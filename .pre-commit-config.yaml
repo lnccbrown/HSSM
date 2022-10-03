@@ -1,0 +1,27 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/psf/black
+    rev: 19.3b0
+    hooks:
+      - id: black
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.9.3
+    hooks:
+      - id: isort
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v0.910 # Use the sha / tag you want to point at
+    hooks:
+      - id: mypy
+        args: [--no-strict-optional, --ignore-missing-imports]
+  - repo: https://github.com/nbQA-dev/nbQA
+    rev: 1.1.1
+    hooks:
+      - id: nbqa-black
+      - id: nbqa-pyupgrade
+        args: [--py36-plus]
+      - id: nbqa-isort
