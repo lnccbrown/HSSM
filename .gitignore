@@ -4,9 +4,6 @@ __pycache__/
 *$py.class
 *.idea/
 
-# C extensions
-*.so
-
 # Distribution / packaging
 .Python
 build/
@@ -52,7 +49,6 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-
 # Jupyter Notebook
 .ipynb_checkpoints
 
@@ -87,8 +83,5 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
-# Pyre type checker
-.pyre/
-
 # Editor cruft
-.idea/
+.idea
