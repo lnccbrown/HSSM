@@ -11,13 +11,18 @@ authors = [
 readme = "README.md"
 license = "MIT"
 #packages = [
-#    { include = "HSSM", from = "src" }
+#    { include = "HSSM", from = "src/hssm" }
 #]
 repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HDDM", "HSSM", "pymc"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.9,<3.12"
+scipy = "1.9.1"
+pymc = "^4.2.1"
+aesara = "^2.8.6"
+bambi = "^0.9.1"
+arviz = "^0.12.1"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.6.0"
@@ -27,6 +32,23 @@ isort = "^5.10.1"
 mypy = "^0.981"
 pre-commit = "^2.20.0"
 
+[tool.black]
+line-length = 88
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
 [tool.isort]
 profile="black"
 
@@ -34,10 +56,17 @@ profile="black"
 good-names = "i,j,k,ex,Run,_,df,pc"
 
 [tool.pylint.messages_control]
-disable = "C0330, C0326, R0912, R0913, R0914, R0915"
+disable = "R0912, R0913, R0914, R0915"
 
 [tool.pylint.format]
 max-line-length = "88"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
 
 [build-system]
 requires = ["poetry-core>=1.2.0"]
