@@ -1,0 +1,44 @@
+[tool.poetry]
+name = "HSSM"
+version = "0.1.0"
+description = ""
+authors = [
+    "Aisulu Omar <aisulu_omar@brown.edu>",
+    "Paul Xu <yang_xu@brown.edu>",
+    "Alexander Fengler <alexander_fengler@brown.edu>",
+    "Michael Frank <michael_frank@brown.edu>"
+]
+readme = "README.md"
+license = "MIT"
+#packages = [
+#    { include = "HSSM", from = "src" }
+#]
+repository = "https://github.com/lnccbrown/HSSM"
+keywords = ["HDDM", "HSSM", "pymc"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+[tool.poetry.dev-dependencies]
+pylint = "^2.6.0"
+pytest = "^6.2.1"
+black = "^22.8.0"
+isort = "^5.10.1"
+mypy = "^0.981"
+pre-commit = "^2.20.0"
+
+[tool.isort]
+profile="black"
+
+[tool.pylint.basic]
+good-names = "i,j,k,ex,Run,_,df,pc"
+
+[tool.pylint.messages_control]
+disable = "C0330, C0326, R0912, R0913, R0914, R0915"
+
+[tool.pylint.format]
+max-line-length = "88"
+
+[build-system]
+requires = ["poetry-core>=1.2.0"]
+build-backend = "poetry.core.masonry.api"
