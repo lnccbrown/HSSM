@@ -34,6 +34,8 @@ htmlcov/
 *.py,cover
 .hypothesis/
 .pytest_cache/
+.mypy_cache/
+tests/__pycache__
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -50,3 +52,4 @@ ENV/
 
 # Editor cruft
 .idea
+.vscode
