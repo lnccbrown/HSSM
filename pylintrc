@@ -12,7 +12,8 @@ ignore=third_party
 
 # Files or directories matching the regex patterns are skipped. The regex
 # matches against base names, not paths.
-ignore-patterns=test_*
+ignore-patterns=test_*,
+        src/scratch/.*
 
 # Pickle collected data for later comparisons.
 persistent=no

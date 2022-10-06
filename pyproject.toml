@@ -23,6 +23,7 @@ pymc = "^4.2.1"
 aesara = "^2.8.6"
 bambi = "^0.9.1"
 arviz = "^0.12.1"
+numba = "^0.56.2"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.6.0"
@@ -56,7 +57,7 @@ profile="black"
 good-names = "i,j,k,ex,Run,_,df,pc"
 
 [tool.pylint.messages_control]
-disable = "R0912, R0913, R0914, R0915"
+disable = "C0114, R0912, R0913, R0914, R0915"
 
 [tool.pylint.format]
 max-line-length = "88"
