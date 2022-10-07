@@ -1,33 +1,39 @@
-"""Aesara/Theano functions for calculating the probability density of the Wiener
+"""Aesara functions for calculating the probability density of the Wiener
 diffusion first-passage time (WFPT) distribution used in drift diffusion models (DDMs).
 
 """
+from __future__ import annotations
+
 from typing import List, Tuple
 
+import aesara
 import aesara.tensor as at
 
 # import arviz as az
 # import matplotlib.pyplot as plt
 import numpy as np
 import pymc as pm
+from aesara.ifelse import ifelse
 from aesara.tensor.random.op import RandomVariable
-from numba import njit
 from pymc.distributions.continuous import PositiveContinuous
 
-# from in_jax import jax_wfpt_rvs
+aesara.config.linker = "cvm"
 
 
-@njit
-def use_fast(tt: np.ndarray, err: float = 1e-7) -> np.ndarray:
-    """For each element in `x`, return `True` if the large-time expansion is
-    more efficient than the small-time expansion.
+def lambda_tt(tt: np.ndarray, err: float = 1e-7) -> Tuple[np.ndarray, np.ndarray]:
+    """For each element in tt, return `True` if the large-time expansion is
+    more efficient than the small-time expansion according to error bound
+    err.
 
     Args:
-        tt: An 1D numpy array of normalized RTs. (0, inf).
-        err: Error bound
+        tt: A 1D numpy array of normalized RTs. (0, inf).
+        err: Error bound.
 
-    Returns: TBD
-
+    Return: A tuple of two arrays:
+        lam: True` if the large-time expansion is more efficient than
+            the small-time expansion according to error bound err.
+        kappa: the kappa used to produce the number of terms in
+            Navarro & Fuss (2009).
     """
 
     # determine number of terms needed for small-t expansion
@@ -40,141 +46,128 @@ def use_fast(tt: np.ndarray, err: float = 1e-7) -> np.ndarray:
     kl = np.max(np.stack([kl, 1.0 / (np.pi * np.sqrt(tt))]), axis=0)
     kl = np.where(np.pi * tt * err < 1, kl, 1.0 / (np.pi * np.sqrt(tt)))
 
-    lambda_tt = (
-        ks - kl >= 0
-    )  # select the most accurate expansion for a fixed number of terms
+    lam = ks - kl >= 0
 
-    kappa = np.where(lambda_tt, kl, ks)
-
-    kappa_low = np.where(lambda_tt, 1, -np.floor((kappa - 1) / 2))
-    kappa_high = np.where(lambda_tt, kappa, np.ceil((kappa - 1) / 2))
-
-    ncols = np.max(kappa_high - kappa_low + 1)
-    out = np.zeros((len(kappa), ncols), dtype=np.int32)
-
-    for i, (low, high) in enumerate(zip(kappa_low, kappa_high)):
-        out[i, high - low] = np.arange(low, high + 1, dtype=np.int32)
-
-    return out
+    # select the most accurate expansion for a fixed number of terms
+    return lam, np.where(lam, kl, ks)
 
 
-def ftt01w_fast(x, w):
-    """Density function for lower-bound first-passage times with drift rate set to 0 and
-    upper bound set to 1, calculated using the fast-RT expansion.
+def n_terms(lam: np.ndarray, kappa: np.ndarray, terms: int | None = None) -> np.ndarray:
+    """Computes a matrix of ks for vectorized summation of k terms
+    determined by Eq. 13 in Navarro & Fuss (2009).
 
     Args:
-        x: RTs. (0, inf).
-        w: Normalized decision starting point. (0, 1).
+        lam: Whether to use small or large time representation
+        kappa: the kappa term in Eq. 13.
+        term: Number of terms to include. If None, use the number of terms
+            recommended in Navarro & Fuss (2009).
 
+    Returns: a matrix of ks for vectorized summation of k terms
+        determined by Eq. 13 in Navarro & Fuss (2009).
     """
-    bigk = 7  # number of terms to evaluate; TODO: this needs tuning eventually
 
-    # calculated the dumb way
-    # p1 = (w + 2 * -3) * T.exp(-T.power(w + 2 * -3, 2) / 2 / x)
-    # p2 = (w + 2 * -2) * T.exp(-T.power(w + 2 * -2, 2) / 2 / x)
-    # p3 = (w + 2 * -1) * T.exp(-T.power(w + 2 * -1, 2) / 2 / x)
-    # p4 = (w + 2 * 0) * T.exp(-T.power(w + 2 * 0, 2) / 2 / x)
-    # p5 = (w + 2 * 1) * T.exp(-T.power(w + 2 * 1, 2) / 2 / x)
-    # p6 = (w + 2 * 2) * T.exp(-T.power(w + 2 * 2, 2) / 2 / x)
-    # p7 = (w + 2 * 3) * T.exp(-T.power(w + 2 * 3, 2) / 2 / x)
-    # p = (p1 + p2 + p3 + p4 + p5 + p6 + p7) / T.sqrt(2 * np.pi * T.power(x, 3))
+    kappa_low = np.where(lam, 1, -np.floor((kappa - 1) / 2))
 
-    # calculated the better way
-    # k = (T.arange(bigk) - T.floor(bigk / 2)).reshape((-1, 1))
-    # y = w + 2 * k
-    # r = -T.power(y, 2) / 2 / x
-    # p = T.sum(y * T.exp(r), axis=0) / T.sqrt(2 * np.pi * T.power(x, 3))
+    if terms is None:
 
-    # calculated using the "log-sum-exp trick" to reduce under/overflows
-    k = at.arange(bigk) - at.floor(bigk / 2)
-    y = w + 2 * k.reshape((-1, 1))
-    r = -at.power(y, 2) / 2 / x
-    c = at.max(r, axis=0)
-    p = at.exp(c + at.log(at.sum(y * at.exp(r - c), axis=0)))
-    p = p / at.sqrt(2 * np.pi * at.power(x, 3))
+        kappa_high = np.where(lam, kappa, np.ceil((kappa - 1) / 2))
+        ncols = np.max(kappa_high - kappa_low + 1)
+        k_terms = np.repeat(np.arange(ncols).reshape((1, -1)), len(kappa), axis=0)
+
+        k_terms = k_terms + kappa_low.reshape((-1, 1))
+        k_mask = k_terms > kappa_high.reshape((-1, 1))
+        k_terms = k_terms[k_mask]
+
+        return k_terms, k_mask
+
+    k_terms = np.repeat(np.arange(terms).reshape((1, -1)), len(kappa), axis=0)
+    k_terms = k_terms + kappa_low.reshape((-1, 1))
+
+    return k_terms, None
+
+
+def ftt01w(tt: np.ndarray, w: np.ndarray, err: float = 1e-7) -> np.ndarray:
+    """For each element in `x`, return `True` if the large-time expansion is
+    more efficient than the small-time expansion.
+
+    Args:
+        tt: A 1D numpy array of normalized RTs. (0, inf).
+        w: w = z / a is a relative start point.
+        err: Error bound.
+
+    Returns: the result of Eq. 13 in Navarro & Fuss, 2009
+    """
+    lam, kappa = lambda_tt(tt, err)
+    k, k_mask = n_terms(lam, kappa)
+
+    p_fast = (w + 2 * k) * at.exp((w + 2 * k) ** 2 / (2 * tt))
+    p_fast = ifelse(k_mask is None, p_fast, k_mask * p_fast + (1 - k_mask) * p_fast)
+    p_fast = at.sum(p_fast, axis=1) / at.sqrt(2 * np.pi * at.power(tt, 3))
+
+    p_slow = k * at.exp(-(k**2) * np.pi**2 * tt / 2) * at.sin(k * np.pi * w)
+    p_slow = ifelse(k_mask is None, p_fast, k_mask * p_slow + (1 - k_mask) * p_slow)
+    p_slow = np.pi * np.sum(p_slow, axis=1)
+
+    p = lam * p_slow + (1 - lam) * p_fast
 
     return p
 
 
-def ftt01w_slow(x, w):
-    """Density function for lower-bound first-passage times with drift rate set to 0 and
-    upper bound set to 1, calculated using the slow-RT expansion.
-
-    Args:
-        x: RTs. (0, inf).
-        w: Normalized decision starting point. (0, 1).
-
-    """
-    bigk = 7  # number of terms to evaluate; TODO: this needs tuning eventually
-
-    # calculated the dumb way
-    # b = T.power(np.pi, 2) * x / 2
-    # p1 = T.exp(-T.power(1, 2) * b) * T.sin(np.pi * w)
-    # p2 = 2 * T.exp(-T.power(2, 2) * b) * T.sin(2 * np.pi * w)
-    # p3 = 3 * T.exp(-T.power(3, 2) * b) * T.sin(3 * np.pi * w)
-    # p4 = 4 * T.exp(-T.power(4, 2) * b) * T.sin(4 * np.pi * w)
-    # p5 = 5 * T.exp(-T.power(5, 2) * b) * T.sin(5 * np.pi * w)
-    # p6 = 6 * T.exp(-T.power(6, 2) * b) * T.sin(6 * np.pi * w)
-    # p7 = 7 * T.exp(-T.power(7, 2) * b) * T.sin(7 * np.pi * w)
-    # p = (p1 + p2 + p3 + p4 + p5 + p6 + p7) * np.pi
-    # print(p)
-
-    # calculated the better way
-    k = at.arange(1, bigk + 1).reshape((-1, 1))
-    y = k * at.sin(k * np.pi * w)
-    r = -at.power(k, 2) * at.power(np.pi, 2) * x / 2
-    p = at.sum(y * at.exp(r), axis=0) * np.pi
-    # print(p)
-
-    # calculated using the "log-sum-exp trick" to reduce under/overflows
-    # k = T.arange(1, bigk + 1).reshape((-1, 1))
-    # y = k * T.sin(k * np.pi * w)
-    # r = -T.power(k, 2) * T.power(np.pi, 2) * x / 2
-    # c = T.max(r, axis=0)
-    # p = T.exp(c + T.log(T.sum(y * T.exp(r - c), axis=0))) * np.pi
-
-    return p
-
-
-def aesara_fnorm(x, w):
-    """Density function for lower-bound first-passage times with drift rate set to 0 and
-    upper bound set to 1, selecting the most efficient expansion per element in `x`.
-
-    Args:
-        x: RTs. (0, inf).
-        w: Normalized decision starting point. (0, 1).
-
-    """
-    y = at.abs(x)
-    f = ftt01w_fast(y, w)
-    s = ftt01w_slow(y, w)
-    u = use_fast(y)
-    positive = x > 0
-    return (f * u + s * (1 - u)) * positive
-
-
-def aesara_pdf_sv(x, v, sv, a, z, t):
-    """Probability density function with drift rates normally distributed over trials.
+def pdf(
+    x: np.ndarray,
+    v: float,
+    a: float,
+    z: float,
+    err: float = 1e-7,
+) -> np.ndarray:
+    """Compute the likelihood of the drift diffusion model f(t|v,a,z) using the method
+    and implementation of Navarro & Fuss, 2009.
 
     Args:
         x: RTs. (-inf, inf) except 0. Negative values correspond to the lower bound.
         v: Mean drift rate. (-inf, inf).
-        sv: Standard deviation of drift rate. [0, inf), 0 if fixed.
         a: Value of decision upper bound. (0, inf).
         z: Normalized decision starting point. (0, 1).
-        t: Non-decision time. [0, inf)
-
+        err: Error bound.
     """
-    flip = x > 0
-    v = flip * -v + (1 - flip) * v  # transform v if x is upper-bound response
-    z = flip * (1 - z) + (1 - flip) * z  # transform z if x is upper-bound response
-    x = at.abs(x)  # abs_olute rts
-    x = x - t  # remove nondecision time
 
-    tt = x / at.power(a, 2)  # "normalize" RTs
-    p = aesara_fnorm(tt, z)  # normalized densities
+    # use normalized time
+    tt = x / a**2
 
-    return (
+    p = ftt01w(tt, z, err)
+
+    # convert to f(t|v,a,w)
+    return p * at.exp(-v * a * z - v**2 * x / 2.0) / a**2
+
+
+def pdf_sv(
+    x: np.ndarray,
+    v: float,
+    sv: float,
+    a: float,
+    z: float,
+    err: float = 1e-7,
+) -> np.ndarray:
+    """Compute the likelihood of the drift diffusion model f(t|v,a,z) using the method
+    and implementation of Navarro & Fuss, 2009.
+
+    Args:
+        x: RTs. (-inf, inf) except 0. Negative values correspond to the lower bound.
+        v: Mean drift rate. (-inf, inf).
+        sv: Standard deviation of v.
+        a: Value of decision upper bound. (0, inf).
+        z: Normalized decision starting point. (0, 1).
+        err: Error bound.
+    """
+
+    if sv == 0:
+        return pdf(x, v, a, z, err)
+
+    tt = x / (pow(a, 2))  # use normalized time
+
+    p = ftt01w(tt, z, err)  # get f(t|0,1,w)
+
+    p = (
         at.exp(
             at.log(p)
             + ((a * z * sv) ** 2 - 2 * a * v * z - (v**2) * x)
@@ -184,8 +177,10 @@ def aesara_pdf_sv(x, v, sv, a, z, t):
         / (a**2)
     )
 
+    return at.gt(x, 0) * p
 
-def aesara_pdf_sv_sz(x, v, sv, a, z, sz, t):
+
+def pdf_sv_sz(x, v, sv, a, z, sz, t):
     """Probability density function with normally distributed drift rate and uniformly
     distributed starting point.
 
@@ -206,24 +201,56 @@ def aesara_pdf_sv_sz(x, v, sv, a, z, sz, t):
     h = sz / n
     z0 = z - sz / 2
 
-    f = 17 * aesara_pdf_sv(x, v, sv, a, z0, t)
-    f = f + 59 * aesara_pdf_sv(x, v, sv, a, z0 + h, t)
-    f = f + 43 * aesara_pdf_sv(x, v, sv, a, z0 + 2 * h, t)
-    f = f + 49 * aesara_pdf_sv(x, v, sv, a, z0 + 3 * h, t)
+    f = 17 * pdf_sv(x, v, sv, a, z0, t)
+    f = f + 59 * pdf_sv(x, v, sv, a, z0 + h, t)
+    f = f + 43 * pdf_sv(x, v, sv, a, z0 + 2 * h, t)
+    f = f + 49 * pdf_sv(x, v, sv, a, z0 + 3 * h, t)
 
-    f = f + 48 * aesara_pdf_sv(x, v, sv, a, z0 + 4 * h, t)
-    f = f + 48 * aesara_pdf_sv(x, v, sv, a, z0 + 5 * h, t)
-    f = f + 48 * aesara_pdf_sv(x, v, sv, a, z0 + 6 * h, t)
+    f = f + 48 * pdf_sv(x, v, sv, a, z0 + 4 * h, t)
+    f = f + 48 * pdf_sv(x, v, sv, a, z0 + 5 * h, t)
+    f = f + 48 * pdf_sv(x, v, sv, a, z0 + 6 * h, t)
 
-    f = f + 49 * aesara_pdf_sv(x, v, sv, a, z0 + h * (n - 3), t)
-    f = f + 43 * aesara_pdf_sv(x, v, sv, a, z0 + h * (n - 2), t)
-    f = f + 59 * aesara_pdf_sv(x, v, sv, a, z0 + h * (n - 1), t)
-    f = f + 17 * aesara_pdf_sv(x, v, sv, a, z0 + h * n, t)
+    f = f + 49 * pdf_sv(x, v, sv, a, z0 + h * (n - 3), t)
+    f = f + 43 * pdf_sv(x, v, sv, a, z0 + h * (n - 2), t)
+    f = f + 59 * pdf_sv(x, v, sv, a, z0 + h * (n - 1), t)
+    f = f + 17 * pdf_sv(x, v, sv, a, z0 + h * n, t)
 
     return f / 48 / n
 
 
-def aesara_pdf_sv_sz_st(x, v, sv, a, z, sz, t, st):
+# def aesara_pdf_sv(x, v, sv, a, z, t):
+#     """Probability density function with drift rates normally distributed over trials.
+
+#     Args:
+#         x: RTs. (-inf, inf) except 0. Negative values correspond to the lower bound.
+#         v: Mean drift rate. (-inf, inf).
+#         sv: Standard deviation of drift rate. [0, inf), 0 if fixed.
+#         a: Value of decision upper bound. (0, inf).
+#         z: Normalized decision starting point. (0, 1).
+#         t: Non-decision time. [0, inf)
+
+#     """
+#     flip = x > 0
+#     v = flip * -v + (1 - flip) * v  # transform v if x is upper-bound response
+#     z = flip * (1 - z) + (1 - flip) * z  # transform z if x is upper-bound response
+#     x = at.abs(x)  # abs_olute rts
+#     x = x - t  # remove nondecision time
+
+#     tt = x / at.power(a, 2)  # "normalize" RTs
+#     p = aesara_fnorm(tt, z)  # normalized densities
+
+#     return (
+#         at.exp(
+#             at.log(p)
+#             + ((a * z * sv) ** 2 - 2 * a * v * z - (v**2) * x)
+#             / (2 * (sv**2) * x + 2)
+#         )
+#         / at.sqrt((sv**2) * x + 1)
+#         / (a**2)
+#     )
+
+
+def pdf_sv_sz_st(x, v, sv, a, z, sz, t, st):
     """ "Probability density function with normally distributed drift rate, uniformly
     distributed starting point, and uniformly distributed nondecision time.
 
@@ -245,24 +272,24 @@ def aesara_pdf_sv_sz_st(x, v, sv, a, z, sz, t, st):
     h = st / n
     t0 = t - st / 2
 
-    f = 17 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0)
-    f = f + 59 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0 + h)
-    f = f + 43 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0 + 2 * h)
-    f = f + 49 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0 + 3 * h)
+    f = 17 * pdf_sv_sz(x, v, sv, a, z, sz, t0)
+    f = f + 59 * pdf_sv_sz(x, v, sv, a, z, sz, t0 + h)
+    f = f + 43 * pdf_sv_sz(x, v, sv, a, z, sz, t0 + 2 * h)
+    f = f + 49 * pdf_sv_sz(x, v, sv, a, z, sz, t0 + 3 * h)
 
-    f = f + 48 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0 + 4 * h)
-    f = f + 48 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0 + 5 * h)
-    f = f + 48 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0 + 6 * h)
+    f = f + 48 * pdf_sv_sz(x, v, sv, a, z, sz, t0 + 4 * h)
+    f = f + 48 * pdf_sv_sz(x, v, sv, a, z, sz, t0 + 5 * h)
+    f = f + 48 * pdf_sv_sz(x, v, sv, a, z, sz, t0 + 6 * h)
 
-    f = f + 49 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0 + h * (n - 3))
-    f = f + 43 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0 + h * (n - 2))
-    f = f + 59 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0 + h * (n - 1))
-    f = f + 17 * aesara_pdf_sv_sz(x, v, sv, a, z, sz, t0 + h * n)
+    f = f + 49 * pdf_sv_sz(x, v, sv, a, z, sz, t0 + h * (n - 3))
+    f = f + 43 * pdf_sv_sz(x, v, sv, a, z, sz, t0 + h * (n - 2))
+    f = f + 59 * pdf_sv_sz(x, v, sv, a, z, sz, t0 + h * (n - 1))
+    f = f + 17 * pdf_sv_sz(x, v, sv, a, z, sz, t0 + h * n)
 
     return f / 48 / n
 
 
-def aesara_pdf_contaminant(x, l, r):
+def pdf_contaminant(x, l, r):
     """Probability density function of exponentially distributed RTs.
 
     Args:
@@ -275,7 +302,7 @@ def aesara_pdf_contaminant(x, l, r):
     return r * p * (x > 0) + (1 - r) * p * (x < 0)
 
 
-def aesara_pdf_sv_sz_st_con(x, v, sv, a, z, sz, t, st, q, l, r):
+def pdf_sv_sz_st_con(x, v, sv, a, z, sz, t, st, q, l, r):
     """ "Probability density function with normally distributed drift rate, uniformly
     distributed starting point, uniformly distributed nondecision time, and
     exponentially distributed contaminants.
@@ -294,8 +321,8 @@ def aesara_pdf_sv_sz_st_con(x, v, sv, a, z, sz, t, st, q, l, r):
         r: Proportion of upper-bound contaminants. [0, 1].
 
     """
-    p_rts = aesara_pdf_sv_sz_st(x, v, sv, a, z, sz, t, st)
-    p_con = aesara_pdf_contaminant(x, l, r)
+    p_rts = pdf_sv_sz_st(x, v, sv, a, z, sz, t, st)
+    p_con = pdf_contaminant(x, l, r)
     return p_rts * (1 - q) + p_con * q
 
 
@@ -318,10 +345,10 @@ def aesara_wfpt_log_like(x, v, sv, a, z, sz, t, st, q, l, r):
         r: Proportion of upper-bound contaminants. [0, 1].
 
     """
-    return at.sum(at.log(aesara_pdf_sv_sz_st_con(x, v, sv, a, z, sz, t, st, q, l, r)))
+    return at.sum(at.log(pdf_sv_sz_st_con(x, v, sv, a, z, sz, t, st, q, l, r)))
 
 
-def aesara_wfpt_rvs(rng, v, sv, a, z, sz, t, st, q, l, r, size):
+def wfpt_rvs(rng, v, sv, a, z, sz, t, st, q, l, r, size):
     """Generate random samples from the WFPT distribution with normally distributed
     drift rate, uniformly distributed starting point, uniformly distributed nondecision
     time, and exponentially distributed contaminants.
@@ -345,15 +372,15 @@ def aesara_wfpt_rvs(rng, v, sv, a, z, sz, t, st, q, l, r, size):
     x = np.linspace(-12, 12, 48000)
     dx = x[1] - x[0]
 
-    pdf = aesara_pdf_sv_sz_st_con(x, v, sv + 1, a, z, sz, t, st, q, l, r)
-    cdf = at.extra_ops.cumsum(pdf) * dx
+    numerical_pdf = pdf_sv_sz_st_con(x, v, sv + 1, a, z, sz, t, st, q, l, r).eval()
+    cdf = np.cumsum(numerical_pdf) * dx
     cdf = cdf / cdf.max()
     u = rng.random_sample(
         size,
     )
-    ix = at.extra_ops.searchsorted(cdf, u)
+    ix = np.searchsorted(cdf, u)
 
-    return x[ix.eval()]
+    return x[ix]
 
 
 class WFPTRandomVariable(RandomVariable):
@@ -369,7 +396,7 @@ class WFPTRandomVariable(RandomVariable):
     def rng_fn(
         cls, rng: np.random.RandomState, v, sv, a, z, sz, t, st, q, l, r, size
     ) -> np.ndarray:
-        return aesara_wfpt_rvs(rng, v, sv, a, z, sz, t, st, q, l, r, size)
+        return wfpt_rvs(rng, v, sv, a, z, sz, t, st, q, l, r, size)
 
 
 class WFPT(PositiveContinuous):
@@ -449,7 +476,7 @@ def test():
 
     rng = np.random.RandomState(10)
 
-    x = aesara_wfpt_rvs(rng, v, sv, a, z, sz, t, st, q, l, r, size)
+    x = wfpt_rvs(rng, v, sv, a, z, sz, t, st, q, l, r, size)
     print(x)
 
     with pm.Model():

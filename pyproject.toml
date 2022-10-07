@@ -32,6 +32,7 @@ black = "^22.8.0"
 isort = "^5.10.1"
 mypy = "^0.981"
 pre-commit = "^2.20.0"
+jupyterlab = "^3.4.8"
 
 [tool.black]
 line-length = 88
