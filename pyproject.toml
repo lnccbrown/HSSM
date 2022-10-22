@@ -26,6 +26,7 @@ numba = "^0.56.2"
 setuptools = "^65.5.0"
 numpy = "^1.23.4"
 ipykernel = "^6.16.0"
+ssms = {git = "https://github.com/AlexanderFengler/ssm_simulators"}
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.6.0"
