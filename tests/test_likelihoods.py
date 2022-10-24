@@ -16,7 +16,7 @@ import ssms.basic_simulators.simulator as simulator
 from numpy.random import rand
 
 sys.path.insert(0, os.path.abspath("src"))
-from src.hssm.wfpt import log_pdf_sv
+from src.hssm.wfpt import decision_func, log_pdf_sv
 
 
 class TestWfpt(unittest.TestCase):
@@ -27,6 +27,7 @@ class TestWfpt(unittest.TestCase):
             theta=[0.0, 1.5, 0.5, 1.0], model="ddm", n_samples=self.n_samples
         )
         self.data_tmp = self.sim_out["rts"] * self.sim_out["choices"]
+        self.err = 1e-7
 
     def test_kterm(self):
         """
@@ -39,13 +40,19 @@ class TestWfpt(unittest.TestCase):
             a = 1.5 + rand()
             z = 0.5 * rand()
             t = rand() * 0.5
-            err = 1e-7
+            err = self.err
             logp = log_pdf_sv(
                 self.data_tmp.flatten(), v, sv, a, z, t, err, k_terms=k_term
             )
             logp = logp.eval()
-            assert math.isfinite(logp) == True
-            assert math.isnan(logp) == False
+            np.testing.assert_equal(math.isfinite(logp), True)
+            np.testing.assert_equal(math.isnan(logp), False)
+
+    def test_decision(self):
+        decision = decision_func()
+        lambda_rt = decision(self.data_tmp.flatten(), self.err)
+        np.testing.assert_equal(all(v == False for v in lambda_rt.eval()), True)
+        np.testing.assert_equal(len(self.data_tmp.flatten()), len(lambda_rt.eval()))
 
     def test_logp(self):
         """
