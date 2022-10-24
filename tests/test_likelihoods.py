@@ -49,6 +49,9 @@ class TestWfpt(unittest.TestCase):
             np.testing.assert_equal(math.isnan(logp), False)
 
     def test_decision(self):
+        """
+        This function tests output of decision function
+        """
         decision = decision_func()
         lambda_rt = decision(self.data_tmp.flatten(), self.err)
         np.testing.assert_equal(all(v == False for v in lambda_rt.eval()), True)
