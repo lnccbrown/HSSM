@@ -54,12 +54,10 @@ ENV/
 poetry.lock
 
 # Editor cruft
-.idea
-.vscode
+.idea/
+.vscode/
 
 # MacOS cruft
 .DS_Store
 
-__pycache__
-*/__pycache__
-*/__pycache__/*
+__pycache__/
