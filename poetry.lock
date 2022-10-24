@@ -507,7 +507,7 @@ scipy = "^1.9.1"
 type = "git"
 url = "https://github.com/brown-ccv/hddm-wfpt.git"
 reference = "HEAD"
-resolved_reference = "e995244318ef4407c34952ef1791954193b93674"
+resolved_reference = "e444207b23b0416d3514cc627c57885955fc0d61"
 
 [[package]]
 name = "identify"
