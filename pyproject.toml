@@ -26,7 +26,6 @@ numba = "^0.56.2"
 setuptools = "^65.5.0"
 numpy = "^1.23.4"
 ipykernel = "^6.16.0"
-ssms = {git = "https://github.com/AlexanderFengler/ssm_simulators"}
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.6.0"
@@ -38,9 +37,9 @@ pre-commit = "^2.20.0"
 jupyterlab = "^3.4.8"
 Cython = "^0.29.32"
 hddm-wfpt = {git = "https://github.com/brown-ccv/hddm-wfpt.git"}
+ssms = {git = "https://github.com/digicosmos86/ssm_simulators"}
 
 [tool.poetry.group.dev.dependencies]
-hddm-wfpt = {git = "https://github.com/brown-ccv/hddm-wfpt.git"}
 jupyter = "^1.0.0"
 
 
