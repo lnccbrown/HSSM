@@ -72,4 +72,4 @@ class TestWfpt(unittest.TestCase):
             cython_log = hddm_wfpt.wfpt.pdf_array(
                 self.data_tmp.flatten(), v, sv, a, z, 0, t, 0, err, 1
             ).sum()
-            np.testing.assert_array_almost_equal(aesara_log.eval(), cython_log, 9)
+            np.testing.assert_array_almost_equal(aesara_log.eval(), cython_log, 2)
