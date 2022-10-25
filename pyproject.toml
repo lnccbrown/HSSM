@@ -22,8 +22,6 @@ scipy = "1.9.1"
 pymc = "^4.2.1"
 aesara = "^2.8.6"
 arviz = "^0.12.1"
-numba = "^0.56.2"
-setuptools = "^65.5.0"
 numpy = "^1.23.4"
 
 [tool.poetry.dev-dependencies]
@@ -34,7 +32,6 @@ isort = "^5.10.1"
 mypy = "^0.981"
 pre-commit = "^2.20.0"
 jupyterlab = "^3.4.8"
-Cython = "^0.29.32"
 hddm-wfpt = {git = "https://github.com/brown-ccv/hddm-wfpt.git"}
 
 [tool.black]
@@ -74,5 +71,5 @@ testpaths = [
 ]
 
 [build-system]
-requires = ["poetry-core>=1.2.0", "cython", "setuptools"]
+requires = ["poetry-core>=1.2.0"]
 build-backend = "poetry.core.masonry.api"
