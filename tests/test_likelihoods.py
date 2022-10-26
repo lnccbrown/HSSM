@@ -15,7 +15,7 @@ import ssms.basic_simulators.simulator as simulator
 from numpy.random import rand
 
 sys.path.insert(0, os.path.abspath("src"))
-from src.hssm.wfpt import decision_func, log_pdf_sv
+from hssm.wfpt import decision_func, log_pdf_sv
 
 
 @pytest.fixture
@@ -40,8 +40,8 @@ def test_kterm(data_fixture):
         err = 1e-7
         logp = log_pdf_sv(data_fixture.flatten(), v, sv, a, z, t, err, k_terms=k_term)
         logp = logp.eval()
-        np.testing.assert_equal(math.isfinite(logp), True)
-        np.testing.assert_equal(math.isnan(logp), False)
+        assert math.isinf(logp) == False
+        assert math.isnan(logp) == False
 
 
 def test_decision(data_fixture):
@@ -70,4 +70,4 @@ def test_logp(data_fixture):
         cython_log = hddm_wfpt.wfpt.pdf_array(
             data_fixture.flatten(), v, sv, a, z, 0, t, 0, err, 1
         ).sum()
-        np.testing.assert_array_almost_equal(aesara_log.eval(), cython_log, 2)
+        np.testing.assert_array_almost_equal(aesara_log.eval(), cython_log)

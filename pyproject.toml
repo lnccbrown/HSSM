@@ -26,6 +26,7 @@ numba = "^0.56.2"
 setuptools = "^65.5.0"
 numpy = "^1.23.4"
 ipykernel = "^6.16.0"
+pylint = "^2.15.5"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.6.0"
