@@ -205,7 +205,7 @@ class WFPTRandomVariable(RandomVariable):
     @classmethod
     def rng_fn(
         cls,  # rng: np.random.RandomState, v, sv, a, z, sz, t, st, q, l, r, size
-    ) -> np.ndarray:
+    ):
         """Generates WFPT random variables."""
 
         return NotImplementedError("Not Implemented")
