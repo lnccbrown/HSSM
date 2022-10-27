@@ -72,7 +72,7 @@ def test_logp(data_fixture):
         cython_log = hddm_wfpt.wfpt.pdf_array(
             data_fixture, v, sv, a, z, 0, t, 0, err, 1
         ).sum()
-        np.testing.assert_array_almost_equal(aesara_log.eval(), cython_log)
+        np.testing.assert_array_almost_equal(aesara_log.eval(), cython_log, 2)
 
 
 def test_wfpt_class(data_fixture):
