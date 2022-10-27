@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Callable, List, Tuple
 
+import aesara
 import aesara.tensor as at
 import numpy as np
 import pandas as pd
@@ -18,8 +19,10 @@ import pymc as pm
 from aesara.tensor.random.op import RandomVariable
 from pymc.distributions.continuous import PositiveContinuous
 
+aesara.config.floatX = "float32"
 
-def decision_func() -> Callable[[np.ndarray, float], at.tensor]:
+
+def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
     """Produces a decision function that determines whether the pdf should be calculated
     with large-time or small-time expansion.
 
@@ -30,7 +33,7 @@ def decision_func() -> Callable[[np.ndarray, float], at.tensor]:
     internal_err = None
     internal_result = None
 
-    def inner_func(rt: np.ndarray, err: float = 1e-7) -> at.tensor:
+    def inner_func(rt: np.ndarray, err: float = 1e-7) -> np.ndarray:
         """For each element in `rt`, return `True` if the large-time expansion is
         more efficient than the small-time expansion and `False` otherwise.
 
@@ -76,7 +79,7 @@ def decision_func() -> Callable[[np.ndarray, float], at.tensor]:
 decision = decision_func()
 
 
-def ftt01w_fast(tt: at.tensor, w: float, k_terms: int) -> at.tensor:
+def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the fast-RT expansion.
 
@@ -101,7 +104,7 @@ def ftt01w_fast(tt: at.tensor, w: float, k_terms: int) -> at.tensor:
     return p
 
 
-def ftt01w_slow(tt: at.tensor, w: float, k_terms: int) -> at.tensor:
+def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the slow-RT expansion.
 
@@ -128,7 +131,7 @@ def ftt01w(
     w: float,
     err: float = 1e-7,
     k_terms: int = 10,
-) -> at.tensor:
+) -> np.ndarray:
     """Compute the appproximated density of f(tt|0,1,w) using the method
     and implementation of Navarro & Fuss, 2009.
 
@@ -157,7 +160,7 @@ def log_pdf_sv(
     t: float,
     err: float = 1e-7,
     k_terms: int = 10,
-) -> at.scalar:
+) -> float:
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
 
@@ -205,7 +208,7 @@ class WFPTRandomVariable(RandomVariable):
     @classmethod
     def rng_fn(
         cls,  # rng: np.random.RandomState, v, sv, a, z, sz, t, st, q, l, r, size
-    ) -> np.ndarray:
+    ):  # type: ignore
         """Generates WFPT random variables."""
 
         return NotImplementedError("Not Implemented")
