@@ -39,6 +39,7 @@ tests/__pycache__
 
 # Jupyter Notebook
 .ipynb_checkpoints
+.ipynb_checkpoints/
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
 __pypackages__/
@@ -50,6 +51,14 @@ env/
 venv/
 ENV/
 
+# Also ignore poetry.lock
+poetry.lock
+
 # Editor cruft
-.idea
-.vscode
+.idea/
+.vscode/
+
+# MacOS cruft
+.DS_Store
+
+__pycache__/
