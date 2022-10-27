@@ -14,7 +14,6 @@ from typing import Callable, List, Tuple
 import aesara
 import aesara.tensor as at
 import numpy as np
-import pandas as pd
 import pymc as pm
 from aesara.tensor.random.op import RandomVariable
 from pymc.distributions.continuous import PositiveContinuous
@@ -29,9 +28,9 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
     Returns: A decision function with saved state to avoid repeated computation.
     """
 
-    internal_rt = None
-    internal_err = None
-    internal_result = None
+    internal_rt: np.ndarray | None = None
+    internal_err: float | None = None
+    internal_result: np.ndarray | None = None
 
     def inner_func(rt: np.ndarray, err: float = 1e-7) -> np.ndarray:
         """For each element in `rt`, return `True` if the large-time expansion is
@@ -48,7 +47,11 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
         nonlocal internal_err
         nonlocal internal_result
 
-        if np.all(rt == internal_rt) and err == internal_err:
+        if (
+            np.all(rt == internal_rt)
+            and err == internal_err
+            and internal_result is not None
+        ):
             return internal_result
 
         internal_rt = rt
@@ -160,7 +163,7 @@ def log_pdf_sv(
     t: float,
     err: float = 1e-7,
     k_terms: int = 10,
-) -> float:
+) -> np.ndarray:
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
 
@@ -177,8 +180,8 @@ def log_pdf_sv(
 
     # First, flip data to positive
     flip = data > 0
-    v = flip * -v + (1 - flip) * v  # transform v if x is upper-bound response
-    z = flip * (1 - z) + (1 - flip) * z  # transform z if x is upper-bound response
+    v = at.switch(flip, -v, v)  # transform v if x is upper-bound response
+    z = at.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = np.abs(data)  # absolute rts
     rt = rt - t  # remove nondecision time
 
@@ -231,25 +234,3 @@ class WFPT(PositiveContinuous):
     def logp(data, v, sv, a, z, t, err=1e-7, k_terms=10):
 
         return log_pdf_sv(data, v, sv, a, z, t, err, k_terms)
-
-
-def main():
-    """Simple tests of the code here"""
-
-    cavanaugh_data = pd.read_csv("../scratch/cavanagh_theta_nn.txt")
-
-    with pm.Model():
-
-        sv = 0
-        a = 0.8
-        z = 0.5
-        t = 0.0
-
-        v = pm.Normal(name="v")
-        WFPT(name="x", v=v, sv=sv, a=a, z=z, t=t, observed=cavanaugh_data.rt.values)
-        results = pm.sample(1000, return_inferencedata=True)
-        print(results)
-
-
-if __name__ == "__main__":
-    main()
