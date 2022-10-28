@@ -17,6 +17,7 @@ import numpy as np
 import pymc as pm
 from aesara.tensor.random.op import RandomVariable
 from pymc.distributions.continuous import PositiveContinuous
+from pymc.distributions.dist_math import check_parameters
 
 aesara.config.floatX = "float32"
 
@@ -151,7 +152,9 @@ def ftt01w(
     p_fast = ftt01w_fast(tt, w, k_terms)
     p_slow = ftt01w_slow(tt, w, k_terms)
 
-    return at.switch(lambda_rt, p_fast, p_slow)
+    p = at.switch(lambda_rt, p_fast, p_slow)
+
+    return p * (p > 0)  # Making sure that p > 0
 
 
 def log_pdf_sv(
@@ -180,21 +183,35 @@ def log_pdf_sv(
 
     # First, flip data to positive
     flip = data > 0
-    v = at.switch(flip, -v, v)  # transform v if x is upper-bound response
-    z = at.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
+    v_flipped = at.switch(flip, -v, v)  # transform v if x is upper-bound response
+    z_flipped = at.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = np.abs(data)  # absolute rts
     rt = rt - t  # remove nondecision time
 
-    p = ftt01w(rt, a, z, err, k_terms)
+    p = ftt01w(rt, a, z_flipped, err, k_terms)
 
-    p = at.sum(
+    logp = (
         at.log(p)
-        + ((a * z * sv) ** 2 - 2 * a * v * z - (v**2) * rt) / (2 * (sv**2) * rt + 2)
+        + (
+            (a * z_flipped * sv) ** 2
+            - 2 * a * v_flipped * z_flipped
+            - (v_flipped**2) * rt
+        )
+        / (2 * (sv**2) * rt + 2)
         - at.log(sv**2 * rt + 1) / 2
         - 2 * at.log(a)
     )
 
-    return p
+    checked_logp = check_parameters(
+        logp,
+        sv >= 0,
+        msg="sv >= 0",
+    )
+    checked_logp = check_parameters(checked_logp, a >= 0, msg="a >= 0")
+    checked_logp = check_parameters(checked_logp, 0 < z < 1, msg="0 < z < 1")
+    checked_logp = check_parameters(checked_logp, np.all(rt > 0), msg="t <= min(rt)")
+
+    return checked_logp
 
 
 # TODO: Implement this class.
