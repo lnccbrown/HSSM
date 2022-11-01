@@ -208,8 +208,8 @@ def log_pdf_sv(
         msg="sv >= 0",
     )
     checked_logp = check_parameters(checked_logp, a >= 0, msg="a >= 0")
-    checked_logp = check_parameters(checked_logp, 0 < z < 1, msg="0 < z < 1")
-    checked_logp = check_parameters(checked_logp, np.all(rt > 0), msg="t <= min(rt)")
+    # checked_logp = check_parameters(checked_logp, 0 < z < 1, msg="0 < z < 1")
+    # checked_logp = check_parameters(checked_logp, np.all(rt > 0), msg="t <= min(rt)")
 
     return checked_logp
 
