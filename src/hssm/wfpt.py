@@ -223,7 +223,7 @@ class WFPTRandomVariable(RandomVariable):
     ndim_supp: int = 0
     ndims_params: List[int] = [0] * 10
     dtype: str = "floatX"
-    _print_name: Tuple[str, str] = ("WFPT", "WFPT")
+    _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
 
     @classmethod
     def rng_fn(
