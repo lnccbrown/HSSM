@@ -18,6 +18,7 @@ import pymc as pm
 from aesara.tensor.random.op import RandomVariable
 from pymc.distributions.continuous import PositiveContinuous
 from pymc.distributions.dist_math import check_parameters
+from ssms.basic_simulators import simulator
 
 aesara.config.floatX = "float32"
 
@@ -226,12 +227,16 @@ class WFPTRandomVariable(RandomVariable):
     _print_name: Tuple[str, str] = ("WFPT", "WFPT")
 
     @classmethod
-    def rng_fn(
-        cls,  # rng: np.random.RandomState, v, sv, a, z, sz, t, st, q, l, r, size
-    ):  # type: ignore
-        """Generates WFPT random variables."""
-
-        return NotImplementedError("Not Implemented")
+    # pylint: disable=arguments-renamed
+    def rng_fn(  # type: ignore
+        cls,
+        theta: List[float],
+        model: str = "ddm",
+        size: int = 500,
+    ) -> np.ndarray:
+        sim_out = simulator(theta=theta, model=model, n_samples=size)
+        data_tmp = sim_out["rts"] * sim_out["choices"]
+        return data_tmp.flatten()
 
 
 class WFPT(PositiveContinuous):
