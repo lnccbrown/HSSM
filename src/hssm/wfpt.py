@@ -18,7 +18,7 @@ import pymc as pm
 from aesara.tensor.random.op import RandomVariable
 from pymc.distributions.continuous import PositiveContinuous
 from pymc.distributions.dist_math import check_parameters
-from ssms.basic_simulators import simulator
+from ssms.basic_simulators import simulator  # type: ignore
 
 aesara.config.floatX = "float32"
 
