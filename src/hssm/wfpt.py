@@ -38,6 +38,10 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
         """For each element in `rt`, return `True` if the large-time expansion is
         more efficient than the small-time expansion and `False` otherwise.
 
+        This function uses a closure to save the result of past computation.
+        If `rt` and `err` passed to it does not change, then it will directly
+        return the results of the previous computation.
+
         Args:
             rt: An 1D numpy of flipped RTs. (0, inf).
             err: Error bound
