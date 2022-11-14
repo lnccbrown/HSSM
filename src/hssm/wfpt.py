@@ -9,7 +9,8 @@ https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b
 
 from __future__ import annotations
 
-from typing import Callable, List, Tuple
+from functools import cache
+from typing import List, Tuple
 
 import aesara
 import aesara.tensor as at
@@ -55,8 +56,14 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     return kl
 
 
-def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
-    """Computes and compares k_small with k_large.
+@cache
+def decision(rt: np.ndarray, err: float) -> np.ndarray:
+    """For each element in `rt`, return `True` if the large-time expansion is
+    more efficient than the small-time expansion and `False` otherwise.
+
+    This function uses a closure to save the result of past computation.
+    If `rt` and `err` passed to it does not change, then it will directly
+    return the results of the previous computation.
 
     Args:
         rt: An 1D numpy of flipped RTs. (0, inf).
@@ -68,63 +75,6 @@ def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
     kl = k_large(rt, err)
 
     return ks < kl
-
-
-def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
-    """Produces a decision function that determines whether the pdf should be calculated
-    with large-time or small-time expansion.
-
-    Returns: A decision function with saved state to avoid repeated computation.
-    """
-
-    internal_rt: np.ndarray | None = None
-    internal_err: float | None = None
-    internal_result: np.ndarray | None = None
-
-    def inner_func(rt: np.ndarray, err: float = 1e-7) -> np.ndarray:
-        """For each element in `rt`, return `True` if the large-time expansion is
-        more efficient than the small-time expansion and `False` otherwise.
-
-        This function uses a closure to save the result of past computation.
-        If `rt` and `err` passed to it does not change, then it will directly
-        return the results of the previous computation.
-
-        Args:
-            rt: An 1D numpy of flipped RTs. (0, inf).
-            err: Error bound
-
-        Returns: a 1D boolean at array of which implementation should be used.
-        """
-
-        nonlocal internal_rt
-        nonlocal internal_err
-        nonlocal internal_result
-
-        if (
-            internal_result is not None
-            and err == internal_err
-            and np.all(rt == internal_rt)
-        ):
-            # This order is to promote short circuiting to avoid
-            # unnecessary computation.
-            return internal_result
-
-        internal_rt = rt
-        internal_err = err
-
-        lambda_rt = compare_k(rt, err)
-
-        internal_result = lambda_rt
-
-        return lambda_rt
-
-    return inner_func
-
-
-# This decision function keeps an internal state of `tt`
-# and does not repeat computation if a new `tt` passed to
-# it is the same
-decision = decision_func()
 
 
 def get_ks(k_terms: int, fast: bool) -> np.ndarray:
@@ -164,6 +114,7 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     r = -at.power(y, 2) / (2 * tt)
     c = at.max(r, axis=0)
     p = at.exp(c + at.log(at.sum(y * at.exp(r - c), axis=0)))
+    # Normalize p
     p = p / at.sqrt(2 * np.pi * at.power(tt, 3))
 
     return p
