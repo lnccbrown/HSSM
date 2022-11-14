@@ -127,6 +127,21 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
 decision = decision_func()
 
 
+def get_ks(k_terms: int, fast: bool) -> np.ndarray:
+    """Returns an array of ks given the number of terms needed to
+    approximate the sum of the infinite series.
+
+    Args:
+        k_terms: number of terms needed
+        fast: whether the function is used in the fast of slow expansion.
+
+    Returns: An array of ks.
+    """
+    if fast:
+        return at.arange(-at.floor((k_terms - 1) / 2), at.ceil((k_terms - 1) / 2) + 1)
+    return at.arange(1, k_terms + 1).reshape((-1, 1))
+
+
 def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the fast-RT expansion.
@@ -142,9 +157,11 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 
     # Slightly changed the original code to mimic the paper and
     # ensure correctness
-    k = at.arange(-at.floor((k_terms - 1) / 2), at.ceil((k_terms - 1) / 2) + 1)
+    k = get_ks(k_terms, fast=True)
+
+    # A log-sum-exp trick is used here
     y = w + 2 * k.reshape((-1, 1))
-    r = -at.power(y, 2) / 2 / tt
+    r = -at.power(y, 2) / (2 * tt)
     c = at.max(r, axis=0)
     p = at.exp(c + at.log(at.sum(y * at.exp(r - c), axis=0)))
     p = p / at.sqrt(2 * np.pi * at.power(tt, 3))
@@ -164,8 +181,7 @@ def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     Returns:
         The approximated function f(tt|0, 1, w).
     """
-
-    k = at.arange(1, k_terms + 1).reshape((-1, 1))
+    k = get_ks(k_terms, fast=False)
     y = k * at.sin(k * np.pi * w)
     r = -at.power(k, 2) * at.power(np.pi, 2) * tt / 2
     p = at.sum(y * at.exp(r), axis=0) * np.pi
@@ -234,6 +250,10 @@ def log_pdf_sv(
 
     p = ftt01w(rt, a, z_flipped, err, k_terms)
 
+    # This step does 3 things at the same time:
+    # 1. Computes f(t|v, a, z) from the pdf when setting a = 0 and z = 1.
+    # 2. Computes the log of above value
+    # 3. Computes the integration given the sd of v
     logp = (
         at.log(p)
         + (
