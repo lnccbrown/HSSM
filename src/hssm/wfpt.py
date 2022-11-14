@@ -23,6 +23,53 @@ from ssms.basic_simulators import simulator  # type: ignore
 aesara.config.floatX = "float32"
 
 
+def k_small(rt: np.ndarray, err: float) -> np.ndarray:
+    """Determines number of terms needed for small-t expansion.
+
+    Args:
+        rt: An 1D numpy of flipped RTs. (0, inf).
+        err: Error bound
+
+    Returns: a 1D at array of k_small.
+    """
+    ks = 2 + at.sqrt(-2 * rt * at.log(2 * np.sqrt(2 * np.pi * rt) * err))
+    ks = at.max(at.stack([ks, at.sqrt(rt) + 1]), axis=0)
+    ks = at.switch(2 * at.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
+
+    return ks
+
+
+def k_large(rt: np.ndarray, err: float) -> np.ndarray:
+    """Determine number of terms needed for large-t expansion.
+
+    Args:
+        rt: An 1D numpy of flipped RTs. (0, inf).
+        err: Error bound
+
+    Returns: a 1D at array of k_large.
+    """
+    kl = at.sqrt(-2 * at.log(np.pi * rt * err) / (np.pi**2 * rt))
+    kl = at.max(at.stack([kl, 1.0 / (np.pi * at.sqrt(rt))]), axis=0)
+    kl = at.switch(np.pi * rt * err < 1, kl, 1.0 / (np.pi * at.sqrt(rt)))
+
+    return kl
+
+
+def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
+    """Computes and compares k_small with k_large.
+
+    Args:
+        rt: An 1D numpy of flipped RTs. (0, inf).
+        err: Error bound
+
+    Returns: a 1D boolean at array of which implementation should be used.
+    """
+    ks = k_small(rt, err)
+    kl = k_large(rt, err)
+
+    return ks < kl
+
+
 def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
     """Produces a decision function that determines whether the pdf should be calculated
     with large-time or small-time expansion.
@@ -54,26 +101,18 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
         nonlocal internal_result
 
         if (
-            np.all(rt == internal_rt)
+            internal_result is not None
             and err == internal_err
-            and internal_result is not None
+            and np.all(rt == internal_rt)
         ):
+            # This order is to promote short circuiting to avoid
+            # unnecessary computation.
             return internal_result
 
         internal_rt = rt
         internal_err = err
 
-        # determine number of terms needed for small-t expansion
-        ks = 2 + at.sqrt(-2 * rt * at.log(2 * np.sqrt(2 * np.pi * rt) * err))
-        ks = at.max(at.stack([ks, at.sqrt(rt) + 1]), axis=0)
-        ks = at.switch(2 * at.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
-
-        # determine number of terms needed for large-t expansion
-        kl = at.sqrt(-2 * at.log(np.pi * rt * err) / (np.pi**2 * rt))
-        kl = at.max(at.stack([kl, 1.0 / (np.pi * at.sqrt(rt))]), axis=0)
-        kl = at.switch(np.pi * rt * err < 1, kl, 1.0 / (np.pi * at.sqrt(rt)))
-
-        lambda_rt = ks < kl
+        lambda_rt = compare_k(rt, err)
 
         internal_result = lambda_rt
 
