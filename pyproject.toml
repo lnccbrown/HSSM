@@ -23,6 +23,8 @@ pymc = "^4.2.1"
 aesara = "^2.8.6"
 arviz = "^0.12.1"
 pylint = "^2.15.5"
+numpy = "^1.23.4"
+ssms = {git = "https://github.com/digicosmos86/ssm_simulators.git"}
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.6.0"
