@@ -13,25 +13,25 @@ repos:
           - "-rn" # Only display messages
           - "-sn" # Don't display the score
           - "--max-line-length=88"
-  - repo: https://github.com/psf/black
-    rev: 22.8.0
-    hooks:
-      - id: black-jupyter
-        args:
-          - --line-length=88
-          - --include='\.pyi?$'
-
-          # these folders wont be formatted by black
-          - --exclude="""\.git |
-            \.__pycache__|
-            \.hg|
-            \.mypy_cache|
-            \.tox|
-            \.venv|
-            _build|
-            buck-out|
-            build|
-            dist"""
+#  - repo: https://github.com/psf/black
+#    rev: 22.8.0
+#    hooks:
+#      - id: black-jupyter
+#        args:
+#          - --line-length=88
+#          - --include='\.pyi?$'
+#
+#          # these folders wont be formatted by black
+#          - --exclude="""\.git |
+#            \.__pycache__|
+#            \.hg|
+#            \.mypy_cache|
+#            \.tox|
+#            \.venv|
+#            _build|
+#            buck-out|
+#            build|
+#            dist"""
   - repo: https://github.com/PyCQA/isort
     rev: 5.10.1
     hooks:
