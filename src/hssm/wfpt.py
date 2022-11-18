@@ -1,16 +1,13 @@
 """
 wfpt.py: aesara implementation of the Wiener First Passage Time Distribution
-
 This code is based on Sam Mathias's Aesara/Theano implementation
 of the WFPT distribution here:
 https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b
-
 """
 
 from __future__ import annotations
 
-from functools import cache
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 import aesara
 import aesara.tensor as at
@@ -26,11 +23,9 @@ aesara.config.floatX = "float32"
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     """Determines number of terms needed for small-t expansion.
-
     Args:
         rt: An 1D numpy of flipped RTs. (0, inf).
         err: Error bound
-
     Returns: a 1D at array of k_small.
     """
     ks = 2 + at.sqrt(-2 * rt * at.log(2 * np.sqrt(2 * np.pi * rt) * err))
@@ -42,11 +37,9 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
 
 def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     """Determine number of terms needed for large-t expansion.
-
     Args:
         rt: An 1D numpy of flipped RTs. (0, inf).
         err: Error bound
-
     Returns: a 1D at array of k_large.
     """
     kl = at.sqrt(-2 * at.log(np.pi * rt * err) / (np.pi**2 * rt))
@@ -56,19 +49,11 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     return kl
 
 
-@cache
-def decision(rt: np.ndarray, err: float) -> np.ndarray:
-    """For each element in `rt`, return `True` if the large-time expansion is
-    more efficient than the small-time expansion and `False` otherwise.
-
-    This function uses a closure to save the result of past computation.
-    If `rt` and `err` passed to it does not change, then it will directly
-    return the results of the previous computation.
-
+def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
+    """Computes and compares k_small with k_large.
     Args:
         rt: An 1D numpy of flipped RTs. (0, inf).
         err: Error bound
-
     Returns: a 1D boolean at array of which implementation should be used.
     """
     ks = k_small(rt, err)
@@ -77,14 +62,65 @@ def decision(rt: np.ndarray, err: float) -> np.ndarray:
     return ks < kl
 
 
+def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
+    """Produces a decision function that determines whether the pdf should be calculated
+    with large-time or small-time expansion.
+    Returns: A decision function with saved state to avoid repeated computation.
+    """
+
+    internal_rt: np.ndarray | None = None
+    internal_err: float | None = None
+    internal_result: np.ndarray | None = None
+
+    def inner_func(rt: np.ndarray, err: float = 1e-7) -> np.ndarray:
+        """For each element in `rt`, return `True` if the large-time expansion is
+        more efficient than the small-time expansion and `False` otherwise.
+        This function uses a closure to save the result of past computation.
+        If `rt` and `err` passed to it does not change, then it will directly
+        return the results of the previous computation.
+        Args:
+            rt: An 1D numpy of flipped RTs. (0, inf).
+            err: Error bound
+        Returns: a 1D boolean at array of which implementation should be used.
+        """
+
+        nonlocal internal_rt
+        nonlocal internal_err
+        nonlocal internal_result
+
+        if (
+            internal_result is not None
+            and err == internal_err
+            and np.all(rt == internal_rt)
+        ):
+            # This order is to promote short circuiting to avoid
+            # unnecessary computation.
+            return internal_result
+
+        internal_rt = rt
+        internal_err = err
+
+        lambda_rt = compare_k(rt, err)
+
+        internal_result = lambda_rt
+
+        return lambda_rt
+
+    return inner_func
+
+
+# This decision function keeps an internal state of `tt`
+# and does not repeat computation if a new `tt` passed to
+# it is the same
+decision = decision_func()
+
+
 def get_ks(k_terms: int, fast: bool) -> np.ndarray:
     """Returns an array of ks given the number of terms needed to
     approximate the sum of the infinite series.
-
     Args:
         k_terms: number of terms needed
         fast: whether the function is used in the fast of slow expansion.
-
     Returns: An array of ks.
     """
     if fast:
@@ -95,12 +131,10 @@ def get_ks(k_terms: int, fast: bool) -> np.ndarray:
 def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the fast-RT expansion.
-
     Args:
         tt: Flipped, normalized RTs. (0, inf).
         w: Normalized decision starting point. (0, 1).
         k_terms: number of terms to use to approximate the PDF.
-
     Returns:
         The approximated function f(tt|0, 1, w).
     """
@@ -123,12 +157,10 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the slow-RT expansion.
-
     Args:
         tt: Flipped, normalized RTs. (0, inf).
         w: Normalized decision starting point. (0, 1).
         k_terms: number of terms to use to approximate the PDF.
-
     Returns:
         The approximated function f(tt|0, 1, w).
     """
@@ -149,7 +181,6 @@ def ftt01w(
 ) -> np.ndarray:
     """Compute the appproximated density of f(tt|0,1,w) using the method
     and implementation of Navarro & Fuss, 2009.
-
     Args:
         rt: Flipped RTs. (0, inf).
         a: Value of decision upper bound. (0, inf).
@@ -180,7 +211,6 @@ def log_pdf_sv(
 ) -> np.ndarray:
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
-
     Args:
         data: RTs. (-inf, inf) except 0. Negative values correspond to the lower bound.
         v: Mean drift rate. (-inf, inf).
