@@ -22,6 +22,7 @@ scipy = "1.9.1"
 pymc = "^4.2.1"
 aesara = "^2.8.6"
 arviz = "^0.12.1"
+pylint = "^2.15.5"
 numpy = "^1.23.4"
 ssms = {git = "https://github.com/digicosmos86/ssm_simulators.git"}
 
@@ -33,7 +34,11 @@ isort = "^5.10.1"
 mypy = "^0.981"
 pre-commit = "^2.20.0"
 jupyterlab = "^3.4.8"
+numpy = "^1.23.4"
+ipykernel = "^6.16.0"
 hddm-wfpt = {git = "https://github.com/brown-ccv/hddm-wfpt.git"}
+ssms = {git = "https://github.com/digicosmos86/ssm_simulators"}
+jupyter = "^1.0.0"
 
 [tool.black]
 line-length = 88
