@@ -41,7 +41,7 @@ def test_kterm(data_fixture):
         t = rand() * 0.5
         err = 1e-7
         logp = log_pdf_sv(data_fixture, v, sv, a, z, t, err, k_terms=k_term)
-        logp = logp.eval()
+        logp = sum(logp.eval())
         assert math.isinf(logp) == False
         assert math.isnan(logp) == False
 
