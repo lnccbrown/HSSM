@@ -9,7 +9,7 @@ the Wiener First-Passage Time distribution.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Tuple
+from typing import Callable, Tuple
 
 import aesara
 import aesara.tensor as at
@@ -22,7 +22,9 @@ from jax import grad, jit
 from numpy.typing import ArrayLike
 
 from hssm.wfpt.onnx2xla import interpret_onnx
-from hssm.wfpt.wfpt import LogLikeFunc, LogLikeGrad
+
+LogLikeFunc = Callable[..., ArrayLike]
+LogLikeGrad = Callable[..., ArrayLike]
 
 
 class LAN:
