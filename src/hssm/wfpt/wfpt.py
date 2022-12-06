@@ -45,7 +45,7 @@ class WFPT:
             # This is just a placeholder because pm.Distribution requires an rv_op
             # Might be updated in the future once
 
-            # TODO: replace this default when we have a better random number generation
+            # NOTE: replace this default when we have a better random number generation
             # method. This is here as a place holder.
             rv_op = rv() if rv is not None else WFPTRandomVariable()
             params = list_params
@@ -102,6 +102,7 @@ class WFPT:
             model = onnx.load(model)
 
         if backend is None or backend == "aesara":
+            # TODO: finish this
             lan_logp = LAN.make_aesara_logp()
         if backend == "jax":
             logp, logp_grad, logp_nojit = LAN.make_jax_funcs_from_onnx(

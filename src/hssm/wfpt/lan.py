@@ -168,3 +168,5 @@ class LAN:
             return logp_nojit
 
         return lan_logp_op
+
+    # TODO: add a make_aesara_logp class function here
