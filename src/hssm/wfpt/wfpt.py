@@ -101,8 +101,7 @@ class WFPT:
             model = onnx.load(model)
 
         if backend is None or backend == "aesara":
-            # TODO: finish this
-            lan_logp = LAN.make_aesara_logp()
+            lan_logp = LAN.make_aesara_logp(model, list_params)
         if backend == "jax":
             logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
                 model,
