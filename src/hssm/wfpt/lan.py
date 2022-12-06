@@ -173,7 +173,7 @@ class LAN:
         return lan_logp_op
 
     @classmethod
-    def make_aesara_logp(cls, model: str | PathLike | onnx.Model):
+    def make_aesara_logp(cls, model: str | PathLike | onnx.Model, *dist_params):
         """
         Converting onnx model file to aesara
         Args:
