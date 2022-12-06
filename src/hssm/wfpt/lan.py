@@ -72,9 +72,9 @@ class LAN:
 
             # Makes a matrix to feed to the LAN model
             rt = jnp.abs(data)
-            response = data > 0
+            response = jnp.where(data >= 0, 1.0, -1.0)
             params_matrix = jnp.repeat(
-                jnp.stack(dist_params).reshape(1, -1), axis=0, repeats=len(rt)
+                jnp.stack(dist_params).reshape(1, -1), axis=0, repeats=len(data)
             )
             input_matrix = jnp.hstack(
                 [params_matrix, rt.reshape(-1, 1), response.reshape(-1, 1)]
@@ -84,12 +84,12 @@ class LAN:
                 jnp.squeeze(interpret_onnx(loaded_model.graph, input_matrix)[0])
             )
 
-        grad_logp = grad(logp, argnums=range(1, 1 + n_params))
+        logp_grad = grad(logp, argnums=range(1, 1 + n_params))
 
         if compile_funcs:
-            return jit(logp), jit(grad_logp), logp
+            return jit(logp), jit(logp_grad), logp
 
-        return logp, grad_logp, logp
+        return logp, logp_grad, logp
 
     @staticmethod
     def make_jax_logp_ops(
@@ -151,12 +151,12 @@ class LAN:
                 inputs = [
                     at.as_tensor_variable(data),
                 ] + [at.as_tensor_variable(dist_param) for dist_param in dist_params]
-                outputs = [inp.type() for inp in inputs[2:]]
+                outputs = [inp.type() for inp in inputs[1:]]
 
                 return Apply(self, inputs, outputs)
 
             def perform(self, node, inputs, outputs):
-                results = logp_grad(*inputs)
+                results = logp_grad(inputs[0], *inputs[1:])
 
                 for i, result in enumerate(results):
                     outputs[i][0] = np.asarray(result, dtype=node.outputs[i].dtype)

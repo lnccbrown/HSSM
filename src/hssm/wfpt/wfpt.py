@@ -51,7 +51,6 @@ class WFPT:
             params = list_params
 
             @classmethod
-            # Use a list of strs to specify both the number and order of parameters
             def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
                 dist_params = [
                     at.as_tensor_variable(pm.floatX(kwargs[param]))
@@ -60,9 +59,9 @@ class WFPT:
                 other_kwargs = {k: v for k, v in kwargs.items() if k not in cls.params}
                 return super().dist(dist_params, **other_kwargs)
 
-            def logp(data, dist_params, **kwargs):
+            def logp(data, *dist_params):
 
-                return loglik(data, *dist_params, **kwargs)
+                return loglik(data, *dist_params)
 
         return WFPTDistribution
 
@@ -78,7 +77,7 @@ class WFPT:
         model: str | PathLike | onnx.model,
         backend: str | None,
         list_params: List[str],
-        rv: Type[RandomVariable],
+        rv: Type[RandomVariable] | None = None,
         compile_funcs: bool = True,
     ) -> Type[pm.Distribution]:
         """Produces a PyMC distribution that uses the provided ONNX model as
@@ -105,9 +104,11 @@ class WFPT:
             # TODO: finish this
             lan_logp = LAN.make_aesara_logp()
         if backend == "jax":
-            logp, logp_grad, logp_nojit = LAN.make_jax_funcs_from_onnx(
-                model, compile_funcs
+            logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
+                model,
+                n_params=len(list_params),
+                compile_funcs=compile_funcs,
             )
-            lan_logp = LAN.make_lan_logp_ops(logp, logp_grad, logp_nojit)
+            lan_logp = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
 
         return cls.make_distribution(lan_logp, rv, list_params)
