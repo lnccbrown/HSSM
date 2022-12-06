@@ -19,15 +19,16 @@ keywords = ["HDDM", "HSSM", "pymc"]
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
 scipy = "1.9.1"
-pymc = "4.2.1"
+pymc = "4.4.0"
 aesara = "^2.8.6"
 arviz = "^0.14.0"
 numpy = "^1.23.4"
 ssms = {git = "https://github.com/digicosmos86/ssm_simulators.git"}
 onnx = "^1.12.0"
-jax = "^0.3.24"
+jax = "^0.3.25"
 jaxlib = "^0.3.24"
 bambi = {git = "https://github.com/brown-ccv/bambi.git"}
+numpyro = "^0.10.1"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.6.0"
@@ -38,6 +39,11 @@ mypy = "^0.981"
 pre-commit = "^2.20.0"
 jupyterlab = "^3.4.8"
 hddm-wfpt = {git = "https://github.com/brown-ccv/hddm-wfpt.git"}
+
+[tool.poetry.group.dev.dependencies]
+numpyro = "^0.10.1"
+viztracer = "^0.15.6"
+ipywidgets = "^8.0.2"
 
 [tool.black]
 line-length = 88

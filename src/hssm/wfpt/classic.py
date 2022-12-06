@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import Callable, List, Tuple
 
-import aesara
 import aesara.tensor as at
 import numpy as np
 import pymc as pm
@@ -19,8 +18,6 @@ from aesara.tensor.random.op import RandomVariable
 from pymc.distributions.continuous import PositiveContinuous
 from pymc.distributions.dist_math import check_parameters
 from ssms.basic_simulators import simulator  # type: ignore
-
-aesara.config.floatX = "float32"
 
 
 def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
@@ -243,7 +240,7 @@ class WFPTRandomVariable(RandomVariable):
         return data_tmp.flatten()
 
 
-class WFPT(PositiveContinuous):
+class WFPTClassic(PositiveContinuous):
     """Wiener first-passage time (WFPT) distribution"""
 
     rv_op = WFPTRandomVariable()
