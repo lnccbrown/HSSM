@@ -115,6 +115,8 @@ def onnx_gemm(
     """Numpy-backed implementatio of Onnx Gemm op."""
     a = jnp.transpose(a) if transA else a
     b = jnp.transpose(b) if transB else b
+    # jax.debug.print("a: {}", a.dtype)
+    # jax.debug.print("b: {}", b.dtype)
 
     return [alpha * jnp.matmul(a, b) + beta * c]
 
