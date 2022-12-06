@@ -21,7 +21,7 @@ from aesara.link.jax.dispatch import jax_funcify
 from jax import grad, jit
 from numpy.typing import ArrayLike
 
-from hssm.lan.onnx2aes import aes_interpret_onnx
+from hssm.wfpt.onnx2aes import aes_interpret_onnx
 from hssm.wfpt.onnx2xla import interpret_onnx
 
 LogLikeFunc = Callable[..., ArrayLike]
@@ -173,7 +173,11 @@ class LAN:
         return lan_logp_op
 
     # TODO: add a make_aesara_logp class function here
-    def make_aesara_logp(data: np.ndarray, model: str, *dist_params):
+    @classmethod
+    def make_aesara_logp(
+        cls,
+        model: str | PathLike | onnx.Model,
+    ):
         """
         Converting onnx model file to aesara
         Args:
@@ -185,14 +189,18 @@ class LAN:
         loaded_model: onnx.Model = (
             onnx.load(model) if isinstance(model, (str, PathLike)) else model
         )
-        rt = at.abs(data)
-        response = at.where(data >= 0, 1.0, -1.0)
 
-        # Specify input layer of MLP
-        inputs = at.zeros(
-            (rt.shape[0], len(dist_params) + 2)
-        )  # (n_trials, number of parameters + 2 [for rt and choice columns])
-        inputs = at.set_subtensor(inputs[:, :-2], at.stack(dist_params))
-        inputs = at.set_subtensor(inputs[:, -2], rt)
-        inputs = at.set_subtensor(inputs[:, -1], response)
-        return at.sum(at.squeeze(aes_interpret_onnx(loaded_model.graph, inputs)[0]))
+        def logp(data: np.ndarray, *dist_params) -> ArrayLike:
+            rt = at.abs(data)
+            response = at.where(data >= 0, 1.0, -1.0)
+
+            # Specify input layer of MLP
+            inputs = at.zeros(
+                (rt.shape[0], len(dist_params) + 2)
+            )  # (n_trials, number of parameters + 2 [for rt and choice columns])
+            inputs = at.set_subtensor(inputs[:, :-2], at.stack(dist_params))
+            inputs = at.set_subtensor(inputs[:, -2], rt)
+            inputs = at.set_subtensor(inputs[:, -1], response)
+            return at.sum(at.squeeze(aes_interpret_onnx(loaded_model.graph, inputs)[0]))
+
+        return logp

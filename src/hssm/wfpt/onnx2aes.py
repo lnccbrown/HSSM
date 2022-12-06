@@ -9,7 +9,7 @@ inputs, also add these inputs as parameters with default values.
 
 import aesara.tensor as at
 
-from hssm.lan.onnx2xla import _asarray, attribute_handlers
+from hssm.wfpt.onnx2xla import _asarray, attribute_handlers
 
 
 def aesara_gemm(
