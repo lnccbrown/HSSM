@@ -14,8 +14,8 @@ import pymc as pm
 from aesara.tensor.random.op import RandomVariable
 from numpy.typing import ArrayLike
 
-from hssm.wfpt.classic import WFPTClassic, WFPTRandomVariable
-from hssm.wfpt.lan import LAN
+from .classic import WFPTClassic, WFPTRandomVariable
+from .lan import LAN
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
@@ -101,7 +101,7 @@ class WFPT:
             model = onnx.load(model)
 
         if backend is None or backend == "aesara":
-            lan_logp = LAN.make_aesara_logp(model, list_params)
+            lan_logp = LAN.make_aesara_logp(model)
         if backend == "jax":
             logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
                 model,

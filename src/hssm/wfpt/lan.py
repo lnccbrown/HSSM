@@ -21,8 +21,8 @@ from aesara.link.jax.dispatch import jax_funcify
 from jax import grad, jit
 from numpy.typing import ArrayLike
 
-from hssm.wfpt.onnx2aes import aes_interpret_onnx
-from hssm.wfpt.onnx2xla import interpret_onnx
+from .onnx2aes import aes_interpret_onnx
+from .onnx2xla import interpret_onnx
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
@@ -173,7 +173,7 @@ class LAN:
         return lan_logp_op
 
     @classmethod
-    def make_aesara_logp(cls, model: str | PathLike | onnx.Model, *dist_params):
+    def make_aesara_logp(cls, model: str | PathLike | onnx.Model):
         """
         Converting onnx model file to aesara
         Args:
