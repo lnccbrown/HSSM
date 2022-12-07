@@ -271,6 +271,7 @@ def log_pdf_sv(
 
     return checked_logp
 
+
 # pylint: disable=W0511, R0903
 # TODO: Implement this class.
 # This is just a placeholder to get the code to run at the moment
@@ -314,7 +315,7 @@ class WFPTClassic(PositiveContinuous):
         t = at.as_tensor_variable(pm.floatX(t))
         return super().dist([v, sv, a, z, t], **kwargs)
 
-    def logp(data, v, sv, a, z, t, err=1e-7, k_terms=10): # pylint: disable=E0213
+    def logp(data, v, sv, a, z, t, err=1e-7, k_terms=10):  # pylint: disable=E0213
         """Produces an array of log-likelihoods."""
 
         return log_pdf_sv(data, v, sv, a, z, t, err, k_terms)
