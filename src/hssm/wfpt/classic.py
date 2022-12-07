@@ -1,10 +1,8 @@
 """
 wfpt.py: aesara implementation of the Wiener First Passage Time Distribution
-
 This code is based on Sam Mathias's Aesara/Theano implementation
 of the WFPT distribution here:
 https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b
-
 """
 
 from __future__ import annotations
@@ -20,10 +18,56 @@ from pymc.distributions.dist_math import check_parameters
 from ssms.basic_simulators import simulator  # type: ignore
 
 
+def k_small(rt: np.ndarray, err: float) -> np.ndarray:
+    """Determines number of terms needed for small-t expansion.
+
+    Args:
+        rt: An 1D numpy of flipped RTs. (0, inf).
+        err: Error bound.
+
+    Returns: a 1D at array of k_small.
+    """
+    ks = 2 + at.sqrt(-2 * rt * at.log(2 * np.sqrt(2 * np.pi * rt) * err))
+    ks = at.max(at.stack([ks, at.sqrt(rt) + 1]), axis=0)
+    ks = at.switch(2 * at.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
+
+    return ks
+
+
+def k_large(rt: np.ndarray, err: float) -> np.ndarray:
+    """Determine number of terms needed for large-t expansion.
+
+    Args:
+        rt: An 1D numpy of flipped RTs. (0, inf).
+        err: Error bound
+
+    Returns: a 1D at array of k_large.
+    """
+    kl = at.sqrt(-2 * at.log(np.pi * rt * err) / (np.pi**2 * rt))
+    kl = at.max(at.stack([kl, 1.0 / (np.pi * at.sqrt(rt))]), axis=0)
+    kl = at.switch(np.pi * rt * err < 1, kl, 1.0 / (np.pi * at.sqrt(rt)))
+
+    return kl
+
+
+def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
+    """Computes and compares k_small with k_large.
+
+    Args:
+        rt: An 1D numpy of flipped RTs. (0, inf).
+        err: Error bound.
+
+    Returns: a 1D boolean at array of which implementation should be used.
+    """
+    ks = k_small(rt, err)
+    kl = k_large(rt, err)
+
+    return ks < kl
+
+
 def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
     """Produces a decision function that determines whether the pdf should be calculated
     with large-time or small-time expansion.
-
     Returns: A decision function with saved state to avoid repeated computation.
     """
 
@@ -34,7 +78,6 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
     def inner_func(rt: np.ndarray, err: float = 1e-7) -> np.ndarray:
         """For each element in `rt`, return `True` if the large-time expansion is
         more efficient than the small-time expansion and `False` otherwise.
-
         This function uses a closure to save the result of past computation.
         If `rt` and `err` passed to it does not change, then it will directly
         return the results of the previous computation.
@@ -51,26 +94,18 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
         nonlocal internal_result
 
         if (
-            np.all(rt == internal_rt)
+            internal_result is not None
             and err == internal_err
-            and internal_result is not None
+            and np.all(rt == internal_rt)
         ):
+            # This order is to promote short circuiting to avoid
+            # unnecessary computation.
             return internal_result
 
         internal_rt = rt
         internal_err = err
 
-        # determine number of terms needed for small-t expansion
-        ks = 2 + at.sqrt(-2 * rt * at.log(2 * np.sqrt(2 * np.pi * rt) * err))
-        ks = at.max(at.stack([ks, at.sqrt(rt) + 1]), axis=0)
-        ks = at.switch(2 * at.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
-
-        # determine number of terms needed for large-t expansion
-        kl = at.sqrt(-2 * at.log(np.pi * rt * err) / (np.pi**2 * rt))
-        kl = at.max(at.stack([kl, 1.0 / (np.pi * at.sqrt(rt))]), axis=0)
-        kl = at.switch(np.pi * rt * err < 1, kl, 1.0 / (np.pi * at.sqrt(rt)))
-
-        lambda_rt = ks < kl
+        lambda_rt = compare_k(rt, err)
 
         internal_result = lambda_rt
 
@@ -83,6 +118,21 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
 # and does not repeat computation if a new `tt` passed to
 # it is the same
 decision = decision_func()
+
+
+def get_ks(k_terms: int, fast: bool) -> np.ndarray:
+    """Returns an array of ks given the number of terms needed to
+    approximate the sum of the infinite series.
+
+    Args:
+        k_terms: number of terms needed
+        fast: whether the function is used in the fast of slow expansion.
+
+    Returns: An array of ks.
+    """
+    if fast:
+        return at.arange(-at.floor((k_terms - 1) / 2), at.ceil((k_terms - 1) / 2) + 1)
+    return at.arange(1, k_terms + 1).reshape((-1, 1))
 
 
 def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
@@ -100,11 +150,14 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 
     # Slightly changed the original code to mimic the paper and
     # ensure correctness
-    k = at.arange(-at.floor((k_terms - 1) / 2), at.ceil((k_terms - 1) / 2) + 1)
+    k = get_ks(k_terms, fast=True)
+
+    # A log-sum-exp trick is used here
     y = w + 2 * k.reshape((-1, 1))
-    r = -at.power(y, 2) / 2 / tt
+    r = -at.power(y, 2) / (2 * tt)
     c = at.max(r, axis=0)
     p = at.exp(c + at.log(at.sum(y * at.exp(r - c), axis=0)))
+    # Normalize p
     p = p / at.sqrt(2 * np.pi * at.power(tt, 3))
 
     return p
@@ -122,8 +175,7 @@ def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     Returns:
         The approximated function f(tt|0, 1, w).
     """
-
-    k = at.arange(1, k_terms + 1).reshape((-1, 1))
+    k = get_ks(k_terms, fast=False)
     y = k * at.sin(k * np.pi * w)
     r = -at.power(k, 2) * at.power(np.pi, 2) * tt / 2
     p = at.sum(y * at.exp(r), axis=0) * np.pi
@@ -192,6 +244,10 @@ def log_pdf_sv(
 
     p = ftt01w(rt, a, z_flipped, err, k_terms)
 
+    # This step does 3 things at the same time:
+    # 1. Computes f(t|v, a, z) from the pdf when setting a = 0 and z = 1.
+    # 2. Computes the log of above value
+    # 3. Computes the integration given the sd of v
     logp = (
         at.log(p)
         + (
@@ -215,7 +271,7 @@ def log_pdf_sv(
 
     return checked_logp
 
-
+# pylint: disable=W0511, R0903
 # TODO: Implement this class.
 # This is just a placeholder to get the code to run at the moment
 class WFPTRandomVariable(RandomVariable):
@@ -228,13 +284,14 @@ class WFPTRandomVariable(RandomVariable):
     _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
 
     @classmethod
-    # pylint: disable=arguments-renamed
+    # pylint: disable=arguments-renamed, bad-option-value
     def rng_fn(  # type: ignore
         cls,
         theta: List[float],
         model: str = "ddm",
         size: int = 500,
     ) -> np.ndarray:
+        """Generates random variables from this distribution."""
         sim_out = simulator(theta=theta, model=model, n_samples=size)
         data_tmp = sim_out["rts"] * sim_out["choices"]
         return data_tmp.flatten()
@@ -245,8 +302,11 @@ class WFPTClassic(PositiveContinuous):
 
     rv_op = WFPTRandomVariable()
 
+    # pylint: disable=W0221
     @classmethod
     def dist(cls, v, sv, a, z, t, **kwargs):
+        """Accepts distribution parameters."""
+
         v = at.as_tensor_variable(pm.floatX(v))
         sv = at.as_tensor_variable(pm.floatX(sv))
         a = at.as_tensor_variable(pm.floatX(a))
@@ -254,6 +314,7 @@ class WFPTClassic(PositiveContinuous):
         t = at.as_tensor_variable(pm.floatX(t))
         return super().dist([v, sv, a, z, t], **kwargs)
 
-    def logp(data, v, sv, a, z, t, err=1e-7, k_terms=10):
+    def logp(data, v, sv, a, z, t, err=1e-7, k_terms=10): # pylint: disable=E0213
+        """Produces an array of log-likelihoods."""
 
         return log_pdf_sv(data, v, sv, a, z, t, err, k_terms)
