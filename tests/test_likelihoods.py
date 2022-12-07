@@ -12,7 +12,7 @@ import arviz
 import numpy as np
 import pymc as pm
 import pytest
-from hddm_wfpt.wfpt import pdf_array
+from hddm_wfpt import wfpt
 from numpy.random import rand
 from ssms.basic_simulators import simulator
 
@@ -70,7 +70,7 @@ def test_logp(data_fixture):
         t = rand() * 0.5
         err = 1e-7
         aesara_log = log_pdf_sv(data_fixture, v, sv, a, z, t, err=err)
-        cython_log = pdf_array(data_fixture, v, sv, a, z, 0, t, 0, err, 1)
+        cython_log = wfpt.pdf_array(data_fixture, v, sv, a, z, 0, t, 0, err, 1)
         np.testing.assert_array_almost_equal(aesara_log.eval(), cython_log, 2)
 
 
