@@ -3,6 +3,7 @@ This file includes the WFPT class factory that produces WFPT classes that suppor
 arbitrary log-likelihood functions and random number generation functions, and
 provides utility functions for handling LANs.
 """
+
 from __future__ import annotations
 
 from os import PathLike
@@ -59,7 +60,7 @@ class WFPT:
                 other_kwargs = {k: v for k, v in kwargs.items() if k not in cls.params}
                 return super().dist(dist_params, **other_kwargs)
 
-            def logp(data, *dist_params):
+            def logp(data, *dist_params):  # pylint: disable=E0213
 
                 return loglik(data, *dist_params)
 
