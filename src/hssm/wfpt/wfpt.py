@@ -100,9 +100,11 @@ class WFPT:
         if isinstance(model, (str, PathLike)):
             model = onnx.load(model)
 
+        lan_logp = None
+
         if backend is None or backend == "aesara":
             lan_logp = LAN.make_aesara_logp(model)
-        if backend == "jax":
+        elif backend == "jax":
             logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
                 model,
                 n_params=len(list_params),
