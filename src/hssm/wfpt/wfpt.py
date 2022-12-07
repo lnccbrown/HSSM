@@ -76,9 +76,9 @@ class WFPT:
     def make_lan_distribution(
         cls,
         model: str | PathLike | onnx.model,
-        backend: str | None,
         list_params: List[str],
         rv: Type[RandomVariable] | None = None,
+        backend: str | None = "aesara",
         compile_funcs: bool = True,
     ) -> Type[pm.Distribution]:
         """Produces a PyMC distribution that uses the provided ONNX model as
@@ -103,7 +103,7 @@ class WFPT:
 
         lan_logp = None
 
-        if backend is None or backend == "aesara":
+        if backend == "aesara":
             lan_logp = LAN.make_aesara_logp(model)
         elif backend == "jax":
             logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
