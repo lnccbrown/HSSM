@@ -154,6 +154,7 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the slow-RT expansion.
+
     Args:
         tt: Flipped, normalized RTs. (0, inf).
         w: Normalized decision starting point. (0, 1).
@@ -256,6 +257,7 @@ def log_pdf_sv(
     return checked_logp
 
 
+# pylint: disable=W0511, R0903
 # TODO: Implement this class.
 # This is just a placeholder to get the code to run at the moment
 class WFPTRandomVariable(RandomVariable):
@@ -268,13 +270,14 @@ class WFPTRandomVariable(RandomVariable):
     _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
 
     @classmethod
-    # pylint: disable=arguments-renamed
+    # pylint: disable=arguments-renamed, bad-option-value
     def rng_fn(  # type: ignore
         cls,
         theta: List[float],
         model: str = "ddm",
         size: int = 500,
     ) -> np.ndarray:
+        """Generates random variables from this distribution."""
         sim_out = simulator(theta=theta, model=model, n_samples=size)
         data_tmp = sim_out["rts"] * sim_out["choices"]
         return data_tmp.flatten()
@@ -285,8 +288,11 @@ class WFPTClassic(PositiveContinuous):
 
     rv_op = WFPTRandomVariable()
 
+    # pylint: disable=W0221
     @classmethod
     def dist(cls, v, sv, a, z, t, **kwargs):
+        """Accepts distribution parameters."""
+
         v = at.as_tensor_variable(pm.floatX(v))
         sv = at.as_tensor_variable(pm.floatX(sv))
         a = at.as_tensor_variable(pm.floatX(a))
@@ -294,6 +300,7 @@ class WFPTClassic(PositiveContinuous):
         t = at.as_tensor_variable(pm.floatX(t))
         return super().dist([v, sv, a, z, t], **kwargs)
 
-    def logp(data, v, sv, a, z, t, err=1e-7, k_terms=10):
+    def logp(data, v, sv, a, z, t, err=1e-7, k_terms=10):  # pylint: disable=E0213
+        """Produces an array of log-likelihoods."""
 
         return log_pdf_sv(data, v, sv, a, z, t, err, k_terms)
