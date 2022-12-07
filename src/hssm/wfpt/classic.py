@@ -270,7 +270,7 @@ class WFPTRandomVariable(RandomVariable):
     _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
 
     @classmethod
-    # pylint: disable=arguments-renamed, bad-option-value
+    # pylint: disable=arguments-renamed,bad-option-value,W0221
     def rng_fn(  # type: ignore
         cls,
         theta: List[float],
