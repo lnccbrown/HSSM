@@ -97,7 +97,7 @@ class WFPT:
         backend: str | None = "aesara",
         compile_funcs: bool = True,
     ) -> Type[pm.Distribution]:
-        """Produces a PyMC distribution that uses the provided ONNX model as
+        """Produces a PyMC distribution that uses the provided base or ONNX model as
         its log-likelihood function.
 
         Args:
