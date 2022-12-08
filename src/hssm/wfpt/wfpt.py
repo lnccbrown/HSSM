@@ -41,6 +41,7 @@ class WFPTRandomVariable(RandomVariable):
         theta: List[float],
         model: str = "ddm",
         size: int = 500,
+        **kwargs
     ) -> np.ndarray:
         """Generates random variables from this distribution."""
         sim_out = simulator(theta=dist_params, model=model, n_samples=size, **kwargs)
