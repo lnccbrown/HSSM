@@ -43,7 +43,7 @@ class WFPTRandomVariable(RandomVariable):
         size: int = 500,
     ) -> np.ndarray:
         """Generates random variables from this distribution."""
-        sim_out = simulator(theta=theta, model=model, n_samples=size)
+        sim_out = simulator(theta=dist_params, model=model, n_samples=size, **kwargs)
         data_tmp = sim_out["rts"] * sim_out["choices"]
         return data_tmp.flatten()
 
