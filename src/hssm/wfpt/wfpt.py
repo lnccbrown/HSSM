@@ -89,7 +89,7 @@ class WFPT:
         return WFPTDistribution
 
     @classmethod
-    def make_wfpt_distribution(
+    def make_ssm_distribution(
         cls,
         model: str | PathLike | onnx.model,
         list_params: List[str],
