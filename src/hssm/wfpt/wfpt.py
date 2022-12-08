@@ -78,7 +78,7 @@ class WFPT:
         model: str | PathLike | onnx.model,
         list_params: List[str],
         rv: Type[RandomVariable] | None = None,
-        backend: str | None = "aesara",
+        backend: str = "aesara",
         compile_funcs: bool = True,
     ) -> Type[pm.Distribution]:
         """Produces a PyMC distribution that uses the provided ONNX model as
@@ -112,5 +112,9 @@ class WFPT:
                 compile_funcs=compile_funcs,
             )
             lan_logp = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
+        else:
+            raise ValueError(
+                "Currently only 'aesara' and 'jax' backends are supported."
+            )
 
         return cls.make_distribution(lan_logp, rv, list_params)
