@@ -30,7 +30,7 @@ class WFPTRandomVariable(RandomVariable):
 
     name: str = "WFPT_RV"
     ndim_supp: int = 0
-    ndims_params: List[int] = [0] * 10
+    ndims_params: List[int] = [0] * list_params
     dtype: str = "floatX"
     _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
 
