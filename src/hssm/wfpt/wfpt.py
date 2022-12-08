@@ -38,7 +38,7 @@ class WFPTRandomVariable(RandomVariable):
     # pylint: disable=arguments-renamed,bad-option-value,W0221
     def rng_fn(  # type: ignore
         cls,
-        theta: List[float],
+        *dist_params,
         model: str = "ddm",
         size: int = 500,
         **kwargs
