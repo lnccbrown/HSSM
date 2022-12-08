@@ -37,6 +37,11 @@ class WFPTRandomVariable(RandomVariable):
     @classmethod
     # pylint: disable=arguments-renamed,bad-option-value,W0221
     def rng_fn(  # type: ignore
+        cls,
+        theta: List[float],
+        model: str = "ddm",
+        size: int = 500,
+        **kwargs
         cls, dist_params: List[float], model: str = "ddm", size: int = 500, **kwargs
     ) -> np.ndarray:
         """Generates random variables from this distribution."""
