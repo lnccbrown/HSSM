@@ -7,15 +7,11 @@ https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b
 
 from __future__ import annotations
 
-from typing import Callable, List, Tuple
+from typing import Callable
 
 import aesara.tensor as at
 import numpy as np
-import pymc as pm
-from aesara.tensor.random.op import RandomVariable
-from pymc.distributions.continuous import PositiveContinuous
 from pymc.distributions.dist_math import check_parameters
-from ssms.basic_simulators import simulator  # type: ignore
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
@@ -214,10 +210,10 @@ def ftt01w(
 def log_pdf_sv(
     data: np.ndarray,
     v: float,
-    sv: float,
     a: float,
     z: float,
     t: float,
+    sv: float,
     err: float = 1e-7,
     k_terms: int = 10,
 ) -> np.ndarray:
@@ -234,7 +230,6 @@ def log_pdf_sv(
         err: Error bound.
         k_terms: number of terms to use to approximate the PDF.
     """
-
     # First, flip data to positive
     flip = data > 0
     v_flipped = at.switch(flip, -v, v)  # transform v if x is upper-bound response
@@ -270,52 +265,3 @@ def log_pdf_sv(
     # checked_logp = check_parameters(checked_logp, np.all(rt > 0), msg="t <= min(rt)")
 
     return checked_logp
-
-
-# pylint: disable=W0511, R0903
-# TODO: Implement this class.
-# This is just a placeholder to get the code to run at the moment
-class WFPTRandomVariable(RandomVariable):
-    """WFPT random variable"""
-
-    name: str = "WFPT_RV"
-    ndim_supp: int = 0
-    ndims_params: List[int] = [0] * 10
-    dtype: str = "floatX"
-    _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
-
-    @classmethod
-    # pylint: disable=arguments-renamed,bad-option-value,W0221
-    def rng_fn(  # type: ignore
-        cls,
-        theta: List[float],
-        model: str = "ddm",
-        size: int = 500,
-    ) -> np.ndarray:
-        """Generates random variables from this distribution."""
-        sim_out = simulator(theta=theta, model=model, n_samples=size)
-        data_tmp = sim_out["rts"] * sim_out["choices"]
-        return data_tmp.flatten()
-
-
-class WFPTClassic(PositiveContinuous):
-    """Wiener first-passage time (WFPT) distribution"""
-
-    rv_op = WFPTRandomVariable()
-
-    # pylint: disable=W0221
-    @classmethod
-    def dist(cls, v, sv, a, z, t, **kwargs):
-        """Accepts distribution parameters."""
-
-        v = at.as_tensor_variable(pm.floatX(v))
-        sv = at.as_tensor_variable(pm.floatX(sv))
-        a = at.as_tensor_variable(pm.floatX(a))
-        z = at.as_tensor_variable(pm.floatX(z))
-        t = at.as_tensor_variable(pm.floatX(t))
-        return super().dist([v, sv, a, z, t], **kwargs)
-
-    def logp(data, v, sv, a, z, t, err=1e-7, k_terms=10):  # pylint: disable=E0213
-        """Produces an array of log-likelihoods."""
-
-        return log_pdf_sv(data, v, sv, a, z, t, err, k_terms)
