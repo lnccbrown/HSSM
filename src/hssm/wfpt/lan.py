@@ -97,7 +97,7 @@ class LAN:
         logp: LogLikeFunc,
         logp_grad: LogLikeGrad,
         logp_nojit: LogLikeFunc,
-    ) -> Op:
+    ) -> LogLikeFunc:
         """Wraps the JAX functions and its gradient in Aesara Ops.
 
         Args:
@@ -111,7 +111,7 @@ class LAN:
             aesara.grad.
         """
 
-        class LANLogpOp(Op):
+        class LANLogpOp(Op):  # pylint: disable=W0223
             """Wraps a JAX function in an aesara Op."""
 
             def make_node(self, data, *dist_params):
@@ -145,7 +145,7 @@ class LAN:
                     aesara.gradient.grad_not_implemented(self, 0, inputs[0]),
                 ] + [output_gradient * result for result in results]
 
-        class LANLogpGradOp(Op):
+        class LANLogpGradOp(Op):  # pylint: disable=W0223
             """Wraps the gradient opearation of a jax function in an aesara op."""
 
             def make_node(self, data, *dist_params):
