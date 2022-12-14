@@ -9,12 +9,9 @@ from __future__ import annotations
 
 from typing import Callable
 
-import aesara
-import aesara.tensor as at
 import numpy as np
+import pytensor.tensor as pt
 from pymc.distributions.dist_math import check_parameters
-
-aesara.config.floatX = "float32"
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
@@ -24,9 +21,9 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
         err: Error bound
     Returns: a 1D at array of k_small.
     """
-    ks = 2 + at.sqrt(-2 * rt * at.log(2 * np.sqrt(2 * np.pi * rt) * err))
-    ks = at.max(at.stack([ks, at.sqrt(rt) + 1]), axis=0)
-    ks = at.switch(2 * at.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
+    ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
+    ks = pt.max(pt.stack([ks, pt.sqrt(rt) + 1]), axis=0)
+    ks = pt.switch(2 * pt.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
 
     return ks
 
@@ -38,9 +35,9 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
         err: Error bound
     Returns: a 1D at array of k_large.
     """
-    kl = at.sqrt(-2 * at.log(np.pi * rt * err) / (np.pi**2 * rt))
-    kl = at.max(at.stack([kl, 1.0 / (np.pi * at.sqrt(rt))]), axis=0)
-    kl = at.switch(np.pi * rt * err < 1, kl, 1.0 / (np.pi * at.sqrt(rt)))
+    kl = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
+    kl = pt.max(pt.stack([kl, 1.0 / (np.pi * pt.sqrt(rt))]), axis=0)
+    kl = pt.switch(np.pi * rt * err < 1, kl, 1.0 / (np.pi * pt.sqrt(rt)))
 
     return kl
 
@@ -120,8 +117,8 @@ def get_ks(k_terms: int, fast: bool) -> np.ndarray:
     Returns: An array of ks.
     """
     if fast:
-        return at.arange(-at.floor((k_terms - 1) / 2), at.ceil((k_terms - 1) / 2) + 1)
-    return at.arange(1, k_terms + 1).reshape((-1, 1))
+        return pt.arange(-pt.floor((k_terms - 1) / 2), pt.ceil((k_terms - 1) / 2) + 1)
+    return pt.arange(1, k_terms + 1).reshape((-1, 1))
 
 
 def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
@@ -141,11 +138,11 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 
     # A log-sum-exp trick is used here
     y = w + 2 * k.reshape((-1, 1))
-    r = -at.power(y, 2) / (2 * tt)
-    c = at.max(r, axis=0)
-    p = at.exp(c + at.log(at.sum(y * at.exp(r - c), axis=0)))
+    r = -pt.power(y, 2) / (2 * tt)
+    c = pt.max(r, axis=0)
+    p = pt.exp(c + pt.log(pt.sum(y * pt.exp(r - c), axis=0)))
     # Normalize p
-    p = p / at.sqrt(2 * np.pi * at.power(tt, 3))
+    p = p / pt.sqrt(2 * np.pi * pt.power(tt, 3))
 
     return p
 
@@ -161,9 +158,9 @@ def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
         The approximated function f(tt|0, 1, w).
     """
     k = get_ks(k_terms, fast=False)
-    y = k * at.sin(k * np.pi * w)
-    r = -at.power(k, 2) * at.power(np.pi, 2) * tt / 2
-    p = at.sum(y * at.exp(r), axis=0) * np.pi
+    y = k * pt.sin(k * np.pi * w)
+    r = -pt.power(k, 2) * pt.power(np.pi, 2) * tt / 2
+    p = pt.sum(y * pt.exp(r), axis=0) * np.pi
 
     return p
 
@@ -190,7 +187,7 @@ def ftt01w(
     p_fast = ftt01w_fast(tt, w, k_terms)
     p_slow = ftt01w_slow(tt, w, k_terms)
 
-    p = at.switch(lambda_rt, p_fast, p_slow)
+    p = pt.switch(lambda_rt, p_fast, p_slow)
 
     return p * (p > 0)  # Making sure that p > 0
 
@@ -220,8 +217,8 @@ def log_pdf_sv(
 
     # First, flip data to positive
     flip = data > 0
-    v_flipped = at.switch(flip, -v, v)  # transform v if x is upper-bound response
-    z_flipped = at.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
+    v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
+    z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = np.abs(data)  # absolute rts
     rt = rt - t  # remove nondecision time
 
@@ -232,15 +229,15 @@ def log_pdf_sv(
     # 2. Computes the log of above value
     # 3. Computes the integration given the sd of v
     logp = (
-        at.log(p)
+        pt.log(p)
         + (
             (a * z_flipped * sv) ** 2
             - 2 * a * v_flipped * z_flipped
             - (v_flipped**2) * rt
         )
         / (2 * (sv**2) * rt + 2)
-        - at.log(sv**2 * rt + 1) / 2
-        - 2 * at.log(a)
+        - pt.log(sv**2 * rt + 1) / 2
+        - 2 * pt.log(a)
     )
 
     checked_logp = check_parameters(
