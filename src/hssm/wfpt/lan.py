@@ -12,10 +12,10 @@ from os import PathLike
 from typing import Callable, Tuple
 
 import aesara
-import aesara.tensor as at
 import jax.numpy as jnp
 import numpy as np
 import onnx
+import pytensor.tensor as pt
 from aesara.graph import Apply, Op
 from aesara.link.jax.dispatch import jax_funcify
 from jax import grad, jit
@@ -116,10 +116,10 @@ class LAN:
 
             def make_node(self, data, *dist_params):
                 inputs = [
-                    at.as_tensor_variable(data),
-                ] + [at.as_tensor_variable(dist_param) for dist_param in dist_params]
+                    pt.as_tensor_variable(data),
+                ] + [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
 
-                outputs = [at.scalar()]
+                outputs = [pt.scalar()]
 
                 return Apply(self, inputs, outputs)
 
@@ -150,8 +150,8 @@ class LAN:
 
             def make_node(self, data, *dist_params):
                 inputs = [
-                    at.as_tensor_variable(data),
-                ] + [at.as_tensor_variable(dist_param) for dist_param in dist_params]
+                    pt.as_tensor_variable(data),
+                ] + [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
                 outputs = [inp.type() for inp in inputs[1:]]
 
                 return Apply(self, inputs, outputs)
@@ -187,16 +187,16 @@ class LAN:
         )
 
         def logp(data: np.ndarray, *dist_params) -> ArrayLike:
-            rt = at.abs(data)
-            response = at.where(data >= 0, 1.0, -1.0)
+            rt = pt.abs(data)
+            response = pt.where(data >= 0, 1.0, -1.0)
 
             # Specify input layer of MLP
-            inputs = at.zeros(
+            inputs = pt.zeros(
                 (rt.shape[0], len(dist_params) + 2)
             )  # (n_trials, number of parameters + 2 [for rt and choice columns])
-            inputs = at.set_subtensor(inputs[:, :-2], at.stack(dist_params))
-            inputs = at.set_subtensor(inputs[:, -2], rt)
-            inputs = at.set_subtensor(inputs[:, -1], response)
-            return at.sum(at.squeeze(aes_interpret_onnx(loaded_model.graph, inputs)[0]))
+            inputs = pt.set_subtensor(inputs[:, :-2], pt.stack(dist_params))
+            inputs = pt.set_subtensor(inputs[:, -2], rt)
+            inputs = pt.set_subtensor(inputs[:, -1], response)
+            return pt.sum(pt.squeeze(aes_interpret_onnx(loaded_model.graph, inputs)[0]))
 
         return logp

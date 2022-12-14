@@ -7,7 +7,7 @@ the number of inputs specified in the Opset document above. If there are any opt
 inputs, also add these inputs as parameters with default values.
 """
 
-import aesara.tensor as at
+import pytensor.tensor as pt
 
 from .onnx2xla import _asarray, attribute_handlers
 
@@ -17,20 +17,19 @@ def aesara_gemm(
 ):  # pylint: disable=C0103
     """Numpy-backed implementatio of Onnx
     General Matrix Multiply (GeMM) op."""
-    a = at.transpose(a) if transA else a
-    b = at.transpose(b) if transB else b
+    a = pt.transpose(a) if transA else a
+    b = pt.transpose(b) if transB else b
 
-    return [alpha * at.dot(a, b) + beta * c]
+    return [alpha * pt.dot(a, b) + beta * c]
 
 
 aes_onnx_ops = {
-    "Add": at.add,
+    "Add": pt.add,
     "Constant": lambda value: [value],
-    "Conv": at.nnet.conv,
-    "MatMul": lambda x, y: [at.dot(x, y)],
-    "Relu": lambda x: [at.math.max(x, 0)],
-    "Reshape": lambda x, shape: [at.reshape(x, shape)],
-    "Tanh": lambda x: [at.tanh(x)],
+    "MatMul": lambda x, y: [pt.dot(x, y)],
+    "Relu": lambda x: [pt.math.max(x, 0)],
+    "Reshape": lambda x, shape: [pt.reshape(x, shape)],
+    "Tanh": lambda x: [pt.tanh(x)],
     "Gemm": aesara_gemm,
 }
 
