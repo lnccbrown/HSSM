@@ -112,12 +112,10 @@ class WFPT:
             function.
         """
         if model == "base":
-
             lan_logp = log_pdf_sv
         else:
             if isinstance(model, (str, PathLike)):
                 model = onnx.load(model)
-
             if backend == "aesara":
                 lan_logp = LAN.make_aesara_logp(model)
             elif backend == "jax":
