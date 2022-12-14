@@ -9,12 +9,12 @@ from __future__ import annotations
 from os import PathLike
 from typing import Callable, List, Tuple, Type
 
-import aesara.tensor as at
 import numpy as np
 import onnx
 import pymc as pm
-from aesara.tensor.random.op import RandomVariable
+import pytensor.tensor as pt
 from numpy.typing import ArrayLike
+from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators import simulator  # type: ignore
 
 from .base import log_pdf_sv
@@ -78,7 +78,7 @@ class WFPT:
             @classmethod
             def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
                 dist_params = [
-                    at.as_tensor_variable(pm.floatX(kwargs[param]))
+                    pt.as_tensor_variable(pm.floatX(kwargs[param]))
                     for param in cls.params
                 ]
                 other_kwargs = {k: v for k, v in kwargs.items() if k not in cls.params}
