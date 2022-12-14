@@ -93,8 +93,8 @@ class WFPT:
     @classmethod
     def make_ssm_distribution(
         cls,
-        model: str | PathLike | onnx.model,
         list_params: List[str],
+        model: str | PathLike | onnx.model | None = None,
         rv: Type[RandomVariable] | None = None,
         backend: str | None = "aesara",
         compile_funcs: bool = True,
