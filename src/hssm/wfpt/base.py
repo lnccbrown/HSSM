@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from typing import Callable
 
+import aesara
 import aesara.tensor as at
 import numpy as np
 from pymc.distributions.dist_math import check_parameters
+
+aesara.config.floatX = "float32"
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
@@ -150,7 +153,6 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the slow-RT expansion.
-
     Args:
         tt: Flipped, normalized RTs. (0, inf).
         w: Normalized decision starting point. (0, 1).
@@ -196,10 +198,10 @@ def ftt01w(
 def log_pdf_sv(
     data: np.ndarray,
     v: float,
+    sv: float,
     a: float,
     z: float,
     t: float,
-    sv: float,
     err: float = 1e-7,
     k_terms: int = 10,
 ) -> np.ndarray:
@@ -215,6 +217,7 @@ def log_pdf_sv(
         err: Error bound.
         k_terms: number of terms to use to approximate the PDF.
     """
+
     # First, flip data to positive
     flip = data > 0
     v_flipped = at.switch(flip, -v, v)  # transform v if x is upper-bound response
