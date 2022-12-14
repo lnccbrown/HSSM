@@ -91,7 +91,7 @@ class WFPT:
         model: str | PathLike | onnx.model,
         list_params: List[str],
         rv: Type[RandomVariable] | None = None,
-        backend: str | None = "aesara",
+        backend: str = "aesara",
         compile_funcs: bool = True,
     ) -> Type[pm.Distribution]:
         """Produces a PyMC distribution that uses the provided base or ONNX model as
