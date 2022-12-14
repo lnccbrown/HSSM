@@ -8,25 +8,24 @@ import math
 import os
 import sys
 
-import arviz
 import numpy as np
-import pymc as pm
 import pytest
+import ssms.basic_simulators
 from hddm_wfpt import wfpt
 from numpy.random import rand
-from ssms.basic_simulators import simulator
 
 sys.path.insert(0, os.path.abspath("src"))
 # pylint: disable=C0413
-from hssm.wfpt.classic import WFPTClassic, decision_func, log_pdf_sv
+from hssm.wfpt.base import decision_func, log_pdf_sv
 
 
 @pytest.fixture
 def data_fixture():
-    n_samples = 500
-    sim_out = simulator(theta=[0.0, 1.5, 0.5, 1.0], model="ddm", n_samples=n_samples)
-    data_tmp = sim_out["rts"] * sim_out["choices"]
-    return data_tmp.flatten()
+    v_true, a_true, z_true, t_true, theta_true = [0.5, 1.5, 0.5, 0.5, 0.3]
+    obs_angle = ssms.basic_simulators.simulator(
+        [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=1000
+    )
+    return obs_angle["rts"][:, 0] * obs_angle["choices"][:, 0]
 
 
 def test_kterm(data_fixture):
@@ -72,16 +71,3 @@ def test_logp(data_fixture):
         aesara_log = log_pdf_sv(data_fixture, v, sv, a, z, t, err=err)
         cython_log = wfpt.pdf_array(data_fixture, v, sv, a, z, 0, t, 0, err, 1)
         np.testing.assert_array_almost_equal(aesara_log.eval(), cython_log, 2)
-
-
-def test_wfpt_class(data_fixture):
-    with pm.Model():
-        sv = 0
-        a = 0.8
-        z = 0.5
-        t = 0.0
-
-        v = pm.Normal(name="v")
-        WFPTClassic(name="x", v=v, sv=sv, a=a, z=z, t=t, observed=data_fixture)
-        results = pm.sample(1000, return_inferencedata=True)
-        assert isinstance(results, arviz.data.inference_data.InferenceData)
