@@ -38,9 +38,8 @@ class LAN:
     @classmethod
     def make_jax_logp_funcs_from_onnx(
         cls,
-        model: str | PathLike | onnx.Model,
+        model: str | PathLike | onnx.ModelProto,
         n_params: int,
-        compile_funcs: bool = True,
     ) -> Tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc,]:
         """Makes a jax function from an ONNX model.
 
@@ -54,9 +53,7 @@ class LAN:
             the forward-pass that's not jitted.
         """
 
-        loaded_model: onnx.Model = (
-            onnx.load(model) if isinstance(model, (str, PathLike)) else model
-        )
+        loaded_model = onnx.load(model) if isinstance(model, (str, PathLike)) else model
 
         def logp(data: np.ndarray, *dist_params) -> ArrayLike:
             """
@@ -64,7 +61,7 @@ class LAN:
             numbers of parameters.
 
             Args:
-                data: response time with sign indicating direction.
+                data: a two-column numpy array with response time and response
                 dist_params: a list of parameters used in the likelihood computation.
 
             Returns:
@@ -72,14 +69,11 @@ class LAN:
             """
 
             # Makes a matrix to feed to the LAN model
-            rt = jnp.abs(data)
-            response = jnp.where(data >= 0, 1.0, -1.0)
+            data = data.reshape(-1, 2)
             params_matrix = jnp.repeat(
-                jnp.stack(dist_params).reshape(1, -1), axis=0, repeats=len(data)
+                jnp.stack(dist_params).reshape(1, -1), axis=0, repeats=data.shape[0]
             )
-            input_matrix = jnp.hstack(
-                [params_matrix, rt.reshape(-1, 1), response.reshape(-1, 1)]
-            )
+            input_matrix = jnp.hstack([params_matrix, data])
 
             return jnp.sum(
                 jnp.squeeze(interpret_onnx(loaded_model.graph, input_matrix)[0])
@@ -87,17 +81,14 @@ class LAN:
 
         logp_grad = grad(logp, argnums=range(1, 1 + n_params))
 
-        if compile_funcs:
-            return jit(logp), jit(logp_grad), logp
-
-        return logp, logp_grad, logp
+        return jit(logp), jit(logp_grad), logp
 
     @staticmethod
     def make_jax_logp_ops(
         logp: LogLikeFunc,
         logp_grad: LogLikeGrad,
         logp_nojit: LogLikeFunc,
-    ) -> LogLikeFunc:
+    ) -> Op:
         """Wraps the JAX functions and its gradient in Aesara Ops.
 
         Args:
@@ -157,7 +148,7 @@ class LAN:
                 return Apply(self, inputs, outputs)
 
             def perform(self, node, inputs, outputs):
-                results = logp_grad(inputs[0], *inputs[1:])
+                results = logp_grad(*inputs)
 
                 for i, result in enumerate(results):
                     outputs[i][0] = np.asarray(result, dtype=node.outputs[i].dtype)
@@ -173,7 +164,7 @@ class LAN:
         return lan_logp_op
 
     @classmethod
-    def make_aesara_logp(cls, model: str | PathLike | onnx.Model):
+    def make_aesara_logp(cls, model: str | PathLike | onnx.ModelProto):
         """
         Converting onnx model file to aesara
         Args:
@@ -182,21 +173,19 @@ class LAN:
         Returns:
             model applied on a data
         """
-        loaded_model: onnx.Model = (
+        loaded_model: onnx.ModelProto = (
             onnx.load(model) if isinstance(model, (str, PathLike)) else model
         )
 
         def logp(data: np.ndarray, *dist_params) -> ArrayLike:
-            rt = at.abs(data)
-            response = at.where(data >= 0, 1.0, -1.0)
 
             # Specify input layer of MLP
+            data = data.reshape((-1, 2))
             inputs = at.zeros(
-                (rt.shape[0], len(dist_params) + 2)
+                (data.shape[0], len(dist_params) + 2)
             )  # (n_trials, number of parameters + 2 [for rt and choice columns])
             inputs = at.set_subtensor(inputs[:, :-2], at.stack(dist_params))
-            inputs = at.set_subtensor(inputs[:, -2], rt)
-            inputs = at.set_subtensor(inputs[:, -1], response)
+            inputs = at.set_subtensor(inputs[:, -2:], data)
             return at.sum(at.squeeze(aes_interpret_onnx(loaded_model.graph, inputs)[0]))
 
         return logp

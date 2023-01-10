@@ -75,11 +75,10 @@ class WFPT:
     @classmethod
     def make_lan_distribution(
         cls,
-        model: str | PathLike | onnx.model,
+        model: str | PathLike | onnx.ModelProto,
         list_params: List[str],
         rv: Type[RandomVariable] | None = None,
         backend: str = "aesara",
-        compile_funcs: bool = True,
     ) -> Type[pm.Distribution]:
         """Produces a PyMC distribution that uses the provided ONNX model as
         its log-likelihood function.
@@ -109,7 +108,6 @@ class WFPT:
             logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
                 model,
                 n_params=len(list_params),
-                compile_funcs=compile_funcs,
             )
             lan_logp = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
         else:
