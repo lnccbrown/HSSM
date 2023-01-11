@@ -75,7 +75,7 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
         If `rt` and `err` passed to it does not change, then it will directly
         return the results of the previous computation.
         Args:
-            rt: An 1D numpy of flipped RTs. (0, inf).
+            rt: An 1D numpy array of flipped RTs. (0, inf).
             err: Error bound
         Returns: a 1D boolean at array of which implementation should be used.
         """
