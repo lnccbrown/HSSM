@@ -34,7 +34,7 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
 def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     """Determine number of terms needed for large-t expansion.
     Args:
-        rt: An 1D numpy of flipped RTs. (0, inf).
+        rt: An 1D numpy array of flipped RTs. (0, inf).
         err: Error bound
     Returns: a 1D at array of k_large.
     """
@@ -178,7 +178,7 @@ def ftt01w(
     """Compute the appproximated density of f(tt|0,1,w) using the method
     and implementation of Navarro & Fuss, 2009.
     Args:
-        rt: Flipped RTs. (0, inf).
+        rt: Flipped Response Rates. (0, inf).
         a: Value of decision upper bound. (0, inf).
         w: Normalized decision starting point. (0, 1).
         err: Error bound.
