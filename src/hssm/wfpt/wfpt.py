@@ -9,6 +9,7 @@ from __future__ import annotations
 from os import PathLike
 from typing import Callable, List, Tuple, Type
 
+import aesara
 import aesara.tensor as at
 import numpy as np
 import onnx
@@ -59,7 +60,7 @@ class WFPT:
     @classmethod
     def make_distribution(
         cls,
-        loglik: LogLikeFunc | None,
+        loglik: LogLikeFunc | aesara.graph.Op | None,
         rv: Type[RandomVariable] | None,
         list_params: List[str] | None,
     ) -> Type[pm.Distribution]:
@@ -115,20 +116,20 @@ class WFPT:
             function.
         """
         if model == "base":
-            lan_logp = log_pdf_sv
-        else:
-            if isinstance(model, (str, PathLike)):
-                model = onnx.load(str(model))
-            if backend == "aesara":
-                lan_logp = LAN.make_aesara_logp(model)
-            elif backend == "jax":
-                logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
-                    model,
-                    n_params=len(list_params),
-                )
-                lan_logp = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
-            else:
-                raise ValueError(
-                    "Currently only 'aesara' and 'jax' backends are supported."
-                )
-        return cls.make_distribution(lan_logp, rv, list_params)
+            return cls.make_distribution(log_pdf_sv, rv, list_params)
+
+        if isinstance(model, (str, PathLike)):
+            model = onnx.load(str(model))
+        if backend == "aesara":
+            lan_logp_aes = LAN.make_aesara_logp(model)
+            return cls.make_distribution(lan_logp_aes, rv, list_params)
+
+        if backend == "jax":
+            logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
+                model,
+                n_params=len(list_params),
+            )
+            lan_logp_jax = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
+            return cls.make_distribution(lan_logp_jax, rv, list_params)
+
+        raise ValueError("Currently only 'aesara' and 'jax' backends are supported.")
