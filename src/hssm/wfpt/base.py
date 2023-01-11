@@ -208,7 +208,7 @@ def log_pdf_sv(
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
     Args:
-        data: 2-column numpy array of (response time, response)
+        data: RTs. (-inf, inf) except 0. Negative values correspond to the lower bound.
         v: Mean drift rate. (-inf, inf).
         sv: Standard deviation of the drift rate [0, inf).
         a: Value of decision upper bound. (0, inf).

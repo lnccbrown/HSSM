@@ -1,7 +1,6 @@
 """
 Likelihood Approximation Network (LAN) extension for the Wiener
 First-Passage Time (WFPT) distribution.
-
 Uses a neural network to approximate the likelihood function of
 the Wiener First-Passage Time distribution.
 """
@@ -42,12 +41,10 @@ class LAN:
         n_params: int,
     ) -> Tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc,]:
         """Makes a jax function from an ONNX model.
-
         Args:
             model: A path or url to the ONNX model, or an ONNX Model object
             already loaded.
             compile: Whether to use jit in jax to compile the model.
-
         Returns: A triple of jax or Python functions. The first calculates the
             forward pass, the second calculates the gradient, and the third is
             the forward-pass that's not jitted.
@@ -61,11 +58,9 @@ class LAN:
             """
             Computes the sum of the log-likelihoods given data and arbitrary
             numbers of parameters.
-
             Args:
                 data: a two-column numpy array with response time and response
                 dist_params: a list of parameters used in the likelihood computation.
-
             Returns:
                 The sum of log-likelihoods.
             """
@@ -92,13 +87,11 @@ class LAN:
         logp_nojit: LogLikeFunc,
     ) -> Op:
         """Wraps the JAX functions and its gradient in Aesara Ops.
-
         Args:
             logp: A JAX function that represents the feed-forward operation of the
                 LAN network.
             logp_grad: The derivative of the above function.
             logp_nojit: A Jax function
-
         Returns:
             An aesara op that wraps the feed-forward operation and can be used with
             aesara.grad.
@@ -118,7 +111,6 @@ class LAN:
 
             def perform(self, node, inputs, output_storage):
                 """Performs the Apply node.
-
                 Args:
                     inputs: This is a list of data from which the values stored in
                         output_storage are to becomputed using non-symbolic language.
