@@ -7,42 +7,19 @@ provides utility functions for handling LANs.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Callable, List, Tuple, Type
+from typing import Callable, List, Type
 
 import aesara.tensor as at
-import numpy as np
 import onnx
 import pymc as pm
 from aesara.tensor.random.op import RandomVariable
 from numpy.typing import ArrayLike
-from ssms.basic_simulators import simulator  # type: ignore
 
-from .base import log_pdf_sv
+from .classic import WFPTClassic, WFPTRandomVariable
 from .lan import LAN
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
-
-# pylint: disable=W0511, R0903
-# This is just a placeholder to get the code to run at the moment
-class WFPTRandomVariable(RandomVariable):
-    """WFPT random variable"""
-
-    name: str = "WFPT_RV"
-    ndim_supp: int = 0
-    ndims_params: List[int] = [0] * 10
-    dtype: str = "floatX"
-    _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
-
-    @classmethod
-    # pylint: disable=arguments-renamed,bad-option-value,W0221
-    def rng_fn(  # type: ignore
-        cls, dist_params: List[float], model: str = "ddm", size: int = 500, **kwargs
-    ) -> np.ndarray:
-        """Generates random variables from this distribution."""
-        sim_out = simulator(theta=dist_params, model=model, n_samples=size, **kwargs)
-        data_tmp = sim_out["rts"] * sim_out["choices"]
-        return data_tmp.flatten()
 
 
 class WFPT:
@@ -59,6 +36,10 @@ class WFPT:
         rv: Type[RandomVariable] | None,
         list_params: List[str] | None,
     ) -> Type[pm.Distribution]:
+
+        if loglik is None:
+            return WFPTClassic
+
         class WFPTDistribution(pm.Distribution):
             """Wiener first-passage time (WFPT) log-likelihood for LANs."""
 
@@ -86,15 +67,20 @@ class WFPT:
         return WFPTDistribution
 
     @classmethod
-    def make_ssm_distribution(
+    def make_classic_distribution(cls) -> Type[WFPTClassic]:
+        """Returns the classic WFPT Distribution."""
+
+        return WFPTClassic
+
+    @classmethod
+    def make_lan_distribution(
         cls,
+        model: str | PathLike | onnx.ModelProto,
         list_params: List[str],
-        model: str | PathLike | onnx.model | None = None,
         rv: Type[RandomVariable] | None = None,
         backend: str = "aesara",
-        compile_funcs: bool = True,
     ) -> Type[pm.Distribution]:
-        """Produces a PyMC distribution that uses the provided base or ONNX model as
+        """Produces a PyMC distribution that uses the provided ONNX model as
         its log-likelihood function.
 
         Args:
@@ -111,19 +97,22 @@ class WFPT:
             A PyMC Distribution class that uses the ONNX model as its log-likelihood
             function.
         """
-        if model == "base":
-            lan_logp = log_pdf_sv
+        if isinstance(model, (str, PathLike)):
+            model = onnx.load(str(model))
+
+        lan_logp = None
+
+        if backend == "aesara":
+            lan_logp = LAN.make_aesara_logp(model)
+        elif backend == "jax":
+            logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
+                model,
+                n_params=len(list_params),
+            )
+            lan_logp = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
         else:
-            if isinstance(model, (str, PathLike)):
-                model = onnx.load(model)
-            if backend == "aesara":
-                lan_logp = LAN.make_aesara_logp(model)
-            elif backend == "jax":
-                logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
-                    model,
-                    n_params=len(list_params),
-                    compile_funcs=compile_funcs,
-                )
-                lan_logp = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
+            raise ValueError(
+                "Currently only 'aesara' and 'jax' backends are supported."
+            )
 
         return cls.make_distribution(lan_logp, rv, list_params)

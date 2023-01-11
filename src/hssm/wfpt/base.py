@@ -208,7 +208,7 @@ def log_pdf_sv(
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
     Args:
-        data: RTs. (-inf, inf) except 0. Negative values correspond to the lower bound.
+        data: 2-column numpy array of (response time, response)
         v: Mean drift rate. (-inf, inf).
         sv: Standard deviation of the drift rate [0, inf).
         a: Value of decision upper bound. (0, inf).
@@ -219,10 +219,11 @@ def log_pdf_sv(
     """
 
     # First, flip data to positive
-    flip = data > 0
-    v_flipped = at.switch(flip, -v, v)  # transform v if x is upper-bound response
-    z_flipped = at.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
-    rt = np.abs(data)  # absolute rts
+    data = at.reshape(data, (-1, 2))
+    rt = data[:, 0]
+    choice = data[:, 1]
+    v_flipped = at.switch(choice, -v, v)  # transform v if x is upper-bound response
+    z_flipped = at.switch(choice, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t  # remove nondecision time
 
     p = ftt01w(rt, a, z_flipped, err, k_terms)
