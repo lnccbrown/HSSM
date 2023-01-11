@@ -20,7 +20,7 @@ aesara.config.floatX = "float32"
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     """Determines number of terms needed for small-t expansion.
     Args:
-        rt: An 1D numpy of flipped RTs. (0, inf).
+        rt: A 1D numpy array of flipped R.... T.....s. (0, inf).
         err: Error bound
     Returns: a 1D at array of k_small.
     """
