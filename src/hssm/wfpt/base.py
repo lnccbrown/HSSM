@@ -7,24 +7,18 @@ https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b
 
 from __future__ import annotations
 
-from typing import Callable, List, Tuple
+from typing import Callable
 
 import aesara.tensor as at
 import numpy as np
-import pymc as pm
-from aesara.tensor.random.op import RandomVariable
-from pymc.distributions.continuous import PositiveContinuous
 from pymc.distributions.dist_math import check_parameters
-from ssms.basic_simulators import simulator  # type: ignore
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     """Determines number of terms needed for small-t expansion.
-
     Args:
-        rt: An 1D numpy of flipped RTs. (0, inf).
-        err: Error bound.
-
+        rt: A 1D numpy array of flipped R.... T.....s. (0, inf).
+        err: Error bound
     Returns: a 1D at array of k_small.
     """
     ks = 2 + at.sqrt(-2 * rt * at.log(2 * np.sqrt(2 * np.pi * rt) * err))
@@ -36,11 +30,9 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
 
 def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     """Determine number of terms needed for large-t expansion.
-
     Args:
-        rt: An 1D numpy of flipped RTs. (0, inf).
+        rt: An 1D numpy array of flipped RTs. (0, inf).
         err: Error bound
-
     Returns: a 1D at array of k_large.
     """
     kl = at.sqrt(-2 * at.log(np.pi * rt * err) / (np.pi**2 * rt))
@@ -52,11 +44,9 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
 
 def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
     """Computes and compares k_small with k_large.
-
     Args:
         rt: An 1D numpy of flipped RTs. (0, inf).
-        err: Error bound.
-
+        err: Error bound
     Returns: a 1D boolean at array of which implementation should be used.
     """
     ks = k_small(rt, err)
@@ -81,11 +71,9 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
         This function uses a closure to save the result of past computation.
         If `rt` and `err` passed to it does not change, then it will directly
         return the results of the previous computation.
-
         Args:
-            rt: An 1D numpy of flipped RTs. (0, inf).
+            rt: An 1D numpy array of flipped RTs. (0, inf).
             err: Error bound
-
         Returns: a 1D boolean at array of which implementation should be used.
         """
 
@@ -123,11 +111,9 @@ decision = decision_func()
 def get_ks(k_terms: int, fast: bool) -> np.ndarray:
     """Returns an array of ks given the number of terms needed to
     approximate the sum of the infinite series.
-
     Args:
         k_terms: number of terms needed
         fast: whether the function is used in the fast of slow expansion.
-
     Returns: An array of ks.
     """
     if fast:
@@ -138,12 +124,10 @@ def get_ks(k_terms: int, fast: bool) -> np.ndarray:
 def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the fast-RT expansion.
-
     Args:
         tt: Flipped, normalized RTs. (0, inf).
         w: Normalized decision starting point. (0, 1).
         k_terms: number of terms to use to approximate the PDF.
-
     Returns:
         The approximated function f(tt|0, 1, w).
     """
@@ -166,12 +150,10 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the slow-RT expansion.
-
     Args:
         tt: Flipped, normalized RTs. (0, inf).
         w: Normalized decision starting point. (0, 1).
         k_terms: number of terms to use to approximate the PDF.
-
     Returns:
         The approximated function f(tt|0, 1, w).
     """
@@ -192,9 +174,8 @@ def ftt01w(
 ) -> np.ndarray:
     """Compute the appproximated density of f(tt|0,1,w) using the method
     and implementation of Navarro & Fuss, 2009.
-
     Args:
-        rt: Flipped RTs. (0, inf).
+        rt: Flipped Response Rates. (0, inf).
         a: Value of decision upper bound. (0, inf).
         w: Normalized decision starting point. (0, 1).
         err: Error bound.
@@ -223,9 +204,8 @@ def log_pdf_sv(
 ) -> np.ndarray:
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
-
     Args:
-        data: 2-column numpy array of (response time, response)
+        data: data: 2-column numpy array of (response time, response)
         v: Mean drift rate. (-inf, inf).
         sv: Standard deviation of the drift rate [0, inf).
         a: Value of decision upper bound. (0, inf).
@@ -271,52 +251,3 @@ def log_pdf_sv(
     # checked_logp = check_parameters(checked_logp, np.all(rt > 0), msg="t <= min(rt)")
 
     return checked_logp
-
-
-# pylint: disable=W0511, R0903
-# TODO: Implement this class.
-# This is just a placeholder to get the code to run at the moment
-class WFPTRandomVariable(RandomVariable):
-    """WFPT random variable"""
-
-    name: str = "WFPT_RV"
-    ndim_supp: int = 0
-    ndims_params: List[int] = [0] * 10
-    dtype: str = "floatX"
-    _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
-
-    @classmethod
-    # pylint: disable=arguments-renamed,bad-option-value,W0221
-    def rng_fn(  # type: ignore
-        cls,
-        theta: List[float],
-        model: str = "ddm",
-        size: int = 500,
-    ) -> np.ndarray:
-        """Generates random variables from this distribution."""
-        sim_out = simulator(theta=theta, model=model, n_samples=size)
-        data_tmp = sim_out["rts"] * sim_out["choices"]
-        return data_tmp.flatten()
-
-
-class WFPTClassic(PositiveContinuous):
-    """Wiener first-passage time (WFPT) distribution"""
-
-    rv_op = WFPTRandomVariable()
-
-    # pylint: disable=W0221
-    @classmethod
-    def dist(cls, v, sv, a, z, t, **kwargs):
-        """Accepts distribution parameters."""
-
-        v = at.as_tensor_variable(pm.floatX(v))
-        sv = at.as_tensor_variable(pm.floatX(sv))
-        a = at.as_tensor_variable(pm.floatX(a))
-        z = at.as_tensor_variable(pm.floatX(z))
-        t = at.as_tensor_variable(pm.floatX(t))
-        return super().dist([v, sv, a, z, t], **kwargs)
-
-    def logp(data, v, sv, a, z, t, err=1e-7, k_terms=10):  # pylint: disable=E0213
-        """Produces an array of log-likelihoods."""
-
-        return log_pdf_sv(data, v, sv, a, z, t, err, k_terms)

@@ -18,7 +18,7 @@ keywords = ["HDDM", "HSSM", "pymc"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
-scipy = "^1.9.3"
+scipy = "1.9.1"
 pymc = "^4.4.0"
 aesara = "2.8.7"
 arviz = "^0.14.0"
