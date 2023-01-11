@@ -93,7 +93,7 @@ class WFPT:
     def make_ssm_distribution(
         cls,
         list_params: List[str],
-        model: str | PathLike | onnx.model | None = None,
+        model: str | PathLike | onnx.ModelProto,
         rv: Type[RandomVariable] | None = None,
         backend: str | None = "aesara",
     ) -> Type[pm.Distribution]:
@@ -127,5 +127,8 @@ class WFPT:
                     n_params=len(list_params),
                 )
                 lan_logp = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
-
+            else:
+                raise ValueError(
+                    "Currently only 'aesara' and 'jax' backends are supported."
+                )
         return cls.make_distribution(lan_logp, rv, list_params)

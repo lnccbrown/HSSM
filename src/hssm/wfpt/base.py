@@ -9,12 +9,9 @@ from __future__ import annotations
 
 from typing import Callable
 
-import aesara
 import aesara.tensor as at
 import numpy as np
 from pymc.distributions.dist_math import check_parameters
-
-aesara.config.floatX = "float32"
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
@@ -208,7 +205,7 @@ def log_pdf_sv(
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
     Args:
-        data: RTs. (-inf, inf) except 0. Negative values correspond to the lower bound.
+        data: data: 2-column numpy array of (response time, response)
         v: Mean drift rate. (-inf, inf).
         sv: Standard deviation of the drift rate [0, inf).
         a: Value of decision upper bound. (0, inf).
