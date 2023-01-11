@@ -134,9 +134,10 @@ class LAN:
             def grad(self, inputs, output_grads):
                 results = lan_logp_grad_op(*inputs)
                 output_gradient = output_grads[0]
-                return [
+                output = [
                     aesara.gradient.grad_not_implemented(self, 0, inputs[0]),
                 ] + [output_gradient * result for result in results]
+                return output
 
         class LANLogpGradOp(Op):  # pylint: disable=W0223
             """Wraps the gradient opearation of a jax function in an aesara op."""
