@@ -23,7 +23,7 @@ from hssm.wfpt.base import decision_func, log_pdf_sv
 def data_fixture():
     v_true, a_true, z_true, t_true, theta_true = [0.5, 1.5, 0.5, 0.5, 0.3]
     obs_angle = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=1000
+        [v_true, a_true, z_true, t_true, theta_true], model="ddm", n_samples=1000
     )
     return obs_angle["rts"][:, 0] * obs_angle["choices"][:, 0]
 
