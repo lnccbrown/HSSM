@@ -118,7 +118,7 @@ class WFPT:
             lan_logp = log_pdf_sv
         else:
             if isinstance(model, (str, PathLike)):
-                model = onnx.load(model)
+                model = onnx.load(str(model))
             if backend == "aesara":
                 lan_logp = LAN.make_aesara_logp(model)
             elif backend == "jax":
