@@ -30,18 +30,13 @@ class WFPTRandomVariable(RandomVariable):
 
     name: str = "WFPT_RV"
     ndim_supp: int = 0
-    ndims_params: List[int] = [0] * list_params
+    ndims_params: List[int] = [0] * 10
     dtype: str = "floatX"
     _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
 
     @classmethod
     # pylint: disable=arguments-renamed,bad-option-value,W0221
     def rng_fn(  # type: ignore
-        cls,
-        *dist_params,
-        model: str = "ddm",
-        size: int = 500,
-        **kwargs
         cls, dist_params: List[float], model: str = "ddm", size: int = 500, **kwargs
     ) -> np.ndarray:
         """Generates random variables from this distribution."""
@@ -96,7 +91,7 @@ class WFPT:
         list_params: List[str],
         model: str | PathLike | onnx.model | None = None,
         rv: Type[RandomVariable] | None = None,
-        backend: str | None = "aesara",
+        backend: str = "aesara",
         compile_funcs: bool = True,
     ) -> Type[pm.Distribution]:
         """Produces a PyMC distribution that uses the provided base or ONNX model as
