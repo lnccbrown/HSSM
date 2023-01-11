@@ -53,7 +53,9 @@ class LAN:
             the forward-pass that's not jitted.
         """
 
-        loaded_model = onnx.load(model) if isinstance(model, (str, PathLike)) else model
+        loaded_model = (
+            onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
+        )
 
         def logp(data: np.ndarray, *dist_params) -> ArrayLike:
             """
@@ -174,7 +176,7 @@ class LAN:
             model applied on a data
         """
         loaded_model: onnx.ModelProto = (
-            onnx.load(model) if isinstance(model, (str, PathLike)) else model
+            onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
         )
 
         def logp(data: np.ndarray, *dist_params) -> ArrayLike:

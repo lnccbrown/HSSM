@@ -98,7 +98,7 @@ class WFPT:
             function.
         """
         if isinstance(model, (str, PathLike)):
-            model = onnx.load(model)
+            model = onnx.load(str(model))
 
         lan_logp = None
 
