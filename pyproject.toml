@@ -67,7 +67,7 @@ profile="black"
 good-names = "i,j,k,ex,Run,_,df,pc"
 
 [tool.pylint.messages_control]
-disable = "C0103, C0114, E0012, E0401, R0912, R0913, R0914, R0915"
+disable = "C0103, C0114, E0012, E0401, R0912, R0913, R0914, R0915, W0221, W0621"
 
 [tool.pylint.format]
 max-line-length = "88"

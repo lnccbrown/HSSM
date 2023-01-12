@@ -1,10 +1,10 @@
 """
-An ONNX to aesara compiler.
+An ONNX to pytensor compiler.
 Tips for extending this file to add more Ops:
-If there is no equivalent in aesara, then we need to write a function. The `aesara_gemm`
-function is an example of such a function. The number of argument is the same as
-the number of inputs specified in the Opset document above. If there are any optional
-inputs, also add these inputs as parameters with default values.
+If there is no equivalent in pytensor, then we need to write a function. The
+`pytensor_gemm` function is an example of such a function. The number of argument is
+the same as the number of inputs specified in the Opset document above. If there are
+any optional inputs, also add these inputs as parameters with default values.
 """
 
 import pytensor.tensor as pt
@@ -12,7 +12,7 @@ import pytensor.tensor as pt
 from .onnx2xla import _asarray, attribute_handlers
 
 
-def aesara_gemm(
+def pytensor_gemm(
     a, b, c=0.0, alpha=1.0, beta=1.0, transA=0, transB=0
 ):  # pylint: disable=C0103
     """Numpy-backed implementatio of Onnx
@@ -23,20 +23,20 @@ def aesara_gemm(
     return [alpha * pt.dot(a, b) + beta * c]
 
 
-aes_onnx_ops = {
+pt_onnx_ops = {
     "Add": pt.add,
     "Constant": lambda value: [value],
     "MatMul": lambda x, y: [pt.dot(x, y)],
     "Relu": lambda x: [pt.math.max(x, 0)],
     "Reshape": lambda x, shape: [pt.reshape(x, shape)],
     "Tanh": lambda x: [pt.tanh(x)],
-    "Gemm": aesara_gemm,
+    "Gemm": pytensor_gemm,
 }
 
 
-def aes_interpret_onnx(graph, *args):
+def pt_interpret_onnx(graph, *args):
     """
-    This function transforms model in onnx to aesara
+    This function transforms model in onnx to pytensor.
     """
     vals = dict(
         {n.name: a for n, a in zip(graph.input, args)},
@@ -45,7 +45,7 @@ def aes_interpret_onnx(graph, *args):
     for node in graph.node:
         args = (vals[name] for name in node.input)
         attrs = {a.name: attribute_handlers[a.type](a) for a in node.attribute}
-        outputs = aes_onnx_ops[node.op_type](*args, **attrs)
+        outputs = pt_onnx_ops[node.op_type](*args, **attrs)
         for name, output in zip(node.output, outputs):
             vals[name] = output
     return [vals[n.name] for n in graph.output]
