@@ -1,16 +1,16 @@
 from pathlib import Path
 
-import aesara
 import numpy as np
 import onnx
 import onnxruntime
+import pytensor
 import pytest
 
 from src.hssm.wfpt.lan import LAN
 from src.hssm.wfpt.onnx2aes import aes_interpret_onnx
 from src.hssm.wfpt.onnx2xla import interpret_onnx
 
-aesara.config.floatX = "float32"
+pytensor.config.floatX = "float32"
 
 
 @pytest.fixture(scope="module")
