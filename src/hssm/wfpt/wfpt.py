@@ -109,8 +109,6 @@ class WFPT:
             list_params: A list of the names of the parameters following the order of
                 how they are fed to the LAN.
             rv: The RandomVariable Op used for posterior sampling.
-            compile_funcs: Whether the JAX functions should be compiled, if the backend
-                is set to JAX.
         Returns:
             A PyMC Distribution class that uses the ONNX model as its log-likelihood
             function.

@@ -13,12 +13,15 @@ from typing import Callable, Tuple
 import jax.numpy as jnp
 import numpy as np
 import onnx
+
+# import aesara
+# import aesara.tensor as at
 import pytensor
 import pytensor.tensor as pt
-from aesara.graph import Apply, Op
-from aesara.link.jax.dispatch import jax_funcify
 from jax import grad, jit
 from numpy.typing import ArrayLike
+from pytensor.graph import Apply, Op
+from pytensor.link.jax.dispatch import jax_funcify
 
 from .onnx2aes import aes_interpret_onnx
 from .onnx2xla import interpret_onnx
