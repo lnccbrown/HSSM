@@ -96,16 +96,16 @@ class WFPT:
         list_params: List[str],
         model: str | PathLike | onnx.ModelProto,
         rv: Type[RandomVariable] | None = None,
-        backend: str | None = "aesara",
+        backend: str | None = "pytensor",
     ) -> Type[pm.Distribution]:
         """Produces a PyMC distribution that uses the provided base or ONNX model as
         its log-likelihood function.
 
         Args:
             model: The path of the ONNX model, or one already loaded in memory.
-            backend: Whether to use "aesara" or "jax" as the backend of the
+            backend: Whether to use "pytensor" or "jax" as the backend of the
                 log-likelihood computation. If `jax`, the function will be wrapped in an
-                aesara Op.
+                pytensor Op.
             list_params: A list of the names of the parameters following the order of
                 how they are fed to the LAN.
             rv: The RandomVariable Op used for posterior sampling.
@@ -118,8 +118,8 @@ class WFPT:
 
         if isinstance(model, (str, PathLike)):
             model = onnx.load(str(model))
-        if backend == "aesara":
-            lan_logp_aes = LAN.make_aesara_logp(model)
+        if backend == "pytensor":
+            lan_logp_aes = LAN.make_pytensor_logp(model)
             return cls.make_distribution(lan_logp_aes, rv, list_params)
 
         if backend == "jax":
@@ -130,4 +130,4 @@ class WFPT:
             lan_logp_jax = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
             return cls.make_distribution(lan_logp_jax, rv, list_params)
 
-        raise ValueError("Currently only 'aesara' and 'jax' backends are supported.")
+        raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")

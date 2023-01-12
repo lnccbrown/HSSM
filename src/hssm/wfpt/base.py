@@ -1,6 +1,6 @@
 """
-wfpt.py: aesara implementation of the Wiener First Passage Time Distribution
-This code is based on Sam Mathias's Aesara/Theano implementation
+wfpt.py: pytensor implementation of the Wiener First Passage Time Distribution
+This code is based on Sam Mathias's Pytensor/Theano implementation
 of the WFPT distribution here:
 https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b
 """
