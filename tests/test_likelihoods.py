@@ -25,7 +25,7 @@ def data_fixture():
     obs = ssms.basic_simulators.simulator(
         [v_true, a_true, z_true, t_true, theta_true], model="ddm", n_samples=1000
     )
-    return obs["rts"][:, 0] * obs["choices"][:, 0]
+    return np.column_stack([obs["rts"][:, 0], obs["choices"][:, 0]])
 
 
 def test_kterm(data_fixture):
@@ -52,9 +52,10 @@ def test_decision(data_fixture):
     """
     decision = decision_func()
     err = 1e-7
-    lambda_rt = decision(data_fixture, err)
+    data = data_fixture[:, 0] * data_fixture[:, 1]
+    lambda_rt = decision(data, err)
     assert all(not v for v in lambda_rt.eval())
-    assert len(data_fixture) == len(lambda_rt.eval())
+    assert data_fixture.shape[0] == lambda_rt.eval().shape[0]
 
 
 def test_logp(data_fixture):
@@ -69,5 +70,6 @@ def test_logp(data_fixture):
         t = rand() * 0.5
         err = 1e-7
         pytensor_log = log_pdf_sv(data_fixture, v, sv, a, z, t, err=err)
-        cython_log = wfpt.pdf_array(data_fixture, v, sv, a, z, 0, t, 0, err, 1)
+        data = data_fixture[:, 0] * data_fixture[:, 1]
+        cython_log = wfpt.pdf_array(data, v, sv, a, z, 0, t, 0, err, 1)
         np.testing.assert_array_almost_equal(pytensor_log.eval(), cython_log, 2)

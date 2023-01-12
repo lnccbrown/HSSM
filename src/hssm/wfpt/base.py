@@ -215,11 +215,12 @@ def log_pdf_sv(
         k_terms: number of terms to use to approximate the PDF.
     """
 
-    # First, flip data to positive
-    flip = data > 0
+    data = pt.reshape(data, (-1, 2))
+    rt = pt.abs(data[:, 0])
+    response = data[:, 1]
+    flip = response > 0
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
-    rt = np.abs(data)  # absolute rts
     rt = rt - t  # remove nondecision time
 
     p = ftt01w(rt, a, z_flipped, err, k_terms)
