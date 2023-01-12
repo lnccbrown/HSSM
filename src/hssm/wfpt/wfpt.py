@@ -12,6 +12,7 @@ from typing import Callable, List, Tuple, Type
 import numpy as np
 import onnx
 import pymc as pm
+import pytensor
 import pytensor.tensor as pt
 from numpy.typing import ArrayLike
 from pytensor.tensor.random.op import RandomVariable
@@ -37,10 +38,14 @@ class WFPTRandomVariable(RandomVariable):
     @classmethod
     # pylint: disable=arguments-renamed,bad-option-value,W0221
     def rng_fn(  # type: ignore
-        cls, dist_params: List[float], model: str = "ddm", size: int = 500, **kwargs
+        cls,
+        list_params: List[str] | None,
+        model: str = "ddm",
+        size: int = 500,
+        **kwargs,
     ) -> np.ndarray:
         """Generates random variables from this distribution."""
-        sim_out = simulator(theta=dist_params, model=model, n_samples=size, **kwargs)
+        sim_out = simulator(theta=list_params, model=model, n_samples=size, **kwargs)
         data_tmp = sim_out["rts"] * sim_out["choices"]
         return data_tmp.flatten()
 
@@ -55,7 +60,7 @@ class WFPT:
     @classmethod
     def make_distribution(
         cls,
-        loglik: LogLikeFunc | None,
+        loglik: LogLikeFunc | pytensor.graph.Op | None,
         rv: Type[RandomVariable] | None,
         list_params: List[str] | None,
     ) -> Type[pm.Distribution]:
@@ -89,10 +94,9 @@ class WFPT:
     def make_ssm_distribution(
         cls,
         list_params: List[str],
-        model: str | PathLike | onnx.model | None = None,
+        model: str | PathLike | onnx.ModelProto,
         rv: Type[RandomVariable] | None = None,
-        backend: str = "aesara",
-        compile_funcs: bool = True,
+        backend: str | None = "aesara",
     ) -> Type[pm.Distribution]:
         """Produces a PyMC distribution that uses the provided base or ONNX model as
         its log-likelihood function.
@@ -112,18 +116,20 @@ class WFPT:
             function.
         """
         if model == "base":
-            lan_logp = log_pdf_sv
-        else:
-            if isinstance(model, (str, PathLike)):
-                model = onnx.load(model)
-            if backend == "aesara":
-                lan_logp = LAN.make_aesara_logp(model)
-            elif backend == "jax":
-                logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
-                    model,
-                    n_params=len(list_params),
-                    compile_funcs=compile_funcs,
-                )
-                lan_logp = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
+            return cls.make_distribution(log_pdf_sv, rv, list_params)
 
-        return cls.make_distribution(lan_logp, rv, list_params)
+        if isinstance(model, (str, PathLike)):
+            model = onnx.load(str(model))
+        if backend == "aesara":
+            lan_logp_aes = LAN.make_aesara_logp(model)
+            return cls.make_distribution(lan_logp_aes, rv, list_params)
+
+        if backend == "jax":
+            logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
+                model,
+                n_params=len(list_params),
+            )
+            lan_logp_jax = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
+            return cls.make_distribution(lan_logp_jax, rv, list_params)
+
+        raise ValueError("Currently only 'aesara' and 'jax' backends are supported.")

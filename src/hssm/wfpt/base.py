@@ -17,7 +17,7 @@ from pymc.distributions.dist_math import check_parameters
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     """Determines number of terms needed for small-t expansion.
     Args:
-        rt: An 1D numpy of flipped RTs. (0, inf).
+        rt: A 1D numpy array of flipped R.... T.....s. (0, inf).
         err: Error bound
     Returns: a 1D at array of k_small.
     """
@@ -31,7 +31,7 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
 def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     """Determine number of terms needed for large-t expansion.
     Args:
-        rt: An 1D numpy of flipped RTs. (0, inf).
+        rt: An 1D numpy array of flipped RTs. (0, inf).
         err: Error bound
     Returns: a 1D at array of k_large.
     """
@@ -72,7 +72,7 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
         If `rt` and `err` passed to it does not change, then it will directly
         return the results of the previous computation.
         Args:
-            rt: An 1D numpy of flipped RTs. (0, inf).
+            rt: An 1D numpy array of flipped RTs. (0, inf).
             err: Error bound
         Returns: a 1D boolean at array of which implementation should be used.
         """
@@ -175,7 +175,7 @@ def ftt01w(
     """Compute the appproximated density of f(tt|0,1,w) using the method
     and implementation of Navarro & Fuss, 2009.
     Args:
-        rt: Flipped RTs. (0, inf).
+        rt: Flipped Response Rates. (0, inf).
         a: Value of decision upper bound. (0, inf).
         w: Normalized decision starting point. (0, 1).
         err: Error bound.
@@ -205,7 +205,7 @@ def log_pdf_sv(
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
     Args:
-        data: RTs. (-inf, inf) except 0. Negative values correspond to the lower bound.
+        data: data: 2-column numpy array of (response time, response)
         v: Mean drift rate. (-inf, inf).
         sv: Standard deviation of the drift rate [0, inf).
         a: Value of decision upper bound. (0, inf).
