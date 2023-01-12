@@ -19,14 +19,14 @@ keywords = ["HDDM", "HSSM", "pymc"]
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
 scipy = "1.9.1"
-pymc = "^4.4.0"
-aesara = "2.8.7"
+pymc = "^5.0.1"
 arviz = "^0.14.0"
 numpy = "^1.23.4"
 onnx = "^1.12.0"
 jax = "^0.3.25"
 jaxlib = "^0.3.24"
 ssms = {git = "https://github.com/digicosmos86/ssm_simulators.git"}
+bambi = {git = "https://github.com/bambinos/bambi.git"}
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^2.6.0"
@@ -67,7 +67,7 @@ profile="black"
 good-names = "i,j,k,ex,Run,_,df,pc"
 
 [tool.pylint.messages_control]
-disable = "C0103, C0114, E0012, E0401, R0912, R0913, R0914, R0915"
+disable = "C0103, C0114, E0012, E0401, R0912, R0913, R0914, R0915, W0221, W0621"
 
 [tool.pylint.format]
 max-line-length = "88"

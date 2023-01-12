@@ -9,13 +9,13 @@ from __future__ import annotations
 from os import PathLike
 from typing import Callable, List, Tuple, Type
 
-import aesara
-import aesara.tensor as at
 import numpy as np
 import onnx
 import pymc as pm
-from aesara.tensor.random.op import RandomVariable
+import pytensor
+import pytensor.tensor as pt
 from numpy.typing import ArrayLike
+from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators import simulator  # type: ignore
 
 from .base import log_pdf_sv
@@ -60,7 +60,7 @@ class WFPT:
     @classmethod
     def make_distribution(
         cls,
-        loglik: LogLikeFunc | aesara.graph.Op | None,
+        loglik: LogLikeFunc | pytensor.graph.Op | None,
         rv: Type[RandomVariable] | None,
         list_params: List[str] | None,
     ) -> Type[pm.Distribution]:
@@ -78,7 +78,7 @@ class WFPT:
             @classmethod
             def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
                 dist_params = [
-                    at.as_tensor_variable(pm.floatX(kwargs[param]))
+                    pt.as_tensor_variable(pm.floatX(kwargs[param]))
                     for param in cls.params
                 ]
                 other_kwargs = {k: v for k, v in kwargs.items() if k not in cls.params}
@@ -96,21 +96,19 @@ class WFPT:
         list_params: List[str],
         model: str | PathLike | onnx.ModelProto,
         rv: Type[RandomVariable] | None = None,
-        backend: str | None = "aesara",
+        backend: str | None = "pytensor",
     ) -> Type[pm.Distribution]:
         """Produces a PyMC distribution that uses the provided base or ONNX model as
         its log-likelihood function.
 
         Args:
             model: The path of the ONNX model, or one already loaded in memory.
-            backend: Whether to use "aesara" or "jax" as the backend of the
+            backend: Whether to use "pytensor" or "jax" as the backend of the
                 log-likelihood computation. If `jax`, the function will be wrapped in an
-                aesara Op.
+                pytensor Op.
             list_params: A list of the names of the parameters following the order of
                 how they are fed to the LAN.
             rv: The RandomVariable Op used for posterior sampling.
-            compile_funcs: Whether the JAX functions should be compiled, if the backend
-                is set to JAX.
         Returns:
             A PyMC Distribution class that uses the ONNX model as its log-likelihood
             function.
@@ -120,8 +118,8 @@ class WFPT:
 
         if isinstance(model, (str, PathLike)):
             model = onnx.load(str(model))
-        if backend == "aesara":
-            lan_logp_aes = LAN.make_aesara_logp(model)
+        if backend == "pytensor":
+            lan_logp_aes = LAN.make_pytensor_logp(model)
             return cls.make_distribution(lan_logp_aes, rv, list_params)
 
         if backend == "jax":
@@ -132,4 +130,4 @@ class WFPT:
             lan_logp_jax = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
             return cls.make_distribution(lan_logp_jax, rv, list_params)
 
-        raise ValueError("Currently only 'aesara' and 'jax' backends are supported.")
+        raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")

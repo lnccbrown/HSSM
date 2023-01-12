@@ -10,17 +10,20 @@ from __future__ import annotations
 from os import PathLike
 from typing import Callable, Tuple
 
-import aesara
-import aesara.tensor as at
 import jax.numpy as jnp
 import numpy as np
 import onnx
-from aesara.graph import Apply, Op
-from aesara.link.jax.dispatch import jax_funcify
+
+# import aesara
+# import aesara.tensor as at
+import pytensor
+import pytensor.tensor as pt
 from jax import grad, jit
 from numpy.typing import ArrayLike
+from pytensor.graph import Apply, Op
+from pytensor.link.jax.dispatch import jax_funcify
 
-from .onnx2aes import aes_interpret_onnx
+from .onnx2pt import pt_interpret_onnx
 from .onnx2xla import interpret_onnx
 
 LogLikeFunc = Callable[..., ArrayLike]
@@ -30,8 +33,8 @@ LogLikeGrad = Callable[..., ArrayLike]
 class LAN:
     """
     A factory class handling LAN-related operations, such as producing log-likelihood
-    functions from onnx model files and wrapping jax log-likelihood functions in aesara
-    Ops.
+    functions from onnx model files and wrapping jax log-likelihood functions in
+    pytensor Ops.
     """
 
     @classmethod
@@ -86,26 +89,26 @@ class LAN:
         logp_grad: LogLikeGrad,
         logp_nojit: LogLikeFunc,
     ) -> Op:
-        """Wraps the JAX functions and its gradient in Aesara Ops.
+        """Wraps the JAX functions and its gradient in pytensor Ops.
         Args:
             logp: A JAX function that represents the feed-forward operation of the
                 LAN network.
             logp_grad: The derivative of the above function.
             logp_nojit: A Jax function
         Returns:
-            An aesara op that wraps the feed-forward operation and can be used with
-            aesara.grad.
+            An pytensor op that wraps the feed-forward operation and can be used with
+            pytensor.grad.
         """
 
         class LANLogpOp(Op):  # pylint: disable=W0223
-            """Wraps a JAX function in an aesara Op."""
+            """Wraps a JAX function in an pytensor Op."""
 
             def make_node(self, data, *dist_params):
                 inputs = [
-                    at.as_tensor_variable(data),
-                ] + [at.as_tensor_variable(dist_param) for dist_param in dist_params]
+                    pt.as_tensor_variable(data),
+                ] + [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
 
-                outputs = [at.scalar()]
+                outputs = [pt.scalar()]
 
                 return Apply(self, inputs, outputs)
 
@@ -127,17 +130,17 @@ class LAN:
                 results = lan_logp_grad_op(*inputs)
                 output_gradient = output_grads[0]
                 output = [
-                    aesara.gradient.grad_not_implemented(self, 0, inputs[0]),
+                    pytensor.gradient.grad_not_implemented(self, 0, inputs[0]),
                 ] + [output_gradient * result for result in results]
                 return output
 
         class LANLogpGradOp(Op):  # pylint: disable=W0223
-            """Wraps the gradient opearation of a jax function in an aesara op."""
+            """Wraps the gradient opearation of a jax function in an pytensor op."""
 
             def make_node(self, data, *dist_params):
                 inputs = [
-                    at.as_tensor_variable(data),
-                ] + [at.as_tensor_variable(dist_param) for dist_param in dist_params]
+                    pt.as_tensor_variable(data),
+                ] + [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
                 outputs = [inp.type() for inp in inputs[1:]]
 
                 return Apply(self, inputs, outputs)
@@ -159,9 +162,9 @@ class LAN:
         return lan_logp_op
 
     @classmethod
-    def make_aesara_logp(cls, model: str | PathLike | onnx.ModelProto):
+    def make_pytensor_logp(cls, model: str | PathLike | onnx.ModelProto):
         """
-        Converting onnx model file to aesara
+        Converting onnx model file to pytensor
         Args:
             model (str): path to onnx model file
             data: the input dataset
@@ -176,11 +179,11 @@ class LAN:
 
             # Specify input layer of MLP
             data = data.reshape((-1, 2))
-            inputs = at.zeros(
+            inputs = pt.zeros(
                 (data.shape[0], len(dist_params) + 2)
             )  # (n_trials, number of parameters + 2 [for rt and choice columns])
-            inputs = at.set_subtensor(inputs[:, :-2], at.stack(dist_params))
-            inputs = at.set_subtensor(inputs[:, -2:], data)
-            return at.sum(at.squeeze(aes_interpret_onnx(loaded_model.graph, inputs)[0]))
+            inputs = pt.set_subtensor(inputs[:, :-2], pt.stack(dist_params))
+            inputs = pt.set_subtensor(inputs[:, -2:], data)
+            return pt.sum(pt.squeeze(pt_interpret_onnx(loaded_model.graph, inputs)[0]))
 
         return logp
