@@ -11,7 +11,7 @@ ignore=CVS,tests
 
 # Add files or directories matching the regex patterns to the blacklist. The
 # regex matches against base names, not paths.
-ignore-patterns=tests
+ignore-patterns=
 
 # Python code to execute, usually for sys.path manipulation such as
 # pygtk.require().
@@ -66,10 +66,7 @@ disable=missing-docstring,
         bad-continuation,
         bad-option-value,
         import-error,
-        invalid-name,
-        unrecognized-option,
-        arguments-differ,
-        redefined-outer-name
+        invalid-name
 
 
 # Enable the message, report, category or checker with the given id(s). You can
@@ -136,13 +133,6 @@ max-line-length=100
 
 # Maximum number of lines in a module
 max-module-lines=1000
-
-# List of optional constructs for which whitespace checking is disabled. `dict-
-# separator` is used to allow tabulation in dicts, etc.: {1  : 1,\n222: 2}.
-# `trailing-comma` allows a space between comma and closing bracket: (a, ).
-# `empty-line` allows space-only lines.
-no-space-check=trailing-comma,
-               dict-separator
 
 # Allow the body of a class to be on the same line as the declaration if body
 # contains single statement.

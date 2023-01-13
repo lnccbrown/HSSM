@@ -22,10 +22,10 @@ from hssm.wfpt.base import decision_func, log_pdf_sv
 @pytest.fixture
 def data_fixture():
     v_true, a_true, z_true, t_true, theta_true = [0.5, 1.5, 0.5, 0.5, 0.3]
-    obs_angle = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=1000
+    obs = ssms.basic_simulators.simulator(
+        [v_true, a_true, z_true, t_true, theta_true], model="ddm", n_samples=1000
     )
-    return obs_angle["rts"][:, 0] * obs_angle["choices"][:, 0]
+    return obs["rts"][:, 0] * obs["choices"][:, 0]
 
 
 def test_kterm(data_fixture):
@@ -68,6 +68,6 @@ def test_logp(data_fixture):
         z = 0.5 * rand()
         t = rand() * 0.5
         err = 1e-7
-        aesara_log = log_pdf_sv(data_fixture, v, sv, a, z, t, err=err)
+        pytensor_log = log_pdf_sv(data_fixture, v, sv, a, z, t, err=err)
         cython_log = wfpt.pdf_array(data_fixture, v, sv, a, z, 0, t, 0, err, 1)
-        np.testing.assert_array_almost_equal(aesara_log.eval(), cython_log, 2)
+        np.testing.assert_array_almost_equal(pytensor_log.eval(), cython_log, 2)
