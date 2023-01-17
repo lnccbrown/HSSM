@@ -1,7 +1,7 @@
 """
-This file includes the WFPT class factory that produces WFPT classes that support
-arbitrary log-likelihood functions and random number generation functions, and
-provides utility functions for handling LANs.
+This module provides functions for producing for Wiener First-Passage Time (WFPT)
+distributions that support arbitrary log-likelihood functions and random number
+generation ops.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators import simulator  # type: ignore
 
 from .base import log_pdf_sv
-from .lan import LAN
+from .lan import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
@@ -50,84 +50,73 @@ class WFPTRandomVariable(RandomVariable):
         return data_tmp.flatten()
 
 
-class WFPT:
+def make_distribution(
+    loglik: LogLikeFunc | pytensor.graph.Op | None,
+    rv: Type[RandomVariable] | None,
+    list_params: List[str] | None,
+) -> Type[pm.Distribution]:
+    class WFPTDistribution(pm.Distribution):
+        """Wiener first-passage time (WFPT) log-likelihood for LANs."""
+
+        # This is just a placeholder because pm.Distribution requires an rv_op
+        # Might be updated in the future once
+
+        # NOTE: replace this default when we have a better random number generation
+        # method. This is here as a place holder.
+        rv_op = rv() if rv is not None else WFPTRandomVariable()
+        params = list_params
+
+        @classmethod
+        def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
+            dist_params = [
+                pt.as_tensor_variable(pm.floatX(kwargs[param])) for param in cls.params
+            ]
+            other_kwargs = {k: v for k, v in kwargs.items() if k not in cls.params}
+            return super().dist(dist_params, **other_kwargs)
+
+        def logp(data, *dist_params):  # pylint: disable=E0213
+
+            return loglik(data, *dist_params)
+
+    return WFPTDistribution
+
+
+def make_ssm_distribution(
+    list_params: List[str],
+    model: str | PathLike | onnx.ModelProto,
+    rv: Type[RandomVariable] | None = None,
+    backend: str | None = "pytensor",
+) -> Type[pm.Distribution]:
+    """Produces a PyMC distribution that uses the provided base or ONNX model as
+    its log-likelihood function.
+
+    Args:
+        model: The path of the ONNX model, or one already loaded in memory.
+        backend: Whether to use "pytensor" or "jax" as the backend of the
+            log-likelihood computation. If `jax`, the function will be wrapped in an
+            pytensor Op.
+        list_params: A list of the names of the parameters following the order of
+            how they are fed to the LAN.
+        rv: The RandomVariable Op used for posterior sampling.
+    Returns:
+        A PyMC Distribution class that uses the ONNX model as its log-likelihood
+        function.
     """
-    This is a class factory for producing for Wiener First-Passage Time (WFPT)
-    distributionsthat supports arbitrary log-likelihood functions and random number
-    generation ops.
-    """
+    if model == "base":
+        return make_distribution(log_pdf_sv, rv, list_params)
 
-    @classmethod
-    def make_distribution(
-        cls,
-        loglik: LogLikeFunc | pytensor.graph.Op | None,
-        rv: Type[RandomVariable] | None,
-        list_params: List[str] | None,
-    ) -> Type[pm.Distribution]:
-        class WFPTDistribution(pm.Distribution):
-            """Wiener first-passage time (WFPT) log-likelihood for LANs."""
+    if isinstance(model, (str, PathLike)):
+        model = onnx.load(str(model))
+    if backend == "pytensor":
+        lan_logp_aes = make_pytensor_logp(model)
+        return make_distribution(lan_logp_aes, rv, list_params)
 
-            # This is just a placeholder because pm.Distribution requires an rv_op
-            # Might be updated in the future once
+    if backend == "jax":
+        logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
+            model,
+            n_params=len(list_params),
+        )
+        lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+        return make_distribution(lan_logp_jax, rv, list_params)
 
-            # NOTE: replace this default when we have a better random number generation
-            # method. This is here as a place holder.
-            rv_op = rv() if rv is not None else WFPTRandomVariable()
-            params = list_params
-
-            @classmethod
-            def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
-                dist_params = [
-                    pt.as_tensor_variable(pm.floatX(kwargs[param]))
-                    for param in cls.params
-                ]
-                other_kwargs = {k: v for k, v in kwargs.items() if k not in cls.params}
-                return super().dist(dist_params, **other_kwargs)
-
-            def logp(data, *dist_params):  # pylint: disable=E0213
-
-                return loglik(data, *dist_params)
-
-        return WFPTDistribution
-
-    @classmethod
-    def make_ssm_distribution(
-        cls,
-        list_params: List[str],
-        model: str | PathLike | onnx.ModelProto,
-        rv: Type[RandomVariable] | None = None,
-        backend: str | None = "pytensor",
-    ) -> Type[pm.Distribution]:
-        """Produces a PyMC distribution that uses the provided base or ONNX model as
-        its log-likelihood function.
-
-        Args:
-            model: The path of the ONNX model, or one already loaded in memory.
-            backend: Whether to use "pytensor" or "jax" as the backend of the
-                log-likelihood computation. If `jax`, the function will be wrapped in an
-                pytensor Op.
-            list_params: A list of the names of the parameters following the order of
-                how they are fed to the LAN.
-            rv: The RandomVariable Op used for posterior sampling.
-        Returns:
-            A PyMC Distribution class that uses the ONNX model as its log-likelihood
-            function.
-        """
-        if model == "base":
-            return cls.make_distribution(log_pdf_sv, rv, list_params)
-
-        if isinstance(model, (str, PathLike)):
-            model = onnx.load(str(model))
-        if backend == "pytensor":
-            lan_logp_aes = LAN.make_pytensor_logp(model)
-            return cls.make_distribution(lan_logp_aes, rv, list_params)
-
-        if backend == "jax":
-            logp, logp_grad, logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
-                model,
-                n_params=len(list_params),
-            )
-            lan_logp_jax = LAN.make_jax_logp_ops(logp, logp_grad, logp_nojit)
-            return cls.make_distribution(lan_logp_jax, rv, list_params)
-
-        raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")
+    raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")
