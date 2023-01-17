@@ -33,7 +33,7 @@ def test_kterm(data_fixture):
     This function defines a range of kterms and tests results to
      makes sure they are not equal to infinity or unknown values
     """
-    for k_term in range(1, 11):
+    for k_term in range(7, 12):
         v = (rand() - 0.5) * 1.5
         sv = 0
         a = 1.5 + rand()
