@@ -6,9 +6,9 @@ import onnxruntime
 import pytensor
 import pytest
 
-from src.hssm.wfpt.lan import LAN
-from src.hssm.wfpt.onnx2pt import pt_interpret_onnx
-from src.hssm.wfpt.onnx2xla import interpret_onnx
+from hssm.wfpt import lan
+from hssm.wfpt.lan.onnx2pt import pt_interpret_onnx
+from hssm.wfpt.lan.onnx2xla import interpret_onnx
 
 pytensor.config.floatX = "float32"
 
@@ -44,12 +44,12 @@ def test_interpret_onnx(onnx_session, fixture_path):
     # For some reason pytensor and onnx (jax) version results are slightly different
     np.testing.assert_almost_equal(result_pytensor, result_onnx, decimal=4)
 
-    jax_logp, jax_logp_grad, jax_logp_nojit = LAN.make_jax_logp_funcs_from_onnx(
+    jax_logp, jax_logp_grad, jax_logp_nojit = lan.make_jax_logp_funcs_from_onnx(
         model, n_params=5
     )
 
-    jax_logp_op = LAN.make_jax_logp_ops(jax_logp, jax_logp_grad, jax_logp_nojit)
-    pytensor_logp = LAN.make_pytensor_logp(model)
+    jax_logp_op = lan.make_jax_logp_ops(jax_logp, jax_logp_grad, jax_logp_nojit)
+    pytensor_logp = lan.make_pytensor_logp(model)
 
     random_rt = np.random.choice([1.0, -1.0], size=1, replace=True)
     params = data[:, :5]

@@ -3,7 +3,6 @@ This module provides all functionalities related to the Wiener Firt-Passage Time
 distribution.
 """
 
-from .lan import LAN
-from .wfpt import WFPT
+from .wfpt import make_distribution, make_ssm_distribution
 
-__all__ = ["LAN", "WFPT"]
+__all__ = ["make_distribution", "make_ssm_distribution"]
