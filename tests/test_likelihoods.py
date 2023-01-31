@@ -21,9 +21,9 @@ from hssm.wfpt.base import decision_func, log_pdf_sv
 
 @pytest.fixture
 def data_fixture():
-    v_true, a_true, z_true, t_true, theta_true = [0.5, 1.5, 0.5, 0.5, 0.3]
+    v_true, a_true, z_true, t_true, sv = [0.5, 1.5, 0.5, 0.5, 0.3]
     obs = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true, theta_true], model="ddm", n_samples=1000
+        [v_true, a_true, z_true, t_true, sv], model="ddm", n_samples=1000
     )
     return np.column_stack([obs["rts"][:, 0], obs["choices"][:, 0]])
 
@@ -69,7 +69,10 @@ def test_logp(data_fixture):
         z = 0.5 * rand()
         t = rand() * 0.5
         err = 1e-7
-        pytensor_log = log_pdf_sv(data_fixture, v, sv, a, z, t, err=err)
+
+        # We have to pass a / 2 to ensure that the log-likelihood will return the
+        # same value as the cython version.
+        pytensor_log = log_pdf_sv(data_fixture, v, sv, a / 2, z, t, err=err)
         data = data_fixture[:, 0] * data_fixture[:, 1]
         cython_log = wfpt.pdf_array(data, v, sv, a, z, 0, t, 0, err, 1)
         np.testing.assert_array_almost_equal(pytensor_log.eval(), cython_log, 2)

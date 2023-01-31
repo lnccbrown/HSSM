@@ -53,23 +53,28 @@ def make_rv(list_params: List[str]) -> Type[RandomVariable]:
         _list_params = list_params
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
+        # NOTE: `rng`` now is a np.random.Generator instead of RandomState
+        # since the latter is now deprecated from numpy
+        @classmethod
         def rng_fn(  # type: ignore
-            self,
+            cls,
             rng: np.random.Generator,
             *args,
             model: str = "ddm",
             size: int = 500,
+            theta: List[str] | None = None,
             **kwargs,
         ) -> np.ndarray:
             """Generates random variables from this distribution."""
-            iinfo32 = np.iinfo(np.int32)
-            seed = rng.integers(iinfo32.min, iinfo32.max, dtype=np.int32)
+            iinfo32 = np.iinfo(np.uint32)
 
-            # Uses a "theta" in `kwargs` to specify how `theta` is passed to
+            seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
+
+            # Uses a "theta" to specify how `theta` is passed to
             # the simulator object
-            if "theta" in kwargs:
-                dict_params = dict(zip(self._list_params, args))
-                theta = [dict_params[param] for param in kwargs["theta"]]
+            if theta is not None:
+                dict_params = dict(zip(cls._list_params, args))
+                theta = [dict_params[param] for param in theta]
             else:
                 theta = list(args)
 
@@ -78,8 +83,8 @@ def make_rv(list_params: List[str]) -> Type[RandomVariable]:
             sim_out = simulator(
                 theta=theta, model=model, n_samples=size, random_state=seed, **kwargs
             )
-            data_tmp = np.column_stack([sim_out["rts"], sim_out["choices"]])
-            return data_tmp
+            output = np.column_stack([sim_out["rts"], sim_out["choices"]])
+            return output
 
     return WFPTRandomVariable
 
@@ -89,6 +94,27 @@ def make_distribution(
     rv: Type[RandomVariable] | None,
     list_params: List[str],
 ) -> Type[pm.Distribution]:
+    """Constructs a pymc.Distribution from a log-likelihood function and a
+    RandomVariable op.
+
+    NOTE: We will gradually switch to the numpy-notype style.
+
+    Parameters
+    ----------
+    loglik
+        A loglikelihood function. It can be any Callable in Python.
+    rv
+        A RandomVariable Op (a class, not an instance). If None, a default will be
+        used.
+    list_params
+        A list of parameters that the log-likelihood accepts. The order of the
+        parameters in the list will determine the order in which the parameters
+        are passed to the log-likelihood function.
+
+    Returns
+    -------
+        A pymc.Distribution that uses the log-likelihood function.
+    """
 
     if rv is None:
         rv = make_rv(list_params)
