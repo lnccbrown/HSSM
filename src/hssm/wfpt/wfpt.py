@@ -26,7 +26,7 @@ LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
 
-def make_rv(list_params: List[str]) -> Type[RandomVariable]:
+def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
     """Builds a RandomVariable Op according to the list of parameters.
 
     Args:
@@ -117,7 +117,7 @@ def make_distribution(
     """
 
     if rv is None:
-        rv = make_rv(list_params)
+        rv = make_wfpt_rv(list_params)
 
     class WFPTDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""

@@ -21,9 +21,9 @@ from hssm.wfpt.base import decision_func, log_pdf_sv
 
 @pytest.fixture
 def data_fixture():
-    v_true, a_true, z_true, t_true, sv = [0.5, 1.5, 0.5, 0.5, 0.3]
+    v_true, a_true, z_true, t_true, sv_true = [0.5, 1.5, 0.5, 0.5, 0.3]
     obs = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true, sv], model="ddm", n_samples=1000
+        [v_true, a_true, z_true, t_true, sv_true], model="ddm", n_samples=1000
     )
     return np.column_stack([obs["rts"][:, 0], obs["choices"][:, 0]])
 
