@@ -3,10 +3,11 @@ from typing import List
 import pandas as pd
 
 
+##
 def data_check(
     data: pd.DataFrame,
-    response_rates: str,
-    response: str,
+    response_rates: str = None,
+    response: str = None,
     additional_args: List[str] = None,
 ) -> pd.DataFrame:
     """
@@ -17,9 +18,11 @@ def data_check(
     response: name of the column indicating response rates
     additional_args: list of additional columns that will be used in the model
     """
-    if additional_args is None:
+    if all(v is None for v in [response_rates, response, additional_args]):
+        columns = ["rt", "response"]
+    elif additional_args is None:
         columns = [response_rates, response]
-    else:
+    elif additional_args is not None:
         columns = [response_rates, response] + additional_args
     data = data[columns]
     return data
