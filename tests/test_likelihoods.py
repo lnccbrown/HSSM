@@ -36,7 +36,7 @@ def test_kterm(data_fixture):
     for k_term in range(7, 12):
         v = (rand() - 0.5) * 1.5
         sv = 0
-        a = 1.5 + rand()
+        a = (1.5 + rand()) / 2
         z = 0.5 * rand()
         t = rand() * 0.5
         err = 1e-7
