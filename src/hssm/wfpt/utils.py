@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import pandas as pd
 
@@ -8,7 +8,7 @@ def data_check(
     data: pd.DataFrame,
     response_rates: str = None,
     response: str = None,
-    additional_args: List[str] | None = None,
+    additional_args: List[Optional[str]] | None = None,
 ) -> pd.DataFrame:
     """
     Convert data into correct format before passing it to the hssm models
