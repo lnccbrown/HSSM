@@ -23,6 +23,6 @@ def data_check(
     elif additional_args is None:
         columns = [response_rates, response]
     elif additional_args is not None:
-        columns = [response_rates, response] + additional_args
+        columns = [response_rates, response, *additional_args]
     data = data[columns]
     return data
