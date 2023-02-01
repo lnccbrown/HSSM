@@ -8,7 +8,7 @@ def data_check(
     data: pd.DataFrame,
     response_rates: str = None,
     response: str = None,
-    additional_args: List[Optional[str]] | None = None,
+    additional_args: List[Optional[str]] = None,
 ) -> pd.DataFrame:
     """
     Convert data into correct format before passing it to the hssm models
