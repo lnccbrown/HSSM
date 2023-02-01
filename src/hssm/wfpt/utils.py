@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 
 import pandas as pd
 
@@ -8,7 +8,7 @@ def data_check(
     data: pd.DataFrame,
     response_rates: str = None,
     response: str = None,
-    additional_args: List[str] = None,
+    additional_args: List = None,
 ) -> pd.DataFrame:
     """
     Convert data into correct format before passing it to the hssm models
@@ -18,11 +18,11 @@ def data_check(
     response: name of the column indicating response rates
     additional_args: list of additional columns that will be used in the model
     """
-    if all(v is None for v in [response_rates, response, additional_args]):
-        columns = ["rt", "response"]
-    elif additional_args is None:
-        columns = [response_rates, response]
-    elif additional_args is not None:
-        columns = [response_rates, response, *additional_args]
-    data = data[columns]
+    replace_dict = {
+        ("rt", "response", None): ["rt", "response"],
+        (None, None, None): ["rt", "response"],
+        (None, None, *additional_args): ["rt", "response", *additional_args],
+    }
+    new_columns = replace_dict[tuple([response_rates, response, *additional_args])]
+    data = data[new_columns]
     return data
