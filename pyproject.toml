@@ -17,7 +17,7 @@ repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HDDM", "HSSM", "pymc"]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
+python = ">=3.9,<3.12"
 scipy = "1.9.1"
 pymc = "^5.0.1"
 arviz = "^0.14.0"
