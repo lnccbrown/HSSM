@@ -21,10 +21,10 @@ def data_check(
     replace_dict = {
         ("rt", "response", None): ["rt", "response"],
         (None, None, None): ["rt", "response"],
-        (None, None, *additional_args): ["rt", "response", *additional_args],
-        (response_rates, response, *additional_args): [response_rates, response, *additional_args],
+        (None, None, *additional_args): ["rt", "response", *additional_args], # type: ignore
+        (response_rates, response, *additional_args): [response_rates, response, *additional_args], # type: ignore
         (response_rates, response, None): [response_rates, response]
     }
-    new_columns = replace_dict[tuple([response_rates, response, *additional_args])]
+    new_columns = replace_dict[tuple([response_rates, response, *additional_args])] # type: ignore
     data = data[new_columns]
     return data
