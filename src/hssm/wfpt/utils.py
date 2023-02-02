@@ -22,6 +22,8 @@ def data_check(
         ("rt", "response", None): ["rt", "response"],
         (None, None, None): ["rt", "response"],
         (None, None, *additional_args): ["rt", "response", *additional_args],
+        (response_rates, response, *additional_args): [response_rates, response, *additional_args],
+        (response_rates, response, None): [response_rates, response]
     }
     new_columns = replace_dict[tuple([response_rates, response, *additional_args])]
     data = data[new_columns]
