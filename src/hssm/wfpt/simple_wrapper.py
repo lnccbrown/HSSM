@@ -1,4 +1,4 @@
-from typing import List
+from typing import Sequence
 
 import pandas as pd
 import pymc as pm
@@ -17,7 +17,7 @@ def create_hssm(
     mp_ctx: str = "forkserver",
     response_rates: str = None,
     response: str = None,
-    additional_args: List[str] = None,
+    additional_args: Sequence[str] = None,
 ):
     pytensor.config.floatX = "float32"
     parameters = {
@@ -46,7 +46,7 @@ def create_hssm(
         param3 = pm.Uniform(params[3], 0.1, 0.9)
         param4 = pm.Uniform(params[4], 0.0, 1.0)
         if "t" in params:
-            rt = model(
+            rt = model(  # type: ignore
                 name="rt",
                 v=param0,
                 sv=param1,
@@ -57,7 +57,7 @@ def create_hssm(
             )
             samples = pm.sample(cores=cores, draws=draws, tune=tune, mp_ctx=mp_ctx)
         else:
-            rt = model(
+            rt = model(  # type: ignore
                 name="rt",
                 v=param0,
                 sv=param1,
