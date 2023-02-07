@@ -1,5 +1,6 @@
+# pylint: disable=unused-variable
+import bambi as bmb
 import pandas as pd
-import pymc as pm
 import pytensor
 
 from hssm import wfpt
@@ -15,11 +16,13 @@ class HSSM:
                 "model": "base",
                 "list_params": ["v", "sv", "a", "z", "t"],
                 "backend": "pytensor",
+                "formula": "c(rt,response)  ~ 1",
             },
             "lan": {
                 "model": "test.onnx",
                 "list_params": ["v", "sv", "a", "z", "theta"],
                 "backend": "jax",
+                "formula": "c(rt,response)  ~ 1",
             },
         }
 
@@ -30,34 +33,37 @@ class HSSM:
         response: str = None,
         additional_args: list = None,
         model: str = "base",
-        cores: int = 2,
-        draws: int = 500,
-        tune: int = 500,
-        mp_ctx: str = "forkserver",
+        formula: str = None,
     ):
-        ssm_model = wfpt.make_ssm_distribution(
-            model=self.parameters[model]["model"],
-            list_params=self.parameters[model]["list_params"],
-            backend=self.parameters[model]["backend"],
-        )
         data = data_check(data, response_rates, response, additional_args)
         params = self.parameters[model]["list_params"]
-
-        with pm.Model():
-            param0 = pm.Uniform(params[0], -3.0, 3.0)
-            param1 = pm.Uniform(params[1], 0.0, 1.2)
-            param2 = pm.Uniform(params[2], 2.0, 3.5)
-            param3 = pm.Uniform(params[3], 0.1, 0.9)
-            param4 = pm.Uniform(params[4], 0.0, 1.0)
-            apply_ssm = ssm_model(
-                name="rt",
-                v=param0,
-                sv=param1,
-                a=param2,
-                z=param3,
-                **{params[4]: param4} if params[4] == "t" else {"theta": param4},
-                observed=data,
-            )
-            samples = pm.sample(cores=cores, draws=draws, tune=tune, mp_ctx=mp_ctx)
-
-        return samples
+        ssm_model = wfpt.make_ssm_distribution(
+            model=self.parameters[model]["model"],
+            list_params=params,
+            backend=self.parameters[model]["backend"],
+        )
+        likelihood = bmb.Likelihood(
+            self.parameters[model]["model"],
+            params=params,
+            parent=params[0],
+            dist=ssm_model,
+        )
+        family = bmb.Family(
+            self.parameters[model]["model"],
+            likelihood=likelihood,
+            link={param: "identity" for param in params},
+        )
+        priors = {
+            "Intercept": bmb.Prior("Uniform", lower=-3, upper=3),
+            params[1]: bmb.Prior("Uniform", lower=0.0, upper=1.2),
+            params[2]: bmb.Prior("Uniform", lower=0.5, upper=2.0),
+            params[3]: bmb.Prior("Uniform", lower=0.1, upper=0.9),
+            params[4]: bmb.Prior("Uniform", lower=0.0, upper=2.0),
+        }
+        bmb_ddm = bmb.Model(
+            self.parameters[model]["formula"] if formula is None else formula,
+            data,
+            family=family,
+            priors=priors,
+        )
+        return bmb_ddm
