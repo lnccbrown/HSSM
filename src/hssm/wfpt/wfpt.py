@@ -90,9 +90,9 @@ def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
 
 
 def make_distribution(
-    loglik: LogLikeFunc | pytensor.graph.Op | None,
-    rv: Type[RandomVariable] | None,
+    loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: List[str],
+    rv: Type[RandomVariable] | None = None,
 ) -> Type[pm.Distribution]:
     """Constructs a pymc.Distribution from a log-likelihood function and a
     RandomVariable op.
@@ -103,13 +103,13 @@ def make_distribution(
     ----------
     loglik
         A loglikelihood function. It can be any Callable in Python.
-    rv
-        A RandomVariable Op (a class, not an instance). If None, a default will be
-        used.
     list_params
         A list of parameters that the log-likelihood accepts. The order of the
         parameters in the list will determine the order in which the parameters
         are passed to the log-likelihood function.
+    rv
+        A RandomVariable Op (a class, not an instance). If None, a default will be
+        used.
 
     Returns
     -------
@@ -125,9 +125,8 @@ def make_distribution(
         # This is just a placeholder because pm.Distribution requires an rv_op
         # Might be updated in the future once
 
-        # NOTE: replace this default when we have a better random number generation
-        # method. This is here as a place holder.
-        rv_op = rv
+        # NOTE: rv_op is an INSTANCE of RandomVariable
+        rv_op = rv()
         params = list_params
 
         @classmethod
@@ -143,6 +142,9 @@ def make_distribution(
             return loglik(data, *dist_params)
 
     return WFPTDistribution
+
+
+WFPT = make_distribution(log_pdf_sv, ["v", "sv", "a", "z", "t"])
 
 
 def make_ssm_distribution(
@@ -166,14 +168,11 @@ def make_ssm_distribution(
         A PyMC Distribution class that uses the ONNX model as its log-likelihood
         function.
     """
-    if model == "base":
-        return make_distribution(log_pdf_sv, rv, list_params)
-
     if isinstance(model, (str, PathLike)):
         model = onnx.load(str(model))
     if backend == "pytensor":
         lan_logp_aes = make_pytensor_logp(model)
-        return make_distribution(lan_logp_aes, rv, list_params)
+        return make_distribution(lan_logp_aes, list_params, rv)
 
     if backend == "jax":
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
@@ -181,13 +180,13 @@ def make_ssm_distribution(
             n_params=len(list_params),
         )
         lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
-        return make_distribution(lan_logp_jax, rv, list_params)
+        return make_distribution(lan_logp_jax, list_params, rv)
 
     raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")
 
 
 def make_family(
-    dist: pm.Distribution,
+    dist: Type[pm.Distribution],
     list_params: List[str],
     link: str | Dict[str, bmb.families.Link],
     parent: str = "v",
