@@ -116,8 +116,7 @@ def make_distribution(
         A pymc.Distribution that uses the log-likelihood function.
     """
 
-    if rv is None:
-        rv = make_wfpt_rv(list_params)
+    random_variable = make_wfpt_rv(list_params) if not rv else rv
 
     class WFPTDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""
@@ -126,7 +125,7 @@ def make_distribution(
         # Might be updated in the future once
 
         # NOTE: rv_op is an INSTANCE of RandomVariable
-        rv_op = rv()
+        rv_op = random_variable()
         params = list_params
 
         @classmethod
