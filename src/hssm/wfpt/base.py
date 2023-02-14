@@ -219,6 +219,7 @@ def log_pdf_sv(
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
     flip = response > 0
+    a = a * 2
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t  # remove nondecision time
