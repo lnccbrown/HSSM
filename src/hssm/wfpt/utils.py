@@ -28,3 +28,8 @@ def data_check(
     new_columns = [response_rates, response, *additional_args]
     data = data[new_columns]
     return data
+
+
+def formula_replacer(orginal_formula: str, new_formula: str) -> str:
+    after_plus = new_formula.split(" ~ ")[1]
+    return orginal_formula.replace("1", after_plus)
