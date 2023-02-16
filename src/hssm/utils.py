@@ -82,14 +82,14 @@ class Param:
             if "~" not in formula:  # type: ignore
                 formula = f"{self.name} ~ {formula}"
 
-            self.formula = formula
+            self._formula = formula
 
             self.dep_priors = {
                 # Convert dict to bmb.Prior if a dict is passed
                 param: (prior if isinstance(prior, bmb.Prior) else bmb.Prior(**prior))
                 for param, prior in dep_priors.items()
             }
-            self.link = link
+            self._link = link
         else:
             if prior is None:
                 raise ValueError(
@@ -113,6 +113,14 @@ class Param:
         """
 
         return self._regression
+
+    @property
+    def link(self) -> str | bmb.Link | None:
+        return self._link if self.is_regression() else None
+
+    @property
+    def formula(self) -> str | None:
+        return self._formula if self.is_regression() else None
 
     def _parse_bambi(
         self,

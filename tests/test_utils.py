@@ -24,6 +24,9 @@ def test_param_non_regression():
     assert param_dict.prior == param_prior.prior
     assert not param_value.is_regression()
 
+    assert param_value.link is None
+    assert param_prior.formula is None
+
     formula1, d1, link1 = param_dict._parse_bambi()  # pylint: disable=W0212
     formula2, d2, link2 = param_prior._parse_bambi()  # pylint: disable=W0212
 
