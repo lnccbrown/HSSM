@@ -93,7 +93,7 @@ class Param:
         else:
             if prior is None:
                 raise ValueError(
-                    f"Please specify a value or a prior for parameter {self.name}"
+                    f"Please specify a value or a prior for parameter {self.name}."
                 )
 
             if dep_priors is not None:

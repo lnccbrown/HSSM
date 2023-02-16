@@ -42,6 +42,18 @@ def test_param_non_regression():
     ):
         Param("t", prior=0.1, formula="1 + x1 + x2")
 
+    with pytest.raises(
+        ValueError, match="Please specify a value or a prior for parameter z."
+    ):
+        Param("z")
+
+    with pytest.raises(
+        ValueError,
+        match="dep_priors should not be specified for z if a formula "
+        + "is not specified",
+    ):
+        Param("z", prior=0.1, dep_priors={})
+
 
 def test_param_regression():
 
@@ -79,3 +91,16 @@ def test_param_regression():
     assert d1 == d2
     assert link1["a"] == "identity"
     assert link2["a"].name == "Fake"
+
+    with pytest.raises(
+        ValueError,
+        match="A regression model is specified for parameter z."
+        + " `prior` parameter should not be specified.",
+    ):
+        Param("z", formula="1 + x1", dep_priors=priors_dict, prior=0.5)
+
+    with pytest.raises(
+        ValueError,
+        match="Priors for the variables that z is regressed on " + "are not specified.",
+    ):
+        Param("z", formula="1 + x1")
