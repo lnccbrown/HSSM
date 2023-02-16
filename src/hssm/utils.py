@@ -65,8 +65,8 @@ class Param:
         if self._regression:
             if prior is not None:
                 raise ValueError(
-                    f"A regression model is specified for parameter {self.name}.\
-                    `prior` parameter should not be specified."
+                    f"A regression model is specified for parameter {self.name}."
+                    + " `prior` parameter should not be specified."
                 )
 
             ## NOTE: for now, we only handle the case where no priors are provided at
@@ -75,8 +75,8 @@ class Param:
             ## about how the formulae package works
             if dep_priors is None:
                 raise ValueError(
-                    f"Priors for the variables that {self.name} is regressed on are \
-                    not specified."
+                    f"Priors for the variables that {self.name} is regressed on "
+                    + "are not specified."
                 )
 
             if "~" not in formula:  # type: ignore
@@ -93,11 +93,14 @@ class Param:
         else:
             if prior is None:
                 raise ValueError(
-                    "Please specify a value or a prior for parameter {self.name}"
+                    f"Please specify a value or a prior for parameter {self.name}"
                 )
 
             if dep_priors is not None:
-                raise ValueError("A regression model is not specified for ")
+                raise ValueError(
+                    f"dep_priors should not be specified for {self.name} "
+                    + "if a formula is not specified."
+                )
 
             self.prior = bmb.Prior(**prior) if isinstance(prior, dict) else prior
 
@@ -141,22 +144,19 @@ class Param:
             contains a regression or not.
         """
 
-        if self.is_regression():
+        if not self.is_regression():
             if isinstance(self.prior, bmb.Prior):
                 return f"{self.name} ~ {self.prior}"
-            else:
-                return f"{self.name} = {self.prior}"
+            return f"{self.name} = {self.prior}"
 
-        link = self.link if isinstance(self.link, str) else "Custom"
+        link = (
+            self.link if isinstance(self.link, str) else self.link.name  # type: ignore
+        )
         priors = "\r\n".join(
             [f"{param} ~ {prior}" for param, prior in self.dep_priors.items()]
         )
 
-        return f"""
-        {self.formula}
-        Link: {link}
-        {priors}
-        """
+        return "\r\n".join([self.formula, f"Link: {link}", priors])  # type: ignore
 
     def __str__(self) -> str:
         """Returns the string representation of the class.
