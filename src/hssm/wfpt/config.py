@@ -1,4 +1,4 @@
-model_config = {
+default_model_config = {
     "analytical": {
         "model": "base",
         "list_params": ["v", "sv", "a", "z", "t"],

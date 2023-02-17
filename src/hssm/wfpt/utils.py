@@ -30,6 +30,6 @@ def data_check(
     return data
 
 
-def formula_replacer(orginal_formula: str, new_formula: str) -> str:
-    after_plus = new_formula.split(" ~ ")[1]
+def formula_replacer(orginal_formula: str, new_formula: dict) -> str:
+    after_plus = new_formula["formula"].split(" ~ ")[1]
     return orginal_formula.replace("1", after_plus)
