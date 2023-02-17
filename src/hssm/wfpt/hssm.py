@@ -1,4 +1,5 @@
-# pylint: disable=unused-variable
+from __future__ import annotations
+
 from typing import List
 
 import bambi as bmb
@@ -14,7 +15,7 @@ class HSSM:
         self,
         data: pd.DataFrame,
         model_name: str = "analytical",
-        include: dict | List = None,  # type: ignore
+        include: dict | List[dict] = None,  # type: ignore
         model_config: dict = None,
     ):
         self.model_config = (
@@ -37,25 +38,27 @@ class HSSM:
             likelihood=self.likelihood,
             link={param: "identity" for param in self.list_params},
         )
-
-        self.formula = self.model_config[model_name]["formula"]
-        if isinstance(include, dict) and include.get("formula"):  # type: ignore
-            self.formula = bmb.Formula(formula_replacer(self.formula, include))
-        elif isinstance(include, list):
-            formulas = [item["formula"] for item in include if item.get("formula")]
-            self.formula = bmb.Formula(*formulas)
-
         self.priors = {}
-        for i, param in enumerate(self.list_params):
+        for param in self.list_params:
             self.priors[param] = bmb.Prior(
                 "Uniform",
                 lower=self.model_config[model_name]["priors"][param][0],  # type: ignore
                 upper=self.model_config[model_name]["priors"][param][1],  # type: ignore
             )
 
-        if isinstance(include, dict) and include.get("prior"):  # type: ignore
+        self.formula = self.model_config[model_name]["formula"]
+        if isinstance(include, dict) and include.get("formula"):  # type: ignore
+            self.formula = formula_replacer(self.formula, include)
             self.priors[include["param"]] = bmb.Prior(
                 "Uniform", lower=include["priors"][0], upper=include["priors"][1]
+            )
+        elif isinstance(include, list):
+            formulas = [item["formula"] for item in include if item.get("formula")]
+            self.formula = bmb.Formula(*formulas)
+            self.priors[include["param"]] = bmb.Prior(  # type: ignore
+                "Uniform",
+                lower=include["priors"][0],  # type: ignore
+                upper=include["priors"][1],  # type: ignore
             )
 
         self.model = bmb.Model(
