@@ -15,7 +15,7 @@ class HSSM:
         self,
         data: pd.DataFrame,
         model_name: str = "analytical",
-        include: dict | List[dict] = None,  # type: ignore
+        include: dict | List[dict] = None,
         model_config: dict = None,
     ):
         self.model_config = (
@@ -55,11 +55,14 @@ class HSSM:
         elif isinstance(include, list):
             formulas = [item["formula"] for item in include if item.get("formula")]
             self.formula = bmb.Formula(*formulas)
-            self.priors[include["param"]] = bmb.Prior(  # type: ignore
-                "Uniform",
-                lower=include["priors"][0],  # type: ignore
-                upper=include["priors"][1],  # type: ignore
-            )
+            for item in include:
+                self.priors[item["param"]] = {
+                    "Intercept": bmb.Prior(
+                        "Uniform",  # type: ignore
+                        lower=item["priors"][0],  # type: ignore
+                        upper=item["priors"][1],  # type: ignore
+                    )
+                }
 
         self.model = bmb.Model(
             self.formula, data, family=self.family, priors=self.priors
