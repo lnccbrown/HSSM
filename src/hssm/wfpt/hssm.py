@@ -41,16 +41,20 @@ class HSSM:
         self.priors = {}
         for param in self.list_params:
             self.priors[param] = bmb.Prior(
-                "Uniform",
-                lower=self.model_config[model_name]["priors"][param][0],  # type: ignore
-                upper=self.model_config[model_name]["priors"][param][1],  # type: ignore
+                self.model_config[model_name]["priors"][param]["name"],
+                # type: ignore
+                lower=self.model_config[model_name]["priors"][param]["lower"],
+                # type: ignore
+                upper=self.model_config[model_name]["priors"][param]["upper"],
             )
 
         self.formula = self.model_config[model_name]["formula"]
         if isinstance(include, dict) and include.get("formula"):  # type: ignore
             self.formula = formula_replacer(self.formula, include)
             self.priors[include["param"]] = bmb.Prior(
-                "Uniform", lower=include["priors"][0], upper=include["priors"][1]
+                include["priors"]["name"],
+                lower=include["priors"]["lower"],
+                upper=include["priors"]["upper"],
             )
         elif isinstance(include, list):
             formulas = [item["formula"] for item in include if item.get("formula")]
@@ -58,9 +62,9 @@ class HSSM:
             for item in include:
                 self.priors[item["param"]] = {
                     "Intercept": bmb.Prior(
-                        "Uniform",  # type: ignore
-                        lower=item["priors"][0],  # type: ignore
-                        upper=item["priors"][1],  # type: ignore
+                        item["priors"]["name"],  # type: ignore
+                        lower=item["priors"]["lower"],  # type: ignore
+                        upper=item["priors"]["upper"],  # type: ignore
                     )
                 }
 
