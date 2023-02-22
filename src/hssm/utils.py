@@ -28,10 +28,13 @@ class Param:
     def __init__(
         self,
         name: str,
-        prior: float | PriorSpec | bmb.Prior | None = None,
+        prior: float
+        | PriorSpec
+        | bmb.Prior
+        | Dict[str, PriorSpec]
+        | Dict[str, bmb.Prior],
         formula: str | None = None,
-        dep_priors: Dict[str, PriorSpec] | Dict[str, bmb.Prior] | None = None,
-        link: str | bmb.Link | None = "identity",
+        link: str | bmb.Link | None = None,
     ):
         """Parses the parameters to class properties.
 
@@ -39,68 +42,46 @@ class Param:
         ----------
         name
             The name of the parameter
-        prior, optional
-            A float value if the parameter is fixed. Otherwise, provide a dictionary
-            that can be parsed by Bambi as a prior specification or a Bambi Prior,
-            by default None.
+        prior
+            If a formula is not specified, this parameter expects a float value if the
+            parameter is fixed or a dictionary that can be parsed by Bambi as a prior
+            specification or a Bambi Prior. if a formula is specified, this parameter
+            expects a dictionary of param:prior, where param is the name of the
+            response variable specified in formula, and prior is either a dictionary
+            that can be parsed by Bambi as a prior specification, or a Bambi Prior.
+            By default None.
         formula, optional
             The regression formula if the parameter depends on other variables. The
             response variable can be omitted, by default None.
-        dep_priors, optional
-            A dictionary of param:prior, where param is the name of the dependent
-            variable specified in formula, and prior is either a dictionary that can be
-            parsed by Bambi as a prior specification, or a Bambi Prior object,
-            by default None
         link, optional
             The link function for the regression. It is either a string that specifies
-            a built-in link function in Bambi, or a Bambi Link object, by default
-            "identity".
+            a built-in link function in Bambi, or a Bambi Link object. If a regression
+            is speicified and link is not specified, "identity" will be used.
         """
 
         self.name = name
+        self.formula = formula
+        self.link = None
 
         # Check if the user has specified a formula
         self._regression = formula is not None
 
         if self._regression:
-            if prior is not None:
-                raise ValueError(
-                    f"A regression model is specified for parameter {self.name}."
-                    + " `prior` parameter should not be specified."
-                )
-
-            ## NOTE: for now, we only handle the case where no priors are provided at
-            ## all. We delegate cases there are some variables whose priors are not
-            ## provided to Bambi at the moment. This could be improved once we know more
-            ## about how the formulae package works
-            if dep_priors is None:
-                raise ValueError(
-                    f"Priors for the variables that {self.name} is regressed on "
-                    + "are not specified."
-                )
-
             if "~" not in formula:  # type: ignore
                 formula = f"{self.name} ~ {formula}"
 
-            self._formula = formula
+            self.formula = formula
 
-            self.dep_priors = {
+            self.prior = {
                 # Convert dict to bmb.Prior if a dict is passed
                 param: (prior if isinstance(prior, bmb.Prior) else bmb.Prior(**prior))
-                for param, prior in dep_priors.items()
+                for param, prior in prior.items()  # type: ignore
             }
-            self._link = link
-        else:
-            if prior is None:
-                raise ValueError(
-                    f"Please specify a value or a prior for parameter {self.name}."
-                )
 
-            if dep_priors is not None:
-                raise ValueError(
-                    f"dep_priors should not be specified for {self.name} "
-                    + "if a formula is not specified."
-                )
+            self.link = "identity" if link is None else link
+        else:
+            if link is not None:
+                raise ValueError("`link` should be None if no regression is specified.")
 
             self.prior = bmb.Prior(**prior) if isinstance(prior, dict) else prior
 
@@ -114,17 +95,9 @@ class Param:
 
         return self._regression
 
-    @property
-    def link(self) -> str | bmb.Link | None:
-        return self._link if self.is_regression() else None
-
-    @property
-    def formula(self) -> str | None:
-        return self._formula if self.is_regression() else None
-
     def _parse_bambi(
         self,
-    ) -> Tuple[str | None, Dict[str, Any], Dict[str, str | bmb.Link] | None]:
+    ) -> Tuple:
         """Returns a 3-tuple that helps with constructing the Bambi model.
 
         Returns
@@ -132,16 +105,15 @@ class Param:
             A 3-tuple of formula, priors, and link functions that can be used to
             construct the Bambi model.
         """
-        if self.is_regression():
-
-            priors = {self.name: self.dep_priors}
-            link = {self.name: self.link}
-
-            return self.formula, priors, link  # type: ignore
 
         prior = {self.name: self.prior}
 
-        return None, prior, None
+        if not self._regression:
+            return None, prior, None
+
+        link = {self.name: self.link}
+
+        return self.formula, prior, link
 
     def __repr__(self) -> str:
         """Returns the representation of the class.
@@ -161,7 +133,7 @@ class Param:
             self.link if isinstance(self.link, str) else self.link.name  # type: ignore
         )
         priors = "\r\n".join(
-            [f"{param} ~ {prior}" for param, prior in self.dep_priors.items()]
+            [f"{param} ~ {prior}" for param, prior in self.prior.items()]
         )
 
         return "\r\n".join([self.formula, f"Link: {link}", priors])  # type: ignore
