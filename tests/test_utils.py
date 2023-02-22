@@ -65,6 +65,10 @@ def test_param_regression():
         "a", formula="a ~ 1 + x1", prior=priors_dict, link=fake_link
     )
 
+    param_reg_parent = Param(
+        "a", formula="a ~ 1 + x1", prior=priors_dict, is_parent=True
+    )
+
     assert param_reg_formula1.formula == "a ~ 1 + x1"
     assert isinstance(param_reg_formula2.link, bmb.Link)
 
@@ -80,3 +84,5 @@ def test_param_regression():
     assert d1 == d2
     assert link1["a"] == "identity"
     assert link2["a"].name == "Fake"
+
+    assert param_reg_parent.formula == "c(rt, response) ~ 1 + x1"
