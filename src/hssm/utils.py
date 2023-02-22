@@ -35,6 +35,7 @@ class Param:
         | Dict[str, bmb.Prior],
         formula: str | None = None,
         link: str | bmb.Link | None = None,
+        is_parent: bool = False,
     ):
         """Parses the parameters to class properties.
 
@@ -57,18 +58,31 @@ class Param:
             The link function for the regression. It is either a string that specifies
             a built-in link function in Bambi, or a Bambi Link object. If a regression
             is speicified and link is not specified, "identity" will be used.
+        is_parent:
+            Determines if this parameter is a "parent" parameter. If so, the response
+            term for the formula will be "c(rt, response)".
         """
 
         self.name = name
         self.formula = formula
         self.link = None
+        self._parent = is_parent
 
         # Check if the user has specified a formula
         self._regression = formula is not None
 
         if self._regression:
-            if "~" not in formula:  # type: ignore
-                formula = f"{self.name} ~ {formula}"
+            if "~" in formula:  # type: ignore
+                if is_parent:
+                    _, right_side = formula.split("~")  # type: ignore
+                    right_side = right_side.strip()
+                    formula = f"c(rt, response) ~ {right_side}"
+
+            else:
+                if is_parent:
+                    formula = f"c(rt, response) ~ {formula}"
+                else:
+                    formula = f"{self.name} ~ {formula}"
 
             self.formula = formula
 
