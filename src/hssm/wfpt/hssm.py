@@ -41,30 +41,30 @@ class HSSM:
         self.priors = {}
         for param in self.list_params:
             self.priors[param] = bmb.Prior(
-                self.model_config[model_name]["priors"][param]["name"],
+                self.model_config[model_name]["prior"][param]["name"],
                 # type: ignore
-                lower=self.model_config[model_name]["priors"][param]["lower"],
+                lower=self.model_config[model_name]["prior"][param]["lower"],
                 # type: ignore
-                upper=self.model_config[model_name]["priors"][param]["upper"],
+                upper=self.model_config[model_name]["prior"][param]["upper"],
             )
 
         self.formula = self.model_config[model_name]["formula"]
         if isinstance(include, dict) and include.get("formula"):  # type: ignore
             self.formula = formula_replacer(self.formula, include)
-            self.priors[include["param"]] = bmb.Prior(
-                include["priors"]["name"],
-                lower=include["priors"]["lower"],
-                upper=include["priors"]["upper"],
+            self.priors[include["name"]] = bmb.Prior(
+                include["prior"]["name"],
+                lower=include["prior"]["lower"],
+                upper=include["prior"]["upper"],
             )
         elif isinstance(include, list):
             formulas = [item["formula"] for item in include if item.get("formula")]
             self.formula = bmb.Formula(*formulas)
             for item in include:
-                self.priors[item["param"]] = {
+                self.priors[item["name"]] = {
                     "Intercept": bmb.Prior(
-                        item["priors"]["name"],  # type: ignore
-                        lower=item["priors"]["lower"],  # type: ignore
-                        upper=item["priors"]["upper"],  # type: ignore
+                        item["prior"]["name"],  # type: ignore
+                        lower=item["prior"]["lower"],  # type: ignore
+                        upper=item["prior"]["upper"],  # type: ignore
                     )
                 }
 
@@ -77,9 +77,13 @@ class HSSM:
         cores: int = 2,
         draws: int = 500,
         tune: int = 500,
-        mp_ctx: str = "forkserver",
-        method: str = None,  # nuts_numpyro if an user want to use jax
+        mp_ctx: str = "fork",
+        # sampler: str = 'pytensor'
     ):
-        return self.model.fit(
-            cores=cores, draws=draws, tune=tune, mp_ctx=mp_ctx, method=method
-        )
+        # if sampler == 'jax'
+        #     return self.model.fit(
+        #         cores=cores, draws=draws, tune=tune, mp_ctx=mp_ctx,
+        #         inference_method='nuts_numpyro'
+        #     )
+        # else:
+        return self.model.fit(cores=cores, draws=draws, tune=tune, mp_ctx=mp_ctx)

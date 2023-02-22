@@ -4,7 +4,7 @@ default_model_config = {
         "list_params": ["v", "sv", "a", "z", "t"],
         "backend": "pytensor",
         "formula": "c(rt,response)  ~ 1",
-        "priors": {
+        "prior": {
             "v": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
             "sv": {"name": "Uniform", "lower": 0.0, "upper": 1.2},
             "a": {"name": "Uniform", "lower": 0.5, "upper": 2.01},
@@ -17,7 +17,7 @@ default_model_config = {
         "list_params": ["v", "sv", "a", "z", "theta"],
         "backend": "jax",
         "formula": "c(rt,response)  ~ 1",
-        "priors": {
+        "prior": {
             "v": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
             "sv": {"name": "Uniform", "lower": 0.0, "upper": 1.2},
             "a": {"name": "Uniform", "lower": 0.5, "upper": 2.01},
