@@ -77,23 +77,9 @@ def test_param_non_regression():
     assert repr(param_dict) == f"z ~ {param_dict.prior}"
 
     with pytest.raises(
-        ValueError,
-        match="A regression model is specified for parameter t."
-        + " `prior` parameter should not be specified.",
+        ValueError, match="`link` should be None if no regression is specified."
     ):
-        Param("t", prior=0.1, formula="1 + x1 + x2")
-
-    with pytest.raises(
-        ValueError, match="Please specify a value or a prior for parameter z."
-    ):
-        Param("z")
-
-    with pytest.raises(
-        ValueError,
-        match="dep_priors should not be specified for z if a formula "
-        + "is not specified",
-    ):
-        Param("z", prior=0.1, dep_priors={})
+        Param("t", 0.5, link="identity")
 
 
 def test_param_regression():
@@ -112,15 +98,19 @@ def test_param_regression():
         "x1": bmb.Prior("Normal", mu=0, sigma=0.5),
     }
 
-    param_reg_formula1 = Param("a", formula="1 + x1", dep_priors=priors_dict)
+    param_reg_formula1 = Param("a", formula="1 + x1", prior=priors_dict)
     param_reg_formula2 = Param(
-        "a", formula="a ~ 1 + x1", dep_priors=priors_dict, link=fake_link
+        "a", formula="a ~ 1 + x1", prior=priors_dict, link=fake_link
+    )
+
+    param_reg_parent = Param(
+        "a", formula="a ~ 1 + x1", prior=priors_dict, is_parent=True
     )
 
     assert param_reg_formula1.formula == "a ~ 1 + x1"
     assert isinstance(param_reg_formula2.link, bmb.Link)
 
-    dep_priors2 = param_reg_formula2.dep_priors
+    dep_priors2 = param_reg_formula2.prior
 
     assert isinstance(dep_priors2["intercept"], bmb.Prior)
     assert dep_priors2["intercept"] == dep_priors2["x1"]
@@ -133,15 +123,4 @@ def test_param_regression():
     assert link1["a"] == "identity"
     assert link2["a"].name == "Fake"
 
-    with pytest.raises(
-        ValueError,
-        match="A regression model is specified for parameter z."
-        + " `prior` parameter should not be specified.",
-    ):
-        Param("z", formula="1 + x1", dep_priors=priors_dict, prior=0.5)
-
-    with pytest.raises(
-        ValueError,
-        match="Priors for the variables that z is regressed on " + "are not specified.",
-    ):
-        Param("z", formula="1 + x1")
+    assert param_reg_parent.formula == "c(rt, response) ~ 1 + x1"
