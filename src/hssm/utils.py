@@ -4,9 +4,10 @@ Contains classes and functions that helps the main HSSM class parse arguments.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 import bambi as bmb
+import pandas as pd
 
 PriorSpec = Dict[str, Any]
 
@@ -15,6 +16,37 @@ PARAM_DEFAULTS = {
     "z": 0.0,
     "t": 0.0,
 }
+
+##
+def data_check(
+    data: pd.DataFrame,
+    response_rates: str = None,
+    response: str = None,
+    additional_args: List[str] = None,
+) -> pd.DataFrame:
+    """
+    Convert data into correct format before passing it to the hssm models
+
+    data: data should be in pandas format
+    response_rates: name of the column indicating response rates
+    response: name of the column indicating response rates
+    additional_args: list of additional columns that will be used in the model
+    """
+    if additional_args is None:
+        additional_args = []
+    if response_rates is None:
+        response_rates = "rt"
+    if response is None:
+        response = "response"
+
+    new_columns = [response_rates, response, *additional_args]
+    data = data[new_columns]
+    return data
+
+
+def formula_replacer(orginal_formula: str, new_formula: dict) -> str:
+    after_plus = new_formula["formula"].split(" ~ ")[1]
+    return orginal_formula.replace("1", after_plus)
 
 
 class Param:

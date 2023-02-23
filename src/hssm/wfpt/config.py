@@ -11,6 +11,7 @@ default_model_config = {
             "z": {"name": "Uniform", "lower": 0.1, "upper": 0.9},
             "t": {"name": "Uniform", "lower": 0.0, "upper": 2.01},
         },
+        "link": {param: "identity" for param in ["v", "sv", "a", "z", "t"]},
     },
     "lan": {
         "model": "test.onnx",
@@ -24,5 +25,6 @@ default_model_config = {
             "z": {"name": "Uniform", "lower": 0.1, "upper": 0.9},
             "theta": {"name": "Uniform", "lower": 0.0, "upper": 2.01},
         },
+        "link": {param: "identity" for param in ["v", "sv", "a", "z", "theta"]},
     },
 }
