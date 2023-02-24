@@ -65,13 +65,13 @@ class HSSM:
         self.formula = self.model_config[model_name]["formula"]
 
         if include:
-            self._add_formula_params(include)
+            self._transform_include(include)
 
         self.model = bmb.Model(
             self.formula, data, family=self.family, priors=self.priors
         )
 
-    def _add_formula_params(self, params: List[dict]) -> None:
+    def _transform_include(self, params: List[dict]) -> None:
         formulas = [p["formula"] for p in params if p.get("formula")]
         first_item = formulas[0].split(" ~ ")[0]
         formulas[0] = formulas[0].replace(first_item, "c(rt,response)")
