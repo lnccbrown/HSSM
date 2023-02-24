@@ -43,6 +43,9 @@ def test_param_non_regression():
     ):
         Param("t", 0.5, link="identity")
 
+    with pytest.raises(ValueError, match="Please specify a value or prior for a."):
+        Param("a")
+
 
 def test_param_regression():
 
@@ -65,9 +68,7 @@ def test_param_regression():
         "a", formula="a ~ 1 + x1", prior=priors_dict, link=fake_link
     )
 
-    param_reg_parent = Param(
-        "a", formula="a ~ 1 + x1", prior=priors_dict, is_parent=True
-    )
+    param_reg_parent = Param("a", formula="a ~ 1 + x1", is_parent=True)
 
     assert param_reg_formula1.formula == "a ~ 1 + x1"
     assert isinstance(param_reg_formula2.link, bmb.Link)
@@ -85,4 +86,13 @@ def test_param_regression():
     assert link1["a"] == "identity"
     assert link2["a"].name == "Fake"
 
-    assert param_reg_parent.formula == "c(rt, response) ~ 1 + x1"
+    formula3, d3, _ = param_reg_parent._parse_bambi()  # pylint: disable=W0212
+
+    assert formula3 == "c(rt, response) ~ 1 + x1"
+    assert param_reg_parent.formula == "a ~ 1 + x1"
+
+    assert d3 is None
+
+    rep = repr(param_reg_parent)
+    lines = rep.split("\r\n")
+    assert lines[2] == "Unspecified, using defaults"

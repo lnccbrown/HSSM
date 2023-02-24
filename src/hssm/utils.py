@@ -32,7 +32,8 @@ class Param:
         | PriorSpec
         | bmb.Prior
         | Dict[str, PriorSpec]
-        | Dict[str, bmb.Prior],
+        | Dict[str, bmb.Prior]
+        | None = None,
         formula: str | None = None,
         link: str | bmb.Link | None = None,
         is_parent: bool = False,
@@ -72,32 +73,30 @@ class Param:
         self._regression = formula is not None
 
         if self._regression:
-            if "~" in formula:  # type: ignore
-                if is_parent:
-                    _, right_side = formula.split("~")  # type: ignore
-                    right_side = right_side.strip()
-                    formula = f"c(rt, response) ~ {right_side}"
 
-            else:
-                if is_parent:
-                    formula = f"c(rt, response) ~ {formula}"
-                else:
-                    formula = f"{self.name} ~ {formula}"
+            self.formula = formula if "~" in formula else f"{name} ~ {formula}"
 
-            self.formula = formula
-
-            self.prior = {
-                # Convert dict to bmb.Prior if a dict is passed
-                param: (prior if isinstance(prior, bmb.Prior) else bmb.Prior(**prior))
-                for param, prior in prior.items()  # type: ignore
-            }
+            self.prior = (
+                {
+                    # Convert dict to bmb.Prior if a dict is passed
+                    param: (
+                        prior if isinstance(prior, bmb.Prior) else bmb.Prior(**prior)
+                    )
+                    for param, prior in prior.items()  # type: ignore
+                }
+                if prior is not None
+                else None
+            )
 
             self.link = "identity" if link is None else link
         else:
-            if link is not None:
-                raise ValueError("`link` should be None if no regression is specified.")
+            if prior is None:
+                raise ValueError(f"Please specify a value or prior for {self.name}.")
 
             self.prior = bmb.Prior(**prior) if isinstance(prior, dict) else prior
+
+            if link is not None:
+                raise ValueError("`link` should be None if no regression is specified.")
 
     def is_regression(self) -> bool:
         """Determines if a regression is specified or not.
@@ -108,6 +107,16 @@ class Param:
         """
 
         return self._regression
+
+    def is_parent(self) -> bool:
+        """Determines if a parameter is a parent parameter for Bambi.
+
+        Returns
+        -------
+            A boolean that indicates if the parameter is a parent or not.
+        """
+
+        return self._parent
 
     def _parse_bambi(
         self,
@@ -120,14 +129,23 @@ class Param:
             construct the Bambi model.
         """
 
-        prior = {self.name: self.prior}
+        formula = None
+        if self._regression:
+            if self._parent:
+                _, right_side = self.formula.split("~")  # type: ignore
+                right_side = right_side.strip()
+                formula = f"c(rt, response) ~ {right_side}"
+            else:
+                formula = self.formula
+
+        prior = {self.name: self.prior} if self.prior is not None else None
 
         if not self._regression:
             return None, prior, None
 
         link = {self.name: self.link}
 
-        return self.formula, prior, link
+        return formula, prior, link
 
     def __repr__(self) -> str:
         """Returns the representation of the class.
@@ -138,7 +156,7 @@ class Param:
             contains a regression or not.
         """
 
-        if not self.is_regression():
+        if not self._regression:
             if isinstance(self.prior, bmb.Prior):
                 return f"{self.name} ~ {self.prior}"
             return f"{self.name} = {self.prior}"
@@ -146,8 +164,10 @@ class Param:
         link = (
             self.link if isinstance(self.link, str) else self.link.name  # type: ignore
         )
-        priors = "\r\n".join(
-            [f"{param} ~ {prior}" for param, prior in self.prior.items()]
+        priors = (
+            "\r\n".join([f"{param} ~ {prior}" for param, prior in self.prior.items()])
+            if self.prior is not None
+            else "Unspecified, using defaults"
         )
 
         return "\r\n".join([self.formula, f"Link: {link}", priors])  # type: ignore
