@@ -108,39 +108,43 @@ class HSSM:
         )
 
     def _transform_include(self, include: List[dict]) -> None:
-        formulas = [p.get("formula") for p in include]
-        v_dict = next((p for p in include if p.get("name") != "v"), None)
-        if v_dict:
-            formulas.insert(0, self.model_config[self.model_name]["formula"])
-        else:
-            first_item = formulas[0].split(" ~ ")[0]  # type: ignore
-            formulas[0] = formulas[0].replace(  # type: ignore
-                first_item, "c(rt,response)"
-            )
+        if all("formula" in d for d in include):
+            formulas = [p.get("formula") for p in include if p.get("formula")]
+            v_dict = next((p for p in include if p.get("name") == "v"), None)
+            if not v_dict:
+                formulas.insert(0, self.model_config[self.model_name]["formula"])
+            else:
+                first_item = formulas[0].split(" ~ ")[0]  # type: ignore
+                formulas[0] = formulas[0].replace(  # type: ignore
+                    first_item, "c(rt,response)"
+                )
 
-        self.formula = bmb.Formula(*formulas)
+            self.formula = bmb.Formula(*formulas)
         self.params = []
         for dictionary in include:
             self.params.append(Param(**dictionary))
-            coefs = dictionary["formula"].split(" ~ ")[1]
-            coefs = coefs.split(" + ")
-            coefs[coefs.index("1")] = "Intercept"
-            self.priors[dictionary["name"]] = {}
-            for coef in coefs:
-                try:
-                    new_prior = bmb.Prior(
-                        dictionary["prior"][coef]["name"],
-                        lower=dictionary["prior"][coef]["lower"],
-                        upper=dictionary["prior"][coef]["upper"],
-                        initval=dictionary["prior"][coef]["initval"],
-                    )
-                except KeyError:
-                    new_prior = bmb.Prior(
-                        dictionary["prior"][coef]["name"],
-                        lower=dictionary["prior"][coef]["lower"],
-                        upper=dictionary["prior"][coef]["upper"],
-                    )
-                self.priors[dictionary["name"]][coef] = new_prior
+            if "formula" in dictionary:
+                coefs = dictionary["formula"].split(" ~ ")[1]
+                coefs = coefs.split(" + ")
+                coefs[coefs.index("1")] = "Intercept"
+                self.priors[dictionary["name"]] = {}
+                for coef in coefs:
+                    try:
+                        new_prior = bmb.Prior(
+                            dictionary["prior"][coef]["name"],
+                            lower=dictionary["prior"][coef]["lower"],
+                            upper=dictionary["prior"][coef]["upper"],
+                            initval=dictionary["prior"][coef]["initval"],
+                        )
+                    except KeyError:
+                        new_prior = bmb.Prior(
+                            dictionary["prior"][coef]["name"],
+                            lower=dictionary["prior"][coef]["lower"],
+                            upper=dictionary["prior"][coef]["upper"],
+                        )
+                    self.priors[dictionary["name"]][coef] = new_prior
+            elif isinstance(dictionary["prior"], (int, float)):
+                self.priors[dictionary["name"]] = dictionary["prior"]
 
     def sample(
         self,
