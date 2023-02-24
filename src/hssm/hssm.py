@@ -6,17 +6,28 @@ import bambi as bmb
 import pandas as pd
 
 from hssm import wfpt
-from hssm.utils import Param, formula_replacer
+from hssm.utils import Param
 from hssm.wfpt.config import default_model_config
 
 
 # add custom link function
 class HSSM:
+    """
+    Initialize the HSSM class.
+
+    Args:
+        data: A pandas DataFrame containing the data to be analyzed.
+        model_name: The name of the model to use. Default is "analytical".
+        include: A list of dictionaries specifying additional parameters
+         to include in the model.
+        model_config: A dictionary containing the model configuration information.
+    """
+
     def __init__(
         self,
         data: pd.DataFrame,
         model_name: str = "analytical",
-        include: dict | List[dict] = None,
+        include: List[dict] = None,
         model_config: dict = None,
     ):
         self.model_config = (
@@ -45,69 +56,48 @@ class HSSM:
         )
         self.priors = {}
         for param in self.list_params:
-            self.priors[param] = bmb.Prior(
-                # type: ignore
-                self.model_config[model_name]["prior"][param]["name"],
-                # type: ignore
+            self.priors[param] = bmb.Prior(  # type: ignore
+                self.model_config[model_name]["prior"][param]["name"],  # type: ignore
                 lower=self.model_config[model_name]["prior"][param]["lower"],
                 upper=self.model_config[model_name]["prior"][param]["upper"],
             )
 
         self.formula = self.model_config[model_name]["formula"]
 
-        if isinstance(include, dict) and include.get("formula"):  # type: ignore
-            self.params = Param(**include)
-            self.formula = formula_replacer(self.formula, include)
-            coefs = self.formula.split(" ~ ")[1].split(" + ")
-            coefs[coefs.index("1")] = "Intercept"
-            self.priors[include["name"]] = {}
-            for coef in coefs:
-                if include["prior"][coef].get("initval") is not None:
-                    new_prior = bmb.Prior(
-                        include["prior"][coef]["name"],
-                        lower=include["prior"][coef]["lower"],
-                        upper=include["prior"][coef]["upper"],
-                        initval=include["prior"][coef]["initval"],
-                    )
-                    self.priors[include["name"]][coef] = new_prior
-                else:
-                    new_prior = bmb.Prior(
-                        include["prior"][coef]["name"],
-                        lower=include["prior"][coef]["lower"],
-                        upper=include["prior"][coef]["upper"],
-                    )
-                    self.priors[include["name"]][coef] = new_prior
-        elif isinstance(include, list):
-            formulas = [item["formula"] for item in include if item.get("formula")]
-            first_item = formulas[0].split(" ~ ")[0]
-            formulas[0] = formulas[0].replace(first_item, "c(rt,response)")
-            self.formula = bmb.Formula(*formulas)
-            for dictionary in include:
-                self.params = Param(**dictionary)
-                coefs = dictionary["formula"].split(" ~ ")[1]
-                coefs = coefs.split(" + ")
-                coefs[coefs.index("1")] = "Intercept"
-                self.priors[dictionary["name"]] = {}
-                for coef in coefs:
-                    if dictionary["prior"].get("initval") is not None:
-                        new_prior = bmb.Prior(
-                            dictionary["prior"][coef]["name"],
-                            lower=dictionary["prior"][coef]["lower"],
-                            upper=dictionary["prior"][coef]["upper"],
-                            initval=dictionary["prior"][coef]["initval"],
-                        )
-                        self.priors[dictionary["name"]][coef] = new_prior
-                    else:
-                        new_prior = bmb.Prior(
-                            dictionary["prior"][coef]["name"],
-                            lower=dictionary["prior"][coef]["lower"],
-                            upper=dictionary["prior"][coef]["upper"],
-                        )
-                        self.priors[dictionary["name"]][coef] = new_prior
+        if include:
+            self._add_formula_params(include)
 
         self.model = bmb.Model(
             self.formula, data, family=self.family, priors=self.priors
         )
+
+    def _add_formula_params(self, params: List[dict]) -> None:
+        formulas = [p["formula"] for p in params if p.get("formula")]
+        first_item = formulas[0].split(" ~ ")[0]
+        formulas[0] = formulas[0].replace(first_item, "c(rt,response)")
+        self.formula = bmb.Formula(*formulas)
+        self.params = []
+        for dictionary in params:
+            self.params.append(Param(**dictionary))
+            coefs = dictionary["formula"].split(" ~ ")[1]
+            coefs = coefs.split(" + ")
+            coefs[coefs.index("1")] = "Intercept"
+            self.priors[dictionary["name"]] = {}
+            for coef in coefs:
+                try:
+                    new_prior = bmb.Prior(
+                        dictionary["prior"][coef]["name"],
+                        lower=dictionary["prior"][coef]["lower"],
+                        upper=dictionary["prior"][coef]["upper"],
+                        initval=dictionary["prior"][coef]["initval"],
+                    )
+                except KeyError:
+                    new_prior = bmb.Prior(
+                        dictionary["prior"][coef]["name"],
+                        lower=dictionary["prior"][coef]["lower"],
+                        upper=dictionary["prior"][coef]["upper"],
+                    )
+                self.priors[dictionary["name"]][coef] = new_prior
 
     def sample(
         self,
