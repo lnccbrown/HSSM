@@ -114,8 +114,8 @@ class HSSM:
             formulas.insert(0, self.model_config[self.model_name]["formula"])
         else:
             first_item = formulas[0].split(" ~ ")[0]  # type: ignore
-            formulas[0] = formulas[0].replace(
-                first_item, "c(rt,response)"  # type: ignore
+            formulas[0] = formulas[0].replace(  # type: ignore
+                first_item, "c(rt,response)"
             )
 
         self.formula = bmb.Formula(*formulas)
