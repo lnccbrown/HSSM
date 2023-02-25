@@ -1,7 +1,7 @@
 import bambi as bmb
 import pytest
 
-from hssm.utils import Param
+from hssm.utils import Param, _parse_bambi
 
 
 def test_param_non_regression():
@@ -96,3 +96,69 @@ def test_param_regression():
     rep = repr(param_reg_parent)
     lines = rep.split("\r\n")
     assert lines[2] == "Unspecified, using defaults"
+
+
+def test__parse_bambi():
+    prior_dict = {"name": "Uniform", "lower": 0.3, "upper": 1.0}
+    prior_obj = bmb.Prior("Uniform", lower=0.3, upper=1.0)
+
+    param_non_parent_non_regression = Param("a", prior=prior_dict)
+    param_parent_non_regression = Param("v", prior=prior_dict, is_parent=True)
+
+    param_non_parent_regression = Param(
+        "a",
+        formula="1 + x1",
+        prior={
+            "intercept": prior_dict,
+            "x1": prior_dict,
+        },
+    )
+
+    param_parent_regression = Param(
+        "v",
+        formula="1 + x1",
+        prior={
+            "intercept": prior_dict,
+            "x1": prior_dict,
+        },
+        is_parent=True,
+    )
+
+    empty_list = []
+    list_one_non_parent_non_regression = [param_non_parent_non_regression]
+    list_one_non_parent_regression = [param_non_parent_regression]
+    list_one_parent_non_regression = [param_parent_non_regression]
+    list_one_parent_regression = [param_parent_regression]
+
+    f0, p0, l0 = _parse_bambi(empty_list)
+
+    assert f0.main == "c(rt, response) ~ 1"
+    assert p0 is None
+    assert l0 == "identity"
+
+    f1, p1, l1 = _parse_bambi(list_one_non_parent_non_regression)
+
+    assert f1.main == "c(rt, response) ~ 1"
+    assert p1["a"] == prior_obj
+    assert l1 == "identity"
+
+    f2, p2, l2 = _parse_bambi(list_one_non_parent_regression)
+
+    assert f2.main == "c(rt, response) ~ 1"
+    assert f2.additionals[0] == "a ~ 1 + x1"
+    assert p2["a"]["intercept"] == prior_obj
+    assert p2["a"]["x1"] == prior_obj
+    assert l2 == {"a": "identity", "c(rt, response)": "identity"}
+
+    f3, p3, l3 = _parse_bambi(list_one_parent_non_regression)
+
+    assert f3.main == "c(rt, response) ~ 1"
+    assert p3["c(rt, response)"]["intercept"] == prior_obj
+    assert l3 == "identity"
+
+    f4, p4, l4 = _parse_bambi(list_one_parent_regression)
+
+    assert f4.main == "c(rt, response) ~ 1 + x1"
+    assert p4["c(rt, response)"]["intercept"] == prior_obj
+    assert p4["c(rt, response)"]["x1"] == prior_obj
+    assert l4 == {"c(rt, response)": "identity"}
