@@ -55,7 +55,7 @@ def test_param_regression():
     )
 
     priors_dict = {
-        "intercept": {
+        "Intercept": {
             "name": "Normal",
             "mu": 0,
             "sigma": 0.5,
@@ -75,8 +75,8 @@ def test_param_regression():
 
     dep_priors2 = param_reg_formula2.prior
 
-    assert isinstance(dep_priors2["intercept"], bmb.Prior)
-    assert dep_priors2["intercept"] == dep_priors2["x1"]
+    assert isinstance(dep_priors2["Intercept"], bmb.Prior)
+    assert dep_priors2["Intercept"] == dep_priors2["x1"]
 
     formula1, d1, link1 = param_reg_formula1._parse_bambi()  # pylint: disable=W0212
     formula2, d2, link2 = param_reg_formula2._parse_bambi()  # pylint: disable=W0212
@@ -109,7 +109,7 @@ def test__parse_bambi():
         "a",
         formula="1 + x1",
         prior={
-            "intercept": prior_dict,
+            "Intercept": prior_dict,
             "x1": prior_dict,
         },
     )
@@ -118,7 +118,7 @@ def test__parse_bambi():
         "v",
         formula="1 + x1",
         prior={
-            "intercept": prior_dict,
+            "Intercept": prior_dict,
             "x1": prior_dict,
         },
         is_parent=True,
@@ -146,19 +146,19 @@ def test__parse_bambi():
 
     assert f2.main == "c(rt, response) ~ 1"
     assert f2.additionals[0] == "a ~ 1 + x1"
-    assert p2["a"]["intercept"] == prior_obj
+    assert p2["a"]["Intercept"] == prior_obj
     assert p2["a"]["x1"] == prior_obj
-    assert l2 == {"a": "identity", "c(rt, response)": "identity"}
+    assert l2 == {"a": "identity"}
 
     f3, p3, l3 = _parse_bambi(list_one_parent_non_regression)
 
     assert f3.main == "c(rt, response) ~ 1"
-    assert p3["c(rt, response)"]["intercept"] == prior_obj
-    assert l3 == "identity"
+    assert p3["c(rt, response)"]["Intercept"] == prior_obj
+    assert l3 == {"v": "identity"}
 
     f4, p4, l4 = _parse_bambi(list_one_parent_regression)
 
     assert f4.main == "c(rt, response) ~ 1 + x1"
-    assert p4["c(rt, response)"]["intercept"] == prior_obj
+    assert p4["c(rt, response)"]["Intercept"] == prior_obj
     assert p4["c(rt, response)"]["x1"] == prior_obj
-    assert l4 == {"c(rt, response)": "identity"}
+    assert l4 == {"v": "identity"}

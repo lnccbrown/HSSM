@@ -146,17 +146,17 @@ class Param:
 
             if self.prior is not None:
                 prior = {left_side: self.prior}
-            link = {left_side: self.link}
+            link = {self.name: self.link}
 
             return formula, prior, link
 
         formula = "c(rt, response) ~ 1" if self._parent else None
 
-        prior = (
-            {"c(rt, response)": {"intercept": self.prior}}
-            if self._parent
-            else {self.name: self.prior}  # type: ignore
-        )
+        if self._parent:
+            prior = {"c(rt, response)": {"Intercept": self.prior}}
+            link = {self.name: "identity"}
+        else:
+            prior = {self.name: self.prior}  # type: ignore
 
         return formula, prior, link
 
@@ -247,21 +247,13 @@ def _parse_bambi(
         if link is not None:
             links |= link
 
-    print(formulas)
-
-    result_formula = (
+    result_formula: bmb.Formula = (
         bmb.Formula("c(rt, response) ~ 1", *formulas)
         if num_parents == 0
         else bmb.Formula(formulas[0], *formulas[1:])
     )
     result_priors = None if not priors else priors
 
-    if not links:
-        result_links: str | Dict[str, str | bmb.Link] = "identity"
-    else:
-        if num_parents == 0:
-            result_links = links | {"c(rt, response)": "identity"}
-        else:
-            result_links = links
+    result_links: Dict | str | None = "identity" if not links else links
 
     return result_formula, result_priors, result_links
