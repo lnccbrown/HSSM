@@ -1,5 +1,5 @@
 default_model_config = {
-    "analytical": {
+    "ddm": {
         "model": "base",
         "list_params": ["v", "sv", "a", "z", "t"],
         "backend": "pytensor",
@@ -15,7 +15,7 @@ default_model_config = {
     },
     "lan": {
         "model": "test.onnx",
-        "list_params": ["v", "sv", "a", "z", "theta"],
+        "list_params": ["v", "a", "z", "t", "theta"],
         "backend": "jax",
         "formula": "c(rt,response)  ~ 1",
         "prior": {

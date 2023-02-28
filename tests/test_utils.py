@@ -1,45 +1,7 @@
-"""
-Unit testing for WFPT likelihood function.
-
-This code compares WFPT likelihood function with
-old implementation of WFPT from (https://github.com/hddm-devs/hddm)
-"""
-import os
-import sys
-
-import numpy as np
-import pytest
-import ssms.basic_simulators
-
-sys.path.insert(0, os.path.abspath("src"))
-
-import pandas as pd
-
-sys.path.insert(0, os.path.abspath("src"))
-
-
-@pytest.fixture
-def data_fixture():
-    v_true, a_true, z_true, t_true, sv_true = [0.5, 1.5, 0.5, 0.5, 0.3]
-    obs_angle = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true, sv_true], model="ddm", n_samples=1000
-    )
-    obs = np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
-    obs = pd.DataFrame(obs, columns=["rt", "response"])
-    return obs
-
-
-def test_kterm(data_fixture):
-    """
-    This function defines a range of kterms and tests results to
-     makes sure they are not equal to infinity or unknown values
-    """
-
-
 import bambi as bmb
 import pytest
 
-from hssm.utils import Param
+from hssm.utils import Param, _parse_bambi
 
 
 def test_param_non_regression():
@@ -81,6 +43,9 @@ def test_param_non_regression():
     ):
         Param("t", 0.5, link="identity")
 
+    with pytest.raises(ValueError, match="Please specify a value or prior for a."):
+        Param("a")
+
 
 def test_param_regression():
 
@@ -90,7 +55,7 @@ def test_param_regression():
     )
 
     priors_dict = {
-        "intercept": {
+        "Intercept": {
             "name": "Normal",
             "mu": 0,
             "sigma": 0.5,
@@ -103,17 +68,15 @@ def test_param_regression():
         "a", formula="a ~ 1 + x1", prior=priors_dict, link=fake_link
     )
 
-    param_reg_parent = Param(
-        "a", formula="a ~ 1 + x1", prior=priors_dict, is_parent=True
-    )
+    param_reg_parent = Param("a", formula="a ~ 1 + x1", is_parent=True)
 
     assert param_reg_formula1.formula == "a ~ 1 + x1"
     assert isinstance(param_reg_formula2.link, bmb.Link)
 
     dep_priors2 = param_reg_formula2.prior
 
-    assert isinstance(dep_priors2["intercept"], bmb.Prior)
-    assert dep_priors2["intercept"] == dep_priors2["x1"]
+    assert isinstance(dep_priors2["Intercept"], bmb.Prior)
+    assert dep_priors2["Intercept"] == dep_priors2["x1"]
 
     formula1, d1, link1 = param_reg_formula1._parse_bambi()  # pylint: disable=W0212
     formula2, d2, link2 = param_reg_formula2._parse_bambi()  # pylint: disable=W0212
@@ -123,4 +86,79 @@ def test_param_regression():
     assert link1["a"] == "identity"
     assert link2["a"].name == "Fake"
 
-    assert param_reg_parent.formula == "c(rt, response) ~ 1 + x1"
+    formula3, d3, _ = param_reg_parent._parse_bambi()  # pylint: disable=W0212
+
+    assert formula3 == "c(rt, response) ~ 1 + x1"
+    assert param_reg_parent.formula == "a ~ 1 + x1"
+
+    assert d3 is None
+
+    rep = repr(param_reg_parent)
+    lines = rep.split("\r\n")
+    assert lines[2] == "Unspecified, using defaults"
+
+
+def test__parse_bambi():
+    prior_dict = {"name": "Uniform", "lower": 0.3, "upper": 1.0}
+    prior_obj = bmb.Prior("Uniform", lower=0.3, upper=1.0)
+
+    param_non_parent_non_regression = Param("a", prior=prior_dict)
+    param_parent_non_regression = Param("v", prior=prior_dict, is_parent=True)
+
+    param_non_parent_regression = Param(
+        "a",
+        formula="1 + x1",
+        prior={
+            "Intercept": prior_dict,
+            "x1": prior_dict,
+        },
+    )
+
+    param_parent_regression = Param(
+        "v",
+        formula="1 + x1",
+        prior={
+            "Intercept": prior_dict,
+            "x1": prior_dict,
+        },
+        is_parent=True,
+    )
+
+    empty_list = []
+    list_one_non_parent_non_regression = [param_non_parent_non_regression]
+    list_one_non_parent_regression = [param_non_parent_regression]
+    list_one_parent_non_regression = [param_parent_non_regression]
+    list_one_parent_regression = [param_parent_regression]
+
+    f0, p0, l0 = _parse_bambi(empty_list)
+
+    assert f0.main == "c(rt, response) ~ 1"
+    assert p0 is None
+    assert l0 == "identity"
+
+    f1, p1, l1 = _parse_bambi(list_one_non_parent_non_regression)
+
+    assert f1.main == "c(rt, response) ~ 1"
+    assert p1["a"] == prior_obj
+    assert l1 == "identity"
+
+    f2, p2, l2 = _parse_bambi(list_one_non_parent_regression)
+
+    assert f2.main == "c(rt, response) ~ 1"
+    assert f2.additionals[0] == "a ~ 1 + x1"
+    assert p2["a"]["Intercept"] == prior_obj
+    assert p2["a"]["x1"] == prior_obj
+    assert l2 == {"a": "identity"}
+
+    f3, p3, l3 = _parse_bambi(list_one_parent_non_regression)
+
+    assert f3.main == "c(rt, response) ~ 1"
+    assert p3["c(rt, response)"]["Intercept"] == prior_obj
+    assert l3 == {"v": "identity"}
+
+    f4, p4, l4 = _parse_bambi(list_one_parent_regression)
+
+    assert f4.main == "c(rt, response) ~ 1 + x1"
+    assert p4["c(rt, response)"]["Intercept"] == prior_obj
+    assert p4["c(rt, response)"]["x1"] == prior_obj
+    assert l4 == {"v": "identity"}

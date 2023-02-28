@@ -6,6 +6,7 @@ old implementation of WFPT from (https://github.com/hddm-devs/hddm)
 """
 import math
 import os
+import random
 import sys
 
 import numpy as np
@@ -21,11 +22,15 @@ from hssm.wfpt.base import decision_func, log_pdf_sv
 
 @pytest.fixture
 def data_fixture():
-    v_true, a_true, z_true, t_true, sv_true = [0.5, 1.5, 0.5, 0.5, 0.3]
-    obs = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true, sv_true], model="ddm", n_samples=1000
+    random_integer = random.randint(0, 9)
+    v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 0.5]
+    obs_ddm = ssms.basic_simulators.simulator(
+        [v_true, a_true, z_true, t_true],
+        model="ddm",
+        n_samples=1000,
+        random_state=random_integer,
     )
-    return np.column_stack([obs["rts"][:, 0], obs["choices"][:, 0]])
+    return np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
 
 
 def test_kterm(data_fixture):

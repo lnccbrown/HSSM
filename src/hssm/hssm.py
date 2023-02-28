@@ -17,18 +17,29 @@ class HSSM:
     The Hierarchical Sequential Sampling Model (HSSM) class.
 
     Args:
-    data (pandas.DataFrame): A pandas DataFrame containing the data to be
-     analyzed.
-    model_name (str): The name of the model to use. Default is "analytical".
+    data (pandas.DataFrame): A pandas DataFrame with the minimum requirements of
+        containing the data with the columns 'rt' and 'response'.
+    model_name (str): The name of the model to use. Default is "ddm".
+    Current default implementations are "ddm" | "lan" | "custom".
+        ddm - Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
+        the method and implementation of Navarro & Fuss, 2009.
+        lan - Likelihood Approximation Network (LAN) extension for the Wiener
+         First-Passage Time (WFPT) distribution.
     include (List[dict], optional): A list of dictionaries specifying additional
-     parameters to include in the model. Defaults to None.
+     parameters to include in the model. Defaults to None. Priors specification range:
+        v: Mean drift rate. (-inf, inf).
+        sv: Standard deviation of the drift rate [0, inf).
+        a: Value of decision upper bound. (0, inf).
+        z: Normalized decision starting point. (0, 1).
+        t: Non-decision time [0, inf).
+        theta: [0, inf).
     model_config (dict, optional): A dictionary containing the model
      configuration information. Defaults to None.
 
     Attributes:
         list_params (list): The list of parameter names.
         model_name (str): The name of the model.
-        ssm_model: A SSM model object.
+        model_distribution: A SSM model object.
         likelihood: A Bambi likelihood object.
         family: A Bambi family object.
         priors (dict): A dictionary containing the prior distribution
@@ -46,22 +57,22 @@ class HSSM:
     def __init__(
         self,
         data: pd.DataFrame,
-        model_name: str | None = "analytical",
-        include: List[dict] = None,
-        model_config: dict = None,
+        model_name: str | None = "ddm",
+        include: List[dict] | None = None,
+        model_config: dict | None = None,
     ):
-        if model_config is not None:
-            model_name = None
+        if model_name not in ["lan", "custom", "ddm"]:
+            raise Exception("Please provide a correct model_name")
 
         self.model_config = (
             model_config if model_config else default_model_config[model_name]
         )
 
         self.list_params = self.model_config["list_params"]
-        if model_name == "analytical":
-            self.ssm_model = wfpt.WFPT
-        else:
-            self.ssm_model = wfpt.make_ssm_distribution(
+        if model_name == "ddm":
+            self.model_distribution = wfpt.WFPT
+        elif model_name == "lan":
+            self.model_distribution = wfpt.make_lan_distribution(
                 model=self.model_config["model"],  # type: ignore
                 list_params=self.list_params,
                 backend=self.model_config["backend"],
@@ -70,23 +81,19 @@ class HSSM:
             self.model_config["model"],
             params=self.list_params,
             parent=self.model_config["list_params"][0],
-            dist=self.ssm_model,
+            dist=self.model_distribution,
         )
 
         self.priors = {}
         for param in self.list_params:
             self.priors[param] = (
                 bmb.Prior(
-                    self.model_config["prior"][param]["name"],
-                    lower=self.model_config["prior"][param]["lower"],
-                    upper=self.model_config["prior"][param]["upper"],
+                    **self.model_config["prior"][param],
                 )
                 if param != self.model_config["list_params"][0]
                 else {
                     "Intercept": bmb.Prior(
-                        self.model_config["prior"][param]["Intercept"]["name"],
-                        lower=self.model_config["prior"][param]["Intercept"]["lower"],
-                        upper=self.model_config["prior"][param]["Intercept"]["upper"],
+                        **self.model_config["prior"][param]["Intercept"],
                     )
                 }
             )
@@ -110,7 +117,14 @@ class HSSM:
     def _transform_include(self, include: List[dict]) -> None:
         if all("formula" in d for d in include):
             formulas = [p.get("formula") for p in include if p.get("formula")]
-            v_dict = next((p for p in include if p.get("name") == "v"), None)
+            v_dict = next(
+                (
+                    p
+                    for p in include
+                    if p.get("name") == self.model_config["list_params"][0]
+                ),
+                None,
+            )
             if not v_dict:
                 formulas.insert(0, self.model_config["formula"])
             else:
@@ -130,22 +144,7 @@ class HSSM:
                 coefs[coefs.index("1")] = "Intercept"
                 self.priors[dictionary["name"]] = {}
                 for coef in coefs:
-                    lower_key = list((dictionary["prior"][coef].keys()))[1]
-                    upper_key = list((dictionary["prior"][coef].keys()))[2]
-
-                    if "initval" not in dictionary["prior"][coef]:
-                        new_prior = bmb.Prior(
-                            dictionary["prior"][coef]["name"],
-                            lower=dictionary["prior"][coef][lower_key],
-                            upper=dictionary["prior"][coef][upper_key],
-                        )
-                    else:
-                        new_prior = bmb.Prior(
-                            dictionary["prior"][coef]["name"],
-                            lower=dictionary["prior"][coef][lower_key],
-                            upper=dictionary["prior"][coef][upper_key],
-                            initval=dictionary["prior"][coef]["initval"],
-                        )
+                    new_prior = bmb.Prior(**dictionary["prior"][coef])
                     self.priors[dictionary["name"]][coef] = new_prior
             elif isinstance(dictionary["prior"], (int, float)):
                 self.priors[dictionary["name"]] = dictionary["prior"]

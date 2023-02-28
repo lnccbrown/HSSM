@@ -20,7 +20,7 @@ PARAM_DEFAULTS = {
 ##
 def data_check(
     data: pd.DataFrame,
-    response_rates: str = None,
+    reaction_time: str = None,
     response: str = None,
     additional_args: List[str] = None,
 ) -> pd.DataFrame:
@@ -34,19 +34,14 @@ def data_check(
     """
     if additional_args is None:
         additional_args = []
-    if response_rates is None:
-        response_rates = "rt"
+    if reaction_time is None:
+        reaction_time = "rt"
     if response is None:
         response = "response"
 
-    new_columns = [response_rates, response, *additional_args]
+    new_columns = [reaction_time, response, *additional_args]
     data = data[new_columns]
     return data
-
-
-def formula_replacer(orginal_formula: str, new_formula: dict) -> str:
-    after_plus = new_formula["formula"].split(" ~ ")[1]
-    return orginal_formula.replace("1", after_plus)
 
 
 class Param:
