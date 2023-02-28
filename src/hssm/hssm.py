@@ -47,7 +47,6 @@ class HSSM:
         model_name: str = "analytical",
         include: List[dict] = None,
         model_config: dict = None,
-        link: dict = None,
     ):
         if model_config is not None:
             model_name = None
@@ -57,26 +56,21 @@ class HSSM:
         )
 
         self.list_params = self.model_config["list_params"]
-        self.parent = self.model_config["list_params"][0]
         if model_name == "analytical":
             self.ssm_model = wfpt.WFPT
         else:
             self.ssm_model = wfpt.make_ssm_distribution(
                 model=self.model_config["model"],  # type: ignore
-                list_params=self.list_params,  # type: ignore
+                list_params=self.list_params,
                 backend=self.model_config["backend"],
             )
         self.likelihood = bmb.Likelihood(
             self.model_config["model"],
             params=self.list_params,
-            parent=self.parent,
+            parent=self.model_config["list_params"][0],
             dist=self.ssm_model,
         )
-        self.family = bmb.Family(
-            self.model_config["model"],
-            likelihood=self.likelihood,
-            link=link if link else self.model_config["link"],
-        )
+
         self.priors = {}
         for param in self.list_params:
             self.priors[param] = (
@@ -85,7 +79,7 @@ class HSSM:
                     lower=self.model_config["prior"][param]["lower"],
                     upper=self.model_config["prior"][param]["upper"],
                 )
-                if param != self.parent
+                if param != self.model_config["list_params"][0]
                 else {
                     "Intercept": bmb.Prior(
                         self.model_config["prior"][param]["Intercept"]["name"],
@@ -96,9 +90,16 @@ class HSSM:
             )
 
         self.formula = self.model_config["formula"]
+        self.link = self.model_config["link"]
 
         if include:
             self._transform_include(include)
+
+        self.family = bmb.Family(
+            self.model_config["model"],
+            likelihood=self.likelihood,
+            link=self.link,
+        )
 
         self.model = bmb.Model(
             self.formula, data, family=self.family, priors=self.priors
@@ -146,6 +147,8 @@ class HSSM:
                     self.priors[dictionary["name"]][coef] = new_prior
             elif isinstance(dictionary["prior"], (int, float)):
                 self.priors[dictionary["name"]] = dictionary["prior"]
+            if "link" in dictionary:
+                self.link[dictionary["name"]] = dictionary["link"]
 
     def sample(
         self,
