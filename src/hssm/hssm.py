@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import re
 from typing import List
 
 import bambi as bmb
@@ -37,7 +36,7 @@ class HSSM:
         model: A Bambi model object.
 
     Methods:
-        _transform_include: A method to transform the include list
+        _transform_include: A method to transform include list
          into Bambi's format.
         sample: A method to sample posterior distributions.
     """
@@ -48,57 +47,55 @@ class HSSM:
         model_name: str = "analytical",
         include: List[dict] = None,
         model_config: dict = None,
+        link: dict = None,
     ):
+        if model_config is not None:
+            model_name = None
+
         self.model_config = (
-            model_config if model_config is not None else default_model_config
+            model_config if model_config else default_model_config[model_name]
         )
-        self.list_params = self.model_config[model_name]["list_params"]
-        self.model_name = model_name
-        if self.model_name == "analytical":
+
+        self.list_params = self.model_config["list_params"]
+        self.parent = self.model_config["list_params"][0]
+        if model_name == "analytical":
             self.ssm_model = wfpt.WFPT
         else:
             self.ssm_model = wfpt.make_ssm_distribution(
-                model=self.model_config[model_name]["model"],  # type: ignore
+                model=self.model_config["model"],  # type: ignore
                 list_params=self.list_params,  # type: ignore
-                # type: ignore
-                backend=self.model_config[model_name]["backend"],
+                backend=self.model_config["backend"],
             )
         self.likelihood = bmb.Likelihood(
-            self.model_config[model_name]["model"],
+            self.model_config["model"],
             params=self.list_params,
-            parent=self.list_params[0],  # type: ignore
+            parent=self.parent,
             dist=self.ssm_model,
         )
         self.family = bmb.Family(
-            self.model_config[model_name]["model"],
+            self.model_config["model"],
             likelihood=self.likelihood,
-            link=self.model_config[model_name]["link"],
+            link=link if link else self.model_config["link"],
         )
         self.priors = {}
         for param in self.list_params:
             self.priors[param] = (
                 bmb.Prior(
-                    self.model_config[model_name]["prior"][param]["name"],
-                    lower=self.model_config[model_name]["prior"][param]["lower"],
-                    upper=self.model_config[model_name]["prior"][param]["upper"],
+                    self.model_config["prior"][param]["name"],
+                    lower=self.model_config["prior"][param]["lower"],
+                    upper=self.model_config["prior"][param]["upper"],
                 )
-                if param != "v"
+                if param != self.parent
                 else {
                     "Intercept": bmb.Prior(
-                        self.model_config[model_name]["prior"][param]["Intercept"][
-                            "name"
-                        ],
-                        lower=self.model_config[model_name]["prior"][param][
-                            "Intercept"
-                        ]["lower"],
-                        upper=self.model_config[model_name]["prior"][param][
-                            "Intercept"
-                        ]["upper"],
+                        self.model_config["prior"][param]["Intercept"]["name"],
+                        lower=self.model_config["prior"][param]["Intercept"]["lower"],
+                        upper=self.model_config["prior"][param]["Intercept"]["upper"],
                     )
                 }
             )
 
-        self.formula = self.model_config[model_name]["formula"]
+        self.formula = self.model_config["formula"]
 
         if include:
             self._transform_include(include)
@@ -112,9 +109,9 @@ class HSSM:
             formulas = [p.get("formula") for p in include if p.get("formula")]
             v_dict = next((p for p in include if p.get("name") == "v"), None)
             if not v_dict:
-                formulas.insert(0, self.model_config[self.model_name]["formula"])
+                formulas.insert(0, self.model_config["formula"])
             else:
-                first_item = formulas[0].split(" ~ ")[0]  # type: ignore
+                first_item = formulas[0].split("~")[0]  # type: ignore
                 formulas[0] = formulas[0].replace(  # type: ignore
                     first_item, "c(rt,response)"
                 )
@@ -124,23 +121,27 @@ class HSSM:
         for dictionary in include:
             self.params.append(Param(**dictionary))
             if "formula" in dictionary:
-                coefs = dictionary["formula"].split(" ~ ")[1]
-                coefs = coefs.split(" + ")
+                dictionary["formula"] = re.sub(r"\s+", "", dictionary["formula"])
+                coefs = dictionary["formula"].split("~")[1]
+                coefs = coefs.split("+")
                 coefs[coefs.index("1")] = "Intercept"
                 self.priors[dictionary["name"]] = {}
                 for coef in coefs:
-                    try:
+                    lower_key = list((dictionary["prior"][coef].keys()))[1]
+                    upper_key = list((dictionary["prior"][coef].keys()))[2]
+
+                    if "initval" not in dictionary["prior"][coef]:
                         new_prior = bmb.Prior(
                             dictionary["prior"][coef]["name"],
-                            lower=dictionary["prior"][coef]["lower"],
-                            upper=dictionary["prior"][coef]["upper"],
-                            initval=dictionary["prior"][coef]["initval"],
+                            lower=dictionary["prior"][coef][lower_key],
+                            upper=dictionary["prior"][coef][upper_key],
                         )
-                    except KeyError:
+                    else:
                         new_prior = bmb.Prior(
                             dictionary["prior"][coef]["name"],
-                            lower=dictionary["prior"][coef]["lower"],
-                            upper=dictionary["prior"][coef]["upper"],
+                            lower=dictionary["prior"][coef][lower_key],
+                            upper=dictionary["prior"][coef][upper_key],
+                            initval=dictionary["prior"][coef]["initval"],
                         )
                     self.priors[dictionary["name"]][coef] = new_prior
             elif isinstance(dictionary["prior"], (int, float)):
@@ -176,8 +177,8 @@ class HSSM:
                 cores=cores,
                 draws=draws,
                 tune=tune,
-                mp_ctx=mp_ctx,
                 inference_method="nuts_numpyro",
+                chain_method="parallel",
             )
         else:
             return self.model.fit(cores=cores, draws=draws, tune=tune, mp_ctx=mp_ctx)
