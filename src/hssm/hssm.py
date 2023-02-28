@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from typing import List
 
@@ -44,7 +46,7 @@ class HSSM:
     def __init__(
         self,
         data: pd.DataFrame,
-        model_name: str = "analytical",
+        model_name: str | None = "analytical",
         include: List[dict] = None,
         model_config: dict = None,
     ):
