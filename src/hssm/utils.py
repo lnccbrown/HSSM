@@ -1,5 +1,11 @@
 """
-Contains classes and functions that helps the main HSSM class parse arguments.
+HSSM has to reconcile with two representations: it's own representation as an HSSM and
+the representation acceptable to Bambi. The two are not equivalent. This file contains
+the Param class that reconcile these differences.
+
+The Param class is an abstraction that stores the parameter specifications and turns
+these representations in Bambi-compatible formats through convenience function
+_parse_bambi().
 """
 
 from __future__ import annotations
@@ -7,14 +13,6 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 
 import bambi as bmb
-
-PriorSpec = Dict[str, Any]
-
-PARAM_DEFAULTS = {
-    "a": bmb.Prior("Uniform", lower=0.1, upper=1.0),
-    "z": 0.0,
-    "t": 0.0,
-}
 
 
 class Param:
@@ -29,9 +27,9 @@ class Param:
         self,
         name: str,
         prior: float
-        | PriorSpec
+        | Dict[str, Any]
         | bmb.Prior
-        | Dict[str, PriorSpec]
+        | Dict[str, Dict[str, Any]]
         | Dict[str, bmb.Prior]
         | None = None,
         formula: str | None = None,
@@ -140,7 +138,7 @@ class Param:
         if self._regression:
             left_side = "c(rt, response)" if self._parent else self.name
 
-            _, right_side = self.formula.split("~")  # type: ignore
+            right_side = self.formula.split("~")[1]  # type: ignore
             right_side = right_side.strip()
             formula = f"{left_side} ~ {right_side}"
 
