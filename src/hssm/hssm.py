@@ -104,8 +104,7 @@ class HSSM:
         This function transforms a list of dictionaries containing
          parameter information into a list of Param objects.
           It also creates a formula, priors, and a link for the Bambi
-           package based on the parameters. The function takes in a List[dict]
-           object called include and returns None.
+           package based on the parameters.
 
         Parameters:
 
