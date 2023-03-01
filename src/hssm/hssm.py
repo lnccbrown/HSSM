@@ -56,23 +56,23 @@ class HSSM:
     def __init__(
         self,
         data: pd.DataFrame,
-        model_name: str | None = "ddm",
+        model: str | None = "ddm",
         include: List[dict] | None = None,
         model_config: dict | None = None,
     ):
-        if model_name not in ["angle", "custom", "ddm"]:
+        if model not in ["angle", "custom", "ddm"]:
             raise ValueError("Please provide a correct model_name")
 
         self.model_config = (
-            model_config if model_config else default_model_config[model_name]
+            model_config if model_config else default_model_config[model]
         )
 
         self.list_params = self.model_config["list_params"]
-        if model_name == "ddm":
+        if model == "ddm":
             self.model_distribution = wfpt.WFPT
-        elif model_name == "angle":
+        elif model == "angle":
             self.model_distribution = wfpt.make_lan_distribution(
-                model=self.model_config["model"],
+                model=self.model_config["loglik_path"],
                 list_params=self.list_params,
                 backend=self.model_config["backend"],
             )
@@ -84,7 +84,6 @@ class HSSM:
         )
 
         self.formula = self.model_config["formula"]
-        self.link = self.model_config["link"]
         self.priors = self.model_config["prior"]
 
         self._transform_params(include)  # type: ignore
