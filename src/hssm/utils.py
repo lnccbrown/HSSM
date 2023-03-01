@@ -1,5 +1,11 @@
 """
-Contains classes and functions that helps the main HSSM class parse arguments.
+HSSM has to reconcile with two representations: it's own representation as an HSSM and
+the representation acceptable to Bambi. The two are not equivalent. This file contains
+the Param class that reconcile these differences.
+
+The Param class is an abstraction that stores the parameter specifications and turns
+these representations in Bambi-compatible formats through convenience function
+_parse_bambi().
 """
 
 from __future__ import annotations
@@ -7,41 +13,6 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 
 import bambi as bmb
-import pandas as pd
-
-PriorSpec = Dict[str, Any]
-
-PARAM_DEFAULTS = {
-    "a": bmb.Prior("Uniform", lower=0.1, upper=1.0),
-    "z": 0.0,
-    "t": 0.0,
-}
-
-##
-def data_check(
-    data: pd.DataFrame,
-    reaction_time: str = None,
-    response: str = None,
-    additional_args: List[str] = None,
-) -> pd.DataFrame:
-    """
-    Convert data into correct format before passing it to the hssm models
-
-    data: data should be in pandas format
-    response_rates: name of the column indicating response rates
-    response: name of the column indicating response rates
-    additional_args: list of additional columns that will be used in the model
-    """
-    if additional_args is None:
-        additional_args = []
-    if reaction_time is None:
-        reaction_time = "rt"
-    if response is None:
-        response = "response"
-
-    new_columns = [reaction_time, response, *additional_args]
-    data = data[new_columns]
-    return data
 
 
 class Param:
@@ -56,10 +27,11 @@ class Param:
         self,
         name: str,
         prior: float
-        | PriorSpec
+        | Dict[str, Any]
         | bmb.Prior
-        | Dict[str, PriorSpec]
-        | Dict[str, bmb.Prior],
+        | Dict[str, Dict[str, Any]]
+        | Dict[str, bmb.Prior]
+        | None = None,
         formula: str | None = None,
         link: str | bmb.Link | None = None,
         is_parent: bool = False,
@@ -99,32 +71,34 @@ class Param:
         self._regression = formula is not None
 
         if self._regression:
-            if "~" in formula:  # type: ignore
-                if is_parent:
-                    _, right_side = formula.split("~")  # type: ignore
-                    right_side = right_side.strip()
-                    formula = f"c(rt, response) ~ {right_side}"
 
-            else:
-                if is_parent:
-                    formula = f"c(rt, response) ~ {formula}"
-                else:
-                    formula = f"{self.name} ~ {formula}"
+            self.formula = (
+                formula if "~" in formula else f"{name} ~ {formula}"  # type: ignore
+            )
 
-            self.formula = formula
-
-            self.prior = {
-                # Convert dict to bmb.Prior if a dict is passed
-                param: (prior if isinstance(prior, bmb.Prior) else bmb.Prior(**prior))
-                for param, prior in prior.items()  # type: ignore
-            }
+            self.prior = (
+                {
+                    # Convert dict to bmb.Prior if a dict is passed
+                    param: (
+                        prior if isinstance(prior, bmb.Prior) else bmb.Prior(**prior)
+                    )
+                    for param, prior in prior.items()  # type: ignore
+                }
+                if prior is not None
+                else None
+            )
 
             self.link = "identity" if link is None else link
         else:
+            if prior is None:
+                raise ValueError(f"Please specify a value or prior for {self.name}.")
+
+            self.prior = (
+                bmb.Prior(**prior) if isinstance(prior, dict) else prior  # type: ignore
+            )
+
             if link is not None:
                 raise ValueError("`link` should be None if no regression is specified.")
-
-            self.prior = bmb.Prior(**prior) if isinstance(prior, dict) else prior
 
     def is_regression(self) -> bool:
         """Determines if a regression is specified or not.
@@ -135,6 +109,16 @@ class Param:
         """
 
         return self._regression
+
+    def is_parent(self) -> bool:
+        """Determines if a parameter is a parent parameter for Bambi.
+
+        Returns
+        -------
+            A boolean that indicates if the parameter is a parent or not.
+        """
+
+        return self._parent
 
     def _parse_bambi(
         self,
@@ -147,14 +131,32 @@ class Param:
             construct the Bambi model.
         """
 
-        prior = {self.name: self.prior}
+        formula = None
+        prior = None
+        link = None
 
-        if not self._regression:
-            return None, prior, None
+        if self._regression:
+            left_side = "c(rt, response)" if self._parent else self.name
 
-        link = {self.name: self.link}
+            right_side = self.formula.split("~")[1]  # type: ignore
+            right_side = right_side.strip()
+            formula = f"{left_side} ~ {right_side}"
 
-        return self.formula, prior, link
+            if self.prior is not None:
+                prior = {left_side: self.prior}
+            link = {self.name: self.link}
+
+            return formula, prior, link
+
+        formula = "c(rt, response) ~ 1" if self._parent else None
+
+        if self._parent:
+            prior = {"c(rt, response)": {"Intercept": self.prior}}
+            link = {self.name: "identity"}
+        else:
+            prior = {self.name: self.prior}  # type: ignore
+
+        return formula, prior, link
 
     def __repr__(self) -> str:
         """Returns the representation of the class.
@@ -165,7 +167,7 @@ class Param:
             contains a regression or not.
         """
 
-        if not self.is_regression():
+        if not self._regression:
             if isinstance(self.prior, bmb.Prior):
                 return f"{self.name} ~ {self.prior}"
             return f"{self.name} = {self.prior}"
@@ -173,8 +175,10 @@ class Param:
         link = (
             self.link if isinstance(self.link, str) else self.link.name  # type: ignore
         )
-        priors = "\r\n".join(
-            [f"{param} ~ {prior}" for param, prior in self.prior.items()]
+        priors = (
+            "\r\n".join([f"{param} ~ {prior}" for param, prior in self.prior.items()])
+            if self.prior is not None
+            else "Unspecified, using defaults"
         )
 
         return "\r\n".join([self.formula, f"Link: {link}", priors])  # type: ignore
@@ -188,3 +192,66 @@ class Param:
             contains a regression or not.
         """
         return self.__repr__()
+
+
+def _parse_bambi(
+    params: List[Param],
+) -> Tuple[bmb.Formula, Dict | None, Dict[str, str | bmb.Link] | str | None]:
+    """From a list of Params, retrieve three items that helps with bambi model building
+
+    Parameters
+    ----------
+    params
+        A list of Param objects.
+
+    Returns
+    -------
+        A 3-tuple of
+            1. A bmb.Formula object.
+            2. A dictionary of priors, if any is specified.
+            3. A dictionary of link functions, if any is specified.
+    """
+
+    # Handle the edge case where list_params is empty:
+    if not params:
+        return bmb.Formula("c(rt, response) ~ 1"), None, "identity"
+
+    # Then, we check how many parameters in the specified list of params are parent.
+    num_parents = sum(param.is_parent() for param in params)
+
+    # In the case where there is more than one parent:
+    assert num_parents <= 1, "More than one parent is specified!"
+
+    formulas = []
+    priors: Dict[str, Any] = {}
+    links: Dict[str, str | bmb.Link] = {}
+    params_copy = params.copy()
+
+    if num_parents == 1:
+        for idx, param in enumerate(params):
+            if param.is_parent():
+                parent_param = params_copy.pop(idx)
+                break
+
+        params_copy.insert(0, parent_param)
+
+    for param in params_copy:
+        formula, prior, link = param._parse_bambi()
+
+        if formula is not None:
+            formulas.append(formula)
+        if priors is not None:
+            priors |= prior
+        if link is not None:
+            links |= link
+
+    result_formula: bmb.Formula = (
+        bmb.Formula("c(rt, response) ~ 1", *formulas)
+        if num_parents == 0
+        else bmb.Formula(formulas[0], *formulas[1:])
+    )
+    result_priors = None if not priors else priors
+
+    result_links: Dict | str | None = "identity" if not links else links
+
+    return result_formula, result_priors, result_links
