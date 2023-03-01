@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import re
 from typing import List
 
 import bambi as bmb
 import pandas as pd
 
 from hssm import wfpt
-from hssm.utils import Param
+from hssm.utils import Param, _parse_bambi
 from hssm.wfpt.config import default_model_config
 
 
@@ -49,7 +48,7 @@ class HSSM:
         model: A Bambi model object.
 
     Methods:
-        _transform_include: A method to transform include list
+        _transform_params: A method to transform priors, link and formula
          into Bambi's format.
         sample: A method to sample posterior distributions.
     """
@@ -84,28 +83,11 @@ class HSSM:
             dist=self.model_distribution,
         )
 
-        self.priors = {}
-        for param in self.list_params:
-            if param == self.model_config["list_params"][0]:
-                self.priors["Intercept"] = (
-                    self.model_config["prior"][param]["Intercept"]
-                    if isinstance(
-                        self.model_config["prior"][param]["Intercept"], bmb.Prior
-                    )
-                    else bmb.Prior(**self.model_config["prior"][param]["Intercept"])
-                )
-            else:
-                self.priors[param] = (
-                    self.model_config["prior"][param]
-                    if isinstance(self.model_config["prior"][param], bmb.Prior)
-                    else bmb.Prior(**self.model_config["prior"][param])
-                )
-
         self.formula = self.model_config["formula"]
         self.link = self.model_config["link"]
+        self.priors = self.model_config["prior"]
 
-        if include:
-            self._transform_include(include)
+        self._transform_params(include)
 
         self.family = bmb.Family(
             self.model_config["model"],
@@ -117,46 +99,46 @@ class HSSM:
             self.formula, data, family=self.family, priors=self.priors
         )
 
-    def _transform_include(self, include: List[dict]) -> None:
-        if all("formula" in d for d in include):
-            formulas = [p.get("formula") for p in include if p.get("formula")]
-            v_dict = next(
-                (
-                    p
-                    for p in include
-                    if p.get("name") == self.model_config["list_params"][0]
-                ),
-                None,
-            )
-            if not v_dict:
-                formulas.insert(0, self.model_config["formula"])
-            else:
-                first_item = formulas[0].split("~")[0]  # type: ignore
-                formulas[0] = formulas[0].replace(  # type: ignore
-                    first_item, "c(rt,response)"
-                )
+    def _transform_params(self, include: List[dict]) -> None:
+        """
+        This function transforms a list of dictionaries containing
+         parameter information into a list of Param objects.
+          It also creates a formula, priors, and a link for the Bambi
+           package based on the parameters. The function takes in a List[dict]
+           object called include and returns None.
 
-            self.formula = bmb.Formula(*formulas)
+        Parameters:
+
+        include (List[dict]): A list of dictionaries containing information
+         about the parameters.
+        """
+        processed = []
         self.params = []
-        for dictionary in include:
-            self.params.append(Param(**dictionary))
-            if "formula" in dictionary:
-                dictionary["formula"] = re.sub(r"\s+", "", dictionary["formula"])
-                coefs = dictionary["formula"].split("~")[1]
-                coefs = coefs.split("+")
-                coefs[coefs.index("1")] = "Intercept"
-                self.priors[dictionary["name"]] = {}
-                for coef in coefs:
-                    new_prior = (
-                        dictionary["prior"][coef]
-                        if isinstance(dictionary["prior"][coef], bmb.Prior)
-                        else bmb.Prior(**dictionary["prior"][coef])
+        if include:
+            for dictionary in include:
+                processed.append(dictionary["name"])
+                if dictionary["name"] == self.list_params[0]:
+                    self.params.append(Param(is_parent=True, **dictionary))
+                else:
+                    self.params.append(Param(**dictionary))
+
+        for param in self.list_params:
+            if param not in processed:
+                if param == self.list_params[0]:
+                    self.params.append(
+                        Param(
+                            name=param,
+                            prior=self.priors[param]["Intercept"],
+                            is_parent=True,
+                        )
                     )
-                    self.priors[dictionary["name"]][coef] = new_prior
-            elif isinstance(dictionary["prior"], (int, float)):
-                self.priors[dictionary["name"]] = dictionary["prior"]
-            if "link" in dictionary:
-                self.link[dictionary["name"]] = dictionary["link"]
+                else:
+                    self.params.append(Param(name=param, prior=self.priors[param]))
+
+        if len(self.params) != len(self.list_params):
+            raise ValueError()
+
+        self.formula, self.priors, self.link = _parse_bambi(self.params)
 
     def sample(
         self,

@@ -1,5 +1,5 @@
 default_model_config = {
-    "ddm": {
+    "ddm": {  ##ddm
         "model": "base",
         "list_params": ["v", "sv", "a", "z", "t"],
         "backend": "pytensor",
@@ -13,7 +13,7 @@ default_model_config = {
         },
         "link": {param: "identity" for param in ["v", "sv", "a", "z", "t"]},
     },
-    "lan": {
+    "lan": {  ## angle
         "model": "test.onnx",
         "list_params": ["v", "a", "z", "t", "theta"],
         "backend": "jax",
