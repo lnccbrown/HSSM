@@ -86,17 +86,20 @@ class HSSM:
 
         self.priors = {}
         for param in self.list_params:
-            self.priors[param] = (
-                bmb.Prior(
-                    **self.model_config["prior"][param],
-                )
-                if param != self.model_config["list_params"][0]
-                else {
-                    "Intercept": bmb.Prior(
-                        **self.model_config["prior"][param]["Intercept"],
+            if param == self.model_config["list_params"][0]:
+                self.priors["Intercept"] = (
+                    self.model_config["prior"][param]["Intercept"]
+                    if isinstance(
+                        self.model_config["prior"][param]["Intercept"], bmb.Prior
                     )
-                }
-            )
+                    else bmb.Prior(**self.model_config["prior"][param]["Intercept"])
+                )
+            else:
+                self.priors[param] = (
+                    self.model_config["prior"][param]
+                    if isinstance(self.model_config["prior"][param], bmb.Prior)
+                    else bmb.Prior(**self.model_config["prior"][param])
+                )
 
         self.formula = self.model_config["formula"]
         self.link = self.model_config["link"]
@@ -144,7 +147,11 @@ class HSSM:
                 coefs[coefs.index("1")] = "Intercept"
                 self.priors[dictionary["name"]] = {}
                 for coef in coefs:
-                    new_prior = bmb.Prior(**dictionary["prior"][coef])
+                    new_prior = (
+                        dictionary["prior"][coef]
+                        if isinstance(dictionary["prior"][coef], bmb.Prior)
+                        else bmb.Prior(**dictionary["prior"][coef])
+                    )
                     self.priors[dictionary["name"]][coef] = new_prior
             elif isinstance(dictionary["prior"], (int, float)):
                 self.priors[dictionary["name"]] = dictionary["prior"]
