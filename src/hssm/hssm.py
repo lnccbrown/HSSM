@@ -61,7 +61,7 @@ class HSSM:
         model_config: dict | None = None,
     ):
         if model_name not in ["lan", "custom", "ddm"]:
-            raise Exception("Please provide a correct model_name")
+            raise ValueError("Please provide a correct model_name")
 
         self.model_config = (
             model_config if model_config else default_model_config[model_name]
