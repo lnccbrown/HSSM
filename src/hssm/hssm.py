@@ -72,7 +72,7 @@ class HSSM:
             self.model_distribution = wfpt.WFPT
         elif model_name == "lan":
             self.model_distribution = wfpt.make_lan_distribution(
-                model=self.model_config["model"],  # type: ignore
+                model=self.model_config["model"],
                 list_params=self.list_params,
                 backend=self.model_config["backend"],
             )
@@ -87,7 +87,7 @@ class HSSM:
         self.link = self.model_config["link"]
         self.priors = self.model_config["prior"]
 
-        self._transform_params(include)
+        self._transform_params(include)  # type: ignore
 
         self.family = bmb.Family(
             self.model_config["model"],
