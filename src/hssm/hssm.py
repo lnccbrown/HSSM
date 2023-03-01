@@ -70,7 +70,7 @@ class HSSM:
         self.list_params = self.model_config["list_params"]
         if model_name == "ddm":
             self.model_distribution = wfpt.WFPT
-        elif model_name == "lan":
+        elif model_name == "angle":
             self.model_distribution = wfpt.make_lan_distribution(
                 model=self.model_config["model"],
                 list_params=self.list_params,
@@ -135,7 +135,7 @@ class HSSM:
                     self.params.append(Param(name=param, prior=self.priors[param]))
 
         if len(self.params) != len(self.list_params):
-            raise ValueError()
+            raise ValueError("Please provide a correct set of priors")
 
         self.formula, self.priors, self.link = _parse_bambi(self.params)
 
