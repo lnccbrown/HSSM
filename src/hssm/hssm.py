@@ -22,7 +22,7 @@ class HSSM:
     Current default implementations are "ddm" | "lan" | "custom".
         ddm - Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
         the method and implementation of Navarro & Fuss, 2009.
-        lan - Likelihood Approximation Network (LAN) extension for the Wiener
+        angle - Likelihood Approximation Network (LAN) extension for the Wiener
          First-Passage Time (WFPT) distribution.
     include (List[dict], optional): A list of dictionaries specifying additional
      parameters to include in the model. Defaults to None. Priors specification range:
@@ -60,7 +60,7 @@ class HSSM:
         include: List[dict] | None = None,
         model_config: dict | None = None,
     ):
-        if model_name not in ["lan", "custom", "ddm"]:
+        if model_name not in ["angle", "custom", "ddm"]:
             raise ValueError("Please provide a correct model_name")
 
         self.model_config = (
