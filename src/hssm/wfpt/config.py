@@ -1,6 +1,11 @@
+"""
+Add specification
+"""
+
+
 default_model_config = {
     "ddm": {
-        "model": "analytical",
+        "loglik_kind": "analytical",
         "list_params": ["v", "sv", "a", "z", "t"],
         "backend": "pytensor",
         "formula": "c(rt,response)  ~ 1",
@@ -13,7 +18,7 @@ default_model_config = {
         },
     },
     "angle": {
-        "model": "approx_differentiable",
+        "loglik_kind": "approx_differentiable",
         "loglik_path": "test.onnx",
         "list_params": ["v", "a", "z", "t", "theta"],
         "backend": "jax",

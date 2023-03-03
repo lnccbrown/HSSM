@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Callable, List
 
 import bambi as bmb
 import pandas as pd
+import pytensor
+from numpy.typing import ArrayLike
 
 from hssm import wfpt
 from hssm.utils import Param, _parse_bambi
 from hssm.wfpt.config import default_model_config
 
+LogLikeFunc = Callable[..., ArrayLike]
 
 # add custom link function
 class HSSM:
@@ -59,6 +62,7 @@ class HSSM:
         model: str | None = "ddm",
         include: List[dict] | None = None,
         model_config: dict | None = None,
+        loglik: LogLikeFunc | pytensor.graph.Op | None = None,
     ):
         if model not in ["angle", "custom", "ddm"]:
             raise ValueError("Please provide a correct model_name")
@@ -76,8 +80,13 @@ class HSSM:
                 list_params=self.list_params,
                 backend=self.model_config["backend"],
             )
+        elif model == "custom":
+            self.model_distribution = wfpt.make_distribution(
+                loglik=loglik, list_params=self.list_params
+            )
+
         self.likelihood = bmb.Likelihood(
-            self.model_config["model"],
+            self.model_config["loglik_kind"],
             params=self.list_params,
             parent=self.model_config["list_params"][0],
             dist=self.model_distribution,
@@ -89,7 +98,7 @@ class HSSM:
         self._transform_params(include)  # type: ignore
 
         self.family = bmb.Family(
-            self.model_config["model"],
+            self.model_config["loglik_kind"],
             likelihood=self.likelihood,
             link=self.link,
         )
