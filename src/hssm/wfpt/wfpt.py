@@ -146,7 +146,7 @@ def make_distribution(
 WFPT = make_distribution(log_pdf_sv, ["v", "sv", "a", "z", "t"])
 
 
-def make_ssm_distribution(
+def make_lan_distribution(
     list_params: List[str],
     model: str | PathLike | onnx.ModelProto,
     rv: Type[RandomVariable] | None = None,
