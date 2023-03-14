@@ -6,6 +6,7 @@ import pytest
 import ssms.basic_simulators
 
 from hssm import hssm
+from hssm.wfpt.config import default_model_config
 
 
 @pytest.fixture
@@ -15,7 +16,6 @@ def data():
         [v_true, a_true, z_true, t_true, sv_true], model="ddm", n_samples=1000
     )
     obs_ddm = np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
-
     dataset = pd.DataFrame(obs_ddm, columns=["rt", "response"])
     dataset["x"] = dataset["rt"] * 0.1
     dataset["y"] = dataset["rt"] * 0.5
@@ -23,31 +23,34 @@ def data():
 
 
 @pytest.fixture
-def data_lan():
+def data_angle():
     v_true, a_true, z_true, t_true, theta_true = [0.5, 1.5, 0.5, 0.5, 0.3]
     obs_angle = ssms.basic_simulators.simulator(
         [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=1000
     )
     obs_angle = np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
-    return pd.DataFrame(obs_angle, columns=["rt", "response"])
+    data = pd.DataFrame(obs_angle, columns=["rt", "response"])
+    return data
 
 
-def test_base(data):
+def test_ddm(data):
     pytensor.config.floatX = "float32"
     model = hssm.HSSM(data=data)
     assert isinstance(model.model, bmb.models.Model)
     assert model.list_params == ["v", "sv", "a", "z", "t"]
     assert isinstance(model.formula, bmb.formula.Formula)
     assert model.link == {"v": "identity"}
+    assert model.model_config == default_model_config["ddm"]
 
 
-def test_lan(data_lan):
+def test_angle(data_angle):
     pytensor.config.floatX = "float32"
-    model = hssm.HSSM(data=data_lan, model="angle")
+    model = hssm.HSSM(data=data_angle, model="angle")
     assert isinstance(model.model, bmb.models.Model)
     assert model.list_params == ["v", "a", "z", "t", "theta"]
     assert isinstance(model.formula, bmb.formula.Formula)
     assert model.link == {"v": "identity"}
+    assert model.model_config == default_model_config["angle"]
 
 
 def test_transform_params(data):
