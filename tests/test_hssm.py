@@ -72,8 +72,8 @@ def test_transform_params(data):
     assert model.params[0].prior.keys() == include[0]["prior"].keys()
     assert model.params[0].formula == include[0]["formula"]
     assert model.params[0].name == "v"
-    assert model.params[1].name == "a"
-    assert model.params[2].name == "sv"
+    assert model.params[1].name == "sv"
+    assert model.params[2].name == "a"
     assert model.params[3].name == "z"
     assert model.params[4].name == "t"
     assert len(model.params) == 5
