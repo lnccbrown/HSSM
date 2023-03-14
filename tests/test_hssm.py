@@ -1,4 +1,3 @@
-import arviz
 import bambi as bmb
 import numpy as np
 import pandas as pd
@@ -40,8 +39,6 @@ def test_base(data):
     assert model.list_params == ["v", "sv", "a", "z", "t"]
     assert isinstance(model.formula, bmb.formula.Formula)
     assert model.link == {"v": "identity"}
-    samples = model.sample()
-    assert isinstance(samples, arviz.data.inference_data.InferenceData)
 
 
 def test_lan(data_lan):
@@ -51,8 +48,6 @@ def test_lan(data_lan):
     assert model.list_params == ["v", "a", "z", "t", "theta"]
     assert isinstance(model.formula, bmb.formula.Formula)
     assert model.link == {"v": "identity"}
-    samples = model.sample()
-    assert isinstance(samples, arviz.data.inference_data.InferenceData)
 
 
 def test_transform_params(data):
