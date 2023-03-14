@@ -40,7 +40,7 @@ class HSSM:
 
     Attributes:
         list_params (list): The list of parameter names.
-        model_name (str): The name of the model.
+        model (str): The name of the model.
         model_distribution: A SSM model object.
         likelihood: A Bambi likelihood object.
         family: A Bambi family object.
@@ -48,7 +48,6 @@ class HSSM:
          of parameters.
         formula (str): A string representing the model formula.
         params (list): A list of Param objects representing model parameters.
-        model: A Bambi model object.
 
     Methods:
         _transform_params: A method to transform priors, link and formula
