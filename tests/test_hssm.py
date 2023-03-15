@@ -67,6 +67,7 @@ def test_transform_params(data):
         }
     ]
     model = hssm.HSSM(data=data, include=include)
+    assert isinstance(model.model, bmb.models.Model)
     assert model.params[0].prior.keys() == include[0]["prior"].keys()
     assert model.params[0].formula == include[0]["formula"]
     assert model.params[0].name == "v"
@@ -99,8 +100,55 @@ def test_transform_params_two(data):
         },
     ]
     model = hssm.HSSM(data=data, include=include)
+    assert isinstance(model.model, bmb.models.Model)
     assert model.params[0].prior.keys() == include[0]["prior"].keys()
     assert model.params[1].prior.keys() == include[1]["prior"].keys()
     assert model.params[0].formula == include[0]["formula"]
     assert model.params[1].formula == include[1]["formula"]
+    assert len(model.params) == 5
+
+
+def test_transform_params_three(data):
+    include = [
+        {
+            "name": "v",  # change to name
+            "prior": {
+                "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
+                "x": {"name": "Uniform", "lower": -2.0, "upper": 1.0},
+                "y": {"name": "Uniform", "lower": -2.0, "upper": 1.0},
+            },
+            "formula": "v ~ 1 + x + y",
+        },
+        {"name": "a", "prior": 0.5},
+    ]
+    model = hssm.HSSM(data=data, include=include)
+    assert isinstance(model.model, bmb.models.Model)
+    assert model.params[1].prior == include[1]["prior"]
+    assert model.params[0].prior.keys() == include[0]["prior"].keys()
+    assert model.params[1].name == include[1]["name"]
+    assert model.params[0].formula == include[0]["formula"]
+    assert len(model.params) == 5
+
+
+def test_transform_params_four(data):
+    include = [
+        {
+            "name": "a",  # change to name
+            "prior": {
+                "Intercept": {
+                    "name": "Uniform",
+                    "lower": 0.0,
+                    "upper": 1.0,
+                    "initval": 0.5,
+                },
+                "x": {"name": "Uniform", "lower": -0.5, "upper": 0.5, "initval": 0},
+            },
+            "formula": "a ~ 1 + x",
+        }
+    ]
+    model = hssm.HSSM(data=data, include=include)
+    assert isinstance(model.model, bmb.models.Model)
+    assert model.model_config["formula"] == default_model_config["angle"]["formula"]
+    assert model.params[0].prior.keys() == include[0]["prior"].keys()
+    assert model.params[0].formula == include[0]["formula"]
     assert len(model.params) == 5
