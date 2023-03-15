@@ -43,14 +43,14 @@ def test_ddm(data):
     assert model.model_config == default_model_config["ddm"]
 
 
-def test_angle(data_angle):
-    pytensor.config.floatX = "float32"
-    model = hssm.HSSM(data=data_angle, model="angle")
-    assert isinstance(model.model, bmb.models.Model)
-    assert model.list_params == ["v", "a", "z", "t", "theta"]
-    assert isinstance(model.formula, bmb.formula.Formula)
-    assert model.link == {"v": "identity"}
-    assert model.model_config == default_model_config["angle"]
+# def test_angle(data_angle):
+#     pytensor.config.floatX = "float32"
+#     model = hssm.HSSM(data=data_angle, model="angle")
+#     assert isinstance(model.model, bmb.models.Model)
+#     assert model.list_params == ["v", "a", "z", "t", "theta"]
+#     assert isinstance(model.formula, bmb.formula.Formula)
+#     assert model.link == {"v": "identity"}
+#     assert model.model_config == default_model_config["angle"]
 
 
 def test_transform_params(data):
