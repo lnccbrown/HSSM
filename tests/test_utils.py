@@ -1,6 +1,10 @@
 import bambi as bmb
+import numpy as np
+import pandas as pd
 import pytest
+import ssms.basic_simulators
 
+import hssm
 from hssm.utils import Param, _parse_bambi
 
 
@@ -162,3 +166,66 @@ def test__parse_bambi():
     assert p4["c(rt, response)"]["Intercept"] == prior_obj
     assert p4["c(rt, response)"]["x1"] == prior_obj
     assert l4 == {"v": "identity"}
+
+
+def test_get_alias_dict():
+
+    # Simulate some data:
+    v_true, a_true, z_true, t_true, sv_true = [0.5, 1.5, 0.5, 0.5, 0.3]
+    obs_ddm = ssms.basic_simulators.simulator(
+        [v_true, a_true, z_true, t_true, sv_true], model="ddm", n_samples=1000
+    )
+    obs_ddm = np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
+
+    dataset = pd.DataFrame(obs_ddm, columns=["rt", "response"])
+    dataset["x"] = dataset["rt"] * 0.1
+    dataset["y"] = dataset["rt"] * 0.5
+    dataset["group"] = np.random.randint(0, 10, len(dataset))
+
+    alias_default = hssm.HSSM(data=dataset)._aliases
+    alias_regression = hssm.HSSM(
+        data=dataset,
+        include=[
+            {
+                "name": "v",  # change to name
+                "prior": {
+                    "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
+                    "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+                    "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+                },
+                "formula": "v ~ (1|group) + x + y",
+                "link": "identity",
+            }
+        ],
+    )._aliases
+
+    alias_regression_a = hssm.HSSM(
+        data=dataset,
+        include=[
+            {
+                "name": "a",  # change to name
+                "prior": {
+                    "Intercept": {
+                        "name": "Uniform",
+                        "lower": 0.0,
+                        "upper": 1.0,
+                        "initval": 0.5,
+                    },
+                    "x": {"name": "Uniform", "lower": -0.5, "upper": 0.5, "initval": 0},
+                },
+                "formula": "a ~ (1|group) + x",
+            }
+        ],
+    )._aliases
+
+    assert alias_default["c(rt, response)"] == "rt, response"
+    assert alias_default["Intercept"] == "v"
+    assert alias_default["a"] == "a"
+
+    assert alias_regression["c(rt, response)"] == "rt, response"
+    assert alias_regression["Intercept"] == "v_Intercept"
+    assert alias_regression["1|group"] == "v_1|group"
+
+    assert alias_regression_a["c(rt, response)"]["c(rt, response)"] == "rt, response"
+    assert alias_regression_a["c(rt, response)"]["Intercept"] == "v"
+    #  assert alias_regression_a["a"]["Intercept"] == "v" # Undetermined, will add later

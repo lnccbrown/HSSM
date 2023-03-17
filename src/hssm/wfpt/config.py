@@ -10,7 +10,7 @@ default_model_config = {
         "backend": "pytensor",
         "formula": "c(rt,response)  ~ 1",
         "prior": {
-            "v": {"Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0}},
+            "v": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
             "sv": {"name": "Uniform", "lower": 0.0, "upper": 1.2},
             "a": {"name": "Uniform", "lower": 0.50, "upper": 2.01},
             "z": {"name": "Uniform", "lower": 0.10, "upper": 0.9},
@@ -24,7 +24,7 @@ default_model_config = {
         "backend": "jax",
         "formula": "c(rt,response)  ~ 1",
         "prior": {
-            "v": {"Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0}},
+            "v": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
             "a": {"name": "Uniform", "lower": 0.0, "upper": 1.2},
             "z": {"name": "Uniform", "lower": 0.0, "upper": 2.01},
             "t": {"name": "Uniform", "lower": 0.0, "upper": 0.90},
