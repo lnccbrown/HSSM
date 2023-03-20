@@ -367,7 +367,7 @@ class HSSMModelGraph(ModelGraph):
     ):
         """Make graphviz Digraph of PyMC model
 
-        NOTE: Directly ganked and modified from
+        NOTE: This is a slightly modified version of the code in:
         https://github.com/pymc-devs/pymc/blob/main/pymc/model_graph.py
 
         Credit for this code goes to PyMC developers.

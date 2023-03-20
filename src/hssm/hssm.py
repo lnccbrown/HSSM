@@ -66,7 +66,8 @@ class HSSM:  # pylint: disable=R0902
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
     ):
         self.data = data
-        self.model_type = model
+        self.model_name = model
+        self._trace = None
 
         if model not in ["angle", "custom", "ddm"]:
             raise ValueError("Please provide a correct model_name")
@@ -198,7 +199,7 @@ class HSSM:  # pylint: disable=R0902
 
     @property
     def pymc_model(self) -> pm.Model:
-        """A convenience funciton that returns the PyMC model build by the bambi,
+        """A convenience funciton that returns the PyMC model build by bambi,
         largely to avoid stuff like self.model.backend.model...
 
         Returns
@@ -280,7 +281,7 @@ class HSSM:  # pylint: disable=R0902
         output = []
 
         output.append("Hierarchical Sequential Sampling Model")
-        output.append(f"Model: {self.model_type}")
+        output.append(f"Model: {self.model_name}")
         output.append("")
 
         output.append("Response variable: rt, response")
