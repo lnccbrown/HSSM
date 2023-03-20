@@ -25,9 +25,9 @@ numpy = "^1.23.4"
 onnx = "^1.12.0"
 jax = "^0.3.25"
 jaxlib = "^0.3.24"
-ssms = {git = "https://github.com/AlexanderFengler/ssm_simulators.git"}
 bambi = "^0.10.0"
 formulae = "^0.3.4"
+ssm-simulators = "^0.3.0"
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^2.6.0"
