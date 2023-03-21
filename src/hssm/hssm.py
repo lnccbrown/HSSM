@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Literal
 
 import bambi as bmb
 import pandas as pd
@@ -158,42 +158,30 @@ class HSSM:  # pylint: disable=R0902
 
     def sample(
         self,
-        cores: int = 2,
-        draws: int = 500,
-        tune: int = 500,
-        mp_ctx: str = "fork",
-        sampler: str = "pytensor",
+        sampler: Literal[
+            "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
+        ] = "mcmc",
+        **kwargs,
     ):
+        """Performs sampling using the `fit` method via bambi.Model.
+
+        Parameters
+        ----------
+
+        sampler
+            The sampler to use. Can be either "mcmc" (default), "nuts_numpyro",
+            "nuts_blackjax", "laplace", or "vi".
+        kwargs
+            Other arguments passed to bmb.Model.fit()
+
+        Returns
+        -------
+            An ArviZ ``InferenceData`` instance if inference_method is  ``"mcmc"``
+            (default), "nuts_numpyro", "nuts_blackjax" or "laplace".
+            An ``Approximation`` object if  ``"vi"``.
         """
-        Perform posterior sampling using the `fit` function of Bambi.
 
-        Args:
-            cores (int): The number of cores to use for parallel sampling.
-             Default is 2.
-            draws (int): The number of posterior samples to draw. Default is 500.
-            tune (int): The number of tuning steps to perform before starting
-             to draw posterior samples. Default is 500.
-            mp_ctx (str): The multiprocessing context to use. Default is "fork".
-            sampler (str): The sampler to use. Can be either "jax" or "pytensor".
-             Default is "pytensor".
-
-        Returns:
-            The posterior samples, which is an instance of the
-             `arviz.InferenceData` class.
-        """
-
-        if sampler == "jax":
-            self._trace = self.model.fit(  # pylint: disable=W0201
-                cores=cores,
-                draws=draws,
-                tune=tune,
-                inference_method="nuts_numpyro",
-                chain_method="parallel",
-            )
-        else:
-            self._trace = self.model.fit(  # pylint: disable=W0201
-                cores=cores, draws=draws, tune=tune, mp_ctx=mp_ctx
-            )
+        self._trace = self.model.fit(inference_method=sampler, **kwargs)
 
         return self.trace
 

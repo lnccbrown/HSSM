@@ -66,7 +66,7 @@ class Param:
             The link function for the regression. It is either a string that specifies
             a built-in link function in Bambi, or a Bambi Link object. If a regression
             is speicified and link is not specified, "identity" will be used.
-        is_parent:
+        is_parent
             Determines if this parameter is a "parent" parameter. If so, the response
             term for the formula will be "c(rt, response)".
         """
