@@ -1,20 +1,21 @@
 from __future__ import annotations
 
-from typing import Callable, List
+from typing import Callable, Dict, List, Literal
 
 import bambi as bmb
 import pandas as pd
+import pymc as pm
 import pytensor
 from numpy.typing import ArrayLike
 
 from hssm import wfpt
-from hssm.utils import Param, _parse_bambi
+from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict
 from hssm.wfpt.config import default_model_config
 
 LogLikeFunc = Callable[..., ArrayLike]
 
 # add custom link function
-class HSSM:
+class HSSM:  # pylint: disable=R0902
     """
     The Hierarchical Sequential Sampling Model (HSSM) class.
 
@@ -64,6 +65,10 @@ class HSSM:
         model_config: dict | None = None,
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
     ):
+        self.data = data
+        self.model_name = model
+        self._trace = None
+
         if model not in ["angle", "custom", "ddm"]:
             raise ValueError("Please provide a correct model_name")
 
@@ -72,6 +77,7 @@ class HSSM:
         )
 
         self.list_params = self.model_config["list_params"]
+        self.parent = self.list_params[0]
         if model == "ddm":
             self.model_distribution = wfpt.WFPT
         elif model == "angle":
@@ -82,7 +88,7 @@ class HSSM:
             )
         elif model == "custom":
             self.model_distribution = wfpt.make_distribution(
-                loglik=loglik, list_params=self.list_params
+                loglik=loglik, list_params=self.list_params  # type: ignore
             )
 
         self.likelihood = bmb.Likelihood(
@@ -107,6 +113,9 @@ class HSSM:
             self.formula, data, family=self.family, priors=self.priors
         )
 
+        self._aliases = get_alias_dict(self.model, self.parent_param)
+        self.set_alias(self._aliases)
+
     def _transform_params(self, include: List[dict]) -> None:
         """
         This function transforms a list of dictionaries containing
@@ -122,25 +131,25 @@ class HSSM:
         processed = []
         self.params = []
         if include:
-            for dictionary in include:
-                processed.append(dictionary["name"])
-                if dictionary["name"] == self.list_params[0]:
-                    self.params.append(Param(is_parent=True, **dictionary))
-                else:
-                    self.params.append(Param(**dictionary))
+            for param_dict in include:
+                processed.append(param_dict["name"])
+                is_parent = param_dict["name"] == self.parent
+                param = Param(is_parent=is_parent, **param_dict)
+                self.params.append(param)
+                if is_parent:
+                    self.parent_param = param
 
-        for param in self.list_params:
-            if param not in processed:
-                if param == self.list_params[0]:
-                    self.params.append(
-                        Param(
-                            name=param,
-                            prior=self.priors[param]["Intercept"],
-                            is_parent=True,
-                        )
-                    )
-                else:
-                    self.params.append(Param(name=param, prior=self.priors[param]))
+        for param_str in self.list_params:
+            if param_str not in processed:
+                is_parent = param_str == self.parent
+                param = Param(
+                    name=param_str,
+                    prior=self.model_config["prior"][param_str],
+                    is_parent=is_parent,
+                )
+                self.params.append(param)
+                if is_parent:
+                    self.parent_param = param
 
         if len(self.params) != len(self.list_params):
             raise ValueError("Please provide a correct set of priors")
@@ -149,36 +158,141 @@ class HSSM:
 
     def sample(
         self,
-        cores: int = 2,
-        draws: int = 500,
-        tune: int = 500,
-        mp_ctx: str = "fork",
-        sampler: str = "pytensor",
+        sampler: Literal[
+            "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
+        ] = "mcmc",
+        **kwargs,
     ):
-        """
-        Perform posterior sampling using the `fit` function of Bambi.
+        """Performs sampling using the `fit` method via bambi.Model.
 
-        Args:
-            cores (int): The number of cores to use for parallel sampling.
-             Default is 2.
-            draws (int): The number of posterior samples to draw. Default is 500.
-            tune (int): The number of tuning steps to perform before starting
-             to draw posterior samples. Default is 500.
-            mp_ctx (str): The multiprocessing context to use. Default is "fork".
-            sampler (str): The sampler to use. Can be either "jax" or "pytensor".
-             Default is "pytensor".
+        Parameters
+        ----------
 
-        Returns:
-            The posterior samples, which is an instance of the
-             `arviz.InferenceData` class.
+        sampler
+            The sampler to use. Can be either "mcmc" (default), "nuts_numpyro",
+            "nuts_blackjax", "laplace", or "vi".
+        kwargs
+            Other arguments passed to bmb.Model.fit()
+
+        Returns
+        -------
+            An ArviZ ``InferenceData`` instance if inference_method is  ``"mcmc"``
+            (default), "nuts_numpyro", "nuts_blackjax" or "laplace".
+            An ``Approximation`` object if  ``"vi"``.
         """
-        if sampler == "jax":
-            return self.model.fit(
-                cores=cores,
-                draws=draws,
-                tune=tune,
-                inference_method="nuts_numpyro",
-                chain_method="parallel",
-            )
-        else:
-            return self.model.fit(cores=cores, draws=draws, tune=tune, mp_ctx=mp_ctx)
+
+        self._trace = self.model.fit(inference_method=sampler, **kwargs)
+
+        return self.trace
+
+    @property
+    def pymc_model(self) -> pm.Model:
+        """A convenience funciton that returns the PyMC model build by bambi,
+        largely to avoid stuff like self.model.backend.model...
+
+        Returns
+        -------
+            The PyMC model built by bambi
+        """
+
+        return self.model.backend.model
+
+    def set_alias(self, aliases: Dict[str, str | Dict]):
+        """Sets the aliases according to the dictionary passed to it and rebuild the
+        model.
+
+        Parameters
+        ----------
+        alias
+            A dict specifying the paramter names being aliased and the aliases.
+        """
+
+        self.model.set_alias(aliases)
+        self.model.build()
+
+    # NOTE: can't annotate return type because the graphviz dependency is optional
+    def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
+        """Produce a graphviz Digraph from a built HSSM model.
+        Requires graphviz, which may be installed most easily with
+            ``conda install -c conda-forge python-graphviz``
+        Alternatively, you may install the ``graphviz`` binaries yourself, and then
+        ``pip install graphviz`` to get the python bindings.
+        See http://graphviz.readthedocs.io/en/stable/manual.html for more information.
+
+        The code is largely copied from
+        https://github.com/bambinos/bambi/blob/main/bambi/models.py
+        Credit for the code goes to Bambi developers.
+
+        Parameters
+        ----------
+        formatting
+            One of ``"plain"`` or ``"plain_with_params"``. Defaults to ``"plain"``.
+        name
+            Name of the figure to save. Defaults to ``None``, no figure is saved.
+        figsize
+            Maximum width and height of figure in inches. Defaults to ``None``, the
+            figure size is set automatically. If defined and the drawing is larger than
+            the given size, the drawing is uniformly scaled down so that it fits within
+            the given size.  Only works if ``name`` is not ``None``.
+        dpi
+            Point per inch of the figure to save.
+            Defaults to 300. Only works if ``name`` is not ``None``.
+        fmt
+            Format of the figure to save.
+            Defaults to ``"png"``. Only works if ``name`` is not ``None``.
+
+        Returns
+            The graph
+        """
+
+        self.model._check_built()
+
+        graphviz = HSSMModelGraph(
+            model=self.pymc_model, parent=self.parent_param
+        ).make_graph(formatting=formatting)
+
+        width, height = (None, None) if figsize is None else figsize
+
+        if name is not None:
+            graphviz_ = graphviz.copy()
+            graphviz_.graph_attr.update(size=f"{width},{height}!")
+            graphviz_.graph_attr.update(dpi=str(dpi))
+            graphviz_.render(filename=name, format=fmt, cleanup=True)
+
+            return graphviz_
+
+        return graphviz
+
+    def __repr__(self) -> str:
+        """Creates a representation of the model."""
+
+        output = []
+
+        output.append("Hierarchical Sequential Sampling Model")
+        output.append(f"Model: {self.model_name}")
+        output.append("")
+
+        output.append("Response variable: rt, response")
+        output.append(f"Observations: {len(self.data)}")
+        output.append("")
+
+        output.append("Parameters:")
+        output.append("")
+
+        for param in self.params:
+            output.append(str(param))
+
+        return "\r\n".join(output)
+
+    def __str__(self) -> str:
+        """Creates a string representation of the model."""
+
+        return self.__repr__()
+
+    @property
+    def trace(self):
+
+        if not self._trace:
+            raise ValueError("Please sample the model first.")
+
+        return self._trace
