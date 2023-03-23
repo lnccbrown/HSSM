@@ -19,7 +19,7 @@ default_model_config = {
     },
     "angle": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": "test.onnx",
+        "loglik_path": "hssm/onnx_models/default.onnx",
         "list_params": ["v", "a", "z", "t", "theta"],
         "backend": "jax",
         "formula": "c(rt,response)  ~ 1",
