@@ -41,6 +41,35 @@ def test_ddm(data):
     assert isinstance(model.formula, bmb.formula.Formula)
     assert model.link == {"v": "identity"}
     assert model.model_config == default_model_config["ddm"]
+    assert list(model.model_config.keys()) == [
+        "loglik_kind",
+        "list_params",
+        "backend",
+        "formula",
+        "prior",
+    ]
+    assert list(model.model_config["prior"].keys()) == model.list_params
+
+
+def test_hssm_init_model_names(data, data_angle):
+    with pytest.raises(ValueError):
+        hssm.HSSM(data, model="invalid_model")
+
+    hssm_ddm = hssm.HSSM(data)
+    assert hssm_ddm.model_distribution.__name__ == "WFPTDistribution"
+
+    hssm_angle = hssm.HSSM(data_angle, model="angle")
+    assert hssm_angle.model_distribution.__name__ == "WFPTDistribution"
+
+
+def test_hssm_sample(data):
+    model = hssm.HSSM(data)
+    posterior_samples = model.sample()
+
+    assert posterior_samples is not None
+    assert "posterior" in posterior_samples
+    assert "sample_stats" in posterior_samples
+    assert "observed_data" in posterior_samples
 
 
 # def test_angle(data_angle):
@@ -152,3 +181,75 @@ def test_transform_params_four(data):
     assert model.params[0].prior.keys() == include[0]["prior"].keys()
     assert model.params[0].formula == include[0]["formula"]
     assert len(model.params) == 5
+
+
+def test_invalid_include_key(data):
+    include = [
+        {
+            "name": "v",
+            "prior": {"Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0}},
+            "formula": "v ~ 1",
+            "invalid_key": "identity",
+        }
+    ]
+    model = hssm.HSSM(data=data, include=include)
+    with pytest.raises(ValueError):
+        model.sample()
+
+
+def test_invalid_param_name(data):
+    include = [
+        {
+            "name": "invalid_param",
+            "prior": {"Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0}},
+            "formula": "v ~ 1",
+        }
+    ]
+    model = hssm.HSSM(data=data, include=include)
+    with pytest.raises(ValueError):
+        model.sample()
+
+
+def test_invalid_formula(data):
+    include = [
+        {
+            "name": "v",
+            "prior": {"Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0}},
+            "formula": "invalid_formula",
+        }
+    ]
+    model = hssm.HSSM(data=data, include=include)
+    with pytest.raises(ValueError):
+        model.sample()
+
+
+def test_invalid_prior_name(data):
+    include = [
+        {
+            "name": "v",
+            "prior": {"Invalid": {"name": "Uniform", "lower": -3.0, "upper": 3.0}},
+            "formula": "v ~ 1",
+        }
+    ]
+    model = hssm.HSSM(data=data, include=include)
+    with pytest.raises(ValueError):
+        model.sample()
+
+
+def test_invalid_prior_distribution(data):
+    include = [
+        {
+            "name": "v",
+            "prior": {
+                "Intercept": {
+                    "name": "InvalidDistribution",
+                    "lower": -3.0,
+                    "upper": 3.0,
+                }
+            },
+            "formula": "v ~ 1",
+        }
+    ]
+    model = hssm.HSSM(data=data, include=include)
+    with pytest.raises(ValueError):
+        model.sample()
