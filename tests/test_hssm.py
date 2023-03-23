@@ -85,7 +85,7 @@ def test_hssm_sample(data):
 def test_transform_params(data):
     include = [
         {
-            "name": "v",  # change to name
+            "name": "v",
             "prior": {
                 "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
                 "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
@@ -97,13 +97,16 @@ def test_transform_params(data):
     ]
     model = hssm.HSSM(data=data, include=include)
     assert isinstance(model.model, bmb.models.Model)
+
+    # Check model properties using a loop
+    param_names = ["v", "sv", "a", "z", "t"]
+    for idx, param in enumerate(model.params):
+        assert param.name == param_names[idx]
+
+    # Check the specific include properties
     assert model.params[0].prior.keys() == include[0]["prior"].keys()
     assert model.params[0].formula == include[0]["formula"]
-    assert model.params[0].name == "v"
-    assert model.params[1].name == "sv"
-    assert model.params[2].name == "a"
-    assert model.params[3].name == "z"
-    assert model.params[4].name == "t"
+
     assert len(model.params) == 5
 
 
