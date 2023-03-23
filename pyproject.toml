@@ -25,8 +25,9 @@ numpy = "^1.23.4"
 onnx = "^1.12.0"
 jax = "^0.3.25"
 jaxlib = "^0.3.24"
-bambi = {git = "https://github.com/bambinos/bambi.git"}
-ssms = {git = "https://github.com/AlexanderFengler/ssm_simulators.git"}
+bambi = "^0.10.0"
+formulae = "^0.3.4"
+ssm-simulators = "^0.3.0"
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^2.6.0"
@@ -42,6 +43,7 @@ autoflake = "^2.0.0"
 numpyro = "^0.10.1"
 ipywidgets = "^8.0.3"
 onnxruntime = "^1.13.1"
+graphviz = "^0.20.1"
 
 [tool.black]
 line-length = 88
