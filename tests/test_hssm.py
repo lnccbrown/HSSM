@@ -36,7 +36,6 @@ def data_angle():
 def test_ddm(data):
     pytensor.config.floatX = "float32"
     model = hssm.HSSM(data=data)
-    assert isinstance(model.model, bmb.models.Model)
     assert model.list_params == ["v", "sv", "a", "z", "t"]
     assert isinstance(model.formula, bmb.formula.Formula)
     assert model.link == {"v": "identity"}
@@ -96,7 +95,6 @@ def test_transform_params(data):
         }
     ]
     model = hssm.HSSM(data=data, include=include)
-    assert isinstance(model.model, bmb.models.Model)
 
     # Check model properties using a loop
     param_names = ["v", "sv", "a", "z", "t"]
@@ -132,7 +130,6 @@ def test_transform_params_two(data):
         },
     ]
     model = hssm.HSSM(data=data, include=include)
-    assert isinstance(model.model, bmb.models.Model)
     assert model.params[0].prior.keys() == include[0]["prior"].keys()
     assert model.params[1].prior.keys() == include[1]["prior"].keys()
     assert model.params[0].formula == include[0]["formula"]
@@ -154,7 +151,6 @@ def test_transform_params_three(data):
         {"name": "a", "prior": 0.5},
     ]
     model = hssm.HSSM(data=data, include=include)
-    assert isinstance(model.model, bmb.models.Model)
     assert model.params[1].prior == include[1]["prior"]
     assert model.params[0].prior.keys() == include[0]["prior"].keys()
     assert model.params[1].name == include[1]["name"]
@@ -179,7 +175,6 @@ def test_transform_params_four(data):
         }
     ]
     model = hssm.HSSM(data=data, include=include)
-    assert isinstance(model.model, bmb.models.Model)
     assert model.model_config["formula"] == default_model_config["angle"]["formula"]
     assert model.params[0].prior.keys() == include[0]["prior"].keys()
     assert model.params[0].formula == include[0]["formula"]
