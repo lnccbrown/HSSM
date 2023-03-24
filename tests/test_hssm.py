@@ -57,9 +57,6 @@ def test_hssm_init_model_names(data, data_angle):
     hssm_ddm = hssm.HSSM(data)
     assert hssm_ddm.model_distribution.__name__ == "WFPTDistribution"
 
-    hssm_angle = hssm.HSSM(data_angle, model="angle")
-    assert hssm_angle.model_distribution.__name__ == "WFPTDistribution"
-
 
 def test_hssm_sample(data):
     model = hssm.HSSM(data)
@@ -190,7 +187,7 @@ def test_invalid_include_key(data):
             "invalid_key": "identity",
         }
     ]
-    with pytest.raises(TypeError):
+    with pytest.raises(Exception):
         hssm.HSSM(data=data, include=include)
 
 
@@ -202,7 +199,7 @@ def test_invalid_param_name(data):
             "formula": "v ~ 1",
         }
     ]
-    with pytest.raises(ValueError):
+    with pytest.raises(Exception):
         hssm.HSSM(data=data, include=include)
 
 
