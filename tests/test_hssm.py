@@ -190,9 +190,8 @@ def test_invalid_include_key(data):
             "invalid_key": "identity",
         }
     ]
-    model = hssm.HSSM(data=data, include=include)
     with pytest.raises(TypeError):
-        model.sample()
+        hssm.HSSM(data=data, include=include)
 
 
 def test_invalid_param_name(data):
@@ -203,9 +202,8 @@ def test_invalid_param_name(data):
             "formula": "v ~ 1",
         }
     ]
-    model = hssm.HSSM(data=data, include=include)
     with pytest.raises(ValueError):
-        model.sample()
+        hssm.HSSM(data=data, include=include)
 
 
 def test_invalid_formula(data):
@@ -216,6 +214,5 @@ def test_invalid_formula(data):
             "formula": "invalid_formula",
         }
     ]
-    model = hssm.HSSM(data=data, include=include)
     with pytest.raises(KeyError):
-        model.sample()
+        hssm.HSSM(data=data, include=include)
