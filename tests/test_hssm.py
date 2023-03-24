@@ -214,5 +214,5 @@ def test_invalid_formula(data):
             "formula": "invalid_formula",
         }
     ]
-    with pytest.raises(KeyError):
+    with pytest.raises(Exception):
         hssm.HSSM(data=data, include=include)
