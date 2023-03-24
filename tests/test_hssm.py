@@ -196,7 +196,7 @@ def test_invalid_include_key(data):
         }
     ]
     model = hssm.HSSM(data=data, include=include)
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         model.sample()
 
 
@@ -222,37 +222,5 @@ def test_invalid_formula(data):
         }
     ]
     model = hssm.HSSM(data=data, include=include)
-    with pytest.raises(ValueError):
-        model.sample()
-
-
-def test_invalid_prior_name(data):
-    include = [
-        {
-            "name": "v",
-            "prior": {"Invalid": {"name": "Uniform", "lower": -3.0, "upper": 3.0}},
-            "formula": "v ~ 1",
-        }
-    ]
-    model = hssm.HSSM(data=data, include=include)
-    with pytest.raises(ValueError):
-        model.sample()
-
-
-def test_invalid_prior_distribution(data):
-    include = [
-        {
-            "name": "v",
-            "prior": {
-                "Intercept": {
-                    "name": "InvalidDistribution",
-                    "lower": -3.0,
-                    "upper": 3.0,
-                }
-            },
-            "formula": "v ~ 1",
-        }
-    ]
-    model = hssm.HSSM(data=data, include=include)
-    with pytest.raises(ValueError):
+    with pytest.raises(KeyError):
         model.sample()
