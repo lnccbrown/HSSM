@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytensor
 import pytest
-import ssms.basic_simulators
+import ssms
 
 from hssm import hssm
 from hssm.wfpt.config import default_model_config
