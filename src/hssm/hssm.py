@@ -72,19 +72,20 @@ class HSSM:  # pylint: disable=R0902
         if model not in ["angle", "custom", "ddm"]:
             raise ValueError("Please provide a correct model_name")
 
-        self.model_config = (
-            model_config if model_config else default_model_config[model]
-        )
+        if model_config:
+            self.model_config = {**default_model_config[model], **model_config}
+        else:
+            self.model_config = default_model_config[model]
 
         self.list_params = self.model_config["list_params"]
-        self.parent = self.list_params[0]
+        self.parent = self.list_params[0]  # type: ignore
         if model == "ddm":
             self.model_distribution = wfpt.WFPT
         elif model == "angle":
             self.model_distribution = wfpt.make_lan_distribution(
                 model=self.model_config["loglik_path"],
-                list_params=self.list_params,
-                backend=self.model_config["backend"],
+                list_params=self.list_params,  # type: ignore
+                backend=self.model_config["backend"],  # type: ignore
             )
         elif model == "custom":
             self.model_distribution = wfpt.make_distribution(
@@ -94,7 +95,7 @@ class HSSM:  # pylint: disable=R0902
         self.likelihood = bmb.Likelihood(
             self.model_config["loglik_kind"],
             params=self.list_params,
-            parent=self.model_config["list_params"][0],
+            parent=self.model_config["list_params"][0],  # type: ignore
             dist=self.model_distribution,
         )
 
@@ -144,7 +145,7 @@ class HSSM:  # pylint: disable=R0902
                 is_parent = param_str == self.parent
                 param = Param(
                     name=param_str,
-                    prior=self.model_config["prior"][param_str],
+                    prior=self.model_config["prior"][param_str],  # type: ignore
                     is_parent=is_parent,
                 )
                 self.params.append(param)
