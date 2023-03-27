@@ -224,7 +224,7 @@ def test_invalid_formula(data):
 
 def test_model_config_and_loglik_path_update(data_angle, fixture_path):
     my_hssm = hssm.HSSM(
-        data=data,
+        data=data_angle,
         model="angle",
         model_config={
             "loglik_kind": "approx_differentiable",
