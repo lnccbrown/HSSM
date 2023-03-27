@@ -213,3 +213,16 @@ def test_invalid_formula(data):
     ]
     with pytest.raises(Exception):
         hssm.HSSM(data=data, include=include)
+
+
+def test_model_config_and_loglik_path_update(example_data):
+    my_hssm = hssm.HSSM(
+        data=example_data,
+        model="angle",
+        model_config={
+            "loglik_kind": "approx_differentiable",
+            "loglik_path": "new_path.onnx",
+        },
+    )
+    assert my_hssm.model_config["loglik_path"] == "new_path.onnx"
+    assert my_hssm.model_config["loglik_kind"] == "approx_differentiable"
