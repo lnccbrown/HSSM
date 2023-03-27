@@ -231,5 +231,5 @@ def test_model_config_and_loglik_path_update(data_angle, fixture_path):
             "loglik_path": fixture_path / "new_path.onnx",
         },
     )
-    assert my_hssm.model_config["loglik_path"] == "new_path.onnx"
+    assert my_hssm.model_config["loglik_path"] == fixture_path / "new_path.onnx"
     assert my_hssm.model_config["loglik_kind"] == "approx_differentiable"
