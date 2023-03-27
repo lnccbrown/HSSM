@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import bambi as bmb
 import numpy as np
 import pandas as pd
@@ -20,6 +22,11 @@ def data():
     dataset["x"] = dataset["rt"] * 0.1
     dataset["y"] = dataset["rt"] * 0.5
     return dataset
+
+
+@pytest.fixture(scope="module")
+def fixture_path():
+    return Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture
@@ -215,13 +222,13 @@ def test_invalid_formula(data):
         hssm.HSSM(data=data, include=include)
 
 
-def test_model_config_and_loglik_path_update(example_data):
+def test_model_config_and_loglik_path_update(example_data, fixture_path):
     my_hssm = hssm.HSSM(
         data=example_data,
         model="angle",
         model_config={
             "loglik_kind": "approx_differentiable",
-            "loglik_path": "new_path.onnx",
+            "loglik_path": fixture_path / "new_path.onnx",
         },
     )
     assert my_hssm.model_config["loglik_path"] == "new_path.onnx"
