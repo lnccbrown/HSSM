@@ -82,7 +82,7 @@ class HSSM:  # pylint: disable=R0902
             self.model_distribution = wfpt.WFPT
         elif model == "angle":
             self.model_distribution = wfpt.make_lan_distribution(
-                model=self.model_config["loglik_path"],
+                model=self.model_config["loglik_path"],  # type: ignore
                 list_params=self.list_params,  # type: ignore
                 backend=self.model_config["backend"],  # type: ignore
             )
@@ -154,7 +154,7 @@ class HSSM:  # pylint: disable=R0902
         if len(self.params) != len(self.list_params):
             raise ValueError("Please provide a correct set of priors")
 
-        self.formula, self.priors, self.link = _parse_bambi(self.params)
+        self.formula, self.priors, self.link = _parse_bambi(self.params)  # type: ignore
 
     def sample(
         self,
