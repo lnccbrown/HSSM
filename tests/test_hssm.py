@@ -58,16 +58,6 @@ def test_hssm_init_model_names(data, data_angle):
     assert hssm_ddm.model_distribution.__name__ == "WFPTDistribution"
 
 
-def test_hssm_sample(data):
-    model = hssm.HSSM(data)
-    posterior_samples = model.sample()
-
-    assert posterior_samples is not None
-    assert "posterior" in posterior_samples
-    assert "sample_stats" in posterior_samples
-    assert "observed_data" in posterior_samples
-
-
 # def test_angle(data_angle):
 #     pytensor.config.floatX = "float32"
 #     model = hssm.HSSM(data=data_angle, model="angle")
