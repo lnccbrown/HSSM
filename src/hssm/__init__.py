@@ -1,3 +1,5 @@
 """HSSM - Toolkit for Hierarchical Sequential Sampling Models"""
 
-__version__ = "0.1.0"
+from .hssm import HSSM
+
+__all__ = ["HSSM"]
