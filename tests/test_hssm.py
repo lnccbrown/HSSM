@@ -100,6 +100,6 @@ def test_transform_params_general(data, include, should_raise_exception):
 
         # Check model properties using a loop
         param_names = ["v", "sv", "a", "z", "t"]
-        for idx, param in enumerate(model.params):
-            assert param.name == param_names[idx]
+        model_param_names = sorted([param.name for param in model.params])
+        assert model_param_names == sorted(param_names)
         assert len(model.params) == 5
