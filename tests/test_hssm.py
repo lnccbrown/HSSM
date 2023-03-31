@@ -94,10 +94,9 @@ def data():
 def test_transform_params_general(data, include, should_raise_exception):
     if should_raise_exception:
         with pytest.raises(Exception):
-            model = hssm.HSSM(data=data, include=include)
+            hssm.HSSM(data=data, include=include)
     else:
         model = hssm.HSSM(data=data, include=include)
-
         # Check model properties using a loop
         param_names = ["v", "sv", "a", "z", "t"]
         model_param_names = sorted([param.name for param in model.params])
