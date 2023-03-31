@@ -61,15 +61,7 @@ def data():
             False,
         ),
         (
-            [
-                {
-                    "name": "invalid_param",
-                    "prior": {
-                        "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0}
-                    },
-                    "formula": "v ~ 1",
-                }
-            ],
+            [{"name": "invalid_param", "prior": "invalid_param"}],
             True,
         ),
         (
