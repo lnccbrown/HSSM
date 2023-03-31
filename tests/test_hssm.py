@@ -107,7 +107,7 @@ def test_transform_params_general(data, include, should_raise_exception):
         model = hssm.HSSM(data=data, include=include)
 
         # Check model properties using a loop
-        param_names = ["v", "sv", "a", "z", "t"]
+        param_names = ["v", "a", "sv", "z", "t"]
         for idx, param in enumerate(model.params):
             assert param.name == param_names[idx]
         assert len(model.params) == 5
