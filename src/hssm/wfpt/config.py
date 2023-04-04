@@ -1,5 +1,5 @@
 """
-Add specification
+Default configurations for models in HSSM class
 """
 
 
@@ -18,9 +18,9 @@ default_model_config = {
         },
         "default_boundaries": [[-3.0, 0.0, 0.3, 0.1, 0.0], [3.0, 1.0, 2.5, 0.9, 2.0]],
     },
-    "angle": {
+    "onnx_models": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": "hssm/onnx_models/default.onnx",
+        "loglik_path": "hssm/onnx_models/angle.onnx",
         "list_params": ["v", "a", "z", "t", "theta"],
         "backend": "jax",
         "formula": "c(rt,response)  ~ 1",
@@ -36,4 +36,18 @@ default_model_config = {
             [3.0, 3.0, 0.9, 2.0, 1.3],
         ],
     },
+}
+
+onnx_models = {
+    "angle": "hssm/onnx_models/angle.onnx",
+    "levy": "hssm/onnx_models/levy.onnx",
+    "ornstein": "hssm/onnx_models/ornstein.onnx",
+    "weibull": "src/hssm/onnx_models/weibull.onnx",
+    "race_no_bias_angle_4": "hssm/onnx_models/race_no_bias_angle_4.onnx",
+    "ddm_mic2_adj_angle_no_bias": "hssm/onnx_models/ddm_mic2_adj_angle_no_bias.onnx",
+    "ddm_mic2_adj_no_bias": "hssm/onnx_models/ddm_mic2_adj_no_bias.onnx",
+    "ddm_mic2_adj_weibull_no_bias": "hssm/onnx_models/"
+    "ddm_mic2_adj_weibull_no_bias.onnx",
+    "ddm_seq2_no_bias": "hssm/onnx_models/ddm_seq2_no_bias.onnx",
+    "lca_no_bias_4": "hssm/onnx_models/lca_no_bias_4.onnx",
 }

@@ -10,7 +10,7 @@ from numpy.typing import ArrayLike
 
 from hssm import wfpt
 from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict
-from hssm.wfpt.config import default_model_config
+from hssm.wfpt.config import default_model_config, onnx_models
 
 LogLikeFunc = Callable[..., ArrayLike]
 
@@ -68,8 +68,23 @@ class HSSM:  # pylint: disable=R0902
         self.model_name = model
         self._trace = None
 
-        if model not in ["angle", "custom", "ddm"]:
+        if model not in [
+            "angle",
+            "custom",
+            "ddm",
+            "ornstein",
+            "levy",
+            "weibull",
+            "ddm_mic2_adj_angle_no_bias",
+            "ddm_mic2_adj_no_bias",
+            "ddm_mic2_adj_weibull_no_bias",
+            "ddm_seq2_no_bias",
+            "lca_no_bias_4",
+        ]:
             raise ValueError("Please provide a correct model_name")
+
+        if model in onnx_models:
+            default_model_config["onnx_models"]["loglik_path"] = onnx_models[model]
 
         if model_config and "default" in model_config:
             merged_config = {
@@ -96,7 +111,7 @@ class HSSM:  # pylint: disable=R0902
         self.parent = self.list_params[0]  # type: ignore
         if model == "ddm":
             self.model_distribution = wfpt.WFPT
-        elif model == "angle":
+        elif model == "onnx_models":
             self.model_distribution = wfpt.make_lan_distribution(
                 model=self.model_config["loglik_path"],  # type: ignore
                 list_params=self.list_params,  # type: ignore
