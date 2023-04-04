@@ -72,9 +72,20 @@ class HSSM:  # pylint: disable=R0902
             raise ValueError("Please provide a correct model_name")
 
         if model_config:
-            self.model_config = {**default_model_config[model], **model_config}
+            merged_config = {
+                key: {
+                    **default_model_config[model]["default"][key],  # type: ignore
+                    **model_config["default"].get(key, {}),
+                }
+                for key in default_model_config[model]["default"]
+            }
+            self.model_config = {
+                **default_model_config[model],  # type: ignore
+                **model_config,
+                "default": merged_config,
+            }
         else:
-            self.model_config = default_model_config[model]
+            self.model_config = default_model_config[model]  # type: ignore
 
         self.list_params = self.model_config["list_params"]
         self.parent = self.list_params[0]  # type: ignore
@@ -99,7 +110,7 @@ class HSSM:  # pylint: disable=R0902
         )
 
         self.formula = self.model_config["formula"]
-        self.priors = self.model_config["prior"]
+        self.priors = self.model_config["default"]
 
         self._transform_params(include)  # type: ignore
 
@@ -143,8 +154,8 @@ class HSSM:  # pylint: disable=R0902
             if param_str not in processed:
                 is_parent = param_str == self.parent
                 param = Param(
-                    name=param_str,
-                    prior=self.model_config["prior"][param_str],  # type: ignore
+                    name=param_str,  # type: ignore
+                    prior=self.model_config["default"][param_str],  # type: ignore
                     is_parent=is_parent,
                 )
                 self.params.append(param)
