@@ -28,7 +28,17 @@ LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
 
-def extract_priors(prior_dict):
+def extract_priors(prior_dict: dict):  # type: ignore
+    """
+    Extract the lower and upper priors from the given prior dictionary.
+
+    Args:
+        prior_dict (dict): A dictionary containing the lower and upper
+         priors for each parameter.
+
+    Returns:
+        list: A list of lists containing the lower priors and the upper priors.
+    """
     lower_priors = []
     upper_priors = []
 
@@ -39,10 +49,28 @@ def extract_priors(prior_dict):
     return [lower_priors, upper_priors]
 
 
-def adjust_logp(logp, *dist_params):
-    boundaries = extract_priors(default_model_config["ddm"]["prior"])
+def adjust_logp(
+    logp: LogLikeFunc | pytensor.graph.Op, *dist_params, model: str = "ddm"
+):
+    """
+    Adjust the log-likelihood function based on the given distribution
+     parameters and model.
+
+    Args:
+        logp (LogLikeFunc | pytensor.graph.Op): The log-likelihood function
+         to be adjusted.
+        *dist_params: Distribution parameters used to adjust the
+         log-likelihood function.
+        model (str, optional): The model used for extracting the priors.
+         Defaults to "ddm".
+
+    Returns:
+        LogLikeFunc | pytensor.graph.Op: The adjusted
+        log-likelihood function.
+    """
+    boundaries = extract_priors(default_model_config[model]["prior"])  # type: ignore
     out_of_bounds_val = -66.1
-    dist_params = list(dist_params)
+    dist_params = list(dist_params)  # type: ignore
 
     for i, param in enumerate(dist_params):
         logp = pt.switch(pt.lt(param, boundaries[1][i]), logp, out_of_bounds_val)
