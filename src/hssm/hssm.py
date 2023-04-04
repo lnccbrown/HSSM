@@ -71,7 +71,7 @@ class HSSM:  # pylint: disable=R0902
         if model not in ["angle", "custom", "ddm"]:
             raise ValueError("Please provide a correct model_name")
 
-        if model_config:
+        if model_config and "default" in model_config:
             merged_config = {
                 key: {
                     **default_model_config[model]["default"][key],  # type: ignore
@@ -83,6 +83,11 @@ class HSSM:  # pylint: disable=R0902
                 **default_model_config[model],  # type: ignore
                 **model_config,
                 "default": merged_config,
+            }
+        elif model_config:
+            self.model_config = {
+                **default_model_config[model],  # type: ignore
+                **model_config,
             }
         else:
             self.model_config = default_model_config[model]  # type: ignore
