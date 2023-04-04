@@ -19,11 +19,36 @@ from numpy.typing import ArrayLike
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators import simulator  # type: ignore
 
+from hssm.wfpt.config import default_model_config
+
 from .base import log_pdf_sv
 from .lan import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
+
+
+def extract_priors(prior_dict):
+    lower_priors = []
+    upper_priors = []
+
+    for key in prior_dict:
+        lower_priors.append(prior_dict[key]["lower"])
+        upper_priors.append(prior_dict[key]["upper"])
+
+    return [lower_priors, upper_priors]
+
+
+def adjust_logp(logp, *dist_params):
+    boundaries = extract_priors(default_model_config["ddm"]["prior"])
+    out_of_bounds_val = -66.1
+    dist_params = list(dist_params)
+
+    for i, param in enumerate(dist_params):
+        logp = pt.switch(pt.lt(param, boundaries[1][i]), logp, out_of_bounds_val)
+        logp = pt.switch(pt.ge(param, boundaries[0][i]), logp, out_of_bounds_val)
+
+    return logp
 
 
 def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
@@ -138,7 +163,8 @@ def make_distribution(
 
         def logp(data, *dist_params):  # pylint: disable=E0213
 
-            return loglik(data, *dist_params)
+            logp = loglik(data, *dist_params)
+            return adjust_logp(logp, *dist_params)
 
     return WFPTDistribution
 

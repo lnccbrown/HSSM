@@ -11,10 +11,10 @@ default_model_config = {
         "formula": "c(rt,response)  ~ 1",
         "prior": {
             "v": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-            "sv": {"name": "Uniform", "lower": 0.0, "upper": 1.2},
-            "a": {"name": "Uniform", "lower": 0.50, "upper": 2.01},
-            "z": {"name": "Uniform", "lower": 0.10, "upper": 0.9},
-            "t": {"name": "Uniform", "lower": 0.0, "upper": 2.01},
+            "sv": {"name": "Uniform", "lower": 0.3, "upper": 2.5},
+            "a": {"name": "Uniform", "lower": 0.1, "upper": 0.9},
+            "z": {"name": "Uniform", "lower": 0.1, "upper": 0.9},
+            "t": {"name": "Uniform", "lower": 0.0, "upper": 2.0},
         },
     },
     "angle": {
@@ -25,10 +25,10 @@ default_model_config = {
         "formula": "c(rt,response)  ~ 1",
         "prior": {
             "v": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-            "a": {"name": "Uniform", "lower": 0.0, "upper": 1.2},
-            "z": {"name": "Uniform", "lower": 0.0, "upper": 2.01},
-            "t": {"name": "Uniform", "lower": 0.0, "upper": 0.90},
-            "theta": {"name": "Uniform", "lower": 0.0, "upper": 2.01},
+            "a": {"name": "Uniform", "lower": 0.3, "upper": 3.0},
+            "z": {"name": "Uniform", "lower": 0.2, "upper": 0.9},
+            "t": {"name": "Uniform", "lower": 0.001, "upper": 2.0},
+            "theta": {"name": "Uniform", "lower": -0.1, "upper": 1.3},
         },
     },
 }
