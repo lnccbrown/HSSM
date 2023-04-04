@@ -41,7 +41,7 @@ class HSSM:  # pylint: disable=R0902
 
     Attributes:
         list_params (list): The list of parameter names.
-        model_name (str): The name of the model.
+        model (str): The name of the model.
         model_distribution: A SSM model object.
         likelihood: A Bambi likelihood object.
         family: A Bambi family object.
@@ -49,7 +49,6 @@ class HSSM:  # pylint: disable=R0902
          of parameters.
         formula (str): A string representing the model formula.
         params (list): A list of Param objects representing model parameters.
-        model: A Bambi model object.
 
     Methods:
         _transform_params: A method to transform priors, link and formula
@@ -72,19 +71,36 @@ class HSSM:  # pylint: disable=R0902
         if model not in ["angle", "custom", "ddm"]:
             raise ValueError("Please provide a correct model_name")
 
-        self.model_config = (
-            model_config if model_config else default_model_config[model]
-        )
+        if model_config and "default" in model_config:
+            merged_config = {
+                key: {
+                    **default_model_config[model]["default"][key],  # type: ignore
+                    **model_config["default"].get(key, {}),
+                }
+                for key in default_model_config[model]["default"]
+            }
+            self.model_config = {
+                **default_model_config[model],  # type: ignore
+                **model_config,
+                "default": merged_config,
+            }
+        elif model_config:
+            self.model_config = {
+                **default_model_config[model],  # type: ignore
+                **model_config,
+            }
+        else:
+            self.model_config = default_model_config[model]  # type: ignore
 
         self.list_params = self.model_config["list_params"]
-        self.parent = self.list_params[0]
+        self.parent = self.list_params[0]  # type: ignore
         if model == "ddm":
             self.model_distribution = wfpt.WFPT
         elif model == "angle":
             self.model_distribution = wfpt.make_lan_distribution(
-                model=self.model_config["loglik_path"],
-                list_params=self.list_params,
-                backend=self.model_config["backend"],
+                model=self.model_config["loglik_path"],  # type: ignore
+                list_params=self.list_params,  # type: ignore
+                backend=self.model_config["backend"],  # type: ignore
             )
         elif model == "custom":
             self.model_distribution = wfpt.make_distribution(
@@ -94,12 +110,12 @@ class HSSM:  # pylint: disable=R0902
         self.likelihood = bmb.Likelihood(
             self.model_config["loglik_kind"],
             params=self.list_params,
-            parent=self.model_config["list_params"][0],
+            parent=self.model_config["list_params"][0],  # type: ignore
             dist=self.model_distribution,
         )
 
         self.formula = self.model_config["formula"]
-        self.priors = self.model_config["prior"]
+        self.priors = self.model_config["default"]
 
         self._transform_params(include)  # type: ignore
 
@@ -143,8 +159,8 @@ class HSSM:  # pylint: disable=R0902
             if param_str not in processed:
                 is_parent = param_str == self.parent
                 param = Param(
-                    name=param_str,
-                    prior=self.model_config["prior"][param_str],
+                    name=param_str,  # type: ignore
+                    prior=self.model_config["default"][param_str],  # type: ignore
                     is_parent=is_parent,
                 )
                 self.params.append(param)
@@ -154,7 +170,7 @@ class HSSM:  # pylint: disable=R0902
         if len(self.params) != len(self.list_params):
             raise ValueError("Please provide a correct set of priors")
 
-        self.formula, self.priors, self.link = _parse_bambi(self.params)
+        self.formula, self.priors, self.link = _parse_bambi(self.params)  # type: ignore
 
     def sample(
         self,
