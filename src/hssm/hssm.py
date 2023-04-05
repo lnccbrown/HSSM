@@ -88,7 +88,7 @@ class HSSM:  # pylint: disable=R0902
             model_config
             if model_config
             else default_model_config[
-                self.model_name if not self.is_onnx else "onnx_models"
+                self.model_name if not self.is_onnx else "onnx_models"  # type: ignore
             ]
         )
 
