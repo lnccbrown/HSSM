@@ -75,17 +75,22 @@ class HSSM:  # pylint: disable=R0902
             "ornstein",
             "levy",
             "weibull",
-            "ddm_mic2_adj_angle_no_bias",
-            "ddm_mic2_adj_no_bias",
-            "ddm_mic2_adj_weibull_no_bias",
             "ddm_seq2_no_bias",
-            "lca_no_bias_4",
         ]:
             raise ValueError("Please provide a correct model_name")
 
-        if model in onnx_models:
-            self.model_name = "onnx_models"
+        self.is_onnx = model in onnx_models
+
+        if self.is_onnx:
             default_model_config["onnx_models"]["loglik_path"] = onnx_models[model]
+
+        self.model_config = (
+            model_config
+            if model_config
+            else default_model_config[
+                self.model_name if not self.is_onnx else "onnx_models"
+            ]
+        )
 
         if model_config and "default" in model_config:
             merged_config = {
@@ -93,30 +98,28 @@ class HSSM:  # pylint: disable=R0902
                     **default_model_config[self.model_name]["default"][  # type: ignore
                         key
                     ],
-                    **model_config["default"].get(key, {}),
+                    **model_config["default_prior"].get(key, {}),
                 }
                 for key in default_model_config[self.model_name][  # type: ignore
-                    "default"
+                    "default_prior"
                 ]
             }
             self.model_config = {
                 **default_model_config[self.model_name],  # type: ignore
                 **model_config,
-                "default": merged_config,
+                "default_prior": merged_config,
             }
         elif model_config:
             self.model_config = {
                 **default_model_config[self.model_name],  # type: ignore
                 **model_config,
             }
-        else:
-            self.model_config = default_model_config[self.model_name]  # type: ignore
 
         self.list_params = self.model_config["list_params"]
         self.parent = self.list_params[0]  # type: ignore
         if self.model_name == "ddm":
             self.model_distribution = wfpt.WFPT
-        elif self.model_name == "onnx_models":
+        elif self.is_onnx:
             self.model_distribution = wfpt.make_lan_distribution(
                 model=self.model_config["loglik_path"],  # type: ignore
                 list_params=self.list_params,  # type: ignore
@@ -135,7 +138,7 @@ class HSSM:  # pylint: disable=R0902
         )
 
         self.formula = self.model_config["formula"]
-        self.priors = self.model_config["default"]
+        self.priors = self.model_config["default_prior"]
 
         self._transform_params(include)  # type: ignore
 
@@ -180,7 +183,7 @@ class HSSM:  # pylint: disable=R0902
                 is_parent = param_str == self.parent
                 param = Param(
                     name=param_str,  # type: ignore
-                    prior=self.model_config["default"][param_str],  # type: ignore
+                    prior=self.model_config["default_prior"][param_str],  # type: ignore
                     is_parent=is_parent,
                 )
                 self.params.append(param)

@@ -9,7 +9,7 @@ default_model_config = {
         "list_params": ["v", "sv", "a", "z", "t"],
         "backend": "pytensor",
         "formula": "c(rt,response)  ~ 1",
-        "default": {
+        "default_prior": {
             "v": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
             "sv": {"name": "Uniform", "lower": 0.0, "upper": 1.0},
             "a": {"name": "Uniform", "lower": 0.30, "upper": 2.5},
@@ -24,7 +24,7 @@ default_model_config = {
         "list_params": ["v", "a", "z", "t", "theta"],
         "backend": "jax",
         "formula": "c(rt,response)  ~ 1",
-        "default": {
+        "default_prior": {
             "v": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
             "a": {"name": "Uniform", "lower": 0.0, "upper": 1.2},
             "z": {"name": "Uniform", "lower": 0.0, "upper": 2.01},
@@ -44,10 +44,5 @@ onnx_models = {
     "ornstein": "hssm/onnx_models/ornstein.onnx",
     "weibull": "src/hssm/onnx_models/weibull.onnx",
     "race_no_bias_angle_4": "hssm/onnx_models/race_no_bias_angle_4.onnx",
-    "ddm_mic2_adj_angle_no_bias": "hssm/onnx_models/ddm_mic2_adj_angle_no_bias.onnx",
-    "ddm_mic2_adj_no_bias": "hssm/onnx_models/ddm_mic2_adj_no_bias.onnx",
-    "ddm_mic2_adj_weibull_no_bias": "hssm/onnx_models/"
-    "ddm_mic2_adj_weibull_no_bias.onnx",
     "ddm_seq2_no_bias": "hssm/onnx_models/ddm_seq2_no_bias.onnx",
-    "lca_no_bias_4": "hssm/onnx_models/lca_no_bias_4.onnx",
 }
