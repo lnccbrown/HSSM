@@ -84,40 +84,43 @@ class HSSM:  # pylint: disable=R0902
             raise ValueError("Please provide a correct model_name")
 
         if model in onnx_models:
+            self.model_name = "onnx_models"
             default_model_config["onnx_models"]["loglik_path"] = onnx_models[model]
 
         if model_config and "default" in model_config:
             merged_config = {
                 key: {
-                    **default_model_config[model]["default"][key],  # type: ignore
+                    **default_model_config[self.model_name]["default"][
+                        key
+                    ],  # type: ignore
                     **model_config["default"].get(key, {}),
                 }
-                for key in default_model_config[model]["default"]
+                for key in default_model_config[self.model_name]["default"]
             }
             self.model_config = {
-                **default_model_config[model],  # type: ignore
+                **default_model_config[self.model_name],  # type: ignore
                 **model_config,
                 "default": merged_config,
             }
         elif model_config:
             self.model_config = {
-                **default_model_config[model],  # type: ignore
+                **default_model_config[self.model_name],  # type: ignore
                 **model_config,
             }
         else:
-            self.model_config = default_model_config[model]  # type: ignore
+            self.model_config = default_model_config[self.model_name]  # type: ignore
 
         self.list_params = self.model_config["list_params"]
         self.parent = self.list_params[0]  # type: ignore
-        if model == "ddm":
+        if self.model_name == "ddm":
             self.model_distribution = wfpt.WFPT
-        elif model == "onnx_models":
+        elif self.model_name == "onnx_models":
             self.model_distribution = wfpt.make_lan_distribution(
                 model=self.model_config["loglik_path"],  # type: ignore
                 list_params=self.list_params,  # type: ignore
                 backend=self.model_config["backend"],  # type: ignore
             )
-        elif model == "custom":
+        elif self.model_name == "custom":
             self.model_distribution = wfpt.make_distribution(
                 loglik=loglik, list_params=self.list_params  # type: ignore
             )
