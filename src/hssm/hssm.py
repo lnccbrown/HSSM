@@ -95,7 +95,9 @@ class HSSM:  # pylint: disable=R0902
                     ],
                     **model_config["default"].get(key, {}),
                 }
-                for key in default_model_config[self.model_name]["default"]
+                for key in default_model_config[self.model_name][  # type: ignore
+                    "default"
+                ]
             }
             self.model_config = {
                 **default_model_config[self.model_name],  # type: ignore
