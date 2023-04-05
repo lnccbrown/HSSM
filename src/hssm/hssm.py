@@ -90,9 +90,9 @@ class HSSM:  # pylint: disable=R0902
         if model_config and "default" in model_config:
             merged_config = {
                 key: {
-                    **default_model_config[self.model_name]["default"][
+                    **default_model_config[self.model_name]["default"][  # type: ignore
                         key
-                    ],  # type: ignore
+                    ],
                     **model_config["default"].get(key, {}),
                 }
                 for key in default_model_config[self.model_name]["default"]
