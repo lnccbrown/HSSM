@@ -65,10 +65,9 @@ class HSSM:  # pylint: disable=R0902
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
     ):
         self.data = data
-        self.model_name = model
         self._trace = None
 
-        if model not in [
+        supported_models = [
             "angle",
             "custom",
             "ddm",
@@ -76,7 +75,8 @@ class HSSM:  # pylint: disable=R0902
             "levy",
             "weibull",
             "ddm_seq2_no_bias",
-        ]:
+        ]
+        if model not in supported_models:
             raise ValueError("Please provide a correct model_name")
 
         self.is_onnx = model in onnx_models
@@ -84,44 +84,30 @@ class HSSM:  # pylint: disable=R0902
         if self.is_onnx:
             default_model_config["onnx_models"]["loglik_path"] = onnx_models[model]
 
+        self.model_name = model if not self.is_onnx else "onnx_models"
+
         self.model_config = (
-            model_config
-            if model_config
-            else default_model_config[
-                self.model_name if not self.is_onnx else "onnx_models"  # type: ignore
-            ]
+            model_config if model_config else default_model_config[self.model_name]
         )
 
         if model_config and "default" in model_config:
             merged_config = {
                 key: {
-                    **default_model_config[
-                        self.model_name if not self.is_onnx else "onnx_models"
-                    ][
-                        "default"
-                    ][  # type: ignore
+                    **default_model_config[self.model_name]["default"][  # type: ignore
                         key
                     ],
                     **model_config["default_prior"].get(key, {}),
                 }
-                for key in default_model_config[
-                    self.model_name if not self.is_onnx else "onnx_models"
-                ][  # type: ignore
-                    "default_prior"
-                ]
+                for key in default_model_config[self.model_name]["default_prior"]
             }
             self.model_config = {
-                **default_model_config[
-                    self.model_name if not self.is_onnx else "onnx_models"
-                ],  # type: ignore
+                **default_model_config[self.model_name],
                 **model_config,
                 "default_prior": merged_config,
             }
         elif model_config:
             self.model_config = {
-                **default_model_config[
-                    self.model_name if not self.is_onnx else "onnx_models"
-                ],  # type: ignore
+                **default_model_config[self.model_name],
                 **model_config,
             }
 
