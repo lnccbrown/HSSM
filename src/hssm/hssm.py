@@ -95,23 +95,33 @@ class HSSM:  # pylint: disable=R0902
         if model_config and "default" in model_config:
             merged_config = {
                 key: {
-                    **default_model_config[self.model_name]["default"][  # type: ignore
+                    **default_model_config[
+                        self.model_name if not self.is_onnx else "onnx_models"
+                    ][
+                        "default"
+                    ][  # type: ignore
                         key
                     ],
                     **model_config["default_prior"].get(key, {}),
                 }
-                for key in default_model_config[self.model_name][  # type: ignore
+                for key in default_model_config[
+                    self.model_name if not self.is_onnx else "onnx_models"
+                ][  # type: ignore
                     "default_prior"
                 ]
             }
             self.model_config = {
-                **default_model_config[self.model_name],  # type: ignore
+                **default_model_config[
+                    self.model_name if not self.is_onnx else "onnx_models"
+                ],  # type: ignore
                 **model_config,
                 "default_prior": merged_config,
             }
         elif model_config:
             self.model_config = {
-                **default_model_config[self.model_name],  # type: ignore
+                **default_model_config[
+                    self.model_name if not self.is_onnx else "onnx_models"
+                ],  # type: ignore
                 **model_config,
             }
 
