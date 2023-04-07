@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Literal
+from typing import Any, Callable, Dict, List, Literal
 
 import bambi as bmb
 import pandas as pd
@@ -10,7 +10,7 @@ from numpy.typing import ArrayLike
 
 from hssm import wfpt
 from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict
-from hssm.wfpt.config import default_model_config, onnx_models
+from hssm.wfpt.config import default_model_config
 
 LogLikeFunc = Callable[..., ArrayLike]
 
@@ -66,36 +66,20 @@ class HSSM:  # pylint: disable=R0902
     ):
         self.data = data
         self._trace = None
+        self.model_name = model
 
-        supported_models = [
-            "angle",
-            "custom",
-            "ddm",
-            "ornstein",
-            "levy",
-            "weibull",
-            "ddm_seq2_no_bias",
-        ]
-        if model not in supported_models:
+        if model not in default_model_config and self.model_name != "custom":
             raise ValueError("Please provide a correct model_name")
 
-        self.is_onnx = model in onnx_models
-
-        if self.is_onnx:
-            default_model_config["onnx_models"]["loglik_path"] = onnx_models[model]
-
-        self.model_name = model if not self.is_onnx else "onnx_models"
-
         self.model_config = (
-            model_config if model_config else default_model_config[self.model_name]
+            model_config if model_config else default_model_config[model]
         )
+        value: Any = default_model_config[self.model_name]["default_prior"]
 
         if model_config and "default" in model_config:
             merged_config = {
                 key: {
-                    **default_model_config[self.model_name]["default"][  # type: ignore
-                        key
-                    ],
+                    **value[key],
                     **model_config["default_prior"].get(key, {}),
                 }
                 for key in default_model_config[self.model_name]["default_prior"]
@@ -113,6 +97,9 @@ class HSSM:  # pylint: disable=R0902
 
         self.list_params = self.model_config["list_params"]
         self.parent = self.list_params[0]  # type: ignore
+
+        self.is_onnx = self.model_config["loglik_kind"] == "approx_differentiable"
+
         if self.model_name == "ddm":
             self.model_distribution = wfpt.WFPT
         elif self.is_onnx:
@@ -133,7 +120,7 @@ class HSSM:  # pylint: disable=R0902
             dist=self.model_distribution,
         )
 
-        self.formula = self.model_config["formula"]
+        self.formula = "c(rt,response)  ~ 1"
         self.priors = self.model_config["default_prior"]
 
         self._transform_params(include)  # type: ignore
