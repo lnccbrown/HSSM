@@ -65,10 +65,10 @@ class HSSM:  # pylint: disable=R0902
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
     ):
         self.data = data
-        self.model_name = model
         self._trace = None
+        self.model_name = model
 
-        if model not in ["angle", "custom", "ddm"]:
+        if model not in default_model_config and self.model_name != "custom":
             raise ValueError("Please provide a correct model_name")
 
         if model_config:
@@ -78,15 +78,17 @@ class HSSM:  # pylint: disable=R0902
 
         self.list_params = self.model_config["list_params"]
         self.parent = self.list_params[0]
-        if model == "ddm":
+        self.is_onnx = self.model_config["loglik_kind"] == "approx_differentiable"
+
+        if self.model_name == "ddm":
             self.model_distribution = wfpt.WFPT
-        elif model == "angle":
+        elif self.is_onnx:
             self.model_distribution = wfpt.make_lan_distribution(
                 model=self.model_config["loglik_path"],
                 list_params=self.list_params,
                 backend=self.model_config["backend"],
             )
-        elif model == "custom":
+        elif self.model_name == "custom":
             self.model_distribution = wfpt.make_distribution(
                 loglik=loglik, list_params=self.list_params  # type: ignore
             )
@@ -98,8 +100,8 @@ class HSSM:  # pylint: disable=R0902
             dist=self.model_distribution,
         )
 
-        self.formula = self.model_config["formula"]
-        self.priors = self.model_config["default"]
+        self.formula = "c(rt,response)  ~ 1"
+        self.priors = self.model_config["default_prior"]
 
         self._transform_params(include)  # type: ignore
 
