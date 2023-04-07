@@ -146,7 +146,7 @@ class HSSM:  # pylint: disable=R0902
                 is_parent = param_str == self.parent
                 param = Param(
                     name=param_str,  # type: ignore
-                    prior=self.model_config["default"][param_str],  # type: ignore
+                    prior=self.model_config["default_prior"][param_str],  # type: ignore
                     is_parent=is_parent,
                 )
                 self.params.append(param)
