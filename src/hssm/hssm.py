@@ -67,9 +67,8 @@ class HSSM:  # pylint: disable=R0902
         self._trace = None
         self.model_name = model
         default_model_config: Any
-        self.default_model_config = default_model_config
 
-        if model not in self.default_model_config and self.model_name != "custom":
+        if model not in default_model_config and self.model_name != "custom":
             raise ValueError("Please provide a correct model_name")
 
         self.model_config = (
@@ -79,19 +78,19 @@ class HSSM:  # pylint: disable=R0902
         if model_config and "default" in model_config:
             merged_config = {
                 key: {
-                    **self.default_model_config[self.model_name]["default_prior"][key],
+                    **default_model_config[self.model_name]["default_prior"][key],
                     **model_config["default_prior"].get(key, {}),
                 }
-                for key in self.default_model_config[self.model_name]["default_prior"]
+                for key in default_model_config[self.model_name]["default_prior"]
             }
             self.model_config = {
-                **self.default_model_config[self.model_name],
+                **default_model_config[self.model_name],
                 **model_config,
                 "default_prior": merged_config,
             }
         elif model_config:
             self.model_config = {
-                **self.default_model_config[self.model_name],
+                **default_model_config[self.model_name],
                 **model_config,
             }
 
