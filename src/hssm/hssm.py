@@ -9,7 +9,7 @@ import pytensor
 from numpy.typing import ArrayLike
 
 from hssm import wfpt
-from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict
+from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict, merge_dicts
 from hssm.wfpt.config import default_model_config
 
 LogLikeFunc = Callable[..., ArrayLike]
@@ -71,46 +71,30 @@ class HSSM:  # pylint: disable=R0902
         if model not in ["angle", "custom", "ddm"]:
             raise ValueError("Please provide a correct model_name")
 
-        if model_config and "default" in model_config:
-            merged_config = {
-                key: {
-                    **default_model_config[model]["default"][key],  # type: ignore
-                    **model_config["default"].get(key, {}),
-                }
-                for key in default_model_config[model]["default"]
-            }
-            self.model_config = {
-                **default_model_config[model],  # type: ignore
-                **model_config,
-                "default": merged_config,
-            }
-        elif model_config:
-            self.model_config = {
-                **default_model_config[model],  # type: ignore
-                **model_config,
-            }
+        if model_config:
+            self.model_config = merge_dicts(default_model_config[model], model_config)
         else:
-            self.model_config = default_model_config[model]  # type: ignore
+            self.model_config = default_model_config[model]
 
         self.list_params = self.model_config["list_params"]
-        self.parent = self.list_params[0]  # type: ignore
+        self.parent = self.list_params[0]
         if model == "ddm":
             self.model_distribution = wfpt.WFPT
         elif model == "angle":
             self.model_distribution = wfpt.make_lan_distribution(
-                model=self.model_config["loglik_path"],  # type: ignore
-                list_params=self.list_params,  # type: ignore
-                backend=self.model_config["backend"],  # type: ignore
+                model=self.model_config["loglik_path"],
+                list_params=self.list_params,
+                backend=self.model_config["backend"],
             )
         elif model == "custom":
             self.model_distribution = wfpt.make_distribution(
-                loglik=loglik, list_params=self.list_params  # type: ignore
+                loglik=loglik, list_params=self.list_params
             )
 
         self.likelihood = bmb.Likelihood(
             self.model_config["loglik_kind"],
             params=self.list_params,
-            parent=self.model_config["list_params"][0],  # type: ignore
+            parent=self.model_config["list_params"][0],
             dist=self.model_distribution,
         )
 
