@@ -2,8 +2,9 @@
 Default configurations for models in HSSM class
 """
 
+from typing import Any
 
-default_model_config = {
+default_model_config: Any = {
     "ddm": {
         "loglik_kind": "analytical",
         "list_params": ["v", "sv", "a", "z", "t"],

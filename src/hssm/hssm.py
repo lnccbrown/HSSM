@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Literal
+from typing import Callable, Dict, List, Literal
 
 import bambi as bmb
 import pandas as pd
@@ -10,6 +10,7 @@ from numpy.typing import ArrayLike
 
 from hssm import wfpt
 from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict
+from hssm.wfpt.config import default_model_config
 
 LogLikeFunc = Callable[..., ArrayLike]
 
@@ -66,7 +67,6 @@ class HSSM:  # pylint: disable=R0902
         self.data = data
         self._trace = None
         self.model_name = model
-        default_model_config: Any
 
         if model not in default_model_config and self.model_name != "custom":
             raise ValueError("Please provide a correct model_name")
