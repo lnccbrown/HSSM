@@ -10,7 +10,6 @@ from numpy.typing import ArrayLike
 
 from hssm import wfpt
 from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict
-from hssm.wfpt.config import default_model_config
 
 LogLikeFunc = Callable[..., ArrayLike]
 
@@ -67,6 +66,7 @@ class HSSM:  # pylint: disable=R0902
         self.data = data
         self._trace = None
         self.model_name = model
+        default_model_config: Any
 
         if model not in default_model_config and self.model_name != "custom":
             raise ValueError("Please provide a correct model_name")
@@ -74,12 +74,11 @@ class HSSM:  # pylint: disable=R0902
         self.model_config = (
             model_config if model_config else default_model_config[model]
         )
-        value: Any = default_model_config[self.model_name]["default_prior"]
 
         if model_config and "default" in model_config:
             merged_config = {
                 key: {
-                    **value[key],
+                    **default_model_config[self.model_name]["default_prior"][key],
                     **model_config["default_prior"].get(key, {}),
                 }
                 for key in default_model_config[self.model_name]["default_prior"]
