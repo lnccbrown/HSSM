@@ -68,19 +68,27 @@ class HSSM:  # pylint: disable=R0902
         self._trace = None
         self.model_name = model
 
-        if model not in default_model_config and self.model_name != "custom":
-            raise ValueError("Please provide a correct model_name")
-
-        if model_config:
-            self.model_config = merge_dicts(default_model_config[model], model_config)
+        if model_config is None and self.model_name != "custom":
+            if model not in default_model_config:
+                raise ValueError("Please provide a correct model_name")
+            self.model_config = default_model_config[self.model_name]
+        elif model_config is not None:
+            if self.model_name != "custom":
+                if model not in default_model_config:
+                    raise ValueError("Please provide a correct model_name")
+                self.model_config = merge_dicts(
+                    default_model_config[self.model_name], model_config
+                )
+            else:
+                self.model_config = model_config
         else:
-            self.model_config = default_model_config[model]
+            raise ValueError("Please provide a model_config for the custom model")
 
         self.list_params = self.model_config["list_params"]
         self.parent = self.list_params[0]
         self.is_onnx = self.model_config["loglik_kind"] == "approx_differentiable"
 
-        if self.model_name == "ddm":
+        if self.model_config["loglik_kind"] == "analytical":
             self.model_distribution = wfpt.WFPT
         elif self.is_onnx:
             self.model_distribution = wfpt.make_lan_distribution(
@@ -100,7 +108,6 @@ class HSSM:  # pylint: disable=R0902
             dist=self.model_distribution,
         )
 
-        self.formula = "c(rt,response)  ~ 1"
         self.priors = self.model_config["default_prior"]
 
         self._transform_params(include)  # type: ignore
