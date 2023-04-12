@@ -9,7 +9,7 @@ import pytensor
 from numpy.typing import ArrayLike
 
 from hssm import wfpt
-from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict
+from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict, merge_dicts
 from hssm.wfpt.config import default_model_config
 
 LogLikeFunc = Callable[..., ArrayLike]
@@ -65,27 +65,38 @@ class HSSM:  # pylint: disable=R0902
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
     ):
         self.data = data
-        self.model_name = model
         self._trace = None
+        self.model_name = model
 
-        if model not in ["angle", "custom", "ddm"]:
-            raise ValueError("Please provide a correct model_name")
-
-        self.model_config = (
-            model_config if model_config else default_model_config[model]
-        )
+        if model_config is None and self.model_name != "custom":
+            if model not in default_model_config:
+                raise ValueError("Please provide a correct model_name")
+            self.model_config = default_model_config[self.model_name]
+        elif model_config is not None:
+            if self.model_name != "custom":
+                if model not in default_model_config:
+                    raise ValueError("Please provide a correct model_name")
+                self.model_config = merge_dicts(
+                    default_model_config[self.model_name], model_config
+                )
+            else:
+                self.model_config = model_config
+        else:
+            raise ValueError("Please provide a model_config for the custom model")
 
         self.list_params = self.model_config["list_params"]
         self.parent = self.list_params[0]
-        if model == "ddm":
+        self.is_onnx = self.model_config["loglik_kind"] == "approx_differentiable"
+
+        if self.model_config["loglik_kind"] == "analytical":
             self.model_distribution = wfpt.WFPT
-        elif model == "angle":
+        elif self.is_onnx:
             self.model_distribution = wfpt.make_lan_distribution(
                 model=self.model_config["loglik_path"],
                 list_params=self.list_params,
                 backend=self.model_config["backend"],
             )
-        elif model == "custom":
+        elif self.model_name == "custom":
             self.model_distribution = wfpt.make_distribution(
                 loglik=loglik, list_params=self.list_params  # type: ignore
             )
@@ -97,8 +108,7 @@ class HSSM:  # pylint: disable=R0902
             dist=self.model_distribution,
         )
 
-        self.formula = self.model_config["formula"]
-        self.priors = self.model_config["prior"]
+        self.priors = self.model_config["default_prior"]
 
         self._transform_params(include)  # type: ignore
 
@@ -142,8 +152,8 @@ class HSSM:  # pylint: disable=R0902
             if param_str not in processed:
                 is_parent = param_str == self.parent
                 param = Param(
-                    name=param_str,
-                    prior=self.model_config["prior"][param_str],
+                    name=param_str,  # type: ignore
+                    prior=self.model_config["default_prior"][param_str],  # type: ignore
                     is_parent=is_parent,
                 )
                 self.params.append(param)
@@ -153,7 +163,7 @@ class HSSM:  # pylint: disable=R0902
         if len(self.params) != len(self.list_params):
             raise ValueError("Please provide a correct set of priors")
 
-        self.formula, self.priors, self.link = _parse_bambi(self.params)
+        self.formula, self.priors, self.link = _parse_bambi(self.params)  # type: ignore
 
     def sample(
         self,

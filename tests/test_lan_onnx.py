@@ -22,7 +22,7 @@ def fixture_path():
 def onnx_session():
 
     fixture_dir = Path(__file__).parent / "fixtures"
-    model_path = str(fixture_dir / "test.onnx")
+    model_path = str(fixture_dir / "angle.onnx")
 
     return onnxruntime.InferenceSession(model_path, None)
 
@@ -36,7 +36,7 @@ def test_interpret_onnx(onnx_session, fixture_path):
 
     result_onnx = onnx_session.run([output_name], {input_name: data})[0]
 
-    model = onnx.load(fixture_path / "test.onnx")
+    model = onnx.load(fixture_path / "angle.onnx")
     result_jax = np.asarray(interpret_onnx(model.graph, data)[0])
     result_pytensor = pt_interpret_onnx(model.graph, data)[0].eval()
 
