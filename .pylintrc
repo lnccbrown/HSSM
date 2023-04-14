@@ -70,7 +70,9 @@ disable=missing-docstring,
         protected-access,
         unsubscriptable-object,
         too-many-nested-blocks,
-        too-many-instance-attributes
+        too-many-instance-attributes,
+        arguments-differ,
+        arguments-renamed,
 
 
 # Enable the message, report, category or checker with the given id(s). You can

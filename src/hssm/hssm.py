@@ -77,6 +77,8 @@ class HSSM:  # pylint: disable=R0902
 
         self.list_params = self.model_config["list_params"]
         self.parent = self.list_params[0]
+        self._transform_params(include)  # type: ignore
+        params_is_reg = [param.is_regression() for param in self.params]
         if model == "ddm":
             self.model_distribution = wfpt.WFPT
         elif model == "angle":
@@ -84,6 +86,7 @@ class HSSM:  # pylint: disable=R0902
                 model=self.model_config["loglik_path"],
                 list_params=self.list_params,
                 backend=self.model_config["backend"],
+                params_is_reg=params_is_reg,
             )
         elif model == "custom":
             self.model_distribution = wfpt.make_distribution(
@@ -100,12 +103,10 @@ class HSSM:  # pylint: disable=R0902
         self.formula = self.model_config["formula"]
         self.priors = self.model_config["prior"]
 
-        self._transform_params(include)  # type: ignore
-
         self.family = bmb.Family(
             self.model_config["loglik_kind"],
             likelihood=self.likelihood,
-            link=self.link,
+            link=self.link,  # type: ignore
         )
 
         self.model = bmb.Model(
