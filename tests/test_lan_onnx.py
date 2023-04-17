@@ -29,6 +29,10 @@ def onnx_session():
 
 
 def test_interpret_onnx(onnx_session, fixture_path):
+    """
+    Tests whether both versions of interpret_onnx return similar values as does the
+    ONNX runtime.
+    """
 
     data = np.random.rand(1, 7).astype(np.float32)
 
@@ -43,10 +47,16 @@ def test_interpret_onnx(onnx_session, fixture_path):
 
     np.testing.assert_almost_equal(result_jax, result_onnx, decimal=4)
     # For some reason pytensor and onnx (jax) version results are slightly different
+    # This could be due to precision.
     np.testing.assert_almost_equal(result_pytensor, result_onnx, decimal=4)
 
 
 def test_make_jax_logp_funcs_from_onnx(fixture_path):
+    """
+    Tests whether the jax logp functions returned from jax_logp_funcs form onnx
+    reutrn the same values to interpret_onnx.
+    """
+
     model = onnx.load(fixture_path / "test.onnx")
 
     jax_logp, _, jax_logp_nojit = lan.make_jax_logp_funcs_from_onnx(
@@ -91,6 +101,11 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
 
 
 def test_make_jax_logp_ops(fixture_path):
+    """
+    Tests whether the logp Op returned from make_jax_logp_ops with different backends
+    work the same way.
+    """
+
     model = onnx.load(fixture_path / "test.onnx")
 
     jax_logp_op = lan.make_jax_logp_ops(
@@ -108,6 +123,20 @@ def test_make_jax_logp_ops(fixture_path):
         np.asarray(jax_loglik.eval()), pt_loglik.eval(), decimal=3
     )
 
+    v = pt.as_tensor_variable(np.random.rand())
+
+    params_with_v = [v, *params_all_scalars[1:]]
+    data = data.astype(np.float32)
+
+    jax_loglik = jax_logp_op(data, *params_with_v)
+    pt_loglik = pytensor_logp(data, *params_with_v)
+
+    np.testing.assert_array_almost_equal(
+        pytensor.grad(jax_loglik.sum(), wrt=v).eval(),
+        pytensor.grad(pt_loglik.sum(), wrt=v).eval(),
+        decimal=4,
+    )
+
     jax_logp_op = lan.make_jax_logp_ops(
         *lan.make_jax_logp_funcs_from_onnx(model, params_is_reg=[True] + [False] * 4)
     )
@@ -120,18 +149,13 @@ def test_make_jax_logp_ops(fixture_path):
 
     np.testing.assert_array_almost_equal(jax_loglik.eval(), pt_loglik.eval(), decimal=4)
 
-    v = pt.as_tensor_variable(np.random.rand())
+    v = pt.as_tensor_variable(np.random.rand(10).astype(np.float32))
 
-    params_with_v = [v, *params_all_scalars[1:]]
+    params_with_v = params_all_scalars[1:]
     data = data.astype(np.float32)
 
-    jax_logp_op = lan.make_jax_logp_ops(
-        *lan.make_jax_logp_funcs_from_onnx(model, params_is_reg=[False] * 5)
-    )
-    pytensor_logp = lan.make_pytensor_logp(model, params_is_reg=[False] * 5)
-
-    jax_loglik = jax_logp_op(data, *params_with_v)
-    pt_loglik = pytensor_logp(data, *params_with_v)
+    jax_loglik = jax_logp_op(data, v, *params_with_v)
+    pt_loglik = pytensor_logp(data, v, *params_with_v)
 
     np.testing.assert_array_almost_equal(
         pytensor.grad(jax_loglik.sum(), wrt=v).eval(),

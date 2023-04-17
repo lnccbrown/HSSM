@@ -41,7 +41,7 @@ def make_jax_logp_funcs_from_onnx(
         model:
             A path or url to the ONNX model, or an ONNX Model object that's
             already loaded.
-        params:
+        params_is_reg:
             A list of booleans indicating whether the parameters are regressions.
             Parameters that are regressions will not be vectorized in likelihood
             calculations.
@@ -59,12 +59,18 @@ def make_jax_logp_funcs_from_onnx(
 
     def logp(data: np.ndarray, *dist_params) -> ArrayLike:
         """
-        Computes the sum of the log-likelihoods given data and arbitrary
+        Computes the element-wise log-likelihoods given data and arbitrary
         numbers of parameters.
-        Args:
-            data: a two-column numpy array with response time and response
-            dist_params: a list of parameters used in the likelihood computation.
-        Returns:
+
+        Parameters
+        ----------
+        data:
+            A two-column numpy array with response time and response
+        dist_params:
+            A list of parameters used in the likelihood computation.
+
+        Returns
+        -------
             The sum of log-likelihoods.
         """
 
@@ -73,12 +79,29 @@ def make_jax_logp_funcs_from_onnx(
 
         return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
 
+    # The vectorization of the logp function
     vmap_logp = vmap(
         logp,
         in_axes=[0] + [0 if is_regression else None for is_regression in params_is_reg],
     )
 
     def vjp_vmap_logp(data: np.ndarray, *dist_params, gz) -> List[ArrayLike]:
+        """Computes the VJP of the log-likelihood function
+
+        Parameters
+        ----------
+        data:
+            A two-column numpy array with response time and response.
+        dist_params:
+            A list of parameters used in the likelihood computation.
+        gz:
+            The point at which the VJP is to be computed.
+
+        Returns
+        -------
+            The VJP of the log-likelihood function computed at gz.
+        """
+
         _, vjp_fn = vjp(vmap_logp, data, *dist_params)
         return vjp_fn(gz)[1:]
 
@@ -91,12 +114,18 @@ def make_jax_logp_ops(
     logp_nojit: LogLikeFunc,
 ) -> Op:
     """Wraps the JAX functions and its gradient in pytensor Ops.
-    Args:
-        logp: A JAX function that represents the feed-forward operation of the
-            LAN network.
-        logp_vjp: The Jax function that calculates the VJP of the logp function.
-        logp_nojit: A Jax function
-    Returns:
+
+    Parameters
+    ----------
+    logp:
+        A JAX function that represents the feed-forward operation of the LAN network.
+    logp_vjp:
+        The Jax function that calculates the VJP of the logp function.
+    logp_nojit:
+        The non-jit version of logp.
+
+    Returns
+    -------
         An pytensor op that wraps the feed-forward operation and can be used with
         pytensor.grad.
     """
@@ -115,9 +144,11 @@ def make_jax_logp_ops(
 
         def perform(self, node, inputs, output_storage):
             """Performs the Apply node.
-            Args:
+
+            Parameters
+            ----------
                 inputs: This is a list of data from which the values stored in
-                    output_storage are to becomputed using non-symbolic language.
+                    output_storage are to be computed using non-symbolic language.
                 output_storage: This is a list of storage cells where the output
                     is to be stored. A storage cell is a one-element list. It is
                     forbidden to change the length of the list(s) contained in
@@ -169,21 +200,23 @@ def make_jax_logp_ops(
 
 def make_pytensor_logp(
     model: str | PathLike | onnx.ModelProto, params_is_reg: List[bool]
-):
+) -> Callable[..., ArrayLike]:
     """
     Converting onnx model file to pytensor
 
     Parameters
     ----------
         model:
-            Path to onnx model file.
-        Params:
+            A path or url to the ONNX model, or an ONNX Model object that's
+            already loaded.
+        params_is_reg:
             A list of booleans indicating whether the parameters are regressions.
             Parameters that are regressions will not be vectorized in likelihood
             calculations.
 
-    Returns:
-        model applied on a data
+    Returns
+    -------
+        The logp function that applies the ONNX model to data
     """
     loaded_model: onnx.ModelProto = (
         onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
