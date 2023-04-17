@@ -171,8 +171,8 @@ def make_lan_distribution(
     if isinstance(model, (str, PathLike)):
         model = onnx.load(str(model))
     if backend == "pytensor":
-        lan_logp_aes = make_pytensor_logp(model, params_is_reg)
-        return make_distribution(lan_logp_aes, list_params, rv)
+        lan_logp_pt = make_pytensor_logp(model, params_is_reg)
+        return make_distribution(lan_logp_pt, list_params, rv)
 
     if backend == "jax":
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
