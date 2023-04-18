@@ -7,7 +7,7 @@ generation ops.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Callable, Dict, List, Tuple, Type
+from typing import Any, Callable, Dict, List, Tuple, Type, Union
 
 import bambi as bmb
 import numpy as np
@@ -28,55 +28,48 @@ LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
 
-def extract_priors(prior_dict: dict):  # type: ignore
-    """
-    Extract the lower and upper priors from the given prior dictionary.
-
-    Args:
-        prior_dict (dict): A dictionary containing the lower and upper
-         priors for each parameter.
-
-    Returns:
-        list: A list of lists containing the lower priors and the upper priors.
-    """
-    lower_priors = []
-    upper_priors = []
-
-    for key in prior_dict:
-        lower_priors.append(prior_dict[key]["lower"])
-        upper_priors.append(prior_dict[key]["upper"])
-
-    return [lower_priors, upper_priors]
-
-
 def adjust_logp(
-    logp: LogLikeFunc | pytensor.graph.Op, *dist_params, model: str = "ddm"
-):
+    logp: Union[float, pytensor.Tensor],
+    list_params: List[str],
+    *dist_params: Any,
+    model: str = "ddm",
+) -> Union[float, pytensor.Tensor]:
     """
-    Adjust the log-likelihood function based on the given distribution
-     parameters and model.
+    Adjusts the log probability of a model based on parameter boundaries.
 
     Args:
-        logp (LogLikeFunc | pytensor.graph.Op): The log-likelihood function
-         to be adjusted.
-        *dist_params: Distribution parameters used to adjust the
-         log-likelihood function.
-        model (str, optional): The model used for extracting the priors.
-         Defaults to "ddm".
+        logp: The log probability of the model.
+        list_params: A list of strings representing the names
+         of the distribution parameters.
+        dist_params: The distribution parameters.
+        model: The name of the model, default is 'ddm'.
 
     Returns:
-        LogLikeFunc | pytensor.graph.Op: The adjusted
-        log-likelihood function.
+        The adjusted log probability.
     """
-    boundaries = extract_priors(default_model_config[model]["prior"])  # type: ignore
-    out_of_bounds_val = -66.1
-    dist_params = list(dist_params)  # type: ignore
+    dist_params_dict = dict(zip(list_params, dist_params))
 
-    for i, param in enumerate(dist_params):
-        logp = pt.switch(pt.lt(param, boundaries[1][i]), logp, out_of_bounds_val)
-        logp = pt.switch(pt.ge(param, boundaries[0][i]), logp, out_of_bounds_val)
+    default_boundaries = default_model_config[model]["default_boundaries"]
+    boundaries = {
+        k: (
+            pt.constant(v[0], dtype=pytensor.config.floatX),
+            pt.constant(v[1], dtype=pytensor.config.floatX),
+        )
+        for k, v in default_boundaries.items()
+    }
+    out_of_bounds_val = pt.constant(-66.1, dtype=pytensor.config.floatX)
 
-    return logp
+    logp_adjusted = logp
+
+    for param_name, param in dist_params_dict.items():
+        lower_bound, upper_bound = boundaries[param_name]
+
+        out_of_bounds_mask = pt.bitwise_or(
+            pt.lt(param, lower_bound), pt.gt(param, upper_bound)
+        )
+        logp_adjusted = pt.where(out_of_bounds_mask, out_of_bounds_val, logp_adjusted)
+
+    return logp_adjusted
 
 
 def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
@@ -192,7 +185,8 @@ def make_distribution(
         def logp(data, *dist_params):  # pylint: disable=E0213
 
             logp = loglik(data, *dist_params)
-            return adjust_logp(logp, *dist_params)
+            print(logp)
+            return adjust_logp(logp, list_params, *dist_params)
 
     return WFPTDistribution
 
