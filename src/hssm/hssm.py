@@ -86,6 +86,10 @@ class HSSM:  # pylint: disable=R0902
 
         self.list_params = self.model_config["list_params"]
         self.parent = self.list_params[0]
+
+        self._transform_params(include)  # type: ignore
+        params_is_reg = [param.is_regression() for param in self.params]
+        
         self.is_onnx = self.model_config["loglik_kind"] == "approx_differentiable"
 
         if self.model_config["loglik_kind"] == "analytical":
@@ -95,6 +99,7 @@ class HSSM:  # pylint: disable=R0902
                 model=self.model_config["loglik_path"],
                 list_params=self.list_params,
                 backend=self.model_config["backend"],
+                params_is_reg=params_is_reg,
             )
         elif self.model_name == "custom":
             self.model_distribution = wfpt.make_distribution(
@@ -110,12 +115,10 @@ class HSSM:  # pylint: disable=R0902
 
         self.priors = self.model_config["default_prior"]
 
-        self._transform_params(include)  # type: ignore
-
         self.family = bmb.Family(
             self.model_config["loglik_kind"],
             likelihood=self.likelihood,
-            link=self.link,
+            link=self.link,  # type: ignore
         )
 
         self.model = bmb.Model(
