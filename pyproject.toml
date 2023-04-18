@@ -85,5 +85,5 @@ testpaths = [
 ignore_missing_imports = true
 
 [build-system]
-requires = ["poetry-core>=1.2.0"]
+requires = ["poetry-core>=1.4.0"]
 build-backend = "poetry.core.masonry.api"

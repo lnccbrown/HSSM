@@ -149,8 +149,9 @@ WFPT = make_distribution(log_pdf_sv, ["v", "sv", "a", "z", "t"])
 def make_lan_distribution(
     list_params: List[str],
     model: str | PathLike | onnx.ModelProto,
+    params_is_reg: List[bool],
+    backend: str = "pytensor",
     rv: Type[RandomVariable] | None = None,
-    backend: str | None = "pytensor",
 ) -> Type[pm.Distribution]:
     """Produces a PyMC distribution that uses the provided base or ONNX model as
     its log-likelihood function.
@@ -170,13 +171,13 @@ def make_lan_distribution(
     if isinstance(model, (str, PathLike)):
         model = onnx.load(str(model))
     if backend == "pytensor":
-        lan_logp_aes = make_pytensor_logp(model)
-        return make_distribution(lan_logp_aes, list_params, rv)
+        lan_logp_pt = make_pytensor_logp(model, params_is_reg)
+        return make_distribution(lan_logp_pt, list_params, rv)
 
     if backend == "jax":
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
             model,
-            n_params=len(list_params),
+            params_is_reg,
         )
         lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
         return make_distribution(lan_logp_jax, list_params, rv)

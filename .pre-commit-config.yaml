@@ -16,10 +16,13 @@ repos:
           - --expand-star-imports
           - --remove-duplicate-keys
           - --remove-unused-variables
-  - repo: https://github.com/pycqa/pylint
-    rev: pylint-2.6.0
+  - repo: local
     hooks:
       - id: pylint
+        name: pylint
+        entry: pylint
+        language: system
+        types: [python]
         exclude: tests/|notebooks/
         args:
           - "-rn" # Only display messages
@@ -45,7 +48,7 @@ repos:
             build|
             dist"""
   - repo: https://github.com/PyCQA/isort
-    rev: 5.10.1
+    rev: 5.12.0
     hooks:
       - id: isort
   - repo: https://github.com/pre-commit/mirrors-mypy
