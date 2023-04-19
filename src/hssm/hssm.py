@@ -113,8 +113,6 @@ class HSSM:  # pylint: disable=R0902
             dist=self.model_distribution,
         )
 
-        self.priors = self.model_config["default_prior"]
-
         self.family = bmb.Family(
             self.model_config["loglik_kind"],
             likelihood=self.likelihood,
