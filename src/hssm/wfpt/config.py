@@ -11,7 +11,7 @@ default_model_config: Any = {
         "backend": "pytensor",
         "default_prior": {
             "v": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-            "sv": {"name": "Uniform", "lower": 0.0, "upper": 1.0},
+            "sv": 0,
             "a": {"name": "Uniform", "lower": 0.30, "upper": 2.5},
             "z": {"name": "Uniform", "lower": 0.10, "upper": 0.9},
             "t": {"name": "Uniform", "lower": 0.0, "upper": 2.0},
