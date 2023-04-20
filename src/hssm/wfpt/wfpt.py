@@ -32,7 +32,7 @@ def adjust_logp(
     logp: Any,
     list_params: List[str],
     *dist_params: Any,
-    model: Optional[str] = "custom",
+    model: str = "custom",
     custom_boundary: Optional[Dict[str, Tuple[float, float]]] = None,
 ):
     """
