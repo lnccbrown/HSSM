@@ -75,8 +75,9 @@ class HSSM:  # pylint: disable=R0902
             self.model_config = model_config
         else:
             if model not in default_model_config:
+                supported_models = list(default_model_config.keys())
                 raise ValueError(
-                    f"`model` must be one of {default_model_config.keys()} or 'custom'."
+                    f"`model` must be one of {supported_models} or 'custom'."
                 )
             self.model_config = (
                 default_model_config[model]
