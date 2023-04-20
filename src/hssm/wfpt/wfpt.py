@@ -29,12 +29,12 @@ LogLikeGrad = Callable[..., ArrayLike]
 
 
 def adjust_logp(
-    logp: Union[float, pt],
+    logp: Union[np.ndarray, pt, float],
     list_params: List[str],
     *dist_params: Any,
     model: str = "ddm",
     custom_boundary: Optional[Dict[str, Tuple[float, float]]] = None,
-) -> Union[float, pt]:
+):
     """
     Adjusts the log probability of a model based on parameter boundaries.
 
@@ -150,7 +150,7 @@ def make_distribution(
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: List[str],
     rv: Type[RandomVariable] | None = None,
-    model: str = "custom",  # Add model parameter with a default value
+    model: str = "custom",
 ) -> Type[pm.Distribution]:
     """Constructs a pymc.Distribution from a log-likelihood function and a
     RandomVariable op.
