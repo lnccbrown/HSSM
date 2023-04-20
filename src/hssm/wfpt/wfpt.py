@@ -32,7 +32,7 @@ def adjust_logp(
     logp: Any,
     list_params: List[str],
     *dist_params: Any,
-    model: str = "ddm",
+    model: Optional[str] = "custom",
     custom_boundary: Optional[Dict[str, Tuple[float, float]]] = None,
 ):
     """
@@ -210,7 +210,7 @@ def make_lan_distribution(
     model: str | PathLike | onnx.ModelProto,
     params_is_reg: List[bool],
     backend: str = "pytensor",
-    model_name: str = "angle",
+    model_name: Optional[str] = "angle",
     rv: Type[RandomVariable] | None = None,
 ) -> Type[pm.Distribution]:
     """Produces a PyMC distribution that uses the provided base or ONNX model as
