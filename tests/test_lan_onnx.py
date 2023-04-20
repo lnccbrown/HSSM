@@ -111,7 +111,7 @@ def test_make_jax_logp_ops(fixture_path):
     jax_logp_op = lan.make_jax_logp_ops(
         *lan.make_jax_logp_funcs_from_onnx(model, params_is_reg=[False] * 5)
     )
-    pytensor_logp = lan.make_pytensor_logp(model, params_is_reg=[False] * 5)
+    pytensor_logp = lan.make_pytensor_logp(model)
 
     data = np.random.rand(10, 2)
     params_all_scalars = np.random.rand(5).astype(np.float32)
@@ -140,7 +140,7 @@ def test_make_jax_logp_ops(fixture_path):
     jax_logp_op = lan.make_jax_logp_ops(
         *lan.make_jax_logp_funcs_from_onnx(model, params_is_reg=[True] + [False] * 4)
     )
-    pytensor_logp = lan.make_pytensor_logp(model, params_is_reg=[True] + [False] * 4)
+    pytensor_logp = lan.make_pytensor_logp(model)
 
     v = np.random.rand(10)
 

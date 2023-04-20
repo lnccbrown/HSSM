@@ -252,7 +252,7 @@ def make_jax_logp_ops(
 
 
 def make_pytensor_logp(
-    model: str | PathLike | onnx.ModelProto, params_is_reg: list[bool]
+    model: str | PathLike | onnx.ModelProto,
 ) -> Callable[..., ArrayLike]:
     """
     Converting onnx model file to pytensor
@@ -280,7 +280,7 @@ def make_pytensor_logp(
 
         # Specify input layer of MLP
         data = data.reshape((-1, 2))
-        inputs = pt.zeros((data.shape[0], len(params_is_reg) + 2))
+        inputs = pt.zeros((data.shape[0], len(dist_params) + 2))
         for i, dist_param in enumerate(dist_params):
             inputs = pt.set_subtensor(
                 inputs[:, i],
