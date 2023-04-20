@@ -7,7 +7,7 @@ generation ops.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 import bambi as bmb
 import numpy as np
@@ -29,7 +29,7 @@ LogLikeGrad = Callable[..., ArrayLike]
 
 
 def adjust_logp(
-    logp: Union[np.ndarray, float],
+    logp: Any,
     list_params: List[str],
     *dist_params: Any,
     model: str = "ddm",
