@@ -100,10 +100,13 @@ class HSSM:  # pylint: disable=R0902
                 list_params=self.list_params,
                 backend=self.model_config["backend"],
                 params_is_reg=params_is_reg,
+                model_name=self.model_name,
             )
         elif self.model_name == "custom":
             self.model_distribution = wfpt.make_distribution(
-                loglik=loglik, list_params=self.list_params  # type: ignore
+                loglik=loglik,
+                list_params=self.list_params,  # type: ignore
+                model=self.model_name,
             )
 
         self.likelihood = bmb.Likelihood(
