@@ -29,7 +29,7 @@ LogLikeGrad = Callable[..., ArrayLike]
 
 
 def adjust_logp(
-    logp: Union[np.ndarray, pt, float],
+    logp: Union[np.ndarray, float],
     list_params: List[str],
     *dist_params: Any,
     model: str = "ddm",
@@ -210,6 +210,7 @@ def make_lan_distribution(
     model: str | PathLike | onnx.ModelProto,
     params_is_reg: List[bool],
     backend: str = "pytensor",
+    model_name: str = "angle",
     rv: Type[RandomVariable] | None = None,
 ) -> Type[pm.Distribution]:
     """Produces a PyMC distribution that uses the provided base or ONNX model as
@@ -231,7 +232,7 @@ def make_lan_distribution(
         model = onnx.load(str(model))
     if backend == "pytensor":
         lan_logp_pt = make_pytensor_logp(model, params_is_reg)
-        return make_distribution(lan_logp_pt, list_params, rv, model="angle")
+        return make_distribution(lan_logp_pt, list_params, rv, model=model_name)
 
     if backend == "jax":
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
@@ -239,7 +240,7 @@ def make_lan_distribution(
             params_is_reg,
         )
         lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
-        return make_distribution(lan_logp_jax, list_params, rv, model="angle")
+        return make_distribution(lan_logp_jax, list_params, rv, model=model_name)
 
     raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")
 
