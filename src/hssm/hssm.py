@@ -89,7 +89,7 @@ class HSSM:  # pylint: disable=R0902
 
         self._transform_params(include)  # type: ignore
         params_is_reg = [param.is_regression() for param in self.params]
-        
+
         self.is_onnx = self.model_config["loglik_kind"] == "approx_differentiable"
 
         if self.model_config["loglik_kind"] == "analytical":
@@ -120,7 +120,7 @@ class HSSM:  # pylint: disable=R0902
         )
 
         self.model = bmb.Model(
-            self.formula, data, family=self.family, priors=self.priors
+            self.formula, data, family=self.family, priors=self.priors  # type: ignore
         )
 
         self._aliases = get_alias_dict(self.model, self.parent_param)
