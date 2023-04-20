@@ -29,12 +29,12 @@ LogLikeGrad = Callable[..., ArrayLike]
 
 
 def adjust_logp(
-    logp: Union[float, pytensor.Tensor],
+    logp: Union[float, pt],
     list_params: List[str],
     *dist_params: Any,
     model: str = "ddm",
     custom_boundary: Optional[Dict[str, Tuple[float, float]]] = None,
-) -> Union[float, pytensor.Tensor]:
+) -> Union[float, pt]:
     """
     Adjusts the log probability of a model based on parameter boundaries.
 
