@@ -25,6 +25,8 @@ def fast_eval(var):
 
 
 def merge_dicts(dict1: dict, dict2: dict) -> dict:
+    """Recursively merges two dictionaries."""
+
     merged = dict1.copy()
     for key, value in dict2.items():
         if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
@@ -215,7 +217,7 @@ class Param:
 
 def _parse_bambi(
     params: List[Param],
-) -> Tuple[bmb.Formula, Dict | None, Dict[str, str | bmb.Link] | str | None]:
+) -> tuple[bmb.Formula, Dict | None, Dict[str, str | bmb.Link] | str]:
     """From a list of Params, retrieve three items that helps with bambi model building
 
     Parameters
@@ -246,12 +248,15 @@ def _parse_bambi(
     links: Dict[str, str | bmb.Link] = {}
     params_copy = params.copy()
 
+    parent_param = None
+
     if num_parents == 1:
         for idx, param in enumerate(params):
             if param.is_parent():
                 parent_param = params_copy.pop(idx)
                 break
 
+        assert parent_param is not None
         params_copy.insert(0, parent_param)
 
     for param in params_copy:
@@ -271,7 +276,7 @@ def _parse_bambi(
     )
     result_priors = None if not priors else priors
 
-    result_links: Dict | str | None = "identity" if not links else links
+    result_links: Dict | str = "identity" if not links else links
 
     return result_formula, result_priors, result_links
 
