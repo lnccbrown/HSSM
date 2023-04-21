@@ -42,7 +42,7 @@ def adjust_logp(
         list_params: A list of strings representing the names
          of the distribution parameters.
         dist_params: The distribution parameters.
-        model: The name of the model, default is 'ddm'.
+        default_boundaries: Boundaries for parameters in the likelihood.
 
     Returns:
         The adjusted log probability.
@@ -56,7 +56,7 @@ def adjust_logp(
             pt.constant(v[0], dtype=pytensor.config.floatX),
             pt.constant(v[1], dtype=pytensor.config.floatX),
         )
-        for k, v in default_boundaries.items()
+        for k, v in default_boundaries.items()  # type: ignore
     }
 
     for param_name, param in dist_params_dict.items():
@@ -159,6 +159,8 @@ def make_distribution(
     rv
         A RandomVariable Op (a class, not an instance). If None, a default will be
         used.
+
+
 
     Returns
     -------
