@@ -2,9 +2,12 @@
 Default configurations for models in HSSM class
 """
 
-from typing import Any
+from pathlib import Path
 
-default_model_config: Any = {
+# Ensure the absolute paths of the models are correct
+ONNX_Model_Path = Path(__file__).parent / "lan/onnx_models"
+
+default_model_config: dict = {
     "ddm": {
         "loglik_kind": "analytical",
         "list_params": ["v", "sv", "a", "z", "t"],
@@ -26,7 +29,7 @@ default_model_config: Any = {
     },
     "angle": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": "hssm/onnx_models/angle.onnx",
+        "loglik_path": ONNX_Model_Path / "angle.onnx",
         "list_params": ["v", "a", "z", "t", "theta"],
         "backend": "jax",
         "default_prior": {
@@ -46,7 +49,7 @@ default_model_config: Any = {
     },
     "levy": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": "hssm/onnx_models/levy.onnx",
+        "loglik_path": ONNX_Model_Path / "levy.onnx",
         "list_params": ["v", "a", "z", "alpha", "t"],
         "backend": "jax",
         "default_prior": {
@@ -66,7 +69,7 @@ default_model_config: Any = {
     },
     "ornstein": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": "hssm/onnx_models/ornstein.onnx",
+        "loglik_path": ONNX_Model_Path / "ornstein.onnx",
         "list_params": ["v", "a", "z", "g", "t"],
         "backend": "jax",
         "default_prior": {
@@ -86,7 +89,7 @@ default_model_config: Any = {
     },
     "weibull": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": "src/hssm/onnx_models/weibull.onnx",
+        "loglik_path": ONNX_Model_Path / "weibull.onnx",
         "list_params": ["v", "a", "z", "t", "alpha", "beta"],
         "backend": "jax",
         "default_prior": {
@@ -108,7 +111,7 @@ default_model_config: Any = {
     },
     "race_no_bias_angle_4": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": "hssm/onnx_models/race_no_bias_angle_4.onnx",
+        "loglik_path": ONNX_Model_Path / "race_no_bias_angle_4.onnx",
         "list_params": ["v0", "v1", "v2", "v3", "a", "z", "ndt", "theta"],
         "backend": "jax",
         "default_prior": {
@@ -134,7 +137,7 @@ default_model_config: Any = {
     },
     "ddm_seq2_no_bias": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": "hssm/onnx_models/ddm_seq2_no_bias.onnx",
+        "loglik_path": ONNX_Model_Path / "ddm_seq2_no_bias.onnx",
         "list_params": ["vh", "vl1", "vl2", "a", "t"],
         "backend": "jax",
         "default_prior": {
