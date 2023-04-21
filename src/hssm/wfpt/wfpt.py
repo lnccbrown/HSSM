@@ -7,7 +7,7 @@ generation ops.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Callable, Dict, List, Tuple, Type
+from typing import Callable, Type
 
 import bambi as bmb
 import numpy as np
@@ -26,7 +26,7 @@ LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
 
-def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
+def make_wfpt_rv(list_params: list[str]) -> Type[RandomVariable]:
     """Builds a RandomVariable Op according to the list of parameters.
 
     Args:
@@ -47,9 +47,9 @@ def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
         # to get around the support checking in PyMC that would result in error
         ndim_supp: int = 0
 
-        ndims_params: List[int] = [0 for _ in list_params]
+        ndims_params: list[int] = [0 for _ in list_params]
         dtype: str = "floatX"
-        _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
+        _print_name: tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
         _list_params = list_params
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
@@ -62,7 +62,7 @@ def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
             *args,
             model: str = "ddm",
             size: int = 500,
-            theta: List[str] | None = None,
+            theta: list[str] | None = None,
             **kwargs,
         ) -> np.ndarray:
             """Generates random variables from this distribution."""
@@ -91,7 +91,7 @@ def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
 
 def make_distribution(
     loglik: LogLikeFunc | pytensor.graph.Op,
-    list_params: List[str],
+    list_params: list[str],
     rv: Type[RandomVariable] | None = None,
 ) -> Type[pm.Distribution]:
     """Constructs a pymc.Distribution from a log-likelihood function and a
@@ -147,34 +147,50 @@ WFPT = make_distribution(log_pdf_sv, ["v", "sv", "a", "z", "t"])
 
 
 def make_lan_distribution(
-    list_params: List[str],
+    list_params: list[str],
     model: str | PathLike | onnx.ModelProto,
-    params_is_reg: List[bool],
     backend: str = "pytensor",
     rv: Type[RandomVariable] | None = None,
+    params_is_reg: list[bool] | None = None,
 ) -> Type[pm.Distribution]:
     """Produces a PyMC distribution that uses the provided base or ONNX model as
     its log-likelihood function.
 
-    Args:
-        model: The path of the ONNX model, or one already loaded in memory.
-        backend: Whether to use "pytensor" or "jax" as the backend of the
-            log-likelihood computation. If `jax`, the function will be wrapped in an
-            pytensor Op.
-        list_params: A list of the names of the parameters following the order of
-            how they are fed to the LAN.
-        rv: The RandomVariable Op used for posterior sampling.
-    Returns:
+    Parameters
+    ----------
+
+    list_params
+        A list of the names of the parameters following the order of how they are fed
+        to the LAN.
+    model
+        The path of the ONNX model, or one already loaded in memory.
+    backend
+        Whether to use "pytensor" or "jax" as the backend of the
+        log-likelihood computation. If `jax`, the function will be wrapped in an
+        pytensor Op.
+    rv
+        The RandomVariable Op used for posterior sampling.
+    param_is_reg
+        A list of booleans indicating whether each parameter in the
+        corresponding position in `list_params` is a regression.
+
+    Returns
+    -------
         A PyMC Distribution class that uses the ONNX model as its log-likelihood
         function.
     """
     if isinstance(model, (str, PathLike)):
         model = onnx.load(str(model))
     if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp(model, params_is_reg)
+        lan_logp_pt = make_pytensor_logp(model)
         return make_distribution(lan_logp_pt, list_params, rv)
 
     if backend == "jax":
+        if params_is_reg is None:
+            raise ValueError(
+                "Please supply a list of bools to `params_is_reg` to indicate whether"
+                + " each paramter is a regression."
+            )
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
             model,
             params_is_reg,
@@ -187,25 +203,32 @@ def make_lan_distribution(
 
 def make_family(
     dist: Type[pm.Distribution],
-    list_params: List[str],
-    link: str | Dict[str, bmb.families.Link],
+    list_params: list[str],
+    link: str | dict[str, bmb.families.Link],
     parent: str = "v",
     likelihood_name: str = "WFPT Likelihood",
     family_name="WFPT Family",
 ) -> bmb.Family:
     """Builds a family in bambi.
 
-    Args:
-        dist (pm.Distribution): a pm.Distribution class (not an instance).
-        list_params (List[str]): a list of parameters for the likelihood function.
-        link (str | Dict[str, bmb.families.Link]): a link function or a dictionary of
-            parameter: link functions.
-        parent (str): the parent parameter of the likelihood function. Defaults to v.
-        likelihood_name (str): the name of the likelihood function.
-        family_name (str): the name of the family.
+    Parameters
+    ----------
+    dist
+        A pm.Distribution class (not an instance).
+    list_params
+        A list of parameters for the likelihood function.
+    link
+        A link function or a dictionary of parameter: link functions.
+    parent
+        The parent parameter of the likelihood function. Defaults to v.
+    likelihood_name
+        the name of the likelihood function.
+    family_name
+        the name of the family.
 
-    Returns:
-        bmb.Family: an instance of a bambi family.
+    Returns
+    -------
+        An instance of a bambi family.
     """
 
     likelihood = bmb.Likelihood(
