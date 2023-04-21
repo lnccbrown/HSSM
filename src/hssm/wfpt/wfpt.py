@@ -156,15 +156,26 @@ def make_lan_distribution(
     """Produces a PyMC distribution that uses the provided base or ONNX model as
     its log-likelihood function.
 
-    Args:
-        model: The path of the ONNX model, or one already loaded in memory.
-        backend: Whether to use "pytensor" or "jax" as the backend of the
-            log-likelihood computation. If `jax`, the function will be wrapped in an
-            pytensor Op.
-        list_params: A list of the names of the parameters following the order of
-            how they are fed to the LAN.
-        rv: The RandomVariable Op used for posterior sampling.
-    Returns:
+    Parameters
+    ----------
+
+    list_params
+        A list of the names of the parameters following the order of how they are fed
+        to the LAN.
+    model
+        The path of the ONNX model, or one already loaded in memory.
+    backend
+        Whether to use "pytensor" or "jax" as the backend of the
+        log-likelihood computation. If `jax`, the function will be wrapped in an
+        pytensor Op.
+    rv
+        The RandomVariable Op used for posterior sampling.
+    param_is_reg
+        A list of booleans indicating whether each parameter in the
+        corresponding position in `list_params` is a regression.
+
+    Returns
+    -------
         A PyMC Distribution class that uses the ONNX model as its log-likelihood
         function.
     """
@@ -200,17 +211,24 @@ def make_family(
 ) -> bmb.Family:
     """Builds a family in bambi.
 
-    Args:
-        dist (pm.Distribution): a pm.Distribution class (not an instance).
-        list_params (List[str]): a list of parameters for the likelihood function.
-        link (str | Dict[str, bmb.families.Link]): a link function or a dictionary of
-            parameter: link functions.
-        parent (str): the parent parameter of the likelihood function. Defaults to v.
-        likelihood_name (str): the name of the likelihood function.
-        family_name (str): the name of the family.
+    Parameters
+    ----------
+    dist
+        A pm.Distribution class (not an instance).
+    list_params
+        A list of parameters for the likelihood function.
+    link
+        A link function or a dictionary of parameter: link functions.
+    parent
+        The parent parameter of the likelihood function. Defaults to v.
+    likelihood_name
+        the name of the likelihood function.
+    family_name
+        the name of the family.
 
-    Returns:
-        bmb.Family: an instance of a bambi family.
+    Returns
+    -------
+        An instance of a bambi family.
     """
 
     likelihood = bmb.Likelihood(
