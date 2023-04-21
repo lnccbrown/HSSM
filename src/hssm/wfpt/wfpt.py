@@ -7,7 +7,7 @@ generation ops.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Tuple, Type
 
 import bambi as bmb
 import numpy as np
@@ -32,8 +32,7 @@ def adjust_logp(
     logp: Any,
     list_params: List[str],
     *dist_params: Any,
-    model: str = "custom",
-    custom_boundary: Optional[Dict[str, Tuple[float, float]]] = None,
+    default_boundaries: dict | None = None,
 ):
     """
     Adjusts the log probability of a model based on parameter boundaries.
@@ -48,13 +47,10 @@ def adjust_logp(
     Returns:
         The adjusted log probability.
     """
-    if model == "custom" and custom_boundary is None:
-        raise ValueError(
-            "For 'custom' model, a custom_boundary dictionary must be provided."
-        )
+    out_of_bounds_val = pt.constant(-66.1, dtype=pytensor.config.floatX)
+
     dist_params_dict = dict(zip(list_params, dist_params))
 
-    default_boundaries = default_model_config[model]["default_boundaries"]
     boundaries = {
         k: (
             pt.constant(v[0], dtype=pytensor.config.floatX),
@@ -62,9 +58,6 @@ def adjust_logp(
         )
         for k, v in default_boundaries.items()
     }
-    out_of_bounds_val = pt.constant(-66.1, dtype=pytensor.config.floatX)
-
-    logp_adjusted = logp
 
     for param_name, param in dist_params_dict.items():
         lower_bound, upper_bound = boundaries[param_name]
@@ -72,13 +65,10 @@ def adjust_logp(
         out_of_bounds_mask = pt.bitwise_or(
             pt.lt(param, lower_bound), pt.gt(param, upper_bound)
         )
-        # Ensure logp_adjusted is a tensor before accessing its shape
-        if isinstance(logp_adjusted, float):
-            logp_adjusted = pt.constant(logp_adjusted, dtype=pytensor.config.floatX)
 
-        broadcasted_mask = pt.broadcast_to(out_of_bounds_mask, logp_adjusted.shape)
+        broadcasted_mask = pt.broadcast_to(out_of_bounds_mask, logp.shape)
 
-        logp_adjusted = pt.where(broadcasted_mask, out_of_bounds_val, logp_adjusted)
+        logp_adjusted = pt.where(broadcasted_mask, out_of_bounds_val, logp)
 
     return logp_adjusted
 
@@ -150,7 +140,8 @@ def make_distribution(
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: List[str],
     rv: Type[RandomVariable] | None = None,
-    model: str = "custom",
+    model_name: str = "custom",
+    custom_boundaries: dict | None = None,
 ) -> Type[pm.Distribution]:
     """Constructs a pymc.Distribution from a log-likelihood function and a
     RandomVariable op.
@@ -173,6 +164,14 @@ def make_distribution(
     -------
         A pymc.Distribution that uses the log-likelihood function.
     """
+    if model_name == "custom" and custom_boundaries is None:
+        raise ValueError(
+            "For 'custom' model, a custom_boundary dictionary must be provided."
+        )
+    if model_name != "custom":
+        default_boundaries = default_model_config[model_name]["default_boundaries"]
+    else:
+        default_boundaries = custom_boundaries
 
     random_variable = make_wfpt_rv(list_params) if not rv else rv
 
@@ -197,12 +196,14 @@ def make_distribution(
         def logp(data, *dist_params):  # pylint: disable=E0213
 
             logp = loglik(data, *dist_params)
-            return adjust_logp(logp, list_params, *dist_params, model=model)
+            return adjust_logp(
+                logp, list_params, *dist_params, default_boundaries=default_boundaries
+            )
 
     return WFPTDistribution
 
 
-WFPT = make_distribution(log_pdf_sv, ["v", "sv", "a", "z", "t"], model="ddm")
+WFPT = make_distribution(log_pdf_sv, ["v", "sv", "a", "z", "t"], model_name="ddm")
 
 
 def make_lan_distribution(
@@ -210,7 +211,8 @@ def make_lan_distribution(
     model: str | PathLike | onnx.ModelProto,
     params_is_reg: List[bool],
     backend: str = "pytensor",
-    model_name: Optional[str] = "angle",
+    model_name: str = "angle",
+    custom_boundaries: dict | None = None,
     rv: Type[RandomVariable] | None = None,
 ) -> Type[pm.Distribution]:
     """Produces a PyMC distribution that uses the provided base or ONNX model as
@@ -232,7 +234,13 @@ def make_lan_distribution(
         model = onnx.load(str(model))
     if backend == "pytensor":
         lan_logp_pt = make_pytensor_logp(model, params_is_reg)
-        return make_distribution(lan_logp_pt, list_params, rv, model=model_name)
+        return make_distribution(
+            lan_logp_pt,
+            list_params,
+            rv,
+            model_name=model_name,
+            custom_boundaries=custom_boundaries,
+        )
 
     if backend == "jax":
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
@@ -240,7 +248,13 @@ def make_lan_distribution(
             params_is_reg,
         )
         lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
-        return make_distribution(lan_logp_jax, list_params, rv, model=model_name)
+        return make_distribution(
+            lan_logp_jax,
+            list_params,
+            rv,
+            model_name=model_name,
+            custom_boundaries=custom_boundaries,
+        )
 
     raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")
 

@@ -106,7 +106,7 @@ class HSSM:  # pylint: disable=R0902
             self.model_distribution = wfpt.make_distribution(
                 loglik=loglik,
                 list_params=self.list_params,  # type: ignore
-                model=self.model_name,
+                model_name=self.model_name,
             )
 
         self.likelihood = bmb.Likelihood(
