@@ -7,7 +7,7 @@ generation ops.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Callable, Dict, List, Tuple, Type
+from typing import Callable, Type
 
 import bambi as bmb
 import numpy as np
@@ -26,7 +26,7 @@ LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
 
-def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
+def make_wfpt_rv(list_params: list[str]) -> Type[RandomVariable]:
     """Builds a RandomVariable Op according to the list of parameters.
 
     Args:
@@ -47,9 +47,9 @@ def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
         # to get around the support checking in PyMC that would result in error
         ndim_supp: int = 0
 
-        ndims_params: List[int] = [0 for _ in list_params]
+        ndims_params: list[int] = [0 for _ in list_params]
         dtype: str = "floatX"
-        _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
+        _print_name: tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
         _list_params = list_params
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
@@ -62,7 +62,7 @@ def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
             *args,
             model: str = "ddm",
             size: int = 500,
-            theta: List[str] | None = None,
+            theta: list[str] | None = None,
             **kwargs,
         ) -> np.ndarray:
             """Generates random variables from this distribution."""
@@ -91,7 +91,7 @@ def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
 
 def make_distribution(
     loglik: LogLikeFunc | pytensor.graph.Op,
-    list_params: List[str],
+    list_params: list[str],
     rv: Type[RandomVariable] | None = None,
 ) -> Type[pm.Distribution]:
     """Constructs a pymc.Distribution from a log-likelihood function and a
@@ -147,11 +147,11 @@ WFPT = make_distribution(log_pdf_sv, ["v", "sv", "a", "z", "t"])
 
 
 def make_lan_distribution(
-    list_params: List[str],
+    list_params: list[str],
     model: str | PathLike | onnx.ModelProto,
     backend: str = "pytensor",
     rv: Type[RandomVariable] | None = None,
-    params_is_reg: List[bool] | None = None,
+    params_is_reg: list[bool] | None = None,
 ) -> Type[pm.Distribution]:
     """Produces a PyMC distribution that uses the provided base or ONNX model as
     its log-likelihood function.
@@ -203,8 +203,8 @@ def make_lan_distribution(
 
 def make_family(
     dist: Type[pm.Distribution],
-    list_params: List[str],
-    link: str | Dict[str, bmb.families.Link],
+    list_params: list[str],
+    link: str | dict[str, bmb.families.Link],
     parent: str = "v",
     likelihood_name: str = "WFPT Likelihood",
     family_name="WFPT Family",

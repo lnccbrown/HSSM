@@ -10,7 +10,7 @@ _parse_bambi().
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, NewType, Tuple
+from typing import Any, Iterable, NewType
 
 import bambi as bmb
 from bambi.terms import CommonTerm, GroupSpecificTerm
@@ -48,10 +48,10 @@ class Param:
         self,
         name: str,
         prior: float
-        | Dict[str, Any]
+        | dict[str, Any]
         | bmb.Prior
-        | Dict[str, Dict[str, Any]]
-        | Dict[str, bmb.Prior]
+        | dict[str, dict[str, Any]]
+        | dict[str, bmb.Prior]
         | None = None,
         formula: str | None = None,
         link: str | bmb.Link | None = None,
@@ -143,7 +143,7 @@ class Param:
 
     def _parse_bambi(
         self,
-    ) -> Tuple:
+    ) -> tuple:
         """Returns a 3-tuple that helps with constructing the Bambi model.
 
         Returns
@@ -216,8 +216,8 @@ class Param:
 
 
 def _parse_bambi(
-    params: List[Param],
-) -> tuple[bmb.Formula, Dict | None, Dict[str, str | bmb.Link] | str]:
+    params: list[Param],
+) -> tuple[bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
     """From a list of Params, retrieve three items that helps with bambi model building
 
     Parameters
@@ -244,8 +244,8 @@ def _parse_bambi(
     assert num_parents <= 1, "More than one parent is specified!"
 
     formulas = []
-    priors: Dict[str, Any] = {}
-    links: Dict[str, str | bmb.Link] = {}
+    priors: dict[str, Any] = {}
+    links: dict[str, str | bmb.Link] = {}
     params_copy = params.copy()
 
     parent_param = None
@@ -276,12 +276,12 @@ def _parse_bambi(
     )
     result_priors = None if not priors else priors
 
-    result_links: Dict | str = "identity" if not links else links
+    result_links: dict | str = "identity" if not links else links
 
     return result_formula, result_priors, result_links
 
 
-def make_alias_dict_from_parent(parent: Param) -> Dict[str, str]:
+def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
     """From a Param object that represents a parent parameter in Bambi,
     returns a dict that represents how Bambi should alias its parameters to
     make it more HSSM-friendly.
@@ -315,7 +315,7 @@ def make_alias_dict_from_parent(parent: Param) -> Dict[str, str]:
     return result_dict
 
 
-def get_alias_dict(model: bmb.Model, parent: Param) -> Dict[str, str | Dict]:
+def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
     """Iterates through a list of Param objects, and aliases a Bambi model's parameters
     to make it more HSSM-friendly.
 
@@ -330,7 +330,7 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> Dict[str, str | Dict]:
     parent_name = parent.name
 
     if len(model.distributional_components) == 1:
-        alias_dict: Dict[str, str | Dict] = {
+        alias_dict: dict[str, str | dict] = {
             "c(rt, response)": "rt, response"
         }  # type: ignore
         if not parent.is_regression():
