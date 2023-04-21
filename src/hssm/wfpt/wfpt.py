@@ -159,9 +159,11 @@ def make_distribution(
     rv
         A RandomVariable Op (a class, not an instance). If None, a default will be
         used.
-
-
-
+    model_name
+        The name of the model (a string).
+    custom_boundaries
+        A dictionary with parameters as keys (a string) and its boundaries as values.
+        Example: {"parameter": (lower_boundary, upper_boundary)}.
     Returns
     -------
         A pymc.Distribution that uses the log-likelihood function.
@@ -227,7 +229,13 @@ def make_lan_distribution(
             pytensor Op.
         list_params: A list of the names of the parameters following the order of
             how they are fed to the LAN.
-        rv: The RandomVariable Op used for posterior sampling.
+        rv
+            The RandomVariable Op used for posterior sampling.
+        model_name
+            The name of the model (a string).
+        custom_boundaries
+            A dictionary with parameters as keys (a string) and its boundaries
+            as values.Example: {"parameter": (lower_boundary, upper_boundary)}.
     Returns:
         A PyMC Distribution class that uses the ONNX model as its log-likelihood
         function.
