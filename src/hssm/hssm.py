@@ -104,7 +104,7 @@ class HSSM:  # pylint: disable=R0902
             )
         elif self.model_name == "custom":
             self.model_distribution = wfpt.make_distribution(
-                loglik=loglik,
+                loglik=loglik,  # type: ignore
                 list_params=self.list_params,  # type: ignore
                 model_name=self.model_name,
                 custom_boundaries=self.model_config["default_boundaries"],
