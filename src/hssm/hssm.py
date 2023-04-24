@@ -96,7 +96,7 @@ class HSSM:  # pylint: disable=R0902
         params_is_reg = [param.is_regression() for param in self.params]
 
         self.is_onnx = self.model_config["loglik_kind"] == "approx_differentiable"
-        boundaries = model_config["default_boundaries"]
+        boundaries = self.model_config["default_boundaries"]
         if self.model_config["loglik_kind"] == "analytical":
             self.model_distribution = wfpt.WFPT
         elif self.is_onnx:
