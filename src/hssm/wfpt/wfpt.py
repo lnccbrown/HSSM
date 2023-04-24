@@ -7,7 +7,7 @@ generation ops.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Any, Callable, Dict, List, Tuple, Type
+from typing import Any, Callable, List, Type
 
 import bambi as bmb
 import numpy as np
@@ -73,7 +73,7 @@ def adjust_logp(
     return logp_adjusted
 
 
-def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
+def make_model_rv(list_params: List[str]) -> Type[RandomVariable]:
     """Builds a RandomVariable Op according to the list of parameters.
 
     Args:
@@ -96,7 +96,7 @@ def make_wfpt_rv(list_params: List[str]) -> Type[RandomVariable]:
 
         ndims_params: List[int] = [0 for _ in list_params]
         dtype: str = "floatX"
-        _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
+        _print_name: tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
         _list_params = list_params
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
@@ -140,8 +140,7 @@ def make_distribution(
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: List[str],
     rv: Type[RandomVariable] | None = None,
-    model_name: str = "custom",
-    custom_boundaries: dict | None = None,
+    boundaries: dict | None = None,
 ) -> Type[pm.Distribution]:
     """Constructs a pymc.Distribution from a log-likelihood function and a
     RandomVariable op.
@@ -159,25 +158,14 @@ def make_distribution(
     rv
         A RandomVariable Op (a class, not an instance). If None, a default will be
         used.
-    model_name
-        The name of the model (a string).
-    custom_boundaries
+    boundaries
         A dictionary with parameters as keys (a string) and its boundaries as values.
         Example: {"parameter": (lower_boundary, upper_boundary)}.
     Returns
     -------
         A pymc.Distribution that uses the log-likelihood function.
     """
-    if model_name == "custom" and custom_boundaries is None:
-        raise ValueError(
-            "For 'custom' model, a custom_boundary dictionary must be provided."
-        )
-    if model_name != "custom":
-        default_boundaries = default_model_config[model_name]["default_boundaries"]
-    else:
-        default_boundaries = custom_boundaries
-
-    random_variable = make_wfpt_rv(list_params) if not rv else rv
+    random_variable = make_model_rv(list_params) if not rv else rv
 
     class WFPTDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""
@@ -201,13 +189,17 @@ def make_distribution(
 
             logp = loglik(data, *dist_params)
             return adjust_logp(
-                logp, list_params, *dist_params, default_boundaries=default_boundaries
+                logp, list_params, *dist_params, default_boundaries=boundaries
             )
 
     return WFPTDistribution
 
 
-WFPT = make_distribution(log_pdf_sv, ["v", "sv", "a", "z", "t"], model_name="ddm")
+WFPT = make_distribution(
+    log_pdf_sv,
+    ["v", "sv", "a", "z", "t"],
+    default_model_config["ddm"]["default_boundaries"],
+)
 
 
 def make_lan_distribution(
@@ -215,8 +207,7 @@ def make_lan_distribution(
     model: str | PathLike | onnx.ModelProto,
     params_is_reg: List[bool],
     backend: str = "pytensor",
-    model_name: str = "angle",
-    custom_boundaries: dict | None = None,
+    boundaries: dict | None = None,
     rv: Type[RandomVariable] | None = None,
 ) -> Type[pm.Distribution]:
     """Produces a PyMC distribution that uses the provided base or ONNX model as
@@ -248,8 +239,7 @@ def make_lan_distribution(
             lan_logp_pt,
             list_params,
             rv,
-            model_name=model_name,
-            custom_boundaries=custom_boundaries,
+            boundaries=boundaries,
         )
 
     if backend == "jax":
@@ -262,8 +252,7 @@ def make_lan_distribution(
             lan_logp_jax,
             list_params,
             rv,
-            model_name=model_name,
-            custom_boundaries=custom_boundaries,
+            boundaries=boundaries,
         )
 
     raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")
@@ -272,7 +261,7 @@ def make_lan_distribution(
 def make_family(
     dist: Type[pm.Distribution],
     list_params: List[str],
-    link: str | Dict[str, bmb.families.Link],
+    link: str | dict[str, bmb.families.Link],
     parent: str = "v",
     likelihood_name: str = "WFPT Likelihood",
     family_name="WFPT Family",
