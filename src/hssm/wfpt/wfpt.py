@@ -7,7 +7,7 @@ generation ops.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Callable, Type
+from typing import Any, Callable, Type
 
 import bambi as bmb
 import numpy as np
@@ -28,9 +28,9 @@ LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
 
-def adjust_logp(
+def apply_param_bounds_to_loglik(
     logp: Any,
-    list_params: List[str],
+    list_params: list[str],
     *dist_params: Any,
     default_boundaries: dict | None = None,
 ):
@@ -189,7 +189,7 @@ def make_distribution(
         def logp(data, *dist_params):  # pylint: disable=E0213
 
             logp = loglik(data, *dist_params)
-            return adjust_logp(
+            return apply_param_bounds_to_loglik(
                 logp, list_params, *dist_params, default_boundaries=boundaries
             )
 
@@ -240,7 +240,7 @@ def make_lan_distribution(
     if isinstance(model, (str, PathLike)):
         model = onnx.load(str(model))
     if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp(model, params_is_reg)
+        lan_logp_pt = make_pytensor_logp(model)
         return make_distribution(
             lan_logp_pt,
             list_params,
