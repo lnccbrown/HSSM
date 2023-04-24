@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Literal
+from typing import Callable, Literal
 
 import bambi as bmb
 import pandas as pd
@@ -59,35 +59,40 @@ class HSSM:  # pylint: disable=R0902
     def __init__(
         self,
         data: pd.DataFrame,
-        model: str | None = "ddm",
-        include: List[dict] | None = None,
+        model: str = "ddm",
+        include: list[dict] | None = None,
         model_config: dict | None = None,
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
     ):
         self.data = data
-        self._trace = None
-        self.model_name = model
+        self._inference_obj = None
 
-        if model_config is None and self.model_name != "custom":
-            if model not in default_model_config:
-                raise ValueError("Please provide a correct model_name")
-            self.model_config = default_model_config[self.model_name]
-        elif model_config is not None:
-            if self.model_name != "custom":
-                if model not in default_model_config:
-                    raise ValueError("Please provide a correct model_name")
-                self.model_config = merge_dicts(
-                    default_model_config[self.model_name], model_config
+        if model == "custom":
+            if model_config is None:
+                raise ValueError(
+                    "For custom models, please provide a correct model config."
                 )
-            else:
-                self.model_config = model_config
+            self.model_config = model_config
         else:
-            raise ValueError("Please provide a model_config for the custom model")
+            if model not in default_model_config:
+                supported_models = list(default_model_config.keys())
+                raise ValueError(
+                    f"`model` must be one of {supported_models} or 'custom'."
+                )
+            self.model_config = (
+                default_model_config[model]
+                if model_config is None
+                else merge_dicts(default_model_config[model], model_config)
+            )
+
+        self.model_name = model
 
         self.list_params = self.model_config["list_params"]
         self.parent = self.list_params[0]
 
-        self._transform_params(include)  # type: ignore
+        self.params, self.formula, self.priors, self.link = self._transform_params(
+            include
+        )
         params_is_reg = [param.is_regression() for param in self.params]
 
         self.is_onnx = self.model_config["loglik_kind"] == "approx_differentiable"
@@ -117,38 +122,45 @@ class HSSM:  # pylint: disable=R0902
         )
 
         self.family = bmb.Family(
-            self.model_config["loglik_kind"],
-            likelihood=self.likelihood,
-            link=self.link,  # type: ignore
+            self.model_config["loglik_kind"], likelihood=self.likelihood, link=self.link
         )
 
         self.model = bmb.Model(
-            self.formula, data, family=self.family, priors=self.priors  # type: ignore
+            self.formula, data, family=self.family, priors=self.priors
         )
 
         self._aliases = get_alias_dict(self.model, self.parent_param)
         self.set_alias(self._aliases)
 
-    def _transform_params(self, include: List[dict]) -> None:
+    def _transform_params(
+        self, include: list[dict] | None
+    ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
         """
-        This function transforms a list of dictionaries containing
-         parameter information into a list of Param objects.
-          It also creates a formula, priors, and a link for the Bambi
-           package based on the parameters.
+        This function transforms a list of dictionaries containing parameter
+        information into a list of Param objects. It also creates a formula, priors,
+        and a link for the Bambi package based on the parameters.
 
-        Parameters:
+        Parameters
+        ----------
+        include:
+            A list of dictionaries containing information about the parameters.
 
-        include (List[dict]): A list of dictionaries containing information
-         about the parameters.
+        Returns
+        -------
+            A tuple of 4 items, the latter 3 are for creating the bambi model.
+            - A list of the same length as self.list_params containing Param objects.
+            - A bmb.formula object.
+            - An optional dict containing prior information for Bambi.
+            - An optional dict of link functions for Bambi.
         """
         processed = []
-        self.params = []
+        params = []
         if include:
             for param_dict in include:
                 processed.append(param_dict["name"])
                 is_parent = param_dict["name"] == self.parent
                 param = Param(is_parent=is_parent, **param_dict)
-                self.params.append(param)
+                params.append(param)
                 if is_parent:
                     self.parent_param = param
 
@@ -156,18 +168,18 @@ class HSSM:  # pylint: disable=R0902
             if param_str not in processed:
                 is_parent = param_str == self.parent
                 param = Param(
-                    name=param_str,  # type: ignore
-                    prior=self.model_config["default_prior"][param_str],  # type: ignore
+                    name=param_str,
+                    prior=self.model_config["default_prior"][param_str],
                     is_parent=is_parent,
                 )
-                self.params.append(param)
+                params.append(param)
                 if is_parent:
                     self.parent_param = param
 
-        if len(self.params) != len(self.list_params):
+        if len(params) != len(self.list_params):
             raise ValueError("Please provide a correct set of priors")
 
-        self.formula, self.priors, self.link = _parse_bambi(self.params)  # type: ignore
+        return params, *_parse_bambi(params)
 
     def sample(
         self,
@@ -194,7 +206,7 @@ class HSSM:  # pylint: disable=R0902
             An ``Approximation`` object if  ``"vi"``.
         """
 
-        self._trace = self.model.fit(inference_method=sampler, **kwargs)
+        self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
 
         return self.trace
 
@@ -210,7 +222,7 @@ class HSSM:  # pylint: disable=R0902
 
         return self.model.backend.model
 
-    def set_alias(self, aliases: Dict[str, str | Dict]):
+    def set_alias(self, aliases: dict[str, str | dict]):
         """Sets the aliases according to the dictionary passed to it and rebuild the
         model.
 
@@ -305,7 +317,7 @@ class HSSM:  # pylint: disable=R0902
     @property
     def trace(self):
 
-        if not self._trace:
+        if not self._inference_obj:
             raise ValueError("Please sample the model first.")
 
-        return self._trace
+        return self._inference_obj
