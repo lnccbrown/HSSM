@@ -7,7 +7,7 @@ generation ops.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Any, Callable, List, Type
+from typing import Any, Callable, Dict, List, Tuple, Type
 
 import bambi as bmb
 import numpy as np
@@ -96,7 +96,7 @@ def make_model_rv(list_params: List[str]) -> Type[RandomVariable]:
 
         ndims_params: List[int] = [0 for _ in list_params]
         dtype: str = "floatX"
-        _print_name: tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
+        _print_name: Tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
         _list_params = list_params
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
@@ -198,7 +198,7 @@ def make_distribution(
 WFPT = make_distribution(
     log_pdf_sv,
     ["v", "sv", "a", "z", "t"],
-    default_model_config["ddm"]["default_boundaries"],
+    boundaries=default_model_config["ddm"]["default_boundaries"],
 )
 
 
@@ -261,7 +261,7 @@ def make_lan_distribution(
 def make_family(
     dist: Type[pm.Distribution],
     list_params: List[str],
-    link: str | dict[str, bmb.families.Link],
+    link: str | Dict[str, bmb.families.Link],
     parent: str = "v",
     likelihood_name: str = "WFPT Likelihood",
     family_name="WFPT Family",
