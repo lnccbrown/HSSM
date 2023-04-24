@@ -34,14 +34,8 @@ def data_angle():
     return np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
 
 
-@pytest.mark.parametrize(
-    "a",
-    [0.5, -4.0],
-)
-def test_adjust_logp_with_analytical(
-    data,
-    a,
-):
+@pytest.mark.parametrize("a", [0.5, -4.0])
+def test_adjust_logp_with_analytical(data, a):
     v = 1
     sv = 0
     z = 0.5
@@ -63,10 +57,7 @@ def test_adjust_logp_with_analytical(
     assert pt.all(pt.eq(adjusted_logp, pt.full_like(adjusted_logp, -66.1))).eval()
 
 
-@pytest.mark.parametrize(
-    "theta",
-    [0.5, -4.0],
-)
+@pytest.mark.parametrize("theta", [0.5, -4.0])
 def test_adjust_logp_with_angle(data_angle, fixture_path, theta):
     v = 1
     a = 0.5
