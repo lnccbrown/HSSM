@@ -58,8 +58,11 @@ def test_adjust_logp_with_analytical(
         err,
         default_boundaries=default_model_config["ddm"]["default_boundaries"],
     )
-    assert pt.all(adjusted_logp == logp).eval() == expected_all_equal
-    assert all(adjusted_logp.eval() == -66.1) == expected_all_different
+    assert pt.all(pt.eq(adjusted_logp, logp)).eval() == expected_all_equal
+    assert (
+        pt.all(pt.eq(adjusted_logp, pt.full_like(adjusted_logp, -66.1))).eval()
+        == expected_all_different
+    )
 
 
 @pytest.mark.parametrize(
@@ -87,5 +90,8 @@ def test_adjust_logp_with_angle(
         theta,
         default_boundaries=default_model_config["angle"]["default_boundaries"],
     )
-    assert pt.all(adjusted_logp == logp_angle).eval() == expected_all_equal
-    assert all(adjusted_logp.eval() == -66.1) == expected_all_different
+    assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval() == expected_all_equal
+    assert (
+        pt.all(pt.eq(adjusted_logp, pt.full_like(adjusted_logp, -66.1))).eval()
+        == expected_all_different
+    )
