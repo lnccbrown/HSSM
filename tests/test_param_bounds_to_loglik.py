@@ -17,8 +17,7 @@ def data():
     obs_ddm = ssms.basic_simulators.simulator(
         [v_true, a_true, z_true, t_true], model="ddm", n_samples=1000
     )
-    obs_ddm = np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
-    return obs_ddm
+    return np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
 
 
 @pytest.fixture(scope="module")
@@ -32,8 +31,7 @@ def data_angle():
     obs_angle = ssms.basic_simulators.simulator(
         [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=1000
     )
-    obs_angle = np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
-    return obs_angle
+    return np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
 
 
 @pytest.mark.parametrize(
@@ -69,7 +67,7 @@ def test_adjust_logp_with_analytical(
     [(0.5, True, False), (-4.0, False, True)],
 )
 def test_adjust_logp_with_angle(
-    data_angle, theta, fixture_path, expected_all_equal, expected_all_different
+    data_angle, fixture_path, theta, expected_all_equal, expected_all_different
 ):
     v = 1
     a = 0.5
