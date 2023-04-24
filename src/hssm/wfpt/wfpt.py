@@ -68,9 +68,9 @@ def adjust_logp(
 
         broadcasted_mask = pt.broadcast_to(out_of_bounds_mask, logp.shape)
 
-        logp_adjusted = pt.where(broadcasted_mask, out_of_bounds_val, logp)
+        logp = pt.where(broadcasted_mask, out_of_bounds_val, logp)
 
-    return logp_adjusted
+    return logp
 
 
 def make_model_rv(list_params: List[str]) -> Type[RandomVariable]:
