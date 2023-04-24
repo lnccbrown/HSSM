@@ -74,19 +74,18 @@ def test_adjust_logp_with_analytical(
     [(0.5, True, False), (-4.0, False, True)],
 )
 def test_adjust_logp_with_angle(
-    data_angle, fixture_path, expected_all_equal, expected_all_different
+    data_angle, theta, fixture_path, expected_all_equal, expected_all_different
 ):
     v = 1
     a = 0.5
     z = 0.5
     t = 0.5
-    theta = 0
 
     logp_pytensor = lan.make_pytensor_logp(fixture_path / "test.onnx")
-    logp = logp_pytensor(data_angle, v, a, z, t, theta)
+    logp_angle = logp_pytensor(data_angle, v, a, z, t, theta)
 
     adjusted_logp = apply_param_bounds_to_loglik(
-        logp,
+        logp_angle,
         ["v", "a", "z", "t", "theta"],
         v,
         a,
@@ -95,5 +94,5 @@ def test_adjust_logp_with_angle(
         theta,
         default_boundaries=default_model_config["angle"]["default_boundaries"],
     )
-    assert pt.all(adjusted_logp == logp).eval() == expected_all_equal
+    assert pt.all(adjusted_logp == logp_angle).eval() == expected_all_equal
     assert all(adjusted_logp.eval() == -66.1) == expected_all_different
