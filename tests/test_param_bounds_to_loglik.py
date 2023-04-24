@@ -54,9 +54,7 @@ def test_adjust_logp_with_analytical(data, a):
         default_boundaries=default_model_config["ddm"]["default_boundaries"],
     )
     assert pt.all(pt.eq(adjusted_logp, logp)).eval() == True
-    assert (
-        pt.all(pt.eq(adjusted_logp, pt.full_like(adjusted_logp, -66.1))).eval() == True
-    )
+    assert pt.all(pt.eq(adjusted_logp, -66.1)).eval() == True
 
 
 @pytest.mark.parametrize("theta", [0.5, -4.0])
@@ -80,6 +78,4 @@ def test_adjust_logp_with_angle(data_angle, fixture_path, theta):
         default_boundaries=default_model_config["angle"]["default_boundaries"],
     )
     assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval() == True
-    assert (
-        pt.all(pt.eq(adjusted_logp, pt.full_like(adjusted_logp, -66.1))).eval() == True
-    )
+    assert pt.all(pt.eq(adjusted_logp, -66.1)).eval() == True
