@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import pytensor.tensor as pt
 import pytest
 import ssms
@@ -19,10 +18,7 @@ def data():
         [v_true, a_true, z_true, t_true], model="ddm", n_samples=1000
     )
     obs_ddm = np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
-    dataset = pd.DataFrame(obs_ddm, columns=["rt", "response"])
-    dataset["x"] = dataset["rt"] * 0.1
-    dataset["y"] = dataset["rt"] * 0.5
-    return dataset
+    return obs_ddm
 
 
 @pytest.fixture(scope="module")
@@ -37,8 +33,7 @@ def data_angle():
         [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=1000
     )
     obs_angle = np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
-    data = pd.DataFrame(obs_angle, columns=["rt", "response"])
-    return data
+    return obs_angle
 
 
 @pytest.mark.parametrize(
