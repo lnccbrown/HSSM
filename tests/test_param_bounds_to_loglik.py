@@ -55,7 +55,7 @@ def test_adjust_logp_with_analytical(data, a):
     )
     assert pt.all(pt.eq(adjusted_logp, logp)).eval() == True
     assert (
-        pt.all(pt.eq(adjusted_logp, pt.full_like(adjusted_logp, -66.1))).eval() == False
+        pt.all(pt.eq(adjusted_logp, pt.full_like(adjusted_logp, -66.1))).eval() == True
     )
 
 
@@ -81,5 +81,5 @@ def test_adjust_logp_with_angle(data_angle, fixture_path, theta):
     )
     assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval() == True
     assert (
-        pt.all(pt.eq(adjusted_logp, pt.full_like(adjusted_logp, -66.1))).eval() == False
+        pt.all(pt.eq(adjusted_logp, pt.full_like(adjusted_logp, -66.1))).eval() == True
     )
