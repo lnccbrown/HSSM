@@ -60,7 +60,11 @@ def test_adjust_logp_with_analytical(
         err,
         default_boundaries=default_model_config["ddm"]["default_boundaries"],
     )
-    assert pt.all(pt.eq(adjusted_logp, logp)).eval() == expected_all_equal
+    if expected_all_equal:
+        assert pt.all(pt.eq(adjusted_logp, logp)).eval()
+    else:
+        assert pt.all(pt.isnan(logp)).eval()
+        assert pt.all(pt.eq(adjusted_logp, -66.1)).eval()
 
 
 @pytest.mark.parametrize(
