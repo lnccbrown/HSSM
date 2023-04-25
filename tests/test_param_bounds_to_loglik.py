@@ -34,8 +34,13 @@ def data_angle():
     return np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
 
 
-@pytest.mark.parametrize("a", [0.5, -4.0])
-def test_adjust_logp_with_analytical(data, a):
+@pytest.mark.parametrize(
+    "a, expected_all_equal, expected_all_different",
+    [(0.5, True, False), (-4.0, False, True)],
+)
+def test_adjust_logp_with_analytical(
+    data, a, expected_all_equal, expected_all_different
+):
     v = 1
     sv = 0
     z = 0.5
@@ -53,12 +58,17 @@ def test_adjust_logp_with_analytical(data, a):
         err,
         default_boundaries=default_model_config["ddm"]["default_boundaries"],
     )
-    assert pt.all(pt.eq(adjusted_logp, logp)).eval()
-    assert pt.all(pt.eq(adjusted_logp, -66.1)).eval()
+    assert pt.all(pt.eq(adjusted_logp, logp)).eval() == expected_all_equal
+    assert t.all(pt.eq(adjusted_logp, logp)).eval() == expected_all_different
 
 
-@pytest.mark.parametrize("theta", [0.5, -4.0])
-def test_adjust_logp_with_angle(data_angle, fixture_path, theta):
+@pytest.mark.parametrize(
+    "theta, expected_all_equal, expected_all_different",
+    [(0.5, True, False), (-4.0, False, True)],
+)
+def test_adjust_logp_with_angle(
+    data_angle, fixture_path, theta, expected_all_equal, expected_all_different
+):
     v = 1
     a = 0.5
     z = 0.5
@@ -77,5 +87,5 @@ def test_adjust_logp_with_angle(data_angle, fixture_path, theta):
         theta,
         default_boundaries=default_model_config["angle"]["default_boundaries"],
     )
-    assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval()
-    assert pt.all(pt.eq(adjusted_logp, -66.1)).eval()
+    assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval() == expected_all_equal
+    assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval() == expected_all_different
