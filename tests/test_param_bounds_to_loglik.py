@@ -36,7 +36,7 @@ def data_angle():
 
 @pytest.mark.parametrize(
     "a, expected_all_equal",
-    [(0.5, True), (-4.0, False)],
+    [(0.5, True), (-20.0, False)],
 )
 def test_adjust_logp_with_analytical(
     data,
