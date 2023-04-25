@@ -6,6 +6,7 @@ import pytest
 import ssms
 
 from hssm import hssm
+from hssm.wfpt import WFPT
 
 
 @pytest.fixture
@@ -158,6 +159,17 @@ def test_model_config_and_loglik_path_update(data_angle, fixture_path):
 
 
 def test_custom_model(data, example_model_config):
+
+    with pytest.raises(ValueError):
+        model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
+
+    example_model_config["loglik_kind"] = "approx_differentiable"
+
+    with pytest.raises(ValueError):
+        model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
+
+    example_model_config["loglik"] = WFPT
+
     model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
 
     assert model.model_name == "custom"
