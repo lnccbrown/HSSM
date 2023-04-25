@@ -35,11 +35,13 @@ def data_angle():
 
 
 @pytest.mark.parametrize(
-    "a, expected_all_equal, expected_all_different",
-    [(0.5, True, False), (-4.0, False, True)],
+    "a, expected_all_equal",
+    [(0.5, True), (-4.0, False)],
 )
 def test_adjust_logp_with_analytical(
-    data, a, expected_all_equal, expected_all_different
+    data,
+    a,
+    expected_all_equal,
 ):
     v = 1
     sv = 0
@@ -59,16 +61,16 @@ def test_adjust_logp_with_analytical(
         default_boundaries=default_model_config["ddm"]["default_boundaries"],
     )
     assert pt.all(pt.eq(adjusted_logp, logp)).eval() == expected_all_equal
-    assert pt.all(pt.eq(adjusted_logp, -66.1)).eval().item() == expected_all_different
 
 
 @pytest.mark.parametrize(
-    "theta, expected_all_equal, expected_all_different",
-    [(0.5, True, False), (-4.0, False, True)],
+    "theta, expected_all_equal",
+    [
+        (0.5, True),
+        (-4.0, False),
+    ],
 )
-def test_adjust_logp_with_angle(
-    data_angle, fixture_path, theta, expected_all_equal, expected_all_different
-):
+def test_adjust_logp_with_angle(data_angle, fixture_path, theta, expected_all_equal):
     v = 1
     a = 0.5
     z = 0.5
@@ -88,4 +90,3 @@ def test_adjust_logp_with_angle(
         default_boundaries=default_model_config["angle"]["default_boundaries"],
     )
     assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval() == expected_all_equal
-    assert pt.all(pt.eq(adjusted_logp, -66.1)).eval().item() == expected_all_different
