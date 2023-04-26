@@ -41,13 +41,18 @@ vector_a = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_b
 
 
 @pytest.mark.parametrize(
-    "a, expected_all_equal",
-    [(0.5, True), (0.1, False), (vector_a, True), (np.random.rand(1000), False)],
+    "a, expected_result",
+    [
+        (0.5, "equal"),
+        (0.1, "not_equal"),
+        (vector_a, "equal"),
+        (np.random.rand(1000), "not_equal_no_inf"),
+    ],
 )
 def test_adjust_logp_with_analytical(
     data,
     a,
-    expected_all_equal,
+    expected_result,
 ):
     v = 1
     sv = 0
@@ -66,10 +71,14 @@ def test_adjust_logp_with_analytical(
         err,
         bounds=default_model_config["ddm"]["default_boundaries"],
     )
-    if expected_all_equal:
+    if expected_result == "equal":
         assert pt.all(pt.eq(adjusted_logp, logp)).eval()
-    else:
+    elif expected_result == "not_equal":
         assert pt.all(pt.eq(adjusted_logp, -66.1)).eval()
+    elif expected_result == "not_equal_no_inf":
+        assert not pt.all(pt.eq(adjusted_logp, logp)).eval() and not np.any(
+            np.isinf(adjusted_logp.eval())
+        )
 
 
 vector_length = 1000
@@ -79,10 +88,15 @@ vector_theta = np.random.rand(vector_length) * (upper_bound - lower_bound) + low
 
 
 @pytest.mark.parametrize(
-    "theta, expected_all_equal",
-    [(0.5, True), (-4.0, False), (vector_theta, True), (np.random.rand(1000), False)],
+    "theta, expected_result",
+    [
+        (0.5, "equal"),
+        (-4.0, "not_equal"),
+        (vector_theta, "equal"),
+        (np.random.rand(1000), "not_equal_no_inf"),
+    ],
 )
-def test_adjust_logp_with_angle(data_angle, fixture_path, theta, expected_all_equal):
+def test_adjust_logp_with_angle(data_angle, fixture_path, theta, expected_result):
     v = 1
     a = 0.5
     z = 0.5
@@ -101,4 +115,12 @@ def test_adjust_logp_with_angle(data_angle, fixture_path, theta, expected_all_eq
         theta,
         bounds=default_model_config["angle"]["default_boundaries"],
     )
-    assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval() == expected_all_equal
+
+    if expected_result == "equal":
+        assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval()
+    elif expected_result == "not_equal":
+        assert pt.all(pt.eq(adjusted_logp, -66.1)).eval()
+    elif expected_result == "not_equal_no_inf":
+        assert not pt.all(pt.eq(adjusted_logp, logp_angle)).eval() and not np.any(
+            np.isinf(adjusted_logp.eval())
+        )
