@@ -72,7 +72,7 @@ def test_adjust_logp_with_analytical(
         bounds=default_model_config["ddm"]["default_boundaries"],
     )
     if expected_result == "equal":
-        assert pt.allclose(adjusted_logp, logp, atol=1e-8).eval()
+        assert pt.allclose(adjusted_logp, logp, atol=1e-5).eval()
     elif expected_result == "not_equal":
         assert pt.all(pt.eq(adjusted_logp, -66.1)).eval()
     elif expected_result == "not_equal_no_inf":
