@@ -8,11 +8,11 @@ from .wfpt import (
     make_distribution,
     make_family,
     make_lan_distribution,
-    make_wfpt_rv,
+    make_model_rv,
 )
 
 __all__ = [
-    "make_wfpt_rv",
+    "make_model_rv",
     "make_distribution",
     "make_lan_distribution",
     "make_family",
