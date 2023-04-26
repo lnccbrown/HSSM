@@ -39,10 +39,11 @@ lower_bound = 0.3
 upper_bound = 2.5
 vector_a = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
 
-vector_length = 1000
-lower_bound = -0.3
-upper_bound = 1.0
-vector_a_2 = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
+lower_bound_2 = 0.1
+upper_bound_2 = 3.0
+vector_a_2 = (
+    np.random.rand(vector_length) * (upper_bound_2 - lower_bound_2) + lower_bound_2
+)
 
 
 @pytest.mark.parametrize(
@@ -91,11 +92,10 @@ lower_bound = -0.1
 upper_bound = 1.3
 vector_theta = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
 
-vector_length = 1000
-lower_bound = -0.5
-upper_bound = 3.0
+lower_bound_2 = -0.5
+upper_bound_2 = 3.0
 vector_theta_2 = (
-    np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
+    np.random.rand(vector_length) * (upper_bound_2 - lower_bound_2) + lower_bound_2
 )
 
 
