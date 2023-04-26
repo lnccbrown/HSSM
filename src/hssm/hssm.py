@@ -96,7 +96,7 @@ class HSSM:  # pylint: disable=R0902
         params_is_reg = [param.is_regression() for param in self.params]
 
         self.is_onnx = self.model_config["loglik_kind"] == "approx_differentiable"
-
+        bounds = self.model_config["default_boundaries"]
         if self.model_config["loglik_kind"] == "analytical":
             self.model_distribution = wfpt.WFPT
         elif self.is_onnx:
@@ -105,10 +105,13 @@ class HSSM:  # pylint: disable=R0902
                 list_params=self.list_params,
                 backend=self.model_config["backend"],
                 params_is_reg=params_is_reg,
+                bounds=bounds,
             )
         elif self.model_name == "custom":
             self.model_distribution = wfpt.make_distribution(
-                loglik=loglik, list_params=self.list_params  # type: ignore
+                loglik=loglik,  # type: ignore
+                list_params=self.list_params,  # type: ignore
+                bounds=bounds,
             )
 
         self.likelihood = bmb.Likelihood(

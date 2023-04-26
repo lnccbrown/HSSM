@@ -7,7 +7,7 @@ generation ops.
 from __future__ import annotations
 
 from os import PathLike
-from typing import Callable, Type
+from typing import Any, Callable, Type
 
 import bambi as bmb
 import numpy as np
@@ -19,6 +19,8 @@ from numpy.typing import ArrayLike
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators import simulator  # type: ignore
 
+from hssm.wfpt.config import default_model_config
+
 from .base import log_pdf_sv
 from .lan import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
 
@@ -26,7 +28,53 @@ LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
 
-def make_wfpt_rv(list_params: list[str]) -> Type[RandomVariable]:
+def apply_param_bounds_to_loglik(
+    logp: Any,
+    list_params: list[str],
+    *dist_params: Any,
+    bounds: dict | None = None,
+):
+    """
+    Adjusts the log probability of a model based on parameter boundaries.
+
+    Args:
+        logp: The log probability of the model.
+        list_params: A list of strings representing the names
+         of the distribution parameters.
+        dist_params: The distribution parameters.
+        bounds: Boundaries for parameters in the likelihood.
+
+    Returns:
+        The adjusted log probability.
+    """
+    out_of_bounds_val = pt.constant(-66.1, dtype=pytensor.config.floatX)
+
+    dist_params_dict = dict(zip(list_params, dist_params))
+
+    bounds = {
+        k: (
+            pt.constant(v[0], dtype=pytensor.config.floatX),
+            pt.constant(v[1], dtype=pytensor.config.floatX),
+        )
+        for k, v in bounds.items()  # type: ignore
+    }
+
+    for param_name, param in dist_params_dict.items():
+        lower_bound, upper_bound = bounds[param_name]
+
+        out_of_bounds_mask = pt.bitwise_or(
+            pt.lt(param, lower_bound), pt.gt(param, upper_bound)
+        )
+
+        broadcasted_mask = pt.broadcast_to(out_of_bounds_mask, logp.shape)
+
+        logp = pt.where(broadcasted_mask, out_of_bounds_val, logp)
+
+    return logp
+
+
+def make_model_rv(list_params: list[str]) -> Type[RandomVariable]:
+
     """Builds a RandomVariable Op according to the list of parameters.
 
     Args:
@@ -93,6 +141,7 @@ def make_distribution(
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     rv: Type[RandomVariable] | None = None,
+    bounds: dict | None = None,
 ) -> Type[pm.Distribution]:
     """Constructs a pymc.Distribution from a log-likelihood function and a
     RandomVariable op.
@@ -110,13 +159,14 @@ def make_distribution(
     rv
         A RandomVariable Op (a class, not an instance). If None, a default will be
         used.
-
+    bounds
+        A dictionary with parameters as keys (a string) and its boundaries as values.
+        Example: {"parameter": (lower_boundary, upper_boundary)}.
     Returns
     -------
         A pymc.Distribution that uses the log-likelihood function.
     """
-
-    random_variable = make_wfpt_rv(list_params) if not rv else rv
+    random_variable = make_model_rv(list_params) if not rv else rv
 
     class WFPTDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""
@@ -138,43 +188,54 @@ def make_distribution(
 
         def logp(data, *dist_params):  # pylint: disable=E0213
 
-            return loglik(data, *dist_params)
+            logp = loglik(data, *dist_params)
+            if bounds is None:
+                return logp
+            else:
+                return apply_param_bounds_to_loglik(
+                    logp, list_params, *dist_params, bounds=bounds
+                )
 
     return WFPTDistribution
 
 
-WFPT = make_distribution(log_pdf_sv, ["v", "sv", "a", "z", "t"])
+WFPT = make_distribution(
+    log_pdf_sv,
+    ["v", "sv", "a", "z", "t"],
+    bounds=default_model_config["ddm"]["default_boundaries"],
+)
 
 
 def make_lan_distribution(
     list_params: list[str],
     model: str | PathLike | onnx.ModelProto,
     backend: str = "pytensor",
+    bounds: dict | None = None,
     rv: Type[RandomVariable] | None = None,
     params_is_reg: list[bool] | None = None,
 ) -> Type[pm.Distribution]:
     """Produces a PyMC distribution that uses the provided base or ONNX model as
     its log-likelihood function.
 
-    Parameters
-    ----------
+    Args:
+        model: The path of the ONNX model, or one already loaded in memory.
+        backend: Whether to use "pytensor" or "jax" as the backend of the
+            log-likelihood computation. If `jax`, the function will be wrapped in an
+            pytensor Op.
+        list_params: A list of the names of the parameters following the order of
+            how they are fed to the LAN.
+        rv
+            The RandomVariable Op used for posterior sampling.
+        model_name
+            The name of the model (a string).
+        param_is_reg
+            A list of booleans indicating whether each parameter in the
+            corresponding position in `list_params` is a regression.
+        bounds
+            A dictionary with parameters as keys (a string) and its boundaries
+            as values.Example: {"parameter": (lower_boundary, upper_boundary)}.
+    Returns:
 
-    list_params
-        A list of the names of the parameters following the order of how they are fed
-        to the LAN.
-    model
-        The path of the ONNX model, or one already loaded in memory.
-    backend
-        Whether to use "pytensor" or "jax" as the backend of the
-        log-likelihood computation. If `jax`, the function will be wrapped in an
-        pytensor Op.
-    rv
-        The RandomVariable Op used for posterior sampling.
-    param_is_reg
-        A list of booleans indicating whether each parameter in the
-        corresponding position in `list_params` is a regression.
-
-    Returns
     -------
         A PyMC Distribution class that uses the ONNX model as its log-likelihood
         function.
@@ -183,8 +244,12 @@ def make_lan_distribution(
         model = onnx.load(str(model))
     if backend == "pytensor":
         lan_logp_pt = make_pytensor_logp(model)
-        return make_distribution(lan_logp_pt, list_params, rv)
-
+        return make_distribution(
+            lan_logp_pt,
+            list_params,
+            rv,
+            bounds=bounds,
+        )
     if backend == "jax":
         if params_is_reg is None:
             raise ValueError(
@@ -196,7 +261,12 @@ def make_lan_distribution(
             params_is_reg,
         )
         lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
-        return make_distribution(lan_logp_jax, list_params, rv)
+        return make_distribution(
+            lan_logp_jax,
+            list_params,
+            rv,
+            bounds=bounds,
+        )
 
     raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")
 

@@ -3,7 +3,7 @@ import numpy as np
 from hssm import wfpt
 
 
-def test_make_wfpt_rv():
+def test_make_model_rv():
 
     params = ["v", "sv", "a", "z", "t"]
     theta = ["v", "a", "z", "t", "sv"]
@@ -13,7 +13,7 @@ def test_make_wfpt_rv():
     # v, a, z, t, sv
     true_values = [0.5, 1.5, 0.5, 0.5, 0.3]
 
-    wfpt_rv = wfpt.make_wfpt_rv(params)
+    wfpt_rv = wfpt.make_model_rv(params)
     rng = np.random.default_rng()
 
     random_sample = wfpt_rv.rng_fn(rng, *true_values, size=500, theta=theta)
