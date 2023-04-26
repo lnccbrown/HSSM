@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable, Literal
 
+import arviz as az
 import bambi as bmb
 import pandas as pd
 import pymc as pm
@@ -197,6 +198,10 @@ class HSSM:  # pylint: disable=R0902
         ----------
         include:
             A list of dictionaries containing information about the parameters.
+        model:
+            A string that indicates the type of the model.
+        model_config:
+            A dict for the configuration for the model.
 
         Returns
         -------
@@ -243,7 +248,7 @@ class HSSM:  # pylint: disable=R0902
             "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
         ] = "mcmc",
         **kwargs,
-    ):
+    ) -> az.InferenceData | pm.Approximation:
         """Performs sampling using the `fit` method via bambi.Model.
 
         Parameters
@@ -261,6 +266,13 @@ class HSSM:  # pylint: disable=R0902
             (default), "nuts_numpyro", "nuts_blackjax" or "laplace".
             An ``Approximation`` object if  ``"vi"``.
         """
+
+        supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
+
+        if sampler not in supported_samplers:
+            raise ValueError(
+                f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
+            )
 
         self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
 
@@ -371,7 +383,19 @@ class HSSM:  # pylint: disable=R0902
         return self.__repr__()
 
     @property
-    def trace(self):
+    def trace(self) -> az.InferenceData | pm.Approximation:
+        """
+        Returns the trace of the model after sampling.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+            The trace of the model after sampling.
+        """
 
         if not self._inference_obj:
             raise ValueError("Please sample the model first.")

@@ -94,8 +94,6 @@ class Param:
         self._parent = is_parent
         self.bounds = bounds
 
-        # Using if self.is_regression() is more expressive here
-        # This is just to satisfy the static type checker
         if formula is not None:
             # The regression case
 
@@ -108,15 +106,7 @@ class Param:
                 )
 
             self.prior: ParamSpec = (
-                {
-                    # Convert dict to bmb.Prior if a dict is passed
-                    param: (
-                        prior if isinstance(prior, bmb.Prior) else bmb.Prior(**prior)
-                    )
-                    for param, prior in prior.items()
-                }
-                if prior is not None
-                else None
+                self._make_prior_dict(prior) if prior is not None else prior
             )
 
             self.link = "identity" if link is None else link
@@ -237,6 +227,31 @@ class Param:
             contains a regression or not.
         """
         return self.__repr__()
+
+    def _make_prior_dict(
+        self, prior: dict[str, ParamSpec]
+    ) -> dict[str, float | bmb.Prior]:
+        """Helper function to make bambi priors from a dictionary of priors for the
+        regression case.
+
+        Parameters
+        ----------
+        prior:
+            A dictionary where each key is the name of a parameter in a regression
+            and each value is the prior specification for that parameter.
+
+        Returns
+        -------
+            A dictionary where each key is the name of a parameter in a regression
+            and each value is either a float or a bmb.Prior object.
+        """
+        priors = {
+            # Convert dict to bmb.Prior if a dict is passed
+            param: bmb.Prior(**prior) if isinstance(prior, dict) else prior
+            for param, prior in prior.items()
+        }
+
+        return priors
 
 
 def _parse_bambi(
