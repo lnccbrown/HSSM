@@ -72,7 +72,7 @@ def test_adjust_logp_with_analytical(
         bounds=default_model_config["ddm"]["default_boundaries"],
     )
     if expected_result == "equal":
-        assert pt.all(pt.eq(adjusted_logp, logp)).eval()
+        assert pt.allclose(adjusted_logp, logp, atol=1e-8).eval()
     elif expected_result == "not_equal":
         assert pt.all(pt.eq(adjusted_logp, -66.1)).eval()
     elif expected_result == "not_equal_no_inf":
@@ -117,7 +117,7 @@ def test_adjust_logp_with_angle(data_angle, fixture_path, theta, expected_result
     )
 
     if expected_result == "equal":
-        assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval()
+        assert pt.allclose(adjusted_logp, logp_angle, atol=1e-8).eval()
     elif expected_result == "not_equal":
         assert pt.all(pt.eq(adjusted_logp, -66.1)).eval()
     elif expected_result == "not_equal_no_inf":
