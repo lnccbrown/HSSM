@@ -87,7 +87,6 @@ def test_adjust_logp_with_analytical(
         )
 
 
-vector_length = 1000
 lower_bound = -0.1
 upper_bound = 1.3
 vector_theta = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
