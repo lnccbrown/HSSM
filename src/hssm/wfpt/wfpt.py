@@ -30,7 +30,7 @@ OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
 
 
 def apply_param_bounds_to_loglik(
-    logp: ArrayLike,
+    logp: Any,
     list_params: list[str],
     *dist_params: Any,
     bounds: dict[str, BoundsSpec],
