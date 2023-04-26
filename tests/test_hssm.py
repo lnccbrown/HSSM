@@ -43,14 +43,7 @@ def example_model_config():
     return {
         "loglik_kind": "example",
         "list_params": ["v", "sv", "a", "z", "t"],
-        "default_prior": {
-            "v": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-            "sv": {"name": "Uniform", "lower": 0.0, "upper": 1.0},
-            "a": {"name": "Uniform", "lower": 0.30, "upper": 2.5},
-            "z": {"name": "Uniform", "lower": 0.10, "upper": 0.9},
-            "t": {"name": "Uniform", "lower": 0.0, "upper": 2.0},
-        },
-        "default_boundaries": {
+        "bounds": {
             "v": (-3.0, 3.0),
             "sv": (0.0, 1.0),
             "a": (0.3, 2.5),
