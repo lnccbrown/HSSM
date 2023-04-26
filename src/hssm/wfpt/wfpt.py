@@ -32,7 +32,7 @@ def apply_param_bounds_to_loglik(
     logp: Any,
     list_params: list[str],
     *dist_params: Any,
-    default_boundaries: dict | None = None,
+    bounds: dict | None = None,
 ):
     """
     Adjusts the log probability of a model based on parameter boundaries.
@@ -42,7 +42,7 @@ def apply_param_bounds_to_loglik(
         list_params: A list of strings representing the names
          of the distribution parameters.
         dist_params: The distribution parameters.
-        default_boundaries: Boundaries for parameters in the likelihood.
+        bounds: Boundaries for parameters in the likelihood.
 
     Returns:
         The adjusted log probability.
@@ -51,16 +51,16 @@ def apply_param_bounds_to_loglik(
 
     dist_params_dict = dict(zip(list_params, dist_params))
 
-    boundaries = {
+    bounds = {
         k: (
             pt.constant(v[0], dtype=pytensor.config.floatX),
             pt.constant(v[1], dtype=pytensor.config.floatX),
         )
-        for k, v in default_boundaries.items()  # type: ignore
+        for k, v in bounds.items()  # type: ignore
     }
 
     for param_name, param in dist_params_dict.items():
-        lower_bound, upper_bound = boundaries[param_name]
+        lower_bound, upper_bound = bounds[param_name]
 
         out_of_bounds_mask = pt.bitwise_or(
             pt.lt(param, lower_bound), pt.gt(param, upper_bound)
@@ -141,7 +141,7 @@ def make_distribution(
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     rv: Type[RandomVariable] | None = None,
-    boundaries: dict | None = None,
+    bounds: dict | None = None,
 ) -> Type[pm.Distribution]:
     """Constructs a pymc.Distribution from a log-likelihood function and a
     RandomVariable op.
@@ -159,7 +159,7 @@ def make_distribution(
     rv
         A RandomVariable Op (a class, not an instance). If None, a default will be
         used.
-    boundaries
+    bounds
         A dictionary with parameters as keys (a string) and its boundaries as values.
         Example: {"parameter": (lower_boundary, upper_boundary)}.
     Returns
@@ -189,9 +189,12 @@ def make_distribution(
         def logp(data, *dist_params):  # pylint: disable=E0213
 
             logp = loglik(data, *dist_params)
-            return apply_param_bounds_to_loglik(
-                logp, list_params, *dist_params, default_boundaries=boundaries
-            )
+            if bounds is None:
+                return logp
+            else:
+                return apply_param_bounds_to_loglik(
+                    logp, list_params, *dist_params, bounds=bounds
+                )
 
     return WFPTDistribution
 
@@ -199,7 +202,7 @@ def make_distribution(
 WFPT = make_distribution(
     log_pdf_sv,
     ["v", "sv", "a", "z", "t"],
-    boundaries=default_model_config["ddm"]["default_boundaries"],
+    bounds=default_model_config["ddm"]["default_boundaries"],
 )
 
 
@@ -207,7 +210,7 @@ def make_lan_distribution(
     list_params: list[str],
     model: str | PathLike | onnx.ModelProto,
     backend: str = "pytensor",
-    boundaries: dict | None = None,
+    bounds: dict | None = None,
     rv: Type[RandomVariable] | None = None,
     params_is_reg: list[bool] | None = None,
 ) -> Type[pm.Distribution]:
@@ -228,7 +231,7 @@ def make_lan_distribution(
         param_is_reg
             A list of booleans indicating whether each parameter in the
             corresponding position in `list_params` is a regression.
-        custom_boundaries
+        bounds
             A dictionary with parameters as keys (a string) and its boundaries
             as values.Example: {"parameter": (lower_boundary, upper_boundary)}.
     Returns:
@@ -245,7 +248,7 @@ def make_lan_distribution(
             lan_logp_pt,
             list_params,
             rv,
-            boundaries=boundaries,
+            bounds=bounds,
         )
     if backend == "jax":
         if params_is_reg is None:
@@ -262,7 +265,7 @@ def make_lan_distribution(
             lan_logp_jax,
             list_params,
             rv,
-            boundaries=boundaries,
+            bounds=bounds,
         )
 
     raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")

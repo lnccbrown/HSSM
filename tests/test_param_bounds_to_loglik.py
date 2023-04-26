@@ -34,9 +34,15 @@ def data_angle():
     return np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
 
 
+vector_length = 1000
+lower_bound = 0.3
+upper_bound = 2.5
+vector_a = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
+
+
 @pytest.mark.parametrize(
     "a, expected_all_equal",
-    [(0.5, True), (0.1, False)],
+    [(0.5, True), (0.1, False), (vector_a, True), (np.random.rand(1000), False)],
 )
 def test_adjust_logp_with_analytical(
     data,
@@ -66,12 +72,15 @@ def test_adjust_logp_with_analytical(
         assert pt.all(pt.eq(adjusted_logp, -66.1)).eval()
 
 
+vector_length = 1000
+lower_bound = -0.1
+upper_bound = 1.3
+vector_theta = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
+
+
 @pytest.mark.parametrize(
     "theta, expected_all_equal",
-    [
-        (0.5, True),
-        (-4.0, False),
-    ],
+    [(0.5, True), (-4.0, False), (vector_theta, True), (np.random.rand(1000), False)],
 )
 def test_adjust_logp_with_angle(data_angle, fixture_path, theta, expected_all_equal):
     v = 1
