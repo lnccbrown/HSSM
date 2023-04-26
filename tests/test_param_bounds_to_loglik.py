@@ -64,7 +64,7 @@ def test_adjust_logp_with_analytical(
         z,
         t,
         err,
-        default_boundaries=default_model_config["ddm"]["default_boundaries"],
+        bounds=default_model_config["ddm"]["default_boundaries"],
     )
     if expected_all_equal:
         assert pt.all(pt.eq(adjusted_logp, logp)).eval()
@@ -99,6 +99,6 @@ def test_adjust_logp_with_angle(data_angle, fixture_path, theta, expected_all_eq
         z,
         t,
         theta,
-        default_boundaries=default_model_config["angle"]["default_boundaries"],
+        bounds=default_model_config["angle"]["default_boundaries"],
     )
     assert pt.all(pt.eq(adjusted_logp, logp_angle)).eval() == expected_all_equal
