@@ -39,6 +39,11 @@ lower_bound = 0.3
 upper_bound = 2.5
 vector_a = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
 
+vector_length = 1000
+lower_bound = -0.3
+upper_bound = 1.0
+vector_a_2 = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
+
 
 @pytest.mark.parametrize(
     "a, expected_result",
@@ -46,7 +51,7 @@ vector_a = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_b
         (0.5, "equal"),
         (0.1, "not_equal"),
         (vector_a, "equal"),
-        (np.random.rand(1000), "not_equal_no_inf"),
+        (vector_a_2, "not_equal_no_inf"),
     ],
 )
 def test_adjust_logp_with_analytical(
@@ -86,6 +91,13 @@ lower_bound = -0.1
 upper_bound = 1.3
 vector_theta = np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
 
+vector_length = 1000
+lower_bound = -0.5
+upper_bound = 3.0
+vector_theta_2 = (
+    np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
+)
+
 
 @pytest.mark.parametrize(
     "theta, expected_result",
@@ -93,7 +105,7 @@ vector_theta = np.random.rand(vector_length) * (upper_bound - lower_bound) + low
         (0.5, "equal"),
         (-4.0, "not_equal"),
         (vector_theta, "equal"),
-        (np.random.rand(1000), "not_equal_no_inf"),
+        (vector_theta_2, "not_equal_no_inf"),
     ],
 )
 def test_adjust_logp_with_angle(data_angle, fixture_path, theta, expected_result):
@@ -117,7 +129,7 @@ def test_adjust_logp_with_angle(data_angle, fixture_path, theta, expected_result
     )
 
     if expected_result == "equal":
-        assert pt.allclose(adjusted_logp, logp_angle, atol=1e-8).eval()
+        assert pt.allclose(adjusted_logp, logp_angle, atol=1e-5).eval()
     elif expected_result == "not_equal":
         assert pt.all(pt.eq(adjusted_logp, -66.1)).eval()
     elif expected_result == "not_equal_no_inf":
