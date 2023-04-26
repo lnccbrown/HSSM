@@ -5,9 +5,7 @@ This code compares WFPT likelihood function with
 old implementation of WFPT from (https://github.com/hddm-devs/hddm)
 """
 import math
-import os
 import random
-import sys
 
 import numpy as np
 import pytest
@@ -15,7 +13,6 @@ import ssms.basic_simulators
 from hddm_wfpt import wfpt
 from numpy.random import rand
 
-sys.path.insert(0, os.path.abspath("src"))
 # pylint: disable=C0413
 from hssm.wfpt.base import decision_func, log_pdf_sv
 
