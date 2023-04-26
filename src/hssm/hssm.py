@@ -64,9 +64,9 @@ class HSSM:  # pylint: disable=R0902
         A list of Param objects representing model parameters.
 
     Methods:
-        _transform_params: A method to transform priors, link and formula
-         into Bambi's format.
         sample: A method to sample posterior distributions.
+        set_alias: Sets the alias for a paramter.
+        graph: Plot the model with PyMC's built-in graph function.
     """
 
     def __init__(
@@ -213,7 +213,7 @@ class HSSM:  # pylint: disable=R0902
                 processed.append(param_dict["name"])
                 is_parent = param_dict["name"] == self._parent
                 param = Param(
-                    bounds=model_config["default_boundaries"][param_dict["name"]],
+                    bounds=model_config["bounds"][param_dict["name"]],
                     is_parent=is_parent,
                     **param_dict,
                 )
@@ -222,7 +222,7 @@ class HSSM:  # pylint: disable=R0902
         for param_str in self.list_params:
             if param_str not in processed:
                 is_parent = param_str == self._parent
-                bounds = model_config["default_boundaries"][param_str]
+                bounds = model_config["bounds"][param_str]
                 prior = 0.0 if model == "ddm" and param_str == "sv" else None
                 param = Param(
                     name=param_str,

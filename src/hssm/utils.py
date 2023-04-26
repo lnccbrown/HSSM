@@ -79,10 +79,10 @@ class Param:
         link, optional
             The link function for the regression. It is either a string that specifies
             a built-in link function in Bambi, or a Bambi Link object. If a regression
-            is speicified and link is not specified, "identity" will be used by default.
+            is specified and link is not specified, "identity" will be used by default.
         bounds, optional:
             If provided, the prior will be created with boundary checks. If this
-            parameter is specified as a parent or regression, boundary checks will be
+            parameter is specified as a regression, boundary checks will be
             skipped at this point.
         is_parent
             Determines if this parameter is a "parent" parameter. If so, the response
