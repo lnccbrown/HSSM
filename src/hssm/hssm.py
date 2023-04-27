@@ -16,7 +16,7 @@ from hssm.wfpt.config import Config, SupportedModels, default_model_config
 LogLikeFunc = Callable[..., ArrayLike]
 
 
-class HSSM:  # pylint: disable=R0902
+class HSSM:
     """
     The Hierarchical Sequential Sampling Model (HSSM) class.
 
@@ -116,9 +116,7 @@ class HSSM:  # pylint: disable=R0902
 
         assert self._parent_param is not None
 
-        params_is_reg = [
-            param.is_regression or param.is_parent for param in self.params
-        ]
+        params_is_reg = [param.is_regression for param in self.params]
 
         if "loglik_kind" not in self.model_config or self.model_config[
             "loglik_kind"
@@ -263,8 +261,8 @@ class HSSM:  # pylint: disable=R0902
         Returns
         -------
             An ArviZ ``InferenceData`` instance if inference_method is  ``"mcmc"``
-            (default), "nuts_numpyro", "nuts_blackjax" or "laplace".
-            An ``Approximation`` object if  ``"vi"``.
+        (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An ``Approximation``
+        object if  ``"vi"``.
         """
 
         supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
