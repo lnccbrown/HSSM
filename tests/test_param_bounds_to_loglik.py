@@ -38,9 +38,23 @@ def generate_random_vector(vector_length, lower_bound, upper_bound):
     return np.random.rand(vector_length) * (upper_bound - lower_bound) + lower_bound
 
 
+def generate_samples_outside_boundary(samples_needed, boundary):
+    samples = []
+
+    while len(samples) < samples_needed:
+        random_sample = np.random.uniform(
+            -10, 10
+        )  # Generate a random number between -10 and 10
+        if random_sample < boundary[0] or random_sample > boundary[1]:
+            samples.append(random_sample)
+
+    outside_boundary_array = np.array(samples)
+    return outside_boundary_array
+
+
 vector_length = 1000
 vector_a = generate_random_vector(vector_length, 0.3, 2.5)
-vector_a_2 = generate_random_vector(vector_length, 0.0, 19.0)
+vector_a_2 = generate_samples_outside_boundary(vector_length, (0.3, 3.0))
 
 
 @pytest.mark.parametrize(
@@ -83,7 +97,7 @@ def test_adjust_logp_with_analytical(
 
 
 vector_theta = generate_random_vector(vector_length, -0.1, 1.3)
-vector_theta_2 = generate_random_vector(vector_length, -5.9, 10.0)
+vector_theta_2 = generate_samples_outside_boundary(vector_length, (-0.1, 1.3))
 
 
 @pytest.mark.parametrize(
