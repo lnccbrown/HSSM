@@ -47,7 +47,7 @@ vector_a_2 = generate_random_vector(vector_length, 0.1, 3.0)
     "a, expected_result",
     [
         (0.5, "equal"),
-        (0.1, "not_equal"),
+        (0.0, "not_equal"),
         (vector_a, "equal"),
         (vector_a_2, "not_equal_no_inf"),
     ],
