@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable, Literal
 
+import arviz as az
 import bambi as bmb
 import pandas as pd
 import pymc as pm
@@ -10,59 +11,73 @@ from numpy.typing import ArrayLike
 
 from hssm import wfpt
 from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict, merge_dicts
-from hssm.wfpt.config import default_model_config
+from hssm.wfpt.config import Config, SupportedModels, default_model_config
 
 LogLikeFunc = Callable[..., ArrayLike]
 
-# add custom link function
-class HSSM:  # pylint: disable=R0902
+
+class HSSM:
     """
     The Hierarchical Sequential Sampling Model (HSSM) class.
 
-    Args:
-    data (pandas.DataFrame): A pandas DataFrame with the minimum requirements of
-        containing the data with the columns 'rt' and 'response'.
-    model_name (str): The name of the model to use. Default is "ddm".
-    Current default implementations are "ddm" | "lan" | "custom".
-        ddm - Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
-        the method and implementation of Navarro & Fuss, 2009.
-        angle - Likelihood Approximation Network (LAN) extension for the Wiener
-         First-Passage Time (WFPT) distribution.
-    include (List[dict], optional): A list of dictionaries specifying additional
-     parameters to include in the model. Defaults to None. Priors specification range:
-        v: Mean drift rate. (-inf, inf).
-        sv: Standard deviation of the drift rate [0, inf).
-        a: Value of decision upper bound. (0, inf).
-        z: Normalized decision starting point. (0, 1).
-        t: Non-decision time [0, inf).
-        theta: [0, inf).
-    model_config (dict, optional): A dictionary containing the model
-     configuration information. Defaults to None.
+    Parameters
+    ----------
 
-    Attributes:
-        list_params (list): The list of parameter names.
-        model (str): The name of the model.
-        model_distribution: A SSM model object.
-        likelihood: A Bambi likelihood object.
-        family: A Bambi family object.
-        priors (dict): A dictionary containing the prior distribution
-         of parameters.
-        formula (str): A string representing the model formula.
-        params (list): A list of Param objects representing model parameters.
+    data:
+        A pandas DataFrame with the minimum requirements of containing the data with the
+        columns 'rt' and 'response'.
+    model:
+        The name of the model to use. Currently supported models are "ddm", "angle",
+        "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". If
+        using a custom model, please pass "custom". Defaults to "ddm".
+    include, optional:
+        A list of dictionaries specifying parameter specifications to include in the
+        model. If left unspecified, defaults will be used for all parameter
+        specifications. Defaults to None.
+    model_config, optional:
+        A dictionary containing the model configuration information. If None is
+        provided, defaults will be used. Defaults to None.
+    **kwargs:
+        Additional arguments passed to the bmb.Model object.
+
+    Attributes
+    ----------
+    data:
+        A pandas DataFrame with at least two columns of "rt" and "response" indicating
+        the response time and responses.
+    list_params:
+        The list of strs of parameter names.
+    model_name:
+        The name of the model.
+    model_config:
+        A dictionary representing the model configuration.
+    model_distribution:
+        The likelihood function of the model in the form of a pm.Distribution subclass.
+    family:
+        A Bambi family object.
+    priors:
+        A dictionary containing the prior distribution of parameters.
+    formula:
+        A string representing the model formula.
+    link:
+        A string or a dictionary representing the link functions for all parameters.
+    params:
+        A list of Param objects representing model parameters.
 
     Methods:
-        _transform_params: A method to transform priors, link and formula
-         into Bambi's format.
         sample: A method to sample posterior distributions.
+        set_alias: Sets the alias for a paramter.
+        graph: Plot the model with PyMC's built-in graph function.
     """
 
     def __init__(
         self,
         data: pd.DataFrame,
-        model: str = "ddm",
+        model: SupportedModels = "ddm",
         include: list[dict] | None = None,
-        model_config: dict | None = None,
+        model_config: Config | None = None,
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
+        **kwargs,
     ):
         self.data = data
         self._inference_obj = None
@@ -88,31 +103,68 @@ class HSSM:  # pylint: disable=R0902
         self.model_name = model
 
         self.list_params = self.model_config["list_params"]
-        self.parent = self.list_params[0]
+        self._parent = self.list_params[0]
 
         self.params, self.formula, self.priors, self.link = self._transform_params(
-            include
+            include, self.model_name, self.model_config
         )
-        params_is_reg = [param.is_regression() for param in self.params]
 
-        self.is_onnx = self.model_config["loglik_kind"] == "approx_differentiable"
-        bounds = self.model_config["default_boundaries"]
-        if self.model_config["loglik_kind"] == "analytical":
-            self.model_distribution = wfpt.WFPT
-        elif self.is_onnx:
-            self.model_distribution = wfpt.make_lan_distribution(
-                model=self.model_config["loglik_path"],
-                list_params=self.list_params,
-                backend=self.model_config["backend"],
-                params_is_reg=params_is_reg,
-                bounds=bounds,
+        for param in self.params:
+            if param.name == self._parent:
+                self._parent_param = param
+                break
+
+        assert self._parent_param is not None
+
+        params_is_reg = [param.is_regression for param in self.params]
+
+        if "loglik_kind" not in self.model_config or self.model_config[
+            "loglik_kind"
+        ] not in [
+            "analytical",
+            "approx_differentiable",
+            "blackbox",
+        ]:
+            raise ValueError(
+                "'loglike_kind' field of model_config must be one of "
+                + '"analytical", "approx_differentiable", "blackbox".'
             )
-        elif self.model_name == "custom":
-            self.model_distribution = wfpt.make_distribution(
-                loglik=loglik,  # type: ignore
-                list_params=self.list_params,  # type: ignore
-                bounds=bounds,
-            )
+
+        if "loglik" in self.model_config:
+            # If a user has already provided a log-likelihood function
+            if issubclass(self.model_config["loglik"], pm.Distribution):
+                # Test if the it is a distribution
+                self.model_distribution = self.model_config["loglik"]
+            else:
+                # If not, create a distribution
+                self.model_distribution = wfpt.make_distribution(
+                    loglik=loglik, list_params=self.list_params  # type: ignore
+                )
+        else:
+            # If not, in the case of "approx_differentiable"
+            if self.model_config["loglik_kind"] == "approx_differentiable":
+                # Check if a loglik_path is provided.
+                if (
+                    "loglik_path" not in self.model_config
+                    or self.model_config["loglik_path"] is None
+                ):
+                    raise ValueError(
+                        "Please provide either a path to an onnx file for the log "
+                        + "likelihood or a log-likelihood function."
+                    )
+                self.model_distribution = wfpt.make_lan_distribution(
+                    model=self.model_config["loglik_path"],
+                    list_params=self.list_params,
+                    backend=self.model_config["backend"],
+                    params_is_reg=params_is_reg,
+                )
+            else:
+                raise ValueError(
+                    "Please provide a likelihood function or a pm.Distribution "
+                    + "in the `loglik` field of model_config!"
+                )
+
+        assert self.model_distribution is not None
 
         self.likelihood = bmb.Likelihood(
             self.model_config["loglik_kind"],
@@ -126,14 +178,14 @@ class HSSM:  # pylint: disable=R0902
         )
 
         self.model = bmb.Model(
-            self.formula, data, family=self.family, priors=self.priors
+            self.formula, data, family=self.family, priors=self.priors, **kwargs
         )
 
-        self._aliases = get_alias_dict(self.model, self.parent_param)
+        self._aliases = get_alias_dict(self.model, self._parent_param)
         self.set_alias(self._aliases)
 
     def _transform_params(
-        self, include: list[dict] | None
+        self, include: list[dict] | None, model: str, model_config: Config
     ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
         """
         This function transforms a list of dictionaries containing parameter
@@ -144,6 +196,10 @@ class HSSM:  # pylint: disable=R0902
         ----------
         include:
             A list of dictionaries containing information about the parameters.
+        model:
+            A string that indicates the type of the model.
+        model_config:
+            A dict for the configuration for the model.
 
         Returns
         -------
@@ -158,23 +214,26 @@ class HSSM:  # pylint: disable=R0902
         if include:
             for param_dict in include:
                 processed.append(param_dict["name"])
-                is_parent = param_dict["name"] == self.parent
-                param = Param(is_parent=is_parent, **param_dict)
+                is_parent = param_dict["name"] == self._parent
+                param = Param(
+                    bounds=model_config["bounds"][param_dict["name"]],
+                    is_parent=is_parent,
+                    **param_dict,
+                )
                 params.append(param)
-                if is_parent:
-                    self.parent_param = param
 
         for param_str in self.list_params:
             if param_str not in processed:
-                is_parent = param_str == self.parent
+                is_parent = param_str == self._parent
+                bounds = model_config["bounds"][param_str]
+                prior = 0.0 if model == "ddm" and param_str == "sv" else None
                 param = Param(
                     name=param_str,
-                    prior=self.model_config["default_prior"][param_str],
+                    prior=prior,
+                    bounds=bounds,
                     is_parent=is_parent,
                 )
                 params.append(param)
-                if is_parent:
-                    self.parent_param = param
 
         if len(params) != len(self.list_params):
             raise ValueError("Please provide a correct set of priors")
@@ -187,7 +246,7 @@ class HSSM:  # pylint: disable=R0902
             "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
         ] = "mcmc",
         **kwargs,
-    ):
+    ) -> az.InferenceData | pm.Approximation:
         """Performs sampling using the `fit` method via bambi.Model.
 
         Parameters
@@ -202,9 +261,16 @@ class HSSM:  # pylint: disable=R0902
         Returns
         -------
             An ArviZ ``InferenceData`` instance if inference_method is  ``"mcmc"``
-            (default), "nuts_numpyro", "nuts_blackjax" or "laplace".
-            An ``Approximation`` object if  ``"vi"``.
+        (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An ``Approximation``
+        object if  ``"vi"``.
         """
+
+        supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
+
+        if sampler not in supported_samplers:
+            raise ValueError(
+                f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
+            )
 
         self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
 
@@ -273,7 +339,7 @@ class HSSM:  # pylint: disable=R0902
         self.model._check_built()
 
         graphviz = HSSMModelGraph(
-            model=self.pymc_model, parent=self.parent_param
+            model=self.pymc_model, parent=self._parent_param
         ).make_graph(formatting=formatting)
 
         width, height = (None, None) if figsize is None else figsize
@@ -315,7 +381,19 @@ class HSSM:  # pylint: disable=R0902
         return self.__repr__()
 
     @property
-    def trace(self):
+    def trace(self) -> az.InferenceData | pm.Approximation:
+        """
+        Returns the trace of the model after sampling.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+            The trace of the model after sampling.
+        """
 
         if not self._inference_obj:
             raise ValueError("Please sample the model first.")

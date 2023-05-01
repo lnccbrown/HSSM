@@ -17,46 +17,50 @@ import pytensor
 import pytensor.tensor as pt
 from numpy.typing import ArrayLike
 from pytensor.tensor.random.op import RandomVariable
-from ssms.basic_simulators import simulator  # type: ignore
+from ssms.basic_simulators import simulator
 
-from hssm.wfpt.config import default_model_config
-
+from ..utils import BoundsSpec
 from .base import log_pdf_sv
 from .lan import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
+OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
+
 
 def apply_param_bounds_to_loglik(
     logp: Any,
     list_params: list[str],
     *dist_params: Any,
-    bounds: dict | None = None,
+    bounds: dict[str, BoundsSpec],
 ):
     """
     Adjusts the log probability of a model based on parameter boundaries.
 
-    Args:
-        logp: The log probability of the model.
-        list_params: A list of strings representing the names
-         of the distribution parameters.
-        dist_params: The distribution parameters.
-        bounds: Boundaries for parameters in the likelihood.
+    Parameters
+    ----------
+    logp:
+        The log probability of the model.
+    list_params:
+        A list of strings representing the names of the distribution parameters.
+    dist_params:
+        The distribution parameters.
+    bounds:
+        Boundaries for parameters in the likelihood.
 
     Returns:
-        The adjusted log probability.
+        The adjusted log likelihoods.
     """
-    out_of_bounds_val = pt.constant(-66.1, dtype=pytensor.config.floatX)
 
     dist_params_dict = dict(zip(list_params, dist_params))
 
     bounds = {
         k: (
-            pt.constant(v[0], dtype=pytensor.config.floatX),
-            pt.constant(v[1], dtype=pytensor.config.floatX),
+            pm.floatX(v[0]),
+            pm.floatX(v[1]),
         )
-        for k, v in bounds.items()  # type: ignore
+        for k, v in bounds.items()
     }
 
     for param_name, param in dist_params_dict.items():
@@ -66,9 +70,11 @@ def apply_param_bounds_to_loglik(
             pt.lt(param, lower_bound), pt.gt(param, upper_bound)
         )
 
-        broadcasted_mask = pt.broadcast_to(out_of_bounds_mask, logp.shape)
+        broadcasted_mask = pt.broadcast_to(
+            out_of_bounds_mask, logp.shape
+        )  # typing: ignore
 
-        logp = pt.where(broadcasted_mask, out_of_bounds_val, logp)
+        logp = pt.where(broadcasted_mask, OUT_OF_BOUNDS_VAL, logp)
 
     return logp
 
@@ -189,20 +195,27 @@ def make_distribution(
         def logp(data, *dist_params):  # pylint: disable=E0213
 
             logp = loglik(data, *dist_params)
+
             if bounds is None:
                 return logp
-            else:
-                return apply_param_bounds_to_loglik(
-                    logp, list_params, *dist_params, bounds=bounds
-                )
+
+            return apply_param_bounds_to_loglik(
+                logp, list_params, *dist_params, bounds=bounds
+            )
 
     return WFPTDistribution
 
 
-WFPT = make_distribution(
+WFPT: Type[pm.Distribution] = make_distribution(
     log_pdf_sv,
     ["v", "sv", "a", "z", "t"],
-    bounds=default_model_config["ddm"]["default_boundaries"],
+    bounds={
+        "v": (-3.0, 3.0),
+        "sv": (0.0, 1.0),
+        "a": (0.3, 2.5),
+        "z": (0.1, 0.9),
+        "t": (0.0, 2.0),
+    },
 )
 
 

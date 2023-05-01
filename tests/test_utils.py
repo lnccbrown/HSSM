@@ -26,7 +26,7 @@ def test_param_non_regression():
     assert param_value.name == "a"
     assert isinstance(param_dict.prior, bmb.Prior)
     assert param_dict.prior == param_prior.prior
-    assert not param_value.is_regression()
+    assert not param_value.is_regression
 
     assert param_value.link is None
     assert param_prior.formula is None
@@ -47,7 +47,7 @@ def test_param_non_regression():
     ):
         Param("t", 0.5, link="identity")
 
-    with pytest.raises(ValueError, match="Please specify a value or prior for a."):
+    with pytest.raises(ValueError, match="Please specify the prior or bounds for a."):
         Param("a")
 
 
