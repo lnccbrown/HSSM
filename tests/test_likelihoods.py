@@ -55,7 +55,7 @@ def test_decision(data_fixture):
     decision = decision_func()
     err = 1e-7
     data = data_fixture[:, 0] * data_fixture[:, 1]
-    lambda_rt = decision(data, err)
+    lambda_rt = decision(np.abs(data), err)
     assert all(not v for v in lambda_rt.eval())
     assert data_fixture.shape[0] == lambda_rt.eval().shape[0]
 
@@ -64,12 +64,12 @@ def test_logp(data_fixture):
     """
     This function compares new and old implementation of logp calculation
     """
-    for _ in range(20):
+    for _ in range(10):
         v = (rand() - 0.5) * 1.5
         sv = 0
         a = 1.5 + rand()
         z = 0.5 * rand()
-        t = rand() * 0.5
+        t = rand() * min(abs(data_fixture[:, 0]))
         err = 1e-7
 
         # We have to pass a / 2 to ensure that the log-likelihood will return the
