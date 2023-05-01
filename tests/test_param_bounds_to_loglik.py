@@ -40,7 +40,7 @@ def generate_random_vector(vector_length, lower_bound, upper_bound):
 
 vector_length = 1000
 vector_a = generate_random_vector(vector_length, 0.3, 2.5)
-vector_a_2 = generate_random_vector(vector_length, 0.1, 3.0)
+vector_a_2 = generate_random_vector(vector_length, 0.0, 19.0)
 
 
 @pytest.mark.parametrize(
@@ -83,7 +83,7 @@ def test_adjust_logp_with_analytical(
 
 
 vector_theta = generate_random_vector(vector_length, -0.1, 1.3)
-vector_theta_2 = generate_random_vector(vector_length, -0.5, 3.0)
+vector_theta_2 = generate_random_vector(vector_length, -5.9, 10.0)
 
 
 @pytest.mark.parametrize(
