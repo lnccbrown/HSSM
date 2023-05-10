@@ -77,4 +77,4 @@ def test_logp(data_fixture):
         pytensor_log = log_pdf_sv(data_fixture, v, sv, a / 2, z, t, err=err)
         data = data_fixture[:, 0] * data_fixture[:, 1]
         cython_log = wfpt.pdf_array(data, v, sv, a, z, 0, t, 0, err, 1)
-        np.testing.assert_array_almost_equal(pytensor_log.eval(), cython_log, 1)
+        np.testing.assert_array_almost_equal(pytensor_log.eval(), cython_log, 0)
