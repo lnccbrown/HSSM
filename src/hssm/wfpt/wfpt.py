@@ -28,6 +28,15 @@ LogLikeGrad = Callable[..., ArrayLike]
 
 OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
 
+# Defined here to avoid circular import
+ddm_bounds: dict[str, tuple[float, float]] = {
+    "v": (-3.0, 3.0),
+    "sv": (0.0, 1.0),
+    "a": (0.3, 2.5),
+    "z": (0.1, 0.9),
+    "t": (0.0, 2.0),
+}
+
 
 def apply_param_bounds_to_loglik(
     logp: Any,
@@ -207,15 +216,7 @@ def make_distribution(
 
 
 WFPT: Type[pm.Distribution] = make_distribution(
-    log_pdf_sv,
-    ["v", "sv", "a", "z", "t"],
-    bounds={
-        "v": (-3.0, 3.0),
-        "sv": (0.0, 1.0),
-        "a": (0.3, 2.5),
-        "z": (0.1, 0.9),
-        "t": (0.0, 2.0),
-    },
+    log_pdf_sv, ["v", "sv", "a", "z", "t"], bounds=ddm_bounds
 )
 
 

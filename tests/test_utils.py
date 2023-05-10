@@ -218,14 +218,14 @@ def test_get_alias_dict():
         ],
     )._aliases
 
-    assert alias_default["c(rt, response)"] == "rt, response"
+    assert alias_default["c(rt, response)"] == "rt,response"
     assert alias_default["Intercept"] == "v"
     assert alias_default["a"] == "a"
 
-    assert alias_regression["c(rt, response)"] == "rt, response"
+    assert alias_regression["c(rt, response)"] == "rt,response"
     assert alias_regression["Intercept"] == "v_Intercept"
     assert alias_regression["1|group"] == "v_1|group"
 
-    assert alias_regression_a["c(rt, response)"]["c(rt, response)"] == "rt, response"
+    assert alias_regression_a["c(rt, response)"]["c(rt, response)"] == "rt,response"
     assert alias_regression_a["c(rt, response)"]["Intercept"] == "v"
     #  assert alias_regression_a["a"]["Intercept"] == "v" # Undetermined, will add later
