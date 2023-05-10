@@ -191,6 +191,7 @@ def ftt01w(
 
     return p * (p > 0)  # Making sure that p > 0
 
+
 def log_pdf_sv(
     data: np.ndarray,
     v: float,
@@ -230,7 +231,7 @@ def log_pdf_sv(
     # 2. Computes the log of above value
     # 3. Computes the integration given the sd of v
     logp = (
-        pt.log(p+ 1e-10)
+        pt.log(p + 1e-10)
         + (
             (a * z_flipped * sv) ** 2
             - 2 * a * v_flipped * z_flipped
