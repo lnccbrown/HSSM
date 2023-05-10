@@ -191,10 +191,6 @@ def ftt01w(
 
     return p * (p > 0)  # Making sure that p > 0
 
-def stable_log_sum_exp(x, y):
-    max_val = pt.maximum(x, y)
-    return max_val + pt.log(pt.exp(x - max_val) + pt.exp(y - max_val))
-
 def log_pdf_sv(
     data: np.ndarray,
     v: float,
@@ -233,22 +229,17 @@ def log_pdf_sv(
     # 1. Computes f(t|v, a, z) from the pdf when setting a = 0 and z = 1.
     # 2. Computes the log of above value
     # 3. Computes the integration given the sd of v
-    logp_numerator = (
-            pt.log(p)
-            + (
-                    (a * z_flipped * sv) ** 2
-                    - 2 * a * v_flipped * z_flipped
-                    - (v_flipped ** 2) * rt
-            )
-            / (2 * (sv ** 2) * rt + 2)
+    logp = (
+        pt.log(p+ 1e-10)
+        + (
+            (a * z_flipped * sv) ** 2
+            - 2 * a * v_flipped * z_flipped
+            - (v_flipped**2) * rt
+        )
+        / (2 * (sv**2) * rt + 2)
+        - pt.log(sv**2 * rt + 1 + 1e-10) / 2
+        - 2 * pt.log(a + 1e-10)
     )
-
-    logp_denominator = (
-            pt.log(sv ** 2 * rt + 1) / 2
-            + 2 * pt.log(a)
-    )
-
-    logp = stable_log_sum_exp(logp_numerator, -logp_denominator)
 
     checked_logp = check_parameters(
         logp,
