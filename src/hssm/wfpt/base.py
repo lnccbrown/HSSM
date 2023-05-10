@@ -230,7 +230,7 @@ def log_pdf_sv(
     # 1. Computes f(t|v, a, z) from the pdf when setting a = 0 and z = 1.
     # 2. Computes the log of above value
     # 3. Computes the integration given the sd of v
-    small_number = 1e-12
+    small_number = 1e-15
     logp = (
         pt.log(p + small_number)
         + (
