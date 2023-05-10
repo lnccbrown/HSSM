@@ -230,16 +230,17 @@ def log_pdf_sv(
     # 1. Computes f(t|v, a, z) from the pdf when setting a = 0 and z = 1.
     # 2. Computes the log of above value
     # 3. Computes the integration given the sd of v
+    small_number = 1e-12
     logp = (
-        pt.log(p + 1e-12)
+        pt.log(p + small_number)
         + (
             (a * z_flipped * sv) ** 2
             - 2 * a * v_flipped * z_flipped
             - (v_flipped**2) * rt
         )
         / (2 * (sv**2) * rt + 2)
-        - pt.log(sv**2 * rt + 1 + 1e-12) / 2
-        - 2 * pt.log(a + 1e-12)
+        - pt.log(sv**2 * rt + 1 + small_number) / 2
+        - 2 * pt.log(a + small_number)
     )
 
     checked_logp = check_parameters(
