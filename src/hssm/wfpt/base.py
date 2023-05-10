@@ -231,15 +231,15 @@ def log_pdf_sv(
     # 2. Computes the log of above value
     # 3. Computes the integration given the sd of v
     logp = (
-        pt.log(p + 1e-10)
+        pt.log(p + 1e-12)
         + (
             (a * z_flipped * sv) ** 2
             - 2 * a * v_flipped * z_flipped
             - (v_flipped**2) * rt
         )
         / (2 * (sv**2) * rt + 2)
-        - pt.log(sv**2 * rt + 1 + 1e-10) / 2
-        - 2 * pt.log(a + 1e-10)
+        - pt.log(sv**2 * rt + 1 + 1e-12) / 2
+        - 2 * pt.log(a + 1e-12)
     )
 
     checked_logp = check_parameters(
