@@ -80,7 +80,6 @@ def apply_param_bounds_to_loglik(
 
 
 def make_model_rv(list_params: list[str]) -> Type[RandomVariable]:
-
     """Builds a RandomVariable Op according to the list of parameters.
 
     Args:
@@ -193,7 +192,6 @@ def make_distribution(
             return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
-
             logp = loglik(data, *dist_params)
 
             if bounds is None:

@@ -201,7 +201,7 @@ def log_pdf_sv(
     t: float,
     err: float = 1e-7,
     k_terms: int = 10,
-    small_number: float = 1e-15
+    small_number: float = 1e-15,
 ) -> np.ndarray:
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
