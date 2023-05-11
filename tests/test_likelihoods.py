@@ -91,8 +91,8 @@ def test_params():
 
 def test_no_inf_values(data_fixture, test_params):
     """
-    This test checks if the output does not include inf values even when parameters are out of range,
-    when small_number is set to 1e-15.
+    This test checks if the output does not include inf values even
+    when parameters are out of range, when small_number is set to 1e-15.
     """
     for a in np.arange(2.5, 5.1, 0.1):  # a ranges from 2.5 to 5 with step size 0.1
         logp = log_pdf_sv(data_fixture, a=a, small_number=1e-15, **test_params)
@@ -106,7 +106,8 @@ def test_inf_values(data_fixture, test_params):
     """
     for a in np.arange(2.5, 5.1, 0.1):  # a ranges from 2.5 to 5 with step size 0.1
         logp = log_pdf_sv(data_fixture, a=a, small_number=0.0, **test_params)
-        assert np.any(np.isinf(logp)), f"log_pdf_sv() did return inf values for a = {a} when small_number is 0 as expected."
+        assert np.any(np.isinf(logp)), f"log_pdf_sv() did return inf values for" \
+                                       f" a = {a} when small_number is 0 as expected."
 
 
 
