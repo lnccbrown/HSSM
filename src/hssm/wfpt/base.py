@@ -21,7 +21,8 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
         err: Error bound
     Returns: a 1D at array of k_small.
     """
-    ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
+    log_arg = pt.log(2 * pt.sqrt(2 * np.pi * rt) * err)
+    ks = 2 + pt.sqrt(-2 * rt * log_arg)
     ks = pt.max(pt.stack([ks, pt.sqrt(rt) + 1]), axis=0)
     ks = pt.switch(2 * pt.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
 
@@ -132,16 +133,15 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
         The approximated function f(tt|0, 1, w).
     """
 
+    # Slightly changed the original code to mimic the paper and
+    # ensure correctness
     k = get_ks(k_terms, fast=True)
 
+    # A log-sum-exp trick is used here
     y = w + 2 * k.reshape((-1, 1))
     r = -pt.power(y, 2) / (2 * tt)
     c = pt.max(r, axis=0)
-
-    # Use np.logaddexp for better numerical stability
-    p = np.logaddexp(c, np.log(np.sum(y * np.exp(r - c), axis=0)))
-    p = np.exp(p)
-
+    p = pt.exp(c + pt.log(pt.sum(y * pt.exp(r - c), axis=0)))
     # Normalize p
     p = p / pt.sqrt(2 * np.pi * pt.power(tt, 3))
 
@@ -161,10 +161,7 @@ def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     k = get_ks(k_terms, fast=False)
     y = k * pt.sin(k * np.pi * w)
     r = -pt.power(k, 2) * pt.power(np.pi, 2) * tt / 2
-
-    # Use np.logaddexp for better numerical stability
-    p = np.logaddexp(np.log(np.sum(y * np.exp(r), axis=0)), np.log(np.pi))
-    p = np.exp(p)
+    p = pt.sum(y * pt.exp(r), axis=0) * np.pi
 
     return p
 
@@ -228,6 +225,7 @@ def log_pdf_sv(
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
+
 
     p = ftt01w(rt, a, z_flipped, err, k_terms)
 
