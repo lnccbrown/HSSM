@@ -147,6 +147,7 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 
     return p
 
+
 def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the slow-RT expansion.
@@ -227,7 +228,6 @@ def log_pdf_sv(
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
-
 
     p = ftt01w(rt, a, z_flipped, err, k_terms)
 
