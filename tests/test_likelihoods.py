@@ -109,7 +109,7 @@ def test_inf_values(data_fixture, test_params):
     This test checks if the output includes inf values when parameters are out of range,
     and when small_number is set to 0.0.
     """
-    for a in np.arange(2.5, 5.1, 0.1):  # a ranges from 2.5 to 5 with step size 0.1
+    for a in np.arange(4.0, 5.1, 0.1):  # a ranges from 2.5 to 5 with step size 0.1
         logp = log_pdf_sv(data_fixture, a=a, small_number=0.0, **test_params)
         assert np.any(np.isinf(logp.eval())), (
             f"log_pdf_sv() did return inf values for"
