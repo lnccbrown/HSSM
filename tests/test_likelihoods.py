@@ -125,4 +125,4 @@ def test_no_inf_values_t(data_fixture, test_params_with_a):
 
         assert np.all(
             np.isfinite(logp.eval())
-        ), f"log_pdf_sv() returned non-finite values for a = {a}."
+        ), f"log_pdf_sv() returned non-finite values for a = {t}."
