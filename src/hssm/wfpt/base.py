@@ -21,8 +21,7 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
         err: Error bound
     Returns: a 1D at array of k_small.
     """
-    log_arg = pt.log(2 * pt.sqrt(2 * np.pi * rt) * err)
-    ks = 2 + pt.sqrt(-2 * rt * log_arg)
+    ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
     ks = pt.max(pt.stack([ks, pt.sqrt(rt) + 1]), axis=0)
     ks = pt.switch(2 * pt.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
 
@@ -228,10 +227,10 @@ def log_pdf_sv(
     a = a * 2
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
-
+    #t = pt.where(rt < t, small_number, t)
     rt = rt - t
     rt = pt.where(rt < 0, small_number, rt)
-
+    print(rt.eval())
     p = ftt01w(rt, a, z_flipped, err, k_terms)
 
     # This step does 3 things at the same time:
