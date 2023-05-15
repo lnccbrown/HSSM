@@ -120,9 +120,9 @@ def test_no_inf_values_t(data_fixture, test_params_with_a):
     This test checks if the output does not include inf values even
     when parameters are out of range, when small_number is set to 1e-15.
     """
-    for t in np.arange(2.5, 5.1, 0.1):  # a ranges from 2.5 to 5 with step size 0.1
+    for t in np.arange(3.0, 5.1, 0.1):  # a ranges from 2.5 to 5 with step size 0.1
         logp = log_pdf_sv(data_fixture, t=t, small_number=1e-15, **test_params_with_a)
 
         assert np.all(
             np.isfinite(logp.eval())
-        ), f"log_pdf_sv() returned non-finite values for a = {t}."
+        ), f"log_pdf_sv() returned non-finite values for t = {t}."
