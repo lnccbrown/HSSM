@@ -97,7 +97,7 @@ def test_no_inf_values_a(data_fixture, shared_params):
         params = {**shared_params, "a": a}
         logp = log_pdf_sv(data_fixture, small_number=1e-15, **params)
         assert np.all(
-            np.isfinite(logp)
+            np.isfinite(logp.eval())
         ), f"log_pdf_sv() returned non-finite values for a = {a}."
 
 
@@ -106,7 +106,7 @@ def test_no_inf_values_t(data_fixture, shared_params):
         params = {**shared_params, "t": t}
         logp = log_pdf_sv(data_fixture, small_number=1e-15, **params)
         assert np.all(
-            np.isfinite(logp)
+            np.isfinite(logp.eval())
         ), f"log_pdf_sv() returned non-finite values for t = {t}."
 
 
@@ -115,7 +115,7 @@ def test_no_inf_values_v(data_fixture, shared_params):
         params = {**shared_params, "v": v}
         logp = log_pdf_sv(data_fixture, small_number=1e-15, **params)
         assert np.all(
-            np.isfinite(logp)
+            np.isfinite(logp.eval())
         ), f"log_pdf_sv() returned non-finite values for v = {v}."
 
 
@@ -124,5 +124,5 @@ def test_no_inf_values_z(data_fixture, shared_params):
         params = {**shared_params, "z": z}
         logp = log_pdf_sv(data_fixture, small_number=1e-15, **params)
         assert np.all(
-            np.isfinite(logp)
+            np.isfinite(logp.eval())
         ), f"log_pdf_sv() returned non-finite values for z = {z}."
