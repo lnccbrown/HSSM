@@ -215,6 +215,10 @@ def log_pdf_sv(
         t: Non-decision time [0, inf).
         err: Error bound.
         k_terms: number of terms to use to approximate the PDF.
+        small_number: A small positive number to prevent division by zero or
+                      taking the log of zero, also used to replace negative
+                      response times after subtracting non-decision time.
+                      Default is 1e-15.
     """
 
     data = pt.reshape(data, (-1, 2))
@@ -224,7 +228,9 @@ def log_pdf_sv(
     a = a * 2
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
+
     rt = rt - t
+    rt = pt.where(rt < 0, small_number, rt)
 
     p = ftt01w(rt, a, z_flipped, err, k_terms)
 
