@@ -91,7 +91,7 @@ def test_params():
     }
 
 
-def test_no_inf_values(data_fixture, test_params):
+def test_no_inf_values_a(data_fixture, test_params):
     """
     This test checks if the output does not include inf values even
     when parameters are out of range, when small_number is set to 1e-15.
