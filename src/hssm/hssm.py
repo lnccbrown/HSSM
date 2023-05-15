@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 
 import arviz as az
 import bambi as bmb
@@ -105,6 +105,29 @@ class HSSM:
         self.list_params = self.model_config["list_params"]
         self._parent = self.list_params[0]
 
+        if include is None:
+            include = []
+        params_in_include = [param["name"] for param in include]
+
+        other_kwargs: dict[Any, Any] = {}
+        for k, v in kwargs.items():
+            if k in self.list_params:
+                if k in params_in_include:
+                    raise ValueError(
+                        f'Parameter "{k}" is already specified in `include`.'
+                    )
+
+                if isinstance(v, (int, float, bmb.Prior)):
+                    include.append({"name": k, "prior": v})
+                elif isinstance(v, dict):
+                    include.append(v | {"name": k})
+                else:
+                    raise ValueError(
+                        f"Parameter {k} must be a float, a dict, or a bmb.Prior object."
+                    )
+            else:
+                other_kwargs |= {k: v}
+
         self.params, self.formula, self.priors, self.link = self._transform_params(
             include, self.model_name, self.model_config
         )
@@ -178,7 +201,7 @@ class HSSM:
         )
 
         self.model = bmb.Model(
-            self.formula, data, family=self.family, priors=self.priors, **kwargs
+            self.formula, data, family=self.family, priors=self.priors, **other_kwargs
         )
 
         self._aliases = get_alias_dict(self.model, self._parent_param)

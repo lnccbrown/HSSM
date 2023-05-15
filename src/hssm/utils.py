@@ -108,7 +108,7 @@ class Param:
                 )
 
             self.prior: float | bmb.Prior = (
-                self._make_prior_dict(prior) if prior is not None else prior
+                _make_prior_dict(prior) if prior is not None else prior
             )
 
             self.link = "identity" if link is None else link
@@ -237,30 +237,50 @@ class Param:
         """
         return self.__repr__()
 
-    def _make_prior_dict(
-        self, prior: dict[str, ParamSpec]
-    ) -> dict[str, float | bmb.Prior]:
-        """Helper function to make bambi priors from a dictionary of priors for the
-        regression case.
 
-        Parameters
-        ----------
-        prior:
-            A dictionary where each key is the name of a parameter in a regression
-            and each value is the prior specification for that parameter.
+def _make_prior_dict(prior: dict[str, ParamSpec]) -> dict[str, float | bmb.Prior]:
+    """Helper function to make bambi priors from a dictionary of priors for the
+    regression case.
 
-        Returns
-        -------
-            A dictionary where each key is the name of a parameter in a regression
-            and each value is either a float or a bmb.Prior object.
-        """
-        priors = {
-            # Convert dict to bmb.Prior if a dict is passed
-            param: bmb.Prior(**prior) if isinstance(prior, dict) else prior
-            for param, prior in prior.items()
-        }
+    Parameters
+    ----------
+    prior:
+        A dictionary where each key is the name of a parameter in a regression
+        and each value is the prior specification for that parameter.
 
-        return priors
+    Returns
+    -------
+        A dictionary where each key is the name of a parameter in a regression
+        and each value is either a float or a bmb.Prior object.
+    """
+    priors = {
+        # Convert dict to bmb.Prior if a dict is passed
+        param: _make_priors_recursive(prior) if isinstance(prior, dict) else prior
+        for param, prior in prior.items()
+    }
+
+    return priors
+
+
+def _make_priors_recursive(prior: dict[str, Any]) -> bmb.Prior:
+    """Helper function that recursively converts a dict that might have some
+    fields that have a parameter definitions as dicts to bmb.Prior objects.
+
+    Parameters
+    ----------
+    prior:
+        A dictionary that contains parameter specifications.
+
+    Returns
+    -------
+        A bmb.Prior object with fields that can be converted to bmb.Prior objects
+        also converted.
+    """
+    for k, v in prior.items():
+        if isinstance(v, dict) and "name" in v:
+            prior[k] = _make_priors_recursive(v)
+
+    return bmb.Prior(**prior)
 
 
 def _parse_bambi(
@@ -552,7 +572,7 @@ def make_bounded_prior(
 
     if isinstance(prior, dict):
         dist = make_truncated_dist(lower, upper, **prior)
-        return bmb.Prior(dist=dist, **prior)
+        return bmb.Prior(name=prior["name"], dist=dist)
 
     # After handling the constant and dict case, now handle the bmb.Prior case
     if prior.dist is not None:
@@ -587,8 +607,8 @@ def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Cal
     dist_name = kwargs["name"]
     dist_kwargs = {k: v for k, v in kwargs.items() if k != "name"}
 
-    def TruncatedDist(name, *args, **kwargs):
-        dist = get_distribution(dist_name).dist(*args, **kwargs, **dist_kwargs)
+    def TruncatedDist(name):
+        dist = get_distribution(dist_name).dist(**dist_kwargs)
         return pm.Truncated(
             name="Trucated_" + name,
             dist=dist,
