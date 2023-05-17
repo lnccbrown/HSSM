@@ -228,7 +228,7 @@ def log_pdf_sv(
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
-    rt = pt.where(rt < 0, small_number, rt)
+    # rt = pt.where(rt < 0, small_number, rt)
     p = ftt01w(rt, a, z_flipped, err, k_terms)
 
     # This step does 3 things at the same time:
@@ -246,6 +246,8 @@ def log_pdf_sv(
         - pt.log(sv**2 * rt + 1 + small_number) / 2
         - 2 * pt.log(a + small_number)
     )
+    logp = pt.where(rt < 0, small_number, logp)
+
 
     checked_logp = check_parameters(
         logp,
