@@ -5,7 +5,7 @@ import pytest
 import ssms.basic_simulators
 
 import hssm
-from hssm.utils import Param, _parse_bambi
+from hssm.utils import Param, _make_priors_recursive, _parse_bambi
 
 
 def test_param_non_regression():
@@ -229,3 +229,17 @@ def test_get_alias_dict():
     assert alias_regression_a["c(rt, response)"]["c(rt, response)"] == "rt,response"
     assert alias_regression_a["c(rt, response)"]["Intercept"] == "v"
     #  assert alias_regression_a["a"]["Intercept"] == "v" # Undetermined, will add later
+
+
+def test__make_priors_recursive():
+
+    test_dict = {
+        "name": "Uniform",
+        "lower": 0.1,
+        "upper": {"name": "Normal", "mu": 0.5, "sigma": 0.1},
+    }
+
+    result_prior = _make_priors_recursive(test_dict)
+    assert isinstance(result_prior, bmb.Prior)
+    assert isinstance(result_prior.args["upper"], bmb.Prior)
+    assert result_prior.args["upper"].name == "Normal"
