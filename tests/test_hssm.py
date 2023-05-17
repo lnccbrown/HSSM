@@ -167,3 +167,23 @@ def test_custom_model(data, example_model_config):
 
     assert model.model_name == "custom"
     assert model.model_config == example_model_config
+
+
+def test_model_definition_outside_include(data):
+
+    model_with_one_param_fixed = hssm.HSSM(data, a=0.5)
+
+    assert "a" in model_with_one_param_fixed.priors
+    assert model_with_one_param_fixed.priors["a"] == 0.5
+
+    model_with_one_param = hssm.HSSM(
+        data, a={"prior": {"name": "Normal", "mu": 0.5, "sigma": 0.1}}
+    )
+
+    assert "a" in model_with_one_param.priors
+    assert model_with_one_param.priors["a"].name == "Normal"
+
+    with pytest.raises(
+        ValueError, match='Parameter "a" is already specified in `include`'
+    ):
+        hssm.HSSM(data, include=[{"name": "a", "prior": 0.5}], a=0.5)
