@@ -10,9 +10,11 @@ _parse_bambi().
 
 from __future__ import annotations
 
-from typing import Any, Iterable, NewType, Union, cast
+from typing import Any, Callable, Iterable, NewType, Union, cast
 
 import bambi as bmb
+import pymc as pm
+from bambi.backend.utils import get_distribution
 from bambi.terms import CommonTerm, GroupSpecificTerm
 from pymc.model_graph import ModelGraph
 from pytensor import function
@@ -105,7 +107,7 @@ class Param:
                     + "regression."
                 )
 
-            self.prior: ParamSpec = (
+            self.prior: float | bmb.Prior = (
                 self._make_prior_dict(prior) if prior is not None else prior
             )
 
@@ -123,8 +125,7 @@ class Param:
             else:
                 # Explicitly cast the type of prior, no runtime performance penalty
                 prior = cast(ParamSpec, prior)
-                # self.prior = make_bounded_prior(prior, bounds)
-                self.prior = bmb.Prior(**prior) if isinstance(prior, dict) else prior
+                self.prior = make_bounded_prior(prior, bounds)
 
             if link is not None:
                 raise ValueError("`link` should be None if no regression is specified.")
@@ -204,19 +205,27 @@ class Param:
 
         if not self.is_regression:
             if isinstance(self.prior, bmb.Prior):
-                return f"{self.name} ~ {self.prior}"
+                if self.bounds is None:
+                    return f"{self.name} ~ {self.prior}"
+                return f"{self.name} ~ {self.prior}\tbounds: {self.bounds}"
             return f"{self.name} = {self.prior}"
 
         link = self.link if isinstance(self.link, str) else self.link.name
 
         assert not isinstance(self.prior, float)
+        assert self.formula is not None
+
         priors = (
             "\r\n".join([f"\t{param} ~ {prior}" for param, prior in self.prior.items()])
             if self.prior is not None
             else "Unspecified, using defaults"
         )
 
-        return "\r\n".join([self.formula, f"\tLink: {link}", priors])  # type: ignore
+        if self.bounds is not None:
+            return "\r\n".join(
+                [self.formula, f"\tLink: {link}", f"\tbounds: {self.bounds}", priors]
+            )
+        return "\r\n".join([self.formula, f"\tLink: {link}", priors])
 
     def __str__(self) -> str:
         """Returns the string representation of the class.
@@ -337,7 +346,7 @@ def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
 
     assert parent.is_parent, "This Param object should be a parent!"
 
-    result_dict = {"c(rt, response)": "rt, response"}
+    result_dict = {"c(rt, response)": "rt,response"}
 
     # The easy case. We will just alias "Intercept" as the actual name of the
     # parameter
@@ -369,7 +378,7 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
     parent_name = parent.name
 
     if len(model.distributional_components) == 1:
-        alias_dict: dict[str, Any] = {"c(rt, response)": "rt, response"}
+        alias_dict: dict[str, Any] = {"c(rt, response)": "rt,response"}
         if not parent.is_regression:
             alias_dict |= {"Intercept": parent_name}
         else:
@@ -377,7 +386,7 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
                 if isinstance(term, (CommonTerm, GroupSpecificTerm)):
                     alias_dict |= {name: f"{parent_name}_{name}"}
     else:
-        alias_dict = {"c(rt, response)": {"c(rt, response)": "rt, response"}}
+        alias_dict = {"c(rt, response)": {"c(rt, response)": "rt,response"}}
         for component_name, component in model.distributional_components.items():
             if component.response_kind == "data":
                 if not parent.is_regression:
@@ -389,7 +398,7 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
                                 name: f"{parent_name}_{name}"
                             }
             else:
-                name = f"rt, response_{component_name}"
+                name = f"rt,response_{component_name}"
                 alias_dict[component_name] = {name: component_name}
 
     for name in model.constant_components.keys():
@@ -469,8 +478,8 @@ class HSSMModelGraph(ModelGraph):
                     label=f"{self.parent.name}\n~\nDeterministic",
                     shape="box",
                 )
-                shape = fast_eval(self.model["rt, response"].shape)
-                plate_label = f"rt, response_obs({shape[0]})"
+                shape = fast_eval(self.model["rt,response"].shape)
+                plate_label = f"rt,response_obs({shape[0]})"
 
                 sub.attr(
                     label=plate_label,
@@ -485,7 +494,7 @@ class HSSMModelGraph(ModelGraph):
                 if (
                     self.parent.is_regression
                     and parent.startswith(f"{self.parent.name}_")
-                    and child == "rt, response"
+                    and child == "rt,response"
                 ):
                     # Modify the edges so that they point to the
                     # parent parameter
@@ -494,97 +503,97 @@ class HSSMModelGraph(ModelGraph):
                     graph.edge(parent.replace(":", "&"), child.replace(":", "&"))
 
         if self.parent.is_regression:
-            graph.edge(self.parent.name, "rt, response")
+            graph.edge(self.parent.name, "rt,response")
 
         return graph
 
 
-# def make_bounded_prior(
-#     prior: ParamSpec, bounds: BoundsSpec | None
-# ) -> float | bmb.Prior:
-#     """Helper function to create a prior within specified bounds. Works in the
-#     following cases:
+def make_bounded_prior(
+    prior: ParamSpec, bounds: BoundsSpec | None
+) -> float | bmb.Prior:
+    """Helper function to create a prior within specified bounds. Works in the
+    following cases:
 
-#     1. If a prior passed is a fixed value, then check if the value is specified within
-#     the bounds. Raises a ValueError if not.
-#     2. If a prior passed is a dictionary, we create a bmb.Prior with a truncated
-#     distribution.
-#     3. If a prior is passed as a bmb.Prior object, do the same thing above.
+    1. If a prior passed is a fixed value, then check if the value is specified within
+    the bounds. Raises a ValueError if not.
+    2. If a prior passed is a dictionary, we create a bmb.Prior with a truncated
+    distribution.
+    3. If a prior is passed as a bmb.Prior object, do the same thing above.
 
-#     The above boundary checks does not happen when bounds is None.
+    The above boundary checks does not happen when bounds is None.
 
-#     Parameters
-#     ----------
-#     prior
-#         A prior definition. Cound be a float, a dict that can be passed to a bmb.Prior
-#         to create a prior distribution, or a bmb.Prior.
-#     bounds, optional:
-#         If provided, needs to be a tuple of floats that indicates the lower and upper
-#         bounds of the parameter.
+    Parameters
+    ----------
+    prior
+        A prior definition. Cound be a float, a dict that can be passed to a bmb.Prior
+        to create a prior distribution, or a bmb.Prior.
+    bounds, optional:
+        If provided, needs to be a tuple of floats that indicates the lower and upper
+        bounds of the parameter.
 
-#     Returns
-#     -------
-#         A float if `prior` is a float, otherwise a bmb.Prior object
-#     """
+    Returns
+    -------
+        A float if `prior` is a float, otherwise a bmb.Prior object
+    """
 
-#     if bounds is None:
-#         return bmb.Prior(**prior) if isinstance(prior, dict) else prior
+    if bounds is None:
+        return bmb.Prior(**prior) if isinstance(prior, dict) else prior
 
-#     lower, upper = bounds
+    lower, upper = bounds
 
-#     if isinstance(prior, float):
-#         if not lower <= prior <= upper:
-#             raise ValueError(
-#                 f"The fixed prior should be between {lower:.4f} and {upper:.4f}, "
-#                 + f"got {prior:.4f}."
-#             )
+    if isinstance(prior, float):
+        if not lower <= prior <= upper:
+            raise ValueError(
+                f"The fixed prior should be between {lower:.4f} and {upper:.4f}, "
+                + f"got {prior:.4f}."
+            )
 
-#         return prior
+        return prior
 
-#     if isinstance(prior, dict):
-#         dist = make_truncated_dist(lower, upper, **prior)
-#         return bmb.Prior(dist=dist, **prior)
+    if isinstance(prior, dict):
+        dist = make_truncated_dist(lower, upper, **prior)
+        return bmb.Prior(dist=dist, **prior)
 
-#     if prior.dist is not None:
-#         return prior
+    # After handling the constant and dict case, now handle the bmb.Prior case
+    if prior.dist is not None:
+        return prior
 
-#     name = prior.name
-#     args = prior.args
+    name = prior.name
+    args = prior.args
 
-#     dist = make_truncated_dist(lower, upper, name=name, **args)
-#     prior.update(dist=dist)
+    dist = make_truncated_dist(lower, upper, name=name, **args)
+    prior.update(dist=dist)
 
-#     return prior
+    return prior
 
 
-# def make_truncated_dist(
-#     lower_bound: float, upper_bound: float, **kwargs
-# ) -> TensorVariable:
-#     """Helper function to create a bmb.Prior object with truncated priors.
+def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Callable:
+    """Helper function to create a custom function with truncated priors.
 
-#     Parameters
-#     ----------
-#     lower_bound:
-#         The lower bound for the distribution.
-#     upper_bound:
-#         The upper bound for the distribution.
-#     kwargs:
-#         Typically a dictionary with a name for the name of the Prior distribution
-#         and other arguments passed to bmb.Prior object.
+    Parameters
+    ----------
+    lower_bound:
+        The lower bound for the distribution.
+    upper_bound:
+        The upper bound for the distribution.
+    kwargs:
+        Typically a dictionary with a name for the name of the Prior distribution
+        and other arguments passed to bmb.Prior object.
 
-#     Returns
-#     -------
-#         A distribution (TensorVariable) created with pm.Truncated().
-#     """
-#     name = kwargs["name"]
-#     args = {k: v for k, v in kwargs.items() if k != "name"}
+    Returns
+    -------
+        A distribution (TensorVariable) created with pm.Truncated().
+    """
+    dist_name = kwargs["name"]
+    dist_kwargs = {k: v for k, v in kwargs.items() if k != "name"}
 
-#     dist = get_distribution(name).dist(**args)
+    def TruncatedDist(name):
+        dist = get_distribution(dist_name).dist(**dist_kwargs)
+        return pm.Truncated(
+            name="Trucated_" + name,
+            dist=dist,
+            lower=lower_bound,
+            upper=upper_bound,
+        )
 
-#     truncated_dist = pm.Truncated.dist(
-#       dist=dist,
-#       lower=lower_bound,
-#       upper=upper_bound
-#     )
-
-#     return truncated_dist
+    return TruncatedDist

@@ -274,7 +274,7 @@ class HSSM:
 
         self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
 
-        return self.trace
+        return self.traces
 
     @property
     def pymc_model(self) -> pm.Model:
@@ -363,7 +363,7 @@ class HSSM:
         output.append(f"Model: {self.model_name}")
         output.append("")
 
-        output.append("Response variable: rt, response")
+        output.append("Response variable: rt,response")
         output.append(f"Observations: {len(self.data)}")
         output.append("")
 
@@ -381,7 +381,7 @@ class HSSM:
         return self.__repr__()
 
     @property
-    def trace(self) -> az.InferenceData | pm.Approximation:
+    def traces(self) -> az.InferenceData | pm.Approximation:
         """
         Returns the trace of the model after sampling.
 
