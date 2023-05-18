@@ -117,4 +117,3 @@ def test_no_inf_values_v(data_fixture, shared_params):
         assert np.all(
             np.isfinite(logp.eval())
         ), f"log_pdf_sv() returned non-finite values for v = {v}."
-
