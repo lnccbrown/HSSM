@@ -246,7 +246,7 @@ def log_pdf_sv(
         - pt.log(sv**2 * rt + 1 + small_number) / 2
         - 2 * pt.log(a + small_number)
     )
-    logp = pt.where(logp < 0, small_number, logp)
+    #logp = pt.where(logp < 0, small_number, logp)
     checked_logp = check_parameters(
         logp,
         sv >= 0,
