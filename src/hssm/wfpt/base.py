@@ -252,3 +252,15 @@ def log_pdf_sv(
     # checked_logp = check_parameters(checked_logp, np.all(rt > 0), msg="t <= min(rt)")
 
     return checked_logp
+
+
+def log_pdf(
+    data: np.ndarray,
+    v: float,
+    a: float,
+    z: float,
+    t: float,
+    err: float = 1e-7,
+    k_terms: int = 10,
+) -> np.ndarray:
+    return log_pdf_sv(data, v, 0, a, z, t, err, k_terms)

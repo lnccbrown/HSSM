@@ -160,8 +160,8 @@ class HSSM:
                 self.model_distribution = self.model_config["loglik"]
             else:
                 # If not, create a distribution
-                self.model_distribution = wfpt.make_distribution(
-                    loglik=loglik, list_params=self.list_params  # type: ignore
+                self.model_distribution = wfpt.make_distribution(  # type: ignore
+                    self.model_name, loglik=loglik, list_params=self.list_params
                 )
         else:
             # If not, in the case of "approx_differentiable"
@@ -176,6 +176,7 @@ class HSSM:
                         + "likelihood or a log-likelihood function."
                     )
                 self.model_distribution = wfpt.make_lan_distribution(
+                    model_name=self.model_name,
                     model=self.model_config["loglik_path"],
                     list_params=self.list_params,
                     backend=self.model_config["backend"],

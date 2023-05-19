@@ -18,9 +18,10 @@ import pytensor.tensor as pt
 from numpy.typing import ArrayLike
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators import simulator
+from ssms.config import model_config as ssms_model_config
 
 from ..utils import BoundsSpec
-from .base import log_pdf_sv
+from .base import log_pdf, log_pdf_sv
 from .lan import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
 
 LogLikeFunc = Callable[..., ArrayLike]
@@ -29,12 +30,16 @@ LogLikeGrad = Callable[..., ArrayLike]
 OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
 
 # Defined here to avoid circular import
-ddm_bounds: dict[str, tuple[float, float]] = {
+# TODO: update these bounds in the future
+ddm_analytical_bounds: dict[str, tuple[float, float]] = {
     "v": (-3.0, 3.0),
-    "sv": (0.0, 1.0),
     "a": (0.3, 2.5),
     "z": (0.1, 0.9),
     "t": (0.0, 2.0),
+}
+
+ddm_sdv_analytical_bounds = ddm_analytical_bounds | {
+    "sv": (0.0, 1.0),
 }
 
 
@@ -88,7 +93,7 @@ def apply_param_bounds_to_loglik(
     return logp
 
 
-def make_model_rv(list_params: list[str]) -> Type[RandomVariable]:
+def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]:
 
     """Builds a RandomVariable Op according to the list of parameters.
 
@@ -100,6 +105,7 @@ def make_model_rv(list_params: list[str]) -> Type[RandomVariable]:
             a pm.Distribution.
     """
 
+    # TODO: Fix the name of the RandomVariable
     # pylint: disable=W0511, R0903
     class WFPTRandomVariable(RandomVariable):
         """WFPT random variable"""
@@ -116,43 +122,56 @@ def make_model_rv(list_params: list[str]) -> Type[RandomVariable]:
         _list_params = list_params
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
-        # NOTE: `rng`` now is a np.random.Generator instead of RandomState
+        # NOTE: `rng` now is a np.random.Generator instead of RandomState
         # since the latter is now deprecated from numpy
         @classmethod
         def rng_fn(  # type: ignore
             cls,
             rng: np.random.Generator,
             *args,
-            model: str = "ddm",
-            size: int = 500,
-            theta: list[str] | None = None,
+            size: int,
             **kwargs,
         ) -> np.ndarray:
             """Generates random variables from this distribution."""
             iinfo32 = np.iinfo(np.uint32)
-
             seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
 
-            # Uses a "theta" to specify how `theta` is passed to
-            # the simulator object
-            if theta is not None:
-                dict_params = dict(zip(cls._list_params, args))
-                theta = [dict_params[param] for param in theta]
-            else:
-                theta = list(args)
+            if cls._list_params != ssms_model_config[model_name]["params"]:
+                raise ValueError(
+                    f"The list of parameters in `list_params` {cls._list_params} "
+                    + "is different from the model config in SSM Simulators "
+                    + f"({ssms_model_config[model_name]['params']})."
+                )
 
-            # Because the `theta` parameter requires
+            if all(np.isscalar(arg) or arg.shape[0] == 1 for arg in args):
+                # All parameters are scalars
+
+                theta = np.stack(args)
+                n_samples = size
+            else:
+                theta = np.zeros([size, len(args)])
+                for i, arg in enumerate(args):
+                    theta[:, i] = arg
+                n_samples = 1
 
             sim_out = simulator(
-                theta=theta, model=model, n_samples=size, random_state=seed, **kwargs
+                theta=theta,
+                model=model_name,
+                n_samples=n_samples,
+                random_state=seed,
+                **kwargs,
             )
+
             output = np.column_stack([sim_out["rts"], sim_out["choices"]])
+            assert output.shape[0] == size
+
             return output
 
     return WFPTRandomVariable
 
 
 def make_distribution(
+    model_name: str,
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     rv: Type[RandomVariable] | None = None,
@@ -181,7 +200,7 @@ def make_distribution(
     -------
         A pymc.Distribution that uses the log-likelihood function.
     """
-    random_variable = make_model_rv(list_params) if not rv else rv
+    random_variable = make_model_rv(model_name, list_params) if not rv else rv
 
     class WFPTDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""
@@ -216,11 +235,16 @@ def make_distribution(
 
 
 WFPT: Type[pm.Distribution] = make_distribution(
-    log_pdf_sv, ["v", "sv", "a", "z", "t"], bounds=ddm_bounds
+    "ddm", log_pdf_sv, ["v", "a", "z", "t"], bounds=ddm_analytical_bounds
+)
+
+WFPT_SDV: Type[pm.Distribution] = make_distribution(
+    "ddm", log_pdf, ["v", "a", "z", "t"], bounds=ddm_analytical_bounds
 )
 
 
 def make_lan_distribution(
+    model_name: str,
     list_params: list[str],
     model: str | PathLike | onnx.ModelProto,
     backend: str = "pytensor",
@@ -259,6 +283,7 @@ def make_lan_distribution(
     if backend == "pytensor":
         lan_logp_pt = make_pytensor_logp(model)
         return make_distribution(
+            model_name,
             lan_logp_pt,
             list_params,
             rv,
@@ -276,6 +301,7 @@ def make_lan_distribution(
         )
         lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
         return make_distribution(
+            model_name,
             lan_logp_jax,
             list_params,
             rv,
