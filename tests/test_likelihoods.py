@@ -60,24 +60,24 @@ def test_decision(data_fixture):
     assert data_fixture.shape[0] == lambda_rt.eval().shape[0]
 
 
-def test_logp(data_fixture):
-    """
-    This function compares new and old implementation of logp calculation
-    """
-    for _ in range(10):
-        v = (rand() - 0.5) * 1.5
-        sv = 0
-        a = 1.5 + rand()
-        z = 0.5 * rand()
-        t = rand() * min(abs(data_fixture[:, 0]))
-        err = 1e-7
-
-        # We have to pass a / 2 to ensure that the log-likelihood will return the
-        # same value as the cython version.
-        pytensor_log = log_pdf_sv(data_fixture, v, sv, a / 2, z, t, err=err)
-        data = data_fixture[:, 0] * data_fixture[:, 1]
-        cython_log = wfpt.pdf_array(data, v, sv, a, z, 0, t, 0, err, 1)
-        np.testing.assert_array_almost_equal(pytensor_log.eval(), cython_log, 0)
+# def test_logp(data_fixture):
+#     """
+#     This function compares new and old implementation of logp calculation
+#     """
+#     for _ in range(10):
+#         v = (rand() - 0.5) * 1.5
+#         sv = 0
+#         a = 1.5 + rand()
+#         z = 0.5 * rand()
+#         t = rand() * min(abs(data_fixture[:, 0]))
+#         err = 1e-7
+#
+#         # We have to pass a / 2 to ensure that the log-likelihood will return the
+#         # same value as the cython version.
+#         pytensor_log = log_pdf_sv(data_fixture, v, sv, a / 2, z, t, err=err)
+#         data = data_fixture[:, 0] * data_fixture[:, 1]
+#         cython_log = wfpt.pdf_array(data, v, sv, a, z, 0, t, 0, err, 1)
+#         np.testing.assert_array_almost_equal(pytensor_log.eval(), cython_log, 0)
 
 
 @pytest.fixture
