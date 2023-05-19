@@ -43,7 +43,7 @@ default_model_config: dict[SupportedModels, Config] = {
     "ddm_sdv": {
         "loglik": wfpt.WFPT,
         "loglik_kind": "analytical",
-        "list_params": ["v", "sv", "a", "z", "t"],
+        "list_params": ["v", "a", "z", "t", "sv"],
         "backend": "pytensor",
         "bounds": wfpt.ddm_sdv_analytical_bounds,
     },

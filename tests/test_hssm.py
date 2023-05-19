@@ -42,10 +42,9 @@ def data_angle():
 def example_model_config():
     return {
         "loglik_kind": "example",
-        "list_params": ["v", "sv", "a", "z", "t"],
+        "list_params": ["v", "a", "z", "t"],
         "bounds": {
             "v": (-3.0, 3.0),
-            "sv": (0.0, 1.0),
             "a": (0.3, 2.5),
             "z": (0.1, 0.9),
             "t": (0.0, 2.0),
@@ -132,10 +131,10 @@ def test_transform_params_general(data, include, should_raise_exception):
     else:
         model = hssm.HSSM(data=data, include=include)
         # Check model properties using a loop
-        param_names = ["v", "sv", "a", "z", "t"]
+        param_names = ["v", "a", "z", "t"]
         model_param_names = sorted([param.name for param in model.params])
         assert model_param_names == sorted(param_names)
-        assert len(model.params) == 5
+        assert len(model.params) == 4
 
 
 def test_model_config_and_loglik_path_update(data_angle, fixture_path):

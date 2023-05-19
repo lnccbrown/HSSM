@@ -152,6 +152,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
                 theta = np.zeros([size, len(args)])
                 for i, arg in enumerate(args):
                     theta[:, i] = arg
+                print(theta)
                 n_samples = 1
 
             sim_out = simulator(

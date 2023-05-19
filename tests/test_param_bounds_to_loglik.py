@@ -53,7 +53,10 @@ def test_make_distribution():
     bounds = {"param1": [-1.0, 1.0], "param2": [-1.0, 1.0]}
 
     Dist = make_distribution(
-        loglik=fake_logp_function, list_params=["param1", "param2"], bounds=bounds
+        model_name="custom",
+        loglik=fake_logp_function,
+        list_params=["param1", "param2"],
+        bounds=bounds,
     )
 
     scalar_in_bound = -0.5
