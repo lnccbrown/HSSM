@@ -277,7 +277,6 @@ def make_pytensor_logp(
     )
 
     def logp(data: np.ndarray, *dist_params: list[float | ArrayLike]) -> ArrayLike:
-
         # Specify input layer of MLP
         data = data.reshape((-1, 2))
         inputs = pt.zeros((data.shape[0], len(dist_params) + 2))

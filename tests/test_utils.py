@@ -9,7 +9,6 @@ from hssm.utils import Param, _make_priors_recursive, _parse_bambi
 
 
 def test_param_non_regression():
-
     param_value = Param("a", prior=0.5)
 
     param_dict = Param(
@@ -52,7 +51,6 @@ def test_param_non_regression():
 
 
 def test_param_regression():
-
     fake_func = lambda x: x * 2  # pylint: disable=C3001
     fake_link = bmb.Link(
         "Fake", link=fake_func, linkinv=fake_func, linkinv_backend=fake_func
@@ -169,7 +167,6 @@ def test__parse_bambi():
 
 
 def test_get_alias_dict():
-
     # Simulate some data:
     v_true, a_true, z_true, t_true, sv_true = [0.5, 1.5, 0.5, 0.5, 0.3]
     obs_ddm = ssms.basic_simulators.simulator(

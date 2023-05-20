@@ -4,7 +4,6 @@ from hssm import wfpt
 
 
 def test_make_model_rv():
-
     params = ["v", "sv", "a", "z", "t"]
     theta = ["v", "a", "z", "t", "sv"]
     seed = 42
