@@ -44,7 +44,9 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "angle": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": hf_hub_download(repo_id="Aisulu/hssm_onnx_models", filename="angle.onnx"),
+        "loglik_path": hf_hub_download(
+            repo_id="Aisulu/hssm_onnx_models", filename="angle.onnx"
+        ),
         "list_params": ["v", "a", "z", "t", "theta"],
         "backend": "jax",
         "bounds": {
@@ -57,7 +59,9 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "levy": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": hf_hub_download(repo_id="Aisulu/hssm_onnx_models", filename="levy.onnx"),
+        "loglik_path": hf_hub_download(
+            repo_id="Aisulu/hssm_onnx_models", filename="levy.onnx"
+        ),
         "list_params": ["v", "a", "z", "alpha", "t"],
         "backend": "jax",
         "bounds": {
@@ -70,7 +74,9 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "ornstein": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": hf_hub_download(repo_id="Aisulu/hssm_onnx_models", filename="ornstein.onnx"),
+        "loglik_path": hf_hub_download(
+            repo_id="Aisulu/hssm_onnx_models", filename="ornstein.onnx"
+        ),
         "list_params": ["v", "a", "z", "g", "t"],
         "backend": "jax",
         "bounds": {
@@ -83,7 +89,9 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "weibull": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": hf_hub_download(repo_id="Aisulu/hssm_onnx_models", filename="weibull.onnx"),
+        "loglik_path": hf_hub_download(
+            repo_id="Aisulu/hssm_onnx_models", filename="weibull.onnx"
+        ),
         "list_params": ["v", "a", "z", "t", "alpha", "beta"],
         "backend": "jax",
         "bounds": {
@@ -97,7 +105,9 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "race_no_bias_angle_4": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": hf_hub_download(repo_id="Aisulu/hssm_onnx_models", filename="race_no_bias_angle_4.onnx"),
+        "loglik_path": hf_hub_download(
+            repo_id="Aisulu/hssm_onnx_models", filename="race_no_bias_angle_4.onnx"
+        ),
         "list_params": ["v0", "v1", "v2", "v3", "a", "z", "ndt", "theta"],
         "backend": "jax",
         "bounds": {
@@ -113,7 +123,9 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "ddm_seq2_no_bias": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": hf_hub_download(repo_id="Aisulu/hssm_onnx_models", filename="ddm_seq2_no_bias.onnx"),
+        "loglik_path": hf_hub_download(
+            repo_id="Aisulu/hssm_onnx_models", filename="ddm_seq2_no_bias.onnx"
+        ),
         "list_params": ["vh", "vl1", "vl2", "a", "t"],
         "backend": "jax",
         "bounds": {
