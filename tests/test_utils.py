@@ -229,7 +229,6 @@ def test_get_alias_dict():
 
 
 def test__make_priors_recursive():
-
     test_dict = {
         "name": "Uniform",
         "lower": 0.1,

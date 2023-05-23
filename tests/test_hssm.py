@@ -169,7 +169,6 @@ def test_custom_model(data, example_model_config):
 
 
 def test_model_definition_outside_include(data):
-
     model_with_one_param_fixed = hssm.HSSM(data, a=0.5)
 
     assert "a" in model_with_one_param_fixed.priors
