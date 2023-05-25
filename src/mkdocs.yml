@@ -1,0 +1,14 @@
+site_name: HSSM
+
+nav:
+    - Home: index.md
+    - About: about.md
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+theme:
+  name: material
+
+
+
