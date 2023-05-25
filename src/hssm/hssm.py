@@ -19,32 +19,19 @@ LogLikeFunc = Callable[..., ArrayLike]
 class HSSM:
     """
     The Hierarchical Sequential Sampling Model (HSSM) class.
-
-    Parameters
-    ----------
-
-    data:
-        A pandas DataFrame with the minimum requirements of containing the data with the
-        columns 'rt' and 'response'.
-    model:
-        The name of the model to use. Currently supported models are "ddm", "angle",
-        "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". If
-        using a custom model, please pass "custom". Defaults to "ddm".
-    include, optional:
-        A list of dictionaries specifying parameter specifications to include in the
-        model. If left unspecified, defaults will be used for all parameter
-        specifications. Defaults to None.
-    model_config, optional:
-        A dictionary containing the model configuration information. If None is
-        provided, defaults will be used. Defaults to None.
-    **kwargs:
-        Additional arguments passed to the bmb.Model object.
-
     Attributes
     ----------
     data:
         A pandas DataFrame with at least two columns of "rt" and "response" indicating
         the response time and responses.
+    model:
+        The name of the model to use. Currently supported models are "ddm", "angle",
+        "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". If
+        using a custom model, please pass "custom". Defaults to "ddm".
+    include:
+        A list of dictionaries specifying parameter specifications to include in the
+        model. If left unspecified, defaults will be used for all parameter
+        specifications. Defaults to None.
     list_params:
         The list of strs of parameter names.
     model_name:

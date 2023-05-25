@@ -18,15 +18,15 @@ keywords = ["HDDM", "HSSM", "pymc"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
-scipy = "1.9.1"
+scipy = "1.10.1"
 pymc = "^5.0.1"
 arviz = "^0.14.0"
 numpy = "^1.23.4"
 onnx = "^1.12.0"
 jax = "^0.4.0"
 jaxlib = "^0.4.0"
-bambi = "^0.10.0"
-formulae = "^0.3.4"
+bambi = "^0.11.0"
+formulae = "^0.4.0"
 ssm-simulators = "^0.3.0"
 
 [tool.poetry.group.dev.dependencies]
@@ -42,7 +42,6 @@ hddm-wfpt = {git = "https://github.com/brown-ccv/hddm-wfpt.git"}
 autoflake = "^2.0.0"
 numpyro = "^0.10.1"
 ipywidgets = "^8.0.3"
-onnxruntime = "^1.13.1"
 graphviz = "^0.20.1"
 viztracer = "^0.15.6"
 
