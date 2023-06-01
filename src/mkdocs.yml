@@ -2,9 +2,12 @@ site_name: HSSM
 
 nav:
     - Home: index.md
-    - About: about.md
+    - Basic Tutorial: 004_using_base_hssm_func.ipynb
+    - HSSM Code Documentation: hssm.md
+    - WFPT Code Documentation: wfpt.md
 plugins:
   - search
+  - mknotebooks
   - mkdocstrings:
       default_handler: python
 theme:

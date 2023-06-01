@@ -63,8 +63,3 @@ TO-DO: Licensing information
 ### Contact Information
 TO-DO: Contact information
 
-### Code Documentation
-
-[HSSM Class Documentation](hssm.md)
-
-[WFPT Class Documentation](wfpt.md)
