@@ -8,8 +8,10 @@ from hssm import wfpt
 
 REPO_ID = "Aisulu/hssm_onnx_models"
 
+
 def download_hf(path: str):
     return hf_hub_download(repo_id=REPO_ID, filename=path)
+
 
 SupportedModels = Literal[
     "ddm",

@@ -11,7 +11,7 @@ from numpy.typing import ArrayLike
 
 from hssm import wfpt
 from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict, merge_dicts
-from hssm.wfpt.config import Config, SupportedModels, default_model_config
+from hssm.wfpt.config import Config, SupportedModels, default_model_config, download_hf
 
 LogLikeFunc = Callable[..., ArrayLike]
 
@@ -76,6 +76,7 @@ class HSSM:
         model: SupportedModels = "ddm",
         include: list[dict] | None = None,
         model_config: Config | None = None,
+        loglik_path: str | None = None,
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
         **kwargs,
     ):
@@ -100,8 +101,9 @@ class HSSM:
                 else merge_dicts(default_model_config[model], model_config)
             )
 
+        if loglik_path:
+            self.model_config["loglik_path"] = download_hf(loglik_path)
         self.model_name = model
-
         self.list_params = self.model_config["list_params"]
         self._parent = self.list_params[0]
 
