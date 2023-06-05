@@ -89,7 +89,9 @@ class HSSM:
                 self.model_config = model_config
             else:
                 if likelihood_type is None or loglik is None:
-                    raise ValueError("For custom models, both `likelihood_type` and `loglik` must be provided.")
+                    raise ValueError(
+                        "For custom models, both `likelihood_type` and `loglik` must be provided."
+                    )
 
                 if likelihood_type == "analytical":
                     self.model_config = default_model_config.get("custom_analytical")
