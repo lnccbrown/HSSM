@@ -94,9 +94,11 @@ class HSSM:
                     )
 
                 if likelihood_type == "analytical":
-                    self.model_config = default_model_config.get("custom_analytical")
+                    self.model_config = default_model_config["custom_analytical"]
+                    self.model_config["loglik"] = loglik
                 elif likelihood_type == "approx_differentiable":
-                    self.model_config = default_model_config.get("custom_approx")
+                    self.model_config = default_model_config["custom_angle"]
+                    self.model_config["loglik_path"] = loglik
                 if not self.model_config:
                     raise ValueError("Invalid custom model configuration.")
         else:
