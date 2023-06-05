@@ -1,4 +1,4 @@
-# HSSM - Hierarchical Sequential Sampling Modeling 
+# HSSM - Hierarchical Sequential Sampling Modeling
 
 ## Class: HSSM
 
@@ -28,13 +28,13 @@ The Hierarchical Sequential Sampling Model (HSSM) class.
 - `set_alias`: Sets the alias for a parameter.
 - `graph`: Plot the model with PyMC's built-in graph function.
 
-## Method: __init__
+### Method: `__init__`
 
-### Description
+#### Description
 
 Constructor method that initializes the HSSM class.
 
-### Parameters
+#### Parameters
 
 - `data`: A pandas DataFrame.
 - `model`: SupportedModels, defaults to "ddm".
@@ -43,16 +43,50 @@ Constructor method that initializes the HSSM class.
 - `loglik`: LogLikeFunc or pytensor.graph.Op or None, defaults to None.
 - `**kwargs`: Other parameters.
 
-## Method: sample
+### Method: `_transform_params`
 
-TO-DO: Add Description and Parameters for this method.
+Transforms a list of dictionaries containing parameter information into a list of Param objects. It also generates a formula, priors, and a link for the Bambi package based on these parameters.
 
-## Method: set_alias
+#### Parameters
 
-TO-DO: Add Description and Parameters for this method.
+- **include**: A list of dictionaries with details about the parameters.
+- **model**: A string indicating the type of the model.
+- **model_config**: A dict providing configuration details for the model.
 
-## Method: graph
+#### Returns
 
-TO-DO: Add Description and Parameters for this method.
+A tuple of four items:
+
+1. A list of Param objects.
+2. A Bambi formula object.
+3. An optional dict containing prior information for Bambi.
+4. An optional dict of link functions for Bambi.
+
+### Method: `Sample`
+
+Performs sampling using the `fit` method via the Bambi Model.
+
+#### Parameters
+
+- **sampler**: The sampler to use. Options include "mcmc" (default), "nuts_numpyro", "nuts_blackjax", "laplace", or "vi".
+- **kwargs**: Other arguments passed to Bambi Model's `fit` method.
+
+#### Returns
+
+An ArviZ `InferenceData` instance if `inference_method` is "mcmc", "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation` object if "vi".
+
+### pymc_model Property
+
+Returns the PyMC model built by Bambi.
+
+#### Returns
+
+The PyMC model built by Bambi.
+
+### Method: `set_alias`
+
+Sets the aliases according to the dictionary passed
+
+
 
 ::: hssm.hssm
