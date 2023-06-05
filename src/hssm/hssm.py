@@ -75,6 +75,7 @@ class HSSM:
         data: pd.DataFrame,
         model: SupportedModels = "ddm",
         include: list[dict] | None = None,
+        likelihood_type: str = None,
         model_config: Config | None = None,
         loglik_path: str | None = None,
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
@@ -84,11 +85,18 @@ class HSSM:
         self._inference_obj = None
 
         if model == "custom":
-            if model_config is None:
-                raise ValueError(
-                    "For custom models, please provide a correct model config."
-                )
-            self.model_config = model_config
+            if model_config:
+                self.model_config = model_config
+            else:
+                if likelihood_type is None or loglik is None:
+                    raise ValueError("For custom models, both `likelihood_type` and `loglik` must be provided.")
+
+                if likelihood_type == "analytical":
+                    self.model_config = default_model_config.get("custom_analytical")
+                elif likelihood_type == "approx_differentiable":
+                    self.model_config = default_model_config.get("custom_approx")
+                if not self.model_config:
+                    raise ValueError("Invalid custom model configuration.")
         else:
             if model not in default_model_config:
                 supported_models = list(default_model_config.keys())
