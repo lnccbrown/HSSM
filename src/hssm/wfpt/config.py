@@ -32,6 +32,32 @@ ConfigParams = Literal[
 Config = dict[ConfigParams, Any]
 
 default_model_config: dict[SupportedModels, Config] = {
+    "custom_analytical": {
+        "loglik": None,
+        "loglik_kind": "analytical",
+        "list_params": ["v", "sv", "a", "z", "t"],
+        "backend": "pytensor",
+        "bounds": {
+            "v": (-3.0, 3.0),
+            "sv": (0.0, 1.0),
+            "a": (0.3, 2.5),
+            "z": (0.1, 0.9),
+            "t": (0.0, 2.0),
+        },
+    },
+    "custom_angle": {
+        "loglik_kind": "approx_differentiable",
+        "loglik_path": None,
+        "list_params": ["v", "a", "z", "t", "theta"],
+        "backend": "jax",
+        "bounds": {
+            "v": (-3.0, 3.0),
+            "a": (0.3, 3.0),
+            "z": (0.1, 0.9),
+            "t": (0.001, 2.0),
+            "theta": (-0.1, 1.3),
+        },
+    },
     "ddm": {
         "loglik": wfpt.WFPT,
         "loglik_kind": "analytical",
