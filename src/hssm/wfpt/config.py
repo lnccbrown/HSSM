@@ -22,6 +22,8 @@ SupportedModels = Literal[
     "race_no_bias_angle_4",
     "ddm_seq2_no_bias",
     "custom",
+    "custom_analytical",
+    "custom_angle"
 ]
 
 ConfigParams = Literal[
