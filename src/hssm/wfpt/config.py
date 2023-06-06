@@ -23,7 +23,7 @@ SupportedModels = Literal[
     "ddm_seq2_no_bias",
     "custom",
     "custom_analytical",
-    "custom_angle"
+    "custom_angle",
 ]
 
 ConfigParams = Literal[
