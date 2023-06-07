@@ -1,13 +1,17 @@
 """
 Default configurations for models in HSSM class
 """
-from pathlib import Path
+from huggingface_hub import hf_hub_download
 from typing import Any, Literal
 
 from hssm import wfpt
 
-# Ensure the absolute paths of the models are correct
-ONNX_Model_Path = Path(__file__).parent / "lan/onnx_models"
+REPO_ID = "Aisulu/hssm_onnx_models"
+
+
+def download_hf(path: str):
+    return hf_hub_download(repo_id=REPO_ID, filename=path)
+
 
 SupportedModels = Literal[
     "ddm",
@@ -47,7 +51,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "angle": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": ONNX_Model_Path / "angle.onnx",
+        "loglik_path": download_hf("angle.onnx"),
         "list_params": ["v", "a", "z", "t", "theta"],
         "backend": "jax",
         "bounds": {
@@ -60,7 +64,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "levy": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": ONNX_Model_Path / "levy.onnx",
+        "loglik_path": download_hf("levy.onnx"),
         "list_params": ["v", "a", "z", "alpha", "t"],
         "backend": "jax",
         "bounds": {
@@ -73,7 +77,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "ornstein": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": ONNX_Model_Path / "ornstein.onnx",
+        "loglik_path": download_hf("ornstein.onnx"),
         "list_params": ["v", "a", "z", "g", "t"],
         "backend": "jax",
         "bounds": {
@@ -86,7 +90,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "weibull": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": ONNX_Model_Path / "weibull.onnx",
+        "loglik_path": download_hf("weibull.onnx"),
         "list_params": ["v", "a", "z", "t", "alpha", "beta"],
         "backend": "jax",
         "bounds": {
@@ -100,7 +104,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "race_no_bias_angle_4": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": ONNX_Model_Path / "race_no_bias_angle_4.onnx",
+        "loglik_path": download_hf("race_no_bias_angle_4.onnx"),
         "list_params": ["v0", "v1", "v2", "v3", "a", "z", "ndt", "theta"],
         "backend": "jax",
         "bounds": {
@@ -116,7 +120,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "ddm_seq2_no_bias": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": ONNX_Model_Path / "ddm_seq2_no_bias.onnx",
+        "loglik_path": download_hf("ddm_seq2_no_bias.onnx"),
         "list_params": ["vh", "vl1", "vl2", "a", "t"],
         "backend": "jax",
         "bounds": {
