@@ -138,16 +138,16 @@ def test_transform_params_general(data, include, should_raise_exception):
         assert len(model.params) == 5
 
 
-def test_model_config_and_loglik_path_update(data_angle, fixture_path):
+def test_model_config_and_loglik_update(data_angle, fixture_path):
     my_hssm = hssm.HSSM(
         data=data_angle,
         model="angle",
         model_config={
             "loglik_kind": "approx_differentiable",
-            "loglik_path": fixture_path / "new_path.onnx",
+            "loglik": fixture_path / "new_path.onnx",
         },
     )
-    assert my_hssm.model_config["loglik_path"] == fixture_path / "new_path.onnx"
+    assert my_hssm.model_config["loglik"] == fixture_path / "new_path.onnx"
     assert my_hssm.model_config["loglik_kind"] == "approx_differentiable"
 
 
