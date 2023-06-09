@@ -5,6 +5,7 @@ distribution.
 
 from .wfpt import (
     WFPT,
+    WFPT_SDV,
     ddm_analytical_bounds,
     ddm_sdv_analytical_bounds,
     make_distribution,
@@ -21,4 +22,5 @@ __all__ = [
     "make_lan_distribution",
     "make_family",
     "WFPT",
+    "WFPT_SDV",
 ]

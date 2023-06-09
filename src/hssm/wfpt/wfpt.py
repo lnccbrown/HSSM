@@ -236,11 +236,11 @@ def make_distribution(
 
 
 WFPT: Type[pm.Distribution] = make_distribution(
-    "ddm", log_pdf_sv, ["v", "a", "z", "t"], bounds=ddm_analytical_bounds
+    "ddm", log_pdf, ["v", "a", "z", "t"], bounds=ddm_analytical_bounds
 )
 
 WFPT_SDV: Type[pm.Distribution] = make_distribution(
-    "ddm", log_pdf, ["v", "a", "z", "t"], bounds=ddm_analytical_bounds
+    "ddm_sdv", log_pdf_sv, ["v", "a", "z", "t", "sv"], bounds=ddm_analytical_bounds
 )
 
 

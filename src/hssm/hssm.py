@@ -160,8 +160,10 @@ class HSSM:
                 self.model_distribution = self.model_config["loglik"]
             else:
                 # If not, create a distribution
-                self.model_distribution = wfpt.make_distribution(  # type: ignore
-                    self.model_name, loglik=loglik, list_params=self.list_params
+                self.model_distribution = wfpt.make_distribution(
+                    self.model_name,
+                    loglik=loglik,  # type: ignore
+                    list_params=self.list_params,
                 )
         else:
             # If not, in the case of "approx_differentiable"
