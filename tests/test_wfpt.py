@@ -5,7 +5,6 @@ from hssm import wfpt
 
 
 def test_make_model_rv():
-
     params = ["v", "a", "z", "t"]
     seed = 42
 

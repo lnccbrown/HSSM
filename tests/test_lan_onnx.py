@@ -21,7 +21,6 @@ def fixture_path():
 
 @pytest.fixture(scope="module")
 def onnx_session():
-
     fixture_dir = Path(__file__).parent / "fixtures"
     model_path = str(fixture_dir / "angle.onnx")
 

@@ -94,7 +94,6 @@ def apply_param_bounds_to_loglik(
 
 
 def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]:
-
     """Builds a RandomVariable Op according to the list of parameters.
 
     Args:
@@ -129,10 +128,19 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
             cls,
             rng: np.random.Generator,
             *args,
-            size: int,
             **kwargs,
         ) -> np.ndarray:
             """Generates random variables from this distribution."""
+
+            # First figure out what the size specified here is
+            # Since the number of unnamed arguments is underdetermined,
+            # we are going to use this hack.
+            if "size" in kwargs:
+                size = kwargs.pop("size")
+            else:
+                size = args[-1]
+                args = args[:-1]
+
             iinfo32 = np.iinfo(np.uint32)
             seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
 
@@ -147,7 +155,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
                 # All parameters are scalars
 
                 theta = np.stack(args)
-                n_samples = size
+                n_samples = 1 if not size else size
             else:
                 theta = np.zeros([size, len(args)])
                 for i, arg in enumerate(args):
@@ -222,7 +230,6 @@ def make_distribution(
             return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
-
             logp = loglik(data, *dist_params)
 
             if bounds is None:

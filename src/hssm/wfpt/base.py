@@ -201,6 +201,7 @@ def log_pdf_sv(
     t: float,
     err: float = 1e-7,
     k_terms: int = 10,
+    small_number: float = 1e-15,
 ) -> np.ndarray:
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
@@ -213,6 +214,10 @@ def log_pdf_sv(
         t: Non-decision time [0, inf).
         err: Error bound.
         k_terms: number of terms to use to approximate the PDF.
+        small_number: A small positive number to prevent division by zero or
+                      taking the log of zero, also used to replace negative
+                      response times after subtracting non-decision time.
+                      Default is 1e-15.
     """
 
     data = pt.reshape(data, (-1, 2))
@@ -222,8 +227,7 @@ def log_pdf_sv(
     a = a * 2
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
-    rt = rt - t  # remove nondecision time
-
+    rt = rt - t
     p = ftt01w(rt, a, z_flipped, err, k_terms)
 
     # This step does 3 things at the same time:
@@ -231,17 +235,17 @@ def log_pdf_sv(
     # 2. Computes the log of above value
     # 3. Computes the integration given the sd of v
     logp = (
-        pt.log(p)
+        pt.log(p + small_number)
         + (
             (a * z_flipped * sv) ** 2
             - 2 * a * v_flipped * z_flipped
             - (v_flipped**2) * rt
         )
         / (2 * (sv**2) * rt + 2)
-        - pt.log(sv**2 * rt + 1) / 2
-        - 2 * pt.log(a)
+        - pt.log(sv**2 * rt + 1 + small_number) / 2
+        - 2 * pt.log(a + small_number)
     )
-
+    logp = pt.where(rt <= 0, small_number, logp)
     checked_logp = check_parameters(
         logp,
         sv >= 0,
@@ -250,7 +254,6 @@ def log_pdf_sv(
     checked_logp = check_parameters(checked_logp, a >= 0, msg="a >= 0")
     # checked_logp = check_parameters(checked_logp, 0 < z < 1, msg="0 < z < 1")
     # checked_logp = check_parameters(checked_logp, np.all(rt > 0), msg="t <= min(rt)")
-
     return checked_logp
 
 
