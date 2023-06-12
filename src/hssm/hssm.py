@@ -429,7 +429,7 @@ class HSSM:
         return self.__repr__()
 
     @property
-    def traces(self) -> az.InferenceData | pm.Approximation:
+    def traces(self) -> Union[az.InferenceData, pm.Approximation]:
         """
         Function Name:
             traces
