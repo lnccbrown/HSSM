@@ -1,2 +1,2 @@
-# HSSM Class Documentation
+# Base Class Documentation
 ::: hssm.wfpt

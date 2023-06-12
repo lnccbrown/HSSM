@@ -15,12 +15,17 @@ from pymc.distributions.dist_math import check_parameters
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
-    """Determines number of terms needed for small-t expansion.
+    """
+    Determines number of terms needed for small-t expansion.
+
     Args:
         rt: A 1D numpy array of flipped R.... T.....s. (0, inf).
         err: Error bound
-    Returns: a 1D at array of k_small.
+
+    Returns:
+        A 1D numpy array of k_small.
     """
+
     ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
     ks = pt.max(pt.stack([ks, pt.sqrt(rt) + 1]), axis=0)
     ks = pt.switch(2 * pt.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
@@ -29,11 +34,15 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
 
 
 def k_large(rt: np.ndarray, err: float) -> np.ndarray:
-    """Determine number of terms needed for large-t expansion.
+    """
+    Determine number of terms needed for large-t expansion.
+
     Args:
         rt: An 1D numpy array of flipped RTs. (0, inf).
         err: Error bound
-    Returns: a 1D at array of k_large.
+
+    Returns:
+        A 1D numpy array of k_large.
     """
     kl = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
     kl = pt.max(pt.stack([kl, 1.0 / (np.pi * pt.sqrt(rt))]), axis=0)

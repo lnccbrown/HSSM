@@ -45,18 +45,17 @@ def apply_param_bounds_to_loglik(
     bounds: dict[str, BoundsSpec],
 ):
     """
-    Adjusts the log probability of a model based on parameter boundaries.
+    Function Name:
+        apply_param_bounds_to_loglik
 
-    Parameters
-    ----------
-    logp:
-        The log probability of the model.
-    list_params:
-        A list of strings representing the names of the distribution parameters.
-    dist_params:
-        The distribution parameters.
-    bounds:
-        Boundaries for parameters in the likelihood.
+    Purpose:
+        Adjusts the log probability of a model based on parameter boundaries.
+
+    Args:
+        logp (Any): The log probability of the model.
+        list_params (List[str]): A list of strings representing the names of the distribution parameters.
+        dist_params (Any): The distribution parameters.
+        bounds (Dict[str, BoundsSpec]): Boundaries for parameters in the likelihood.
 
     Returns:
         The adjusted log likelihoods.
@@ -89,19 +88,29 @@ def apply_param_bounds_to_loglik(
 
 
 def make_model_rv(list_params: list[str]) -> Type[RandomVariable]:
-    """Builds a RandomVariable Op according to the list of parameters.
+    """
+    Function Name:
+        make_model_rv
+
+    Purpose:
+        Builds a RandomVariable Op according to the list of parameters.
 
     Args:
         list_params (List[str]): a list of str of all parameters for this RandomVariable
 
     Returns:
-        Type[RandomVariable]: a class of RandomVariable that are to be used in
-            a pm.Distribution.
+        Type[RandomVariable]: a class of RandomVariable that are to be used in a pm.Distribution.
     """
 
     # pylint: disable=W0511, R0903
     class WFPTRandomVariable(RandomVariable):
-        """WFPT random variable"""
+        """
+        Class Name:
+            WFPTRandomVariable
+
+        Purpose:
+            Class to define a WFPT (Wiener First Passage Time) random variable.
+        """
 
         name: str = "WFPT_RV"
 
@@ -127,7 +136,24 @@ def make_model_rv(list_params: list[str]) -> Type[RandomVariable]:
             theta: list[str] | None = None,
             **kwargs,
         ) -> np.ndarray:
-            """Generates random variables from this distribution."""
+            """
+            Function Name:
+                rng_fn
+
+            Purpose:
+                Generates random variables from this distribution.
+
+            Args:
+                rng (np.random.Generator): A numpy random Generator object.
+                args (*args): Variable length argument list.
+                model (str): Model type. Default is "ddm".
+                size (int): Size of the output array. Default is 500.
+                theta (List[str] | None): A list of parameter names.
+                kwargs (**kwargs): Arbitrary keyword arguments.
+
+            Returns:
+                np.ndarray: An array of random variables from the distribution.
+            """
             iinfo32 = np.iinfo(np.uint32)
 
             seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
@@ -157,28 +183,22 @@ def make_distribution(
     rv: Type[RandomVariable] | None = None,
     bounds: dict | None = None,
 ) -> Type[pm.Distribution]:
-    """Constructs a pymc.Distribution from a log-likelihood function and a
-    RandomVariable op.
+    """
+    Function Name:
+        make_distribution
 
-    NOTE: We will gradually switch to the numpy-notype style.
+    Purpose:
+        Constructs a pymc.Distribution from a log-likelihood function and a
+        RandomVariable op.
 
-    Parameters
-    ----------
-    loglik
-        A loglikelihood function. It can be any Callable in Python.
-    list_params
-        A list of parameters that the log-likelihood accepts. The order of the
-        parameters in the list will determine the order in which the parameters
-        are passed to the log-likelihood function.
-    rv
-        A RandomVariable Op (a class, not an instance). If None, a default will be
-        used.
-    bounds
-        A dictionary with parameters as keys (a string) and its boundaries as values.
-        Example: {"parameter": (lower_boundary, upper_boundary)}.
-    Returns
-    -------
-        A pymc.Distribution that uses the log-likelihood function.
+    Args:
+        loglik (Union[LogLikeFunc, pytensor.graph.Op]): A loglikelihood function. It can be any Callable in Python.
+        list_params (List[str]): A list of parameters that the log-likelihood accepts.
+        rv (Optional[Type[RandomVariable]]): A RandomVariable Op (a class, not an instance). If None, a default will be used.
+        bounds (Optional[Dict]): A dictionary with parameters as keys (a string) and its boundaries as values.
+
+    Returns:
+        Type[pm.Distribution]: A pymc.Distribution that uses the log-likelihood function.
     """
     random_variable = make_model_rv(list_params) if not rv else rv
 
@@ -226,31 +246,23 @@ def make_lan_distribution(
     rv: Type[RandomVariable] | None = None,
     params_is_reg: list[bool] | None = None,
 ) -> Type[pm.Distribution]:
-    """Produces a PyMC distribution that uses the provided base or ONNX model as
-    its log-likelihood function.
+    """
+    Function Name:
+        make_lan_distribution
+
+    Purpose:
+        Produces a PyMC distribution that uses the provided base or ONNX model as its log-likelihood function.
 
     Args:
-        model: The path of the ONNX model, or one already loaded in memory.
-        backend: Whether to use "pytensor" or "jax" as the backend of the
-            log-likelihood computation. If `jax`, the function will be wrapped in an
-            pytensor Op.
-        list_params: A list of the names of the parameters following the order of
-            how they are fed to the LAN.
-        rv
-            The RandomVariable Op used for posterior sampling.
-        model_name
-            The name of the model (a string).
-        param_is_reg
-            A list of booleans indicating whether each parameter in the
-            corresponding position in `list_params` is a regression.
-        bounds
-            A dictionary with parameters as keys (a string) and its boundaries
-            as values.Example: {"parameter": (lower_boundary, upper_boundary)}.
-    Returns:
+        model (Union[str, PathLike, onnx.ModelProto]): The path of the ONNX model, or one already loaded in memory.
+        backend (str): Whether to use "pytensor" or "jax" as the backend of the log-likelihood computation. If `jax`, the function will be wrapped in an pytensor Op.
+        list_params (List[str]): A list of the names of the parameters following the order of how they are fed to the LAN.
+        rv (Optional[Type[RandomVariable]]): The RandomVariable Op used for posterior sampling.
+        params_is_reg (Optional[List[bool]]): A list of booleans indicating whether each parameter in the corresponding position in `list_params` is a regression.
+        bounds (Optional[Dict]): A dictionary with parameters as keys (a string) and its boundaries as values.
 
-    -------
-        A PyMC Distribution class that uses the ONNX model as its log-likelihood
-        function.
+    Returns:
+        Type[pm.Distribution]: A PyMC Distribution class that uses the ONNX model as its log-likelihood function.
     """
     if isinstance(model, (str, PathLike)):
         model = onnx.load(str(model))
@@ -291,26 +303,23 @@ def make_family(
     likelihood_name: str = "WFPT Likelihood",
     family_name="WFPT Family",
 ) -> bmb.Family:
-    """Builds a family in bambi.
+    """
+    Function Name:
+        make_family
 
-    Parameters
-    ----------
-    dist
-        A pm.Distribution class (not an instance).
-    list_params
-        A list of parameters for the likelihood function.
-    link
-        A link function or a dictionary of parameter: link functions.
-    parent
-        The parent parameter of the likelihood function. Defaults to v.
-    likelihood_name
-        the name of the likelihood function.
-    family_name
-        the name of the family.
+    Purpose:
+        Builds a family in bambi.
 
-    Returns
-    -------
-        An instance of a bambi family.
+    Args:
+        dist (Type[pm.Distribution]): A pm.Distribution class (not an instance).
+        list_params (List[str]): A list of parameters for the likelihood function.
+        link (Union[str, Dict[str, bmb.families.Link]]): A link function or a dictionary of parameter: link functions.
+        parent (str): The parent parameter of the likelihood function. Defaults to v.
+        likelihood_name (str): the name of the likelihood function.
+        family_name (str): the name of the family.
+
+    Returns:
+        bmb.Family: An instance of a bambi family.
     """
 
     likelihood = bmb.Likelihood(

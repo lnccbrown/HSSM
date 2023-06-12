@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Dict, Literal, Optional, Union
 
 import arviz as az
 import bambi as bmb
@@ -51,10 +49,10 @@ class HSSM:
         self,
         data: pd.DataFrame,
         model: SupportedModels = "ddm",
-        include: list[dict] | None = None,
+        include: Optional[list[dict]] = None,
         likelihood_type: str = None,
-        model_config: Config | None = None,
-        loglik: LogLikeFunc | pytensor.graph.Op | None = None,
+        model_config: Optional[Config] = None,
+        loglik: Optional[Union[LogLikeFunc, pytensor.graph.Op]] = None,
         **kwargs,
     ):
         self.data = data
@@ -202,8 +200,13 @@ class HSSM:
         self.set_alias(self._aliases)
 
     def _transform_params(
-        self, include: list[dict] | None, model: str, model_config: Config
-    ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
+        self, include: Optional[list[dict]], model: str, model_config: Config
+    ) -> tuple[
+        list[Param],
+        bmb.Formula,
+        Optional[Dict],
+        Union[Dict[str, Union[str, bmb.Link]], str],
+    ]:
         """
         Function Name:
             _transform_params
@@ -264,8 +267,8 @@ class HSSM:
         sampler: Literal[
             "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
         ] = "mcmc",
-        **kwargs,
-    ) -> az.InferenceData | pm.Approximation:
+        **kwargs: Any,
+    ) -> Union[az.InferenceData, pm.Approximation]:
         """
         Function Name:
             sample
@@ -315,7 +318,7 @@ class HSSM:
 
         return self.model.backend.model
 
-    def set_alias(self, aliases: dict[str, str | dict]):
+    def set_alias(self, aliases: Dict[str, Union[str, Dict]]):
         """
         Function Name:
             set_alias
