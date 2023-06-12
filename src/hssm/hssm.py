@@ -112,7 +112,7 @@ class HSSM:
                 raise ValueError("Invalid custom model configuration.")
 
         if loglik and self.model_config["loglik_kind"] == "approx_differentiable":
-            self.model_config["loglik"] = download_hf(loglik)
+            self.model_config["loglik"] = download_hf(loglik)  # type: ignore
         elif loglik and self.model_config["loglik_kind"] == "analytical":
             self.model_config["loglik"] = loglik
         self.model_name = model
