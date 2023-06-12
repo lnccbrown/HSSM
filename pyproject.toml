@@ -29,6 +29,8 @@ bambi = "^0.11.0"
 formulae = "^0.4.0"
 ssm-simulators = "^0.3.0"
 mknotebooks = "^0.7.1"
+mkdocs-material = "^9.1.15"
+mkdocstrings-python = "^1.1.2"
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^2.6.0"
