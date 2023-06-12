@@ -8,7 +8,7 @@ def test_model_paths():
         if config["loglik_kind"] == "approx_differentiable":
             if model == "custom_angle":
                 assert (
-                    config["loglik_path"] is None
+                    config["loglik"] is None
                 ), "The `loglik_path` should be None for `custom_angle` model."
             else:
-                assert Path(config["loglik_path"]).exists()
+                assert Path(config["loglik"]).exists()
