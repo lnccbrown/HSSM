@@ -3,7 +3,7 @@ site_name: HSSM
 nav:
     - Home: index.md
     - HSSM Class Code Documentation: hssm.md
-    - Base Code Documentation: wfpt.md
+    - Pymc Distribution Documentation: wfpt.md
     - DDM Code Documentation: base.md
     - Basic Tutorial: 004_using_base_hssm_func.ipynb
 
