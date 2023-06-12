@@ -9,6 +9,6 @@ def test_model_paths():
             if model == "custom_angle":
                 assert (
                     config["loglik"] is None
-                ), "The `loglik_path` should be None for `custom_angle` model."
+                ), "The `loglik` should be None for `custom_angle` model."
             else:
                 assert Path(config["loglik"]).exists()
