@@ -1,8 +1,8 @@
 """
 Default configurations for models in HSSM class
 """
-from huggingface_hub import hf_hub_download
 from typing import Any, Literal
+from huggingface_hub import hf_hub_download
 
 from hssm import wfpt
 
@@ -22,12 +22,13 @@ SupportedModels = Literal[
     "race_no_bias_angle_4",
     "ddm_seq2_no_bias",
     "custom",
+    "custom_analytical",
+    "custom_angle",
 ]
 
 ConfigParams = Literal[
     "loglik",
     "loglik_kind",
-    "loglik_path",
     "list_params",
     "backend",
     "bounds",
@@ -36,6 +37,32 @@ ConfigParams = Literal[
 Config = dict[ConfigParams, Any]
 
 default_model_config: dict[SupportedModels, Config] = {
+    "custom_analytical": {
+        "loglik_kind": "analytical",
+        "loglik": None,
+        "list_params": ["v", "sv", "a", "z", "t"],
+        "backend": "pytensor",
+        "bounds": {
+            "v": (-3.0, 3.0),
+            "sv": (0.0, 1.0),
+            "a": (0.3, 2.5),
+            "z": (0.1, 0.9),
+            "t": (0.0, 2.0),
+        },
+    },
+    "custom_angle": {
+        "loglik_kind": "approx_differentiable",
+        "list_params": ["v", "a", "z", "t", "theta"],
+        "loglik": None,
+        "backend": "jax",
+        "bounds": {
+            "v": (-3.0, 3.0),
+            "a": (0.3, 3.0),
+            "z": (0.1, 0.9),
+            "t": (0.001, 2.0),
+            "theta": (-0.1, 1.3),
+        },
+    },
     "ddm": {
         "loglik": wfpt.WFPT,
         "loglik_kind": "analytical",
@@ -51,7 +78,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "angle": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": download_hf("angle.onnx"),
+        "loglik": download_hf("angle.onnx"),
         "list_params": ["v", "a", "z", "t", "theta"],
         "backend": "jax",
         "bounds": {
@@ -64,7 +91,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "levy": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": download_hf("levy.onnx"),
+        "loglik": download_hf("levy.onnx"),
         "list_params": ["v", "a", "z", "alpha", "t"],
         "backend": "jax",
         "bounds": {
@@ -77,7 +104,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "ornstein": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": download_hf("ornstein.onnx"),
+        "loglik": download_hf("ornstein.onnx"),
         "list_params": ["v", "a", "z", "g", "t"],
         "backend": "jax",
         "bounds": {
@@ -90,7 +117,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "weibull": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": download_hf("weibull.onnx"),
+        "loglik": download_hf("weibull.onnx"),
         "list_params": ["v", "a", "z", "t", "alpha", "beta"],
         "backend": "jax",
         "bounds": {
@@ -104,7 +131,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "race_no_bias_angle_4": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": download_hf("race_no_bias_angle_4.onnx"),
+        "loglik": download_hf("race_no_bias_angle_4.onnx"),
         "list_params": ["v0", "v1", "v2", "v3", "a", "z", "ndt", "theta"],
         "backend": "jax",
         "bounds": {
@@ -120,7 +147,7 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "ddm_seq2_no_bias": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": download_hf("ddm_seq2_no_bias.onnx"),
+        "loglik": download_hf("ddm_seq2_no_bias.onnx"),
         "list_params": ["vh", "vl1", "vl2", "a", "t"],
         "backend": "jax",
         "bounds": {
