@@ -1,8 +1,8 @@
 """
 Default configurations for models in HSSM class
 """
-from huggingface_hub import hf_hub_download
 from typing import Any, Literal
+from huggingface_hub import hf_hub_download
 
 from hssm import wfpt
 
@@ -38,8 +38,8 @@ Config = dict[ConfigParams, Any]
 
 default_model_config: dict[SupportedModels, Config] = {
     "custom_analytical": {
-        "loglik": None,
         "loglik_kind": "analytical",
+        "loglik": None,
         "list_params": ["v", "sv", "a", "z", "t"],
         "backend": "pytensor",
         "bounds": {
@@ -52,8 +52,8 @@ default_model_config: dict[SupportedModels, Config] = {
     },
     "custom_angle": {
         "loglik_kind": "approx_differentiable",
-        "loglik_path": None,
         "list_params": ["v", "a", "z", "t", "theta"],
+        "loglik": None,
         "backend": "jax",
         "bounds": {
             "v": (-3.0, 3.0),

@@ -92,13 +92,10 @@ class HSSM:
                         "For custom models, both `likelihood_type` and `loglik` must be provided."
                     )
                 if likelihood_type == "analytical":
-                    self.model_config = default_model_config["custom_analytical"]
-                    self.model_config["loglik"] = loglik
+                    model = "custom_analytical"
                 elif likelihood_type == "approx_differentiable":
-                    self.model_config = default_model_config["custom_angle"]
-                    self.model_config["loglik_path"] = loglik
-                if not self.model_config:
-                    raise ValueError("Invalid custom model configuration.")
+                    model = "custom_angle"
+                self.model_config = default_model_config[model]
         else:
             if model not in default_model_config:
                 supported_models = list(default_model_config.keys())
@@ -111,8 +108,13 @@ class HSSM:
                 else merge_dicts(default_model_config[model], model_config)
             )
 
-        if loglik and model_config["loglik_kind"] == "approx_differentiable":
+            if not self.model_config:
+                raise ValueError("Invalid custom model configuration.")
+
+        if loglik and self.model_config["loglik_kind"] == "approx_differentiable":
             self.model_config["loglik"] = download_hf(loglik)
+        elif loglik and self.model_config["loglik_kind"] == "analytical":
+            self.model_config["loglik"] = loglik
         self.model_name = model
         self.list_params = self.model_config["list_params"]
         self._parent = self.list_params[0]

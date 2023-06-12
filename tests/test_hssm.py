@@ -7,6 +7,7 @@ import ssms
 
 from hssm import hssm
 from hssm.wfpt import WFPT
+from hssm.wfpt.config import download_hf
 
 
 @pytest.fixture
@@ -41,7 +42,7 @@ def data_angle():
 @pytest.fixture
 def example_model_config():
     return {
-        "loglik_kind": "example",
+        "loglik_kind": "blackbox",
         "list_params": ["v", "sv", "a", "z", "t"],
         "bounds": {
             "v": (-3.0, 3.0),
@@ -161,6 +162,7 @@ def test_custom_model(data, example_model_config):
         model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
 
     example_model_config["loglik"] = WFPT
+    example_model_config["loglik_kind"] = "analytical"
 
     model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
 
@@ -185,3 +187,31 @@ def test_model_definition_outside_include(data):
         ValueError, match='Parameter "a" is already specified in `include`'
     ):
         hssm.HSSM(data, include=[{"name": "a", "prior": 0.5}], a=0.5)
+
+
+def test_custom_model_without_model_config_and_loglik_raises_error(data):
+    with pytest.raises(
+        ValueError,
+        match="For custom models, both `likelihood_type` and `loglik` must be provided.",
+    ):
+        hssm.HSSM(data=data, model="custom")
+
+
+#
+def test_custom_model_with_analytical_likelihood_type(data):
+    likelihood_type = "analytical"
+    loglik = WFPT
+    model = hssm.HSSM(
+        data=data, model="custom", likelihood_type=likelihood_type, loglik=loglik
+    )
+    assert model.model_config["loglik"] == loglik
+
+
+#
+def test_custom_model_with_approx_differentiable_likelihood_type(data_angle):
+    likelihood_type = "approx_differentiable"
+    loglik = "angle.onnx"
+    model = hssm.HSSM(
+        data=data_angle, model="custom", likelihood_type=likelihood_type, loglik=loglik
+    )
+    assert model.model_config["loglik"] == download_hf(loglik)
