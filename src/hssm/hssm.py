@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Dict, Literal, Optional, Union
 
 import arviz as az
 import bambi as bmb
@@ -18,66 +16,43 @@ LogLikeFunc = Callable[..., ArrayLike]
 
 class HSSM:
     """
-    The Hierarchical Sequential Sampling Model (HSSM) class.
+    The Hierarchical Sequential Sampling Model (HSSM) class which utilizes specified models for computations.
 
-    Parameters
-    ----------
+    Args:
+        data (pd.DataFrame): A DataFrame with at least two columns - "rt" and "response", specifying response time and responses, respectively.
+        model (str, optional): Model to be utilized. Currently supports "ddm", "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". "custom" for custom models. Defaults to "ddm".
+        include (list[dict] | None, optional): A list of dictionaries specifying parameter specifications to include in the model. Defaults to None if left unspecified.
+        likelihood_type (str, optional): Specifies the likelihood type. Defaults to None.
+        model_config (Config | None, optional): Model configuration. Defaults to None.
+        loglik (LogLikeFunc | pytensor.graph.Op | None, optional): Log-likelihood function. Defaults to None.
 
-    data:
-        A pandas DataFrame with the minimum requirements of containing the data with the
-        columns 'rt' and 'response'.
-    model:
-        The name of the model to use. Currently supported models are "ddm", "angle",
-        "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". If
-        using a custom model, please pass "custom". Defaults to "ddm".
-    include, optional:
-        A list of dictionaries specifying parameter specifications to include in the
-        model. If left unspecified, defaults will be used for all parameter
-        specifications. Defaults to None.
-    model_config, optional:
-        A dictionary containing the model configuration information. If None is
-        provided, defaults will be used. Defaults to None.
-    **kwargs:
-        Additional arguments passed to the bmb.Model object.
+    Attributes:
+        list_params (list[str]): List of parameter names.
+        model_name (str): Name of the model.
+        model_config (dict): Model configuration.
+        model_distribution (Likelihood distribution): Likelihood function of the model in the form of a pm.Distribution subclass.
+        family (bmb.Family): A Bambi family object.
+        priors (dict): Prior distribution of parameters.
+        formula (str): Model formula.
+        link (str or dict): Link functions for all parameters.
+        params (list[Param]): List of Param objects representing model parameters.
 
-    Attributes
-    ----------
-    data:
-        A pandas DataFrame with at least two columns of "rt" and "response" indicating
-        the response time and responses.
-    list_params:
-        The list of strs of parameter names.
-    model_name:
-        The name of the model.
-    model_config:
-        A dictionary representing the model configuration.
-    model_distribution:
-        The likelihood function of the model in the form of a pm.Distribution subclass.
-    family:
-        A Bambi family object.
-    priors:
-        A dictionary containing the prior distribution of parameters.
-    formula:
-        A string representing the model formula.
-    link:
-        A string or a dictionary representing the link functions for all parameters.
-    params:
-        A list of Param objects representing model parameters.
+    Raises:
+        ValueError: If unsupported model name is passed or the likelihood type and log-likelihood function are not provided for a custom model, or if the log-likelihood kind is invalid.
+        TypeError: If parameter specifications are not in the correct format.
 
-    Methods:
-        sample: A method to sample posterior distributions.
-        set_alias: Sets the alias for a paramter.
-        graph: Plot the model with PyMC's built-in graph function.
+    Returns:
+        HSSM: A class object with the specified attributes and methods.
     """
 
     def __init__(
         self,
         data: pd.DataFrame,
         model: SupportedModels = "ddm",
-        include: list[dict] | None = None,
-        likelihood_type: str = None,
-        model_config: Config | None = None,
-        loglik: LogLikeFunc | pytensor.graph.Op | None = None,
+        include: Optional[list[dict]] = None,
+        likelihood_kind: str = None,
+        model_config: Optional[Config] = None,
+        loglik: Optional[Union[LogLikeFunc, pytensor.graph.Op]] = None,
         **kwargs,
     ):
         self.data = data
@@ -87,14 +62,14 @@ class HSSM:
             if model_config:
                 self.model_config = model_config
             else:
-                if likelihood_type is None and loglik is None:
+                if likelihood_kind is None and loglik is None:
                     raise ValueError(
-                        "For custom models, both `likelihood_type` and `loglik` must be provided."
+                        "For custom models, both `likelihood_kind` and `loglik` must be provided."
                     )
-                if likelihood_type == "analytical":
-                    model = "custom_analytical"
-                elif likelihood_type == "approx_differentiable":
-                    model = "custom_angle"
+                if likelihood_kind == "analytical":
+                    model = "ddm"
+                elif likelihood_kind == "approx_differentiable":
+                    model = "angle"
                 self.model_config = default_model_config[model]
         else:
             if model not in default_model_config:
@@ -110,12 +85,20 @@ class HSSM:
 
             if not self.model_config:
                 raise ValueError("Invalid custom model configuration.")
-
-        if loglik and self.model_config["loglik_kind"] == "approx_differentiable":
-            self.model_config["loglik"] = download_hf(loglik)  # type: ignore
+        self.model_name = model
+        if self.model_config["loglik_kind"] == "approx_differentiable":
+            if loglik:
+                try:
+                    self.model_config["loglik"] = download_hf(loglik)  # type: ignore
+                except Exception as e:
+                    print(f"Failed to download the model with name '{loglik}'. Error: {e}. Using the model name as is.")
+                    self.model_config["loglik"] = loglik
+            else:
+                self.model_config["loglik"] = download_hf(self.model_config["loglik"])  # type: ignore
         elif loglik and self.model_config["loglik_kind"] == "analytical":
             self.model_config["loglik"] = loglik
-        self.model_name = model
+
+
         self.list_params = self.model_config["list_params"]
         self._parent = self.list_params[0]
 
@@ -225,29 +208,36 @@ class HSSM:
         self.set_alias(self._aliases)
 
     def _transform_params(
-        self, include: list[dict] | None, model: str, model_config: Config
-    ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
+        self, include: Optional[list[dict]], model: str, model_config: Config
+    ) -> tuple[
+        list[Param],
+        bmb.Formula,
+        Optional[Dict],
+        Union[Dict[str, Union[str, bmb.Link]], str],
+    ]:
         """
-        This function transforms a list of dictionaries containing parameter
-        information into a list of Param objects. It also creates a formula, priors,
-        and a link for the Bambi package based on the parameters.
+        Function Name:
+            _transform_params
 
-        Parameters
-        ----------
-        include:
-            A list of dictionaries containing information about the parameters.
-        model:
-            A string that indicates the type of the model.
-        model_config:
-            A dict for the configuration for the model.
+        Purpose:
+            Transforms a list of dictionaries containing parameter information into a list of Param objects.
+            Also, it generates a formula, priors, and a link for the Bambi package based on the parameters.
 
-        Returns
-        -------
-            A tuple of 4 items, the latter 3 are for creating the bambi model.
-            - A list of the same length as self.list_params containing Param objects.
+        Args:
+            include (list[dict] | None): A list of dictionaries containing information about the parameters.
+            model (str): A string indicating the model type.
+            model_config (Config): A dict containing the configuration for the model.
+
+        Returns:
+            tuple: A tuple of four items, with the last three for creating the Bambi model:
+            - A list (of the same length as self.list_params) containing Param objects.
             - A bmb.formula object.
             - An optional dict containing prior information for Bambi.
             - An optional dict of link functions for Bambi.
+
+        Raises:
+            TypeError: If the input parameters are not in the correct format.
+            ValueError: If an unsupported model type is passed.
         """
         processed = []
         params = []
@@ -285,24 +275,26 @@ class HSSM:
         sampler: Literal[
             "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
         ] = "mcmc",
-        **kwargs,
-    ) -> az.InferenceData | pm.Approximation:
-        """Performs sampling using the `fit` method via bambi.Model.
+        **kwargs: Any,
+    ) -> Union[az.InferenceData, pm.Approximation]:
+        """
+        Function Name:
+            sample
 
-        Parameters
-        ----------
+        Purpose:
+            Executes the sampling process using the 'fit' method through bambi.Model.
 
-        sampler
-            The sampler to use. Can be either "mcmc" (default), "nuts_numpyro",
-            "nuts_blackjax", "laplace", or "vi".
-        kwargs
-            Other arguments passed to bmb.Model.fit()
+        Args:
+            sampler (Literal): The sampler to use. Options include "mcmc" (default), "nuts_numpyro", "nuts_blackjax", "laplace", or "vi".
+            kwargs: Additional arguments passed to bmb.Model.fit().
 
-        Returns
-        -------
-            An ArviZ ``InferenceData`` instance if inference_method is  ``"mcmc"``
-        (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An ``Approximation``
-        object if  ``"vi"``.
+        Returns:
+            az.InferenceData | pm.Approximation: An ArviZ `InferenceData` instance if the inference_method is "mcmc" (default),
+            "nuts_numpyro", "nuts_blackjax", or "laplace". An `Approximation` object if "vi".
+
+        Raises:
+            TypeError: If the 'sampler' argument is not a recognized string.
+            ValueError: If the 'kwargs' do not match the expected arguments for bmb.Model.fit().
         """
 
         supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
@@ -318,24 +310,36 @@ class HSSM:
 
     @property
     def pymc_model(self) -> pm.Model:
-        """A convenience funciton that returns the PyMC model build by bambi,
-        largely to avoid stuff like self.model.backend.model...
+        """
+        Function Name:
+            pymc_model
 
-        Returns
-        -------
-            The PyMC model built by bambi
+        Purpose:
+            Provides a convenience function that fetches the PyMC model constructed by bambi, primarily to bypass verbose calls like self.model.backend.model...
+
+        Returns:
+            pm.Model: The PyMC model established by bambi.
+
+        Raises:
+            AttributeError: If the bambi model or the PyMC model doesn't exist.
         """
 
         return self.model.backend.model
 
-    def set_alias(self, aliases: dict[str, str | dict]):
-        """Sets the aliases according to the dictionary passed to it and rebuild the
-        model.
+    def set_alias(self, aliases: Dict[str, Union[str, Dict]]):
+        """
+        Function Name:
+            set_alias
 
-        Parameters
-        ----------
-        alias
-            A dict specifying the paramter names being aliased and the aliases.
+        Purpose:
+            Assigns aliases based on the provided dictionary and reconstructs the model.
+
+        Args:
+            alias (dict): A dictionary specifying the parameter names being aliased and the respective aliases.
+
+        Raises:
+            TypeError: If the provided argument is not a dictionary.
+            KeyError: If a parameter to be aliased doesn't exist in the model.
         """
 
         self.model.set_alias(aliases)
@@ -343,39 +347,33 @@ class HSSM:
 
     # NOTE: can't annotate return type because the graphviz dependency is optional
     def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
-        """Produce a graphviz Digraph from a built HSSM model.
-        Requires graphviz, which may be installed most easily with
-            ``conda install -c conda-forge python-graphviz``
-        Alternatively, you may install the ``graphviz`` binaries yourself, and then
-        ``pip install graphviz`` to get the python bindings.
-        See http://graphviz.readthedocs.io/en/stable/manual.html for more information.
-
-        The code is largely copied from
-        https://github.com/bambinos/bambi/blob/main/bambi/models.py
-        Credit for the code goes to Bambi developers.
-
-        Parameters
-        ----------
-        formatting
-            One of ``"plain"`` or ``"plain_with_params"``. Defaults to ``"plain"``.
-        name
-            Name of the figure to save. Defaults to ``None``, no figure is saved.
-        figsize
-            Maximum width and height of figure in inches. Defaults to ``None``, the
-            figure size is set automatically. If defined and the drawing is larger than
-            the given size, the drawing is uniformly scaled down so that it fits within
-            the given size.  Only works if ``name`` is not ``None``.
-        dpi
-            Point per inch of the figure to save.
-            Defaults to 300. Only works if ``name`` is not ``None``.
-        fmt
-            Format of the figure to save.
-            Defaults to ``"png"``. Only works if ``name`` is not ``None``.
-
-        Returns
-            The graph
         """
+        Function Name:
+            graph
 
+        Purpose:
+            Generates a graphviz Digraph from a constructed HSSM model. This function relies on the Graphviz package,
+            which you can install using ``conda install -c conda-forge python-graphviz`` or manually installing the
+            ``graphviz`` binaries and using ``pip install graphviz`` for the Python bindings.
+
+        Args:
+            formatting (str): Defines the type of formatting to be applied. Can either be ``"plain"`` or
+                ``"plain_with_params"``. Defaults to ``"plain"``.
+            name (str): The name of the saved figure. If set to ``None`` (default), no figure is saved.
+            figsize (tuple): Maximum width and height of the figure in inches. If specified, and if the generated
+                drawing exceeds this size, it's uniformly scaled down to fit. Only applicable if ``name`` is specified.
+                Defaults to ``None``.
+            dpi (int): Defines the resolution of the saved figure in dots per inch. Only applicable if ``name`` is specified.
+                Defaults to 300.
+            fmt (str): Specifies the format of the saved figure. Only applicable if ``name`` is specified.
+                Defaults to ``"png"``.
+
+        Returns:
+            A graphviz Digraph object.
+
+        Raises:
+            ImportError: If the graphviz package is not installed.
+        """
         self.model._check_built()
 
         graphviz = HSSMModelGraph(
@@ -395,7 +393,16 @@ class HSSM:
         return graphviz
 
     def __repr__(self) -> str:
-        """Creates a representation of the model."""
+        """
+        Function Name:
+            __repr__
+
+        Purpose:
+            Creates a representation of the model.
+
+        Returns:
+            str: A string representation of the model.
+        """
 
         output = []
 
@@ -416,23 +423,33 @@ class HSSM:
         return "\r\n".join(output)
 
     def __str__(self) -> str:
-        """Creates a string representation of the model."""
+        """
+        Function Name:
+            __str__
+
+        Purpose:
+            Creates a string representation of the model.
+
+        Returns:
+            str: A string representation of the model.
+        """
 
         return self.__repr__()
 
     @property
-    def traces(self) -> az.InferenceData | pm.Approximation:
+    def traces(self) -> Union[az.InferenceData, pm.Approximation]:
         """
-        Returns the trace of the model after sampling.
+        Function Name:
+            traces
 
-        Raises
-        ------
-        ValueError
-            If the model has not been sampled yet.
+        Purpose:
+            Provides the trace of the model after sampling has been conducted.
 
-        Returns
-        -------
-            The trace of the model after sampling.
+        Returns:
+            az.InferenceData | pm.Approximation: A trace of the model post-sampling.
+
+        Raises:
+            ValueError: If the model hasn't undergone sampling yet.
         """
 
         if not self._inference_obj:
