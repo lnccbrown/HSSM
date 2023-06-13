@@ -91,13 +91,14 @@ class HSSM:
                 try:
                     self.model_config["loglik"] = download_hf(loglik)  # type: ignore
                 except Exception as e:
-                    print(f"Failed to download the model with name '{loglik}'. Error: {e}. Using the model name as is.")
+                    print(
+                        f"Failed to download the model with name '{loglik}'. Error: {e}. Using the model name as is."
+                    )
                     self.model_config["loglik"] = loglik
             else:
                 self.model_config["loglik"] = download_hf(self.model_config["loglik"])  # type: ignore
         elif loglik and self.model_config["loglik_kind"] == "analytical":
             self.model_config["loglik"] = loglik
-
 
         self.list_params = self.model_config["list_params"]
         self._parent = self.list_params[0]
