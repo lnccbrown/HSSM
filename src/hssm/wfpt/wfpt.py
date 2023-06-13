@@ -21,13 +21,11 @@ from ssms.basic_simulators import simulator
 from ssms.config import model_config as ssms_model_config
 
 from ..utils import BoundsSpec
-from .base import log_pdf, log_pdf_sv
+from .base import OUT_OF_BOUNDS_VAL, log_pdf, log_pdf_sv
 from .lan import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
-
-OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
 
 # Defined here to avoid circular import
 # TODO: update these bounds in the future
@@ -157,10 +155,16 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
                 theta = np.stack(args)
                 n_samples = 1 if not size else size
             else:
-                theta = np.zeros([size, len(args)])
-                for i, arg in enumerate(args):
-                    theta[:, i] = arg
-                print(theta)
+                # Preprocess all parameters, reshape them into a matrix of dimension
+                # (size, n_params) where size is the number of elements in the largest
+                # of all parameters passed to *arg
+
+                elem_max_size = np.argmax([x.size for x in args])
+                max_shape = args[elem_max_size].shape
+
+                theta = np.column_stack(
+                    [np.broadcast_to(arg, max_shape).reshape(-1) for arg in args]
+                )
                 n_samples = 1
 
             sim_out = simulator(
@@ -172,7 +176,9 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
             )
 
             output = np.column_stack([sim_out["rts"], sim_out["choices"]])
-            assert output.shape[0] == size
+
+            if max_shape is not None:
+                output = output.reshape((*max_shape, 2))
 
             return output
 
@@ -205,6 +211,7 @@ def make_distribution(
     bounds
         A dictionary with parameters as keys (a string) and its boundaries as values.
         Example: {"parameter": (lower_boundary, upper_boundary)}.
+
     Returns
     -------
         A pymc.Distribution that uses the log-likelihood function.
@@ -263,25 +270,28 @@ def make_lan_distribution(
     """Produces a PyMC distribution that uses the provided base or ONNX model as
     its log-likelihood function.
 
-    Args:
-        model: The path of the ONNX model, or one already loaded in memory.
-        backend: Whether to use "pytensor" or "jax" as the backend of the
-            log-likelihood computation. If `jax`, the function will be wrapped in an
-            pytensor Op.
-        list_params: A list of the names of the parameters following the order of
-            how they are fed to the LAN.
-        rv
-            The RandomVariable Op used for posterior sampling.
-        model_name
-            The name of the model (a string).
-        param_is_reg
-            A list of booleans indicating whether each parameter in the
-            corresponding position in `list_params` is a regression.
-        bounds
-            A dictionary with parameters as keys (a string) and its boundaries
-            as values.Example: {"parameter": (lower_boundary, upper_boundary)}.
-    Returns:
+    Parameters
+    ----------
+    model
+        The path of the ONNX model, or one already loaded in memory.
+    backend
+        Whether to use "pytensor" or "jax" as the backend of the log-likelihood
+        computation. If `jax`, the function will be wrapped in a pytensor Op.
+    list_params
+        A list of the names of the parameters following the order of how they are fed to
+        the LAN.
+    rv
+        The RandomVariable Op used for posterior sampling.
+    model_name
+        The name of the model (a string).
+    param_is_reg
+        A list of booleans indicating whether each parameter in the corresponding
+        position in `list_params` is a regression.
+    bounds
+        A dictionary with parameters as keys (a string) and its boundariesas values.
+        Example: {"parameter": (lower_boundary, upper_boundary)}.
 
+    Returns
     -------
         A PyMC Distribution class that uses the ONNX model as its log-likelihood
         function.

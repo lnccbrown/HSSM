@@ -23,51 +23,55 @@ class HSSM:
     Parameters
     ----------
 
-    data:
+    data
         A pandas DataFrame with the minimum requirements of containing the data with the
         columns 'rt' and 'response'.
-    model:
+    model
         The name of the model to use. Currently supported models are "ddm", "angle",
         "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". If
         using a custom model, please pass "custom". Defaults to "ddm".
-    include, optional:
+    include, optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
-    model_config, optional:
+    model_config, optional
         A dictionary containing the model configuration information. If None is
         provided, defaults will be used. Defaults to None.
-    **kwargs:
+    **kwargs
         Additional arguments passed to the bmb.Model object.
 
     Attributes
     ----------
-    data:
+    data
         A pandas DataFrame with at least two columns of "rt" and "response" indicating
         the response time and responses.
-    list_params:
+    list_params
         The list of strs of parameter names.
-    model_name:
+    model_name
         The name of the model.
-    model_config:
+    model_config
         A dictionary representing the model configuration.
-    model_distribution:
+    model_distribution
         The likelihood function of the model in the form of a pm.Distribution subclass.
-    family:
+    family
         A Bambi family object.
-    priors:
+    priors
         A dictionary containing the prior distribution of parameters.
-    formula:
+    formula
         A string representing the model formula.
-    link:
+    link
         A string or a dictionary representing the link functions for all parameters.
-    params:
+    params
         A list of Param objects representing model parameters.
 
-    Methods:
-        sample: A method to sample posterior distributions.
-        set_alias: Sets the alias for a paramter.
-        graph: Plot the model with PyMC's built-in graph function.
+    Methods
+    -------
+    sample
+        A method to sample posterior distributions.
+    set_alias
+        Sets the alias for a paramter.
+    graph
+        Plot the model with PyMC's built-in graph function.
     """
 
     def __init__(
@@ -220,11 +224,11 @@ class HSSM:
 
         Parameters
         ----------
-        include:
+        include
             A list of dictionaries containing information about the parameters.
-        model:
+        model
             A string that indicates the type of the model.
-        model_config:
+        model_config
             A dict for the configuration for the model.
 
         Returns
@@ -302,6 +306,50 @@ class HSSM:
 
         return self.traces
 
+    def sample_posterior_predictive(
+        self,
+        idata: az.InferenceData | None = None,
+        data: pd.DataFrame | None = None,
+        inplace: bool = True,
+        include_group_specific: bool = True,
+    ) -> az.InferenceData | None:
+        """Performs posterior predictive sampling from the HSSM model.
+
+        Parameters
+        ----------
+        idata, optional
+            The `InferenceData` object returned by `HSSM.sample()`. If not provided,
+            the `InferenceData` from the last time `sample()` is called will be used.
+        data, optional
+            An optional data frame with values for the predictors that are used to
+            obtain out-of-sample predictions. If omitted, the original dataset is used.
+        inplace, optional
+            If `True` will modify idata in-place and append a `posterior_predictive`
+            group to `idata`. Otherwise, it will return a copy of idata with the
+            predictions added, by default True.
+        include_group_specific, optional
+            If `True` will make predictions including the group specific effects.
+            Otherwise, predictions are made with common effects only (i.e. group-
+            specific are set to zero), by default True.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet and idata is not provided.
+
+        Returns
+        -------
+            InferenceData or None
+        """
+        if idata is None:
+            if self._inference_obj is None:
+                raise ValueError(
+                    "The model has not been sampled yet. "
+                    + "Please either provide an idata object or sample the model first."
+                )
+            idata = self._inference_obj
+        return self.model.predict(idata, "pps", data, inplace, include_group_specific)
+
     @property
     def pymc_model(self) -> pm.Model:
         """A convenience funciton that returns the PyMC model build by bambi,
@@ -359,6 +407,7 @@ class HSSM:
             Defaults to ``"png"``. Only works if ``name`` is not ``None``.
 
         Returns
+        -------
             The graph
         """
 
