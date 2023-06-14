@@ -149,7 +149,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
                     + f"({ssms_model_config[model_name]['params']})."
                 )
 
-            if all(np.isscalar(arg) or arg.shape[0] == 1 for arg in args):
+            if all(np.isscalar(arg) or np.asarray(arg).size == 1 for arg in args):
                 # All parameters are scalars
 
                 theta = np.stack(args)

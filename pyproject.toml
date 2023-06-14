@@ -25,7 +25,7 @@ numpy = "^1.23.4"
 onnx = "^1.12.0"
 jax = "^0.4.0"
 jaxlib = "^0.4.0"
-bambi = {git = "https://github.com/bambinos/bambi", rev = "refs/pull/682/merge"}
+bambi = {git = "https://github.com/tomicapretto/bambi.git", rev = "fix_hssm"}
 ssm-simulators = "^0.3.0"
 
 [tool.poetry.group.dev.dependencies]

@@ -4,6 +4,7 @@ from typing import Any, Callable, Literal
 
 import arviz as az
 import bambi as bmb
+import numpy as np
 import pandas as pd
 import pymc as pm
 import pytensor
@@ -22,7 +23,6 @@ class HSSM:
 
     Parameters
     ----------
-
     data
         A pandas DataFrame with the minimum requirements of containing the data with the
         columns 'rt' and 'response'.
@@ -68,6 +68,8 @@ class HSSM:
     -------
     sample
         A method to sample posterior distributions.
+    sample_posterior_predictive
+        A method to produce posterior predictive samples.
     set_alias
         Sets the alias for a paramter.
     graph
@@ -203,7 +205,7 @@ class HSSM:
             dist=self.model_distribution,
         )
 
-        self.family = bmb.Family(
+        self.family = SSMFamily(
             self.model_config["loglik_kind"], likelihood=self.likelihood, link=self.link
         )
 
@@ -281,7 +283,6 @@ class HSSM:
 
         Parameters
         ----------
-
         sampler
             The sampler to use. Can be either "mcmc" (default), "nuts_numpyro",
             "nuts_blackjax", "laplace", or "vi".
@@ -474,3 +475,8 @@ class HSSM:
             raise ValueError("Please sample the model first.")
 
         return self._inference_obj
+
+
+class SSMFamily(bmb.Family):
+    def create_extra_pps_coord(self):
+        return np.arange(2)

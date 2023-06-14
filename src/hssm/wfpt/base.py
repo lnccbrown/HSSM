@@ -310,7 +310,7 @@ def log_pdf_sv(
         - pt.log(sv**2 * rt + 1) / 2
         - 2 * pt.log(a)
     )
-    logp = pt.where(rt <= 0, OUT_OF_BOUNDS_VAL, logp)
+    # logp = pt.where(rt <= 0, OUT_OF_BOUNDS_VAL, logp)
     checked_logp = check_parameters(
         logp,
         sv >= 0,
