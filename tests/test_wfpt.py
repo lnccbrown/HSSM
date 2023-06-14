@@ -39,4 +39,4 @@ def test_make_model_rv():
     assert random_sample.shape[0] == 100
 
     with pytest.raises(ValueError):
-        wfpt_rv.rng_fn(rng, *true_values, size=500)
+        wfpt_rv.rng_fn(rng, *true_values, size=499)

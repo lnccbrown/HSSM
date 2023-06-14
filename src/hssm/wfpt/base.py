@@ -257,6 +257,7 @@ def log_pdf_sv(
     t: float,
     err: float = 1e-7,
     k_terms: int = 10,
+    epsilon: float = 1e-15,
 ) -> np.ndarray:
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
@@ -279,6 +280,8 @@ def log_pdf_sv(
         Error bound.
     k_terms
         number of terms to use to approximate the PDF.
+    epsilon
+        A small positive number to prevent division by zero ortaking the log of zero.
 
     Returns
     -------
@@ -300,17 +303,17 @@ def log_pdf_sv(
     # 2. Computes the log of above value
     # 3. Computes the integration given the sd of v
     logp = (
-        pt.log(p)
+        pt.log(p + epsilon)
         + (
             (a * z_flipped * sv) ** 2
             - 2 * a * v_flipped * z_flipped
             - (v_flipped**2) * rt
         )
         / (2 * (sv**2) * rt + 2)
-        - pt.log(sv**2 * rt + 1) / 2
-        - 2 * pt.log(a)
+        - pt.log(sv**2 * rt + 1 + epsilon) / 2
+        - 2 * pt.log(a + epsilon)
     )
-    # logp = pt.where(rt <= 0, OUT_OF_BOUNDS_VAL, logp)
+    logp = pt.where(rt <= 0, OUT_OF_BOUNDS_VAL, logp)
     checked_logp = check_parameters(
         logp,
         sv >= 0,
@@ -330,6 +333,7 @@ def log_pdf(
     t: float,
     err: float = 1e-7,
     k_terms: int = 10,
+    epsilon: float = 1e-15,
 ) -> np.ndarray:
     """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
     the method and implementation of Navarro & Fuss, 2009.
@@ -350,9 +354,11 @@ def log_pdf(
         Error bound.
     k_terms
         number of terms to use to approximate the PDF.
+    epsilon
+        A small positive number to prevent division by zero ortaking the log of zero.
 
     Returns
     -------
         The log likelihood of the drift diffusion model give sv=0.
     """
-    return log_pdf_sv(data, v, 0, a, z, t, err, k_terms)
+    return log_pdf_sv(data, v, 0, a, z, t, err, k_terms, epsilon)

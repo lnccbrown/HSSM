@@ -139,6 +139,8 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
                 size = args[-1]
                 args = args[:-1]
 
+            arg_arrays = [np.asarray(arg) for arg in args]
+
             iinfo32 = np.iinfo(np.uint32)
             seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
 
@@ -149,23 +151,35 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
                     + f"({ssms_model_config[model_name]['params']})."
                 )
 
-            if all(np.isscalar(arg) or np.asarray(arg).size == 1 for arg in args):
+            is_all_scalar = all(arg.size == 1 for arg in arg_arrays)
+
+            if is_all_scalar:
                 # All parameters are scalars
 
-                theta = np.stack(args)
+                theta = np.stack(arg_arrays)
                 n_samples = 1 if not size else size
             else:
                 # Preprocess all parameters, reshape them into a matrix of dimension
                 # (size, n_params) where size is the number of elements in the largest
                 # of all parameters passed to *arg
 
-                elem_max_size = np.argmax([x.size for x in args])
-                max_shape = args[elem_max_size].shape
+                elem_max_size = np.argmax([arg.size for arg in arg_arrays])
+                max_shape = arg_arrays[elem_max_size].shape
+
+                new_data_size = max_shape[-1]
 
                 theta = np.column_stack(
-                    [np.broadcast_to(arg, max_shape).reshape(-1) for arg in args]
+                    [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
                 )
-                n_samples = 1
+
+                if size is None:
+                    n_samples = 1
+                elif size % new_data_size != 0:
+                    raise ValueError(
+                        "`size` needs to be a multiple of the size of data"
+                    )
+                else:
+                    n_samples = size // new_data_size
 
             sim_out = simulator(
                 theta=theta,
@@ -177,8 +191,8 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
 
             output = np.column_stack([sim_out["rts"], sim_out["choices"]])
 
-            if max_shape is not None:
-                output = output.reshape((*max_shape, 2))
+            if not is_all_scalar:
+                output = output.reshape((*max_shape[:-1], max_shape[-1] * n_samples, 2))
 
             return output
 
