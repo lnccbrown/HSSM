@@ -88,7 +88,7 @@ def shared_params():
         "z": 0.5,
         "t": 0.5,
         "err": 1e-7,
-        "epsilon": 0,
+        "epsilon": 1e-15,
     }
 
 
