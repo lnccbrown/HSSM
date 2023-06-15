@@ -50,7 +50,7 @@ class HSSM:
         data: pd.DataFrame,
         model: SupportedModels = "ddm",
         include: Optional[list[dict]] = None,
-        likelihood_kind: str = None,
+        loglik_kind: str = None,
         model_config: Optional[Config] = None,
         loglik: Optional[Union[LogLikeFunc, pytensor.graph.Op]] = None,
         **kwargs,
@@ -62,9 +62,9 @@ class HSSM:
             if model_config:
                 self.model_config = model_config
             else:
-                if likelihood_kind is None and loglik is None:
+                if loglik_kind is None and loglik is None:
                     raise ValueError(
-                        "For custom models, both `likelihood_kind` and `loglik` must be provided."
+                        "For custom models, both `loglik_kind` and `loglik` must be provided."
                     )
                 self.model_config = default_model_config[model]
         else:

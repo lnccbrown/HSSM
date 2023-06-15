@@ -192,26 +192,26 @@ def test_model_definition_outside_include(data):
 def test_custom_model_without_model_config_and_loglik_raises_error(data):
     with pytest.raises(
         ValueError,
-        match="For custom models, both `likelihood_kind` and `loglik` must be provided.",
+        match="For custom models, both `loglik_kind` and `loglik` must be provided.",
     ):
         hssm.HSSM(data=data, model="custom")
 
 
 #
 def test_custom_model_with_analytical_likelihood_type(data):
-    likelihood_kind = "analytical"
+    loglik_kind = "analytical"
     loglik = WFPT
     model = hssm.HSSM(
-        data=data, model="ddm", likelihood_kind=likelihood_kind, loglik=loglik
+        data=data, model="ddm", loglik_kind=loglik_kind, loglik=loglik
     )
     assert model.model_config["loglik"] == loglik
 
 
 #
 def test_custom_model_with_approx_differentiable_likelihood_type(data_angle):
-    likelihood_kind = "approx_differentiable"
+    loglik_kind = "approx_differentiable"
     loglik = "angle.onnx"
     model = hssm.HSSM(
-        data=data_angle, model="angle", likelihood_kind=likelihood_kind, loglik=loglik
+        data=data_angle, model="angle", loglik_kind=loglik_kind, loglik=loglik
     )
     assert model.model_config["loglik"] == download_hf(loglik)
