@@ -202,7 +202,7 @@ def test_custom_model_with_analytical_likelihood_type(data):
     likelihood_kind = "analytical"
     loglik = WFPT
     model = hssm.HSSM(
-        data=data, model="custom", likelihood_kind=likelihood_kind, loglik=loglik
+        data=data, model="ddm", likelihood_kind=likelihood_kind, loglik=loglik
     )
     assert model.model_config["loglik"] == loglik
 
@@ -212,6 +212,6 @@ def test_custom_model_with_approx_differentiable_likelihood_type(data_angle):
     likelihood_kind = "approx_differentiable"
     loglik = "angle.onnx"
     model = hssm.HSSM(
-        data=data_angle, model="custom", likelihood_kind=likelihood_kind, loglik=loglik
+        data=data_angle, model="angle", likelihood_kind=likelihood_kind, loglik=loglik
     )
     assert model.model_config["loglik"] == download_hf(loglik)
