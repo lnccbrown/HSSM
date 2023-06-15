@@ -66,10 +66,6 @@ class HSSM:
                     raise ValueError(
                         "For custom models, both `likelihood_kind` and `loglik` must be provided."
                     )
-                if likelihood_kind == "analytical":
-                    model = "ddm"
-                elif likelihood_kind == "approx_differentiable":
-                    model = "angle"
                 self.model_config = default_model_config[model]
         else:
             if model not in default_model_config:
