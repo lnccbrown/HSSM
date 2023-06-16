@@ -1,73 +1,86 @@
+"""HSSM: Hierarchical Sequential Sampling Models.
+
+A package based on pymc and bambi to perform Bayesian inference for hierarchical
+sequential sampling models.
+
+This file defines the entry class HSSM.
+"""
+
+
 from __future__ import annotations
 
-from typing import Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
-import arviz as az
 import bambi as bmb
-import pandas as pd
 import pymc as pm
-import pytensor
 from numpy.typing import ArrayLike
 
 from hssm import wfpt
 from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict, merge_dicts
 from hssm.wfpt.config import Config, SupportedModels, default_model_config, download_hf
 
+if TYPE_CHECKING:
+    import arviz as az
+    import pandas as pd
+    import pytensor
+
 LogLikeFunc = Callable[..., ArrayLike]
 
 
 class HSSM:
-    """
-    The Hierarchical Sequential Sampling Model (HSSM) class.
+    """The Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
     ----------
-
-    data:
+    data
         A pandas DataFrame with the minimum requirements of containing the data with the
         columns 'rt' and 'response'.
-    model:
+    model
         The name of the model to use. Currently supported models are "ddm", "angle",
         "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". If
         using a custom model, please pass "custom". Defaults to "ddm".
-    include, optional:
+    include, optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
-    model_config, optional:
+    model_config, optional
         A dictionary containing the model configuration information. If None is
         provided, defaults will be used. Defaults to None.
-    **kwargs:
+    **kwargs
         Additional arguments passed to the bmb.Model object.
 
     Attributes
     ----------
-    data:
+    data
         A pandas DataFrame with at least two columns of "rt" and "response" indicating
         the response time and responses.
-    list_params:
+    list_params
         The list of strs of parameter names.
-    model_name:
+    model_name
         The name of the model.
-    model_config:
+    model_config
         A dictionary representing the model configuration.
-    model_distribution:
+    model_distribution
         The likelihood function of the model in the form of a pm.Distribution subclass.
-    family:
+    family
         A Bambi family object.
-    priors:
+    priors
         A dictionary containing the prior distribution of parameters.
-    formula:
+    formula
         A string representing the model formula.
-    link:
+    link
         A string or a dictionary representing the link functions for all parameters.
-    params:
+    params
         A list of Param objects representing model parameters.
 
-    Methods:
-        sample: A method to sample posterior distributions.
-        set_alias: Sets the alias for a paramter.
-        graph: Plot the model with PyMC's built-in graph function.
+    Methods
+    -------
+    sample
+        A method to sample posterior distributions.
+    set_alias
+        Sets the alias for a paramter.
+    graph
+        Plot the model with PyMC's built-in graph function.
     """
 
     def __init__(
@@ -212,18 +225,19 @@ class HSSM:
     def _transform_params(
         self, include: list[dict] | None, model: str, model_config: Config
     ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
-        """
-        This function transforms a list of dictionaries containing parameter
-        information into a list of Param objects. It also creates a formula, priors,
-        and a link for the Bambi package based on the parameters.
+        """Transform parameters.
+
+        Transforms a list of dictionaries containing parameter information into a
+        list of Param objects. This function creates a formula, priors,and a link for
+        the Bambi package based on the parameters.
 
         Parameters
         ----------
-        include:
+        include
             A list of dictionaries containing information about the parameters.
-        model:
+        model
             A string that indicates the type of the model.
-        model_config:
+        model_config
             A dict for the configuration for the model.
 
         Returns
@@ -272,11 +286,10 @@ class HSSM:
         ] = "mcmc",
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
-        """Performs sampling using the `fit` method via bambi.Model.
+        """Perform sampling using the `fit` method via bambi.Model.
 
         Parameters
         ----------
-
         sampler
             The sampler to use. Can be either "mcmc" (default), "nuts_numpyro",
             "nuts_blackjax", "laplace", or "vi".
@@ -285,11 +298,10 @@ class HSSM:
 
         Returns
         -------
-            An ArviZ ``InferenceData`` instance if inference_method is  ``"mcmc"``
-        (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An ``Approximation``
-        object if  ``"vi"``.
+            An ArviZ `InferenceData` instance if inference_method is `"mcmc"`
+            (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
+            object if `"vi"`.
         """
-
         supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
 
         if sampler not in supported_samplers:
@@ -303,18 +315,18 @@ class HSSM:
 
     @property
     def pymc_model(self) -> pm.Model:
-        """A convenience funciton that returns the PyMC model build by bambi,
-        largely to avoid stuff like self.model.backend.model...
+        """Provide access to the PyMC model.
 
         Returns
         -------
             The PyMC model built by bambi
         """
-
         return self.model.backend.model
 
     def set_alias(self, aliases: dict[str, str | dict]):
-        """Sets the aliases according to the dictionary passed to it and rebuild the
+        """Set parameter aliases.
+
+        Sets the aliases according to the dictionary passed to it and rebuild the
         model.
 
         Parameters
@@ -322,45 +334,46 @@ class HSSM:
         alias
             A dict specifying the paramter names being aliased and the aliases.
         """
-
         self.model.set_alias(aliases)
         self.model.build()
 
     # NOTE: can't annotate return type because the graphviz dependency is optional
     def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
         """Produce a graphviz Digraph from a built HSSM model.
-        Requires graphviz, which may be installed most easily with
-            ``conda install -c conda-forge python-graphviz``
-        Alternatively, you may install the ``graphviz`` binaries yourself, and then
-        ``pip install graphviz`` to get the python bindings.
-        See http://graphviz.readthedocs.io/en/stable/manual.html for more information.
 
-        The code is largely copied from
-        https://github.com/bambinos/bambi/blob/main/bambi/models.py
-        Credit for the code goes to Bambi developers.
+        Requires graphviz, which may be installed most easily with `conda install -c
+        conda-forge python-graphviz`. Alternatively, you may install the `graphviz`
+        binaries yourself, and then `pip install graphviz` to get the python bindings.
+        See http://graphviz.readthedocs.io/en/stable/manual.html for more information.
 
         Parameters
         ----------
         formatting
-            One of ``"plain"`` or ``"plain_with_params"``. Defaults to ``"plain"``.
+            One of `"plain"` or `"plain_with_params"`. Defaults to `"plain"`.
         name
-            Name of the figure to save. Defaults to ``None``, no figure is saved.
+            Name of the figure to save. Defaults to `None`, no figure is saved.
         figsize
-            Maximum width and height of figure in inches. Defaults to ``None``, the
+            Maximum width and height of figure in inches. Defaults to `None`, the
             figure size is set automatically. If defined and the drawing is larger than
             the given size, the drawing is uniformly scaled down so that it fits within
-            the given size.  Only works if ``name`` is not ``None``.
+            the given size.  Only works if `name` is not `None`.
         dpi
             Point per inch of the figure to save.
-            Defaults to 300. Only works if ``name`` is not ``None``.
+            Defaults to 300. Only works if `name` is not `None`.
         fmt
             Format of the figure to save.
-            Defaults to ``"png"``. Only works if ``name`` is not ``None``.
+            Defaults to `"png"`. Only works if `name` is not `None`.
 
         Returns
+        -------
             The graph
-        """
 
+        Note
+        ----
+            The code is largely copied from
+            https://github.com/bambinos/bambi/blob/main/bambi/models.py
+            Credit for the code goes to Bambi developers.
+        """
         self.model._check_built()
 
         graphviz = HSSMModelGraph(
@@ -380,8 +393,7 @@ class HSSM:
         return graphviz
 
     def __repr__(self) -> str:
-        """Creates a representation of the model."""
-
+        """Create a representation of the model."""
         output = []
 
         output.append("Hierarchical Sequential Sampling Model")
@@ -401,14 +413,12 @@ class HSSM:
         return "\r\n".join(output)
 
     def __str__(self) -> str:
-        """Creates a string representation of the model."""
-
+        """Create a string representation of the model."""
         return self.__repr__()
 
     @property
     def traces(self) -> az.InferenceData | pm.Approximation:
-        """
-        Returns the trace of the model after sampling.
+        """Return the trace of the model after sampling.
 
         Raises
         ------
@@ -419,7 +429,6 @@ class HSSM:
         -------
             The trace of the model after sampling.
         """
-
         if not self._inference_obj:
             raise ValueError("Please sample the model first.")
 

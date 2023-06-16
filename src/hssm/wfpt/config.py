@@ -1,8 +1,7 @@
-"""
-Default configurations for models in HSSM class
-"""
-from huggingface_hub import hf_hub_download
+"""Default configurations for models in HSSM class."""
 from typing import Any, Literal
+
+from huggingface_hub import hf_hub_download
 
 from hssm import wfpt
 
@@ -10,6 +9,7 @@ REPO_ID = "Aisulu/hssm_onnx_models"
 
 
 def download_hf(path: str):
+    """Download model from hugging face."""
     return hf_hub_download(repo_id=REPO_ID, filename=path)
 
 
