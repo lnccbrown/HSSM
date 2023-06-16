@@ -12,6 +12,10 @@ plugins:
   - mknotebooks
   - mkdocstrings:
       default_handler: python
+      handlers:
+          python:
+              options:
+                  docstring_style: numpy
 theme:
   name: material
 
