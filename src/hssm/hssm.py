@@ -50,7 +50,7 @@ class HSSM:
         data: pd.DataFrame,
         model: SupportedModels = "ddm",
         include: Optional[list[dict]] = None,
-        loglik_kind: str = None,
+        loglik_kind: Optional[str] = None,
         model_config: Optional[Config] = None,
         loglik: Optional[Union[LogLikeFunc, pytensor.graph.Op]] = None,
         **kwargs,
