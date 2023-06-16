@@ -46,5 +46,10 @@ jobs:
       - name: Check styling
         run: poetry run black . --check
 
+      - name: Linting
+        uses: chartboost/ruff-action@v1
+        with:
+          src: "./src/hssm"
+
       - name: Run tests
         run: poetry run pytest
