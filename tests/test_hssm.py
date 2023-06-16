@@ -201,9 +201,7 @@ def test_custom_model_without_model_config_and_loglik_raises_error(data):
 def test_custom_model_with_analytical_likelihood_type(data):
     loglik_kind = "analytical"
     loglik = WFPT
-    model = hssm.HSSM(
-        data=data, model="ddm", loglik_kind=loglik_kind, loglik=loglik
-    )
+    model = hssm.HSSM(data=data, model="ddm", loglik_kind=loglik_kind, loglik=loglik)
     assert model.model_config["loglik"] == loglik
 
 
