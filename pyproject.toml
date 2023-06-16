@@ -24,27 +24,25 @@ numpy = "^1.23.4"
 onnx = "^1.12.0"
 jax = "^0.4.0"
 jaxlib = "^0.4.0"
-bambi = "^0.10.0"
-formulae = "^0.3.4"
+bambi = "^0.11.0"
 ssm-simulators = "^0.3.0"
 huggingface-hub = "^0.14.1"
 scipy = "^1.10.1"
 
 [tool.poetry.group.dev.dependencies]
-pylint = "^2.6.0"
 pytest = "^7.3.1"
 black = "^22.8.0"
 isort = "^5.10.1"
 mypy = "^0.981"
 pre-commit = "^2.20.0"
-jupyterlab = "^3.4.8"
+jupyterlab = "^4.0.2"
 ipykernel = "^6.16.0"
 hddm-wfpt = {git = "https://github.com/brown-ccv/hddm-wfpt.git"}
 autoflake = "^2.0.0"
 ipywidgets = "^8.0.3"
 onnxruntime = "^1.13.1"
 graphviz = "^0.20.1"
-viztracer = "^0.15.6"
+ruff = "^0.0.272"
 
 [tool.black]
 line-length = 88
