@@ -10,9 +10,9 @@ authors = [
 ]
 readme = "README.md"
 license = "MIT"
-#packages = [
-#    { include = "HSSM", from = "src/hssm" }
-#]
+packages = [
+   { include = "HSSM", from = "src/hssm" }
+]
 repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HDDM", "HSSM", "pymc"]
 
