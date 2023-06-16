@@ -11,10 +11,10 @@ authors = [
 readme = "README.md"
 license = "MIT"
 packages = [
-   { include = "HSSM", from = "src/hssm" }
+   { include = "hssm", from = "src" }
 ]
 repository = "https://github.com/lnccbrown/HSSM"
-keywords = ["HDDM", "HSSM", "pymc"]
+keywords = ["HSSM", "HDDM", "hierarchical sequential sampling", "pymc"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
