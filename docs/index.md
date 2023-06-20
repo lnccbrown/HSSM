@@ -1,4 +1,4 @@
-# HSSM - Hierarchical Sequential Sampling Modeling 
+# HSSM - Hierarchical Sequential Sampling Modeling
 
 ## Introduction
 
@@ -62,4 +62,3 @@ TO-DO: Licensing information
 
 ### Contact Information
 TO-DO: Contact information
-

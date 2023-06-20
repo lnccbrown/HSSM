@@ -18,6 +18,3 @@ plugins:
                   docstring_style: numpy
 theme:
   name: material
-
-
-
