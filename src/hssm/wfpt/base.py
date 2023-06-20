@@ -1,8 +1,8 @@
-"""
-wfpt.py: pytensor implementation of the Wiener First Passage Time Distribution
+"""pytensor implementation of the Wiener First Passage Time Distribution.
+
 This code is based on Sam Mathias's Pytensor/Theano implementation
 of the WFPT distribution here:
-https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b
+https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b.
 """
 
 from __future__ import annotations
@@ -15,17 +15,19 @@ from pymc.distributions.dist_math import check_parameters
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
+    """Determine number of terms needed for small-t expansion.
+
+    Parameters
+    ----------
+    rt
+        A 1D numpy array of flipped R.... T.....s. (0, inf).
+    err
+        Error bound.
+
+    Returns
+    -------
+        A 1D at array of k_small.
     """
-    Determines number of terms needed for small-t expansion.
-
-    Args:
-        rt: A 1D numpy array of flipped R.... T.....s. (0, inf).
-        err: Error bound
-
-    Returns:
-        A 1D numpy array of k_small.
-    """
-
     ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
     ks = pt.max(pt.stack([ks, pt.sqrt(rt) + 1]), axis=0)
     ks = pt.switch(2 * pt.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
@@ -34,15 +36,18 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
 
 
 def k_large(rt: np.ndarray, err: float) -> np.ndarray:
-    """
-    Determine number of terms needed for large-t expansion.
+    """Determine number of terms needed for large-t expansion.
 
-    Args:
-        rt: An 1D numpy array of flipped RTs. (0, inf).
-        err: Error bound
+    Parameters
+    ----------
+    rt
+        An 1D numpy array of flipped RTs. (0, inf).
+    err
+        Error bound
 
-    Returns:
-        A 1D numpy array of k_large.
+    Returns
+    -------
+        A 1D at array of k_large.
     """
     kl = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
     kl = pt.max(pt.stack([kl, 1.0 / (np.pi * pt.sqrt(rt))]), axis=0)
@@ -52,11 +57,18 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
 
 
 def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
-    """Computes and compares k_small with k_large.
-    Args:
-        rt: An 1D numpy of flipped RTs. (0, inf).
-        err: Error bound
-    Returns: a 1D boolean at array of which implementation should be used.
+    """Compute and compare k_small with k_large.
+
+    Parameters
+    ----------
+    rt
+        An 1D numpy of flipped RTs. (0, inf).
+    err
+        Error bound.
+
+    Returns
+    -------
+        A 1D boolean at array of which implementation should be used.
     """
     ks = k_small(rt, err)
     kl = k_large(rt, err)
@@ -65,27 +77,39 @@ def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
 
 
 def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
-    """Produces a decision function that determines whether the pdf should be calculated
-    with large-time or small-time expansion.
-    Returns: A decision function with saved state to avoid repeated computation.
-    """
+    """Make a decision function.
 
+    Produces a decision function that determines whether the pdf should be calculated
+    with large-time or small-time expansion.
+
+    Returns
+    -------
+        A decision function with saved state to avoid repeated computation.
+    """
     internal_rt: np.ndarray | None = None
     internal_err: float | None = None
     internal_result: np.ndarray | None = None
 
     def inner_func(rt: np.ndarray, err: float = 1e-7) -> np.ndarray:
-        """For each element in `rt`, return `True` if the large-time expansion is
+        """Determine whether `k_small` or `k_large` will be used.
+
+        For each element in `rt`, return `True` if the large-time expansion is
         more efficient than the small-time expansion and `False` otherwise.
         This function uses a closure to save the result of past computation.
         If `rt` and `err` passed to it does not change, then it will directly
         return the results of the previous computation.
-        Args:
-            rt: An 1D numpy array of flipped RTs. (0, inf).
-            err: Error bound
-        Returns: a 1D boolean at array of which implementation should be used.
-        """
 
+        Parameters
+        ----------
+        rt
+            An 1D numpy array of flipped RTs. (0, inf).
+        err
+            Error bound.
+
+        Returns
+        -------
+            A 1D boolean at array of which implementation should be used.
+        """
         nonlocal internal_rt
         nonlocal internal_err
         nonlocal internal_result
@@ -118,12 +142,21 @@ decision = decision_func()
 
 
 def get_ks(k_terms: int, fast: bool) -> np.ndarray:
-    """Returns an array of ks given the number of terms needed to
-    approximate the sum of the infinite series.
-    Args:
-        k_terms: number of terms needed
-        fast: whether the function is used in the fast of slow expansion.
-    Returns: An array of ks.
+    """Return an array of ks.
+
+    Returns an array of ks given the number of terms needed to approximate the sum of
+    the infinite series.
+
+    Parameters
+    ----------
+    k_terms
+        number of terms needed
+    fast
+        whether the function is used in the fast of slow expansion.
+
+    Returns
+    -------
+        An array of ks.
     """
     if fast:
         return pt.arange(-pt.floor((k_terms - 1) / 2), pt.ceil((k_terms - 1) / 2) + 1)
@@ -131,16 +164,24 @@ def get_ks(k_terms: int, fast: bool) -> np.ndarray:
 
 
 def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
-    """Density function for lower-bound first-passage times with drift rate set to 0 and
+    """Perform fast computation of ftt01w.
+
+    Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the fast-RT expansion.
-    Args:
-        tt: Flipped, normalized RTs. (0, inf).
-        w: Normalized decision starting point. (0, 1).
-        k_terms: number of terms to use to approximate the PDF.
-    Returns:
+
+    Parameters
+    ----------
+    tt
+        Flipped, normalized RTs. (0, inf).
+    w
+        Normalized decision starting point. (0, 1).
+    k_terms
+        number of terms to use to approximate the PDF.
+
+    Returns
+    -------
         The approximated function f(tt|0, 1, w).
     """
-
     # Slightly changed the original code to mimic the paper and
     # ensure correctness
     k = get_ks(k_terms, fast=True)
@@ -157,13 +198,22 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 
 
 def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
-    """Density function for lower-bound first-passage times with drift rate set to 0 and
+    """Perform slow computation of ftt01w.
+
+    Density function for lower-bound first-passage times with drift rate set to 0 and
     upper bound set to 1, calculated using the slow-RT expansion.
-    Args:
-        tt: Flipped, normalized RTs. (0, inf).
-        w: Normalized decision starting point. (0, 1).
-        k_terms: number of terms to use to approximate the PDF.
-    Returns:
+
+    Parameters
+    ----------
+    tt
+        Flipped, normalized RTs. (0, inf).
+    w
+        Normalized decision starting point. (0, 1).
+    k_terms
+        number of terms to use to approximate the PDF.
+
+    Returns
+    -------
         The approximated function f(tt|0, 1, w).
     """
     k = get_ks(k_terms, fast=False)
@@ -181,14 +231,24 @@ def ftt01w(
     err: float = 1e-7,
     k_terms: int = 10,
 ) -> np.ndarray:
-    """Compute the appproximated density of f(tt|0,1,w) using the method
-    and implementation of Navarro & Fuss, 2009.
-    Args:
-        rt: Flipped Response Rates. (0, inf).
-        a: Value of decision upper bound. (0, inf).
-        w: Normalized decision starting point. (0, 1).
-        err: Error bound.
-        k_terms: number of terms to use to approximate the PDF.
+    """Compute the appproximated density of f(tt|0,1,w).
+
+    Parameters
+    ----------
+    rt
+        Flipped Response Rates. (0, inf).
+    a
+        Value of decision upper bound. (0, inf).
+    w
+        Normalized decision starting point. (0, 1).
+    err
+        Error bound.
+    k_terms
+        number of terms to use to approximate the PDF.
+
+    Returns
+    -------
+        The Approximated density of f(tt|0,1,w).
     """
     lambda_rt = decision(rt, err)
     tt = rt / a**2
@@ -212,23 +272,39 @@ def log_pdf_sv(
     k_terms: int = 10,
     small_number: float = 1e-15,
 ) -> np.ndarray:
-    """Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
-    the method and implementation of Navarro & Fuss, 2009.
-    Args:
-        data: data: 2-column numpy array of (response time, response)
-        v: Mean drift rate. (-inf, inf).
-        sv: Standard deviation of the drift rate [0, inf).
-        a: Value of decision upper bound. (0, inf).
-        z: Normalized decision starting point. (0, 1).
-        t: Non-decision time [0, inf).
-        err: Error bound.
-        k_terms: number of terms to use to approximate the PDF.
-        small_number: A small positive number to prevent division by zero or
-                      taking the log of zero, also used to replace negative
-                      response times after subtracting non-decision time.
-                      Default is 1e-15.
-    """
+    """Compute analytical likelihood for the DDM model with `sv`.
 
+    Computes the log-likelihood of the drift diffusion model f(t|v,a,z) using
+    the method and implementation of Navarro & Fuss, 2009.
+
+    Parameters
+    ----------
+    data
+        data: 2-column numpy array of (response time, response)
+    v
+        Mean drift rate. (-inf, inf).
+    sv
+        Standard deviation of the drift rate [0, inf).
+    a
+        Value of decision upper bound. (0, inf).
+    z
+        Normalized decision starting point. (0, 1).
+    t
+        Non-decision time [0, inf).
+    err
+        Error bound.
+    k_terms
+        number of terms to use to approximate the PDF.
+    small_number
+        A small positive number to prevent division by zero or
+        taking the log of zero, also used to replace negative
+        response times after subtracting non-decision time.
+        Default is 1e-15.
+
+    Returns
+    -------
+        The analytical likelihoods for DDM.
+    """
     data = pt.reshape(data, (-1, 2))
     rt = pt.abs(data[:, 0])
     response = data[:, 1]

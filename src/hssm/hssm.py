@@ -1,76 +1,108 @@
-from typing import Any, Callable, Dict, Literal, Optional, Union
+"""HSSM: Hierarchical Sequential Sampling Models.
 
-import arviz as az
+A package based on pymc and bambi to perform Bayesian inference for hierarchical
+sequential sampling models.
+
+This file defines the entry class HSSM.
+"""
+
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Callable, Literal
+
 import bambi as bmb
-import pandas as pd
+import numpy as np
 import pymc as pm
-import pytensor
 from numpy.typing import ArrayLike
 
 from hssm import wfpt
 from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict, merge_dicts
-from hssm.wfpt.config import Config, SupportedModels, default_model_config, download_hf
+from hssm.wfpt.config import download_hf, Config, SupportedModels, default_model_config
+
+if TYPE_CHECKING:
+    import arviz as az
+    import pandas as pd
+    import pytensor
 
 LogLikeFunc = Callable[..., ArrayLike]
 
 
 class HSSM:
-    """
-    The Hierarchical Sequential Sampling Model (HSSM) class which utilizes specified models for computations.
+    """The Hierarchical Sequential Sampling Model (HSSM) class.
 
-    Args:
-        data (pd.DataFrame): A DataFrame with at least two columns - "rt" and "response", specifying response time and responses, respectively.
-        model (str, optional): Model to be utilized. Currently supports "ddm", "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". "custom" for custom models. Defaults to "ddm".
-        include (list[dict] | None, optional): A list of dictionaries specifying parameter specifications to include in the model. Defaults to None if left unspecified.
-        likelihood_type (str, optional): Specifies the likelihood type. Defaults to None.
-        model_config (Config | None, optional): Model configuration. Defaults to None.
-        loglik (LogLikeFunc | pytensor.graph.Op | None, optional): Log-likelihood function. Defaults to None.
+    Parameters
+    ----------
+    data
+        A pandas DataFrame with the minimum requirements of containing the data with the
+        columns 'rt' and 'response'.
+    model
+        The name of the model to use. Currently supported models are "ddm", "angle",
+        "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". If
+        using a custom model, please pass "custom". Defaults to "ddm".
+    include, optional
+        A list of dictionaries specifying parameter specifications to include in the
+        model. If left unspecified, defaults will be used for all parameter
+        specifications. Defaults to None.
+    model_config, optional
+        A dictionary containing the model configuration information. If None is
+        provided, defaults will be used. Defaults to None.
+    **kwargs
+        Additional arguments passed to the bmb.Model object.
 
-    Attributes:
-        list_params (list[str]): List of parameter names.
-        model_name (str): Name of the model.
-        model_config (dict): Model configuration.
-        model_distribution (Likelihood distribution): Likelihood function of the model in the form of a pm.Distribution subclass.
-        family (bmb.Family): A Bambi family object.
-        priors (dict): Prior distribution of parameters.
-        formula (str): Model formula.
-        link (str or dict): Link functions for all parameters.
-        params (list[Param]): List of Param objects representing model parameters.
+    Attributes
+    ----------
+    data
+        A pandas DataFrame with at least two columns of "rt" and "response" indicating
+        the response time and responses.
+    list_params
+        The list of strs of parameter names.
+    model_name
+        The name of the model.
+    model_config
+        A dictionary representing the model configuration.
+    model_distribution
+        The likelihood function of the model in the form of a pm.Distribution subclass.
+    family
+        A Bambi family object.
+    priors
+        A dictionary containing the prior distribution of parameters.
+    formula
+        A string representing the model formula.
+    link
+        A string or a dictionary representing the link functions for all parameters.
+    params
+        A list of Param objects representing model parameters.
 
-    Raises:
-        ValueError: If unsupported model name is passed or the likelihood type and log-likelihood function are not provided for a custom model, or if the log-likelihood kind is invalid.
-        TypeError: If parameter specifications are not in the correct format.
-
-    Returns:
-        HSSM: A class object with the specified attributes and methods.
+    Methods
+    -------
+    sample
+        A method to sample posterior distributions.
+    set_alias
+        Sets the alias for a paramter.
+    graph
+        Plot the model with PyMC's built-in graph function.
     """
 
     def __init__(
         self,
         data: pd.DataFrame,
         model: SupportedModels = "ddm",
-        include: Optional[list[dict]] = None,
-        likelihood_type: str = None,
-        model_config: Optional[Config] = None,
-        loglik: Optional[Union[LogLikeFunc, pytensor.graph.Op]] = None,
+        include: list[dict] | None = None,
+        model_config: Config | None = None,
+        loglik_path: str | None = None,
+        loglik: LogLikeFunc | pytensor.graph.Op | None = None,
         **kwargs,
     ):
         self.data = data
         self._inference_obj = None
 
         if model == "custom":
-            if model_config:
-                self.model_config = model_config
-            else:
-                if likelihood_type is None and loglik is None:
-                    raise ValueError(
-                        "For custom models, both `likelihood_type` and `loglik` must be provided."
-                    )
-                if likelihood_type == "analytical":
-                    model = "custom_analytical"
-                elif likelihood_type == "approx_differentiable":
-                    model = "custom_angle"
-                self.model_config = default_model_config[model]
+            if model_config is None:
+                raise ValueError(
+                    "For custom models, please provide a correct model config."
+                )
+            self.model_config = model_config
         else:
             if model not in default_model_config:
                 supported_models = list(default_model_config.keys())
@@ -83,14 +115,10 @@ class HSSM:
                 else merge_dicts(default_model_config[model], model_config)
             )
 
-            if not self.model_config:
-                raise ValueError("Invalid custom model configuration.")
-
-        if loglik and self.model_config["loglik_kind"] == "approx_differentiable":
-            self.model_config["loglik"] = download_hf(loglik)  # type: ignore
-        elif loglik and self.model_config["loglik_kind"] == "analytical":
-            self.model_config["loglik"] = loglik
+        if loglik_path:
+            self.model_config["loglik_path"] = download_hf(loglik_path)
         self.model_name = model
+
         self.list_params = self.model_config["list_params"]
         self._parent = self.list_params[0]
 
@@ -142,10 +170,7 @@ class HSSM:
                 + '"analytical", "approx_differentiable", "blackbox".'
             )
 
-        if (
-            "loglik" in self.model_config
-            and self.model_config["loglik_kind"] != "approx_differentiable"
-        ):
+        if "loglik" in self.model_config:
             # If a user has already provided a log-likelihood function
             if issubclass(self.model_config["loglik"], pm.Distribution):
                 # Test if the it is a distribution
@@ -153,22 +178,24 @@ class HSSM:
             else:
                 # If not, create a distribution
                 self.model_distribution = wfpt.make_distribution(
-                    loglik=loglik, list_params=self.list_params  # type: ignore
+                    self.model_name,
+                    loglik=loglik,  # type: ignore
+                    list_params=self.list_params,
                 )
         else:
             # If not, in the case of "approx_differentiable"
             if self.model_config["loglik_kind"] == "approx_differentiable":
-                # Check if a loglik is provided.
+                # Check if a loglik_path is provided.
                 if (
-                    "loglik" not in self.model_config
-                    or self.model_config["loglik"] is None
+                    "loglik_path" not in self.model_config
+                    or self.model_config["loglik_path"] is None
                 ):
                     raise ValueError(
                         "Please provide either a path to an onnx file for the log "
                         + "likelihood or a log-likelihood function."
                     )
                 self.model_distribution = wfpt.make_lan_distribution(
-                    model=self.model_config["loglik"],
+                    model=self.model_config["loglik_path"],
                     list_params=self.list_params,
                     backend=self.model_config["backend"],
                     params_is_reg=params_is_reg,
@@ -188,7 +215,7 @@ class HSSM:
             dist=self.model_distribution,
         )
 
-        self.family = bmb.Family(
+        self.family = SSMFamily(
             self.model_config["loglik_kind"], likelihood=self.likelihood, link=self.link
         )
 
@@ -200,36 +227,30 @@ class HSSM:
         self.set_alias(self._aliases)
 
     def _transform_params(
-        self, include: Optional[list[dict]], model: str, model_config: Config
-    ) -> tuple[
-        list[Param],
-        bmb.Formula,
-        Optional[Dict],
-        Union[Dict[str, Union[str, bmb.Link]], str],
-    ]:
-        """
-        Function Name:
-            _transform_params
+        self, include: list[dict] | None, model: str, model_config: Config
+    ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
+        """Transform parameters.
 
-        Purpose:
-            Transforms a list of dictionaries containing parameter information into a list of Param objects.
-            Also, it generates a formula, priors, and a link for the Bambi package based on the parameters.
+        Transforms a list of dictionaries containing parameter information into a
+        list of Param objects. This function creates a formula, priors,and a link for
+        the Bambi package based on the parameters.
 
-        Args:
-            include (list[dict] | None): A list of dictionaries containing information about the parameters.
-            model (str): A string indicating the model type.
-            model_config (Config): A dict containing the configuration for the model.
+        Parameters
+        ----------
+        include
+            A list of dictionaries containing information about the parameters.
+        model
+            A string that indicates the type of the model.
+        model_config
+            A dict for the configuration for the model.
 
-        Returns:
-            tuple: A tuple of four items, with the last three for creating the Bambi model:
-            - A list (of the same length as self.list_params) containing Param objects.
+        Returns
+        -------
+            A tuple of 4 items, the latter 3 are for creating the bambi model.
+            - A list of the same length as self.list_params containing Param objects.
             - A bmb.formula object.
             - An optional dict containing prior information for Bambi.
             - An optional dict of link functions for Bambi.
-
-        Raises:
-            TypeError: If the input parameters are not in the correct format.
-            ValueError: If an unsupported model type is passed.
         """
         processed = []
         params = []
@@ -267,28 +288,24 @@ class HSSM:
         sampler: Literal[
             "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
         ] = "mcmc",
-        **kwargs: Any,
-    ) -> Union[az.InferenceData, pm.Approximation]:
+        **kwargs,
+    ) -> az.InferenceData | pm.Approximation:
+        """Perform sampling using the `fit` method via bambi.Model.
+
+        Parameters
+        ----------
+        sampler
+            The sampler to use. Can be either "mcmc" (default), "nuts_numpyro",
+            "nuts_blackjax", "laplace", or "vi".
+        kwargs
+            Other arguments passed to bmb.Model.fit()
+
+        Returns
+        -------
+            An ArviZ `InferenceData` instance if inference_method is `"mcmc"`
+            (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
+            object if `"vi"`.
         """
-        Function Name:
-            sample
-
-        Purpose:
-            Executes the sampling process using the 'fit' method through bambi.Model.
-
-        Args:
-            sampler (Literal): The sampler to use. Options include "mcmc" (default), "nuts_numpyro", "nuts_blackjax", "laplace", or "vi".
-            kwargs: Additional arguments passed to bmb.Model.fit().
-
-        Returns:
-            az.InferenceData | pm.Approximation: An ArviZ `InferenceData` instance if the inference_method is "mcmc" (default),
-            "nuts_numpyro", "nuts_blackjax", or "laplace". An `Approximation` object if "vi".
-
-        Raises:
-            TypeError: If the 'sampler' argument is not a recognized string.
-            ValueError: If the 'kwargs' do not match the expected arguments for bmb.Model.fit().
-        """
-
         supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
 
         if sampler not in supported_samplers:
@@ -300,71 +317,110 @@ class HSSM:
 
         return self.traces
 
+    def sample_posterior_predictive(
+        self,
+        idata: az.InferenceData | None = None,
+        data: pd.DataFrame | None = None,
+        inplace: bool = True,
+        include_group_specific: bool = True,
+    ) -> az.InferenceData | None:
+        """Perform posterior predictive sampling from the HSSM model.
+
+        Parameters
+        ----------
+        idata, optional
+            The `InferenceData` object returned by `HSSM.sample()`. If not provided,
+            the `InferenceData` from the last time `sample()` is called will be used.
+        data, optional
+            An optional data frame with values for the predictors that are used to
+            obtain out-of-sample predictions. If omitted, the original dataset is used.
+        inplace, optional
+            If `True` will modify idata in-place and append a `posterior_predictive`
+            group to `idata`. Otherwise, it will return a copy of idata with the
+            predictions added, by default True.
+        include_group_specific, optional
+            If `True` will make predictions including the group specific effects.
+            Otherwise, predictions are made with common effects only (i.e. group-
+            specific are set to zero), by default True.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet and idata is not provided.
+
+        Returns
+        -------
+            InferenceData or None
+        """
+        if idata is None:
+            if self._inference_obj is None:
+                raise ValueError(
+                    "The model has not been sampled yet. "
+                    + "Please either provide an idata object or sample the model first."
+                )
+            idata = self._inference_obj
+        return self.model.predict(idata, "pps", data, inplace, include_group_specific)
+
     @property
     def pymc_model(self) -> pm.Model:
+        """Provide access to the PyMC model.
+
+        Returns
+        -------
+            The PyMC model built by bambi
         """
-        Function Name:
-            pymc_model
-
-        Purpose:
-            Provides a convenience function that fetches the PyMC model constructed by bambi, primarily to bypass verbose calls like self.model.backend.model...
-
-        Returns:
-            pm.Model: The PyMC model established by bambi.
-
-        Raises:
-            AttributeError: If the bambi model or the PyMC model doesn't exist.
-        """
-
         return self.model.backend.model
 
-    def set_alias(self, aliases: Dict[str, Union[str, Dict]]):
+    def set_alias(self, aliases: dict[str, str | dict]):
+        """Set parameter aliases.
+
+        Sets the aliases according to the dictionary passed to it and rebuild the
+        model.
+
+        Parameters
+        ----------
+        alias
+            A dict specifying the paramter names being aliased and the aliases.
         """
-        Function Name:
-            set_alias
-
-        Purpose:
-            Assigns aliases based on the provided dictionary and reconstructs the model.
-
-        Args:
-            alias (dict): A dictionary specifying the parameter names being aliased and the respective aliases.
-
-        Raises:
-            TypeError: If the provided argument is not a dictionary.
-            KeyError: If a parameter to be aliased doesn't exist in the model.
-        """
-
         self.model.set_alias(aliases)
         self.model.build()
 
     # NOTE: can't annotate return type because the graphviz dependency is optional
     def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
-        """
-        Function Name:
-            graph
+        """Produce a graphviz Digraph from a built HSSM model.
 
-        Purpose:
-            Generates a graphviz Digraph from a constructed HSSM model. This function relies on the Graphviz package,
-            which you can install using ``conda install -c conda-forge python-graphviz`` or manually installing the
-            ``graphviz`` binaries and using ``pip install graphviz`` for the Python bindings.
+        Requires graphviz, which may be installed most easily with `conda install -c
+        conda-forge python-graphviz`. Alternatively, you may install the `graphviz`
+        binaries yourself, and then `pip install graphviz` to get the python bindings.
+        See http://graphviz.readthedocs.io/en/stable/manual.html for more information.
 
-        Args:
-            formatting (str): Defines the type of formatting to be applied. Can either be ``"plain"`` or
-                ``"plain_with_params"``. Defaults to ``"plain"``.
-            name (str): The name of the saved figure. If set to ``None`` (default), no figure is saved.
-            figsize (tuple): Maximum width and height of the figure in inches. If specified, and if the generated
-                drawing exceeds this size, it's uniformly scaled down to fit. Only applicable if ``name`` is specified.
-                Defaults to ``None``.
-            dpi (int): Defines the resolution of the saved figure in dots per inch. Only applicable if ``name`` is specified.
-                Defaults to 300.
-            fmt (str): Specifies the format of the saved figure. Only applicable if ``name`` is specified.
-                Defaults to ``"png"``.
+        Parameters
+        ----------
+        formatting
+            One of `"plain"` or `"plain_with_params"`. Defaults to `"plain"`.
+        name
+            Name of the figure to save. Defaults to `None`, no figure is saved.
+        figsize
+            Maximum width and height of figure in inches. Defaults to `None`, the
+            figure size is set automatically. If defined and the drawing is larger than
+            the given size, the drawing is uniformly scaled down so that it fits within
+            the given size.  Only works if `name` is not `None`.
+        dpi
+            Point per inch of the figure to save.
+            Defaults to 300. Only works if `name` is not `None`.
+        fmt
+            Format of the figure to save.
+            Defaults to `"png"`. Only works if `name` is not `None`.
 
-        Returns:
-            A graphviz Digraph object.
+        Returns
+        -------
+            The graph
 
-        Raises:
-            ImportError: If the graphviz package is not installed.
+        Note
+        ----
+            The code is largely copied from
+            https://github.com/bambinos/bambi/blob/main/bambi/models.py
+            Credit for the code goes to Bambi developers.
         """
         self.model._check_built()
 
@@ -385,17 +441,7 @@ class HSSM:
         return graphviz
 
     def __repr__(self) -> str:
-        """
-        Function Name:
-            __repr__
-
-        Purpose:
-            Creates a representation of the model.
-
-        Returns:
-            str: A string representation of the model.
-        """
-
+        """Create a representation of the model."""
         output = []
 
         output.append("Hierarchical Sequential Sampling Model")
@@ -415,36 +461,36 @@ class HSSM:
         return "\r\n".join(output)
 
     def __str__(self) -> str:
-        """
-        Function Name:
-            __str__
-
-        Purpose:
-            Creates a string representation of the model.
-
-        Returns:
-            str: A string representation of the model.
-        """
-
+        """Create a string representation of the model."""
         return self.__repr__()
 
     @property
-    def traces(self) -> Union[az.InferenceData, pm.Approximation]:
+    def traces(self) -> az.InferenceData | pm.Approximation:
+        """Return the trace of the model after sampling.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+            The trace of the model after sampling.
         """
-        Function Name:
-            traces
-
-        Purpose:
-            Provides the trace of the model after sampling has been conducted.
-
-        Returns:
-            az.InferenceData | pm.Approximation: A trace of the model post-sampling.
-
-        Raises:
-            ValueError: If the model hasn't undergone sampling yet.
-        """
-
         if not self._inference_obj:
             raise ValueError("Please sample the model first.")
 
         return self._inference_obj
+
+
+class SSMFamily(bmb.Family):
+    """Extends bmb.Family to get around the dimensionality mismatch."""
+
+    def create_extra_pps_coord(self):
+        """Create an extra dimension.
+
+        Returns
+        -------
+            _description_
+        """
+        return np.arange(2)

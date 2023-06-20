@@ -28,11 +28,9 @@ def onnx_session():
 
 
 def test_interpret_onnx(onnx_session, fixture_path):
-    """
-    Tests whether both versions of interpret_onnx return similar values as does the
+    """Tests whether both versions of interpret_onnx return similar values as does the
     ONNX runtime.
     """
-
     data = np.random.rand(1, 7).astype(np.float32)
 
     input_name = onnx_session.get_inputs()[0].name
@@ -51,11 +49,9 @@ def test_interpret_onnx(onnx_session, fixture_path):
 
 
 def test_make_jax_logp_funcs_from_onnx(fixture_path):
-    """
-    Tests whether the jax logp functions returned from jax_logp_funcs form onnx
+    """Tests whether the jax logp functions returned from jax_logp_funcs form onnx
     reutrn the same values to interpret_onnx.
     """
-
     model = onnx.load(fixture_path / "test.onnx")
 
     jax_logp, _, jax_logp_nojit = lan.make_jax_logp_funcs_from_onnx(
@@ -100,11 +96,9 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
 
 
 def test_make_jax_logp_ops(fixture_path):
-    """
-    Tests whether the logp Op returned from make_jax_logp_ops with different backends
+    """Tests whether the logp Op returned from make_jax_logp_ops with different backends
     work the same way.
     """
-
     model = onnx.load(fixture_path / "test.onnx")
 
     jax_logp_op = lan.make_jax_logp_ops(

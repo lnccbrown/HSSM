@@ -62,3 +62,6 @@ poetry.lock
 .DS_Store
 
 __pycache__/
+
+# mkdocs
+docs/site

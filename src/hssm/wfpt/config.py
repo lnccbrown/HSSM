@@ -1,6 +1,4 @@
-"""
-Default configurations for models in HSSM class
-"""
+"""Default configurations for models in HSSM class."""
 from typing import Any, Literal
 from huggingface_hub import hf_hub_download
 
@@ -10,6 +8,7 @@ REPO_ID = "Aisulu/hssm_onnx_models"
 
 
 def download_hf(path: str):
+    """Download model from hugging face."""
     return hf_hub_download(repo_id=REPO_ID, filename=path)
 
 
@@ -22,47 +21,21 @@ SupportedModels = Literal[
     "race_no_bias_angle_4",
     "ddm_seq2_no_bias",
     "custom",
-    "custom_analytical",
-    "custom_angle",
 ]
 
 ConfigParams = Literal[
     "loglik",
     "loglik_kind",
+    "loglik_path",
     "list_params",
     "backend",
+    "priors",
     "bounds",
 ]
 
 Config = dict[ConfigParams, Any]
 
 default_model_config: dict[SupportedModels, Config] = {
-    "custom_analytical": {
-        "loglik_kind": "analytical",
-        "loglik": None,
-        "list_params": ["v", "sv", "a", "z", "t"],
-        "backend": "pytensor",
-        "bounds": {
-            "v": (-3.0, 3.0),
-            "sv": (0.0, 1.0),
-            "a": (0.3, 2.5),
-            "z": (0.1, 0.9),
-            "t": (0.0, 2.0),
-        },
-    },
-    "custom_angle": {
-        "loglik_kind": "approx_differentiable",
-        "list_params": ["v", "a", "z", "t", "theta"],
-        "loglik": None,
-        "backend": "jax",
-        "bounds": {
-            "v": (-3.0, 3.0),
-            "a": (0.3, 3.0),
-            "z": (0.1, 0.9),
-            "t": (0.001, 2.0),
-            "theta": (-0.1, 1.3),
-        },
-    },
     "ddm": {
         "loglik": wfpt.WFPT,
         "loglik_kind": "analytical",
