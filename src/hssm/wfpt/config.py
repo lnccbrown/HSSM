@@ -1,5 +1,5 @@
 """
-Default configurations for models in HSSM class.
+Provide default configurations for models in the HSSM class..
 """
 from typing import Any, Literal
 from huggingface_hub import hf_hub_download
@@ -11,7 +11,7 @@ REPO_ID = "Aisulu/hssm_onnx_models"
 
 def download_hf(path: str):
     """
-    Downloads a file from a HuggingFace repository.
+    Download a file from a HuggingFace repository.
 
     Parameters
     ----------
