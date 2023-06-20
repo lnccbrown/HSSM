@@ -153,7 +153,8 @@ class HSSM:
                 other_kwargs |= {k: v}
 
         self.params, self.formula, self.priors, self.link = self._transform_params(
-            include, self.model_name, self.model_config)
+            include, self.model_name, self.model_config
+        )
 
         for param in self.params:
             if param.name == self._parent:
@@ -198,8 +199,9 @@ class HSSM:
                     or self.model_config["loglik"] is None
                 ):
                     raise ValueError(
-                        "Please provide either a path to an onnx file for the log " +
-                        "likelihood or a log-likelihood function.")
+                        "Please provide either a path to an onnx file for the log "
+                        + "likelihood or a log-likelihood function."
+                    )
                 self.model_distribution = wfpt.make_lan_distribution(
                     model=self.model_config["loglik"],
                     list_params=self.list_params,
@@ -208,8 +210,9 @@ class HSSM:
                 )
             else:
                 raise ValueError(
-                    "Please provide a likelihood function or a pm.Distribution " +
-                    "in the `loglik` field of model_config!")
+                    "Please provide a likelihood function or a pm.Distribution "
+                    + "in the `loglik` field of model_config!"
+                )
 
         assert self.model_distribution is not None
 
@@ -221,16 +224,12 @@ class HSSM:
         )
 
         self.family = SSMFamily(
-            self.model_config["loglik_kind"],
-            likelihood=self.likelihood,
-            link=self.link)
+            self.model_config["loglik_kind"], likelihood=self.likelihood, link=self.link
+        )
 
         self.model = bmb.Model(
-            self.formula,
-            data,
-            family=self.family,
-            priors=self.priors,
-            **other_kwargs)
+            self.formula, data, family=self.family, priors=self.priors, **other_kwargs
+        )
 
         self._aliases = get_alias_dict(self.model, self._parent_param)
         self.set_alias(self._aliases)
@@ -315,20 +314,14 @@ class HSSM:
             (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
             object if `"vi"`.
         """
-        supported_samplers = [
-            "mcmc",
-            "nuts_numpyro",
-            "nuts_blackjax",
-            "laplace",
-            "vi"]
+        supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
 
         if sampler not in supported_samplers:
             raise ValueError(
                 f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
             )
 
-        self._inference_obj = self.model.fit(
-            inference_method=sampler, **kwargs)
+        self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
 
         return self.traces
 
@@ -370,11 +363,11 @@ class HSSM:
         if idata is None:
             if self._inference_obj is None:
                 raise ValueError(
-                    "The model has not been sampled yet. " +
-                    "Please either provide an idata object or sample the model first.")
+                    "The model has not been sampled yet. "
+                    + "Please either provide an idata object or sample the model first."
+                )
             idata = self._inference_obj
-        return self.model.predict(
-            idata, "pps", data, inplace, include_group_specific)
+        return self.model.predict(idata, "pps", data, inplace, include_group_specific)
 
     @property
     def pymc_model(self) -> pm.Model:
@@ -402,13 +395,7 @@ class HSSM:
 
     # NOTE: can't annotate return type because the graphviz dependency is
     # optional
-    def graph(
-            self,
-            formatting="plain",
-            name=None,
-            figsize=None,
-            dpi=300,
-            fmt="png"):
+    def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
         """Produce a graphviz Digraph from a built HSSM model.
 
         Requires graphviz, which may be installed most easily with `conda install -c
