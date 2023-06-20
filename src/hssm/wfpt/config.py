@@ -1,4 +1,6 @@
-"""Default configurations for models in HSSM class."""
+"""
+Default configurations for models in HSSM class.
+"""
 from typing import Any, Literal
 from huggingface_hub import hf_hub_download
 
@@ -23,8 +25,10 @@ def download_hf(path: str):
 
     Notes
     -----
-    The repository is specified by the REPO_ID constant, which should be a valid HuggingFace.co repository ID.
-    The file is downloaded using the HuggingFace Hub's hf_hub_download function.
+    The repository is specified by the REPO_ID constant,
+    which should be a valid HuggingFace.co repository ID.
+    The file is downloaded using the HuggingFace Hub's
+     hf_hub_download function.
     """
     return hf_hub_download(repo_id=REPO_ID, filename=path)
 
