@@ -103,7 +103,8 @@ class HSSM:
             else:
                 if loglik_kind is None and loglik is None:
                     raise ValueError(
-                        "For custom models, both `loglik_kind` and `loglik` must be provided."
+                        "For custom models,"
+                        " both `loglik_kind` and `loglik` must be provided."
                     )
                 self.model_config = default_model_config[model]
         else:
