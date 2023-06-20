@@ -1,6 +1,4 @@
-"""
-Provide default configurations for models in the HSSM class..
-"""
+"""Provide default configurations for models in the HSSM class."""
 from typing import Any, Literal
 from huggingface_hub import hf_hub_download
 
