@@ -105,6 +105,10 @@ class HSSM:
                     raise ValueError(
                         "For custom models, both `loglik_kind` and `loglik` must be provided."
                     )
+                if loglik_kind == "analytical":
+                    model = "custom_analytical"
+                elif loglik_kind == "approx_differentiable":
+                    model = "custom_angle"
                 self.model_config = default_model_config[model]
         else:
             if model not in default_model_config:
@@ -120,21 +124,12 @@ class HSSM:
 
             if not self.model_config:
                 raise ValueError("Invalid custom model configuration.")
-        self.model_name = model
-        if self.model_config["loglik_kind"] == "approx_differentiable":
-            if loglik:
-                try:
-                    self.model_config["loglik"] = download_hf(loglik)  # type: ignore
-                except Exception as e:
-                    print(
-                        f"Failed to download the model with name '{loglik}'. Error: {e}. Using the model name as is."
-                    )
-                    self.model_config["loglik"] = loglik
-            else:
-                self.model_config["loglik"] = download_hf(self.model_config["loglik"])  # type: ignore
+
+        if loglik and self.model_config["loglik_kind"] == "approx_differentiable":
+            self.model_config["loglik"] = download_hf(loglik)  # type: ignore
         elif loglik and self.model_config["loglik_kind"] == "analytical":
             self.model_config["loglik"] = loglik
-
+        self.model_name = model
         self.list_params = self.model_config["list_params"]
         self._parent = self.list_params[0]
 
@@ -186,7 +181,10 @@ class HSSM:
                 + '"analytical", "approx_differentiable", "blackbox".'
             )
 
-        if "loglik" in self.model_config:
+        if (
+            "loglik" in self.model_config
+            and self.model_config["loglik_kind"] != "approx_differentiable"
+        ):
             # If a user has already provided a log-likelihood function
             if issubclass(self.model_config["loglik"], pm.Distribution):
                 # Test if the it is a distribution
@@ -194,24 +192,22 @@ class HSSM:
             else:
                 # If not, create a distribution
                 self.model_distribution = wfpt.make_distribution(
-                    self.model_name,  # type: ignore
-                    loglik=loglik,  # type: ignore
-                    list_params=self.list_params,
+                    loglik=loglik, list_params=self.list_params  # type: ignore
                 )
         else:
             # If not, in the case of "approx_differentiable"
             if self.model_config["loglik_kind"] == "approx_differentiable":
-                # Check if a loglik_path is provided.
+                # Check if a loglik is provided.
                 if (
-                    "loglik_path" not in self.model_config
-                    or self.model_config["loglik_path"] is None
+                    "loglik" not in self.model_config
+                    or self.model_config["loglik"] is None
                 ):
                     raise ValueError(
                         "Please provide either a path to an onnx file for the log "
                         + "likelihood or a log-likelihood function."
                     )
                 self.model_distribution = wfpt.make_lan_distribution(
-                    model=self.model_config["loglik_path"],
+                    model=self.model_config["loglik"],
                     list_params=self.list_params,
                     backend=self.model_config["backend"],
                     params_is_reg=params_is_reg,

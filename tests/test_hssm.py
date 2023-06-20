@@ -145,10 +145,10 @@ def test_model_config_and_loglik_path_update(data_angle, fixture_path):
         model="angle",
         model_config={
             "loglik_kind": "approx_differentiable",
-            "loglik_path": fixture_path / "new_path.onnx",
+            "loglik": fixture_path / "new_path.onnx",
         },
     )
-    assert my_hssm.model_config["loglik_path"] == fixture_path / "new_path.onnx"
+    assert my_hssm.model_config["loglik"] == fixture_path / "new_path.onnx"
     assert my_hssm.model_config["loglik_kind"] == "approx_differentiable"
 
 
@@ -158,7 +158,7 @@ def test_custom_model(data, example_model_config):
 
     example_model_config["loglik_kind"] = "approx_differentiable"
 
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError):
         model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
 
     example_model_config["loglik"] = WFPT
