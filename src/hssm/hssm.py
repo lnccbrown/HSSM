@@ -105,10 +105,6 @@ class HSSM:
                     raise ValueError(
                         "For custom models, both `loglik_kind` and `loglik` must be provided."
                     )
-                if loglik_kind == "analytical":
-                    model = "custom_analytical"
-                elif loglik_kind == "approx_differentiable":
-                    model = "custom_angle"
                 self.model_config = default_model_config[model]
         else:
             if model not in default_model_config:
