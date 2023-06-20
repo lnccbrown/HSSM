@@ -178,7 +178,7 @@ class HSSM:
             else:
                 # If not, create a distribution
                 self.model_distribution = wfpt.make_distribution(
-                    self.model_name,
+                    self.model_name,  # type: ignore
                     loglik=loglik,  # type: ignore
                     list_params=self.list_params,
                 )
