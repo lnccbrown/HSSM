@@ -4,6 +4,22 @@
 
 HSSM is a Python toolbox that provides a seamless combination of state-of-the-art likelihood approximation methods with the wider ecosystem of probabilistic programming languages. It facilitates flexible hierarchical model building and inference via modern MCMC samplers. HSSM is user-friendly and provides the ability to rigorously estimate the impact of neural and other trial-by-trial covariates through parameter-wise mixed-effects models for a large variety of cognitive process models.
 
+**Authors**: Alexander Fengler, Aisulu Omar, Paul Xu, Krishn Bera, Michael J. Frank
+
+**Contacts**: alexander_fengler@brown.edu, krishn_bera@brown.edu, michael_frank@brown.edu
+
+**Web site**: 
+
+**Github**: https://github.com/lnccbrown/HSSM
+
+**Mailing list**:
+
+**Copyright**: This document has been placed in the public domain.
+
+**License**:
+
+**Version**: 0.0.1
+
 ## Features
 
 - Allows approximate hierarchical Bayesian inference via various likelihood approximators
@@ -16,7 +32,9 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 ## Installation
 
-TO-DO: Installation instructions
+```
+pip install hssm
+```
 
 ## Example
 
