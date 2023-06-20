@@ -90,7 +90,7 @@ class HSSM:
         model: SupportedModels = "ddm",
         include: list[dict] | None = None,
         model_config: Config | None = None,
-        loglik_path: str | None = None,
+        loglik_kind: str | None = None,
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
         **kwargs,
     ):
@@ -98,11 +98,14 @@ class HSSM:
         self._inference_obj = None
 
         if model == "custom":
-            if model_config is None:
-                raise ValueError(
-                    "For custom models, please provide a correct model config."
-                )
-            self.model_config = model_config
+            if model_config:
+                self.model_config = model_config
+            else:
+                if loglik_kind is None and loglik is None:
+                    raise ValueError(
+                        "For custom models, both `loglik_kind` and `loglik` must be provided."
+                    )
+                self.model_config = default_model_config[model]
         else:
             if model not in default_model_config:
                 supported_models = list(default_model_config.keys())
@@ -115,9 +118,22 @@ class HSSM:
                 else merge_dicts(default_model_config[model], model_config)
             )
 
-        if loglik_path:
-            self.model_config["loglik_path"] = download_hf(loglik_path)
+            if not self.model_config:
+                raise ValueError("Invalid custom model configuration.")
         self.model_name = model
+        if self.model_config["loglik_kind"] == "approx_differentiable":
+            if loglik:
+                try:
+                    self.model_config["loglik"] = download_hf(loglik)  # type: ignore
+                except Exception as e:
+                    print(
+                        f"Failed to download the model with name '{loglik}'. Error: {e}. Using the model name as is."
+                    )
+                    self.model_config["loglik"] = loglik
+            else:
+                self.model_config["loglik"] = download_hf(self.model_config["loglik"])  # type: ignore
+        elif loglik and self.model_config["loglik_kind"] == "analytical":
+            self.model_config["loglik"] = loglik
 
         self.list_params = self.model_config["list_params"]
         self._parent = self.list_params[0]

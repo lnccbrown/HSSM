@@ -1,4 +1,4 @@
-from hssm.wfpt.config import default_model_config
+from hssm.wfpt.config import default_model_config, download_hf
 from pathlib import Path
 
 
@@ -11,4 +11,4 @@ def test_model_paths():
                     config["loglik"] is None
                 ), "The `loglik` should be None for `custom_angle` model."
             else:
-                assert Path(config["loglik"]).exists()
+                assert Path(download_hf(config["loglik"])).exists()
