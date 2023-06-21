@@ -128,7 +128,22 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
             *args,
             **kwargs,
         ) -> np.ndarray:
-            """Generates random variables from this distribution."""
+            """Generate random variables from this distribution.
+
+            Parameters
+            ----------
+            rng
+                A `np.random.Generator` object for random state.
+            args
+                Unnamed arguments of parameters, in the order of `_list_params`, plus
+                the last one as size.
+            kwargs
+                Other keyword arguments passed to the ssms simulator.
+
+            Returns
+            -------
+                An array of `(rt, response)` genenerated from the distribution.
+            """
 
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is underdetermined,

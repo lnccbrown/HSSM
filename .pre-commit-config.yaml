@@ -16,18 +16,6 @@ repos:
           - --expand-star-imports
           - --remove-duplicate-keys
           - --remove-unused-variables
-  - repo: local
-    hooks:
-      - id: pylint
-        name: pylint
-        entry: pylint
-        language: system
-        types: [python]
-        exclude: tests/|notebooks/
-        args:
-          - "-rn" # Only display messages
-          - "-sn" # Don't display the score
-          - "--max-line-length=88"
   - repo: https://github.com/psf/black
     rev: 22.8.0
     hooks:

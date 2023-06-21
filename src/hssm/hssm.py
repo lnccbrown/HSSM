@@ -478,5 +478,10 @@ class HSSM:
 
 
 class SSMFamily(bmb.Family):
+    """Extends the `bmb.Family` class to get around the dimension issue with the
+    distribution of this package.
+    """
+
     def create_extra_pps_coord(self):
+        """Add an extra dimension for posterior predictive sampling"""
         return np.arange(2)
