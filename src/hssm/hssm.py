@@ -78,6 +78,8 @@ class HSSM:
     -------
     sample
         A method to sample posterior distributions.
+    sample_posterior_predictive
+        A method to produce posterior predictive samples.
     set_alias
         Sets the alias for a paramter.
     graph
@@ -189,7 +191,9 @@ class HSSM:
             else:
                 # If not, create a distribution
                 self.model_distribution = wfpt.make_distribution(
-                    loglik=loglik, list_params=self.list_params  # type: ignore
+                    self.model_name,
+                    loglik=loglik,  # type: ignore
+                    list_params=self.list_params,
                 )
         else:
             # If not, in the case of "approx_differentiable"
@@ -204,6 +208,7 @@ class HSSM:
                         + "likelihood or a log-likelihood function."
                     )
                 self.model_distribution = wfpt.make_lan_distribution(
+                    model_name=self.model_name,
                     model=self.model_config["loglik"],
                     list_params=self.list_params,
                     backend=self.model_config["backend"],
@@ -332,6 +337,7 @@ class HSSM:
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         include_group_specific: bool = True,
+        kind: Literal["pps", "mean"] = "pps",
     ) -> az.InferenceData | None:
         """Perform posterior predictive sampling from the HSSM model.
 
@@ -351,6 +357,12 @@ class HSSM:
             If `True` will make predictions including the group specific effects.
             Otherwise, predictions are made with common effects only (i.e. group-
             specific are set to zero), by default True.
+        kind
+            Indicates the type of prediction required. Can be `"mean"` or `"pps"`. The
+            first returns draws from the posterior distribution of the mean, while the
+            latter returns the draws from the posterior predictive distribution
+            (i.e. the posterior probability distribution for a new observation).
+            Defaults to `"pps"`.
 
         Raises
         ------
@@ -368,7 +380,7 @@ class HSSM:
                     + "Please either provide an idata object or sample the model first."
                 )
             idata = self._inference_obj
-        return self.model.predict(idata, "pps", data, inplace, include_group_specific)
+        return self.model.predict(idata, kind, data, inplace, include_group_specific)
 
     @property
     def pymc_model(self) -> pm.Model:
@@ -497,10 +509,5 @@ class SSMFamily(bmb.Family):
     """Extends bmb.Family to get around the dimensionality mismatch."""
 
     def create_extra_pps_coord(self):
-        """Create an extra dimension.
-
-        Returns
-        -------
-            _description_
-        """
+        """Create an extra dimension."""
         return np.arange(2)
