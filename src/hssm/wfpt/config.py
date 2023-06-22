@@ -1,17 +1,7 @@
-"""
-Default configurations for models in HSSM class
-"""
+"""Provide default configurations for models in the HSSM class."""
 from typing import Any, Literal
-from huggingface_hub import hf_hub_download
 
 from hssm import wfpt
-
-REPO_ID = "Aisulu/hssm_onnx_models"
-
-
-def download_hf(path: str):
-    return hf_hub_download(repo_id=REPO_ID, filename=path)
-
 
 SupportedModels = Literal[
     "ddm",
@@ -22,140 +12,131 @@ SupportedModels = Literal[
     "race_no_bias_angle_4",
     "ddm_seq2_no_bias",
     "custom",
-    "custom_analytical",
-    "custom_angle",
 ]
+
+LoglikKind = Literal["analytical", "approx_differentiable", "blackbox"]
 
 ConfigParams = Literal[
     "loglik",
-    "loglik_kind",
     "list_params",
+    "default_priors",
     "backend",
     "bounds",
 ]
 
 Config = dict[ConfigParams, Any]
 
-default_model_config: dict[SupportedModels, Config] = {
-    "custom_analytical": {
-        "loglik_kind": "analytical",
-        "loglik": None,
-        "list_params": ["v", "sv", "a", "z", "t"],
-        "backend": "pytensor",
-        "bounds": {
-            "v": (-3.0, 3.0),
-            "sv": (0.0, 1.0),
-            "a": (0.3, 2.5),
-            "z": (0.1, 0.9),
-            "t": (0.0, 2.0),
-        },
-    },
-    "custom_angle": {
-        "loglik_kind": "approx_differentiable",
-        "list_params": ["v", "a", "z", "t", "theta"],
-        "loglik": None,
-        "backend": "jax",
-        "bounds": {
-            "v": (-3.0, 3.0),
-            "a": (0.3, 3.0),
-            "z": (0.1, 0.9),
-            "t": (0.001, 2.0),
-            "theta": (-0.1, 1.3),
-        },
-    },
+default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] = {
     "ddm": {
-        "loglik": wfpt.WFPT,
-        "loglik_kind": "analytical",
-        "list_params": ["v", "sv", "a", "z", "t"],
-        "backend": "pytensor",
-        "bounds": {
-            "v": (-3.0, 3.0),
-            "sv": (0.0, 1.0),
-            "a": (0.3, 2.5),
-            "z": (0.1, 0.9),
-            "t": (0.0, 2.0),
+        "analytical": {
+            "loglik": wfpt.WFPT,
+            "bounds": wfpt.ddm_bounds,
+            "default_priors": {
+                "t": {"name": "Uniform", "lower": 0.0, "upper": 5.0, "initval": 0.0}
+            },
+        },
+        "approx_differentiable": {
+            "loglik": "ddm.onnx",
+            "backend": "pytensor",
+            "bounds": {
+                "v": (-3.0, 3.0),
+                "sv": (0.0, 1.0),
+                "a": (0.3, 2.5),
+                "z": (0.1, 0.9),
+                "t": (0.0, 2.0),
+            },
         },
     },
     "angle": {
-        "loglik_kind": "approx_differentiable",
-        "loglik": download_hf("angle.onnx"),
-        "list_params": ["v", "a", "z", "t", "theta"],
-        "backend": "jax",
-        "bounds": {
-            "v": (-3.0, 3.0),
-            "a": (0.3, 3.0),
-            "z": (0.1, 0.9),
-            "t": (0.001, 2.0),
-            "theta": (-0.1, 1.3),
+        "approx_differentiable": {
+            "loglik": "angle.onnx",
+            "backend": "jax",
+            "bounds": {
+                "v": (-3.0, 3.0),
+                "a": (0.3, 3.0),
+                "z": (0.1, 0.9),
+                "t": (0.001, 2.0),
+                "theta": (-0.1, 1.3),
+            },
         },
     },
     "levy": {
-        "loglik_kind": "approx_differentiable",
-        "loglik": download_hf("levy.onnx"),
-        "list_params": ["v", "a", "z", "alpha", "t"],
-        "backend": "jax",
-        "bounds": {
-            "v": (-3.0, 3.0),
-            "a": (0.3, 3.0),
-            "z": (0.1, 0.9),
-            "alpha": (1.0, 2.0),
-            "t": (1e-3, 2.0),
+        "approx_differentiable": {
+            "loglik": "levy.onnx",
+            "backend": "jax",
+            "bounds": {
+                "v": (-3.0, 3.0),
+                "a": (0.3, 3.0),
+                "z": (0.1, 0.9),
+                "alpha": (1.0, 2.0),
+                "t": (1e-3, 2.0),
+            },
         },
     },
     "ornstein": {
-        "loglik_kind": "approx_differentiable",
-        "loglik": download_hf("ornstein.onnx"),
-        "list_params": ["v", "a", "z", "g", "t"],
-        "backend": "jax",
-        "bounds": {
-            "v": (-2.0, 2.0),
-            "a": (0.3, 3.0),
-            "z": (0.1, 0.9),
-            "g": (-1.0, 1.0),
-            "t": (1e-3, 2.0),
+        "approx_differentiable": {
+            "loglik": "ornstein.onnx",
+            "backend": "jax",
+            "bounds": {
+                "v": (-2.0, 2.0),
+                "a": (0.3, 3.0),
+                "z": (0.1, 0.9),
+                "g": (-1.0, 1.0),
+                "t": (1e-3, 2.0),
+            },
         },
     },
     "weibull": {
-        "loglik_kind": "approx_differentiable",
-        "loglik": download_hf("weibull.onnx"),
-        "list_params": ["v", "a", "z", "t", "alpha", "beta"],
-        "backend": "jax",
-        "bounds": {
-            "v": (-2.5, 2.5),
-            "a": (0.3, 2.5),
-            "z": (0.2, 0.8),
-            "t": (1e-3, 2.0),
-            "alpha": (0.31, 4.99),
-            "beta": (0.31, 6.99),
+        "approx_differentiable": {
+            "loglik": "weibull.onnx",
+            "backend": "jax",
+            "bounds": {
+                "v": (-2.5, 2.5),
+                "a": (0.3, 2.5),
+                "z": (0.2, 0.8),
+                "t": (1e-3, 2.0),
+                "alpha": (0.31, 4.99),
+                "beta": (0.31, 6.99),
+            },
         },
     },
     "race_no_bias_angle_4": {
-        "loglik_kind": "approx_differentiable",
-        "loglik": download_hf("race_no_bias_angle_4.onnx"),
-        "list_params": ["v0", "v1", "v2", "v3", "a", "z", "ndt", "theta"],
-        "backend": "jax",
-        "bounds": {
-            "v0": (0.0, 2.5),
-            "v1": (0.0, 2.5),
-            "v2": (0.0, 2.5),
-            "v3": (0.0, 2.5),
-            "a": (1.0, 3.0),
-            "z": (0.0, 0.9),
-            "ndt": (0.0, 2.0),
-            "theta": (-0.1, 1.45),
+        "approx_differentiable": {
+            "loglik": "race_no_bias_angle_4.onnx",
+            "backend": "jax",
+            "bounds": {
+                "v0": (0.0, 2.5),
+                "v1": (0.0, 2.5),
+                "v2": (0.0, 2.5),
+                "v3": (0.0, 2.5),
+                "a": (1.0, 3.0),
+                "z": (0.0, 0.9),
+                "ndt": (0.0, 2.0),
+                "theta": (-0.1, 1.45),
+            },
         },
     },
     "ddm_seq2_no_bias": {
-        "loglik_kind": "approx_differentiable",
-        "loglik": download_hf("ddm_seq2_no_bias.onnx"),
-        "list_params": ["vh", "vl1", "vl2", "a", "t"],
-        "backend": "jax",
-        "bounds": {
-            "vh": (-4.0, 4.0),
-            "vl1": (-4.0, 4.0),
-            "vl2": (-4.0, 4.0),
-            "a": (0.3, 2.5),
-            "t": (0.0, 2.0),
+        "approx_differentiable": {
+            "loglik": "ddm_seq2_no_bias.onnx",
+            "backend": "jax",
+            "bounds": {
+                "vh": (-4.0, 4.0),
+                "vl1": (-4.0, 4.0),
+                "vl2": (-4.0, 4.0),
+                "a": (0.3, 2.5),
+                "t": (0.0, 2.0),
+            },
         },
     },
+}
+
+default_params: dict[SupportedModels, list[str]] = {
+    "ddm": ["v", "sv", "a", "z", "t"],
+    "angle": ["v", "a", "z", "t", "theta"],
+    "levy": ["v", "a", "z", "alpha", "t"],
+    "ornstein": ["v", "a", "z", "g", "t"],
+    "weibull": ["v", "a", "z", "t", "alpha", "beta"],
+    "race_no_bias_angle_4": ["v0", "v1", "v2", "v3", "a", "z", "ndt", "theta"],
+    "ddm_seq2_no_bias": ["vh", "vl1", "vl2", "a", "t"],
 }

@@ -160,8 +160,6 @@ def make_distribution(
     """Constructs a pymc.Distribution from a log-likelihood function and a
     RandomVariable op.
 
-    NOTE: We will gradually switch to the numpy-notype style.
-
     Parameters
     ----------
     loglik

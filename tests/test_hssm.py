@@ -6,8 +6,9 @@ import pytest
 import ssms
 
 from hssm import hssm
+from hssm.hssm import _model_has_default
+from hssm.utils import download_hf
 from hssm.wfpt import WFPT
-from hssm.wfpt.config import download_hf
 
 
 @pytest.fixture
@@ -42,7 +43,6 @@ def data_angle():
 @pytest.fixture
 def example_model_config():
     return {
-        "loglik_kind": "blackbox",
         "list_params": ["v", "sv", "a", "z", "t"],
         "bounds": {
             "v": (-3.0, 3.0),
@@ -139,35 +139,44 @@ def test_transform_params_general(data, include, should_raise_exception):
         assert len(model.params) == 5
 
 
-def test_model_config_and_loglik_update(data_angle, fixture_path):
-    my_hssm = hssm.HSSM(
-        data=data_angle,
-        model="angle",
-        model_config={
-            "loglik_kind": "approx_differentiable",
-            "loglik": fixture_path / "new_path.onnx",
-        },
-    )
-    assert my_hssm.model_config["loglik"] == fixture_path / "new_path.onnx"
-    assert my_hssm.model_config["loglik_kind"] == "approx_differentiable"
+def test__model_has_default():
+    assert _model_has_default("ddm", "analytical")
+    assert not _model_has_default("ddm", "blackbox")
+    assert not _model_has_default("custom", "analytical")
+
+    with pytest.raises(ValueError):
+        _model_has_default("arbitrary", "analytical")
+
+    with pytest.raises(ValueError):
+        _model_has_default("ddm", "arbitrary")
 
 
 def test_custom_model(data, example_model_config):
-    with pytest.raises(ValueError):
-        model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
+    with pytest.raises(ValueError, match="Please provide a valid `loglik`."):
+        model = hssm.HSSM(data=data, model="custom")
 
-    example_model_config["loglik_kind"] = "approx_differentiable"
+    with pytest.raises(
+        ValueError, match="For custom models, please provide a valid `model_config`."
+    ):
+        model = hssm.HSSM(data=data, model="custom", loglik=WFPT)
 
-    with pytest.raises(ValueError):
-        model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
+    with pytest.raises(
+        ValueError,
+        match="For custom models, please provide `list_params` in `model_config`.",
+    ):
+        model = hssm.HSSM(data=data, model="custom", loglik=WFPT, model_config={})
 
-    example_model_config["loglik"] = WFPT
-    example_model_config["loglik_kind"] = "analytical"
-
-    model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
+    model = hssm.HSSM(
+        data=data,
+        model="custom",
+        model_config=example_model_config,
+        loglik=WFPT,
+    )
 
     assert model.model_name == "custom"
-    assert model.model_config == example_model_config
+    assert model.loglik == WFPT
+    assert model.loglik_kind == "analytical"
+    assert model.list_params == example_model_config["list_params"]
 
 
 def test_model_definition_outside_include(data):
@@ -189,29 +198,10 @@ def test_model_definition_outside_include(data):
         hssm.HSSM(data, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
 
-def test_custom_model_without_model_config_and_loglik_raises_error(data):
-    with pytest.raises(
-        ValueError,
-        match="For custom models, both `likelihood_type` and `loglik` must be provided.",
-    ):
-        hssm.HSSM(data=data, model="custom")
-
-
-#
-def test_custom_model_with_analytical_likelihood_type(data):
-    likelihood_type = "analytical"
-    loglik = WFPT
-    model = hssm.HSSM(
-        data=data, model="custom", likelihood_type=likelihood_type, loglik=loglik
-    )
-    assert model.model_config["loglik"] == loglik
-
-
-#
-def test_custom_model_with_approx_differentiable_likelihood_type(data_angle):
-    likelihood_type = "approx_differentiable"
+def test_model_with_approx_differentiable_likelihood_type(data_angle):
+    loglik_kind = "approx_differentiable"
     loglik = "angle.onnx"
     model = hssm.HSSM(
-        data=data_angle, model="custom", likelihood_type=likelihood_type, loglik=loglik
+        data=data_angle, model="angle", loglik_kind=loglik_kind, loglik=loglik
     )
-    assert model.model_config["loglik"] == download_hf(loglik)
+    assert model.loglik == download_hf(loglik)
