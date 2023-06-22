@@ -13,8 +13,7 @@
 # limitations under the License.
 
 
-"""
-An ONNX to XLA compiler by JAX-tracing a Numpy-backed ONNX interpreter.
+"""An ONNX to XLA compiler by JAX-tracing a Numpy-backed ONNX interpreter.
 
 Tips for extending this file to add more Ops:
 
@@ -137,6 +136,19 @@ onnx_ops = {
 
 
 def interpret_onnx(graph, *args):
+    """Transform model in onnx to pytensor.
+
+    Parameters
+    ----------
+    graph
+        The computation graph.
+    args
+        Inputs to the graph.
+
+    Returns
+    -------
+        The result of the computation.
+    """
     vals = dict(
         {n.name: a for n, a in zip(graph.input, args)},
         **{n.name: _asarray(n) for n in graph.initializer}

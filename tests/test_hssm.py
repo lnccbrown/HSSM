@@ -13,7 +13,7 @@ from hssm.wfpt import WFPT
 
 @pytest.fixture
 def data():
-    v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 0.5]
+    v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 1.5]
     obs_ddm = ssms.basic_simulators.simulator(
         [v_true, a_true, z_true, t_true], model="ddm", n_samples=1000
     )

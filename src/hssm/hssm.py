@@ -6,7 +6,6 @@ sequential sampling models.
 This file defines the entry class HSSM.
 """
 
-
 from __future__ import annotations
 
 from inspect import isclass
@@ -53,7 +52,7 @@ class HSSM:
     ----------
     data
         A pandas DataFrame with the minimum requirements of containing the data with the
-        columns 'rt' and 'response'.
+        columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "angle",
         "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". If

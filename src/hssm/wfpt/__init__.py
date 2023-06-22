@@ -1,7 +1,4 @@
-"""
-This module provides all functionalities related to the Wiener Firt-Passage Time
-distribution.
-"""
+"""All functionalities related to the Wiener Firt-Passage Time distribution."""
 
 from .wfpt import (
     WFPT,

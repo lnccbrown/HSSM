@@ -1,4 +1,4 @@
-"""HSSM - Toolkit for Hierarchical Sequential Sampling Models"""
+"""HSSM - Hierarchical Sequential Sampling Models."""
 
 from .hssm import HSSM
 
