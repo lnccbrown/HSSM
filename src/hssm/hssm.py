@@ -355,6 +355,8 @@ class HSSM:
         ----------
         include
             A list of dictionaries containing information about the parameters.
+        model
+            A string that indicates the type of the model.
         model_config
             A dict for the configuration for the model.
 
