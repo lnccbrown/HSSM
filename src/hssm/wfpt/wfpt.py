@@ -95,7 +95,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
     """
 
     # pylint: disable=W0511, R0903
-    class WFPTRandomVariable(RandomVariable):
+    class SSMRandomVariable(RandomVariable):
         """WFPT random variable."""
 
         name: str = "WFPT_RV"
@@ -113,7 +113,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
         # NOTE: `rng` now is a np.random.Generator instead of RandomState
         # since the latter is now deprecated from numpy
         @classmethod
-        def rng_fn(  # type: ignore
+        def rng_fn(
             cls,
             rng: np.random.Generator,
             *args,
@@ -201,7 +201,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
 
             return output
 
-    return WFPTRandomVariable
+    return SSMRandomVariable
 
 
 def make_distribution(

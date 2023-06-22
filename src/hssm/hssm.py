@@ -11,7 +11,7 @@ from __future__ import annotations
 from inspect import isclass
 from pathlib import Path
 
-from typing import TYPE_CHECKING, Any, cast, Callable, Literal
+from typing import TYPE_CHECKING, Any, cast, Callable, Iterable, Literal
 
 import bambi as bmb
 import numpy as np
@@ -408,6 +408,7 @@ class HSSM:
         sampler: Literal[
             "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
         ] = "mcmc",
+        step: Callable | Iterable[Callable] | None = None,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -417,8 +418,13 @@ class HSSM:
         sampler
             The sampler to use. Can be either "mcmc" (default), "nuts_numpyro",
             "nuts_blackjax", "laplace", or "vi".
+        step
+            A step function or collection of functions. If there are variables without
+            step methods, step methods for those variables will be assigned
+            automatically. By default the NUTS step method will be used, if appropriate
+            to the model.
         kwargs
-            Other arguments passed to bmb.Model.fit()
+            Other arguments passed to bmb.Model.fit().
 
         Returns
         -------
@@ -433,7 +439,13 @@ class HSSM:
                 f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
             )
 
-        self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
+        if self.loglik_kind == "blackbox":
+            if step is None:
+                step = pm.Slice()
+
+        self._inference_obj = self.model.fit(
+            inference_method=sampler, step=step, **kwargs
+        )
 
         return self.traces
 
