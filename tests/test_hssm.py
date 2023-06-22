@@ -144,33 +144,41 @@ def test__model_has_default():
     assert not _model_has_default("ddm", "blackbox")
     assert not _model_has_default("custom", "analytical")
 
-    with pytest.raises(ValueError):
-        _model_has_default("arbitrary", "analytical")
-
-    with pytest.raises(ValueError):
-        _model_has_default("ddm", "arbitrary")
-
 
 def test_custom_model(data, example_model_config):
-    with pytest.raises(ValueError, match="Please provide a valid `loglik`."):
+    with pytest.raises(
+        ValueError, match="When using a custom model, please provide a `loglik_kind.`"
+    ):
         model = hssm.HSSM(data=data, model="custom")
+
+    with pytest.raises(ValueError, match="Please provide a valid `loglik`."):
+        model = hssm.HSSM(data=data, model="custom", loglik_kind="analytical")
 
     with pytest.raises(
         ValueError, match="For custom models, please provide a valid `model_config`."
     ):
-        model = hssm.HSSM(data=data, model="custom", loglik=WFPT)
+        model = hssm.HSSM(
+            data=data, model="custom", loglik=WFPT, loglik_kind="analytical"
+        )
 
     with pytest.raises(
         ValueError,
         match="For custom models, please provide `list_params` in `model_config`.",
     ):
-        model = hssm.HSSM(data=data, model="custom", loglik=WFPT, model_config={})
+        model = hssm.HSSM(
+            data=data,
+            model="custom",
+            loglik=WFPT,
+            loglik_kind="analytical",
+            model_config={},
+        )
 
     model = hssm.HSSM(
         data=data,
         model="custom",
         model_config=example_model_config,
         loglik=WFPT,
+        loglik_kind="analytical",
     )
 
     assert model.model_name == "custom"

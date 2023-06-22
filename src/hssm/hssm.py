@@ -10,9 +10,9 @@ This file defines the entry class HSSM.
 from __future__ import annotations
 
 from inspect import isclass
-from os import PathLike
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Literal
+
+from typing import TYPE_CHECKING, Any, cast, Callable, Literal
 
 import bambi as bmb
 import numpy as np
@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     import arviz as az
     import pandas as pd
     import pytensor
+    from os import PathLike
 
 LogLikeFunc = Callable[..., ArrayLike]
 
@@ -56,14 +57,27 @@ class HSSM:
     model
         The name of the model to use. Currently supported models are "ddm", "angle",
         "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". If
-        using a custom model, please pass "custom". Defaults to "ddm".
+        if any other string is passed, the model will be considered custom, in which
+        case all `model_config`, `loglik`, and `loglik_kind` have to be provided.
     include, optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
     model_config, optional
         A dictionary containing the model configuration information. If None is
-        provided, defaults will be used. Defaults to None.
+        provided, defaults will be used if there are any. Defaults to None.
+        Fields for this `dict` are usually:
+        - `"list_params"`: a list of parameters indicating the parameters of the model.
+            The order in which the parameters are specified in this list is important.
+            Values for each parameter will be passed to the likelihood function in this
+            order.
+        - `"backend"`: Only required when `loglik_kind` is `approxi_differentiable` and
+            an onnx file is supplied for the likelihood approximation network (LAN).
+            Valid values are `"jax"` or `"pytensor"`. It determines whether the LAN in
+            ONNX should be converted to `"jax"` or `"pytensor"`.
+        - `"default_priors"`: A `dict` indicating the default priors for each parameter.
+        - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
+            of LAN, these bounds are training boundaries.
     loglik, optional
         A likelihood function. Defaults to None. Requirements are:
         1. if `loglik_kind` is `"analytical"` or `"blackbox"`, a pm.Distribution, a
@@ -79,9 +93,9 @@ class HSSM:
             that `onnx` file from Hugging Face hub.
         3. It can also be `None`, in which case a default likelihood function will be
             used
-    loglik_kind
+    loglik_kind, optional
         A string that specifies the kind of log-likelihood function specified with
-        `loglik`. Defaults to "analytical". Can be one of the following:
+        `loglik`. Defaults to `None`. Can be one of the following:
         - `"analytical"`: an analytical (approximation) likelihood function. It is
             differentiable and can be used with samplers that requires differentiation.
         - `"approx_differentiable"`: a likelihood approximation network (LAN) likelihood
@@ -89,8 +103,12 @@ class HSSM:
             differentiation.
         - `"blackbox"`: a black box likelihood function. It is typically NOT
             differentiable.
+        - `None`, in which a default will be used. For `ddm` type of models, the default
+            will be `analytical`. For other models supported, it will be
+            `approx_differentiable`. If the model is a custom one, a ValueError
+            will be raised.
     **kwargs
-        Additional arguments passed to the bmb.Model object.
+        Additional arguments passed to the `bmb.Model` object.
 
     Attributes
     ----------
@@ -104,6 +122,7 @@ class HSSM:
     loglik:
         The likelihood function or a path to an onnx file.
     loglik_kind:
+        The kind of likelihood used.
     model_config
         A dictionary representing the model configuration.
     model_distribution
@@ -132,20 +151,50 @@ class HSSM:
     def __init__(
         self,
         data: pd.DataFrame,
-        model: SupportedModels = "ddm",
+        model: SupportedModels | str = "ddm",
         include: list[dict] | None = None,
         model_config: Config | None = None,
         loglik: str | PathLike | LogLikeFunc | pytensor.graph.Op | None = None,
-        loglik_kind: Literal[
-            "analytical", "approx_differentiable", "blackbox"
-        ] = "analytical",
+        loglik_kind: LoglikKind | None = None,
         **kwargs,
     ):
         self.data = data
         self._inference_obj = None
 
+        if loglik_kind is None:
+            if model not in default_model_config:
+                raise ValueError(
+                    "When using a custom model, please provide a `loglik_kind.`"
+                )
+            # Setting loglik_kind to be the first of analytical or
+            # approx_differentiable
+            for kind in ["analytical", "approx_differentiable", "blackbox"]:
+                model = cast(SupportedModels, model)
+                if kind in default_model_config[model]:
+                    kind = cast(LoglikKind, kind)
+                    loglik_kind = kind
+                    break
+            if loglik_kind is None:
+                raise ValueError(
+                    "No default model_config is found. Please provide a `loglik_kind."
+                )
+        else:
+            if loglik_kind not in [
+                "analytical",
+                "approx_differentiable",
+                "blackbox",
+            ]:
+                raise ValueError(
+                    "'loglike_kind', when provided, must be one of "
+                    + '"analytical", "approx_differentiable", "blackbox".'
+                )
+
+        self.loglik_kind = loglik_kind
+        self.model_name = model
+
         # Check if model has default config
-        if _model_has_default(model, loglik_kind):
+        if _model_has_default(self.model_name, self.loglik_kind):
+            model = cast(SupportedModels, model)
             default_config = default_model_config[model][loglik_kind]
 
             self.model_config = (
@@ -161,7 +210,7 @@ class HSSM:
                 raise ValueError("Please provide a valid `loglik`.")
             self.loglik = loglik
 
-            if model == "custom":
+            if model not in default_model_config:
                 if model_config is None:
                     raise ValueError(
                         "For custom models, please provide a valid `model_config`."
@@ -174,11 +223,10 @@ class HSSM:
                 self.model_config = model_config
                 self.list_params = model_config["list_params"]
             else:
+                model = cast(SupportedModels, model)
                 self.model_config = {} if model_config is None else model_config
                 self.list_params = default_params[model]
 
-        self.loglik_kind = loglik_kind
-        self.model_name = model
         self._parent = self.list_params[0]
 
         if include is None:
@@ -566,7 +614,7 @@ class SSMFamily(bmb.Family):
         return np.arange(2)
 
 
-def _model_has_default(model: SupportedModels, loglik_kind: LoglikKind) -> bool:
+def _model_has_default(model: SupportedModels | str, loglik_kind: LoglikKind) -> bool:
     """Determine if the specified model has default configs.
 
     Also checks if `model` and `loglik_kind` are valid.
@@ -582,21 +630,8 @@ def _model_has_default(model: SupportedModels, loglik_kind: LoglikKind) -> bool:
     -------
         Whether the model is supported.
     """
-    if loglik_kind not in [
-        "analytical",
-        "approx_differentiable",
-        "blackbox",
-    ]:
-        raise ValueError(
-            "'loglike_kind' must be one of "
-            + '"analytical", "approx_differentiable", "blackbox".'
-        )
-
-    if model == "custom":
+    if model not in default_model_config:
         return False
 
-    if model not in default_model_config:
-        supported_models = list(default_model_config.keys())
-        raise ValueError(f"`model` must be one of {supported_models} or 'custom'.")
-
+    model = cast(SupportedModels, model)
     return loglik_kind in default_model_config[model]

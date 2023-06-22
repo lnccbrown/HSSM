@@ -11,7 +11,6 @@ SupportedModels = Literal[
     "weibull",
     "race_no_bias_angle_4",
     "ddm_seq2_no_bias",
-    "custom",
 ]
 
 LoglikKind = Literal["analytical", "approx_differentiable", "blackbox"]
