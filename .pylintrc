@@ -73,6 +73,7 @@ disable=missing-docstring,
         too-many-instance-attributes,
         arguments-differ,
         arguments-renamed,
+        fixme,
 
 
 # Enable the message, report, category or checker with the given id(s). You can

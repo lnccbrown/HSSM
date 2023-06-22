@@ -10,8 +10,11 @@ from __future__ import annotations
 from typing import Callable
 
 import numpy as np
+import pymc as pm
 import pytensor.tensor as pt
 from pymc.distributions.dist_math import check_parameters
+
+OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
@@ -270,7 +273,7 @@ def log_pdf_sv(
     t: float,
     err: float = 1e-7,
     k_terms: int = 10,
-    small_number: float = 1e-15,
+    epsilon: float = 1e-15,
 ) -> np.ndarray:
     """Compute analytical likelihood for the DDM model with `sv`.
 
@@ -320,17 +323,17 @@ def log_pdf_sv(
     # 2. Computes the log of above value
     # 3. Computes the integration given the sd of v
     logp = (
-        pt.log(p + small_number)
+        pt.log(p + epsilon)
         + (
             (a * z_flipped * sv) ** 2
             - 2 * a * v_flipped * z_flipped
             - (v_flipped**2) * rt
         )
         / (2 * (sv**2) * rt + 2)
-        - pt.log(sv**2 * rt + 1 + small_number) / 2
-        - 2 * pt.log(a + small_number)
+        - pt.log(sv**2 * rt + 1 + epsilon) / 2
+        - 2 * pt.log(a + epsilon)
     )
-    logp = pt.where(rt <= 0, small_number, logp)
+    logp = pt.where(rt <= 0, OUT_OF_BOUNDS_VAL, logp)
     checked_logp = check_parameters(
         logp,
         sv >= 0,
@@ -340,3 +343,43 @@ def log_pdf_sv(
     # checked_logp = check_parameters(checked_logp, 0 < z < 1, msg="0 < z < 1")
     # checked_logp = check_parameters(checked_logp, np.all(rt > 0), msg="t <= min(rt)")
     return checked_logp
+
+
+def log_pdf(
+    data: np.ndarray,
+    v: float,
+    a: float,
+    z: float,
+    t: float,
+    err: float = 1e-7,
+    k_terms: int = 10,
+    epsilon: float = 1e-15,
+) -> np.ndarray:
+    """Compute the log-likelihood of the drift diffusion model f(t|v,a,z).
+
+    Using the method and implementation of Navarro & Fuss, 2009.
+
+    Parameters
+    ----------
+    data
+        2-column numpy array of (response time, response)
+    v
+        Mean drift rate. (-inf, inf).
+    a
+        Value of decision upper bound. (0, inf).
+    z
+        Normalized decision starting point. (0, 1).
+    t
+        Non-decision time [0, inf).
+    err
+        Error bound.
+    k_terms
+        number of terms to use to approximate the PDF.
+    epsilon
+        A small positive number to prevent division by zero or taking the log of zero.
+
+    Returns
+    -------
+        The log likelihood of the drift diffusion model give sv=0.
+    """
+    return log_pdf_sv(data, v, 0, a, z, t, err, k_terms, epsilon)

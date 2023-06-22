@@ -3,13 +3,13 @@ from typing import Any, Literal, Type
 
 import pymc as pm
 
-from .base import log_pdf_sv
+from .base import log_pdf_sv, log_pdf
 from .wfpt import make_distribution
 
 
 SupportedModels = Literal[
     "ddm",
-    "ddm_sv",
+    "ddm_sdv",
     "angle",
     "levy",
     "ornstein",
@@ -33,7 +33,7 @@ Config = dict[ConfigParams, Any]
 default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] = {
     "ddm": {
         "analytical": {
-            "loglik": log_pdf_sv,
+            "loglik": log_pdf,
             "bounds": {
                 "z": (0.0, 1.0),
             },
@@ -54,7 +54,7 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
             },
         },
     },
-    "ddm_sv": {
+    "ddm_sdv": {
         "analytical": {
             "loglik": log_pdf_sv,
             "bounds": {
@@ -165,7 +165,7 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
 
 default_params: dict[SupportedModels, list[str]] = {
     "ddm": ["v", "sv", "a", "z", "t"],
-    "ddm_sv": ["v", "sv", "a", "z", "t"],
+    "ddm_sdv": ["v", "sv", "a", "z", "t"],
     "angle": ["v", "a", "z", "t", "theta"],
     "levy": ["v", "a", "z", "alpha", "t"],
     "ornstein": ["v", "a", "z", "g", "t"],
@@ -175,13 +175,15 @@ default_params: dict[SupportedModels, list[str]] = {
 }
 
 WFPT: Type[pm.Distribution] = make_distribution(
-    log_pdf_sv,
+    "ddm",
+    log_pdf,
     list_params=default_params["ddm"],
     bounds=default_model_config["ddm"]["analytical"]["bounds"],
 )
 
-WFPT_SV: Type[pm.Distribution] = make_distribution(
+WFPT_SDV: Type[pm.Distribution] = make_distribution(
+    "ddm_sdv",
     log_pdf_sv,
-    list_params=default_params["ddm_sv"],
-    bounds=default_model_config["ddm_sv"]["analytical"]["bounds"],
+    list_params=default_params["ddm_sdv"],
+    bounds=default_model_config["ddm_sdv"]["analytical"]["bounds"],
 )
