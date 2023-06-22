@@ -1,25 +1,35 @@
+"""HSSM: Hierarchical Sequential Sampling Models.
+
+A package based on pymc and bambi to perform Bayesian inference for hierarchical
+sequential sampling models.
+
+This file defines the entry class HSSM.
+"""
+
+
 from __future__ import annotations
 
-from typing import Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
-import arviz as az
 import bambi as bmb
 import numpy as np
-import pandas as pd
 import pymc as pm
-import pytensor
 from numpy.typing import ArrayLike
 
 from hssm import wfpt
 from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict, merge_dicts
-from hssm.wfpt.config import Config, SupportedModels, default_model_config
+from hssm.wfpt.config import download_hf, Config, SupportedModels, default_model_config
+
+if TYPE_CHECKING:
+    import arviz as az
+    import pandas as pd
+    import pytensor
 
 LogLikeFunc = Callable[..., ArrayLike]
 
 
 class HSSM:
-    """
-    The Hierarchical Sequential Sampling Model (HSSM) class.
+    """The Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
     ----------
@@ -82,6 +92,7 @@ class HSSM:
         model: SupportedModels = "ddm",
         include: list[dict] | None = None,
         model_config: Config | None = None,
+        loglik_kind: str | None = None,
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
         **kwargs,
     ):
@@ -89,11 +100,15 @@ class HSSM:
         self._inference_obj = None
 
         if model == "custom":
-            if model_config is None:
-                raise ValueError(
-                    "For custom models, please provide a correct model config."
-                )
-            self.model_config = model_config
+            if model_config:
+                self.model_config = model_config
+            else:
+                if loglik_kind is None and loglik is None:
+                    raise ValueError(
+                        "For custom models,"
+                        " both `loglik_kind` and `loglik` must be provided."
+                    )
+                self.model_config = default_model_config[model]
         else:
             if model not in default_model_config:
                 supported_models = list(default_model_config.keys())
@@ -106,8 +121,14 @@ class HSSM:
                 else merge_dicts(default_model_config[model], model_config)
             )
 
-        self.model_name = model
+            if not self.model_config:
+                raise ValueError("Invalid custom model configuration.")
 
+        if loglik and self.model_config["loglik_kind"] == "approx_differentiable":
+            self.model_config["loglik"] = download_hf(loglik)  # type: ignore
+        elif loglik and self.model_config["loglik_kind"] == "analytical":
+            self.model_config["loglik"] = loglik
+        self.model_name = model
         self.list_params = self.model_config["list_params"]
         self._parent = self.list_params[0]
 
@@ -159,7 +180,10 @@ class HSSM:
                 + '"analytical", "approx_differentiable", "blackbox".'
             )
 
-        if "loglik" in self.model_config:
+        if (
+            "loglik" in self.model_config
+            and self.model_config["loglik_kind"] != "approx_differentiable"
+        ):
             # If a user has already provided a log-likelihood function
             if issubclass(self.model_config["loglik"], pm.Distribution):
                 # Test if the it is a distribution
@@ -174,10 +198,10 @@ class HSSM:
         else:
             # If not, in the case of "approx_differentiable"
             if self.model_config["loglik_kind"] == "approx_differentiable":
-                # Check if a loglik_path is provided.
+                # Check if a loglik is provided.
                 if (
-                    "loglik_path" not in self.model_config
-                    or self.model_config["loglik_path"] is None
+                    "loglik" not in self.model_config
+                    or self.model_config["loglik"] is None
                 ):
                     raise ValueError(
                         "Please provide either a path to an onnx file for the log "
@@ -185,7 +209,7 @@ class HSSM:
                     )
                 self.model_distribution = wfpt.make_lan_distribution(
                     model_name=self.model_name,
-                    model=self.model_config["loglik_path"],
+                    model=self.model_config["loglik"],
                     list_params=self.list_params,
                     backend=self.model_config["backend"],
                     params_is_reg=params_is_reg,
@@ -219,10 +243,11 @@ class HSSM:
     def _transform_params(
         self, include: list[dict] | None, model: str, model_config: Config
     ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
-        """
-        This function transforms a list of dictionaries containing parameter
-        information into a list of Param objects. It also creates a formula, priors,
-        and a link for the Bambi package based on the parameters.
+        """Transform parameters.
+
+        Transforms a list of dictionaries containing parameter information into a
+        list of Param objects. This function creates a formula, priors,and a link for
+        the Bambi package based on the parameters.
 
         Parameters
         ----------
@@ -279,7 +304,7 @@ class HSSM:
         ] = "mcmc",
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
-        """Performs sampling using the `fit` method via bambi.Model.
+        """Perform sampling using the `fit` method via bambi.Model.
 
         Parameters
         ----------
@@ -291,11 +316,10 @@ class HSSM:
 
         Returns
         -------
-            An ArviZ ``InferenceData`` instance if inference_method is  ``"mcmc"``
-        (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An ``Approximation``
-        object if  ``"vi"``.
+            An ArviZ `InferenceData` instance if inference_method is `"mcmc"`
+            (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
+            object if `"vi"`.
         """
-
         supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
 
         if sampler not in supported_samplers:
@@ -315,7 +339,7 @@ class HSSM:
         include_group_specific: bool = True,
         kind: Literal["pps", "mean"] = "pps",
     ) -> az.InferenceData | None:
-        """Performs posterior predictive sampling from the HSSM model.
+        """Perform posterior predictive sampling from the HSSM model.
 
         Parameters
         ----------
@@ -360,18 +384,18 @@ class HSSM:
 
     @property
     def pymc_model(self) -> pm.Model:
-        """A convenience funciton that returns the PyMC model build by bambi,
-        largely to avoid stuff like self.model.backend.model...
+        """Provide access to the PyMC model.
 
         Returns
         -------
             The PyMC model built by bambi
         """
-
         return self.model.backend.model
 
     def set_alias(self, aliases: dict[str, str | dict]):
-        """Sets the aliases according to the dictionary passed to it and rebuild the
+        """Set parameter aliases.
+
+        Sets the aliases according to the dictionary passed to it and rebuild the
         model.
 
         Parameters
@@ -379,46 +403,47 @@ class HSSM:
         alias
             A dict specifying the paramter names being aliased and the aliases.
         """
-
         self.model.set_alias(aliases)
         self.model.build()
 
-    # NOTE: can't annotate return type because the graphviz dependency is optional
+    # NOTE: can't annotate return type because the graphviz dependency is
+    # optional
     def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
         """Produce a graphviz Digraph from a built HSSM model.
-        Requires graphviz, which may be installed most easily with
-            ``conda install -c conda-forge python-graphviz``
-        Alternatively, you may install the ``graphviz`` binaries yourself, and then
-        ``pip install graphviz`` to get the python bindings.
-        See http://graphviz.readthedocs.io/en/stable/manual.html for more information.
 
-        The code is largely copied from
-        https://github.com/bambinos/bambi/blob/main/bambi/models.py
-        Credit for the code goes to Bambi developers.
+        Requires graphviz, which may be installed most easily with `conda install -c
+        conda-forge python-graphviz`. Alternatively, you may install the `graphviz`
+        binaries yourself, and then `pip install graphviz` to get the python bindings.
+        See http://graphviz.readthedocs.io/en/stable/manual.html for more information.
 
         Parameters
         ----------
         formatting
-            One of ``"plain"`` or ``"plain_with_params"``. Defaults to ``"plain"``.
+            One of `"plain"` or `"plain_with_params"`. Defaults to `"plain"`.
         name
-            Name of the figure to save. Defaults to ``None``, no figure is saved.
+            Name of the figure to save. Defaults to `None`, no figure is saved.
         figsize
-            Maximum width and height of figure in inches. Defaults to ``None``, the
+            Maximum width and height of figure in inches. Defaults to `None`, the
             figure size is set automatically. If defined and the drawing is larger than
             the given size, the drawing is uniformly scaled down so that it fits within
-            the given size.  Only works if ``name`` is not ``None``.
+            the given size.  Only works if `name` is not `None`.
         dpi
             Point per inch of the figure to save.
-            Defaults to 300. Only works if ``name`` is not ``None``.
+            Defaults to 300. Only works if `name` is not `None`.
         fmt
             Format of the figure to save.
-            Defaults to ``"png"``. Only works if ``name`` is not ``None``.
+            Defaults to `"png"`. Only works if `name` is not `None`.
 
         Returns
         -------
             The graph
-        """
 
+        Note
+        ----
+            The code is largely copied from
+            https://github.com/bambinos/bambi/blob/main/bambi/models.py
+            Credit for the code goes to Bambi developers.
+        """
         self.model._check_built()
 
         graphviz = HSSMModelGraph(
@@ -438,8 +463,7 @@ class HSSM:
         return graphviz
 
     def __repr__(self) -> str:
-        """Creates a representation of the model."""
-
+        """Create a representation of the model."""
         output = []
 
         output.append("Hierarchical Sequential Sampling Model")
@@ -459,14 +483,12 @@ class HSSM:
         return "\r\n".join(output)
 
     def __str__(self) -> str:
-        """Creates a string representation of the model."""
-
+        """Create a string representation of the model."""
         return self.__repr__()
 
     @property
     def traces(self) -> az.InferenceData | pm.Approximation:
-        """
-        Returns the trace of the model after sampling.
+        """Return the trace of the model after sampling.
 
         Raises
         ------
@@ -477,7 +499,6 @@ class HSSM:
         -------
             The trace of the model after sampling.
         """
-
         if not self._inference_obj:
             raise ValueError("Please sample the model first.")
 
@@ -485,10 +506,8 @@ class HSSM:
 
 
 class SSMFamily(bmb.Family):
-    """Extends the `bmb.Family` class to get around the dimension issue with the
-    distribution of this package.
-    """
+    """Extends bmb.Family to get around the dimensionality mismatch."""
 
     def create_extra_pps_coord(self):
-        """Add an extra dimension for posterior predictive sampling"""
+        """Create an extra dimension."""
         return np.arange(2)

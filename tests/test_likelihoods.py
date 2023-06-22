@@ -1,5 +1,4 @@
-"""
-Unit testing for WFPT likelihood function.
+"""Unit testing for WFPT likelihood function.
 
 This code compares WFPT likelihood function with
 old implementation of WFPT from (https://github.com/hddm-devs/hddm)
@@ -30,9 +29,8 @@ def data_fixture():
 
 
 def test_kterm(data_fixture):
-    """
-    This function defines a range of kterms and tests results to
-     makes sure they are not equal to infinity or unknown values
+    """This function defines a range of kterms and tests results to
+    makes sure they are not equal to infinity or unknown values.
     """
     for k_term in range(7, 12):
         v = (rand() - 0.5) * 1.5
@@ -48,9 +46,7 @@ def test_kterm(data_fixture):
 
 
 def test_decision(data_fixture):
-    """
-    This function tests output of decision function
-    """
+    """This function tests output of decision function."""
     decision = decision_func()
     err = 1e-7
     data = data_fixture[:, 0] * data_fixture[:, 1]

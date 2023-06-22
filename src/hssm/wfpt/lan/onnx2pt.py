@@ -1,5 +1,5 @@
-"""
-An ONNX to pytensor compiler.
+"""An ONNX to pytensor compiler.
+
 Tips for extending this file to add more Ops:
 If there is no equivalent in pytensor, then we need to write a function. The
 `pytensor_gemm` function is an example of such a function. The number of argument is
@@ -15,8 +15,10 @@ from .onnx2xla import _asarray, attribute_handlers
 def pytensor_gemm(
     a, b, c=0.0, alpha=1.0, beta=1.0, transA=0, transB=0
 ):  # pylint: disable=C0103
-    """Numpy-backed implementatio of Onnx
-    General Matrix Multiply (GeMM) op."""
+    """Perform the GEMM op.
+
+    Numpy-backed implementatio, of ONNX General Matrix Multiply (GeMM) op.
+    """
     a = pt.transpose(a) if transA else a
     b = pt.transpose(b) if transB else b
 
@@ -35,8 +37,18 @@ pt_onnx_ops = {
 
 
 def pt_interpret_onnx(graph, *args):
-    """
-    This function transforms model in onnx to pytensor.
+    """Transform model in onnx to pytensor.
+
+    Parameters
+    ----------
+    graph
+        The computation graph.
+    args
+        Inputs to the graph.
+
+    Returns
+    -------
+        The result of the computation.
     """
     vals = dict(
         {n.name: a for n, a in zip(graph.input, args)},

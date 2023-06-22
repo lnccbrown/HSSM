@@ -51,7 +51,9 @@ def test_param_non_regression():
 
 
 def test_param_regression():
-    fake_func = lambda x: x * 2  # pylint: disable=C3001
+    def fake_func(x):
+        return x * 2  # pylint: disable=C3001
+
     fake_link = bmb.Link(
         "Fake", link=fake_func, linkinv=fake_func, linkinv_backend=fake_func
     )
@@ -229,7 +231,6 @@ def test_get_alias_dict():
 
 
 def test__make_priors_recursive():
-
     test_dict = {
         "name": "Uniform",
         "lower": 0.1,

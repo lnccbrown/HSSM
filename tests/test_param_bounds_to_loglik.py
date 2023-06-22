@@ -4,8 +4,7 @@ from hssm.wfpt.wfpt import apply_param_bounds_to_loglik, make_distribution
 
 
 def test_apply_param_bouds_to_loglik():
-    """Tests the function in separation"""
-
+    """Tests the function in separation."""
     logp = np.random.normal(size=1000)
 
     list_params = ["param1", "param2"]
@@ -46,7 +45,7 @@ def test_apply_param_bouds_to_loglik():
 
 def test_make_distribution():
     def fake_logp_function(data, param1, param2):
-        """Make up a fake log likelihood function for this test only"""
+        """Make up a fake log likelihood function for this test only."""
         return data * param1 * param2
 
     data = np.random.normal(size=1000)
