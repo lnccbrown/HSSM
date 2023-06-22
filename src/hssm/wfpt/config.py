@@ -4,7 +4,7 @@ from huggingface_hub import hf_hub_download
 
 from hssm import wfpt
 
-REPO_ID = "Aisulu/hssm_onnx_models"
+REPO_ID = "franklab/HSSM"
 
 
 def download_hf(path: str):

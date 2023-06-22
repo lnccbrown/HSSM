@@ -203,12 +203,20 @@ class HSSM:
                         "Please provide either a path to an onnx file for the log "
                         + "likelihood or a log-likelihood function."
                     )
-                self.model_distribution = wfpt.make_lan_distribution(
-                    model=self.model_config["loglik"],
-                    list_params=self.list_params,
-                    backend=self.model_config["backend"],
-                    params_is_reg=params_is_reg,
-                )
+                try:
+                    self.model_distribution = wfpt.make_lan_distribution(
+                        model=self.model_config["loglik"],
+                        list_params=self.list_params,
+                        backend=self.model_config["backend"],
+                        params_is_reg=params_is_reg,
+                    )
+                except FileNotFoundError:
+                    self.model_distribution = wfpt.make_lan_distribution(
+                        model=download_hf(self.model_config["loglik"]),
+                        list_params=self.list_params,
+                        backend=self.model_config["backend"],
+                        params_is_reg=params_is_reg,
+                    )
             else:
                 raise ValueError(
                     "Please provide a likelihood function or a pm.Distribution "
