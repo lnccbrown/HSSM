@@ -280,9 +280,16 @@ class HSSM:
         # Use it directly as the distribution
         if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
             self.model_distribution = self.loglik
-        # If the user has provided a callable or an Op
+        # If the user has provided an Op
         # Wrap it around with a distribution
-        elif isinstance(self.loglik, Op) or callable(self.loglik):
+        elif isinstance(self.loglik, Op):
+            self.model_distribution = wfpt.make_distribution(
+                self.model_name, loglik=self.loglik, list_params=self.list_params
+            )  # type: ignore
+        # If the user has provided a callable (an arbitrary likelihood function)
+        # Wrap it in an Op and create the distribution:
+        elif callable(self.loglik):
+            self.loglik = wfpt.make_blackbox_ops(self.loglik)
             self.model_distribution = wfpt.make_distribution(
                 self.model_name, loglik=self.loglik, list_params=self.list_params
             )  # type: ignore

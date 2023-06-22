@@ -43,6 +43,7 @@ hddm-wfpt = {git = "https://github.com/brown-ccv/hddm-wfpt.git"}
 ipywidgets = "^8.0.3"
 graphviz = "^0.20.1"
 ruff = "^0.0.272"
+numpyro = "^0.12.1"
 
 [tool.black]
 line-length = 88

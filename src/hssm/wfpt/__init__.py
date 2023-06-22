@@ -5,6 +5,7 @@ from .wfpt import (
     make_family,
     make_lan_distribution,
     make_model_rv,
+    make_blackbox_ops,
 )
 
 from .config import WFPT, WFPT_SDV
@@ -16,6 +17,7 @@ __all__ = [
     "make_distribution",
     "make_lan_distribution",
     "make_family",
+    "make_blackbox_ops",
     "WFPT",
     "WFPT_SDV",
 ]

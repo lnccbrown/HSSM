@@ -40,7 +40,7 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
             "default_priors": {
                 "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
                 "a": {"name": "HalfNormal", "sigma": 2.0},
-                "t": {"name": "Uniform", "lower": 0.0, "upper": 5.0, "initval": 0.0},
+                "t": {"name": "Uniform", "lower": 0.0, "upper": 0.5, "initval": 0.1},
             },
         },
         "approx_differentiable": {
