@@ -284,8 +284,8 @@ class HSSM:
         # Wrap it around with a distribution
         elif isinstance(self.loglik, Op) or callable(self.loglik):
             self.model_distribution = wfpt.make_distribution(
-                loglik=loglik, list_params=self.list_params  # type: ignore
-            )
+                self.model_name, loglik=self.loglik, list_params=self.list_params
+            )  # type: ignore
         # All other situations
         else:
             if self.loglik_kind != "approx_differentiable":

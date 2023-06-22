@@ -39,7 +39,7 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
             },
             "default_priors": {
                 "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
-                "a": {"name": "Halfnormal", "sigma": 2.0},
+                "a": {"name": "HalfNormal", "sigma": 2.0},
                 "t": {"name": "Uniform", "lower": 0.0, "upper": 5.0, "initval": 0.0},
             },
         },
@@ -62,8 +62,8 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
             },
             "default_priors": {
                 "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
-                "sv": {"name": "Halfnormal", "sigma": 2.0},
-                "a": {"name": "Halfnormal", "sigma": 2.0},
+                "sv": {"name": "HalfNormal", "sigma": 2.0},
+                "a": {"name": "HalfNormal", "sigma": 2.0},
                 "t": {"name": "Uniform", "lower": 0.0, "upper": 5.0, "initval": 0.0},
             },
         },
@@ -164,7 +164,7 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
 }
 
 default_params: dict[SupportedModels, list[str]] = {
-    "ddm": ["v", "sv", "a", "z", "t"],
+    "ddm": ["v", "a", "z", "t"],
     "ddm_sdv": ["v", "sv", "a", "z", "t"],
     "angle": ["v", "a", "z", "t", "theta"],
     "levy": ["v", "a", "z", "alpha", "t"],
