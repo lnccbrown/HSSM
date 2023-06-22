@@ -20,7 +20,6 @@ from numpy.typing import ArrayLike
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators import simulator
 
-from .base import log_pdf_sv
 from .lan import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
 
 if TYPE_CHECKING:
@@ -30,15 +29,6 @@ LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
 OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
-
-# Defined here to avoid circular import
-ddm_bounds: dict[str, tuple[float, float]] = {
-    "v": (-3.0, 3.0),
-    "sv": (0.0, 1.0),
-    "a": (0.3, 2.5),
-    "z": (0.1, 0.9),
-    "t": (0.0, 2.0),
-}
 
 
 def apply_param_bounds_to_loglik(
@@ -216,11 +206,6 @@ def make_distribution(
             )
 
     return WFPTDistribution
-
-
-WFPT: Type[pm.Distribution] = make_distribution(
-    log_pdf_sv, ["v", "sv", "a", "z", "t"], bounds=ddm_bounds
-)
 
 
 def make_lan_distribution(

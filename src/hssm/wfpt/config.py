@@ -1,7 +1,11 @@
 """Provide default configurations for models in the HSSM class."""
-from typing import Any, Literal
+from typing import Any, Literal, Type
 
-from hssm import wfpt
+import pymc as pm
+
+from .base import log_pdf_sv
+from .wfpt import make_distribution
+
 
 SupportedModels = Literal[
     "ddm",
@@ -28,10 +32,14 @@ Config = dict[ConfigParams, Any]
 default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] = {
     "ddm": {
         "analytical": {
-            "loglik": wfpt.WFPT,
-            "bounds": wfpt.ddm_bounds,
+            "loglik": log_pdf_sv,
+            "bounds": {
+                "z": (0.0, 1.0),
+            },
             "default_priors": {
-                "t": {"name": "Uniform", "lower": 0.0, "upper": 5.0, "initval": 0.0}
+                "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0, "initval": 0.0},
+                "a": {"name": "Halfnormal", "sigma": 2.0},
+                "t": {"name": "Uniform", "lower": 0.0, "upper": 5.0, "initval": 0.0},
             },
         },
         "approx_differentiable": {
@@ -139,3 +147,9 @@ default_params: dict[SupportedModels, list[str]] = {
     "race_no_bias_angle_4": ["v0", "v1", "v2", "v3", "a", "z", "ndt", "theta"],
     "ddm_seq2_no_bias": ["vh", "vl1", "vl2", "a", "t"],
 }
+
+WFPT: Type[pm.Distribution] = make_distribution(
+    log_pdf_sv,
+    ["v", "a", "z", "t"],
+    bounds=default_model_config["ddm"]["analytical"]["bounds"],
+)
