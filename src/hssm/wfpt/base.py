@@ -355,7 +355,7 @@ def log_pdf(
     k_terms
         number of terms to use to approximate the PDF.
     epsilon
-        A small positive number to prevent division by zero ortaking the log of zero.
+        A small positive number to prevent division by zero or taking the log of zero.
 
     Returns
     -------

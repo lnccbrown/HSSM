@@ -313,6 +313,7 @@ class HSSM:
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         include_group_specific: bool = True,
+        kind: Literal["pps", "mean"] = "pps",
     ) -> az.InferenceData | None:
         """Performs posterior predictive sampling from the HSSM model.
 
@@ -332,6 +333,12 @@ class HSSM:
             If `True` will make predictions including the group specific effects.
             Otherwise, predictions are made with common effects only (i.e. group-
             specific are set to zero), by default True.
+        kind
+            Indicates the type of prediction required. Can be `"mean"` or `"pps"`. The
+            first returns draws from the posterior distribution of the mean, while the
+            latter returns the draws from the posterior predictive distribution
+            (i.e. the posterior probability distribution for a new observation).
+            Defaults to `"pps"`.
 
         Raises
         ------
@@ -349,7 +356,7 @@ class HSSM:
                     + "Please either provide an idata object or sample the model first."
                 )
             idata = self._inference_obj
-        return self.model.predict(idata, "pps", data, inplace, include_group_specific)
+        return self.model.predict(idata, kind, data, inplace, include_group_specific)
 
     @property
     def pymc_model(self) -> pm.Model:
