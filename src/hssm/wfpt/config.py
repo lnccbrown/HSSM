@@ -9,6 +9,7 @@ from .wfpt import make_distribution
 
 SupportedModels = Literal[
     "ddm",
+    "ddm_sv",
     "angle",
     "levy",
     "ornstein",
@@ -37,14 +38,38 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
                 "z": (0.0, 1.0),
             },
             "default_priors": {
-                "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0, "initval": 0.0},
+                "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
                 "a": {"name": "Halfnormal", "sigma": 2.0},
                 "t": {"name": "Uniform", "lower": 0.0, "upper": 5.0, "initval": 0.0},
             },
         },
         "approx_differentiable": {
             "loglik": "ddm.onnx",
-            "backend": "pytensor",
+            "backend": "jax",
+            "bounds": {
+                "v": (-3.0, 3.0),
+                "a": (0.3, 2.5),
+                "z": (0.1, 0.9),
+                "t": (0.0, 2.0),
+            },
+        },
+    },
+    "ddm_sv": {
+        "analytical": {
+            "loglik": log_pdf_sv,
+            "bounds": {
+                "z": (0.0, 1.0),
+            },
+            "default_priors": {
+                "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
+                "sv": {"name": "Halfnormal", "sigma": 2.0},
+                "a": {"name": "Halfnormal", "sigma": 2.0},
+                "t": {"name": "Uniform", "lower": 0.0, "upper": 5.0, "initval": 0.0},
+            },
+        },
+        "approx_differentiable": {
+            "loglik": "ddm_sv.onnx",
+            "backend": "jax",
             "bounds": {
                 "v": (-3.0, 3.0),
                 "sv": (0.0, 1.0),
@@ -140,6 +165,7 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
 
 default_params: dict[SupportedModels, list[str]] = {
     "ddm": ["v", "sv", "a", "z", "t"],
+    "ddm_sv": ["v", "sv", "a", "z", "t"],
     "angle": ["v", "a", "z", "t", "theta"],
     "levy": ["v", "a", "z", "alpha", "t"],
     "ornstein": ["v", "a", "z", "g", "t"],
@@ -150,6 +176,12 @@ default_params: dict[SupportedModels, list[str]] = {
 
 WFPT: Type[pm.Distribution] = make_distribution(
     log_pdf_sv,
-    ["v", "a", "z", "t"],
+    list_params=default_params["ddm"],
     bounds=default_model_config["ddm"]["analytical"]["bounds"],
+)
+
+WFPT_SV: Type[pm.Distribution] = make_distribution(
+    log_pdf_sv,
+    list_params=default_params["ddm_sv"],
+    bounds=default_model_config["ddm_sv"]["analytical"]["bounds"],
 )
