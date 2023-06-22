@@ -1,7 +1,8 @@
-"""
-Likelihood Approximation Network (LAN) extension for the Wiener First-Passage Time
-(WFPT) distribution. Uses a neural network to approximate the likelihood function of
-the Wiener First-Passage Time distribution.
+"""Likelihood Approximation Network (LAN) utilities.
+
+LAN extension for the Wiener First-Passage Time (WFPT) distribution. Uses a neural
+network to approximate the likelihood function of the Wiener First-Passage Time
+distribution.
 
 This module handles LAN-related operations, such as producing log-likelihood functions
 from onnx model files and wrapping jax log-likelihood functions in pytensor Ops.
@@ -33,8 +34,7 @@ def make_jax_logp_funcs_from_onnx(
     model: str | PathLike | onnx.ModelProto,
     params_is_reg: list[bool],
 ) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc,]:
-    """
-    Makes a jax function and its Vector-Jacobian Product from an ONNX Model.
+    """Make a jax function and its Vector-Jacobian Product from an ONNX Model.
 
     Parameters
     ----------
@@ -48,33 +48,32 @@ def make_jax_logp_funcs_from_onnx(
 
     Returns
     -------
-    A triple of jax functions. The first calculates the
-    forward pass, the second calculates the VJP, and the third is
-    the forward-pass that's not jitted.
+        A triple of jax functions. The first calculates the
+        forward pass, the second calculates the VJP, and the third is
+        the forward-pass that's not jitted.
     """
-
     loaded_model = (
         onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
     )
 
     def logp(data: np.ndarray, *dist_params: float) -> float:
-        """
+        """Compute the log-likelihood.
+
         A function that computes the element-wise log-likelihoods given one data point
         and arbitrary numbers of parameters as scalars.
 
         Parameters
         ----------
-        data:
+        data
             A 1-D length 2 array with response time and response that
             represents one data point
-        dist_params:
+        dist_params
             A list of parameters used in the likelihood computation.
 
         Returns
         -------
-        The element-wise log-likelihoods.
+            The element-wise log-likelihoods.
         """
-
         # Makes a matrix to feed to the LAN model
         input_vector = jnp.concatenate((jnp.array(dist_params), data))
 
@@ -89,23 +88,22 @@ def make_jax_logp_funcs_from_onnx(
     def vjp_vmap_logp(
         data: np.ndarray, *dist_params: list[float | ArrayLike], gz: ArrayLike
     ) -> list[ArrayLike]:
-        """Computes the VJP of the log-likelihood function
+        """Compute the VJP of the log-likelihood function.
 
         Parameters
         ----------
-        data:
+        data
             A two-column numpy array with response time and response.
-        dist_params:
+        dist_params
             A list of parameters used in the likelihood computation.
-        gz:
+        gz
             The value of vmap_logp at which the VJP is evaluated, typically is just
             vmap_logp(data, *dist_params)
 
         Returns
         -------
-        The VJP of the log-likelihood function computed at gz.
+            The VJP of the log-likelihood function computed at gz.
         """
-
         _, vjp_fn = vjp(vmap_logp, data, *dist_params)
         return vjp_fn(gz)[1:]
 
@@ -117,37 +115,37 @@ def make_jax_logp_ops(
     logp_vjp: LogLikeGrad,
     logp_nojit: LogLikeFunc,
 ) -> Op:
-    """Wraps the JAX functions and its gradient in pytensor Ops.
+    """Wrap the JAX functions and its gradient in pytensor Ops.
 
     Parameters
     ----------
-    logp:
+    logp
         A JAX function that represents the feed-forward operation of the LAN
         network.
-    logp_vjp:
+    logp_vjp
         The Jax function that calculates the VJP of the logp function.
-    logp_nojit:
+    logp_nojit
         The non-jit version of logp.
 
     Returns
     -------
-    An pytensor op that wraps the feed-forward operation and can be used with
-    pytensor.grad.
+        An pytensor op that wraps the feed-forward operation and can be used with
+        pytensor.grad.
     """
 
     class LANLogpOp(Op):  # pylint: disable=W0223
         """Wraps a JAX function in an pytensor Op."""
 
         def make_node(self, data, *dist_params):
-            """
-            Takes the inputs to the Op and puts them in a list. Also specifies the
-            output types in a list, then feed them to the Apply node.
+            """Take the inputs to the Op and puts them in a list.
+
+            Also specifies the output types in a list, then feed them to the Apply node.
 
             Parameters
             ----------
-            data:
+            data
                 A two-column numpy array with response time and response.
-            dist_params:
+            dist_params
                 A list of parameters used in the likelihood computation. The parameters
                 can be both scalars and arrays.
             """
@@ -160,13 +158,15 @@ def make_jax_logp_ops(
             return Apply(self, inputs, outputs)
 
         def perform(self, node, inputs, output_storage):
-            """Performs the Apply node.
+            """Perform the Apply node.
 
             Parameters
             ----------
-            inputs: This is a list of data from which the values stored in
+            inputs
+                This is a list of data from which the values stored in
                 output_storage are to be computed using non-symbolic language.
-            output_storage: This is a list of storage cells where the output
+            output_storage
+                This is a list of storage cells where the output
                 is to be stored. A storage cell is a one-element list. It is
                 forbidden to change the length of the list(s) contained in
                 output_storage. There is one storage cell for each output of
@@ -176,19 +176,21 @@ def make_jax_logp_ops(
             output_storage[0][0] = np.asarray(result, dtype=node.outputs[0].dtype)
 
         def grad(self, inputs, output_gradients):
-            """
-            Performs the pytensor.grad() operation. It should output the VJP of the
-            Op. In other words, if this Op outputs y, and the gradient at y is grad(x),
-            the required output is y*grad(x).
+            """Perform the pytensor.grad() operation.
 
             Parameters
             ----------
-            inputs:
+            inputs
                 The same as the inputs produced in `make_node`.
-            output_gradients:
+            output_gradients
                 Holds the results of the perform `perform` method.
-            """
 
+            Notes
+            -----
+                It should output the VJP of the Op. In other words, if this `Op`
+                outputs `y`, and the gradient at `y` is grad(x), the required output
+                is y*grad(x).
+            """
             results = lan_logp_vjp_op(inputs[0], *inputs[1:], gz=output_gradients[0])
             output = [
                 pytensor.gradient.grad_not_implemented(self, 0, inputs[0]),
@@ -200,9 +202,9 @@ def make_jax_logp_ops(
         """Wraps the VJP operation of a jax function in an pytensor op."""
 
         def make_node(self, data, *dist_params, gz):
-            """
-            Takes the inputs to the Op and puts them in a list. Also specifies the
-            output types in a list, then feed them to the Apply node.
+            """Take the inputs to the Op and puts them in a list.
+
+            Also specifies the output types in a list, then feed them to the Apply node.
 
             Parameters
             ----------
@@ -223,13 +225,15 @@ def make_jax_logp_ops(
             return Apply(self, inputs, outputs)
 
         def perform(self, node, inputs, outputs):
-            """Performs the Apply node.
+            """Perform the Apply node.
 
             Parameters
             ----------
-            inputs: This is a list of data from which the values stored in
-                output_storage are to be computed using non-symbolic language.
-            output_storage: This is a list of storage cells where the output
+            inputs
+                This is a list of data from which the values stored in
+                `output_storage` are to be computed using non-symbolic language.
+            output_storage
+                This is a list of storage cells where the output
                 is to be stored. A storage cell is a one-element list. It is
                 forbidden to change the length of the list(s) contained in
                 output_storage. There is one storage cell for each output of
@@ -254,12 +258,11 @@ def make_jax_logp_ops(
 def make_pytensor_logp(
     model: str | PathLike | onnx.ModelProto,
 ) -> Callable[..., ArrayLike]:
-    """
-    Converting onnx model file to pytensor
+    """Convert onnx model file to pytensor.
 
     Parameters
     ----------
-    model:
+    model
         A path or url to the ONNX model, or an ONNX Model object that's
         already loaded.
     params_is_reg:
@@ -269,8 +272,8 @@ def make_pytensor_logp(
 
     Returns
     -------
-    The logp function that applies the ONNX model to data and returns the element-
-    wise log-likelihoods.
+        The logp function that applies the ONNX model to data and returns the element-
+        wise log-likelihoods.
     """
     loaded_model: onnx.ModelProto = (
         onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model

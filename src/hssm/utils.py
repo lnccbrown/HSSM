@@ -1,4 +1,5 @@
-"""
+"""Utility functions and classes.
+
 HSSM has to reconcile with two representations: it's own representation as an HSSM and
 the representation acceptable to Bambi. The two are not equivalent. This file contains
 the Param class that reconcile these differences.
@@ -29,8 +30,7 @@ BoundsSpec = tuple[float, float]
 
 
 def merge_dicts(dict1: dict, dict2: dict) -> dict:
-    """Recursively merges two dictionaries."""
-
+    """Recursively merge two dictionaries."""
     merged = dict1.copy()
     for key, value in dict2.items():
         if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
@@ -41,11 +41,40 @@ def merge_dicts(dict1: dict, dict2: dict) -> dict:
 
 
 class Param:
-    """
-    Represents the specifications for the main HSSM class.
+    """Represents the specifications for the main HSSM class.
 
-    Also provides convenience functions that can be used by the HSSM class to
-    parse arguments.
+    Also provides convenience functions that can be used by the HSSM class to parse
+    arguments.
+
+    Parameters
+    ----------
+    name
+        The name of the parameter.
+    prior
+        If a formula is not specified (the non-regression case), this parameter
+        expects a float value if the parameter is fixed or a dictionary that can be
+        parsed by Bambi as a prior specification or a Bambi Prior object. If not
+        specified, then a default uninformative uniform prior with `bound` as
+        boundaries will be constructed. An error will be thrown if `bound` is also
+        not specified.
+        If a formula is specified (the regression case), this parameter expects a
+        dictionary of param:prior, where param is the name of the response variable
+        specified in formula, and prior is specified as above. If left unspecified,
+        default priors created by Bambi will be used.
+    formula
+        The regression formula if the parameter depends on other variables. The
+        response variable can be omitted.
+    link
+        The link function for the regression. It is either a string that specifies
+        a built-in link function in Bambi, or a Bambi Link object. If a regression
+        is specified and link is not specified, "identity" will be used by default.
+    bounds
+        If provided, the prior will be created with boundary checks. If this
+        parameter is specified as a regression, boundary checks will be skipped at
+        this point.
+    is_parent
+        Determines if this parameter is a "parent" parameter. If so, the response
+        term for the formula will be "c(rt, response)". Default is False.
     """
 
     def __init__(
@@ -57,40 +86,6 @@ class Param:
         bounds: BoundsSpec | None = None,
         is_parent: bool = False,
     ):
-        """Parses the parameters to class properties.
-
-        Parameters
-        ----------
-        name
-            The name of the parameter
-        prior, optional
-            If a formula is not specified (the non-regression case), this parameter
-            expects a float value if the parameter is fixed or a dictionary that can be
-            parsed by Bambi as a prior specification or a Bambi Prior object. If not
-            specified, then a default uninformative uniform prior with `bound`
-            as boundaries will be constructed. An error will be thrown if `bound` is
-            also not specified.
-
-            If a formula is specified (the regression case), this parameter
-            expects a dictionary of param:prior, where param is the name of the
-            response variable specified in formula, and prior is specified as above. If
-            left unspecified, default priors created by Bambi will be used.
-        formula, optional
-            The regression formula if the parameter depends on other variables. The
-            response variable can be omitted, by default None.
-        link, optional
-            The link function for the regression. It is either a string that specifies
-            a built-in link function in Bambi, or a Bambi Link object. If a regression
-            is specified and link is not specified, "identity" will be used by default.
-        bounds, optional:
-            If provided, the prior will be created with boundary checks. If this
-            parameter is specified as a regression, boundary checks will be
-            skipped at this point.
-        is_parent
-            Determines if this parameter is a "parent" parameter. If so, the response
-            term for the formula will be "c(rt, response)". By default this is False.
-        """
-
         self.name = name
         self.formula = formula
         self._parent = is_parent
@@ -140,7 +135,6 @@ class Param:
         -------
             A boolean that indicates if a regression is specified.
         """
-
         return self.formula is not None
 
     @property
@@ -151,20 +145,19 @@ class Param:
         -------
             A boolean that indicates if the parameter is a parent or not.
         """
-
         return self._parent
 
     def _parse_bambi(
         self,
     ) -> tuple:
-        """Returns a 3-tuple that helps with constructing the Bambi model.
+        """
+        Return a 3-tuple that helps with constructing the Bambi model.
 
         Returns
         -------
             A 3-tuple of formula, priors, and link functions that can be used to
             construct the Bambi model.
         """
-
         formula = None
         prior = None
         link = None
@@ -195,14 +188,13 @@ class Param:
         return formula, prior, link
 
     def __repr__(self) -> str:
-        """Returns the representation of the class.
+        """Return the representation of the class.
 
         Returns
         -------
-            A string whose construction depends on whether the specification
-            contains a regression or not.
+            A string whose construction depends on whether the specification contains a
+            regression or not.
         """
-
         if not self.is_regression:
             if isinstance(self.prior, bmb.Prior):
                 if self.bounds is None:
@@ -228,30 +220,29 @@ class Param:
         return "\r\n".join([self.formula, f"\tLink: {link}", priors])
 
     def __str__(self) -> str:
-        """Returns the string representation of the class.
+        """Return the string representation of the class.
 
         Returns
         -------
-            A string whose construction depends on whether the specification
-            contains a regression or not.
+            A string whose construction depends on whether the specification contains a
+            regression or not.
         """
         return self.__repr__()
 
 
 def _make_prior_dict(prior: dict[str, ParamSpec]) -> dict[str, float | bmb.Prior]:
-    """Helper function to make bambi priors from a dictionary of priors for the
-    regression case.
+    """Make bambi priors from a ``dict`` of priors for the regression case.
 
     Parameters
     ----------
-    prior:
+    prior
         A dictionary where each key is the name of a parameter in a regression
         and each value is the prior specification for that parameter.
 
     Returns
     -------
-        A dictionary where each key is the name of a parameter in a regression
-        and each value is either a float or a bmb.Prior object.
+        A dictionary where each key is the name of a parameter in a regression and each
+        value is either a float or a bmb.Prior object.
     """
     priors = {
         # Convert dict to bmb.Prior if a dict is passed
@@ -263,18 +254,20 @@ def _make_prior_dict(prior: dict[str, ParamSpec]) -> dict[str, float | bmb.Prior
 
 
 def _make_priors_recursive(prior: dict[str, Any]) -> bmb.Prior:
-    """Helper function that recursively converts a dict that might have some
-    fields that have a parameter definitions as dicts to bmb.Prior objects.
+    """Make `bmb.Prior` objects from ``dict``s.
+
+    Helper function that recursively converts a dict that might have some fields that
+    have a parameter definitions as dicts to bmb.Prior objects.
 
     Parameters
     ----------
-    prior:
+    prior
         A dictionary that contains parameter specifications.
 
     Returns
     -------
-        A bmb.Prior object with fields that can be converted to bmb.Prior objects
-        also converted.
+        A bmb.Prior object with fields that can be converted to bmb.Prior objects also
+        converted.
     """
     for k, v in prior.items():
         if isinstance(v, dict) and "name" in v:
@@ -286,7 +279,7 @@ def _make_priors_recursive(prior: dict[str, Any]) -> bmb.Prior:
 def _parse_bambi(
     params: list[Param],
 ) -> tuple[bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
-    """From a list of Params, retrieve three items that helps with bambi model building
+    """From a list of Params, retrieve three items that helps with bambi model building.
 
     Parameters
     ----------
@@ -295,12 +288,11 @@ def _parse_bambi(
 
     Returns
     -------
-        A 3-tuple of
+        A tuple containing:
             1. A bmb.Formula object.
-            2. A dict of priors, if any is specified.
-            3. A dict of link functions, if any is specified.
+            2. A dictionary of priors, if any is specified.
+            3. A dictionary of link functions, if any is specified.
     """
-
     # Handle the edge case where list_params is empty:
     if not params:
         return bmb.Formula("c(rt, response) ~ 1"), None, "identity"
@@ -350,20 +342,20 @@ def _parse_bambi(
 
 
 def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
-    """From a Param object that represents a parent parameter in Bambi,
+    """Make aliases from the parent parameter.
+
+    From a Param object that represents a parent parameter in Bambi,
     returns a dict that represents how Bambi should alias its parameters to
     make it more HSSM-friendly.
 
     Parameters
     ----------
-    parent
-        A param object that represents a parent parameter.
+        parent: A Param object that represents a parent parameter.
 
     Returns
     -------
         A dict that indicates how Bambi should alias its parameters.
     """
-
     assert parent.is_parent, "This Param object should be a parent!"
 
     result_dict = {"c(rt, response)": "rt,response"}
@@ -384,17 +376,22 @@ def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
 
 
 def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
-    """Iterates through a list of Param objects, and aliases a Bambi model's parameters
+    """Make a list of aliases.
+
+    Iterates through a list of Param objects, and aliases a Bambi model's parameters
     to make it more HSSM-friendly.
 
     Parameters
     ----------
     model
-        A Bambi model
-    params
-        The Param representation of the parent parameter
-    """
+        A Bambi model.
+    parent
+        The Param representation of the parent parameter.
 
+    Returns
+    -------
+        A dict that indicates how Bambi should alias its parameters.
+    """
     parent_name = parent.name
 
     if len(model.distributional_components) == 1:
@@ -428,7 +425,12 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
 
 
 def fast_eval(var):
-    """This is a helper function required for one of the functions below."""
+    """Fast evaluation of a variable.
+
+    Notes
+    -----
+    This is a helper function required for one of the functions below.
+    """
     return function([], var, mode="FAST_COMPILE")()
 
 
@@ -436,10 +438,11 @@ VarName = NewType("VarName", str)
 
 
 class HSSMModelGraph(ModelGraph):
-    """Customize PyMC's ModelGraph class to inject the missing parent parameter
-    into the graph.
+    """Customize PyMC's ModelGraph class to inject the missing parent parameter.
 
-    NOTE: this is really a hack. There might be better ways to get around the
+    Notes
+    -----
+    This is really a hack. There might be better ways to get around the
     parent parameter issue.
     """
 
@@ -450,16 +453,18 @@ class HSSMModelGraph(ModelGraph):
     def make_graph(
         self, var_names: Iterable[VarName] | None = None, formatting: str = "plain"
     ):
-        """Make graphviz Digraph of PyMC model
-
-        NOTE: This is a slightly modified version of the code in:
-        https://github.com/pymc-devs/pymc/blob/main/pymc/model_graph.py
-
-        Credit for this code goes to PyMC developers.
+        """Make graphviz Digraph of PyMC model.
 
         Returns
         -------
-        graphviz.Digraph
+            graphviz.Digraph
+
+        Notes
+        -----
+            This is a slightly modified version of the code in:
+            https://github.com/pymc-devs/pymc/blob/main/pymc/model_graph.py
+
+            Credit for this code goes to PyMC developers.
         """
         try:
             import graphviz  # pylint: disable=C0415
@@ -531,7 +536,9 @@ class HSSMModelGraph(ModelGraph):
 def make_bounded_prior(
     prior: ParamSpec, bounds: BoundsSpec | None
 ) -> float | bmb.Prior:
-    """Helper function to create a prior within specified bounds. Works in the
+    """Create prior within specific bounds.
+
+    Helper function that creates a prior within specified bounds. Works in the
     following cases:
 
     1. If a prior passed is a fixed value, then check if the value is specified within
@@ -540,22 +547,21 @@ def make_bounded_prior(
     distribution.
     3. If a prior is passed as a bmb.Prior object, do the same thing above.
 
-    The above boundary checks does not happen when bounds is None.
+    The above boundary checks do not happen when bounds is None.
 
     Parameters
     ----------
     prior
-        A prior definition. Cound be a float, a dict that can be passed to a bmb.Prior
+        A prior definition. Could be a float, a dict that can be passed to a bmb.Prior
         to create a prior distribution, or a bmb.Prior.
-    bounds, optional:
+    bounds, optional
         If provided, needs to be a tuple of floats that indicates the lower and upper
         bounds of the parameter.
 
     Returns
     -------
-        A float if `prior` is a float, otherwise a bmb.Prior object
+        A float if `prior` is a float, otherwise a bmb.Prior object.
     """
-
     if bounds is None:
         return bmb.Prior(**prior) if isinstance(prior, dict) else prior
 
@@ -588,15 +594,17 @@ def make_bounded_prior(
 
 
 def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Callable:
-    """Helper function to create a custom function with truncated priors.
+    """Create custom functions with truncated priors.
+
+    Helper function that creates a custom function with truncated priors.
 
     Parameters
     ----------
-    lower_bound:
+    lower_bound
         The lower bound for the distribution.
-    upper_bound:
+    upper_bound
         The upper bound for the distribution.
-    kwargs:
+    kwargs
         Typically a dictionary with a name for the name of the Prior distribution
         and other arguments passed to bmb.Prior object.
 
