@@ -4,10 +4,10 @@ nav:
     - Home: index.md
     - Getting Started: 004_using_base_hssm_func.ipynb
     - HSSM Class Code Documentation: hssm.md
-    - Default Configurations for HSSM Models: config.md
     - Pymc Distribution Documentation: wfpt.md
     - DDM Code Documentation: base.md
     - Using Models from Hugging Face: hugging_face_onnx_models.ipynb
+    - Model Configuration: config.md
 
 plugins:
   - search
