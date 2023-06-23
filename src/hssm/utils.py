@@ -17,7 +17,6 @@ import bambi as bmb
 import pymc as pm
 from bambi.backend.utils import get_distribution
 from bambi.terms import CommonTerm, GroupSpecificTerm
-from huggingface_hub import hf_hub_download
 from pymc.model_graph import ModelGraph
 from pytensor import function
 from huggingface_hub import hf_hub_download
@@ -30,32 +29,6 @@ from huggingface_hub import hf_hub_download
 ParamSpec = Union[float, dict[str, Any], bmb.Prior]
 BoundsSpec = tuple[float, float]
 REPO_ID = "franklab/HSSM"
-
-
-def download_hf(path: str):
-    """
-    Download a file from a HuggingFace repository.
-
-    Parameters
-    ----------
-    path : str
-        The path of the file to download in the repository.
-
-    Returns
-    -------
-    str
-        The local path where the file is downloaded.
-
-    Notes
-    -----
-    The repository is specified by the REPO_ID constant,
-    which should be a valid HuggingFace.co repository ID.
-    The file is downloaded using the HuggingFace Hub's
-     hf_hub_download function.
-    """
-    return hf_hub_download(repo_id=REPO_ID, filename=path)
-
-REPO_ID = "Aisulu/hssm_onnx_models"
 
 
 def download_hf(path: str):
@@ -587,7 +560,7 @@ class HSSMModelGraph(ModelGraph):
 
 
 def make_bounded_prior(
-    prior: ParamSpec, bounds: BoundsSpec | None = None
+    prior: ParamSpec, bounds: BoundsSpec | None
 ) -> float | bmb.Prior:
     """Create prior within specific bounds.
 
@@ -668,8 +641,6 @@ def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Cal
     dist_name = kwargs["name"]
     dist_kwargs = {k: v for k, v in kwargs.items() if k != "name"}
 
-    initval = dist_kwargs.pop("initval") if "initval" in dist_kwargs else None
-
     def TruncatedDist(name):
         dist = get_distribution(dist_name).dist(**dist_kwargs)
         return pm.Truncated(
@@ -677,7 +648,6 @@ def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Cal
             dist=dist,
             lower=lower_bound,
             upper=upper_bound,
-            initval=initval,
         )
 
     return TruncatedDist
