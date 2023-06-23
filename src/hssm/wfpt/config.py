@@ -187,3 +187,4 @@ WFPT_SDV: Type[pm.Distribution] = make_distribution(
     list_params=default_params["ddm_sdv"],
     bounds=default_model_config["ddm_sdv"]["analytical"]["bounds"],
 )
+
