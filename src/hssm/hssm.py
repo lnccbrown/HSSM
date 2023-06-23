@@ -239,6 +239,11 @@ class HSSM:
             include = []
         params_in_include = [param["name"] for param in include]
 
+        # Process kwargs
+        # If any of the keys is found in `list_params` it is a parameter specification
+        # We add the parameter specification to `include`, which will be processed later
+        # together with other parameter specifications in `include`.
+        # Otherwise we create another dict and pass it to `bmb.Model`.
         other_kwargs: dict[Any, Any] = {}
         for k, v in kwargs.items():
             if k in self.list_params:
@@ -301,9 +306,9 @@ class HSSM:
         else:
             if self.loglik_kind != "approx_differentiable":
                 raise ValueError(
-                    "loglik_kind is not `approx_differentiable, "
-                    + "Please provide a pm.Distribution, an Op, or a callable "
-                    + "as `loglik`"
+                    "You set `loglik_kind` to `approx_differentiable "
+                    + "but did not provide a pm.Distribution, an Op, or a callable "
+                    + "as `loglik`."
                 )
             if isinstance(self.loglik, str):
                 if not Path(self.loglik).exists():
@@ -367,43 +372,15 @@ class HSSM:
             for param_dict in include:
                 name = param_dict["name"]
                 processed.append(name)
-                is_parent = name == self._parent
-                bounds = (
-                    model_config["bounds"].get(name, None)
-                    if "bounds" in model_config
-                    else None
-                )
-                if "prior" not in param_dict or param_dict["prior"] is None:
-                    if (
-                        "default_priors" in model_config
-                        and name in model_config["default_priors"]
-                    ):
-                        param_dict["prior"] = model_config["default_priors"][name]
-                param = Param(
-                    bounds=bounds,
-                    is_parent=is_parent,
-                    **param_dict,
+                param = _create_param(
+                    param_dict, model_config, is_parent=name == self._parent
                 )
                 params.append(param)
 
         for param_str in self.list_params:
             if param_str not in processed:
-                is_parent = param_str == self._parent
-                bounds = (
-                    model_config["bounds"].get(param_str, None)
-                    if "bounds" in model_config
-                    else None
-                )
-                prior = (
-                    model_config["default_priors"].get(param_str, None)
-                    if "default_priors" in model_config
-                    else None
-                )
-                param = Param(
-                    name=param_str,
-                    prior=prior,
-                    bounds=bounds,
-                    is_parent=is_parent,
+                param = _create_param(
+                    param_str, model_config, is_parent=param_str == self._parent
                 )
                 params.append(param)
 
@@ -660,3 +637,48 @@ def _model_has_default(model: SupportedModels | str, loglik_kind: LoglikKind) ->
 
     model = cast(SupportedModels, model)
     return loglik_kind in default_model_config[model]
+
+
+def _create_param(param: str | dict, model_config: dict, is_parent: bool) -> Param:
+    """Create a Param object.
+
+    Parameters
+    ----------
+    param
+        A dict or str containing parameter settings.
+    model_config
+        A dict containing the config for the model.
+    is_parent
+        Indicates whether this current param is a parent in bambi.
+
+    Returns
+    -------
+        A Param object with info form param and model_config injected.
+    """
+    if isinstance(param, dict):
+        name = param["name"]
+        bounds = (
+            model_config["bounds"].get(name, None) if "bounds" in model_config else None
+        )
+        if "prior" not in param or param["prior"] is None:
+            if (
+                "default_priors" in model_config
+                and name in model_config["default_priors"]
+            ):
+                param["prior"] = model_config["default_priors"][name]
+        return Param(bounds=bounds, is_parent=is_parent, **param)
+
+    bounds = (
+        model_config["bounds"].get(param, None) if "bounds" in model_config else None
+    )
+    prior = (
+        model_config["default_priors"].get(param, None)
+        if "default_priors" in model_config
+        else None
+    )
+    return Param(
+        name=param,
+        prior=prior,
+        bounds=bounds,
+        is_parent=is_parent,
+    )
