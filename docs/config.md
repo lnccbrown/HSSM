@@ -6,22 +6,79 @@ This module provides default configurations for various models used in the Hiera
 
 The module includes a dictionary, `default_model_config`, that provides default configurations for a variety of models, including:
 
-- **DDM**
-- **Angle**
-- **Levy**
-- **Ornstein**
-- **Weibull**
-- **Race_no_bias_angle_4**
-- **DDM_seq2_no_bias**
+- `ddm`
+- `ddm_sdv`
+- `angle`
+- `levy`
+- `ornstein`
+- `weibull`
+- `race_no_bias_angle_4`
+- `ddm_seq2_no_bias`
 
-The configuration for each model includes parameters like the type of log-likelihood (`loglik`), kind of log-likelihood (`loglik_kind`), list of parameters specific to the model (`list_params`), the computational backend to be used (`backend`), and the bounds for the parameters (`bounds`).
+## Configuration parameters
+
+Each model configuration is specified by several parameters, which include:
+
+- `loglik`
+- `list_params`
+- `default_priors`
+- `backend`
+- `bounds`
+
+## Default Configurations
+
+For each model, a dictionary is defined containing configurations for each `LoglikKind`. Each configuration includes:
+
+- `loglik`: the log-likelihood function or filename
+- `bounds`: the bounds for the model parameters
+- `default_priors`: the default priors for the model parameters
+- `backend`: (optional) the backend for approximating the likelihood
 
 ### Model: DDM
 
-- **Log-likelihood:** wfpt.WFPT
+#### Analytical
 - **Log-likelihood kind:** Analytical
+- **Log-likelihood:** log_pdf
+- **Parameters:** v, a, z, t
+- **Bounds:**
+  - z: (0.0, 1.0)
+- **Default priors:**
+  - v: Uniform (-10.0, 10.0)
+  - a: HalfNormal with sigma 2.0
+  - t: Uniform (0.0, 0.5) with initial value 0.1
+
+#### Approx Differentiable
+- **Log-likelihood kind:** Approx Differentiable
+- **Log-likelihood:** ddm.onnx
+- **Backend:** jax
+- **Parameters:** v, a, z, t
+- **Bounds:**
+  - v: (-3.0, 3.0)
+  - a: (0.3, 2.5)
+  - z: (0.1, 0.9)
+  - t: (0.0, 2.0)
+
+---
+
+### Model: DDM_SDV
+
+#### Analytical
+- **Log-likelihood kind:** Analytical
+- **Log-likelihood:** log_pdf_sv
 - **Parameters:** v, sv, a, z, t
-- **Backend:** pytensor
+- **Bounds:**
+  - z: (0.0, 1.0)
+- **Default priors:**
+  - v: Uniform (-10.0, 10.0)
+  - sv: HalfNormal with sigma 2.0
+  - a: HalfNormal with sigma 2.0
+  - t: Uniform (0.0, 5.0) with initial value 0.0
+
+#### Approx Differentiable
+- **Log-likelihood kind:** Approx Differentiable
+- **Log-likelihood:** ddm_sv.onnx
+- **Backend:** jax
+- **Parameters:** v, sv, a, z, t
 - **Bounds:**
   - v: (-3.0, 3.0)
   - sv: (0.0, 1.0)
@@ -31,42 +88,12 @@ The configuration for each model includes parameters like the type of log-likeli
 
 ---
 
-### Model: Angle
-
-- **Log-likelihood kind:** Approximate differentiable
-- **Log-likelihood:** angle.onnx
-- **Parameters:** v, a, z, t, theta
-- **Backend:** jax
-- **Bounds:**
-  - v: (-3.0, 3.0)
-  - a: (0.3, 3.0)
-  - z: (0.1, 0.9)
-  - t: (0.001, 2.0)
-  - theta: (-0.1, 1.3)
-
----
-
-### Model: Levy
-
-- **Log-likelihood kind:** Approximate differentiable
-- **Log-likelihood:** levy.onnx
-- **Parameters:** v, a, z, alpha, t
-- **Backend:** jax
-- **Bounds:**
-  - v: (-3.0, 3.0)
-  - a: (0.3, 3.0)
-  - z: (0.1, 0.9)
-  - alpha: (1.0, 2.0)
-  - t: (1e-3, 2.0)
-
----
-
 ### Model: Ornstein
 
-- **Log-likelihood kind:** Approximate differentiable
+- **Log-likelihood kind:** Approx Differentiable
 - **Log-likelihood:** ornstein.onnx
-- **Parameters:** v, a, z, g, t
 - **Backend:** jax
+- **Parameters:** v, a, z, g, t
 - **Bounds:**
   - v: (-2.0, 2.0)
   - a: (0.3, 3.0)
@@ -78,10 +105,10 @@ The configuration for each model includes parameters like the type of log-likeli
 
 ### Model: Weibull
 
-- **Log-likelihood kind:** Approximate differentiable
+- **Log-likelihood kind:** Approx Differentiable
 - **Log-likelihood:** weibull.onnx
-- **Parameters:** v, a, z, t, alpha, beta
 - **Backend:** jax
+- **Parameters:** v, a, z, t, alpha, beta
 - **Bounds:**
   - v: (-2.5, 2.5)
   - a: (0.3, 2.5)
@@ -94,10 +121,10 @@ The configuration for each model includes parameters like the type of log-likeli
 
 ### Model: Race_no_bias_angle_4
 
-- **Log-likelihood kind:** Approximate differentiable
+- **Log-likelihood kind:** Approx Differentiable
 - **Log-likelihood:** race_no_bias_angle_4.onnx
-- **Parameters:** v0, v1, v2, v3, a, z, ndt, theta
 - **Backend:** jax
+- **Parameters:** v0, v1, v2, v3, a, z, ndt, theta
 - **Bounds:**
   - v0: (0.0, 2.5)
   - v1: (0.0, 2.5)
@@ -112,13 +139,17 @@ The configuration for each model includes parameters like the type of log-likeli
 
 ### Model: DDM_seq2_no_bias
 
-- **Log-likelihood kind:** Approximate differentiable
+- **Log-likelihood kind:** Approx Differentiable
 - **Log-likelihood:** ddm_seq2_no_bias.onnx
-- **Parameters:** vh, vl1, vl2, a, t
 - **Backend:** jax
+- **Parameters:** vh, vl1, vl2, a, t
 - **Bounds:**
   - vh: (-4.0, 4.0)
   - vl1: (-4.0, 4.0)
   - vl2: (-4.0, 4.0)
   - a: (0.3, 2.5)
   - t: (0.0, 2.0)
+
+## WFPT and WFPT_SDV Classes
+
+The WFPT and WFPT_SDV classes are created using the make_distribution function. They represent the Drift Diffusion Model (`ddm`) and Drift Diffusion Model with inter-trial variability in drift (`ddm_sdv`) respectively. They use the log-likelihood functions and parameter lists from the default configurations and parameters.
