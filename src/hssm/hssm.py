@@ -71,10 +71,11 @@ class HSSM:
             The order in which the parameters are specified in this list is important.
             Values for each parameter will be passed to the likelihood function in this
             order.
-        - `"backend"`: Only required when `loglik_kind` is `approxi_differentiable` and
+        - `"backend"`: Only used when `loglik_kind` is `approxi_differentiable` and
             an onnx file is supplied for the likelihood approximation network (LAN).
             Valid values are `"jax"` or `"pytensor"`. It determines whether the LAN in
-            ONNX should be converted to `"jax"` or `"pytensor"`.
+            ONNX should be converted to `"jax"` or `"pytensor"`. If not provideded,
+            `jax` will be used for maximum performance.
         - `"default_priors"`: A `dict` indicating the default priors for each parameter.
         - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
             of LAN, these bounds are training boundaries.
@@ -207,12 +208,13 @@ class HSSM:
             self.loglik = self.model_config["loglik"] if loglik is None else loglik
             self.list_params = default_params[model]
         else:
-            # If there is no default, we require a log-likelihood and a model_config
+            # If there is no default, we require a log-likelihood
             if loglik is None:
                 raise ValueError("Please provide a valid `loglik`.")
             self.loglik = loglik
 
             if model not in default_model_config:
+                # For custom models, require model_config
                 if model_config is None:
                     raise ValueError(
                         "For custom models, please provide a valid `model_config`."
@@ -225,6 +227,8 @@ class HSSM:
                 self.model_config = model_config
                 self.list_params = model_config["list_params"]
             else:
+                # For supported models without configs,
+                # We don't require a model_config (because list_params is known)
                 model = cast(SupportedModels, model)
                 self.model_config = {} if model_config is None else model_config
                 self.list_params = default_params[model]
@@ -255,7 +259,7 @@ class HSSM:
                 other_kwargs |= {k: v}
 
         self.params, self.formula, self.priors, self.link = self._transform_params(
-            include, self.model_name, self.model_config
+            include, self.model_config
         )
 
         for param in self.params:
@@ -309,7 +313,7 @@ class HSSM:
                 self.model_name,
                 model=self.loglik,
                 list_params=self.list_params,
-                backend=self.model_config["backend"],
+                backend=self.model_config.get("backend", "jax"),
                 params_is_reg=params_is_reg,
             )
 
@@ -334,7 +338,7 @@ class HSSM:
         self.set_alias(self._aliases)
 
     def _transform_params(
-        self, include: list[dict] | None, model: str, model_config: Config
+        self, include: list[dict] | None, model_config: Config
     ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
         """Transform parameters.
 
@@ -346,8 +350,6 @@ class HSSM:
         ----------
         include
             A list of dictionaries containing information about the parameters.
-        model
-            A string that indicates the type of the model.
         model_config
             A dict for the configuration for the model.
 
@@ -446,9 +448,8 @@ class HSSM:
                 f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
             )
 
-        if self.loglik_kind == "blackbox":
-            if step is None:
-                step = pm.Slice()
+        if self.loglik_kind == "blackbox" and step is None:
+            step = pm.Slice()
 
         self._inference_obj = self.model.fit(
             inference_method=sampler, step=step, **kwargs
