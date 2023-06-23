@@ -6,8 +6,9 @@ import pytest
 import ssms
 
 from hssm import hssm
+from hssm.hssm import _model_has_default
+from hssm.utils import download_hf
 from hssm.wfpt import WFPT
-from hssm.wfpt.config import download_hf
 
 
 @pytest.fixture
@@ -138,35 +139,52 @@ def test_transform_params_general(data, include, should_raise_exception):
         assert len(model.params) == 4
 
 
-def test_model_config_and_loglik_path_update(data_angle, fixture_path):
-    my_hssm = hssm.HSSM(
-        data=data_angle,
-        model="angle",
-        model_config={
-            "loglik_kind": "approx_differentiable",
-            "loglik": fixture_path / "new_path.onnx",
-        },
-    )
-    assert my_hssm.model_config["loglik"] == fixture_path / "new_path.onnx"
-    assert my_hssm.model_config["loglik_kind"] == "approx_differentiable"
+def test__model_has_default():
+    assert _model_has_default("ddm", "analytical")
+    assert not _model_has_default("ddm", "blackbox")
+    assert not _model_has_default("custom", "analytical")
 
 
 def test_custom_model(data, example_model_config):
-    with pytest.raises(ValueError):
-        model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
+    with pytest.raises(
+        ValueError, match="When using a custom model, please provide a `loglik_kind.`"
+    ):
+        model = hssm.HSSM(data=data, model="custom")
 
-    example_model_config["loglik_kind"] = "approx_differentiable"
+    with pytest.raises(ValueError, match="Please provide a valid `loglik`."):
+        model = hssm.HSSM(data=data, model="custom", loglik_kind="analytical")
 
-    with pytest.raises(ValueError):
-        model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
+    with pytest.raises(
+        ValueError, match="For custom models, please provide a valid `model_config`."
+    ):
+        model = hssm.HSSM(
+            data=data, model="custom", loglik=WFPT, loglik_kind="analytical"
+        )
 
-    example_model_config["loglik"] = WFPT
-    example_model_config["loglik_kind"] = "analytical"
+    with pytest.raises(
+        ValueError,
+        match="For custom models, please provide `list_params` in `model_config`.",
+    ):
+        model = hssm.HSSM(
+            data=data,
+            model="custom",
+            loglik=WFPT,
+            loglik_kind="analytical",
+            model_config={},
+        )
 
-    model = hssm.HSSM(data=data, model="custom", model_config=example_model_config)
+    model = hssm.HSSM(
+        data=data,
+        model="custom",
+        model_config=example_model_config,
+        loglik=WFPT,
+        loglik_kind="analytical",
+    )
 
     assert model.model_name == "custom"
-    assert model.model_config == example_model_config
+    assert model.loglik == WFPT
+    assert model.loglik_kind == "analytical"
+    assert model.list_params == example_model_config["list_params"]
 
 
 def test_model_definition_outside_include(data):
@@ -188,27 +206,10 @@ def test_model_definition_outside_include(data):
         hssm.HSSM(data, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
 
-def test_custom_model_without_model_config_and_loglik_raises_error(data):
-    with pytest.raises(
-        ValueError,
-        match="For custom models, both `loglik_kind` and `loglik` must be provided.",
-    ):
-        hssm.HSSM(data=data, model="custom")
-
-
-#
-def test_custom_model_with_analytical_likelihood_type(data):
-    loglik_kind = "analytical"
-    loglik = WFPT
-    model = hssm.HSSM(data=data, model="ddm", loglik_kind=loglik_kind, loglik=loglik)
-    assert model.model_config["loglik"] == loglik
-
-
-#
-def test_custom_model_with_approx_differentiable_likelihood_type(data_angle):
+def test_model_with_approx_differentiable_likelihood_type(data_angle):
     loglik_kind = "approx_differentiable"
     loglik = "angle.onnx"
     model = hssm.HSSM(
         data=data_angle, model="angle", loglik_kind=loglik_kind, loglik=loglik
     )
-    assert model.model_config["loglik"] == download_hf(loglik)
+    assert model.loglik == download_hf(loglik)

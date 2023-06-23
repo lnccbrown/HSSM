@@ -47,9 +47,7 @@ jobs:
         run: poetry run black . --check
 
       - name: Linting
-        uses: chartboost/ruff-action@v1
-        with:
-          src: "./src/hssm"
+        run: poetry run ruff check .
 
       - name: Run tests
         run: poetry run pytest

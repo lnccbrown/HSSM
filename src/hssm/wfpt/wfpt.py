@@ -17,12 +17,13 @@ import pymc as pm
 import pytensor
 import pytensor.tensor as pt
 from numpy.typing import ArrayLike
+from pytensor.graph.op import Op, Apply
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators import simulator
 from ssms.config import model_config as ssms_model_config
 
 
-from .base import OUT_OF_BOUNDS_VAL, log_pdf, log_pdf_sv
+from .base import OUT_OF_BOUNDS_VAL
 from .lan import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
 
 if TYPE_CHECKING:
@@ -30,19 +31,6 @@ if TYPE_CHECKING:
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
-
-# Defined here to avoid circular import
-# TODO: update these bounds in the future
-ddm_analytical_bounds: dict[str, tuple[float, float]] = {
-    "v": (-3.0, 3.0),
-    "a": (0.3, 2.5),
-    "z": (0.1, 0.9),
-    "t": (0.0, 2.0),
-}
-
-ddm_sdv_analytical_bounds = ddm_analytical_bounds | {
-    "sv": (0.0, 1.0),
-}
 
 
 def apply_param_bounds_to_loglik(
@@ -108,7 +96,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
     """
 
     # pylint: disable=W0511, R0903
-    class WFPTRandomVariable(RandomVariable):
+    class SSMRandomVariable(RandomVariable):
         """WFPT random variable."""
 
         name: str = "WFPT_RV"
@@ -126,7 +114,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
         # NOTE: `rng` now is a np.random.Generator instead of RandomState
         # since the latter is now deprecated from numpy
         @classmethod
-        def rng_fn(  # type: ignore
+        def rng_fn(
             cls,
             rng: np.random.Generator,
             *args,
@@ -214,7 +202,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
 
             return output
 
-    return WFPTRandomVariable
+    return SSMRandomVariable
 
 
 def make_distribution(
@@ -279,15 +267,6 @@ def make_distribution(
             )
 
     return WFPTDistribution
-
-
-WFPT: Type[pm.Distribution] = make_distribution(
-    "ddm", log_pdf, ["v", "a", "z", "t"], bounds=ddm_analytical_bounds
-)
-
-WFPT_SDV: Type[pm.Distribution] = make_distribution(
-    "ddm_sdv", log_pdf_sv, ["v", "a", "z", "t", "sv"], bounds=ddm_analytical_bounds
-)
 
 
 def make_lan_distribution(
@@ -399,3 +378,65 @@ def make_family(
     family = bmb.Family(family_name, likelihood=likelihood, link=link)
 
     return family
+
+
+def make_blackbox_ops(logp: Callable) -> Op:
+    """Wrap an arbitrary function in a pytensor Op.
+
+    Parameters
+    ----------
+    logp
+        A python function that represents the log-likelihood function. The function
+        needs to have signature of logp(data, *dist_paramss) where `data` is a
+        two-column numpy array and `dist_params`represents all parameters passed to the
+        function.
+
+    Returns
+    -------
+        An pytensor op that wraps the log-likelihood function.
+    """
+
+    class BlackBoxOp(Op):  # pylint: disable=W0223
+        """Wraps an arbitrary function in a pytensor Op."""
+
+        def make_node(self, data, *dist_params):
+            """Take the inputs to the Op and puts them in a list.
+
+            Also specifies the output types in a list, then feed them to the Apply node.
+
+            Parameters
+            ----------
+            data
+                A two-column numpy array with response time and response.
+            dist_params
+                A list of parameters used in the likelihood computation. The parameters
+                can be both scalars and arrays.
+            """
+            inputs = [
+                pt.as_tensor_variable(data),
+            ] + [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
+
+            outputs = [pt.vector()]
+
+            return Apply(self, inputs, outputs)
+
+        def perform(self, node, inputs, output_storage):
+            """Perform the Apply node.
+
+            Parameters
+            ----------
+            inputs
+                This is a list of data from which the values stored in
+                output_storage are to be computed using non-symbolic language.
+            output_storage
+                This is a list of storage cells where the output
+                is to be stored. A storage cell is a one-element list. It is
+                forbidden to change the length of the list(s) contained in
+                output_storage. There is one storage cell for each output of
+                the Op.
+            """
+            result = logp(*inputs)
+            output_storage[0][0] = np.asarray(result, dtype=node.outputs[0].dtype)
+
+    blackbox_op = BlackBoxOp()
+    return blackbox_op

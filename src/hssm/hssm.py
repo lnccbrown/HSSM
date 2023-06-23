@@ -6,24 +6,41 @@ sequential sampling models.
 This file defines the entry class HSSM.
 """
 
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Literal
+from inspect import isclass
+from pathlib import Path
+
+from typing import TYPE_CHECKING, Any, cast, Callable, Iterable, Literal
 
 import bambi as bmb
 import numpy as np
 import pymc as pm
 from numpy.typing import ArrayLike
+from pytensor.graph.op import Op
 
 from hssm import wfpt
-from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict, merge_dicts
-from hssm.wfpt.config import download_hf, Config, SupportedModels, default_model_config
+from hssm.utils import (
+    HSSMModelGraph,
+    Param,
+    _parse_bambi,
+    download_hf,
+    get_alias_dict,
+    merge_dicts,
+)
+from hssm.wfpt.config import (
+    Config,
+    LoglikKind,
+    SupportedModels,
+    default_model_config,
+    default_params,
+)
 
 if TYPE_CHECKING:
     import arviz as az
     import pandas as pd
     import pytensor
+    from os import PathLike
 
 LogLikeFunc = Callable[..., ArrayLike]
 
@@ -35,20 +52,64 @@ class HSSM:
     ----------
     data
         A pandas DataFrame with the minimum requirements of containing the data with the
-        columns 'rt' and 'response'.
+        columns "rt" and "response".
     model
-        The name of the model to use. Currently supported models are "ddm", "angle",
-        "levy", "ornstein", "weibull", "race_no_bias_angle_4", "ddm_seq2_no_bias". If
-        using a custom model, please pass "custom". Defaults to "ddm".
+        The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
+        "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4",
+        "ddm_seq2_no_bias". If any other string is passed, the model will be considered
+        custom, in which case all `model_config`, `loglik`, and `loglik_kind` have to be
+        provided by the user.
     include, optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
     model_config, optional
         A dictionary containing the model configuration information. If None is
-        provided, defaults will be used. Defaults to None.
+        provided, defaults will be used if there are any. Defaults to None.
+        Fields for this `dict` are usually:
+        - `"list_params"`: a list of parameters indicating the parameters of the model.
+            The order in which the parameters are specified in this list is important.
+            Values for each parameter will be passed to the likelihood function in this
+            order.
+        - `"backend"`: Only used when `loglik_kind` is `approxi_differentiable` and
+            an onnx file is supplied for the likelihood approximation network (LAN).
+            Valid values are `"jax"` or `"pytensor"`. It determines whether the LAN in
+            ONNX should be converted to `"jax"` or `"pytensor"`. If not provideded,
+            `jax` will be used for maximum performance.
+        - `"default_priors"`: A `dict` indicating the default priors for each parameter.
+        - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
+            of LAN, these bounds are training boundaries.
+    loglik, optional
+        A likelihood function. Defaults to None. Requirements are:
+        1. if `loglik_kind` is `"analytical"` or `"blackbox"`, a pm.Distribution, a
+           pytensor Op, or a Python callable can be used. Signatures are:
+            - `pm.Distribution`: needs to have parameters specified exactly as listed in
+            `list_params`
+            - `pytensor.graph.Op` and `Callable`: needs to accept the parameters
+            specified exactly as listed in `list_params`
+        2. If `loglik_kind` is `"approx_differentiable"`, then in addition to the
+            specifications above, a `str` or `Pathlike` can also be used to specify a
+            path to an `onnx` file. If a `str` is provided, HSSM will first look locally
+            for an `onnx` file. If that is not successful, HSSM will try to download
+            that `onnx` file from Hugging Face hub.
+        3. It can also be `None`, in which case a default likelihood function will be
+            used
+    loglik_kind, optional
+        A string that specifies the kind of log-likelihood function specified with
+        `loglik`. Defaults to `None`. Can be one of the following:
+        - `"analytical"`: an analytical (approximation) likelihood function. It is
+            differentiable and can be used with samplers that requires differentiation.
+        - `"approx_differentiable"`: a likelihood approximation network (LAN) likelihood
+            function. It is differentiable and can be used with samplers that requires
+            differentiation.
+        - `"blackbox"`: a black box likelihood function. It is typically NOT
+            differentiable.
+        - `None`, in which a default will be used. For `ddm` type of models, the default
+            will be `analytical`. For other models supported, it will be
+            `approx_differentiable`. If the model is a custom one, a ValueError
+            will be raised.
     **kwargs
-        Additional arguments passed to the bmb.Model object.
+        Additional arguments passed to the `bmb.Model` object.
 
     Attributes
     ----------
@@ -59,6 +120,10 @@ class HSSM:
         The list of strs of parameter names.
     model_name
         The name of the model.
+    loglik:
+        The likelihood function or a path to an onnx file.
+    loglik_kind:
+        The kind of likelihood used.
     model_config
         A dictionary representing the model configuration.
     model_distribution
@@ -89,53 +154,96 @@ class HSSM:
     def __init__(
         self,
         data: pd.DataFrame,
-        model: SupportedModels = "ddm",
+        model: SupportedModels | str = "ddm",
         include: list[dict] | None = None,
         model_config: Config | None = None,
-        loglik_kind: str | None = None,
-        loglik: LogLikeFunc | pytensor.graph.Op | None = None,
+        loglik: str | PathLike | LogLikeFunc | pytensor.graph.Op | None = None,
+        loglik_kind: LoglikKind | None = None,
         **kwargs,
     ):
         self.data = data
         self._inference_obj = None
 
-        if model == "custom":
-            if model_config:
-                self.model_config = model_config
-            else:
-                if loglik_kind is None and loglik is None:
-                    raise ValueError(
-                        "For custom models,"
-                        " both `loglik_kind` and `loglik` must be provided."
-                    )
-                self.model_config = default_model_config[model]
-        else:
+        if loglik_kind is None:
             if model not in default_model_config:
-                supported_models = list(default_model_config.keys())
                 raise ValueError(
-                    f"`model` must be one of {supported_models} or 'custom'."
+                    "When using a custom model, please provide a `loglik_kind.`"
                 )
-            self.model_config = (
-                default_model_config[model]
-                if model_config is None
-                else merge_dicts(default_model_config[model], model_config)
-            )
+            # Setting loglik_kind to be the first of analytical or
+            # approx_differentiable
+            for kind in ["analytical", "approx_differentiable", "blackbox"]:
+                model = cast(SupportedModels, model)
+                if kind in default_model_config[model]:
+                    kind = cast(LoglikKind, kind)
+                    loglik_kind = kind
+                    break
+            if loglik_kind is None:
+                raise ValueError(
+                    "No default model_config is found. Please provide a `loglik_kind."
+                )
+        else:
+            if loglik_kind not in [
+                "analytical",
+                "approx_differentiable",
+                "blackbox",
+            ]:
+                raise ValueError(
+                    "'loglike_kind', when provided, must be one of "
+                    + '"analytical", "approx_differentiable", "blackbox".'
+                )
 
-            if not self.model_config:
-                raise ValueError("Invalid custom model configuration.")
-
-        if loglik and self.model_config["loglik_kind"] == "approx_differentiable":
-            self.model_config["loglik"] = download_hf(loglik)  # type: ignore
-        elif loglik and self.model_config["loglik_kind"] == "analytical":
-            self.model_config["loglik"] = loglik
+        self.loglik_kind = loglik_kind
         self.model_name = model
-        self.list_params = self.model_config["list_params"]
+
+        # Check if model has default config
+        if _model_has_default(self.model_name, self.loglik_kind):
+            model = cast(SupportedModels, model)
+            default_config = default_model_config[model][loglik_kind]
+
+            self.model_config = (
+                default_config
+                if model_config is None
+                else merge_dicts(default_config, model_config)
+            )
+            self.loglik = self.model_config["loglik"] if loglik is None else loglik
+            self.list_params = default_params[model]
+        else:
+            # If there is no default, we require a log-likelihood
+            if loglik is None:
+                raise ValueError("Please provide a valid `loglik`.")
+            self.loglik = loglik
+
+            if model not in default_model_config:
+                # For custom models, require model_config
+                if model_config is None:
+                    raise ValueError(
+                        "For custom models, please provide a valid `model_config`."
+                    )
+                if "list_params" not in model_config:
+                    raise ValueError(
+                        "For custom models, please provide `list_params` in "
+                        + "`model_config`."
+                    )
+                self.model_config = model_config
+                self.list_params = model_config["list_params"]
+            else:
+                # For supported models without configs,
+                # We don't require a model_config (because list_params is known)
+                model = cast(SupportedModels, model)
+                self.model_config = {} if model_config is None else model_config
+                self.list_params = default_params[model]
+
         self._parent = self.list_params[0]
 
         if include is None:
             include = []
         params_in_include = [param["name"] for param in include]
 
+        # Process kwargs
+        # If any of the keys is found in `list_params` it is a parameter specification
+        # We add the parameter specification to `include`, which will be processed later
+        # together with other parameter specifications in `include`.
+        # Otherwise we create another dict and pass it to `bmb.Model`.
         other_kwargs: dict[Any, Any] = {}
         for k, v in kwargs.items():
             if k in self.list_params:
@@ -156,7 +264,7 @@ class HSSM:
                 other_kwargs |= {k: v}
 
         self.params, self.formula, self.priors, self.link = self._transform_params(
-            include, self.model_name, self.model_config
+            include, self.model_config
         )
 
         for param in self.params:
@@ -168,69 +276,63 @@ class HSSM:
 
         params_is_reg = [param.is_regression for param in self.params]
 
-        if "loglik_kind" not in self.model_config or self.model_config[
-            "loglik_kind"
-        ] not in [
-            "analytical",
-            "approx_differentiable",
-            "blackbox",
-        ]:
-            raise ValueError(
-                "'loglike_kind' field of model_config must be one of "
-                + '"analytical", "approx_differentiable", "blackbox".'
-            )
+        ### Logic for different types of likelihoods:
+        # -`analytical`` and `blackbox`:
+        #     loglik should be a `pm.Distribution`` or a Python callable (any arbirary
+        #     function).
+        # - `approx_differentiable`:
+        #     In addition to `pm.Distribution` and any arbitrary function, it can also
+        #     be an str (which we will download from hugging face) or a Pathlike
+        #     which we will download and make a distribution.
 
-        if (
-            "loglik" in self.model_config
-            and self.model_config["loglik_kind"] != "approx_differentiable"
-        ):
-            # If a user has already provided a log-likelihood function
-            if issubclass(self.model_config["loglik"], pm.Distribution):
-                # Test if the it is a distribution
-                self.model_distribution = self.model_config["loglik"]
-            else:
-                # If not, create a distribution
-                self.model_distribution = wfpt.make_distribution(
-                    self.model_name,
-                    loglik=loglik,  # type: ignore
-                    list_params=self.list_params,
-                )
+        # If user has already provided a log-likelihood function as a distribution
+        # Use it directly as the distribution
+        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
+            self.model_distribution = self.loglik
+        # If the user has provided an Op
+        # Wrap it around with a distribution
+        elif isinstance(self.loglik, Op):
+            self.model_distribution = wfpt.make_distribution(
+                self.model_name, loglik=self.loglik, list_params=self.list_params
+            )  # type: ignore
+        # If the user has provided a callable (an arbitrary likelihood function)
+        # Wrap it in an Op and create the distribution:
+        elif callable(self.loglik):
+            self.loglik = wfpt.make_blackbox_ops(self.loglik)
+            self.model_distribution = wfpt.make_distribution(
+                self.model_name, loglik=self.loglik, list_params=self.list_params
+            )  # type: ignore
+        # All other situations
         else:
-            # If not, in the case of "approx_differentiable"
-            if self.model_config["loglik_kind"] == "approx_differentiable":
-                # Check if a loglik is provided.
-                if (
-                    "loglik" not in self.model_config
-                    or self.model_config["loglik"] is None
-                ):
-                    raise ValueError(
-                        "Please provide either a path to an onnx file for the log "
-                        + "likelihood or a log-likelihood function."
-                    )
-                self.model_distribution = wfpt.make_lan_distribution(
-                    model_name=self.model_name,
-                    model=self.model_config["loglik"],
-                    list_params=self.list_params,
-                    backend=self.model_config["backend"],
-                    params_is_reg=params_is_reg,
-                )
-            else:
+            if self.loglik_kind != "approx_differentiable":
                 raise ValueError(
-                    "Please provide a likelihood function or a pm.Distribution "
-                    + "in the `loglik` field of model_config!"
+                    "You set `loglik_kind` to `approx_differentiable "
+                    + "but did not provide a pm.Distribution, an Op, or a callable "
+                    + "as `loglik`."
                 )
+            if isinstance(self.loglik, str):
+                if not Path(self.loglik).exists():
+                    self.loglik = download_hf(self.loglik)
+
+            self.model_distribution = wfpt.make_lan_distribution(
+                self.model_name,
+                model=self.loglik,
+                list_params=self.list_params,
+                backend=self.model_config.get("backend", "jax"),
+                params_is_reg=params_is_reg,
+            )
 
         assert self.model_distribution is not None
 
         self.likelihood = bmb.Likelihood(
-            self.model_config["loglik_kind"],
+            self.loglik_kind,
             params=self.list_params,
-            parent=self.model_config["list_params"][0],
+            parent=self._parent,
             dist=self.model_distribution,
         )
 
         self.family = SSMFamily(
-            self.model_config["loglik_kind"], likelihood=self.likelihood, link=self.link
+            self.loglik_kind, likelihood=self.likelihood, link=self.link
         )
 
         self.model = bmb.Model(
@@ -241,7 +343,7 @@ class HSSM:
         self.set_alias(self._aliases)
 
     def _transform_params(
-        self, include: list[dict] | None, model: str, model_config: Config
+        self, include: list[dict] | None, model_config: Config
     ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
         """Transform parameters.
 
@@ -253,8 +355,6 @@ class HSSM:
         ----------
         include
             A list of dictionaries containing information about the parameters.
-        model
-            A string that indicates the type of the model.
         model_config
             A dict for the configuration for the model.
 
@@ -270,25 +370,17 @@ class HSSM:
         params = []
         if include:
             for param_dict in include:
-                processed.append(param_dict["name"])
-                is_parent = param_dict["name"] == self._parent
-                param = Param(
-                    bounds=model_config["bounds"][param_dict["name"]],
-                    is_parent=is_parent,
-                    **param_dict,
+                name = param_dict["name"]
+                processed.append(name)
+                param = _create_param(
+                    param_dict, model_config, is_parent=name == self._parent
                 )
                 params.append(param)
 
         for param_str in self.list_params:
             if param_str not in processed:
-                is_parent = param_str == self._parent
-                bounds = model_config["bounds"][param_str]
-                prior = 0.0 if model == "ddm" and param_str == "sv" else None
-                param = Param(
-                    name=param_str,
-                    prior=prior,
-                    bounds=bounds,
-                    is_parent=is_parent,
+                param = _create_param(
+                    param_str, model_config, is_parent=param_str == self._parent
                 )
                 params.append(param)
 
@@ -302,6 +394,7 @@ class HSSM:
         sampler: Literal[
             "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
         ] = "mcmc",
+        step: Callable | Iterable[Callable] | None = None,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -311,8 +404,13 @@ class HSSM:
         sampler
             The sampler to use. Can be either "mcmc" (default), "nuts_numpyro",
             "nuts_blackjax", "laplace", or "vi".
+        step
+            A step function or collection of functions. If there are variables without
+            step methods, step methods for those variables will be assigned
+            automatically. By default the NUTS step method will be used, if appropriate
+            to the model.
         kwargs
-            Other arguments passed to bmb.Model.fit()
+            Other arguments passed to bmb.Model.fit().
 
         Returns
         -------
@@ -327,7 +425,12 @@ class HSSM:
                 f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
             )
 
-        self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
+        if self.loglik_kind == "blackbox" and step is None:
+            step = pm.Slice()
+
+        self._inference_obj = self.model.fit(
+            inference_method=sampler, step=step, **kwargs
+        )
 
         return self.traces
 
@@ -511,3 +614,71 @@ class SSMFamily(bmb.Family):
     def create_extra_pps_coord(self):
         """Create an extra dimension."""
         return np.arange(2)
+
+
+def _model_has_default(model: SupportedModels | str, loglik_kind: LoglikKind) -> bool:
+    """Determine if the specified model has default configs.
+
+    Also checks if `model` and `loglik_kind` are valid.
+
+    Parameters
+    ----------
+    model
+        User-specified model type.
+    loglik_kind
+        User-specified likelihood kind.
+
+    Returns
+    -------
+        Whether the model is supported.
+    """
+    if model not in default_model_config:
+        return False
+
+    model = cast(SupportedModels, model)
+    return loglik_kind in default_model_config[model]
+
+
+def _create_param(param: str | dict, model_config: dict, is_parent: bool) -> Param:
+    """Create a Param object.
+
+    Parameters
+    ----------
+    param
+        A dict or str containing parameter settings.
+    model_config
+        A dict containing the config for the model.
+    is_parent
+        Indicates whether this current param is a parent in bambi.
+
+    Returns
+    -------
+        A Param object with info form param and model_config injected.
+    """
+    if isinstance(param, dict):
+        name = param["name"]
+        bounds = (
+            model_config["bounds"].get(name, None) if "bounds" in model_config else None
+        )
+        if "prior" not in param or param["prior"] is None:
+            if (
+                "default_priors" in model_config
+                and name in model_config["default_priors"]
+            ):
+                param["prior"] = model_config["default_priors"][name]
+        return Param(bounds=bounds, is_parent=is_parent, **param)
+
+    bounds = (
+        model_config["bounds"].get(param, None) if "bounds" in model_config else None
+    )
+    prior = (
+        model_config["default_priors"].get(param, None)
+        if "default_priors" in model_config
+        else None
+    )
+    return Param(
+        name=param,
+        prior=prior,
+        bounds=bounds,
+        is_parent=is_parent,
+    )

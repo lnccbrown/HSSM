@@ -35,6 +35,7 @@ htmlcov/
 .hypothesis/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 tests/__pycache__
 
 # Jupyter Notebook
