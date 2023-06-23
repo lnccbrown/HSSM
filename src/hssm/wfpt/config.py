@@ -6,6 +6,7 @@ from hssm import wfpt
 
 SupportedModels = Literal[
     "ddm",
+    "ddm_sdv",
     "angle",
     "levy",
     "ornstein",
@@ -29,15 +30,16 @@ default_model_config: dict[SupportedModels, Config] = {
     "ddm": {
         "loglik": wfpt.WFPT,
         "loglik_kind": "analytical",
-        "list_params": ["v", "sv", "a", "z", "t"],
+        "list_params": ["v", "a", "z", "t"],
         "backend": "pytensor",
-        "bounds": {
-            "v": (-3.0, 3.0),
-            "sv": (0.0, 1.0),
-            "a": (0.3, 2.5),
-            "z": (0.1, 0.9),
-            "t": (0.0, 2.0),
-        },
+        "bounds": wfpt.ddm_analytical_bounds,
+    },
+    "ddm_sdv": {
+        "loglik": wfpt.WFPT_SDV,
+        "loglik_kind": "analytical",
+        "list_params": ["v", "a", "z", "t", "sv"],
+        "backend": "pytensor",
+        "bounds": wfpt.ddm_sdv_analytical_bounds,
     },
     "angle": {
         "loglik_kind": "approx_differentiable",
