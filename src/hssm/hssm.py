@@ -98,7 +98,7 @@ class HSSM:
         data: pd.DataFrame,
         model: SupportedModels = "ddm",
         include: list[dict] | None = None,
-        model_config: Config | None = None,
+        model_config: default_model_config | None = None,
         loglik_kind: str | None = None,
         loglik: LogLikeFunc | pytensor.graph.Op | None = None,
         **kwargs,
