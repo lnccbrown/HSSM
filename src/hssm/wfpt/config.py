@@ -30,7 +30,7 @@ ConfigParams = Literal[
 
 Config = dict[ConfigParams, Any]
 
-default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] = {
+default_model_config: dict[SupportedModels, dict[LoglikKind, Config]] = {
     "ddm": {
         "analytical": {
             "loglik": log_pdf,
@@ -187,4 +187,3 @@ WFPT_SDV: Type[pm.Distribution] = make_distribution(
     list_params=default_params["ddm_sdv"],
     bounds=default_model_config["ddm_sdv"]["analytical"]["bounds"],
 )
-
