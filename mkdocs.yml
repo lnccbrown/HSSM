@@ -6,6 +6,8 @@ nav:
     - HSSM Class Code Documentation: hssm.md
     - Pymc Distribution Documentation: wfpt.md
     - DDM Code Documentation: base.md
+    - Using Models from Hugging Face: hugging_face_onnx_models.ipynb
+    - Model Configuration: config.md
 
 plugins:
   - search

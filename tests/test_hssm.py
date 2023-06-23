@@ -7,7 +7,7 @@ import ssms
 
 from hssm import hssm
 from hssm.wfpt import WFPT
-from hssm.wfpt.config import download_hf
+from hssm.utils import download_hf
 
 
 @pytest.fixture

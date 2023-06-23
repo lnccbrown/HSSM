@@ -17,8 +17,15 @@ import pymc as pm
 from numpy.typing import ArrayLike
 
 from hssm import wfpt
-from hssm.utils import HSSMModelGraph, Param, _parse_bambi, get_alias_dict, merge_dicts
-from hssm.wfpt.config import download_hf, Config, SupportedModels, default_model_config
+from hssm.utils import (
+    HSSMModelGraph,
+    Param,
+    _parse_bambi,
+    get_alias_dict,
+    merge_dicts,
+    download_hf,
+)
+from hssm.wfpt.config import Config, SupportedModels, default_model_config
 
 if TYPE_CHECKING:
     import arviz as az
