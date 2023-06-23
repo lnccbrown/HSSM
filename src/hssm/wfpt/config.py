@@ -30,7 +30,7 @@ ConfigParams = Literal[
 
 Config = dict[ConfigParams, Any]
 
-default_model_config: dict[SupportedModels, dict[LoglikKind, Config]] = {
+default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] = {
     "ddm": {
         "analytical": {
             "loglik": log_pdf,
