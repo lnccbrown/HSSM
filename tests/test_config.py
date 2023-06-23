@@ -1,4 +1,6 @@
-from hssm.wfpt.config import default_model_config, download_hf
+from hssm.wfpt.config import default_model_config
+from hssm.utils import download_hf
+
 from pathlib import Path
 
 
