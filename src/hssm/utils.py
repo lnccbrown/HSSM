@@ -20,7 +20,6 @@ from bambi.terms import CommonTerm, GroupSpecificTerm
 from huggingface_hub import hf_hub_download
 from pymc.model_graph import ModelGraph
 from pytensor import function
-from huggingface_hub import hf_hub_download
 
 # PEP604 union operator "|" not supported by pylint
 # Fall back to old syntax
