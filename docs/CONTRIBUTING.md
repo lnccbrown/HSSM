@@ -24,29 +24,33 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
 
 2. Clone your fork of the HSSM repo from your GitHub account to your local disk.
 
-   - SSH
-     ```
-     git clone git@github.com:<your GitHub handle>/lnccbrown/hssm.git
-     ```
+`SSH`
+   
+ ```
+ git clone git@github.com:<your GitHub handle>/lnccbrown/hssm.git
+ ```
 
-   - HTTPS
-     ```
-     git clone https://github.com/<your GitHub handle>/lnccbrown/hssm.git
-     ```
+`HTTPS`
+   
+ ```
+ git clone https://github.com/<your GitHub handle>/lnccbrown/hssm.git
+ ```
 
 3. Navigate to your hssm directory and add the base repository as a remote:
 
-   - SSH
-     ```
-     cd hssm
-     git remote add upstream git@github.com:lnccbrown/hssm.git
-     ```
+`SSH`
 
-   - HTTPS
-     ```
-     cd hssm
-     git remote add upstream https://github.com/lnccbrown/hssm.git
-     ```
+ ```
+ cd hssm
+ git remote add upstream git@github.com:lnccbrown/hssm.git
+ ```
+
+`HTTPS`
+   
+ ```
+ cd hssm
+ git remote add upstream https://github.com/lnccbrown/hssm.git
+ ```
 
 4. Create a feature branch to hold your development changes:
 
@@ -55,7 +59,7 @@ git checkout -b my-feature
 ```
 
 
-> :warning: Always create a new feature branch before making any changes. Make your changes in the feature branch. It’s good practice to never routinely work on the main branch of any repository.
+> warning: Always create a new feature branch before making any changes. Make your changes in the feature branch. It’s good practice to never routinely work on the main branch of any repository.
 
 5. The project uses `poetry` for dependency management. If you haven't installed it, you can do so by running `pip install poetry`. After you've installed `poetry`, you can set up your project by running:
 
@@ -83,5 +87,5 @@ git push -u origin my-feature
 
 8. Go to the GitHub web page of your fork of the HSSM repo. Click the ‘Pull request’ button to send your changes to the project’s maintainers for review. This will send an email to the committers.
 
-**This guide is adapted from the [ArviZ contribution guide](https://github.com/arviz-devs/arviz/blob/main/CONTRIBUTING
+** This guide is adapted from the [ArviZ contribution guide](https://github.com/arviz-devs/arviz/blob/main/CONTRIBUTING.md) **
 
