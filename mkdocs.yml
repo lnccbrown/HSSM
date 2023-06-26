@@ -8,6 +8,7 @@ nav:
     - Pymc Distribution Documentation: wfpt.md
     - DDM Code Documentation: base.md
     - Using Models from Hugging Face: notebooks/hugging_face_onnx_models.ipynb
+    - Contributing Guidelines: CONTRIBUTING.md
 
 plugins:
   - search

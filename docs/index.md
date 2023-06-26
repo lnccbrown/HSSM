@@ -6,19 +6,15 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 **Authors**: Alexander Fengler, Aisulu Omar, Paul Xu, Krishn Bera, Michael J. Frank
 
-**Contacts**: alexander_fengler@brown.edu, krishn_bera@brown.edu, michael_frank@brown.edu
-
-**Web site**: 
+**Contacts**: alexander_fengler@brown.edu
 
 **Github**: https://github.com/lnccbrown/HSSM
-
-**Mailing list**:
 
 **Copyright**: This document has been placed in the public domain.
 
 **License**:
 
-**Version**: 0.0.1
+**Version**: 0.0.9
 
 ## Features
 
@@ -73,10 +69,8 @@ model.sample()
 ```
 
 ### Contributing
-TO-DO: Contribution guidelines
+If you're interested in contributing to this project, please see our [contribution guidelines](CONTRIBUTING.md).
 
 ### License
 TO-DO: Licensing information
 
-### Contact Information
-TO-DO: Contact information
