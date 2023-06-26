@@ -285,24 +285,24 @@ def make_lan_distribution(
 
     Parameters
     ----------
+    model_name
+        The kind of the model.
+    list_params
+        A list of the names of the parameters following the order of how they are fed
+        to the LAN.
     model
         The path of the ONNX model, or one already loaded in memory.
     backend
         Whether to use "pytensor" or "jax" as the backend of the log-likelihood
         computation. If `jax`, the function will be wrapped in an pytensor Op.
-    list_params
-        A list of the names of the parameters following the order of how they are fed
-        to the LAN.
-    rv
-        The RandomVariable Op used for posterior sampling.
-    model_name
-        The name of the model (a string).
-    param_is_reg
-        A list of booleans indicating whether each parameter in the
-        corresponding position in `list_params` is a regression.
     bounds
         A dictionary with parameters as keys (a string) and its boundaries
         as values.Example: {"parameter": (lower_boundary, upper_boundary)}.
+    rv
+        The RandomVariable Op used for posterior sampling.
+    params_is_reg
+        A list of booleans indicating whether each parameter in the
+        corresponding position in `list_params` is a regression.
 
     Returns
     -------
