@@ -59,68 +59,55 @@ class HSSM:
         "ddm_seq2_no_bias". If any other string is passed, the model will be considered
         custom, in which case all `model_config`, `loglik`, and `loglik_kind` have to be
         provided by the user.
-    include : optional
+    include, optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
-    model_config : optional
+    model_config, optional
         A dictionary containing the model configuration information. If None is
         provided, defaults will be used if there are any. Defaults to None.
         Fields for this `dict` are usually:
-
         - `"list_params"`: a list of parameters indicating the parameters of the model.
             The order in which the parameters are specified in this list is important.
             Values for each parameter will be passed to the likelihood function in this
             order.
-
         - `"backend"`: Only used when `loglik_kind` is `approxi_differentiable` and
             an onnx file is supplied for the likelihood approximation network (LAN).
             Valid values are `"jax"` or `"pytensor"`. It determines whether the LAN in
             ONNX should be converted to `"jax"` or `"pytensor"`. If not provideded,
             `jax` will be used for maximum performance.
-
         - `"default_priors"`: A `dict` indicating the default priors for each parameter.
-
         - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
             of LAN, these bounds are training boundaries.
-    loglik : optional
+    loglik, optional
         A likelihood function. Defaults to None. Requirements are:
-
         1. if `loglik_kind` is `"analytical"` or `"blackbox"`, a pm.Distribution, a
            pytensor Op, or a Python callable can be used. Signatures are:
             - `pm.Distribution`: needs to have parameters specified exactly as listed in
             `list_params`
-
             - `pytensor.graph.Op` and `Callable`: needs to accept the parameters
             specified exactly as listed in `list_params`
-
         2. If `loglik_kind` is `"approx_differentiable"`, then in addition to the
             specifications above, a `str` or `Pathlike` can also be used to specify a
             path to an `onnx` file. If a `str` is provided, HSSM will first look locally
             for an `onnx` file. If that is not successful, HSSM will try to download
             that `onnx` file from Hugging Face hub.
-
         3. It can also be `None`, in which case a default likelihood function will be
             used
-    loglik_kind : optional
+    loglik_kind, optional
         A string that specifies the kind of log-likelihood function specified with
         `loglik`. Defaults to `None`. Can be one of the following:
-
         - `"analytical"`: an analytical (approximation) likelihood function. It is
             differentiable and can be used with samplers that requires differentiation.
-
         - `"approx_differentiable"`: a likelihood approximation network (LAN) likelihood
             function. It is differentiable and can be used with samplers that requires
             differentiation.
-
         - `"blackbox"`: a black box likelihood function. It is typically NOT
             differentiable.
-
         - `None`, in which a default will be used. For `ddm` type of models, the default
             will be `analytical`. For other models supported, it will be
             `approx_differentiable`. If the model is a custom one, a ValueError
             will be raised.
-
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -151,6 +138,17 @@ class HSSM:
         A string or a dictionary representing the link functions for all parameters.
     params
         A list of Param objects representing model parameters.
+
+    Methods
+    -------
+    sample
+        A method to sample posterior distributions.
+    sample_posterior_predictive
+        A method to produce posterior predictive samples.
+    set_alias
+        Sets the alias for a paramter.
+    graph
+        Plot the model with PyMC's built-in graph function.
     """
 
     def __init__(
@@ -241,6 +239,11 @@ class HSSM:
             include = []
         params_in_include = [param["name"] for param in include]
 
+        # Process kwargs
+        # If any of the keys is found in `list_params` it is a parameter specification
+        # We add the parameter specification to `include`, which will be processed later
+        # together with other parameter specifications in `include`.
+        # Otherwise we create another dict and pass it to `bmb.Model`.
         other_kwargs: dict[Any, Any] = {}
         for k, v in kwargs.items():
             if k in self.list_params:
@@ -293,9 +296,12 @@ class HSSM:
                 self.model_name, loglik=self.loglik, list_params=self.list_params
             )  # type: ignore
         # If the user has provided a callable (an arbitrary likelihood function)
-        # Wrap it in an Op and create the distribution:
+        # If `loglik_kind` is `blackbox`, wrap it in an op and then a distribution
+        # Otherwise, we assume that this funciton is differentiable with `pytensor`
+        # and wrap it directly in a distribution.
         elif callable(self.loglik):
-            self.loglik = wfpt.make_blackbox_ops(self.loglik)
+            if self.loglik_kind == "blackbox":
+                self.loglik = wfpt.make_blackbox_ops(self.loglik)
             self.model_distribution = wfpt.make_distribution(
                 self.model_name, loglik=self.loglik, list_params=self.list_params
             )  # type: ignore
@@ -303,9 +309,9 @@ class HSSM:
         else:
             if self.loglik_kind != "approx_differentiable":
                 raise ValueError(
-                    "loglik_kind is not `approx_differentiable, "
-                    + "Please provide a pm.Distribution, an Op, or a callable "
-                    + "as `loglik`"
+                    "You set `loglik_kind` to `approx_differentiable "
+                    + "but did not provide a pm.Distribution, an Op, or a callable "
+                    + "as `loglik`."
                 )
             if isinstance(self.loglik, str):
                 if not Path(self.loglik).exists():
@@ -369,43 +375,15 @@ class HSSM:
             for param_dict in include:
                 name = param_dict["name"]
                 processed.append(name)
-                is_parent = name == self._parent
-                bounds = (
-                    model_config["bounds"].get(name, None)
-                    if "bounds" in model_config
-                    else None
-                )
-                if "prior" not in param_dict or param_dict["prior"] is None:
-                    if (
-                        "default_priors" in model_config
-                        and name in model_config["default_priors"]
-                    ):
-                        param_dict["prior"] = model_config["default_priors"][name]
-                param = Param(
-                    bounds=bounds,
-                    is_parent=is_parent,
-                    **param_dict,
+                param = _create_param(
+                    param_dict, model_config, is_parent=name == self._parent
                 )
                 params.append(param)
 
         for param_str in self.list_params:
             if param_str not in processed:
-                is_parent = param_str == self._parent
-                bounds = (
-                    model_config["bounds"].get(param_str, None)
-                    if "bounds" in model_config
-                    else None
-                )
-                prior = (
-                    model_config["default_priors"].get(param_str, None)
-                    if "default_priors" in model_config
-                    else None
-                )
-                param = Param(
-                    name=param_str,
-                    prior=prior,
-                    bounds=bounds,
-                    is_parent=is_parent,
+                param = _create_param(
+                    param_str, model_config, is_parent=param_str == self._parent
                 )
                 params.append(param)
 
@@ -471,17 +449,17 @@ class HSSM:
 
         Parameters
         ----------
-        idata : optional
+        idata, optional
             The `InferenceData` object returned by `HSSM.sample()`. If not provided,
             the `InferenceData` from the last time `sample()` is called will be used.
-        data : optional
+        data, optional
             An optional data frame with values for the predictors that are used to
             obtain out-of-sample predictions. If omitted, the original dataset is used.
-        inplace : optional
+        inplace, optional
             If `True` will modify idata in-place and append a `posterior_predictive`
             group to `idata`. Otherwise, it will return a copy of idata with the
             predictions added, by default True.
-        include_group_specific : optional
+        include_group_specific, optional
             If `True` will make predictions including the group specific effects.
             Otherwise, predictions are made with common effects only (i.e. group-
             specific are set to zero), by default True.
@@ -528,7 +506,7 @@ class HSSM:
 
         Parameters
         ----------
-        aliases
+        alias
             A dict specifying the paramter names being aliased and the aliases.
         """
         self.model.set_alias(aliases)
@@ -662,3 +640,48 @@ def _model_has_default(model: SupportedModels | str, loglik_kind: LoglikKind) ->
 
     model = cast(SupportedModels, model)
     return loglik_kind in default_model_config[model]
+
+
+def _create_param(param: str | dict, model_config: dict, is_parent: bool) -> Param:
+    """Create a Param object.
+
+    Parameters
+    ----------
+    param
+        A dict or str containing parameter settings.
+    model_config
+        A dict containing the config for the model.
+    is_parent
+        Indicates whether this current param is a parent in bambi.
+
+    Returns
+    -------
+        A Param object with info form param and model_config injected.
+    """
+    if isinstance(param, dict):
+        name = param["name"]
+        bounds = (
+            model_config["bounds"].get(name, None) if "bounds" in model_config else None
+        )
+        if "prior" not in param or param["prior"] is None:
+            if (
+                "default_priors" in model_config
+                and name in model_config["default_priors"]
+            ):
+                param["prior"] = model_config["default_priors"][name]
+        return Param(bounds=bounds, is_parent=is_parent, **param)
+
+    bounds = (
+        model_config["bounds"].get(param, None) if "bounds" in model_config else None
+    )
+    prior = (
+        model_config["default_priors"].get(param, None)
+        if "default_priors" in model_config
+        else None
+    )
+    return Param(
+        name=param,
+        prior=prior,
+        bounds=bounds,
+        is_parent=is_parent,
+    )
