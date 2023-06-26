@@ -298,11 +298,9 @@ def log_pdf_sv(
         Error bound.
     k_terms
         number of terms to use to approximate the PDF.
-    small_number
+    epsilon
         A small positive number to prevent division by zero or
-        taking the log of zero, also used to replace negative
-        response times after subtracting non-decision time.
-        Default is 1e-15.
+        taking the log of zero.
 
     Returns
     -------
