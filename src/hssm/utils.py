@@ -29,7 +29,7 @@ from pytensor import function
 ParamSpec = Union[float, dict[str, Any], bmb.Prior]
 BoundsSpec = tuple[float, float]
 
-REPO_ID = "Aisulu/hssm_onnx_models"
+REPO_ID = "franklab/HSSM"
 
 
 def download_hf(path: str):

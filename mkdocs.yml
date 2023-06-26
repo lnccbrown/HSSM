@@ -2,14 +2,17 @@ site_name: HSSM
 
 nav:
     - Home: index.md
-    - Getting Started: 004_using_base_hssm_func.ipynb
+    - Getting Started: notebooks/004_using_base_hssm_func.ipynb
     - HSSM Class Code Documentation: hssm.md
+    - Default Configurations for HSSM Models: config.md
     - Pymc Distribution Documentation: wfpt.md
     - DDM Code Documentation: base.md
+    - Using Models from Hugging Face: notebooks/hugging_face_onnx_models.ipynb
 
 plugins:
   - search
-  - mknotebooks
+  - mknotebooks:
+      execute: 'auto'
   - mkdocstrings:
       default_handler: python
       handlers:
