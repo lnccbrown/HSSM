@@ -12,7 +12,7 @@ nav:
 plugins:
   - search
   - mknotebooks:
-      execute: 'auto'
+      execute: True
   - mkdocstrings:
       default_handler: python
       handlers:
