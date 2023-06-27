@@ -12,7 +12,7 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 **Copyright**: This document has been placed in the public domain.
 
-**License**: HSSM is licensed under [Copyright 20xx, Brown University, Providence, RI](../LICENSE)
+**License**: HSSM is licensed under [Copyright 2023, Brown University, Providence, RI](../LICENSE)
 
 **Version**: 0.1.0
 
