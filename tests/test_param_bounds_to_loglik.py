@@ -1,6 +1,6 @@
 import numpy as np
 
-from hssm.wfpt.wfpt import apply_param_bounds_to_loglik, make_distribution
+from hssm.distribution_utils.dist import apply_param_bounds_to_loglik, make_distribution
 
 
 def test_apply_param_bouds_to_loglik():
@@ -52,7 +52,7 @@ def test_make_distribution():
     bounds = {"param1": [-1.0, 1.0], "param2": [-1.0, 1.0]}
 
     Dist = make_distribution(
-        model_name="custom",
+        "fake",
         loglik=fake_logp_function,
         list_params=["param1", "param2"],
         bounds=bounds,

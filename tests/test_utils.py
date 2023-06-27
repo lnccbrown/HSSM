@@ -5,7 +5,7 @@ import pytest
 import ssms.basic_simulators
 
 import hssm
-from hssm.utils import Param, _make_priors_recursive, _parse_bambi
+from hssm.param import Param, _make_priors_recursive, _parse_bambi
 
 
 def test_param_non_regression():

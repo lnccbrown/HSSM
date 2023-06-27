@@ -7,12 +7,15 @@ https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b.
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Type
 
 import numpy as np
 import pymc as pm
+
 import pytensor.tensor as pt
 from pymc.distributions.dist_math import check_parameters
+
+from ..distribution_utils.dist import make_distribution
 
 OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
 
@@ -264,7 +267,7 @@ def ftt01w(
     return p * (p > 0)  # Making sure that p > 0
 
 
-def log_pdf_sv(
+def logp_ddm_sdv(
     data: np.ndarray,
     v: float,
     sv: float,
@@ -343,7 +346,7 @@ def log_pdf_sv(
     return checked_logp
 
 
-def log_pdf(
+def logp_ddm(
     data: np.ndarray,
     v: float,
     a: float,
@@ -380,4 +383,29 @@ def log_pdf(
     -------
         The log likelihood of the drift diffusion model give sv=0.
     """
-    return log_pdf_sv(data, v, 0, a, z, t, err, k_terms, epsilon)
+    return logp_ddm_sdv(data, v, 0, a, z, t, err, k_terms, epsilon)
+
+
+ddm_bounds = {"z": (0.0, 1.0)}
+ddm_sdv_bounds = ddm_bounds | {
+    "v": (-3.0, 3.0),
+    "a": (0.3, 2.5),
+    "t": (0.0, 2.0),
+}
+
+ddm_params = ["v", "a", "z", "t"]
+ddm_sdv_params = ddm_params + ["sv"]
+
+DDM: Type[pm.Distribution] = make_distribution(
+    "ddm",
+    logp_ddm,
+    list_params=["v", "a", "z", "t"],
+    bounds=ddm_bounds,
+)
+
+DDM_SDV: Type[pm.Distribution] = make_distribution(
+    "ddm_sdv",
+    logp_ddm_sdv,
+    list_params=ddm_sdv_params,
+    bounds=ddm_sdv_bounds,
+)

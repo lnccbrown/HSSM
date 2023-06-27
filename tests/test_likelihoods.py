@@ -12,7 +12,7 @@ import ssms.basic_simulators
 from numpy.random import rand
 
 # pylint: disable=C0413
-from hssm.wfpt.base import decision_func, log_pdf_sv
+from hssm.likelihoods.analytical import decision_func, logp_ddm_sdv
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def test_kterm(data_fixture):
         z = 0.5 * rand()
         t = rand() * 0.5
         err = 1e-7
-        logp = log_pdf_sv(data_fixture, v, sv, a, z, t, err, k_terms=k_term)
+        logp = logp_ddm_sdv(data_fixture, v, sv, a, z, t, err, k_terms=k_term)
         logp = sum(logp.eval())
         assert not math.isinf(logp)
         assert not math.isnan(logp)
@@ -91,7 +91,7 @@ def shared_params():
 def test_no_inf_values_a(data_fixture, shared_params):
     for a in np.arange(2.5, 5.1, 0.1):
         params = {**shared_params, "a": a}
-        logp = log_pdf_sv(data_fixture, **params)
+        logp = logp_ddm_sdv(data_fixture, **params)
         assert np.all(
             np.isfinite(logp.eval())
         ), f"log_pdf_sv() returned non-finite values for a = {a}."
@@ -100,7 +100,7 @@ def test_no_inf_values_a(data_fixture, shared_params):
 def test_no_inf_values_t(data_fixture, shared_params):
     for t in np.arange(3.0, 5.1, 0.1):
         params = {**shared_params, "t": t}
-        logp = log_pdf_sv(data_fixture, **params)
+        logp = logp_ddm_sdv(data_fixture, **params)
         assert np.all(
             np.isfinite(logp.eval())
         ), f"log_pdf_sv() returned non-finite values for t = {t}."
@@ -109,7 +109,7 @@ def test_no_inf_values_t(data_fixture, shared_params):
 def test_no_inf_values_v(data_fixture, shared_params):
     for v in np.arange(3.0, 5.1, 0.1):
         params = {**shared_params, "v": v}
-        logp = log_pdf_sv(data_fixture, **params)
+        logp = logp_ddm_sdv(data_fixture, **params)
         assert np.all(
             np.isfinite(logp.eval())
         ), f"log_pdf_sv() returned non-finite values for v = {v}."

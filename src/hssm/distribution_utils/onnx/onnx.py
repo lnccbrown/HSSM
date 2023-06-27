@@ -1,9 +1,5 @@
 """Likelihood Approximation Network (LAN) utilities.
 
-LAN extension for the Wiener First-Passage Time (WFPT) distribution. Uses a neural
-network to approximate the likelihood function of the Wiener First-Passage Time
-distribution.
-
 This module handles LAN-related operations, such as producing log-likelihood functions
 from onnx model files and wrapping jax log-likelihood functions in pytensor Ops.
 """
@@ -33,7 +29,7 @@ LogLikeGrad = Callable[..., ArrayLike]
 def make_jax_logp_funcs_from_onnx(
     model: str | PathLike | onnx.ModelProto,
     params_is_reg: list[bool],
-) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc,]:
+) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]:
     """Make a jax function and its Vector-Jacobian Product from an ONNX Model.
 
     Parameters
@@ -48,6 +44,7 @@ def make_jax_logp_funcs_from_onnx(
 
     Returns
     -------
+    tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]
         A triple of jax functions. The first calculates the
         forward pass, the second calculates the VJP, and the third is
         the forward-pass that's not jitted.
@@ -72,6 +69,7 @@ def make_jax_logp_funcs_from_onnx(
 
         Returns
         -------
+        float
             The element-wise log-likelihoods.
         """
         # Makes a matrix to feed to the LAN model
@@ -102,6 +100,7 @@ def make_jax_logp_funcs_from_onnx(
 
         Returns
         -------
+        list[ArrayLike]
             The VJP of the log-likelihood function computed at gz.
         """
         _, vjp_fn = vjp(vmap_logp, data, *dist_params)
@@ -129,6 +128,7 @@ def make_jax_logp_ops(
 
     Returns
     -------
+    Op
         An pytensor op that wraps the feed-forward operation and can be used with
         pytensor.grad.
     """
@@ -272,6 +272,7 @@ def make_pytensor_logp(
 
     Returns
     -------
+    Callable
         The logp function that applies the ONNX model to data and returns the element-
         wise log-likelihoods.
     """
