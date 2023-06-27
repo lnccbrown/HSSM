@@ -1,4 +1,6 @@
-<img src="docs/images/HSSM2_Logo_Transparent1200.png" width="250">
+<p align="left">
+  <img src="docs/images/HSSM2_Logo_Transparent1200.png" width="250">
+</p>
 
 ## HSSM - Hierarchical Sequential Sampling Modeling
 
@@ -57,3 +59,9 @@ model.sample()
 
 ## Example
 HSSM is licensed under [Copyright 2023, Brown University, Providence, RI](LICENSE)
+
+## Support
+For questions, bug reports, or other unexpected issues, please open an issue on the GitHub repository.
+
+## Contribution
+If you want to contribute to this project, please familiarize yourself with our [contribution guidelines](CONTRIBUTING.md).
