@@ -65,6 +65,11 @@ def apply_param_bounds_to_loglik(
     }
 
     for param_name, param in dist_params_dict.items():
+        # It cannot be assumed that each parameter will have bounds.
+        # Skip the paramters that do not have bounds.
+        if param_name not in bounds:
+            continue
+
         lower_bound, upper_bound = bounds[param_name]
 
         out_of_bounds_mask = pt.bitwise_or(

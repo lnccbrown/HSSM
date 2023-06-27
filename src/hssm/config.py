@@ -1,7 +1,13 @@
 """Provide default configurations for models in the HSSM class."""
 from typing import Any, Literal
 
-from .likelihoods.analytical import DDM, DDM_SDV, ddm_bounds, ddm_params, ddm_sdv_params
+from .likelihoods.analytical import (
+    ddm_bounds,
+    ddm_params,
+    ddm_sdv_params,
+    logp_ddm_sdv,
+    logp_ddm,
+)
 
 SupportedModels = Literal[
     "ddm",
@@ -30,7 +36,7 @@ Config = dict[ConfigParams, Any]
 default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] = {
     "ddm": {
         "analytical": {
-            "loglik": DDM,
+            "loglik": logp_ddm,
             "bounds": ddm_bounds,
             "default_priors": {
                 "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
@@ -51,7 +57,7 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
     },
     "ddm_sdv": {
         "analytical": {
-            "loglik": DDM_SDV,
+            "loglik": logp_ddm_sdv,
             "bounds": ddm_bounds,
             "default_priors": {
                 "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
@@ -61,7 +67,7 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
             },
         },
         "approx_differentiable": {
-            "loglik": "ddm_sv.onnx",
+            "loglik": "ddm_sdv.onnx",
             "backend": "jax",
             "bounds": {
                 "v": (-3.0, 3.0),
