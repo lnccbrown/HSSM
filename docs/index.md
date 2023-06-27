@@ -75,5 +75,5 @@ model.sample()
 ```
 
 ### Contributing
-For those considering to contribute to this project, it is recommended to familiarize themselves with our [contribution guidelines](CONTRIBUTING.md).
+If you want to contribute to this project, please familiarize yourself with our [contribution guidelines](CONTRIBUTING.md).
 
