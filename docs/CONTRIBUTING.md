@@ -61,11 +61,8 @@ git checkout -b my-feature
 
 > Warning: Always create a new feature branch before making any changes. Make your changes in the feature branch. It’s good practice to never routinely work on the main branch of any repository.
 
-5. The project uses `poetry` for dependency management. If you haven't installed it, you can do so by running `pip install poetry`. After you've installed `poetry`, you can set up your project by running:
+5. The project uses `poetry` for dependency management. Poetry needs to be installed in its own environment. Visit the official poetry documentation at https://python-poetry.org/docs/. Follow the installation instructions provided on the documentation page to install poetry on your system. This typically involves running a specific command based on your operating system.
 
-```
-poetry install
-```
 6. Develop the feature on your feature branch. Add your changes using git commands, git add and then git commit, like:
 
 ```
