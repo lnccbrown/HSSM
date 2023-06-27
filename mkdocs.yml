@@ -22,3 +22,13 @@ plugins:
                   docstring_style: numpy
 theme:
   name: material
+  palette:
+    primary: 'white'
+    accent: 'blue'
+  mode: 'dark'  # 'light' or 'dark'
+  logo: 'images/HSSM2_Logo_Transparent600.png'
+
+
+extra_css:
+  - 'styles/extra.css'
+

@@ -1,4 +1,10 @@
-# HSSM - Hierarchical Sequential Sampling Modeling
+<table style="border: none;">
+  <tr>
+    <td style="border: none;"><img src="images/HSSM2_Logo_Transparent1200.png" width="250"></td>
+    <td style="border: none;"><h1>HSSM - Hierarchical Sequential Sampling Modeling</h1></td>
+  </tr>
+</table>
+
 
 ## Introduction
 
