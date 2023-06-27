@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from hssm import wfpt
+from hssm import distribution_utils
 
 
-def test_make_model_rv():
+def test_make_ssm_rv():
     params = ["v", "a", "z", "t"]
     seed = 42
 
@@ -12,7 +12,7 @@ def test_make_model_rv():
     # v, a, z, t
     true_values = [0.5, 0.5, 0.5, 0.3]
 
-    wfpt_rv = wfpt.make_model_rv("ddm", params)
+    wfpt_rv = distribution_utils.make_ssm_rv("ddm", params)
     rng = np.random.default_rng()
 
     random_sample = wfpt_rv.rng_fn(rng, *true_values, size=500)

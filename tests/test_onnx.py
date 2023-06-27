@@ -7,9 +7,7 @@ import pytensor
 import pytensor.tensor as pt
 import pytest
 
-from hssm.wfpt import lan
-from hssm.wfpt.lan.onnx2pt import pt_interpret_onnx
-from hssm.wfpt.lan.onnx2xla import interpret_onnx
+from hssm.distribution_utils.onnx import *
 
 pytensor.config.floatX = "float32"
 
@@ -54,7 +52,7 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     """
     model = onnx.load(fixture_path / "test.onnx")
 
-    jax_logp, _, jax_logp_nojit = lan.make_jax_logp_funcs_from_onnx(
+    jax_logp, _, jax_logp_nojit = make_jax_logp_funcs_from_onnx(
         model, params_is_reg=[False] * 5
     )
 
@@ -80,7 +78,7 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     v = np.random.rand(10)
     input_matrix[:, 0] = v
 
-    jax_logp, _, jax_logp_nojit = lan.make_jax_logp_funcs_from_onnx(
+    jax_logp, _, jax_logp_nojit = make_jax_logp_funcs_from_onnx(
         model, params_is_reg=[True] + [False] * 4
     )
 
@@ -101,10 +99,10 @@ def test_make_jax_logp_ops(fixture_path):
     """
     model = onnx.load(fixture_path / "test.onnx")
 
-    jax_logp_op = lan.make_jax_logp_ops(
-        *lan.make_jax_logp_funcs_from_onnx(model, params_is_reg=[False] * 5)
+    jax_logp_op = make_jax_logp_ops(
+        *make_jax_logp_funcs_from_onnx(model, params_is_reg=[False] * 5)
     )
-    pytensor_logp = lan.make_pytensor_logp(model)
+    pytensor_logp = make_pytensor_logp(model)
 
     data = np.random.rand(10, 2)
     params_all_scalars = np.random.rand(5).astype(np.float32)
@@ -130,10 +128,10 @@ def test_make_jax_logp_ops(fixture_path):
         decimal=4,
     )
 
-    jax_logp_op = lan.make_jax_logp_ops(
-        *lan.make_jax_logp_funcs_from_onnx(model, params_is_reg=[True] + [False] * 4)
+    jax_logp_op = make_jax_logp_ops(
+        *make_jax_logp_funcs_from_onnx(model, params_is_reg=[True] + [False] * 4)
     )
-    pytensor_logp = lan.make_pytensor_logp(model)
+    pytensor_logp = make_pytensor_logp(model)
 
     v = np.random.rand(10)
 

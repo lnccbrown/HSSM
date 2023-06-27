@@ -7,12 +7,15 @@ https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b.
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Type
 
 import numpy as np
 import pymc as pm
+
 import pytensor.tensor as pt
 from pymc.distributions.dist_math import check_parameters
+
+from ..distribution_utils.dist import make_distribution
 
 OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
 
@@ -29,6 +32,7 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         A 1D at array of k_small.
     """
     ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
@@ -50,6 +54,7 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         A 1D at array of k_large.
     """
     kl = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
@@ -71,6 +76,7 @@ def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         A 1D boolean at array of which implementation should be used.
     """
     ks = k_small(rt, err)
@@ -87,6 +93,7 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
 
     Returns
     -------
+    Callable[[np.ndarray, float], np.ndarray]
         A decision function with saved state to avoid repeated computation.
     """
     internal_rt: np.ndarray | None = None
@@ -111,6 +118,7 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
 
         Returns
         -------
+        np.ndarray
             A 1D boolean at array of which implementation should be used.
         """
         nonlocal internal_rt
@@ -159,6 +167,7 @@ def get_ks(k_terms: int, fast: bool) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         An array of ks.
     """
     if fast:
@@ -183,6 +192,7 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         The approximated function f(tt|0, 1, w).
     """
     # Slightly changed the original code to mimic the paper and
@@ -217,6 +227,7 @@ def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         The approximated function f(tt|0, 1, w).
     """
     k = get_ks(k_terms, fast=False)
@@ -251,6 +262,7 @@ def ftt01w(
 
     Returns
     -------
+    np.ndarray
         The Approximated density of f(tt|0,1,w).
     """
     lambda_rt = decision(rt, err)
@@ -264,7 +276,7 @@ def ftt01w(
     return p * (p > 0)  # Making sure that p > 0
 
 
-def log_pdf_sv(
+def logp_ddm_sdv(
     data: np.ndarray,
     v: float,
     sv: float,
@@ -304,6 +316,7 @@ def log_pdf_sv(
 
     Returns
     -------
+    np.ndarray
         The analytical likelihoods for DDM.
     """
     data = pt.reshape(data, (-1, 2))
@@ -343,7 +356,7 @@ def log_pdf_sv(
     return checked_logp
 
 
-def log_pdf(
+def logp_ddm(
     data: np.ndarray,
     v: float,
     a: float,
@@ -378,6 +391,32 @@ def log_pdf(
 
     Returns
     -------
+    np.ndarray
         The log likelihood of the drift diffusion model give sv=0.
     """
-    return log_pdf_sv(data, v, 0, a, z, t, err, k_terms, epsilon)
+    return logp_ddm_sdv(data, v, 0, a, z, t, err, k_terms, epsilon)
+
+
+ddm_bounds = {"z": (0.0, 1.0)}
+ddm_sdv_bounds = ddm_bounds | {
+    "v": (-3.0, 3.0),
+    "a": (0.3, 2.5),
+    "t": (0.0, 2.0),
+}
+
+ddm_params = ["v", "a", "z", "t"]
+ddm_sdv_params = ddm_params + ["sv"]
+
+DDM: Type[pm.Distribution] = make_distribution(
+    "ddm",
+    logp_ddm,
+    list_params=["v", "a", "z", "t"],
+    bounds=ddm_bounds,
+)
+
+DDM_SDV: Type[pm.Distribution] = make_distribution(
+    "ddm_sdv",
+    logp_ddm_sdv,
+    list_params=ddm_sdv_params,
+    bounds=ddm_sdv_bounds,
+)

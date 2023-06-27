@@ -14,26 +14,32 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, Callable, Iterable, Literal
 
 import bambi as bmb
-import numpy as np
 import pymc as pm
 from numpy.typing import ArrayLike
 from pytensor.graph.op import Op
 
-from hssm import wfpt
+from hssm.distribution_utils import (
+    make_blackbox_op,
+    make_distribution,
+    make_distribution_from_onnx,
+    make_family,
+)
 from hssm.utils import (
     HSSMModelGraph,
-    Param,
-    _parse_bambi,
     download_hf,
     get_alias_dict,
     merge_dicts,
 )
-from hssm.wfpt.config import (
+from hssm.config import (
     Config,
     LoglikKind,
     SupportedModels,
     default_model_config,
     default_params,
+)
+from hssm.param import (
+    Param,
+    _parse_bambi,
 )
 
 if TYPE_CHECKING:
@@ -67,6 +73,7 @@ class HSSM:
         A dictionary containing the model configuration information. If None is
         provided, defaults will be used if there are any. Defaults to None.
         Fields for this `dict` are usually:
+
         - `"list_params"`: a list of parameters indicating the parameters of the model.
             The order in which the parameters are specified in this list is important.
             Values for each parameter will be passed to the likelihood function in this
@@ -79,8 +86,17 @@ class HSSM:
         - `"default_priors"`: A `dict` indicating the default priors for each parameter.
         - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
             of LAN, these bounds are training boundaries.
+        - `"rv"`: Optional. Can be a `RandomVariable` class containing the user's own
+            `rng_fn` function for sampling from the distribution that the user is
+            supplying. If not supplied, HSSM will automatically generate a
+            `RandomVariable` using the simulator identified by `model` from the
+            `ssm_simulators` package. If `model` is not supported in `ssm_simulators`,
+            a warning will be raised letting the user know that sampling from the
+            `RandomVariable` will result in errors.
+
     loglik, optional
         A likelihood function. Defaults to None. Requirements are:
+
         1. if `loglik_kind` is `"analytical"` or `"blackbox"`, a pm.Distribution, a
            pytensor Op, or a Python callable can be used. Signatures are:
             - `pm.Distribution`: needs to have parameters specified exactly as listed in
@@ -94,9 +110,11 @@ class HSSM:
             that `onnx` file from Hugging Face hub.
         3. It can also be `None`, in which case a default likelihood function will be
             used
+
     loglik_kind, optional
         A string that specifies the kind of log-likelihood function specified with
         `loglik`. Defaults to `None`. Can be one of the following:
+
         - `"analytical"`: an analytical (approximation) likelihood function. It is
             differentiable and can be used with samplers that requires differentiation.
         - `"approx_differentiable"`: a likelihood approximation network (LAN) likelihood
@@ -108,6 +126,7 @@ class HSSM:
             will be `analytical`. For other models supported, it will be
             `approx_differentiable`. If the model is a custom one, a ValueError
             will be raised.
+
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -138,17 +157,6 @@ class HSSM:
         A string or a dictionary representing the link functions for all parameters.
     params
         A list of Param objects representing model parameters.
-
-    Methods
-    -------
-    sample
-        A method to sample posterior distributions.
-    sample_posterior_predictive
-        A method to produce posterior predictive samples.
-    set_alias
-        Sets the alias for a paramter.
-    graph
-        Plot the model with PyMC's built-in graph function.
     """
 
     def __init__(
@@ -292,18 +300,22 @@ class HSSM:
         # If the user has provided an Op
         # Wrap it around with a distribution
         elif isinstance(self.loglik, Op):
-            self.model_distribution = wfpt.make_distribution(
-                self.model_name, loglik=self.loglik, list_params=self.list_params
+            self.model_distribution = make_distribution(
+                self.model_config.get("rv", self.model_name),
+                loglik=self.loglik,
+                list_params=self.list_params,
             )  # type: ignore
         # If the user has provided a callable (an arbitrary likelihood function)
         # If `loglik_kind` is `blackbox`, wrap it in an op and then a distribution
-        # Otherwise, we assume that this funciton is differentiable with `pytensor`
+        # Otherwise, we assume that this function is differentiable with `pytensor`
         # and wrap it directly in a distribution.
         elif callable(self.loglik):
             if self.loglik_kind == "blackbox":
-                self.loglik = wfpt.make_blackbox_ops(self.loglik)
-            self.model_distribution = wfpt.make_distribution(
-                self.model_name, loglik=self.loglik, list_params=self.list_params
+                self.loglik = make_blackbox_op(self.loglik)
+            self.model_distribution = make_distribution(
+                self.model_config.get("rv", self.model_name),
+                loglik=self.loglik,
+                list_params=self.list_params,
             )  # type: ignore
         # All other situations
         else:
@@ -317,9 +329,9 @@ class HSSM:
                 if not Path(self.loglik).exists():
                     self.loglik = download_hf(self.loglik)
 
-            self.model_distribution = wfpt.make_lan_distribution(
-                self.model_name,
-                model=self.loglik,
+            self.model_distribution = make_distribution_from_onnx(
+                rv=self.model_config.get("rv", self.model_name),
+                onnx_model=self.loglik,
                 list_params=self.list_params,
                 backend=self.model_config.get("backend", "jax"),
                 params_is_reg=params_is_reg,
@@ -327,15 +339,11 @@ class HSSM:
 
         assert self.model_distribution is not None
 
-        self.likelihood = bmb.Likelihood(
-            self.loglik_kind,
-            params=self.list_params,
-            parent=self._parent,
-            dist=self.model_distribution,
-        )
-
-        self.family = SSMFamily(
-            self.loglik_kind, likelihood=self.likelihood, link=self.link
+        self.family = make_family(
+            self.model_distribution,
+            self.list_params,
+            self.link,
+            self._parent,
         )
 
         self.model = bmb.Model(
@@ -363,6 +371,7 @@ class HSSM:
 
         Returns
         -------
+        list[Param], bmb.Formula, dict | None, dict | str
             A tuple of 4 items, the latter 3 are for creating the bambi model.
             - A list of the same length as self.list_params containing Param objects.
             - A bmb.formula object.
@@ -417,6 +426,7 @@ class HSSM:
 
         Returns
         -------
+        az.InferenceData | pm.Approximation
             An ArviZ `InferenceData` instance if inference_method is `"mcmc"`
             (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
             object if `"vi"`.
@@ -477,6 +487,7 @@ class HSSM:
 
         Returns
         -------
+        az.InferenceData | None
             InferenceData or None
         """
         if idata is None:
@@ -494,6 +505,7 @@ class HSSM:
 
         Returns
         -------
+        pm.Model
             The PyMC model built by bambi
         """
         return self.model.backend.model
@@ -542,6 +554,7 @@ class HSSM:
 
         Returns
         -------
+        graphviz.Graph
             The graph
 
         Note
@@ -603,20 +616,13 @@ class HSSM:
 
         Returns
         -------
+        az.InferenceData | pm.Approximation
             The trace of the model after sampling.
         """
         if not self._inference_obj:
             raise ValueError("Please sample the model first.")
 
         return self._inference_obj
-
-
-class SSMFamily(bmb.Family):
-    """Extends bmb.Family to get around the dimensionality mismatch."""
-
-    def create_extra_pps_coord(self):
-        """Create an extra dimension."""
-        return np.arange(2)
 
 
 def _model_has_default(model: SupportedModels | str, loglik_kind: LoglikKind) -> bool:
@@ -633,6 +639,7 @@ def _model_has_default(model: SupportedModels | str, loglik_kind: LoglikKind) ->
 
     Returns
     -------
+    bool
         Whether the model is supported.
     """
     if model not in default_model_config:
@@ -656,6 +663,7 @@ def _create_param(param: str | dict, model_config: dict, is_parent: bool) -> Par
 
     Returns
     -------
+    Param
         A Param object with info form param and model_config injected.
     """
     if isinstance(param, dict):

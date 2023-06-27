@@ -7,8 +7,9 @@ generation ops.
 
 from __future__ import annotations
 
+import logging
 from os import PathLike
-from typing import TYPE_CHECKING, Any, Callable, Type
+from typing import Any, Callable, Type
 
 import bambi as bmb
 import numpy as np
@@ -22,22 +23,19 @@ from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators import simulator
 from ssms.config import model_config as ssms_model_config
 
-
-from .base import OUT_OF_BOUNDS_VAL
-from .lan import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
-
-if TYPE_CHECKING:
-    from hssm.utils import BoundsSpec
+from .onnx import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
+
+OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
 
 
 def apply_param_bounds_to_loglik(
     logp: Any,
     list_params: list[str],
     *dist_params: Any,
-    bounds: dict[str, BoundsSpec],
+    bounds: dict[str, tuple[float, float]],
 ):
     """Adjust the log probability of a model based on parameter boundaries.
 
@@ -82,24 +80,35 @@ def apply_param_bounds_to_loglik(
     return logp
 
 
-def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]:
+def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
     Parameters
     ----------
+    model_name
+        The name of the model. If the `model_name` is not one of the supported
+        models in the `ssm_simulators` package, a warning will be raised, and any
+        attempt to sample from the RandomVariable will result in an error.
     list_params
-        A list of str of all parameters for this ``RandomVariable``.
+        A list of str of all parameters for this `RandomVariable`.
 
     Returns
     -------
-        A class of RandomVariable that are to be used in a ``pm.Distribution``.
+    Type[RandomVariable]
+        A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
+    if model_name not in ssms_model_config:
+        logging.warning(
+            f"You suppied a model '{model_name}', which is currently not supported in "
+            + "the ssm_simulators package. An error will be thrown when sampling from "
+            + "the random variable or when using any posterior sampling methods."
+        )
 
     # pylint: disable=W0511, R0903
     class SSMRandomVariable(RandomVariable):
         """WFPT random variable."""
 
-        name: str = "WFPT_RV"
+        name: str = "SSM_RV"
 
         # NOTE: This is wrong at the moment, but necessary
         # to get around the support checking in PyMC that would result in error
@@ -107,7 +116,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
 
         ndims_params: list[int] = [0 for _ in list_params]
         dtype: str = "floatX"
-        _print_name: tuple[str, str] = ("WFPT", "\\operatorname{WFPT}")
+        _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
         _list_params = list_params
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
@@ -134,6 +143,7 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
 
             Returns
             -------
+            np.ndarray
                 An array of `(rt, response)` genenerated from the distribution.
             """
             # First figure out what the size specified here is
@@ -206,10 +216,9 @@ def make_model_rv(model_name: str, list_params: list[str]) -> Type[RandomVariabl
 
 
 def make_distribution(
-    model_name: str,
+    rv: str | Type[RandomVariable],
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
-    rv: Type[RandomVariable] | None = None,
     bounds: dict | None = None,
 ) -> Type[pm.Distribution]:
     """Make a `pymc.Distribution`.
@@ -219,26 +228,31 @@ def make_distribution(
 
     Parameters
     ----------
+    rv
+        A RandomVariable Op (a class, not an instance) or a string indicating the model.
+        If a string, a RandomVariable class will be created automatically with its
+        `rng_fn` class method generated using the simulator identified with this string
+        from the `ssm_simulators` package. If the string is not one of the supported
+        models in the `ssm_simulators` package, a warning will be raised, and any
+        attempt to sample from the RandomVariable will result in an error.
     loglik
         A loglikelihood function. It can be any Callable in Python.
     list_params
         A list of parameters that the log-likelihood accepts. The order of the
         parameters in the list will determine the order in which the parameters
         are passed to the log-likelihood function.
-    rv
-        A RandomVariable Op (a class, not an instance). If None, a default will be
-        used.
-    bounds
+    bounds : optional
         A dictionary with parameters as keys (a string) and its boundaries as values.
         Example: {"parameter": (lower_boundary, upper_boundary)}.
 
     Returns
     -------
+    Type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
     """
-    random_variable = make_model_rv(model_name, list_params) if not rv else rv
+    random_variable = make_ssm_rv(rv, list_params) if isinstance(rv, str) else rv
 
-    class WFPTDistribution(pm.Distribution):
+    class SSMDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""
 
         # This is just a placeholder because pm.Distribution requires an rv_op
@@ -266,16 +280,15 @@ def make_distribution(
                 logp, list_params, *dist_params, bounds=bounds
             )
 
-    return WFPTDistribution
+    return SSMDistribution
 
 
-def make_lan_distribution(
-    model_name: str,
+def make_distribution_from_onnx(
+    rv: str | Type[RandomVariable],
     list_params: list[str],
-    model: str | PathLike | onnx.ModelProto,
+    onnx_model: str | PathLike | onnx.ModelProto,
     backend: str = "pytensor",
     bounds: dict | None = None,
-    rv: Type[RandomVariable] | None = None,
     params_is_reg: list[bool] | None = None,
 ) -> Type[pm.Distribution]:
     """Make a PyMC distribution from an ONNX model.
@@ -285,12 +298,17 @@ def make_lan_distribution(
 
     Parameters
     ----------
-    model_name
-        The kind of the model.
+    rv
+        A RandomVariable Op (a class, not an instance) or a string indicating the model.
+        If a string, a RandomVariable class will be created automatically with its
+        `rng_fn` class method generated using the simulator identified with this string
+        from the `ssm_simulators` package. If the string is not one of the supported
+        models in the `ssm_simulators` package, a warning will be raised, and any
+        attempt to sample from the RandomVariable will result in an error.
     list_params
         A list of the names of the parameters following the order of how they are fed
-        to the LAN.
-    model
+        to the network.
+    onnx_model
         The path of the ONNX model, or one already loaded in memory.
     backend
         Whether to use "pytensor" or "jax" as the backend of the log-likelihood
@@ -298,26 +316,24 @@ def make_lan_distribution(
     bounds
         A dictionary with parameters as keys (a string) and its boundaries
         as values.Example: {"parameter": (lower_boundary, upper_boundary)}.
-    rv
-        The RandomVariable Op used for posterior sampling.
     params_is_reg
         A list of booleans indicating whether each parameter in the
         corresponding position in `list_params` is a regression.
 
     Returns
     -------
+    Type[pm.Distribution]
         A PyMC Distribution class that uses the ONNX model as its log-likelihood
         function.
     """
-    if isinstance(model, (str, PathLike)):
-        model = onnx.load(str(model))
+    if isinstance(onnx_model, (str, PathLike)):
+        onnx_model = onnx.load(str(onnx_model))
     if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp(model)
+        lan_logp_pt = make_pytensor_logp(onnx_model)
         return make_distribution(
-            model_name,
+            rv,
             lan_logp_pt,
             list_params,
-            rv,
             bounds=bounds,
         )
     if backend == "jax":
@@ -327,15 +343,14 @@ def make_lan_distribution(
                 + " each paramter is a regression."
             )
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
-            model,
+            onnx_model,
             params_is_reg,
         )
         lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
         return make_distribution(
-            model_name,
+            rv,
             lan_logp_jax,
             list_params,
-            rv,
             bounds=bounds,
         )
 
@@ -347,8 +362,8 @@ def make_family(
     list_params: list[str],
     link: str | dict[str, bmb.families.Link],
     parent: str = "v",
-    likelihood_name: str = "WFPT Likelihood",
-    family_name="WFPT Family",
+    likelihood_name: str = "SSM Likelihood",
+    family_name="SSM Family",
 ) -> bmb.Family:
     """Build a family in bambi.
 
@@ -363,9 +378,9 @@ def make_family(
     parent
         The parent parameter of the likelihood function. Defaults to v.
     likelihood_name
-        the name of the likelihood function.
+        the name of the likelihood function. Defaults to "SSM Likelihood".
     family_name
-        the name of the family.
+        the name of the family. Defaults to "SSM Family".
 
     Returns
     -------
@@ -375,12 +390,20 @@ def make_family(
         likelihood_name, parent=parent, params=list_params, dist=dist
     )
 
-    family = bmb.Family(family_name, likelihood=likelihood, link=link)
+    family = SSMFamily(family_name, likelihood=likelihood, link=link)
 
     return family
 
 
-def make_blackbox_ops(logp: Callable) -> Op:
+class SSMFamily(bmb.Family):
+    """Extends bmb.Family to get around the dimensionality mismatch."""
+
+    def create_extra_pps_coord(self):
+        """Create an extra dimension."""
+        return np.arange(2)
+
+
+def make_blackbox_op(logp: Callable) -> Op:
     """Wrap an arbitrary function in a pytensor Op.
 
     Parameters
@@ -440,3 +463,42 @@ def make_blackbox_ops(logp: Callable) -> Op:
 
     blackbox_op = BlackBoxOp()
     return blackbox_op
+
+
+def make_distribution_from_blackbox(
+    rv: str | Type[RandomVariable],
+    loglik: Callable,
+    list_params: list[str],
+    bounds: dict | None = None,
+) -> Type[pm.Distribution]:
+    """Make a `pymc.Distribution`.
+
+    Constructs a `pymc.Distribution` from a blackbox likelihood function
+
+    Parameters
+    ----------
+    rv
+        A RandomVariable Op (a class, not an instance) or a string indicating the model.
+        If a string, a RandomVariable class will be created automatically with its
+        `rng_fn` class method generated using the simulator identified with this string
+        from the `ssm_simulators` package. If the string is not one of the supported
+        models in the `ssm_simulators` package, a warning will be raised, and any
+        attempt to sample from the RandomVariable will result in an error.
+    loglik
+        A loglikelihood function. It can be any Callable in Python.
+    list_params
+        A list of parameters that the log-likelihood accepts. The order of the
+        parameters in the list will determine the order in which the parameters
+        are passed to the log-likelihood function.
+    bounds : optional
+        A dictionary with parameters as keys (a string) and its boundaries as values.
+        Example: {"parameter": (lower_boundary, upper_boundary)}.
+
+    Returns
+    -------
+    Type[pm.Distribution]
+        A pymc.Distribution that uses the log-likelihood function.
+    """
+    blackbox_op = make_blackbox_op(loglik)
+
+    return make_distribution(rv, blackbox_op, list_params, bounds)

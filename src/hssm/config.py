@@ -1,11 +1,7 @@
 """Provide default configurations for models in the HSSM class."""
-from typing import Any, Literal, Type
+from typing import Any, Literal
 
-import pymc as pm
-
-from .base import log_pdf_sv, log_pdf
-from .wfpt import make_distribution
-
+from .likelihoods.analytical import DDM, DDM_SDV, ddm_bounds, ddm_params, ddm_sdv_params
 
 SupportedModels = Literal[
     "ddm",
@@ -26,6 +22,7 @@ ConfigParams = Literal[
     "default_priors",
     "backend",
     "bounds",
+    "rv",
 ]
 
 Config = dict[ConfigParams, Any]
@@ -33,10 +30,8 @@ Config = dict[ConfigParams, Any]
 default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] = {
     "ddm": {
         "analytical": {
-            "loglik": log_pdf,
-            "bounds": {
-                "z": (0.0, 1.0),
-            },
+            "loglik": DDM,
+            "bounds": ddm_bounds,
             "default_priors": {
                 "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
                 "a": {"name": "HalfNormal", "sigma": 2.0},
@@ -49,17 +44,15 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
             "bounds": {
                 "v": (-3.0, 3.0),
                 "a": (0.3, 2.5),
-                "z": (0.1, 0.9),
+                "z": (0.0, 1.0),
                 "t": (0.0, 2.0),
             },
         },
     },
     "ddm_sdv": {
         "analytical": {
-            "loglik": log_pdf_sv,
-            "bounds": {
-                "z": (0.0, 1.0),
-            },
+            "loglik": DDM_SDV,
+            "bounds": ddm_bounds,
             "default_priors": {
                 "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
                 "sv": {"name": "HalfNormal", "sigma": 2.0},
@@ -164,8 +157,8 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
 }
 
 default_params: dict[SupportedModels, list[str]] = {
-    "ddm": ["v", "a", "z", "t"],
-    "ddm_sdv": ["v", "sv", "a", "z", "t"],
+    "ddm": ddm_params,
+    "ddm_sdv": ddm_sdv_params,
     "angle": ["v", "a", "z", "t", "theta"],
     "levy": ["v", "a", "z", "alpha", "t"],
     "ornstein": ["v", "a", "z", "g", "t"],
@@ -173,17 +166,3 @@ default_params: dict[SupportedModels, list[str]] = {
     "race_no_bias_angle_4": ["v0", "v1", "v2", "v3", "a", "z", "ndt", "theta"],
     "ddm_seq2_no_bias": ["vh", "vl1", "vl2", "a", "t"],
 }
-
-WFPT: Type[pm.Distribution] = make_distribution(
-    "ddm",
-    log_pdf,
-    list_params=default_params["ddm"],
-    bounds=default_model_config["ddm"]["analytical"]["bounds"],
-)
-
-WFPT_SDV: Type[pm.Distribution] = make_distribution(
-    "ddm_sdv",
-    log_pdf_sv,
-    list_params=default_params["ddm_sdv"],
-    bounds=default_model_config["ddm_sdv"]["analytical"]["bounds"],
-)

@@ -39,7 +39,7 @@ isort = "^5.10.1"
 pre-commit = "^2.20.0"
 jupyterlab = "^4.0.2"
 ipykernel = "^6.16.0"
-hddm-wfpt = {git = "https://github.com/brown-ccv/hddm-wfpt.git"}
+hddm-wfpt = { git = "https://github.com/brown-ccv/hddm-wfpt.git" }
 ipywidgets = "^8.0.3"
 graphviz = "^0.20.1"
 ruff = "^0.0.272"
@@ -157,6 +157,8 @@ ignore = [
     "PLR2004",
     # Consider `elif` instead of `else` then `if` to remove indentation level
     "PLR5501",
+    # Allow importing from parent modules
+    "TID252",
 ]
 
 exclude = [".github", "docs", "notebook", "tests"]

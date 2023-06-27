@@ -5,10 +5,10 @@ import pandas as pd
 import pytest
 import ssms
 
-from hssm import hssm
+from hssm import HSSM
 from hssm.hssm import _model_has_default
 from hssm.utils import download_hf
-from hssm.wfpt import WFPT
+from hssm.likelihoods import DDM
 
 
 @pytest.fixture
@@ -129,9 +129,9 @@ def example_model_config():
 def test_transform_params_general(data, include, should_raise_exception):
     if should_raise_exception:
         with pytest.raises(Exception):
-            hssm.HSSM(data=data, include=include)
+            HSSM(data=data, include=include)
     else:
-        model = hssm.HSSM(data=data, include=include)
+        model = HSSM(data=data, include=include)
         # Check model properties using a loop
         param_names = ["v", "a", "z", "t"]
         model_param_names = sorted([param.name for param in model.params])
@@ -149,51 +149,49 @@ def test_custom_model(data, example_model_config):
     with pytest.raises(
         ValueError, match="When using a custom model, please provide a `loglik_kind.`"
     ):
-        model = hssm.HSSM(data=data, model="custom")
+        model = HSSM(data=data, model="custom")
 
     with pytest.raises(ValueError, match="Please provide a valid `loglik`."):
-        model = hssm.HSSM(data=data, model="custom", loglik_kind="analytical")
+        model = HSSM(data=data, model="custom", loglik_kind="analytical")
 
     with pytest.raises(
         ValueError, match="For custom models, please provide a valid `model_config`."
     ):
-        model = hssm.HSSM(
-            data=data, model="custom", loglik=WFPT, loglik_kind="analytical"
-        )
+        model = HSSM(data=data, model="custom", loglik=DDM, loglik_kind="analytical")
 
     with pytest.raises(
         ValueError,
         match="For custom models, please provide `list_params` in `model_config`.",
     ):
-        model = hssm.HSSM(
+        model = HSSM(
             data=data,
             model="custom",
-            loglik=WFPT,
+            loglik=DDM,
             loglik_kind="analytical",
             model_config={},
         )
 
-    model = hssm.HSSM(
+    model = HSSM(
         data=data,
         model="custom",
         model_config=example_model_config,
-        loglik=WFPT,
+        loglik=DDM,
         loglik_kind="analytical",
     )
 
     assert model.model_name == "custom"
-    assert model.loglik == WFPT
+    assert model.loglik == DDM
     assert model.loglik_kind == "analytical"
     assert model.list_params == example_model_config["list_params"]
 
 
 def test_model_definition_outside_include(data):
-    model_with_one_param_fixed = hssm.HSSM(data, a=0.5)
+    model_with_one_param_fixed = HSSM(data, a=0.5)
 
     assert "a" in model_with_one_param_fixed.priors
     assert model_with_one_param_fixed.priors["a"] == 0.5
 
-    model_with_one_param = hssm.HSSM(
+    model_with_one_param = HSSM(
         data, a={"prior": {"name": "Normal", "mu": 0.5, "sigma": 0.1}}
     )
 
@@ -203,13 +201,11 @@ def test_model_definition_outside_include(data):
     with pytest.raises(
         ValueError, match='Parameter "a" is already specified in `include`'
     ):
-        hssm.HSSM(data, include=[{"name": "a", "prior": 0.5}], a=0.5)
+        HSSM(data, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
 
 def test_model_with_approx_differentiable_likelihood_type(data_angle):
     loglik_kind = "approx_differentiable"
     loglik = "angle.onnx"
-    model = hssm.HSSM(
-        data=data_angle, model="angle", loglik_kind=loglik_kind, loglik=loglik
-    )
+    model = HSSM(data=data_angle, model="angle", loglik_kind=loglik_kind, loglik=loglik)
     assert model.loglik == download_hf(loglik)
