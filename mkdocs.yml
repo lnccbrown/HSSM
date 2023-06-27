@@ -8,6 +8,7 @@ nav:
     - Pymc Distribution Documentation: wfpt.md
     - DDM Code Documentation: base.md
     - Using Models from Hugging Face: notebooks/hugging_face_onnx_models.ipynb
+    - Contributing Guidelines: CONTRIBUTING.md
 
 plugins:
   - search
@@ -21,3 +22,13 @@ plugins:
                   docstring_style: numpy
 theme:
   name: material
+  palette:
+    primary: 'white'
+    accent: 'blue'
+  mode: 'dark'  # 'light' or 'dark'
+  logo: 'images/HSSM2_Logo_Transparent600.png'
+
+
+extra_css:
+  - 'styles/extra.css'
+

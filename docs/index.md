@@ -1,4 +1,10 @@
-# HSSM - Hierarchical Sequential Sampling Modeling
+<table style="border: none;">
+  <tr>
+    <td style="border: none;"><img src="images/HSSM2_Logo_Transparent1200.png" width="250"></td>
+    <td style="border: none;"><h1>HSSM - Hierarchical Sequential Sampling Modeling</h1></td>
+  </tr>
+</table>
+
 
 ## Introduction
 
@@ -6,19 +12,15 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 **Authors**: Alexander Fengler, Aisulu Omar, Paul Xu, Krishn Bera, Michael J. Frank
 
-**Contacts**: alexander_fengler@brown.edu, krishn_bera@brown.edu, michael_frank@brown.edu
-
-**Web site**: 
+**Contacts**: alexander_fengler@brown.edu
 
 **Github**: https://github.com/lnccbrown/HSSM
 
-**Mailing list**:
-
 **Copyright**: This document has been placed in the public domain.
 
-**License**:
+**License**: HSSM is licensed under [Copyright 2023, Brown University, Providence, RI](../LICENSE)
 
-**Version**: 0.0.1
+**Version**: 0.1.0
 
 ## Features
 
@@ -73,10 +75,5 @@ model.sample()
 ```
 
 ### Contributing
-TO-DO: Contribution guidelines
+If you want to contribute to this project, please familiarize yourself with our [contribution guidelines](CONTRIBUTING.md).
 
-### License
-TO-DO: Licensing information
-
-### Contact Information
-TO-DO: Contact information
