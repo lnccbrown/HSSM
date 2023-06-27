@@ -4,13 +4,13 @@ We invite contributions to the HSSM project from interested individuals or group
 
 There are three main ways you can contribute to [HSSM](https://github.com/lnccbrown/HSSM) (listed in decreasing order of scope):
 
-1. Rectifying issues with the existing codebase. These can range from minor software bugs to more significant design problems. Use the "Bug" label. 
-2. Expanding the existing codebase with new features or improvements to existing ones. Use the "Feature Request" label. 
-3. Contributing to or improving the project's documentation and examples (located in `hssm/examples`). Use the "Documentation" label. 
+1. Expanding the existing codebase with new features or improvements to existing ones. Use the "Feature Request" label. 
+2. Contributing to or improving the project's documentation and examples (located in `hssm/examples`). Use the "Documentation" label.
+3. Rectifying issues with the existing codebase. These can range from minor software bugs to more significant design problems. Use the "Bug" label. 
 
 ## Opening Issues:
 
-We appreciate being informed about problems with the existing HSSM code. We prefer that issues be filed on the [Github Issue Tracker](https://github.com/lnccbrown/HSSM/issues) rather than via social media or direct emails to the developers.
+If you find a bug or encounter any type of problem while using HSSM, please let us know by filing an issue on the [Github Issue Tracker](https://github.com/lnccbrown/HSSM/issues) rather than via social media or direct emails to the developers.
 
 Please make sure your issue isn't already being addressed by other issues or pull requests. You can use the GitHub search tool to search for keywords in the project issue tracker. Please use appropriate labels for an issue.
 
@@ -59,7 +59,7 @@ git checkout -b my-feature
 ```
 
 
-> warning: Always create a new feature branch before making any changes. Make your changes in the feature branch. It’s good practice to never routinely work on the main branch of any repository.
+> Warning: Always create a new feature branch before making any changes. Make your changes in the feature branch. It’s good practice to never routinely work on the main branch of any repository.
 
 5. The project uses `poetry` for dependency management. If you haven't installed it, you can do so by running `pip install poetry`. After you've installed `poetry`, you can set up your project by running:
 

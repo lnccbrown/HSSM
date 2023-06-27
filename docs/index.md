@@ -14,7 +14,7 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 **License**:
 
-**Version**: 0.0.9
+**Version**: 0.1.0
 
 ## Features
 
@@ -69,8 +69,8 @@ model.sample()
 ```
 
 ### Contributing
-If you're interested in contributing to this project, please see our [contribution guidelines](CONTRIBUTING.md).
+For those considering to contribute to this project, it is recommended to familiarize themselves with our [contribution guidelines](CONTRIBUTING.md).
 
 ### License
-TO-DO: Licensing information
+HSSM is licensed under [Copyright 20xx, Brown University, Providence, RI](../LICENSE)
 
