@@ -111,6 +111,7 @@ class Param:
 
         Returns
         -------
+        bool
             A boolean that indicates if a regression is specified.
         """
         return self.formula is not None
@@ -121,6 +122,7 @@ class Param:
 
         Returns
         -------
+        bool
             A boolean that indicates if the parameter is a parent or not.
         """
         return self._parent
@@ -133,6 +135,7 @@ class Param:
 
         Returns
         -------
+        tuple
             A 3-tuple of formula, priors, and link functions that can be used to
             construct the Bambi model.
         """
@@ -170,6 +173,7 @@ class Param:
 
         Returns
         -------
+        str
             A string whose construction depends on whether the specification contains a
             regression or not.
         """
@@ -202,6 +206,7 @@ class Param:
 
         Returns
         -------
+        str
             A string whose construction depends on whether the specification contains a
             regression or not.
         """
@@ -219,6 +224,7 @@ def _make_prior_dict(prior: dict[str, ParamSpec]) -> dict[str, float | bmb.Prior
 
     Returns
     -------
+    dict[str, float | bmb.Prior]
         A dictionary where each key is the name of a parameter in a regression and each
         value is either a float or a bmb.Prior object.
     """
@@ -244,6 +250,7 @@ def _make_priors_recursive(prior: dict[str, Any]) -> bmb.Prior:
 
     Returns
     -------
+    bmb.Prior
         A bmb.Prior object with fields that can be converted to bmb.Prior objects also
         converted.
     """
@@ -266,6 +273,7 @@ def _parse_bambi(
 
     Returns
     -------
+    tuple
         A tuple containing:
             1. A bmb.Formula object.
             2. A dictionary of priors, if any is specified.
@@ -346,6 +354,7 @@ def make_bounded_prior(
 
     Returns
     -------
+    float | bmb.Prior
         A float if `prior` is a float, otherwise a bmb.Prior object.
     """
     if bounds is None:
@@ -396,6 +405,7 @@ def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Cal
 
     Returns
     -------
+    Callable
         A distribution (TensorVariable) created with pm.Truncated().
     """
     dist_name = kwargs["name"]

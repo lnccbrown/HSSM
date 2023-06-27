@@ -157,17 +157,6 @@ class HSSM:
         A string or a dictionary representing the link functions for all parameters.
     params
         A list of Param objects representing model parameters.
-
-    Methods
-    -------
-    sample
-        A method to sample posterior distributions.
-    sample_posterior_predictive
-        A method to produce posterior predictive samples.
-    set_alias
-        Sets the alias for a paramter.
-    graph
-        Plot the model with PyMC's built-in graph function.
     """
 
     def __init__(
@@ -382,6 +371,7 @@ class HSSM:
 
         Returns
         -------
+        list[Param], bmb.Formula, dict | None, dict | str
             A tuple of 4 items, the latter 3 are for creating the bambi model.
             - A list of the same length as self.list_params containing Param objects.
             - A bmb.formula object.
@@ -436,6 +426,7 @@ class HSSM:
 
         Returns
         -------
+        az.InferenceData | pm.Approximation
             An ArviZ `InferenceData` instance if inference_method is `"mcmc"`
             (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
             object if `"vi"`.
@@ -496,6 +487,7 @@ class HSSM:
 
         Returns
         -------
+        az.InferenceData | None
             InferenceData or None
         """
         if idata is None:
@@ -513,6 +505,7 @@ class HSSM:
 
         Returns
         -------
+        pm.Model
             The PyMC model built by bambi
         """
         return self.model.backend.model
@@ -561,6 +554,7 @@ class HSSM:
 
         Returns
         -------
+        graphviz.Graph
             The graph
 
         Note
@@ -622,6 +616,7 @@ class HSSM:
 
         Returns
         -------
+        az.InferenceData | pm.Approximation
             The trace of the model after sampling.
         """
         if not self._inference_obj:
@@ -644,6 +639,7 @@ def _model_has_default(model: SupportedModels | str, loglik_kind: LoglikKind) ->
 
     Returns
     -------
+    bool
         Whether the model is supported.
     """
     if model not in default_model_config:
@@ -667,6 +663,7 @@ def _create_param(param: str | dict, model_config: dict, is_parent: bool) -> Par
 
     Returns
     -------
+    Param
         A Param object with info form param and model_config injected.
     """
     if isinstance(param, dict):

@@ -32,6 +32,7 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         A 1D at array of k_small.
     """
     ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
@@ -53,6 +54,7 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         A 1D at array of k_large.
     """
     kl = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
@@ -74,6 +76,7 @@ def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         A 1D boolean at array of which implementation should be used.
     """
     ks = k_small(rt, err)
@@ -90,6 +93,7 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
 
     Returns
     -------
+    Callable[[np.ndarray, float], np.ndarray]
         A decision function with saved state to avoid repeated computation.
     """
     internal_rt: np.ndarray | None = None
@@ -114,6 +118,7 @@ def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
 
         Returns
         -------
+        np.ndarray
             A 1D boolean at array of which implementation should be used.
         """
         nonlocal internal_rt
@@ -162,6 +167,7 @@ def get_ks(k_terms: int, fast: bool) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         An array of ks.
     """
     if fast:
@@ -186,6 +192,7 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         The approximated function f(tt|0, 1, w).
     """
     # Slightly changed the original code to mimic the paper and
@@ -220,6 +227,7 @@ def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
 
     Returns
     -------
+    np.ndarray
         The approximated function f(tt|0, 1, w).
     """
     k = get_ks(k_terms, fast=False)
@@ -254,6 +262,7 @@ def ftt01w(
 
     Returns
     -------
+    np.ndarray
         The Approximated density of f(tt|0,1,w).
     """
     lambda_rt = decision(rt, err)
@@ -307,6 +316,7 @@ def logp_ddm_sdv(
 
     Returns
     -------
+    np.ndarray
         The analytical likelihoods for DDM.
     """
     data = pt.reshape(data, (-1, 2))
@@ -381,6 +391,7 @@ def logp_ddm(
 
     Returns
     -------
+    np.ndarray
         The log likelihood of the drift diffusion model give sv=0.
     """
     return logp_ddm_sdv(data, v, 0, a, z, t, err, k_terms, epsilon)
