@@ -67,7 +67,7 @@ HSSM is licensed under [Copyright 2023, Brown University, Providence, RI](LICENS
 For questions, bug reports, or other unexpected issues, please open an issue on the GitHub repository.
 
 ## Contribution
-If you want to contribute to this project, please familiarize yourself with our [contribution guidelines](CONTRIBUTING.md).
+If you want to contribute to this project, please familiarize yourself with our [contribution guidelines](docs/CONTRIBUTING.md).
 
 ## Acknowledgements
 
