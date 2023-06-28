@@ -65,11 +65,11 @@ class HSSM:
         "ddm_seq2_no_bias". If any other string is passed, the model will be considered
         custom, in which case all `model_config`, `loglik`, and `loglik_kind` have to be
         provided by the user.
-    include, optional
+    include : optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
-    model_config, optional
+    model_config : optional
         A dictionary containing the model configuration information. If None is
         provided, defaults will be used if there are any. Defaults to None.
         Fields for this `dict` are usually:
@@ -94,7 +94,7 @@ class HSSM:
             a warning will be raised letting the user know that sampling from the
             `RandomVariable` will result in errors.
 
-    loglik, optional
+    loglik : optional
         A likelihood function. Defaults to None. Requirements are:
 
         1. if `loglik_kind` is `"analytical"` or `"blackbox"`, a pm.Distribution, a
@@ -111,7 +111,7 @@ class HSSM:
         3. It can also be `None`, in which case a default likelihood function will be
             used
 
-    loglik_kind, optional
+    loglik_kind : optional
         A string that specifies the kind of log-likelihood function specified with
         `loglik`. Defaults to `None`. Can be one of the following:
 
@@ -471,17 +471,17 @@ class HSSM:
 
         Parameters
         ----------
-        idata, optional
+        idata : optional
             The `InferenceData` object returned by `HSSM.sample()`. If not provided,
             the `InferenceData` from the last time `sample()` is called will be used.
-        data, optional
+        data : optional
             An optional data frame with values for the predictors that are used to
             obtain out-of-sample predictions. If omitted, the original dataset is used.
-        inplace, optional
+        inplace : optional
             If `True` will modify idata in-place and append a `posterior_predictive`
             group to `idata`. Otherwise, it will return a copy of idata with the
             predictions added, by default True.
-        include_group_specific, optional
+        include_group_specific : optional
             If `True` will make predictions including the group specific effects.
             Otherwise, predictions are made with common effects only (i.e. group-
             specific are set to zero), by default True.
@@ -530,7 +530,7 @@ class HSSM:
 
         Parameters
         ----------
-        alias
+        aliases
             A dict specifying the parameter names being aliased and the aliases.
         """
         self.model.set_alias(aliases)

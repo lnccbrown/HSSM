@@ -2,3 +2,17 @@
     height: 200px;  /* adjust size as needed */
     width: 200px;  /* adjust size as needed */
 }
+
+#wrapper {
+    display: grid;
+    grid-template-columns: 33.334% 66.667%;
+}
+
+#main-logo {
+    text-align: center;
+}
+
+#main-title {
+    padding-top: 1.3em;
+    padding-left: 1.0em;
+}

@@ -1,34 +1,68 @@
 site_name: HSSM
 
 nav:
-    - Home: index.md
-    - Getting Started: notebooks/004_using_base_hssm_func.ipynb
-    - HSSM Class Code Documentation: hssm.md
-    - Default Configurations for HSSM Models: config.md
-    - Pymc Distribution Documentation: wfpt.md
-    - DDM Code Documentation: base.md
-    - Using Models from Hugging Face: notebooks/hugging_face_onnx_models.ipynb
-    - Contributing Guidelines: CONTRIBUTING.md
+  - Home: index.md
+  - Getting Started: notebooks/004_using_base_hssm_func.ipynb
+  - API References:
+      - hssm: api_hssm.md
+      - hssm.distribution_utils: api_distribution_utils.md
+      - hssm.likelihoods: api_likelihoods.md
+      - hssm.config: api_defaults.md
+  - Tutorials:
+      - Understanding likelihood functions in HSSM: tutorial_likelihoods.md
+      - Using HSSM low-level API directly with PyMC: notebooks/pymc.ipynb
+      - Using Models from Hugging Face: notebooks/hugging_face_onnx_models.ipynb
+  - Contributing Guidelines: CONTRIBUTING.md
 
 plugins:
   - search
-  - mknotebooks:
-      execute: True
+  - mkdocs-jupyter:
+      execute: False
   - mkdocstrings:
       default_handler: python
       handlers:
-          python:
-              options:
-                  docstring_style: numpy
+        python:
+          options:
+            docstring_style: numpy
 theme:
   name: material
+  features:
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.path
+    - content.code.copy
   palette:
-    primary: 'white'
-    accent: 'blue'
-  mode: 'dark'  # 'light' or 'dark'
-  logo: 'images/HSSM2_Logo_Transparent600.png'
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
 
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
 
 extra_css:
-  - 'styles/extra.css'
+  - "styles/extra.css"
 
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences

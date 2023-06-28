@@ -1,12 +1,7 @@
-<table style="border: none;">
-  <tr>
-    <td style="border: none;"><img src="images/HSSM2_Logo_Transparent1200.png" width="250"></td>
-    <td style="border: none;"><h1>HSSM - Hierarchical Sequential Sampling Modeling</h1></td>
-  </tr>
-</table>
-
-
-## Introduction
+<div id="wrapper">
+  <div id="main-logo"><img src="images/HSSM2_Logo_Transparent1200.png" width="250"></div>
+  <div id="main-title"><h1>Hierarchical Sequential <br />Sampling Models</h1></div>
+</div>
 
 HSSM is a Python toolbox that provides a seamless combination of state-of-the-art likelihood approximation methods with the wider ecosystem of probabilistic programming languages. It facilitates flexible hierarchical model building and inference via modern MCMC samplers. HSSM is user-friendly and provides the ability to rigorously estimate the impact of neural and other trial-by-trial covariates through parameter-wise mixed-effects models for a large variety of cognitive process models.
 
@@ -74,6 +69,5 @@ model = hssm.HSSM(
 model.sample()
 ```
 
-### Contributing
+## Contributing
 If you want to contribute to this project, please familiarize yourself with our [contribution guidelines](CONTRIBUTING.md).
-
