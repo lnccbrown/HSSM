@@ -78,10 +78,10 @@ class HSSM:
             The order in which the parameters are specified in this list is important.
             Values for each parameter will be passed to the likelihood function in this
             order.
-        - `"backend"`: Only used when `loglik_kind` is `approxi_differentiable` and
+        - `"backend"`: Only used when `loglik_kind` is `approx_differentiable` and
             an onnx file is supplied for the likelihood approximation network (LAN).
             Valid values are `"jax"` or `"pytensor"`. It determines whether the LAN in
-            ONNX should be converted to `"jax"` or `"pytensor"`. If not provideded,
+            ONNX should be converted to `"jax"` or `"pytensor"`. If not provided,
             `jax` will be used for maximum performance.
         - `"default_priors"`: A `dict` indicating the default priors for each parameter.
         - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
@@ -294,8 +294,8 @@ class HSSM:
         }
 
         ### Logic for different types of likelihoods:
-        # -`analytical`` and `blackbox`:
-        #     loglik should be a `pm.Distribution`` or a Python callable (any arbirary
+        # -`analytical` and `blackbox`:
+        #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
         #     function).
         # - `approx_differentiable`:
         #     In addition to `pm.Distribution` and any arbitrary function, it can also
@@ -531,7 +531,7 @@ class HSSM:
         Parameters
         ----------
         alias
-            A dict specifying the paramter names being aliased and the aliases.
+            A dict specifying the parameter names being aliased and the aliases.
         """
         self.model.set_alias(aliases)
         self.model.build()
