@@ -9,7 +9,7 @@ authors = [
     "Michael Frank <michael_frank@brown.edu>",
 ]
 readme = "README.md"
-license = "MIT"
+license = "Copyright 2023, Brown University, Providence, RI."
 packages = [{ include = "hssm", from = "src" }]
 repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HSSM", "HDDM", "hierarchical sequential sampling", "pymc"]
