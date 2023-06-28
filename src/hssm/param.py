@@ -416,7 +416,7 @@ def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Cal
     def TruncatedDist(name):
         dist = get_distribution(dist_name).dist(**dist_kwargs)
         return pm.Truncated(
-            name="Trucated_" + name,
+            name="Truncated_" + name,
             dist=dist,
             lower=lower_bound,
             upper=upper_bound,

@@ -284,6 +284,15 @@ class HSSM:
 
         params_is_reg = [param.is_regression for param in self.params]
 
+        # For parameters that are regression, apply bounds at the likelihood level to
+        # ensure that the samples that are out of bounds are discarded (replaced with
+        # a small negative value).
+        self.bounds = {
+            param.name: param.bounds
+            for param in self.params
+            if param.is_regression and param.bounds is not None
+        }
+
         ### Logic for different types of likelihoods:
         # -`analytical`` and `blackbox`:
         #     loglik should be a `pm.Distribution`` or a Python callable (any arbirary
@@ -304,6 +313,7 @@ class HSSM:
                 self.model_config.get("rv", self.model_name),
                 loglik=self.loglik,
                 list_params=self.list_params,
+                bounds=self.bounds,
             )  # type: ignore
         # If the user has provided a callable (an arbitrary likelihood function)
         # If `loglik_kind` is `blackbox`, wrap it in an op and then a distribution
@@ -316,6 +326,7 @@ class HSSM:
                 self.model_config.get("rv", self.model_name),
                 loglik=self.loglik,
                 list_params=self.list_params,
+                bounds=self.bounds,
             )  # type: ignore
         # All other situations
         else:
@@ -335,6 +346,7 @@ class HSSM:
                 list_params=self.list_params,
                 backend=self.model_config.get("backend", "jax"),
                 params_is_reg=params_is_reg,
+                bounds=self.bounds,
             )
 
         assert self.model_distribution is not None
@@ -439,7 +451,7 @@ class HSSM:
             )
 
         if self.loglik_kind == "blackbox" and step is None:
-            step = pm.Slice()
+            step = pm.Slice(model=self.pymc_model)
 
         self._inference_obj = self.model.fit(
             inference_method=sampler, step=step, **kwargs

@@ -65,6 +65,11 @@ def apply_param_bounds_to_loglik(
     }
 
     for param_name, param in dist_params_dict.items():
+        # It cannot be assumed that each parameter will have bounds.
+        # Skip the paramters that do not have bounds.
+        if param_name not in bounds:
+            continue
+
         lower_bound, upper_bound = bounds[param_name]
 
         out_of_bounds_mask = pt.bitwise_or(
@@ -99,7 +104,7 @@ def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]
     """
     if model_name not in ssms_model_config:
         logging.warning(
-            f"You suppied a model '{model_name}', which is currently not supported in "
+            f"You supplied a model '{model_name}', which is currently not supported in "
             + "the ssm_simulators package. An error will be thrown when sampling from "
             + "the random variable or when using any posterior sampling methods."
         )
@@ -144,10 +149,10 @@ def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]
             Returns
             -------
             np.ndarray
-                An array of `(rt, response)` genenerated from the distribution.
+                An array of `(rt, response)` generated from the distribution.
             """
             # First figure out what the size specified here is
-            # Since the number of unnamed arguments is underdetermined,
+            # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
             if "size" in kwargs:
                 size = kwargs.pop("size")
@@ -340,7 +345,7 @@ def make_distribution_from_onnx(
         if params_is_reg is None:
             raise ValueError(
                 "Please supply a list of bools to `params_is_reg` to indicate whether"
-                + " each paramter is a regression."
+                + " each parameter is a regression."
             )
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
             onnx_model,
@@ -410,7 +415,7 @@ def make_blackbox_op(logp: Callable) -> Op:
     ----------
     logp
         A python function that represents the log-likelihood function. The function
-        needs to have signature of logp(data, *dist_paramss) where `data` is a
+        needs to have signature of logp(data, *dist_params) where `data` is a
         two-column numpy array and `dist_params`represents all parameters passed to the
         function.
 
