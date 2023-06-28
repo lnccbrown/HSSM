@@ -28,9 +28,10 @@ Here is a simple example of how to use HSSM:
 ```python
 # Import the package
 import hssm
+from hssm import load_data
 
 # Load a package-supplied dataset
-cav_data = hssm.load_csv(hssm.__path__[0] + '/examples/cavanagh_theta.csv')
+cav_data = load_data('cavanagh_theta')
 
 # Define a basic hierarchical model with trial-level covariates
 model = hssm.HSSM(
