@@ -245,7 +245,7 @@ def ftt01w(
     err: float = 1e-7,
     k_terms: int = 10,
 ) -> np.ndarray:
-    """Compute the appproximated density of f(tt|0,1,w).
+    """Compute the approximate density of f(tt|0,1,w).
 
     Parameters
     ----------

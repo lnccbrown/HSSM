@@ -47,8 +47,8 @@ def test_interpret_onnx(onnx_session, fixture_path):
 
 
 def test_make_jax_logp_funcs_from_onnx(fixture_path):
-    """Tests whether the jax logp functions returned from jax_logp_funcs form onnx
-    reutrn the same values to interpret_onnx.
+    """Tests whether the jax logp functions returned from jax_logp_funcs from onnx
+    returns the same values to interpret_onnx.
     """
     model = onnx.load(fixture_path / "test.onnx")
 
