@@ -1,5 +1,3 @@
-## Acknowledgements
-
 We would like to extend our gratitude to the following individuals for their valuable contributions to the development of the HSSM package:
 
 - [Bambi](https://github.com/bambinos/bambi) - A special thanks to the Bambi project for providing inspiration, guidance, and support throughout the development process. [Tomás Capretto](https://github.com/tomicapretto), a key contributor to Bambi, provided invaluable assistance in the development of the HSSM package.
