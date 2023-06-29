@@ -318,10 +318,10 @@ def make_distribution_from_onnx(
     backend
         Whether to use "pytensor" or "jax" as the backend of the log-likelihood
         computation. If `jax`, the function will be wrapped in an pytensor Op.
-    bounds
+    bounds : optional
         A dictionary with parameters as keys (a string) and its boundaries
         as values.Example: {"parameter": (lower_boundary, upper_boundary)}.
-    params_is_reg
+    params_is_reg : optional
         A list of booleans indicating whether each parameter in the
         corresponding position in `list_params` is a regression.
 
@@ -343,10 +343,7 @@ def make_distribution_from_onnx(
         )
     if backend == "jax":
         if params_is_reg is None:
-            raise ValueError(
-                "Please supply a list of bools to `params_is_reg` to indicate whether"
-                + " each parameter is a regression."
-            )
+            params_is_reg = [False for _ in list_params]
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
             onnx_model,
             params_is_reg,
@@ -389,6 +386,7 @@ def make_family(
 
     Returns
     -------
+    bmb.Family
         An instance of a bambi family.
     """
     likelihood = bmb.Likelihood(
@@ -421,6 +419,7 @@ def make_blackbox_op(logp: Callable) -> Op:
 
     Returns
     -------
+    Op
         An pytensor op that wraps the log-likelihood function.
     """
 
