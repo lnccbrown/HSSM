@@ -1,5 +1,5 @@
 <div id="wrapper">
-  <div id="main-logo"><img src="images/HSSM2_Logo_Transparent1200.png" width="250"></div>
+  <div id="main-logo"><img src="images/mainlogo.png" width="250"></div>
   <div id="main-title"><h1>Hierarchical Sequential <br />Sampling Models</h1></div>
 </div>
 

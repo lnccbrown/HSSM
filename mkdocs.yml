@@ -44,6 +44,7 @@ plugins:
             group_by_category: false
             signature_crossrefs: true
 theme:
+  logo: images/navlogo.png
   name: material
   features:
     - navigation.tracking
@@ -74,6 +75,9 @@ theme:
       toggle:
         icon: material/brightness-4
         name: Switch to system preference
+
+extra:
+  homepage: "https://lnccbrown.github.io/HSSM/"
 
 extra_css:
   - "styles/extra.css"
