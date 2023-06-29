@@ -5,9 +5,10 @@ Heavily influenced by Arviz's(scikit-learn's, and Bambi's) implementation.
 """
 
 import os
-import pandas as pd
 from collections import namedtuple
 from typing import Optional, Union
+
+import pandas as pd
 
 base_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 

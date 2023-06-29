@@ -5,8 +5,8 @@ from .likelihoods.analytical import (
     ddm_bounds,
     ddm_params,
     ddm_sdv_params,
-    logp_ddm_sdv,
     logp_ddm,
+    logp_ddm_sdv,
 )
 
 SupportedModels = Literal[

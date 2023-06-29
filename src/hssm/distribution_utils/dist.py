@@ -18,7 +18,7 @@ import pymc as pm
 import pytensor
 import pytensor.tensor as pt
 from numpy.typing import ArrayLike
-from pytensor.graph.op import Op, Apply
+from pytensor.graph.op import Apply, Op
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators import simulator
 from ssms.config import model_config as ssms_model_config

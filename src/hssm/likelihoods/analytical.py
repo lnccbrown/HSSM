@@ -11,7 +11,6 @@ from typing import Callable, Type
 
 import numpy as np
 import pymc as pm
-
 import pytensor.tensor as pt
 from pymc.distributions.dist_math import check_parameters
 

@@ -20,6 +20,7 @@ from pytensor import function
 
 if TYPE_CHECKING:
     import bambi as bmb
+
     from .param import Param
 
 REPO_ID = "franklab/HSSM"

@@ -10,26 +10,13 @@ from __future__ import annotations
 
 from inspect import isclass
 from pathlib import Path
-
-from typing import TYPE_CHECKING, Any, cast, Callable, Iterable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Literal, cast
 
 import bambi as bmb
 import pymc as pm
 from numpy.typing import ArrayLike
 from pytensor.graph.op import Op
 
-from hssm.distribution_utils import (
-    make_blackbox_op,
-    make_distribution,
-    make_distribution_from_onnx,
-    make_family,
-)
-from hssm.utils import (
-    HSSMModelGraph,
-    download_hf,
-    get_alias_dict,
-    merge_dicts,
-)
 from hssm.config import (
     Config,
     LoglikKind,
@@ -37,16 +24,29 @@ from hssm.config import (
     default_model_config,
     default_params,
 )
+from hssm.distribution_utils import (
+    make_blackbox_op,
+    make_distribution,
+    make_distribution_from_onnx,
+    make_family,
+)
 from hssm.param import (
     Param,
     _parse_bambi,
 )
+from hssm.utils import (
+    HSSMModelGraph,
+    download_hf,
+    get_alias_dict,
+    merge_dicts,
+)
 
 if TYPE_CHECKING:
+    from os import PathLike
+
     import arviz as az
     import pandas as pd
     import pytensor
-    from os import PathLike
 
 LogLikeFunc = Callable[..., ArrayLike]
 
