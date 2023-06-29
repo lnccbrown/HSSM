@@ -12,7 +12,7 @@ readme = "README.md"
 license = "Copyright 2023, Brown University, Providence, RI."
 packages = [{ include = "hssm", from = "src" }]
 repository = "https://github.com/lnccbrown/HSSM"
-keywords = ["HSSM", "hierarchical sequential sampling", "pymc"]
+keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
