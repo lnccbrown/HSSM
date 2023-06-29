@@ -1,7 +1,10 @@
 site_name: HSSM
 
 nav:
-  - Home: index.md
+  - Home:
+      - Overview: index.md
+      - Credits: credits.md
+      - License: license.md
   - Getting Started: notebooks/004_using_base_hssm_func.ipynb
   - API References:
       - hssm: api_hssm.md
@@ -12,7 +15,7 @@ nav:
       - Understanding likelihood functions in HSSM: tutorial_likelihoods.md
       - Using HSSM low-level API directly with PyMC: notebooks/pymc.ipynb
       - Using Models from Hugging Face: notebooks/hugging_face_onnx_models.ipynb
-  - Contributing Guidelines: CONTRIBUTING.md
+  - Contributing: CONTRIBUTING.md
 
 plugins:
   - search
@@ -22,8 +25,24 @@ plugins:
       default_handler: python
       handlers:
         python:
+          import:
+            - https://docs.python.org/3/objects.inv
+            - https://mkdocstrings.github.io/objects.inv
+            - https://mkdocstrings.github.io/griffe/objects.inv
           options:
-            docstring_style: numpy
+            separate_signature: true
+            merge_init_into_class: true
+            docstring_options:
+              ignore_init_summary: true
+            docstring_style: "numpy"
+            docstring_section_style: "list"
+            show_root_members_full_path: true
+            show_object_full_path: false
+            show_category_heading: true
+            show_signature_annotations: true
+            show_source: false
+            group_by_category: false
+            signature_crossrefs: true
 theme:
   name: material
   features:
@@ -33,6 +52,8 @@ theme:
     - navigation.sections
     - navigation.path
     - content.code.copy
+    - content.action.view
+    - content.action.edit
   palette:
     # Palette toggle for automatic mode
     - media: "(prefers-color-scheme)"

@@ -93,7 +93,6 @@ class HSSM:
             `ssm_simulators` package. If `model` is not supported in `ssm_simulators`,
             a warning will be raised letting the user know that sampling from the
             `RandomVariable` will result in errors.
-
     loglik : optional
         A likelihood function. Defaults to None. Requirements are:
 
@@ -110,7 +109,6 @@ class HSSM:
             that `onnx` file from Hugging Face hub.
         3. It can also be `None`, in which case a default likelihood function will be
             used
-
     loglik_kind : optional
         A string that specifies the kind of log-likelihood function specified with
         `loglik`. Defaults to `None`. Can be one of the following:
@@ -126,7 +124,6 @@ class HSSM:
             will be `analytical`. For other models supported, it will be
             `approx_differentiable`. If the model is a custom one, a ValueError
             will be raised.
-
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
