@@ -25,7 +25,7 @@ pip install hssm
 You can also install the bleeding edge version of `hssm` directly from this repo:
 
 ```
-pip install git+https://github.com/lnccbrown/hssm.git
+pip install git+https://github.com/lnccbrown/HSSM.git
 ```
 
 ## Example
