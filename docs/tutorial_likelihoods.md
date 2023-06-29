@@ -69,8 +69,9 @@ If you are specifying a model with a kind of likelihood that's not included in t
      a warning will be raised letting the user know that sampling from the
      `RandomVariable` will result in errors.
 
-   **Note**
-   `default_priors` and `bounds` in `model_config` specifies **default** priors and bounds for the model. Actual priors and defaults should be provided via the `include` list and will override these defaults.
+!!! note
+
+    `default_priors` and `bounds` in `model_config` specifies **default** priors and bounds for the model. Actual priors and defaults should be provided via the `include` list and will override these defaults.
 
 3. Specify `loglik` and `loglik_kind`.
 4. Specify parameter priors in `include`.
