@@ -32,7 +32,7 @@ pip install git+https://github.com/lnccbrown/HSSM.git
 
 Here is a simple example of how to use HSSM:
 
-```
+```python
 import hssm
 from hssm import load_data
 
