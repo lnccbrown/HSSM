@@ -1,5 +1,5 @@
 <p align="left">
-  <img src="docs/images/HSSM2_Logo_Transparent1200.png" width="250">
+  <img src="docs/images/mainlogo.png" width="250">
 </p>
 
 ## HSSM - Hierarchical Sequential Sampling Modeling
