@@ -1,7 +1,7 @@
 """HSSM - Hierarchical Sequential Sampling Models."""
 
-from .hssm import HSSM
 from .datasets import load_data
+from .hssm import HSSM
 
 __all__ = [
     "HSSM",

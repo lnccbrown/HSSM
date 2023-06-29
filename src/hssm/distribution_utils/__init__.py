@@ -1,5 +1,6 @@
 """Utility functions for dynamically building pm.Distributions."""
 
+from ..utils import download_hf
 from .dist import (
     make_blackbox_op,
     make_distribution,
@@ -8,7 +9,6 @@ from .dist import (
     make_family,
     make_ssm_rv,
 )
-from ..utils import download_hf
 
 __all__ = [
     "download_hf",

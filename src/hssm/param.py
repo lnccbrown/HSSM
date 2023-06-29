@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any, Callable, Union, cast
+
 import bambi as bmb
 import pymc as pm
-
 from bambi.backend.utils import get_distribution
-
-from typing import Any, Callable, Union, cast
 
 # PEP604 union operator "|" not supported by pylint
 # Fall back to old syntax
