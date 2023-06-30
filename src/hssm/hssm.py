@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterable, Literal, cast
 
 import bambi as bmb
 import pymc as pm
+import pytensor
 from numpy.typing import ArrayLike
 from pytensor.graph.op import Op
 
@@ -46,7 +47,6 @@ if TYPE_CHECKING:
 
     import arviz as az
     import pandas as pd
-    import pytensor
 
 LogLikeFunc = Callable[..., ArrayLike]
 pytensor.config.floatX = "float32"
