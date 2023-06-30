@@ -32,6 +32,7 @@ pip install git+https://github.com/lnccbrown/HSSM.git
 ### Optional Installation
 
 **Dependency for graph() Function**
+
 Note: In addition to the installation of the main hssm class, there is an optional dependency for the graph() function. This dependency requires graphviz, which can be installed conveniently using conda with the following command:
 
 ```
@@ -43,6 +44,7 @@ Alternatively, you have the option to install the graphviz binaries manually and
 pip install graphviz
 ```
 **Dependency for sampler="nuts_numpyro"**
+
 To utilize the nuts_numpyro sampler, please follow these steps:
 
 1. Install numpyro by executing the following command:
