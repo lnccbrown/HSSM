@@ -15,6 +15,8 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 - Native ArviZ support for plotting and other convenience functions to aid the Bayesian workflow.
 - Utilizes the ONNX format for translation of differentiable likelihood approximators across backends.
 
+### Official documentation link can be found [here](https://lnccbrown.github.io/HSSM/).
+
 ## Installation
 
 `hssm` is available through PyPI. You can install it with Pip via:
