@@ -29,8 +29,9 @@ You can also install the bleeding edge version of `hssm` directly from this repo
 ```
 pip install git+https://github.com/lnccbrown/HSSM.git
 ```
+### Optional Installation
 
-### Dependency for graph() Function
+**Dependency for graph() Function**
 Note: In addition to the installation of the main hssm class, there is an optional dependency for the graph() function. This dependency requires graphviz, which can be installed conveniently using conda with the following command:
 
 ```
@@ -41,7 +42,21 @@ Alternatively, you have the option to install the graphviz binaries manually and
 ```
 pip install graphviz
 ```
+**Dependency for sampler="nuts_numpyro"**
+To utilize the nuts_numpyro sampler, please follow these steps:
 
+1. Install numpyro by executing the following command:
+```
+pip install numpyro
+```
+2. Import the necessary modules and configure the required settings:
+```
+import numpyro
+from jax.config import config
+
+numpyro.set_host_device_count(jax.local_device_count())
+config.update("jax_enable_x64", False)
+```
 ## Example
 
 Here is a simple example of how to use HSSM:
