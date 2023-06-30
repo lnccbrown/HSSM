@@ -30,6 +30,18 @@ You can also install the bleeding edge version of `hssm` directly from this repo
 pip install git+https://github.com/lnccbrown/HSSM.git
 ```
 
+### Dependency for graph() Function
+Note: In addition to the installation of the main hssm class, there is an optional dependency for the graph() function. This dependency requires graphviz, which can be installed conveniently using conda with the following command:
+
+```
+conda install -c conda-forge python-graphviz
+```
+Alternatively, you have the option to install the graphviz binaries manually and then install the Python bindings using pip with the following command:
+
+```
+pip install graphviz
+```
+
 ## Example
 
 Here is a simple example of how to use HSSM:

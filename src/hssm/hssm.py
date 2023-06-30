@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     import pytensor
 
 LogLikeFunc = Callable[..., ArrayLike]
+pytensor.config.floatX = "float32"
 
 
 class HSSM:
