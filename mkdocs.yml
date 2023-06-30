@@ -1,4 +1,7 @@
 site_name: HSSM
+repo_name: lnccbrown/HSSM
+repo_url: https://github.com/lnccbrown/HSSM/
+edit_uri: edit/main/docs
 
 nav:
   - Home:
