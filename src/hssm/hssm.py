@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     import pandas as pd
 
 LogLikeFunc = Callable[..., ArrayLike]
-pytensor.config.floatX = "float32"
 
 
 class HSSM:
