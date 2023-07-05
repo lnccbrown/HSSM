@@ -67,3 +67,6 @@ __pycache__/
 # mkdocs
 docs/site
 site/
+
+# make sure local debug notebooks are not pushed
+notebooks/debug/

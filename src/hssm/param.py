@@ -417,8 +417,8 @@ def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Cal
         return pm.Truncated(
             name="Truncated_" + name,
             dist=dist,
-            lower=lower_bound,
-            upper=upper_bound,
+            lower=pm.floatX(lower_bound),
+            upper=pm.floatX(upper_bound),
             initval=initval,
         )
 

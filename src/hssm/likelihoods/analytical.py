@@ -11,6 +11,7 @@ from typing import Callable, Type
 
 import numpy as np
 import pymc as pm
+import pytensor
 import pytensor.tensor as pt
 from pymc.distributions.dist_math import check_parameters
 
@@ -36,7 +37,7 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     """
     ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
     ks = pt.max(pt.stack([ks, pt.sqrt(rt) + 1]), axis=0)
-    ks = pt.switch(2 * pt.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
+    ks = pt.switch(2 * pt.sqrt(2 * np.pi * rt) * err < 1, ks, 2.0)
 
     return ks
 
@@ -169,9 +170,12 @@ def get_ks(k_terms: int, fast: bool) -> np.ndarray:
     np.ndarray
         An array of ks.
     """
+    dtype = pytensor.config.floatX
     if fast:
-        return pt.arange(-pt.floor((k_terms - 1) / 2), pt.ceil((k_terms - 1) / 2) + 1)
-    return pt.arange(1, k_terms + 1).reshape((-1, 1))
+        return pt.arange(
+            -pt.floor((k_terms - 1) / 2), pt.ceil((k_terms - 1) / 2) + 1, dtype=dtype
+        )
+    return pt.arange(1, k_terms + 1, dtype=dtype).reshape((-1, 1))
 
 
 def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
@@ -322,7 +326,7 @@ def logp_ddm_sdv(
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
     flip = response > 0
-    a = a * 2
+    a = a * 2.0
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
