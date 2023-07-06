@@ -1,11 +1,14 @@
 import bambi as bmb
 import numpy as np
 import pandas as pd
+import pytensor
 import pytest
 import ssms.basic_simulators
+from jax.config import config
 
 import hssm
 from hssm.param import Param, _make_priors_recursive, _parse_bambi
+from hssm.utils import set_floatX
 
 
 def test_param_non_regression():
@@ -241,3 +244,17 @@ def test__make_priors_recursive():
     assert isinstance(result_prior, bmb.Prior)
     assert isinstance(result_prior.args["upper"], bmb.Prior)
     assert result_prior.args["upper"].name == "Normal"
+
+
+def test_set_floatX():
+    # Should raise error when wrong value is passed.
+    with pytest.raises(ValueError):
+        set_floatX("bad_value")
+
+    set_floatX("float32")
+    assert pytensor.config.floatX == "float32"
+    assert not config.read("jax_enable_x64")
+
+    set_floatX("float64")
+    assert pytensor.config.floatX == "float64"
+    assert config.read("jax_enable_x64")
