@@ -1,7 +1,9 @@
 from pathlib import Path
 
+import arviz as az
 import numpy as np
 import pandas as pd
+import pytensor
 import pytest
 import ssms
 
@@ -10,6 +12,7 @@ from hssm.hssm import _model_has_default
 from hssm.utils import download_hf
 from hssm.likelihoods import DDM
 
+pytensor.config.floatX = "float32"
 
 @pytest.fixture
 def data():
@@ -137,6 +140,8 @@ def test_transform_params_general(data, include, should_raise_exception):
         model_param_names = sorted([param.name for param in model.params])
         assert model_param_names == sorted(param_names)
         assert len(model.params) == 4
+        trace = model.sample()
+        assert isinstance(trace, az.InferenceData)
 
 
 def test__model_has_default():
@@ -183,6 +188,8 @@ def test_custom_model(data, example_model_config):
     assert model.loglik == DDM
     assert model.loglik_kind == "analytical"
     assert model.list_params == example_model_config["list_params"]
+    trace = model.sample()
+    assert isinstance(trace, az.InferenceData)
 
 
 def test_model_definition_outside_include(data):
