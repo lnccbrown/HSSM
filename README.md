@@ -59,6 +59,8 @@ from jax.config import config
 numpyro.set_host_device_count(jax.local_device_count())
 config.update("jax_enable_x64", False)
 ```
+For more information please refer to [jax documentation](https://jax.readthedocs.io/en/latest/installation.html).
+
 ## Example
 
 Here is a simple example of how to use HSSM:
