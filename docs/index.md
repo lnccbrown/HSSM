@@ -17,9 +17,6 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 **Version**: 0.1.0
 
-### Overview
-HSSM is a Python toolbox that provides a seamless combination of state-of-the-art likelihood approximation methods with the wider ecosystem of probabilistic programming languages. It facilitates flexible hierarchical model building and inference via modern MCMC samplers. HSSM is user-friendly and provides the ability to rigorously estimate the impact of neural and other trial-by-trial covariates through parameter-wise mixed-effects models for a large variety of cognitive process models.
-
 - Allows approximate hierarchical Bayesian inference via various likelihood approximators.
 - Estimate impact of neural and other trial-by-trial covariates via native hierarchical mixed-regression support.
 - Extensible for users to add novel models with corresponding likelihoods.
@@ -39,6 +36,45 @@ You can also install the bleeding edge version of `hssm` directly from this repo
 
 ```
 pip install git+https://github.com/lnccbrown/hssm.git
+```
+
+### Optional Installation
+
+**Dependency for graph() Function**
+
+Note: In addition to the installation of the main hssm class, there is an optional dependency for the graph() function. This dependency requires graphviz, which can be installed conveniently using conda with the following command:
+
+```
+conda install -c conda-forge python-graphviz
+```
+Alternatively, you have the option to install the graphviz binaries manually and then install the Python bindings using pip with the following command:
+
+```
+pip install graphviz
+```
+**Dependency for sampler="nuts_numpyro"**
+
+To utilize the nuts_numpyro sampler, please follow these steps:
+
+1. Install numpyro by executing the following command:
+```
+pip install numpyro
+```
+2. Import the necessary modules and configure the required settings:
+```
+import numpyro
+from jax.config import config
+
+numpyro.set_host_device_count(jax.local_device_count())
+config.update("jax_enable_x64", False)
+```
+For more information please refer to [jax documentation](https://jax.readthedocs.io/en/latest/installation.html).
+
+### Setting a global float32 
+Using the analytical DDM (Drift Diffusion Model) likelihood in PyMC without setting pytensor.config.floatX = "float32" may result in warning messages during sampling, which is a known bug in PyMC v5.6.0 and earlier versions. Including pytensor.config.floatX = "float32" in the code can temporarily avoid these warnings.
+
+```
+pytensor.config.floatX = "float32"
 ```
 
 ## Example
