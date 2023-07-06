@@ -176,29 +176,41 @@ class Param:
             A string whose construction depends on whether the specification contains a
             regression or not.
         """
-        if not self.is_regression:
-            if isinstance(self.prior, bmb.Prior):
-                if self.bounds is None:
-                    return f"{self.name} ~ {self.prior}"
-                return f"{self.name} ~ {self.prior}\tbounds: {self.bounds}"
-            return f"{self.name} = {self.prior}"
+        output = []
+        output.append(self.name + ":")
 
-        link = self.link if isinstance(self.link, str) else self.link.name
+        # Simplest case: float
+        # Output Value: 0.2
+        if isinstance(self.prior, float):
+            output.append(f"    Value: {self.prior}")
+            return "\r\n".join(output)
 
-        assert not isinstance(self.prior, float)
-        assert self.formula is not None
+        # Regression case:
+        # Output formula, priors, and link functions
+        if self.is_regression:
+            assert self.formula is not None
+            output.append(f"    Formula: {self.formula}")
+            output.append("    Priors:")
 
-        priors = (
-            "\r\n".join([f"\t{param} ~ {prior}" for param, prior in self.prior.items()])
-            if self.prior is not None
-            else "Unspecified, using defaults"
-        )
+            if self.prior is not None:
+                assert isinstance(self.prior, dict)
 
-        if self.bounds is not None:
-            return "\r\n".join(
-                [self.formula, f"\tLink: {link}", f"\tbounds: {self.bounds}", priors]
-            )
-        return "\r\n".join([self.formula, f"\tLink: {link}", priors])
+                for param, prior in self.prior.items():
+                    output.append(f"        {param} ~ {prior}")
+            else:
+                output.append("        Unspecified. Using defaults")
+
+            link = self.link if isinstance(self.link, str) else self.link.name
+            output.append(f"    Link: {link}")
+
+        # None regression case:
+        # Output prior and bounds
+        else:
+            assert isinstance(self.prior, bmb.Prior)
+            output.append(f"    Prior: {self.prior}")
+
+        output.append(f"    Explicit bounds: {self.bounds}")
+        return "\r\n".join(output)
 
     def __str__(self) -> str:
         """Return the string representation of the class.

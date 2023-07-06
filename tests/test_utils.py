@@ -38,8 +38,11 @@ def test_param_non_regression():
     assert d1["z"] == d2["t"]
     assert link1 is None and link2 is None
 
-    assert repr(param_value) == "a = 0.5"
-    assert repr(param_dict) == f"z ~ {param_dict.prior}"
+    assert repr(param_value) == "a:\r\n    Value: 0.5"
+    assert (
+        repr(param_dict)
+        == f"z:\r\n    Prior: {param_dict.prior}\r\n    Explicit bounds: None"
+    )
 
     with pytest.raises(
         ValueError, match="`link` should be None if no regression is specified."
@@ -99,7 +102,7 @@ def test_param_regression():
 
     rep = repr(param_reg_parent)
     lines = rep.split("\r\n")
-    assert lines[2] == "Unspecified, using defaults"
+    assert lines[3] == "        Unspecified. Using defaults"
 
 
 def test__parse_bambi():
