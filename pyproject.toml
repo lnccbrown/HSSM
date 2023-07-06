@@ -17,7 +17,7 @@ keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
 scipy = "1.10.1"
-pymc = "^5.0.1"
+pymc = "^5.6.0"
 arviz = "^0.14.0"
 numpy = "^1.23.4"
 onnx = "^1.12.0"
@@ -26,7 +26,7 @@ jaxlib = "^0.4.0"
 ssm-simulators = "^0.3.0"
 huggingface-hub = "^0.15.1"
 onnxruntime = "^1.15.0"
-bambi = "^0.11.0"
+bambi = "^0.12.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
