@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from inspect import isclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Literal, cast
+from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
 import pymc as pm
@@ -415,7 +415,6 @@ class HSSM:
         sampler: Literal[
             "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
         ] = "mcmc",
-        step: Callable | Iterable[Callable] | None = None,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -424,14 +423,12 @@ class HSSM:
         ----------
         sampler
             The sampler to use. Can be either "mcmc" (default), "nuts_numpyro",
-            "nuts_blackjax", "laplace", or "vi".
-        step
-            A step function or collection of functions. If there are variables without
-            step methods, step methods for those variables will be assigned
-            automatically. By default the NUTS step method will be used, if appropriate
-            to the model.
+            "nuts_blackjax", "laplace", or "vi". If using `blackbox` likelihoods,
+            this cannot be "nuts_numpyro" or "nuts_blackjax".
         kwargs
-            Other arguments passed to bmb.Model.fit().
+            Other arguments passed to bmb.Model.fit(). Please see [here]
+            (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
+            for full documentation.
 
         Returns
         -------
@@ -447,12 +444,16 @@ class HSSM:
                 f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
             )
 
-        if self.loglik_kind == "blackbox" and step is None:
-            step = pm.Slice(model=self.pymc_model)
+        if self.loglik_kind == "blackbox":
+            if sampler in ["nuts_blackjax", "nuts_numpyro"]:
+                raise ValueError(
+                    f"{sampler} sampler does not work with blackbox likelihoods."
+                )
 
-        self._inference_obj = self.model.fit(
-            inference_method=sampler, step=step, **kwargs
-        )
+            if "step" not in kwargs:
+                kwargs["step"] = pm.Slice(model=self.pymc_model)
+
+        self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
 
         return self.traces
 
