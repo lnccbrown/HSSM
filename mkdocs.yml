@@ -8,6 +8,7 @@ nav:
       - Overview: index.md
       - Credits: credits.md
       - License: license.md
+      - Changelog: changelog.md
   - Getting Started: notebooks/004_using_base_hssm_func.ipynb
   - API References:
       - hssm: api_hssm.md
@@ -49,15 +50,19 @@ plugins:
 theme:
   logo: images/navlogo.png
   name: material
+  custom_dir: docs/overrides
   features:
     - navigation.tracking
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.sections
     - navigation.path
+    - navigation.top
     - content.code.copy
     - content.action.view
     - content.action.edit
+    - header.autohide
+    - announce.dismiss
   palette:
     # Palette toggle for automatic mode
     - media: "(prefers-color-scheme)"
@@ -94,3 +99,7 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - attr_list
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
