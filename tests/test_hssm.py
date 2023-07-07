@@ -19,7 +19,7 @@ pytensor.config.floatX = "float32"
 def data():
     v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 1.5]
     obs_ddm = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true], model="ddm", n_samples=1000
+        [v_true, a_true, z_true, t_true], model="ddm", n_samples=100
     )
     obs_ddm = np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
     dataset = pd.DataFrame(obs_ddm, columns=["rt", "response"])
@@ -37,7 +37,7 @@ def fixture_path():
 def data_angle():
     v_true, a_true, z_true, t_true, theta_true = [0.5, 1.5, 0.5, 0.5, 0.3]
     obs_angle = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=1000
+        [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=100
     )
     obs_angle = np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
     data = pd.DataFrame(obs_angle, columns=["rt", "response"])
