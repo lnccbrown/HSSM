@@ -217,3 +217,5 @@ def test_model_with_approx_differentiable_likelihood_type(data_angle):
     loglik = "angle.onnx"
     model = HSSM(data=data_angle, model="angle", loglik_kind=loglik_kind, loglik=loglik)
     assert model.loglik == download_hf(loglik)
+    trace = model.sample()
+    assert isinstance(trace, az.InferenceData)
