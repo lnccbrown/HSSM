@@ -54,7 +54,7 @@ jobs:
         run: poetry run pytest
 
   publish:
-    name: Build source distribution and publish to test-PyPI, and then PyPI
+    name: Build wheel and publish to test-PyPI, and then PyPI, and publish docs
     needs: [run_tests]
     runs-on: ubuntu-latest
 
