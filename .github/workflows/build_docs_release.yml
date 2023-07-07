@@ -1,17 +1,17 @@
-name: Run tests
+name: Build docs on release
 
 on:
-  pull_request:
-  push:
+  release:
+    types:
+      - created
+  workflow_dispatch:
 
 jobs:
-  run_tests:
+  build_docs:
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: true
-      matrix:
-        python-version: ["3.9", "3.10", "3.11"]
 
     steps:
       - uses: actions/checkout@v3
@@ -19,7 +19,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v3
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.9"
 
       - name: Install poetry
         uses: snok/install-poetry@v1
@@ -34,20 +34,11 @@ jobs:
         id: cache
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
+          key: venv-${{ runner.os }}-3.9-${{ hashFiles('**/pyproject.toml') }}
 
       - name: Install dependencies
         if: steps.cache.outputs.cache-hit != 'true'
         run: poetry install --no-interaction
 
-      - name: Run mypy
-        run: poetry run mypy src
-
-      - name: Check styling
-        run: poetry run black . --check
-
-      - name: Linting
-        run: poetry run ruff check .
-
-      - name: Run tests
-        run: poetry run pytest
+      - name: Run mkdocs
+        run: poetry run mkdocs gh-deploy --force
