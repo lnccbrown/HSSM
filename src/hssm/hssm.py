@@ -599,6 +599,7 @@ class HSSM:
         output.append("")
 
         output.append("Response variable: rt,response")
+        output.append(f"Likelihood: {self.loglik_kind}")
         output.append(f"Observations: {len(self.data)}")
         output.append("")
 
