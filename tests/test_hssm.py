@@ -14,6 +14,7 @@ from hssm.likelihoods import DDM
 
 pytensor.config.floatX = "float32"
 
+
 @pytest.fixture
 def data():
     v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 1.5]
