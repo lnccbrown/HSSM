@@ -70,11 +70,11 @@ config.update("jax_enable_x64", False)
 ```
 For more information please refer to [jax documentation](https://jax.readthedocs.io/en/latest/installation.html).
 
-### Setting a global float32 
-Using the analytical DDM (Drift Diffusion Model) likelihood in PyMC without setting pytensor.config.floatX = "float32" may result in warning messages during sampling, which is a known bug in PyMC v5.6.0 and earlier versions. Including pytensor.config.floatX = "float32" in the code can temporarily avoid these warnings.
+### Setting a global float32
+Using the analytical DDM (Drift Diffusion Model) likelihood in PyMC without forcing float type to `"float32"` in PyTensor may result in warning messages during sampling, which is a known bug in PyMC v5.6.0 and earlier versions. We can use `hssm.set_floatX("float32")` to get around this.
 
 ```
-pytensor.config.floatX = "float32"
+hssm.set_floatX("float32")
 ```
 
 ## Example
@@ -83,10 +83,13 @@ Here is a simple example of how to use HSSM:
 
 ```python
 import hssm
-from hssm import load_data
+
+# Set float type to float32 to avoid a current bug in PyMC mentioned above
+# This will not be necessary in the future
+hssm.set_floatX("float32")
 
 # Load a package-supplied dataset
-cav_data = load_data('cavanagh_theta')
+cav_data = hssm.load_data('cavanagh_theta')
 
 # Define a basic hierarchical model with trial-level covariates
 model = hssm.HSSM(

@@ -11,10 +11,13 @@ _parse_bambi().
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterable, NewType
+import logging
+from typing import TYPE_CHECKING, Any, Iterable, Literal, NewType
 
+import pytensor
 from bambi.terms import CommonTerm, GroupSpecificTerm
 from huggingface_hub import hf_hub_download
+from jax.config import config
 from pymc.model_graph import ModelGraph
 from pytensor import function
 
@@ -251,3 +254,33 @@ class HSSMModelGraph(ModelGraph):
             graph.edge(self.parent.name, "rt,response")
 
         return graph
+
+
+def set_floatX(dtype: Literal["float32", "float64"], jax: bool = True):
+    """Set float types for pytensor and Jax.
+
+    Often we wish to work with a specific type of float in both PyTensor and JAX.
+    This function helps set float types in both packages.
+
+    Parameters
+    ----------
+    dtype
+        Either `float32` or `float64`. Float type for pytensor (and jax if `jax=True`).
+    jax, optional
+        Whether this function also sets float type for JAX by changing the
+        `jax_enable_x64` setting in JAX config. Defaults to True.
+    """
+    if dtype not in ["float32", "float64"]:
+        raise ValueError('`dtype` must be either "float32" or "float64".')
+
+    pytensor.config.floatX = dtype
+    logging.info(f"Setting PyTensor floatX type to {dtype}")
+
+    if jax:
+        mapping = dict(float32=False, float64=True)
+        config.update("jax_enable_x64", mapping[dtype])
+
+        logging.info(
+            f'Setting "jax_enable_x64" to {mapping[dtype]}. '
+            + "If this is not intended, please set `jax` to False"
+        )

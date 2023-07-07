@@ -82,10 +82,13 @@ Here is a simple example of how to use HSSM:
 
 ```python
 import hssm
-from hssm import load_data
+
+# Set float type to float32 to avoid a current bug in PyMC
+# This will not be necessary in the future
+hssm.set_floatX("float32")
 
 # Load a package-supplied dataset
-cav_data = load_data('cavanagh_theta')
+cav_data = hssm.load_data('cavanagh_theta')
 
 # Define a basic hierarchical model with trial-level covariates
 model = hssm.HSSM(
