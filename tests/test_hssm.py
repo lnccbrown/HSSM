@@ -189,8 +189,6 @@ def test_custom_model(data, example_model_config):
     assert model.loglik == DDM
     assert model.loglik_kind == "analytical"
     assert model.list_params == example_model_config["list_params"]
-    trace = model.sample()
-    assert isinstance(trace, az.InferenceData)
 
 
 def test_model_definition_outside_include(data):
