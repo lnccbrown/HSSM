@@ -395,6 +395,11 @@ class HSSM:
             for param_dict in include:
                 name = param_dict["name"]
                 processed.append(name)
+                for k in param_dict.keys():
+                    if k not in ["name", "formula", "prior", "link", "bounds"]:
+                        raise ValueError(
+                            f"Invalid key {k} for the specification of {name}!"
+                        )
                 param = _create_param(
                     param_dict, model_config, is_parent=name == self._parent
                 )
