@@ -66,7 +66,11 @@ class Param:
         self.name = name
         self.formula = formula
         self._parent = is_parent
-        self.bounds = bounds
+        self.bounds = tuple(float(x) for x in bounds) if bounds is not None else None
+        self._is_truncated = False
+
+        if isinstance(prior, int):
+            prior = float(prior)
 
         if formula is not None:
             # The regression case
@@ -97,7 +101,23 @@ class Param:
             else:
                 # Explicitly cast the type of prior, no runtime performance penalty
                 prior = cast(ParamSpec, prior)
-                self.prior = make_bounded_prior(prior, bounds)
+
+                if bounds is None:
+                    if isinstance(prior, (float, bmb.Prior)):
+                        self.prior = prior
+                    else:
+                        self.prior = bmb.Prior(**prior)
+                else:
+                    if isinstance(prior, float):
+                        self.prior = prior
+                    else:
+                        self.prior = make_bounded_prior(prior, bounds)
+                        # self._prior is internally used for informative output
+                        # Not used in inference
+                        self._prior = (
+                            bmb.Prior(**prior) if isinstance(prior, dict) else prior
+                        )
+                        self._is_truncated = True
 
             if link is not None:
                 raise ValueError("`link` should be None if no regression is specified.")
@@ -125,6 +145,30 @@ class Param:
             A boolean that indicates if the parameter is a parent or not.
         """
         return self._parent
+
+    @property
+    def is_fixed(self) -> bool:
+        """Determine if a parameter is a fixed value.
+
+        Returns
+        -------
+        bool
+            A boolean that indicates if the parameter is a fixed value.
+        """
+        return isinstance(self.prior, float)
+
+    @property
+    def is_truncated(self) -> bool:
+        """Determines if a parameter is truncated.
+
+        A parameter is truncated when it is not a regression, is not fixed and has
+        bounds.
+
+        Returns
+        -------
+            A boolean that indicates if a parameter is truncated.
+        """
+        return self._is_truncated
 
     def _parse_bambi(
         self,
@@ -207,7 +251,8 @@ class Param:
         # Output prior and bounds
         else:
             assert isinstance(self.prior, bmb.Prior)
-            output.append(f"    Prior: {self.prior}")
+            prior_output = self._prior if self.is_truncated else self.prior
+            output.append(f"    Prior: {prior_output}")
 
         output.append(f"    Explicit bounds: {self.bounds}")
         return "\r\n".join(output)
@@ -338,9 +383,7 @@ def _parse_bambi(
     return result_formula, result_priors, result_links
 
 
-def make_bounded_prior(
-    prior: ParamSpec, bounds: BoundsSpec | None = None
-) -> float | bmb.Prior:
+def make_bounded_prior(prior: ParamSpec, bounds: BoundsSpec) -> float | bmb.Prior:
     """Create prior within specific bounds.
 
     Helper function that creates a prior within specified bounds. Works in the
@@ -359,7 +402,7 @@ def make_bounded_prior(
     prior
         A prior definition. Could be a float, a dict that can be passed to a bmb.Prior
         to create a prior distribution, or a bmb.Prior.
-    bounds, optional
+    bounds : optional
         If provided, needs to be a tuple of floats that indicates the lower and upper
         bounds of the parameter.
 
@@ -368,9 +411,6 @@ def make_bounded_prior(
     float | bmb.Prior
         A float if `prior` is a float, otherwise a bmb.Prior object.
     """
-    if bounds is None:
-        return bmb.Prior(**prior) if isinstance(prior, dict) else prior
-
     lower, upper = bounds
 
     if isinstance(prior, float):
@@ -394,9 +434,8 @@ def make_bounded_prior(
     args = prior.args
 
     dist = make_truncated_dist(lower, upper, name=name, **args)
-    prior.update(dist=dist)
 
-    return prior
+    return bmb.Prior(name=name, dist=dist)
 
 
 def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Callable:
@@ -427,7 +466,7 @@ def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Cal
     def TruncatedDist(name):
         dist = get_distribution(dist_name).dist(**dist_kwargs)
         return pm.Truncated(
-            name="Truncated_" + name,
+            name=name,
             dist=dist,
             lower=lower_bound,
             upper=upper_bound,

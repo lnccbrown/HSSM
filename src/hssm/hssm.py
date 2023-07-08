@@ -256,11 +256,13 @@ class HSSM:
                     raise ValueError(
                         f'Parameter "{k}" is already specified in `include`.'
                     )
-
                 if isinstance(v, (int, float, bmb.Prior)):
                     include.append({"name": k, "prior": v})
                 elif isinstance(v, dict):
-                    include.append(v | {"name": k})
+                    if ("prior" in v) or ("bounds" in v):
+                        include.append(v | {"name": k})
+                    else:
+                        include.append({"name": k, "prior": v})
                 else:
                     raise ValueError(
                         f"Parameter {k} must be a float, a dict, or a bmb.Prior object."
@@ -679,16 +681,31 @@ def _create_param(param: str | dict, model_config: dict, is_parent: bool) -> Par
     """
     if isinstance(param, dict):
         name = param["name"]
-        bounds = (
-            model_config["bounds"].get(name, None) if "bounds" in model_config else None
-        )
+        if "bounds" not in param:
+            bounds = (
+                model_config["bounds"].get(name, None)
+                if "bounds" in model_config
+                else None
+            )
+        else:
+            bounds = param["bounds"]
         if "prior" not in param or param["prior"] is None:
             if (
                 "default_priors" in model_config
                 and name in model_config["default_priors"]
+                and "formula" not in model_config
             ):
-                param["prior"] = model_config["default_priors"][name]
-        return Param(bounds=bounds, is_parent=is_parent, **param)
+                prior = model_config["default_priors"][name]
+        else:
+            prior = param["prior"]
+        return Param(
+            name=name,
+            prior=prior,
+            formula=param.get("formula"),
+            link=param.get("link"),
+            bounds=bounds,
+            is_parent=is_parent,
+        )
 
     bounds = (
         model_config["bounds"].get(param, None) if "bounds" in model_config else None
