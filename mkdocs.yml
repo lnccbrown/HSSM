@@ -24,6 +24,7 @@ nav:
 
 plugins:
   - search
+  - autorefs
   - mkdocs-jupyter:
       execute: False
   - mkdocstrings:
