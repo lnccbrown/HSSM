@@ -1,12 +1,12 @@
+<p align="left">
+  <img src="docs/images/mainlogo.png" width="250">
+</p>
+
 ![PyPI](https://img.shields.io/pypi/v/hssm)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/hssm)
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/lnccbrown/HSSM)
 ![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/lnccbrown/HSSM/run_tests.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
-
-<p align="left">
-  <img src="docs/images/mainlogo.png" width="250">
-</p>
 
 ## HSSM - Hierarchical Sequential Sampling Modeling
 
