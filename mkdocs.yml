@@ -8,7 +8,7 @@ nav:
       - Overview: index.md
       - Credits: credits.md
       - License: license.md
-  - Getting Started: notebooks/004_using_base_hssm_func.ipynb
+  - Getting Started: tutorial_notebooks/no_execute/004_using_base_hssm_func.ipynb
   - API References:
       - hssm: api_hssm.md
       - hssm.distribution_utils: api_distribution_utils.md
@@ -16,14 +16,16 @@ nav:
       - hssm.config: api_defaults.md
   - Tutorials:
       - Understanding likelihood functions in HSSM: tutorial_likelihoods.md
-      - Using HSSM low-level API directly with PyMC: notebooks/pymc.ipynb
-      - Using Models from Hugging Face: notebooks/hugging_face_onnx_models.ipynb
+      - Using HSSM low-level API directly with PyMC: tutorial_notebooks/pymc.ipynb
+      - Using Models from Hugging Face: tutorial_notebooks/hugging_face_onnx_models.ipynb
   - Contributing: CONTRIBUTING.md
 
 plugins:
   - search
   - mkdocs-jupyter:
       execute: True
+      exclude:
+          - tutorial_notebooks/no_execute/*.ipynb
   - mkdocstrings:
       default_handler: python
       handlers:
