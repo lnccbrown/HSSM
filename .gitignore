@@ -67,3 +67,6 @@ __pycache__/
 # mkdocs
 docs/site
 site/
+
+# folders in the repository
+notebooks/

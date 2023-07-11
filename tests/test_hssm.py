@@ -1,7 +1,9 @@
 from pathlib import Path
 
+import arviz as az
 import numpy as np
 import pandas as pd
+import pytensor
 import pytest
 import ssms
 
@@ -10,12 +12,14 @@ from hssm.hssm import _model_has_default
 from hssm.utils import download_hf
 from hssm.likelihoods import DDM
 
+pytensor.config.floatX = "float32"
+
 
 @pytest.fixture
 def data():
     v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 1.5]
     obs_ddm = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true], model="ddm", n_samples=1000
+        [v_true, a_true, z_true, t_true], model="ddm", n_samples=50
     )
     obs_ddm = np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
     dataset = pd.DataFrame(obs_ddm, columns=["rt", "response"])
@@ -33,7 +37,7 @@ def fixture_path():
 def data_angle():
     v_true, a_true, z_true, t_true, theta_true = [0.5, 1.5, 0.5, 0.5, 0.3]
     obs_angle = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=1000
+        [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=100
     )
     obs_angle = np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
     data = pd.DataFrame(obs_angle, columns=["rt", "response"])
@@ -137,6 +141,8 @@ def test_transform_params_general(data, include, should_raise_exception):
         model_param_names = sorted([param.name for param in model.params])
         assert model_param_names == sorted(param_names)
         assert len(model.params) == 4
+        trace = model.sample()
+        assert isinstance(trace, az.InferenceData)
 
 
 def test__model_has_default():
@@ -209,3 +215,5 @@ def test_model_with_approx_differentiable_likelihood_type(data_angle):
     loglik = "angle.onnx"
     model = HSSM(data=data_angle, model="angle", loglik_kind=loglik_kind, loglik=loglik)
     assert model.loglik == download_hf(loglik)
+    trace = model.sample()
+    assert isinstance(trace, az.InferenceData)

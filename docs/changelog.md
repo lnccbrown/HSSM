@@ -9,5 +9,5 @@
 - Support for `inf`s in bounds.
 - Convenient method for simulating data with `ssm_simulators`.
 - More test coverage.
-- CI workflows for publishing package to PyPI
+- CI workflows for publishing package to PyPI.
 - Enhancement to documentations.
