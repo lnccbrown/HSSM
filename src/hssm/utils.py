@@ -266,7 +266,7 @@ def set_floatX(dtype: Literal["float32", "float64"], jax: bool = True):
     ----------
     dtype
         Either `float32` or `float64`. Float type for pytensor (and jax if `jax=True`).
-    jax, optional
+    jax : optional
         Whether this function also sets float type for JAX by changing the
         `jax_enable_x64` setting in JAX config. Defaults to True.
     """

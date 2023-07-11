@@ -16,3 +16,30 @@
     padding-top: 1.3em;
     padding-left: 1.0em;
 }
+
+.right-margin {
+    margin-right: 10px;
+}
+
+@media screen and (min-width: 1220px) {
+    .show-on-small {
+        display: none
+    }
+}
+
+.move-down {
+    transform: translate(0px, -5px);
+    animation: down_movement 1000ms infinite ease-out;
+}
+
+@keyframes down_movement {
+    to {
+        transform: translate(0px, 5px);
+    }
+}
+
+.question {
+    color: pink;
+    width: 35px;
+    height: 35px;
+}

@@ -8,13 +8,15 @@ nav:
       - Overview: index.md
       - Credits: credits.md
       - License: license.md
-  - Getting Started: tutorial_notebooks/no_execute/004_using_base_hssm_func.ipynb
+      - Changelog: changelog.md
+  - Getting Started: tutorial_notebooks/no_execute/getting_started.ipynb
   - API References:
       - hssm: api_hssm.md
       - hssm.distribution_utils: api_distribution_utils.md
       - hssm.likelihoods: api_likelihoods.md
       - hssm.config: api_defaults.md
   - Tutorials:
+      - Main tutorial: tutorial_notebooks/no_execute/main_tutorial.ipynb
       - Understanding likelihood functions in HSSM: tutorial_likelihoods.md
       - Using HSSM low-level API directly with PyMC: tutorial_notebooks/pymc.ipynb
       - Using Models from Hugging Face: tutorial_notebooks/hugging_face_onnx_models.ipynb
@@ -22,10 +24,11 @@ nav:
 
 plugins:
   - search
+  - autorefs
   - mkdocs-jupyter:
       execute: True
-      exclude:
-          - tutorial_notebooks/no_execute/*.ipynb
+      execute_ignore:
+        - tutorial_notebooks/no_execute/*.ipynb
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -51,15 +54,19 @@ plugins:
 theme:
   logo: images/navlogo.png
   name: material
+  custom_dir: docs/overrides
   features:
     - navigation.tracking
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.sections
     - navigation.path
+    - navigation.top
     - content.code.copy
     - content.action.view
     - content.action.edit
+    - header.autohide
+    - announce.dismiss
   palette:
     # Palette toggle for automatic mode
     - media: "(prefers-color-scheme)"
@@ -96,3 +103,7 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - attr_list
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
