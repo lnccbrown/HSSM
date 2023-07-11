@@ -23,7 +23,7 @@ nav:
 plugins:
   - search
   - mkdocs-jupyter:
-      execute: False
+      execute: True
   - mkdocstrings:
       default_handler: python
       handlers:
