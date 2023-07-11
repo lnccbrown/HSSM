@@ -28,7 +28,7 @@ plugins:
   - mkdocs-jupyter:
       execute: True
       execute_ignore:
-        - no_execute/*.ipynb
+        - tutorial_notebooks/no_execute/*.ipynb
   - mkdocstrings:
       default_handler: python
       handlers:
