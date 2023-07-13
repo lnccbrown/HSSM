@@ -138,8 +138,7 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
                                 name: f"{parent_name}_{name}"
                             }
             else:
-                name = f"rt,response_{component_name}"
-                alias_dict[component_name] = {name: component_name}
+                alias_dict[component_name] = {component_name: component_name}
 
     for name in model.constant_components.keys():
         alias_dict |= {name: name}

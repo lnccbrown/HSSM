@@ -233,7 +233,7 @@ def test_get_alias_dict():
 
     assert alias_regression_a["c(rt, response)"]["c(rt, response)"] == "rt,response"
     assert alias_regression_a["c(rt, response)"]["Intercept"] == "v"
-    #  assert alias_regression_a["a"]["Intercept"] == "v" # Undetermined, will add later
+    assert alias_regression_a["a"]["a"] == "a"
 
 
 def test__make_priors_recursive():
