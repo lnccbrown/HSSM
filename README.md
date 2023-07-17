@@ -37,7 +37,7 @@ You can also install the bleeding edge version of `hssm` directly from this repo
 ```
 pip install git+https://github.com/lnccbrown/HSSM.git
 ```
-Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an environment manager to prevent any problems with dependencies during the installation process.
+**Note**: Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an environment manager to prevent any problems with dependencies during the installation process.
 
 ### Optional Installation
 
