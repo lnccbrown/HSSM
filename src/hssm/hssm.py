@@ -522,7 +522,7 @@ class HSSM:
         draws: int = 500,
         var_names: str | list[str] | None = None,
         omit_offsets: bool = True,
-        random_seed: np.random.RandomGenerator | None = None,
+        random_seed: np.random.Generator | None = None,
     ) -> az.InferenceData:
         """Generate samples from the prior predictive distribution.
 
