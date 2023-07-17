@@ -117,12 +117,15 @@ def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]
 
         # NOTE: This is wrong at the moment, but necessary
         # to get around the support checking in PyMC that would result in error
-        ndim_supp: int = 0
+        ndim_supp: int = 1
 
         ndims_params: list[int] = [0 for _ in list_params]
         dtype: str = "floatX"
         _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
         _list_params = list_params
+
+        def _supp_shape_from_params(*args, **kwargs):
+            return (2,)
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
         # NOTE: `rng` now is a np.random.Generator instead of RandomState
@@ -159,6 +162,11 @@ def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]
             else:
                 size = args[-1]
                 args = args[:-1]
+
+            # Although we got around the ndims_supp issue, the size parameter passed
+            # here is still an array with one element. We need to take it out.
+            if not np.isscalar(size):
+                size = np.squeeze(size)
 
             arg_arrays = [np.asarray(arg) for arg in args]
 
