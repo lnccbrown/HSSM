@@ -217,3 +217,18 @@ def test_model_with_approx_differentiable_likelihood_type(data_angle):
     assert model.loglik == download_hf(loglik)
     trace = model.sample()
     assert isinstance(trace, az.InferenceData)
+
+
+def test_sample_prior_predictive(data):
+    model_no_regression = HSSM(data=data.iloc[:10, :])
+    rng = np.random.default_rng()
+
+    prior_predictive_1 = model_no_regression.sample_prior_predictive(draws=10)
+    prior_predictive_2 = model_no_regression.sample_prior_predictive(
+        draws=10, random_seed=rng
+    )
+
+    model_regression = HSSM(
+        data=data.iloc[:10, :], include=[dict(name="v", formula="v ~ 1 + x")]
+    )
+    prior_predictive_3 = model_regression.sample_prior_predictive(draws=10)

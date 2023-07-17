@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from os import PathLike
 
     import arviz as az
+    import numpy as np
     import pandas as pd
     import pytensor
 
@@ -515,6 +516,37 @@ class HSSM:
                 )
             idata = self._inference_obj
         return self.model.predict(idata, kind, data, inplace, include_group_specific)
+
+    def sample_prior_predictive(
+        self,
+        draws: int = 500,
+        var_names: str | list[str] | None = None,
+        omit_offsets: bool = True,
+        random_seed: np.random.RandomGenerator | None = None,
+    ) -> az.InferenceData:
+        """Generate samples from the prior predictive distribution.
+
+        Parameters
+        ----------
+        draws
+            Number of draws to sample from the prior predictive distribution. Defaults
+            to 500.
+        var_names
+            A list of names of variables for which to compute the prior predictive
+            distribution. Defaults to ``None`` which means both observed and unobserved
+            RVs.
+        omit_offsets
+            Whether to omit offset terms in the plot. Defaults to ``True``.
+        random_seed
+            Seed for the random number generator.
+
+        Returns
+        -------
+        az.InferenceData
+            ``InferenceData`` object with the groups ``prior``, ``prior_predictive`` and
+            ``observed_data``.
+        """
+        return self.model.prior_predictive(draws, var_names, omit_offsets, random_seed)
 
     @property
     def pymc_model(self) -> pm.Model:
