@@ -220,7 +220,9 @@ def test_model_with_approx_differentiable_likelihood_type(data_angle):
 
 
 def test_sample_prior_predictive(data):
-    model_no_regression = HSSM(data=data.iloc[:10, :])
+    data = data.iloc[:10, :]
+
+    model_no_regression = HSSM(data=data)
     rng = np.random.default_rng()
 
     prior_predictive_1 = model_no_regression.sample_prior_predictive(draws=10)
@@ -228,7 +230,30 @@ def test_sample_prior_predictive(data):
         draws=10, random_seed=rng
     )
 
-    model_regression = HSSM(
-        data=data.iloc[:10, :], include=[dict(name="v", formula="v ~ 1 + x")]
-    )
+    model_regression = HSSM(data=data, include=[dict(name="v", formula="v ~ 1 + x")])
     prior_predictive_3 = model_regression.sample_prior_predictive(draws=10)
+
+    model_regression_a = HSSM(data=data, include=[dict(name="a", formula="a ~ 1 + x")])
+    prior_predictive_4 = model_regression_a.sample_prior_predictive(draws=10)
+
+    model_regression_multi = HSSM(
+        data=data,
+        include=[
+            dict(name="v", formula="v ~ 1 + x"),
+            dict(name="a", formula="a ~ 1 + y"),
+        ],
+    )
+    prior_predictive_5 = model_regression_multi.sample_prior_predictive(draws=10)
+
+    data["subject_id"] = np.arange(10)
+
+    model_regression_random_effect = HSSM(
+        data=data,
+        include=[
+            dict(name="v", formula="v ~ (1|subject_id) + x"),
+            dict(name="a", formula="a ~ (1|subject_id) + y"),
+        ],
+    )
+    prior_predictive_6 = model_regression_random_effect.sample_prior_predictive(
+        draws=10
+    )
