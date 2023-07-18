@@ -693,13 +693,8 @@ class HSSM:
 
         if self.p_outlier is not None:
             output.append("")
-            lapse_output = "Lapse Probability"
-            if isinstance(self.p_outlier, bmb.Prior):
-                lapse_output += f" ~ {self.p_outlier}"
-            else:
-                lapse_output += f": {self.p_outlier}"
-            output.append(lapse_output)
-            output.append(f"Lapse Distribution: {self.lapse}")
+            output.append(f"Lapse probability: {self.p_outlier}")
+            output.append(f"Lapse distribution: {self.lapse}")
 
         return "\r\n".join(output)
 
