@@ -17,6 +17,7 @@ import onnx
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
+from bambi.backend.utils import get_distribution_from_prior
 from numpy.typing import ArrayLike
 from pytensor.graph.op import Apply, Op
 from pytensor.tensor.random.op import RandomVariable
@@ -85,7 +86,9 @@ def apply_param_bounds_to_loglik(
     return logp
 
 
-def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]:
+def make_ssm_rv(
+    model_name: str, list_params: list[str], lapse: bmb.Prior | None = None
+) -> Type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
     Parameters
@@ -96,6 +99,8 @@ def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]
         attempt to sample from the RandomVariable will result in an error.
     list_params
         A list of str of all parameters for this `RandomVariable`.
+    lapse : optional
+        A bmb.Prior object representing the lapse distribution.
 
     Returns
     -------
@@ -104,10 +109,14 @@ def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]
     """
     if model_name not in ssms_model_config:
         logging.warning(
-            f"You supplied a model '{model_name}', which is currently not supported in "
+            "You supplied a model '%s', which is currently not supported in "
             + "the ssm_simulators package. An error will be thrown when sampling from "
-            + "the random variable or when using any posterior sampling methods."
+            + "the random variable or when using any posterior sampling methods.",
+            model_name,
         )
+
+    if lapse is not None and list_params[-1] != "p_outlier":
+        list_params.append("p_outlier")
 
     # pylint: disable=W0511, R0903
     class SSMRandomVariable(RandomVariable):
@@ -123,6 +132,7 @@ def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]
         dtype: str = "floatX"
         _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
         _list_params = list_params
+        _lapse = lapse
 
         def _supp_shape_from_params(*args, **kwargs):
             return (2,)
@@ -170,12 +180,23 @@ def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]
 
             arg_arrays = [np.asarray(arg) for arg in args]
 
+            p_outlier = None
+
+            if cls._list_params[-1] == "p_outlier":
+                p_outlier = np.squeeze(arg_arrays.pop(-1))
+
             iinfo32 = np.iinfo(np.uint32)
             seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
 
-            if cls._list_params != ssms_model_config[model_name]["params"]:
+            params = (
+                cls._list_params[:-1]
+                if cls._list_params[-1] == "p_outlier"
+                else cls._list_params
+            )
+
+            if params != ssms_model_config[model_name]["params"]:
                 raise ValueError(
-                    f"The list of parameters in `list_params` {cls._list_params} "
+                    f"The list of parameters in `list_params` {params} "
                     + "is different from the model config in SSM Simulators "
                     + f"({ssms_model_config[model_name]['params']})."
                 )
@@ -218,12 +239,32 @@ def make_ssm_rv(model_name: str, list_params: list[str]) -> Type[RandomVariable]
                 **kwargs,
             )
 
-            output = np.column_stack([sim_out["rts"], sim_out["choices"]])
+            sims_out = np.column_stack([sim_out["rts"], sim_out["choices"]])
 
             if not is_all_scalar:
-                output = output.reshape((*max_shape[:-1], max_shape[-1] * n_samples, 2))
+                sims_out = sims_out.reshape(
+                    (*max_shape[:-1], max_shape[-1] * n_samples, 2)
+                )
 
-            return output
+            if p_outlier is not None:
+                assert cls._lapse is not None
+                out_shape = sims_out.shape[:-1]
+                replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
+                replace = np.stack([replace, replace], axis=-1)
+                n_draws = np.prod(out_shape)
+                lapse_rt = pm.draw(
+                    get_distribution_from_prior(cls._lapse).dist(**cls._lapse.args),
+                    n_draws,
+                    random_seed=rng,
+                ).reshape(out_shape)
+                lapse_response = rng.binomial(n=1, p=0.5, size=out_shape)
+                lapse_output = np.stack(
+                    [lapse_rt, lapse_response],
+                    axis=-1,
+                )
+                np.putmask(sims_out, replace, lapse_output)
+
+            return sims_out
 
     return SSMRandomVariable
 
@@ -233,6 +274,7 @@ def make_distribution(
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     bounds: dict | None = None,
+    lapse: bmb.Prior | None = None,
 ) -> Type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -257,13 +299,18 @@ def make_distribution(
     bounds : optional
         A dictionary with parameters as keys (a string) and its boundaries as values.
         Example: {"parameter": (lower_boundary, upper_boundary)}.
+    lapse : optional
+        A bmb.Prior object representing the lapse distribution.
 
     Returns
     -------
     Type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
     """
-    random_variable = make_ssm_rv(rv, list_params) if isinstance(rv, str) else rv
+    random_variable = make_ssm_rv(rv, list_params, lapse) if isinstance(rv, str) else rv
+
+    if lapse is not None and list_params[-1] != "p_outlier":
+        list_params.append("p_outlier")
 
     class SSMDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""
@@ -274,6 +321,7 @@ def make_distribution(
         # NOTE: rv_op is an INSTANCE of RandomVariable
         rv_op = random_variable()
         params = list_params
+        _lapse = lapse
 
         @classmethod
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
@@ -284,7 +332,23 @@ def make_distribution(
             return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
+            if list_params[-1] == "p_outlier":
+                p_outlier = dist_params[-1]
+                dist_params = dist_params[:-1]
+
             logp = loglik(data, *dist_params)
+
+            if list_params[-1] == "p_outlier":
+                logp = pt.log(
+                    (1.0 - p_outlier) * pt.exp(logp)
+                    + p_outlier
+                    * pt.exp(
+                        pm.logp(
+                            get_distribution_from_prior(lapse).dist(**lapse.args),
+                            data[:, 0],
+                        )
+                    )
+                )
 
             if bounds is None:
                 return logp
@@ -303,6 +367,7 @@ def make_distribution_from_onnx(
     backend: str = "pytensor",
     bounds: dict | None = None,
     params_is_reg: list[bool] | None = None,
+    lapse: bmb.Prior | None = None,
 ) -> Type[pm.Distribution]:
     """Make a PyMC distribution from an ONNX model.
 
@@ -332,6 +397,8 @@ def make_distribution_from_onnx(
     params_is_reg : optional
         A list of booleans indicating whether each parameter in the
         corresponding position in `list_params` is a regression.
+    lapse : optional
+        A bmb.Prior object representing the lapse distribution.
 
     Returns
     -------
@@ -348,10 +415,17 @@ def make_distribution_from_onnx(
             lan_logp_pt,
             list_params,
             bounds=bounds,
+            lapse=lapse,
         )
     if backend == "jax":
-        if params_is_reg is None:
-            params_is_reg = [False for _ in list_params]
+        if list_params[-1] == "p_outlier":
+            if params_is_reg is None:
+                params_is_reg = [False for _ in list_params[:-1]]
+            elif len(params_is_reg) == len(list_params):
+                params_is_reg = params_is_reg[:-1]
+        else:
+            if params_is_reg is None:
+                params_is_reg = [False for _ in list_params]
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
             onnx_model,
             params_is_reg,
@@ -362,6 +436,7 @@ def make_distribution_from_onnx(
             lan_logp_jax,
             list_params,
             bounds=bounds,
+            lapse=lapse,
         )
 
     raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")
