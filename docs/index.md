@@ -40,7 +40,7 @@ pip install git+https://github.com/lnccbrown/HSSM.git
 ```
 !!! note 
 
-Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an environment manager with Python 3.9~3.11 to prevent any problems with dependencies during the installation process. For more detailed guidance, please refer to this [discussion](https://github.com/lnccbrown/HSSM/discussions/152). 
+Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an environment manager with Python 3.9~3.11 to prevent any problems with dependencies during the installation process. Please note that hssm is tested for python 3.9, 3.10, 3.11. Use other python versions with caution. For more detailed guidance, please refer to this [discussion](https://github.com/lnccbrown/HSSM/discussions/152). 
 
 ### Optional dependencies
 
