@@ -8,6 +8,7 @@ This file defines the entry class HSSM.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from inspect import isclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
@@ -125,6 +126,14 @@ class HSSM:
             will be `analytical`. For other models supported, it will be
             `approx_differentiable`. If the model is a custom one, a ValueError
             will be raised.
+    p_outlier : optional
+        The fixed lapse probability or the prior distribution of the lapse probability.
+        Defaults to a fixed value of 0.05. When `None`, the lapse probability will not
+        be included in estimation.
+    lapse : optional
+        The lapse distribution. This argument is required only if `p_outlier` is not
+        `None`. Defaults to Uniform(0.0, 10.0).
+
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -165,6 +174,8 @@ class HSSM:
         model_config: Config | None = None,
         loglik: str | PathLike | LogLikeFunc | pytensor.graph.Op | None = None,
         loglik_kind: LoglikKind | None = None,
+        p_outlier: float | dict | bmb.Prior | None = 0.05,
+        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
         **kwargs,
     ):
         self.data = data
@@ -204,7 +215,7 @@ class HSSM:
         # Check if model has default config
         if _model_has_default(self.model_name, self.loglik_kind):
             model = cast(SupportedModels, model)
-            default_config = default_model_config[model][loglik_kind]
+            default_config = deepcopy(default_model_config[model][loglik_kind])
 
             self.model_config = (
                 default_config
@@ -212,7 +223,7 @@ class HSSM:
                 else merge_dicts(default_config, model_config)
             )
             self.loglik = self.model_config["loglik"] if loglik is None else loglik
-            self.list_params = default_params[model]
+            self.list_params = default_params[model][:]
         else:
             # If there is no default, we require a log-likelihood
             if loglik is None:
@@ -231,15 +242,29 @@ class HSSM:
                         + "`model_config`."
                     )
                 self.model_config = model_config
-                self.list_params = model_config["list_params"]
+                self.list_params = model_config["list_params"][:]
             else:
                 # For supported models without configs,
                 # We don't require a model_config (because list_params is known)
                 model = cast(SupportedModels, model)
                 self.model_config = {} if model_config is None else model_config
-                self.list_params = default_params[model]
+                self.list_params = default_params[model][:]
 
         self._parent = self.list_params[0]
+        if p_outlier is not None and lapse is None:
+            raise ValueError(
+                "You have specified `p_outlier`. Please also specify `lapse`."
+            )
+        if lapse is not None and p_outlier is None:
+            raise ValueError(
+                "You have specified `lapse`. Please also specify `p_outlier`."
+            )
+        if "p_outlier" in self.list_params:
+            raise ValueError(
+                "Please do not include 'p_outlier' in `list_params`. "
+                + "We automatically append it to `list_params` when `p_outlier` "
+                + "parameter is not None"
+            )
 
         if include is None:
             include = []
@@ -293,6 +318,12 @@ class HSSM:
             if param.is_regression and param.bounds is not None
         }
 
+        self.p_outlier = p_outlier
+        self.lapse = lapse
+
+        if p_outlier is not None:
+            self.list_params.append("p_outlier")
+
         ### Logic for different types of likelihoods:
         # -`analytical` and `blackbox`:
         #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
@@ -314,6 +345,7 @@ class HSSM:
                 loglik=self.loglik,
                 list_params=self.list_params,
                 bounds=self.bounds,
+                lapse=self.lapse,
             )  # type: ignore
         # If the user has provided a callable (an arbitrary likelihood function)
         # If `loglik_kind` is `blackbox`, wrap it in an op and then a distribution
@@ -327,6 +359,7 @@ class HSSM:
                 loglik=self.loglik,
                 list_params=self.list_params,
                 bounds=self.bounds,
+                lapse=self.lapse,
             )  # type: ignore
         # All other situations
         else:
@@ -347,6 +380,7 @@ class HSSM:
                 backend=self.model_config.get("backend", "jax"),
                 params_is_reg=params_is_reg,
                 bounds=self.bounds,
+                lapse=self.lapse,
             )
 
         assert self.model_distribution is not None
@@ -357,6 +391,14 @@ class HSSM:
             self.link,
             self._parent,
         )
+
+        if self.p_outlier is not None:
+            if isinstance(self.p_outlier, dict):
+                self.p_outlier = bmb.Prior(**self.p_outlier)
+            if self.priors is None:
+                self.priors = {"p_outlier": self.p_outlier}
+            else:
+                self.priors["p_outlier"] = self.p_outlier
 
         self.model = bmb.Model(
             self.formula, data, family=self.family, priors=self.priors, **other_kwargs
@@ -648,6 +690,16 @@ class HSSM:
 
         for param in self.params:
             output.append(str(param))
+
+        if self.p_outlier is not None:
+            output.append("")
+            lapse_output = "Lapse Probability"
+            if isinstance(self.p_outlier, bmb.Prior):
+                lapse_output += f" ~ {self.p_outlier}"
+            else:
+                lapse_output += f": {self.p_outlier}"
+            output.append(lapse_output)
+            output.append(f"Lapse Distribution: {self.lapse}")
 
         return "\r\n".join(output)
 

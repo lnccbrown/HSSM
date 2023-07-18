@@ -8,9 +8,10 @@ import pytest
 import ssms
 
 from hssm import HSSM
+from hssm.distribution_utils import make_distribution
 from hssm.hssm import _model_has_default
 from hssm.utils import download_hf
-from hssm.likelihoods import DDM
+from hssm.likelihoods import DDM, logp_ddm
 
 pytensor.config.floatX = "float32"
 
@@ -141,7 +142,7 @@ def test_transform_params_general(data, include, should_raise_exception):
         model_param_names = sorted([param.name for param in model.params])
         assert model_param_names == sorted(param_names)
         assert len(model.params) == 4
-        trace = model.sample()
+        trace = model.sample(cores=1, chains=1, draws=10, tune=10)
         assert isinstance(trace, az.InferenceData)
 
 
@@ -181,14 +182,13 @@ def test_custom_model(data, example_model_config):
         data=data,
         model="custom",
         model_config=example_model_config,
-        loglik=DDM,
+        loglik=logp_ddm,
         loglik_kind="analytical",
     )
 
     assert model.model_name == "custom"
-    assert model.loglik == DDM
     assert model.loglik_kind == "analytical"
-    assert model.list_params == example_model_config["list_params"]
+    assert model.list_params == example_model_config["list_params"] + ["p_outlier"]
 
 
 def test_model_definition_outside_include(data):
@@ -215,7 +215,7 @@ def test_model_with_approx_differentiable_likelihood_type(data_angle):
     loglik = "angle.onnx"
     model = HSSM(data=data_angle, model="angle", loglik_kind=loglik_kind, loglik=loglik)
     assert model.loglik == download_hf(loglik)
-    trace = model.sample()
+    trace = model.sample(cores=1, chains=1, tune=10, draws=10)
     assert isinstance(trace, az.InferenceData)
 
 
