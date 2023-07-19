@@ -1,6 +1,6 @@
-<div style="position: relative; width: 100%; height: auto;">
+<div style="display: flex; justify-content: space-between;">
   <img src="docs/images/mainlogo.png" style="width: 250px;">
-  <a href="https://ccbs.carney.brown.edu/brainstorm" style="position: absolute; right: 0;">
+  <a href="https://ccbs.carney.brown.edu/brainstorm">
     <img src="docs/images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
   </a>
 </div>
