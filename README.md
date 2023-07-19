@@ -1,7 +1,10 @@
-<p align="left">
-  <img src="docs/images/mainlogo.png" width="250">
-  <a href="https://ccbs.carney.brown.edu/brainstorm"><img hspace = 500 src="docs/images/Brain-Bolt-%2B-Circuits.gif" width="200"></a>
-</p>
+<div style="position: relative; width: 100%;">
+  <img src="docs/images/mainlogo.png" style="width: 250px;">
+  <a href="https://ccbs.carney.brown.edu/brainstorm" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%);">
+    <img src="docs/images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
+  </a>
+</div>
+
 
 ## HSSM - Hierarchical Sequential Sampling Modeling
 
