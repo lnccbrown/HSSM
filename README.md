@@ -1,4 +1,4 @@
-<div style="display: flex; justify-content: space-between;">
+<div style="display: flex; justify-content: space-between; border: 1px solid red;">
   <img src="docs/images/mainlogo.png" style="width: 250px;">
   <a href="https://ccbs.carney.brown.edu/brainstorm">
     <img src="docs/images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
