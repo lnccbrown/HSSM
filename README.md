@@ -1,9 +1,9 @@
-<p style="display: flex; justify-content: space-between; align-items: center;">
-  <a href="https://ccbs.carney.brown.edu/brainstorm">
-    <img src="docs/images/Brain-Bolt-%2B-Circuits.gif" style="width: 150px;">
-  </a>
+<div style="display: flex; justify-content: space-between; align-items: center;">
   <img src="docs/images/mainlogo.png" style="width: 250px;">
-</p>
+  <a href="https://ccbs.carney.brown.edu/brainstorm">
+    <img src="docs/images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
+  </a>
+</div>
 
 
 
