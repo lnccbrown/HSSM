@@ -264,26 +264,26 @@ def ftt01w(
     np.ndarray
         The Approximated density of f(tt|0,1,w).
     """
-    lambda_rt = decision(rt, err)
-    tt = rt / a**2
+    tt = rt / a**2.0
+
+    lambda_rt = compare_k(rt, err)
 
     p_fast = ftt01w_fast(tt, w, k_terms)
     p_slow = ftt01w_slow(tt, w, k_terms)
 
     p = pt.switch(lambda_rt, p_fast, p_slow)
 
-    return p * (p > 0)  # Making sure that p > 0
+    return p
 
 
-def logp_ddm_sdv(
+def logp_ddm(
     data: np.ndarray,
     v: float,
-    sv: float,
     a: float,
     z: float,
     t: float,
     err: float = 1e-7,
-    k_terms: int = 10,
+    k_terms: int = 20,
     epsilon: float = 1e-15,
 ) -> np.ndarray:
     """Compute analytical likelihood for the DDM model with `sv`.
@@ -322,40 +322,52 @@ def logp_ddm_sdv(
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
     flip = response > 0
-    a = a * 2
+    a = a * 2.0
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
+    # rt = pt.maximum(rt - t, epsilon)
     rt = rt - t
-    p = ftt01w(rt, a, z_flipped, err, k_terms)
+    p = pt.where(rt <= epsilon, epsilon, ftt01w(rt, a, z_flipped, err, k_terms))
+
+    logp = pt.switch(
+        rt <= epsilon,
+        epsilon,
+        pt.log(p)
+        - v_flipped * a * z_flipped
+        - (v_flipped**2 * rt / 2.0)
+        - 2.0 * pt.log(a),
+    )
 
     # This step does 3 things at the same time:
     # 1. Computes f(t|v, a, z) from the pdf when setting a = 0 and z = 1.
     # 2. Computes the log of above value
     # 3. Computes the integration given the sd of v
-    logp = (
-        pt.log(p + epsilon)
-        + (
-            (a * z_flipped * sv) ** 2
-            - 2 * a * v_flipped * z_flipped
-            - (v_flipped**2) * rt
-        )
-        / (2 * (sv**2) * rt + 2)
-        - pt.log(sv**2 * rt + 1 + epsilon) / 2
-        - 2 * pt.log(a + epsilon)
-    )
-    logp = pt.where(rt <= 0, OUT_OF_BOUNDS_VAL, logp)
-    checked_logp = check_parameters(
-        logp,
-        sv >= 0,
-        msg="sv >= 0",
-    )
-    checked_logp = check_parameters(checked_logp, a >= 0, msg="a >= 0")
+    # logp = pt.switch(
+    #     p <= 1e-11,
+    #     pt.log(1e-11),
+    #     pt.log(p + 1e-29)
+    #     + (
+    #         (a * z_flipped * sv) ** 2
+    #         - 2 * a * v_flipped * z_flipped
+    #         - (v_flipped**2) * rt
+    #     )
+    #     / (2 * (sv**2) * rt + 2)
+    #     - pt.log(sv**2 * rt + 1) / 2
+    #     - 2 * pt.log(a + 1e-29),
+    # )
+    # logp = pt.where(rt <= 0, OUT_OF_BOUNDS_VAL, logp)
+    # checked_logp = check_parameters(
+    #     logp,
+    #     sv >= 0,
+    #     msg="sv >= 0",
+    # )
+    checked_logp = check_parameters(logp, a >= 0, msg="a >= 0")
     # checked_logp = check_parameters(checked_logp, 0 < z < 1, msg="0 < z < 1")
     # checked_logp = check_parameters(checked_logp, np.all(rt > 0), msg="t <= min(rt)")
     return checked_logp
 
 
-def logp_ddm(
+def logp_ddm_sdv(
     data: np.ndarray,
     v: float,
     a: float,
@@ -393,7 +405,7 @@ def logp_ddm(
     np.ndarray
         The log likelihood of the drift diffusion model give sv=0.
     """
-    return logp_ddm_sdv(data, v, 0, a, z, t, err, k_terms, epsilon)
+    return logp_ddm_sdv(data, v, 0.0, a, z, t, err, k_terms, epsilon)
 
 
 ddm_bounds = {"z": (0.0, 1.0)}
