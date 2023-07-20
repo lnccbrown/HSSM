@@ -266,7 +266,7 @@ def ftt01w(
     """
     tt = rt / a**2.0
 
-    lambda_rt = compare_k(rt, err)
+    lambda_rt = compare_k(tt, err)
 
     p_fast = ftt01w_fast(tt, w, k_terms)
     p_slow = ftt01w_slow(tt, w, k_terms)
@@ -327,12 +327,11 @@ def logp_ddm(
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     # rt = pt.maximum(rt - t, epsilon)
     rt = rt - t
-    p = pt.where(rt <= epsilon, epsilon, ftt01w(rt, a, z_flipped, err, k_terms))
 
     logp = pt.switch(
         rt <= epsilon,
-        epsilon,
-        pt.log(p)
+        OUT_OF_BOUNDS_VAL,
+        pt.log(ftt01w(rt, a, z_flipped, err, k_terms))
         - v_flipped * a * z_flipped
         - (v_flipped**2 * rt / 2.0)
         - 2.0 * pt.log(a),
