@@ -175,7 +175,6 @@ class HSSM:
         self.data = data
         self._inference_obj = None
         self.hierarchical = hierarchical and "participant_id" in data.columns
-        print(self.hierarchical)
 
         if loglik_kind is None:
             if model not in default_model_config:
@@ -435,8 +434,6 @@ class HSSM:
 
         if len(params) != len(self.list_params):
             raise ValueError("Please provide a correct set of priors")
-
-        print(params)
 
         return params, *_parse_bambi(params)
 

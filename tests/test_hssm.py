@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import arviz as az
+import bambi as bmb
 import numpy as np
 import pandas as pd
 import pytensor
@@ -266,5 +267,17 @@ def test_hierarchical(data):
     model = HSSM(data=data)
     assert all(param.is_regression for param in model.params)
 
-    model = HSSM(data=data, v=0.5)
-    assert all(param.is_regression for param in model.params if param != "v")
+    model = HSSM(data=data, v=bmb.Prior("Uniform", lower=-10.0, upper=10.0))
+    assert all(param.is_regression for param in model.params if param.name != "v")
+
+    model = HSSM(data=data, a=bmb.Prior("Uniform", lower=-10.0, upper=10.0))
+    assert all(param.is_regression for param in model.params if param.name != "a")
+
+    model = HSSM(
+        data=data,
+        v=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
+        a=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
+    )
+    assert all(
+        param.is_regression for param in model.params if param.name not in ["v", "a"]
+    )
