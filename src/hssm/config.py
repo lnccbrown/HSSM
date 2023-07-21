@@ -41,6 +41,7 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
             "default_priors": {
                 "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
                 "a": {"name": "HalfNormal", "sigma": 2.0},
+                "z": None,
                 "t": {"name": "Uniform", "lower": 0.0, "upper": 2.0, "initval": 0.1},
             },
         },
@@ -61,9 +62,10 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
             "bounds": ddm_bounds,
             "default_priors": {
                 "v": {"name": "Uniform", "lower": -10.0, "upper": 10.0},
-                "sv": {"name": "HalfNormal", "sigma": 2.0},
                 "a": {"name": "HalfNormal", "sigma": 2.0},
-                "t": {"name": "Uniform", "lower": 0.0, "upper": 5.0, "initval": 0.0},
+                "z": None,
+                "t": {"name": "Uniform", "lower": 0.0, "upper": 2.0, "initval": 0.1},
+                "sv": {"name": "HalfNormal", "sigma": 1.0},
             },
         },
         "approx_differentiable": {
@@ -71,10 +73,10 @@ default_model_config: dict[SupportedModels, dict[Literal[LoglikKind], Config]] =
             "backend": "jax",
             "bounds": {
                 "v": (-3.0, 3.0),
-                "sv": (0.0, 1.0),
                 "a": (0.3, 2.5),
                 "z": (0.1, 0.9),
                 "t": (0.0, 2.0),
+                "sv": (0.0, 1.0),
             },
         },
     },
