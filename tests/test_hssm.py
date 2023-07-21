@@ -259,9 +259,12 @@ def test_sample_prior_predictive(data):
     )
 
 
-def test_hierarchical():
+def test_hierarchical(data):
     data = data.iloc[:10, :].copy()
     data["participant_id"] = np.arange(10)
 
     model = HSSM(data=data)
     assert all(param.is_regression for param in model.params)
+
+    model = HSSM(data=data, v=0.5)
+    assert all(param.is_regression for param in model.params if param != "v")
