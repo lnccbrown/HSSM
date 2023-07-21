@@ -12,7 +12,7 @@ import ssms.basic_simulators
 from numpy.random import rand
 
 # pylint: disable=C0413
-from hssm.likelihoods.analytical import decision_func, logp_ddm_sdv
+from hssm.likelihoods.analytical import compare_k, logp_ddm_sdv
 
 
 @pytest.fixture
@@ -39,18 +39,17 @@ def test_kterm(data_fixture):
         z = 0.5 * rand()
         t = rand() * 0.5
         err = 1e-7
-        logp = logp_ddm_sdv(data_fixture, v, sv, a, z, t, err, k_terms=k_term)
+        logp = logp_ddm_sdv(data_fixture, v, a, z, t, sv, err, k_terms=k_term)
         logp = sum(logp.eval())
         assert not math.isinf(logp)
         assert not math.isnan(logp)
 
 
-def test_decision(data_fixture):
+def test_compare_k(data_fixture):
     """This function tests output of decision function."""
-    decision = decision_func()
     err = 1e-7
     data = data_fixture[:, 0] * data_fixture[:, 1]
-    lambda_rt = decision(np.abs(data), err)
+    lambda_rt = compare_k(np.abs(data), err)
     assert all(not v for v in lambda_rt.eval())
     assert data_fixture.shape[0] == lambda_rt.eval().shape[0]
 
