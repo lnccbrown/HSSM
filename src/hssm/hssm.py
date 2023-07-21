@@ -125,6 +125,10 @@ class HSSM:
             will be `analytical`. For other models supported, it will be
             `approx_differentiable`. If the model is a custom one, a ValueError
             will be raised.
+    hierarchical : optional
+        If True, and if there is a `participant_id` field in `data`, will by default
+        turn any unspecified parameter theta into a regression with
+        "theta ~ 1 + (1|participant_id)" and default priors set by `bambi`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -165,10 +169,13 @@ class HSSM:
         model_config: Config | None = None,
         loglik: str | PathLike | LogLikeFunc | pytensor.graph.Op | None = None,
         loglik_kind: LoglikKind | None = None,
+        hierarchical: bool = True,
         **kwargs,
     ):
         self.data = data
         self._inference_obj = None
+        self.hierarchical = hierarchical and "participant_id" in data.columns
+        print(self.hierarchical)
 
         if loglik_kind is None:
             if model not in default_model_config:
@@ -408,13 +415,28 @@ class HSSM:
 
         for param_str in self.list_params:
             if param_str not in processed:
-                param = _create_param(
-                    param_str, model_config, is_parent=param_str == self._parent
-                )
+                is_parent = param_str == self._parent
+                if self.hierarchical:
+                    bounds = (
+                        model_config["bounds"].get(param_str)
+                        if "bounds" in model_config
+                        else None
+                    )
+                    param = Param(
+                        param_str,
+                        formula="1 + (1|participant_id)",
+                        link="identity",
+                        bounds=bounds,
+                        is_parent=is_parent,
+                    )
+                else:
+                    param = _create_param(param_str, model_config, is_parent=is_parent)
                 params.append(param)
 
         if len(params) != len(self.list_params):
             raise ValueError("Please provide a correct set of priors")
+
+        print(params)
 
         return params, *_parse_bambi(params)
 
