@@ -257,3 +257,11 @@ def test_sample_prior_predictive(data):
     prior_predictive_6 = model_regression_random_effect.sample_prior_predictive(
         draws=10
     )
+
+
+def test_hierarchical():
+    data = data.iloc[:10, :].copy()
+    data["participant_id"] = np.arange(10)
+
+    model = HSSM(data=data)
+    assert all(param.is_regression for param in model.params)
