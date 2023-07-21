@@ -347,7 +347,8 @@ def make_distribution(
                             get_distribution_from_prior(lapse).dist(**lapse.args),
                             data[:, 0],
                         )
-                    ) + 1e-29
+                    )
+                    + 1e-29
                 )
 
             if bounds is None:
