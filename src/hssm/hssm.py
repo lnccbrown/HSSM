@@ -275,21 +275,17 @@ class HSSM:
             include, self.model_config
         )
 
-        for param in self.params:
-            if param.name == self._parent:
-                self._parent_param = param
-                break
-
+        self._parent_param = self.params[self.list_params[0]]
         assert self._parent_param is not None
 
-        params_is_reg = [param.is_regression for param in self.params]
+        params_is_reg = [param.is_regression for param in self.params.values()]
 
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
         # a small negative value).
         self.bounds = {
-            param.name: param.bounds
-            for param in self.params
+            name: param.bounds
+            for name, param in self.params.items()
             if param.is_regression and param.bounds is not None
         }
 
@@ -367,7 +363,9 @@ class HSSM:
 
     def _transform_params(
         self, include: list[dict] | None, model_config: Config
-    ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
+    ) -> tuple[
+        dict[str, Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str
+    ]:
         """Transform parameters.
 
         Transforms a list of dictionaries containing parameter information into a
@@ -391,7 +389,7 @@ class HSSM:
             - An optional dict of link functions for Bambi.
         """
         processed = []
-        params = []
+        params: dict[str, Param] = {}
         if include:
             for param_dict in include:
                 name = param_dict["name"]
@@ -404,19 +402,18 @@ class HSSM:
                 param = _create_param(
                     param_dict, model_config, is_parent=name == self._parent
                 )
-                params.append(param)
+                params[name] = param
 
         for param_str in self.list_params:
             if param_str not in processed:
                 param = _create_param(
                     param_str, model_config, is_parent=param_str == self._parent
                 )
-                params.append(param)
+                params[param_str] = param
 
-        if len(params) != len(self.list_params):
-            raise ValueError("Please provide a correct set of priors")
+        sorted_params = {k: params[k] for k in self.list_params}
 
-        return params, *_parse_bambi(params)
+        return sorted_params, *_parse_bambi(list(sorted_params.values()))
 
     def sample(
         self,
@@ -646,7 +643,7 @@ class HSSM:
         output.append("Parameters:")
         output.append("")
 
-        for param in self.params:
+        for param in self.params.values():
             output.append(str(param))
 
         return "\r\n".join(output)
