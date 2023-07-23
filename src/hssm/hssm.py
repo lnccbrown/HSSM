@@ -282,7 +282,7 @@ class HSSM:
 
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
-        # a small negative value).
+        # a large negative value).
         self.bounds = {
             name: param.bounds
             for name, param in self.params.items()
