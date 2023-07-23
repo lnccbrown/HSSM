@@ -8,7 +8,6 @@ import pytest
 import ssms
 
 from hssm import HSSM
-from hssm.distribution_utils import make_distribution
 from hssm.hssm import _model_has_default
 from hssm.utils import download_hf
 from hssm.likelihoods import DDM, logp_ddm
