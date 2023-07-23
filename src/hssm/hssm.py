@@ -555,7 +555,7 @@ class HSSM:
             distribution. Defaults to ``None`` which means both observed and unobserved
             RVs.
         omit_offsets
-            Whether to omit offset terms in the plot. Defaults to ``True``.
+            Whether to omit offset terms. Defaults to ``True``.
         random_seed
             Seed for the random number generator.
 
