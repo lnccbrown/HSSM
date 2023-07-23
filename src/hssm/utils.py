@@ -287,3 +287,22 @@ def set_floatX(dtype: Literal["float32", "float64"], jax: bool = True):
             f'Setting "jax_enable_x64" to {mapping[dtype]}. '
             + "If this is not intended, please set `jax` to False"
         )
+
+
+def _print_prior(term: CommonTerm | GroupSpecificTerm):
+    """Make the output string of a term.
+
+    If prior is a float, print x: prior. Otherwise, print x ~ prior.
+
+    Parameters
+    ----------
+    term
+        A BaseTerm in Bambi
+    """
+    term_name = term.alias or term.name
+    prior = term._prior
+
+    if isinstance(prior, float):
+        return f"        {term_name}: {prior}"
+
+    return f"        {term_name} ~ {prior}"

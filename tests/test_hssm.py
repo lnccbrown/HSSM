@@ -265,7 +265,7 @@ def test_hierarchical(data):
     data["participant_id"] = np.arange(10)
 
     model = HSSM(data=data)
-    assert all(param.is_regression for param in model.params)
+    assert all(param.is_regression for param in model.params.values())
 
     model = HSSM(data=data, v=bmb.Prior("Uniform", lower=-10.0, upper=10.0))
     assert all(param.is_regression for param in model.params if param.name != "v")

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
 import pymc as pm
+from bambi.model_components import DistributionalComponent
 from numpy.typing import ArrayLike
 from pytensor.graph.op import Op
 
@@ -36,6 +37,7 @@ from hssm.param import (
 )
 from hssm.utils import (
     HSSMModelGraph,
+    _print_prior,
     download_hf,
     get_alias_dict,
     merge_dicts,
@@ -663,7 +665,36 @@ class HSSM:
         output.append("")
 
         for param in self.params.values():
-            output.append(str(param))
+            name = "c(rt, response)" if param.is_parent else param.name
+            output.append(f"{param.name}:")
+
+            component = self.model.components[name]
+
+            # Regression case:
+            if param.is_regression:
+                assert isinstance(component, DistributionalComponent)
+                output.append(f"    Formula: {param.formula}")
+                output.append("    Priors:")
+                intercept_term = component.intercept_term
+                if intercept_term is not None:
+                    output.append(_print_prior(intercept_term))
+                for _, common_term in component.common_terms.items():
+                    output.append(_print_prior(common_term))
+                for _, group_specific_term in component.group_specific_terms.items():
+                    output.append(_print_prior(group_specific_term))
+                output.append(f"    Link: {param.link}")
+            # None regression case
+            else:
+                if param.is_parent:
+                    prior = (
+                        component.intercept_term.prior
+                        if param.prior is None
+                        else param.prior
+                    )
+                else:
+                    prior = component.prior
+                output.append(f"    Prior: {prior}")
+            output.append(f"    Explicit bounds: {param.bounds}")
 
         return "\r\n".join(output)
 
