@@ -268,10 +268,14 @@ def test_hierarchical(data):
     assert all(param.is_regression for param in model.params.values())
 
     model = HSSM(data=data, v=bmb.Prior("Uniform", lower=-10.0, upper=10.0))
-    assert all(param.is_regression for param in model.params if param.name != "v")
+    assert all(
+        param.is_regression for param in model.params.values() if param.name != "v"
+    )
 
     model = HSSM(data=data, a=bmb.Prior("Uniform", lower=0.0, upper=10.0))
-    assert all(param.is_regression for param in model.params if param.name != "a")
+    assert all(
+        param.is_regression for param in model.params.values() if param.name != "a"
+    )
 
     model = HSSM(
         data=data,
@@ -279,5 +283,7 @@ def test_hierarchical(data):
         a=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
     )
     assert all(
-        param.is_regression for param in model.params if param.name not in ["v", "a"]
+        param.is_regression
+        for param in model.params.values()
+        if param.name not in ["v", "a"]
     )
