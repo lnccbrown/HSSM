@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
 import pymc as pm
+from bambi.model_components import DistributionalComponent
 from numpy.typing import ArrayLike
 from pytensor.graph.op import Op
 
@@ -36,6 +37,7 @@ from hssm.param import (
 )
 from hssm.utils import (
     HSSMModelGraph,
+    _print_prior,
     download_hf,
     get_alias_dict,
     merge_dicts,
@@ -125,6 +127,10 @@ class HSSM:
             will be `analytical`. For other models supported, it will be
             `approx_differentiable`. If the model is a custom one, a ValueError
             will be raised.
+    hierarchical : optional
+        If True, and if there is a `participant_id` field in `data`, will by default
+        turn any unspecified parameter theta into a regression with
+        "theta ~ 1 + (1|participant_id)" and default priors set by `bambi`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -165,10 +171,12 @@ class HSSM:
         model_config: Config | None = None,
         loglik: str | PathLike | LogLikeFunc | pytensor.graph.Op | None = None,
         loglik_kind: LoglikKind | None = None,
+        hierarchical: bool = True,
         **kwargs,
     ):
         self.data = data
         self._inference_obj = None
+        self.hierarchical = hierarchical and "participant_id" in data.columns
 
         if loglik_kind is None:
             if model not in default_model_config:
@@ -406,9 +414,22 @@ class HSSM:
 
         for param_str in self.list_params:
             if param_str not in processed:
-                param = _create_param(
-                    param_str, model_config, is_parent=param_str == self._parent
-                )
+                is_parent = param_str == self._parent
+                if self.hierarchical:
+                    bounds = (
+                        model_config["bounds"].get(param_str)
+                        if "bounds" in model_config
+                        else None
+                    )
+                    param = Param(
+                        param_str,
+                        formula="1 + (1|participant_id)",
+                        link="identity",
+                        bounds=bounds,
+                        is_parent=is_parent,
+                    )
+                else:
+                    param = _create_param(param_str, model_config, is_parent=is_parent)
                 params[param_str] = param
 
         sorted_params = {k: params[k] for k in self.list_params}
@@ -644,7 +665,36 @@ class HSSM:
         output.append("")
 
         for param in self.params.values():
-            output.append(str(param))
+            name = "c(rt, response)" if param.is_parent else param.name
+            output.append(f"{param.name}:")
+
+            component = self.model.components[name]
+
+            # Regression case:
+            if param.is_regression:
+                assert isinstance(component, DistributionalComponent)
+                output.append(f"    Formula: {param.formula}")
+                output.append("    Priors:")
+                intercept_term = component.intercept_term
+                if intercept_term is not None:
+                    output.append(_print_prior(intercept_term))
+                for _, common_term in component.common_terms.items():
+                    output.append(_print_prior(common_term))
+                for _, group_specific_term in component.group_specific_terms.items():
+                    output.append(_print_prior(group_specific_term))
+                output.append(f"    Link: {param.link}")
+            # None regression case
+            else:
+                if param.is_parent:
+                    prior = (
+                        component.intercept_term.prior
+                        if param.prior is None
+                        else param.prior
+                    )
+                else:
+                    prior = component.prior
+                output.append(f"    Prior: {prior}")
+            output.append(f"    Explicit bounds: {param.bounds}")
 
         return "\r\n".join(output)
 
