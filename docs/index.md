@@ -17,7 +17,7 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 **License**: HSSM is licensed under [Copyright 2023, Brown University, Providence, RI](../LICENSE)
 
-**Version**: 0.1.1
+**Version**: 0.1.2
 
 - Allows approximate hierarchical Bayesian inference via various likelihood approximators.
 - Estimate impact of neural and other trial-by-trial covariates via native hierarchical mixed-regression support.
