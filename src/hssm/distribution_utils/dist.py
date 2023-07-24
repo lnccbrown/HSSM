@@ -29,6 +29,8 @@ from .onnx import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytenso
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
+_logger = logging.getLogger("hssm")
+
 OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
 
 
@@ -108,7 +110,7 @@ def make_ssm_rv(
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
     if model_name not in ssms_model_config:
-        logging.warning(
+        _logger.warning(
             "You supplied a model '%s', which is currently not supported in "
             + "the ssm_simulators package. An error will be thrown when sampling from "
             + "the random variable or when using any "

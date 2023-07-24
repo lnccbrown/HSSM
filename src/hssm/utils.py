@@ -12,8 +12,10 @@ _parse_bambi().
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Iterable, Literal, NewType
 
+import bambi as bmb
 import pytensor
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from huggingface_hub import hf_hub_download
@@ -22,9 +24,9 @@ from pymc.model_graph import ModelGraph
 from pytensor import function
 
 if TYPE_CHECKING:
-    import bambi as bmb
-
     from .param import Param
+
+_logger = logging.getLogger("hssm")
 
 REPO_ID = "franklab/HSSM"
 
@@ -55,7 +57,7 @@ def download_hf(path: str):
 
 def merge_dicts(dict1: dict, dict2: dict) -> dict:
     """Recursively merge two dictionaries."""
-    merged = dict1.copy()
+    merged = deepcopy(dict1)
     for key, value in dict2.items():
         if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             merged[key] = merge_dicts(merged[key], value)
@@ -113,6 +115,7 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
 
     Returns
     -------
+    dict[str, str | dict]
         A dict that indicates how Bambi should alias its parameters.
     """
     parent_name = parent.name
@@ -277,19 +280,19 @@ def set_floatX(dtype: Literal["float32", "float64"], jax: bool = True):
         raise ValueError('`dtype` must be either "float32" or "float64".')
 
     pytensor.config.floatX = dtype
-    logging.info(f"Setting PyTensor floatX type to {dtype}")
+    _logger.info(f"Setting PyTensor floatX type to {dtype}")
 
     if jax:
         mapping = dict(float32=False, float64=True)
         config.update("jax_enable_x64", mapping[dtype])
 
-        logging.info(
+        _logger.info(
             f'Setting "jax_enable_x64" to {mapping[dtype]}. '
             + "If this is not intended, please set `jax` to False"
         )
 
 
-def _print_prior(term: CommonTerm | GroupSpecificTerm):
+def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:
     """Make the output string of a term.
 
     If prior is a float, print x: prior. Otherwise, print x ~ prior.
@@ -298,6 +301,10 @@ def _print_prior(term: CommonTerm | GroupSpecificTerm):
     ----------
     term
         A BaseTerm in Bambi
+
+    Returns
+    -------
+        A string representing the term_name ~ prior pair
     """
     term_name = term.alias or term.name
     prior = term._prior
@@ -306,3 +313,36 @@ def _print_prior(term: CommonTerm | GroupSpecificTerm):
         return f"        {term_name}: {prior}"
 
     return f"        {term_name} ~ {prior}"
+
+
+def _process_param_in_kwargs(name, prior: float | dict | bmb.Prior) -> dict:
+    """Process parameters specified in kwargs.
+
+    Parameters
+    ----------
+    name
+        The name of the parameters.
+    prior
+        The prior specified.
+
+    Returns
+    -------
+    dict
+        A `dict` that complies with ways to specify parameters in `include`.
+
+    Raises
+    ------
+    ValueError
+        When `prior` is not a `float`, a `dict`, or a `b`mb.Prior` object.
+    """
+    if isinstance(prior, (int, float, bmb.Prior)):
+        return {"name": name, "prior": prior}
+    elif isinstance(prior, dict):
+        if ("prior" in prior) or ("bounds" in prior):
+            return prior | {"name": name}
+        else:
+            return {"name": name, "prior": prior}
+    else:
+        raise ValueError(
+            f"Parameter {name} must be a float, a dict, or a bmb.Prior object."
+        )

@@ -8,6 +8,7 @@ This file defines the entry class HSSM.
 
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from inspect import isclass
 from pathlib import Path
@@ -39,6 +40,7 @@ from hssm.param import (
 from hssm.utils import (
     HSSMModelGraph,
     _print_prior,
+    _process_param_in_kwargs,
     download_hf,
     get_alias_dict,
     merge_dicts,
@@ -53,6 +55,9 @@ if TYPE_CHECKING:
     import pytensor
 
 LogLikeFunc = Callable[..., ArrayLike]
+
+_logger = logging.getLogger("hssm")
+_logger.setLevel("INFO")
 
 
 class HSSM:
@@ -187,6 +192,7 @@ class HSSM:
         self.data = data
         self._inference_obj = None
         self.hierarchical = hierarchical and "participant_id" in data.columns
+        self.has_lapse = p_outlier is not None and p_outlier != 0
 
         if loglik_kind is None:
             if model not in default_model_config:
@@ -222,10 +228,10 @@ class HSSM:
         # Check if model has default config
         if _model_has_default(self.model_name, self.loglik_kind):
             model = cast(SupportedModels, model)
-            default_config = deepcopy(default_model_config[model][loglik_kind])
+            default_config = default_model_config[model][loglik_kind]
 
             self.model_config = (
-                default_config
+                deepcopy(default_config)
                 if model_config is None
                 else merge_dicts(default_config, model_config)
             )
@@ -249,7 +255,7 @@ class HSSM:
                         + "`model_config`."
                     )
                 self.model_config = model_config
-                self.list_params = model_config["list_params"][:]
+                self.list_params = model_config["list_params"]
             else:
                 # For supported models without configs,
                 # We don't require a model_config (because list_params is known)
@@ -257,21 +263,28 @@ class HSSM:
                 self.model_config = {} if model_config is None else model_config
                 self.list_params = default_params[model][:]
 
+        # Logic for determining if p_outlier and lapse is specified correctly.
+        # Basically, avoid situations where only one of them is specified.
         self._parent = self.list_params[0]
-        if p_outlier is not None and lapse is None:
+        if self.has_lapse and lapse is None:
             raise ValueError(
                 "You have specified `p_outlier`. Please also specify `lapse`."
             )
-        if lapse is not None and p_outlier is None:
-            raise ValueError(
-                "You have specified `lapse`. Please also specify `p_outlier`."
+        if lapse is not None and not self.has_lapse:
+            _logger.warning(
+                "You have specified the `lapse` argument to include a lapse "
+                + "distribution, but `p_outlier` is set to either 0 or None."
+                + "Your lapse distribution will be ignored."
             )
-        if "p_outlier" in self.list_params:
+        if "p_outlier" in self.list_params and self.list_params[-1] != "p_outlier":
             raise ValueError(
                 "Please do not include 'p_outlier' in `list_params`. "
                 + "We automatically append it to `list_params` when `p_outlier` "
                 + "parameter is not None"
             )
+
+        if self.has_lapse and self.list_params[-1] != "p_outlier":
+            self.list_params.append("p_outlier")
 
         if include is None:
             include = []
@@ -289,19 +302,18 @@ class HSSM:
                     raise ValueError(
                         f'Parameter "{k}" is already specified in `include`.'
                     )
-                if isinstance(v, (int, float, bmb.Prior)):
-                    include.append({"name": k, "prior": v})
-                elif isinstance(v, dict):
-                    if ("prior" in v) or ("bounds" in v):
-                        include.append(v | {"name": k})
-                    else:
-                        include.append({"name": k, "prior": v})
-                else:
-                    raise ValueError(
-                        f"Parameter {k} must be a float, a dict, or a bmb.Prior object."
-                    )
+                include.append(_process_param_in_kwargs(k, v))
             else:
                 other_kwargs |= {k: v}
+
+        # Process p_outliers the same way.
+        if self.has_lapse:
+            if "p_outlier" in params_in_include:
+                raise ValueError(
+                    "Please do not specify `p_outlier` in `include`. "
+                    + "Please specify it with `p_outlier` instead."
+                )
+            include.append(_process_param_in_kwargs("p_outlier", p_outlier))
 
         self.params, self.formula, self.priors, self.link = self._transform_params(
             include, self.model_config
@@ -321,11 +333,8 @@ class HSSM:
             if param.is_regression and param.bounds is not None
         }
 
-        self.p_outlier = p_outlier
+        self.p_outlier = self.params.get("p_outlier")
         self.lapse = lapse
-
-        if p_outlier is not None:
-            self.list_params.append("p_outlier")
 
         ### Logic for different types of likelihoods:
         # -`analytical` and `blackbox`:
@@ -394,14 +403,6 @@ class HSSM:
             self.link,
             self._parent,
         )
-
-        if self.p_outlier is not None:
-            if isinstance(self.p_outlier, dict):
-                self.p_outlier = bmb.Prior(**self.p_outlier)
-            if self.priors is None:
-                self.priors = {"p_outlier": self.p_outlier}
-            else:
-                self.priors["p_outlier"] = self.p_outlier
 
         self.model = bmb.Model(
             self.formula, data, family=self.family, priors=self.priors, **other_kwargs
@@ -706,6 +707,8 @@ class HSSM:
         output.append("")
 
         for param in self.params.values():
+            if param.name == "p_outlier":
+                continue
             name = "c(rt, response)" if param.is_parent else param.name
             output.append(f"{param.name}:")
 
@@ -739,7 +742,7 @@ class HSSM:
 
         if self.p_outlier is not None:
             output.append("")
-            output.append(f"Lapse probability: {self.p_outlier}")
+            output.append(f"Lapse probability: {self.p_outlier.prior}")
             output.append(f"Lapse distribution: {self.lapse}")
 
         return "\r\n".join(output)
