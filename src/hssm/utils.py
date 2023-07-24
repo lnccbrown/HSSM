@@ -280,7 +280,7 @@ def set_floatX(dtype: Literal["float32", "float64"], jax: bool = True):
         raise ValueError('`dtype` must be either "float32" or "float64".')
 
     pytensor.config.floatX = dtype
-    _logger.info(f"Setting PyTensor floatX type to {dtype}")
+    _logger.info(f"Setting PyTensor floatX type to {dtype}.")
 
     if jax:
         mapping = dict(float32=False, float64=True)
@@ -288,7 +288,7 @@ def set_floatX(dtype: Literal["float32", "float64"], jax: bool = True):
 
         _logger.info(
             f'Setting "jax_enable_x64" to {mapping[dtype]}. '
-            + "If this is not intended, please set `jax` to False"
+            + "If this is not intended, please set `jax` to False."
         )
 
 

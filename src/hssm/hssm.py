@@ -57,7 +57,6 @@ if TYPE_CHECKING:
 LogLikeFunc = Callable[..., ArrayLike]
 
 _logger = logging.getLogger("hssm")
-_logger.setLevel("INFO")
 
 
 class HSSM:
@@ -273,7 +272,7 @@ class HSSM:
         if lapse is not None and not self.has_lapse:
             _logger.warning(
                 "You have specified the `lapse` argument to include a lapse "
-                + "distribution, but `p_outlier` is set to either 0 or None."
+                + "distribution, but `p_outlier` is set to either 0 or None. "
                 + "Your lapse distribution will be ignored."
             )
         if "p_outlier" in self.list_params and self.list_params[-1] != "p_outlier":
@@ -334,7 +333,7 @@ class HSSM:
         }
 
         self.p_outlier = self.params.get("p_outlier")
-        self.lapse = lapse
+        self.lapse = lapse if self.has_lapse else None
 
         ### Logic for different types of likelihoods:
         # -`analytical` and `blackbox`:
@@ -741,6 +740,10 @@ class HSSM:
             output.append(f"    Explicit bounds: {param.bounds}")
 
         if self.p_outlier is not None:
+            # TODO: Allow regression for self.p_outlier
+            # Need to determine what the output should look like
+            # and whether p should be hierarchical when self.hierarchical is True.
+            assert not self.p_outlier.is_regression
             output.append("")
             output.append(f"Lapse probability: {self.p_outlier.prior}")
             output.append(f"Lapse distribution: {self.lapse}")
