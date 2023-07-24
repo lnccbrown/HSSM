@@ -321,7 +321,11 @@ class HSSM:
         self._parent_param = self.params[self.list_params[0]]
         assert self._parent_param is not None
 
-        params_is_reg = [param.is_regression for param in self.params.values()]
+        params_is_reg = [
+            param.is_regression
+            for param_name, param in self.params.items()
+            if param_name != "p_outlier"
+        ]
 
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
@@ -393,8 +397,6 @@ class HSSM:
                 bounds=self.bounds,
                 lapse=self.lapse,
             )
-
-        assert self.model_distribution is not None
 
         self.family = make_family(
             self.model_distribution,
