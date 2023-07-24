@@ -6,7 +6,7 @@
 
 - Improved numerical stability of `analytical` likelihoods.
 - Added the ability to handle lapse distributions.
-- Added the ability to perform prior predictive sampling
+- Added the ability to perform prior predictive sampling.
 - Improved model information output - now default priors provided by `bambi` is also printed.
 - Added a `hierarchical` switch which turns all parameters into hierarchical
   when `participant_id` is provided in data.
