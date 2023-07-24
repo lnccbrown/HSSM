@@ -7,16 +7,17 @@ https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b.
 
 from __future__ import annotations
 
-from typing import Callable, Type
+from typing import Type
 
 import numpy as np
 import pymc as pm
+import pytensor
 import pytensor.tensor as pt
 from pymc.distributions.dist_math import check_parameters
 
 from ..distribution_utils.dist import make_distribution
 
-OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
+LOGP_LB = pm.floatX(-66.1)
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
@@ -84,73 +85,6 @@ def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
     return ks < kl
 
 
-def decision_func() -> Callable[[np.ndarray, float], np.ndarray]:
-    """Make a decision function.
-
-    Produces a decision function that determines whether the pdf should be calculated
-    with large-time or small-time expansion.
-
-    Returns
-    -------
-    Callable[[np.ndarray, float], np.ndarray]
-        A decision function with saved state to avoid repeated computation.
-    """
-    internal_rt: np.ndarray | None = None
-    internal_err: float | None = None
-    internal_result: np.ndarray | None = None
-
-    def inner_func(rt: np.ndarray, err: float = 1e-7) -> np.ndarray:
-        """Determine whether `k_small` or `k_large` will be used.
-
-        For each element in `rt`, return `True` if the large-time expansion is
-        more efficient than the small-time expansion and `False` otherwise.
-        This function uses a closure to save the result of past computation.
-        If `rt` and `err` passed to it does not change, then it will directly
-        return the results of the previous computation.
-
-        Parameters
-        ----------
-        rt
-            An 1D numpy array of flipped RTs. (0, inf).
-        err
-            Error bound.
-
-        Returns
-        -------
-        np.ndarray
-            A 1D boolean at array of which implementation should be used.
-        """
-        nonlocal internal_rt
-        nonlocal internal_err
-        nonlocal internal_result
-
-        if (
-            internal_result is not None
-            and err == internal_err
-            and np.all(rt == internal_rt)
-        ):
-            # This order is to promote short circuiting to avoid
-            # unnecessary computation.
-            return internal_result
-
-        internal_rt = rt
-        internal_err = err
-
-        lambda_rt = compare_k(rt, err)
-
-        internal_result = lambda_rt
-
-        return lambda_rt
-
-    return inner_func
-
-
-# This decision function keeps an internal state of `tt`
-# and does not repeat computation if a new `tt` passed to
-# it is the same
-decision = decision_func()
-
-
 def get_ks(k_terms: int, fast: bool) -> np.ndarray:
     """Return an array of ks.
 
@@ -169,9 +103,13 @@ def get_ks(k_terms: int, fast: bool) -> np.ndarray:
     np.ndarray
         An array of ks.
     """
-    if fast:
-        return pt.arange(-pt.floor((k_terms - 1) / 2), pt.ceil((k_terms - 1) / 2) + 1)
-    return pt.arange(1, k_terms + 1).reshape((-1, 1))
+    ks = (
+        pt.arange(-pt.floor((k_terms - 1) / 2), pt.ceil((k_terms - 1) / 2) + 1)
+        if fast
+        else pt.arange(1, k_terms + 1).reshape((-1, 1))
+    )
+
+    return ks.astype(pytensor.config.floatX)
 
 
 def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
@@ -202,7 +140,7 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     y = w + 2 * k.reshape((-1, 1))
     r = -pt.power(y, 2) / (2 * tt)
     c = pt.max(r, axis=0)
-    p = pt.exp(c + pt.log(pt.sum(y * pt.exp(r - c), axis=0)))
+    p = pt.exp(c) * pt.sum(y * pt.exp(r - c), axis=0)
     # Normalize p
     p = p / pt.sqrt(2 * np.pi * pt.power(tt, 3))
 
@@ -264,26 +202,26 @@ def ftt01w(
     np.ndarray
         The Approximated density of f(tt|0,1,w).
     """
-    lambda_rt = decision(rt, err)
-    tt = rt / a**2
+    tt = rt / a**2.0
+
+    lambda_rt = compare_k(tt, err)
 
     p_fast = ftt01w_fast(tt, w, k_terms)
     p_slow = ftt01w_slow(tt, w, k_terms)
 
     p = pt.switch(lambda_rt, p_fast, p_slow)
 
-    return p * (p > 0)  # Making sure that p > 0
+    return p
 
 
-def logp_ddm_sdv(
+def logp_ddm(
     data: np.ndarray,
     v: float,
-    sv: float,
     a: float,
     z: float,
     t: float,
-    err: float = 1e-7,
-    k_terms: int = 10,
+    err: float = 1e-15,
+    k_terms: int = 20,
     epsilon: float = 1e-15,
 ) -> np.ndarray:
     """Compute analytical likelihood for the DDM model with `sv`.
@@ -297,8 +235,6 @@ def logp_ddm_sdv(
         data: 2-column numpy array of (response time, response)
     v
         Mean drift rate. (-inf, inf).
-    sv
-        Standard deviation of the drift rate [0, inf).
     a
         Value of decision upper bound. (0, inf).
     z
@@ -322,47 +258,37 @@ def logp_ddm_sdv(
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
     flip = response > 0
-    a = a * 2
+    a = a * 2.0
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
-    p = ftt01w(rt, a, z_flipped, err, k_terms)
 
-    # This step does 3 things at the same time:
-    # 1. Computes f(t|v, a, z) from the pdf when setting a = 0 and z = 1.
-    # 2. Computes the log of above value
-    # 3. Computes the integration given the sd of v
-    logp = (
-        pt.log(p + epsilon)
-        + (
-            (a * z_flipped * sv) ** 2
-            - 2 * a * v_flipped * z_flipped
-            - (v_flipped**2) * rt
-        )
-        / (2 * (sv**2) * rt + 2)
-        - pt.log(sv**2 * rt + 1 + epsilon) / 2
-        - 2 * pt.log(a + epsilon)
+    p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
+
+    logp = pt.where(
+        rt <= epsilon,
+        LOGP_LB,
+        pt.log(p)
+        - v_flipped * a * z_flipped
+        - (v_flipped**2 * rt / 2.0)
+        - 2.0 * pt.log(a),
     )
-    logp = pt.where(rt <= 0, OUT_OF_BOUNDS_VAL, logp)
-    checked_logp = check_parameters(
-        logp,
-        sv >= 0,
-        msg="sv >= 0",
-    )
-    checked_logp = check_parameters(checked_logp, a >= 0, msg="a >= 0")
-    # checked_logp = check_parameters(checked_logp, 0 < z < 1, msg="0 < z < 1")
-    # checked_logp = check_parameters(checked_logp, np.all(rt > 0), msg="t <= min(rt)")
+
+    checked_logp = check_parameters(logp, a >= 0, msg="a >= 0")
+    checked_logp = check_parameters(checked_logp, z >= 0, msg="z >= 0")
+    checked_logp = check_parameters(checked_logp, z <= 1, msg="z <= 1")
     return checked_logp
 
 
-def logp_ddm(
+def logp_ddm_sdv(
     data: np.ndarray,
     v: float,
     a: float,
     z: float,
     t: float,
-    err: float = 1e-7,
-    k_terms: int = 10,
+    sv: float,
+    err: float = 1e-15,
+    k_terms: int = 20,
     epsilon: float = 1e-15,
 ) -> np.ndarray:
     """Compute the log-likelihood of the drift diffusion model f(t|v,a,z).
@@ -381,6 +307,8 @@ def logp_ddm(
         Normalized decision starting point. (0, 1).
     t
         Non-decision time [0, inf).
+    sv
+        Standard deviation of the drift rate [0, inf).
     err
         Error bound.
     k_terms
@@ -391,9 +319,42 @@ def logp_ddm(
     Returns
     -------
     np.ndarray
-        The log likelihood of the drift diffusion model give sv=0.
+        The log likelihood of the drift diffusion model with the standard deviation
+        of sv.
     """
-    return logp_ddm_sdv(data, v, 0, a, z, t, err, k_terms, epsilon)
+    if sv == 0:
+        return logp_ddm(data, v, a, z, t, err, k_terms, epsilon)
+
+    data = pt.reshape(data, (-1, 2))
+    rt = pt.abs(data[:, 0])
+    response = data[:, 1]
+    flip = response > 0
+    a = a * 2.0
+    v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
+    z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
+    rt = rt - t
+
+    p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
+
+    logp = pt.switch(
+        rt <= epsilon,
+        LOGP_LB,
+        pt.log(p)
+        + (
+            (a * z_flipped * sv) ** 2
+            - 2 * a * v_flipped * z_flipped
+            - (v_flipped**2) * rt
+        )
+        / (2 * (sv**2) * rt + 2)
+        - 0.5 * pt.log(sv**2 * rt + 1)
+        - 2 * pt.log(a),
+    )
+
+    checked_logp = check_parameters(logp, a >= 0, msg="a >= 0")
+    checked_logp = check_parameters(checked_logp, z >= 0, msg="z >= 0")
+    checked_logp = check_parameters(checked_logp, z <= 1, msg="z <= 1")
+    checked_logp = check_parameters(checked_logp, sv > 0, msg="sv > 0")
+    return checked_logp
 
 
 ddm_bounds = {"z": (0.0, 1.0)}

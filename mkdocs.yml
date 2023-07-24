@@ -17,7 +17,8 @@ nav:
       - hssm.config: api_defaults.md
   - Tutorials:
       - Main tutorial: tutorial_notebooks/no_execute/main_tutorial.ipynb
-      - Understanding likelihood functions in HSSM: tutorial_likelihoods.md
+      - Understanding likelihood functions in HSSM: tutorial_notebooks/tutorial_likelihoods.ipynb
+      - Using lapse probabilities: tutorial_notebooks/no_execute/lapse_prob_and_dist.ipynb
       - Using HSSM low-level API directly with PyMC: tutorial_notebooks/pymc.ipynb
       - Using Models from Hugging Face: tutorial_notebooks/hugging_face_onnx_models.ipynb
   - Contributing: CONTRIBUTING.md
