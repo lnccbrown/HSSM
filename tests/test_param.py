@@ -81,7 +81,7 @@ def test_param_creation_non_regression():
         include=[v, a, z, t],
     )
 
-    pv, pa, pz, pt, ptheta = model.params
+    pv, pa, pz, pt, ptheta = model.params.values()
     assert pv.is_truncated
     assert pa.is_truncated
     assert pz.is_truncated
@@ -135,7 +135,7 @@ def test_param_creation_regression():
         include=[v_reg],
     )
 
-    v_reg_param = model_reg_v.params[0]
+    v_reg_param = model_reg_v.params["v"]
 
     assert v_reg_param.is_regression
     assert not v_reg_param.is_fixed

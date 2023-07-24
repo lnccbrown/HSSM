@@ -138,9 +138,9 @@ def test_transform_params_general(data, include, should_raise_exception):
         model = HSSM(data=data, include=include)
         # Check model properties using a loop
         param_names = ["v", "a", "z", "t"]
-        model_param_names = sorted([param.name for param in model.params])
+        model_param_names = sorted([param.name for param in model.params.values()])
         assert model_param_names == sorted(param_names)
-        assert len(model.params) == 4
+        assert len(model.params.values()) == 4
         trace = model.sample()
         assert isinstance(trace, az.InferenceData)
 
