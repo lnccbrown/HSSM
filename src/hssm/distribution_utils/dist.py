@@ -451,14 +451,8 @@ def make_distribution_from_onnx(
             lapse=lapse,
         )
     if backend == "jax":
-        if list_params[-1] == "p_outlier":
-            if params_is_reg is None:
-                params_is_reg = [False for _ in list_params[:-1]]
-            elif len(params_is_reg) == len(list_params):
-                params_is_reg = params_is_reg[:-1]
-        else:
-            if params_is_reg is None:
-                params_is_reg = [False for _ in list_params]
+        if params_is_reg is None:
+            params_is_reg = [False for param in list_params if param != "p_outlier"]
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
             onnx_model,
             params_is_reg,
