@@ -40,35 +40,16 @@ You can also install the bleeding edge version of `hssm` directly from this repo
 ```
 pip install git+https://github.com/lnccbrown/HSSM.git
 ```
-!!! note 
 
-Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an environment manager with Python 3.9~3.11 to prevent any problems with dependencies during the installation process. Please note that hssm is tested for python 3.9, 3.10, 3.11. Use other python versions with caution. For more detailed guidance, please refer to this [discussion](https://github.com/lnccbrown/HSSM/discussions/152). 
-
-### Optional dependencies
-
-**Dependency for graph() Function**
+For more detailed guidance, please check out our [installation guide](installation.md).
 
 !!! note
 
-    In addition to the installation of the main hssm class, there is an optional dependency for the graph() function. This dependency requires graphviz, which can be installed conveniently using conda with the following command:
-
-    ```bash
-    conda install -c conda-forge python-graphviz
-    ```
-
-    Alternatively, you have the option to install the graphviz binaries manually and then install the Python bindings using pip with the following command:
-
-    ```bash
-    pip install graphviz
-    ```
-
-**Dependency for sampler="nuts_numpyro"**
-
-`numpyro` needs to be installed to use the `nuts_numpyro` sampler:
-
-```bash
-pip install numpyro
-```
+    Possible solutions to any issues with installations with hssm can be located
+    [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an
+    environment manager with Python 3.9~3.11 to prevent any problems with dependencies
+    during the installation process. Please note that hssm is tested for python 3.9, 3.10,
+    3.11. Use other python versions with caution.
 
 ### Setting global float type
 
