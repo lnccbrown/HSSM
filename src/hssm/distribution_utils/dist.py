@@ -114,7 +114,7 @@ def make_ssm_rv(
             "You supplied a model '%s', which is currently not supported in "
             + "the ssm_simulators package. An error will be thrown when sampling from "
             + "the random variable or when using any "
-            + "posterior posterior sampling methods.",
+            + "posterior or prior predictive sampling methods.",
             model_name,
         )
 
@@ -123,7 +123,7 @@ def make_ssm_rv(
 
     # pylint: disable=W0511, R0903
     class SSMRandomVariable(RandomVariable):
-        """WFPT random variable."""
+        """SSM random variable."""
 
         name: str = "SSM_RV"
         # to get around the support checking in PyMC that would result in error
@@ -275,7 +275,10 @@ def make_ssm_rv(
                 )
 
             if p_outlier is not None:
-                assert cls._lapse is not None
+                assert cls._lapse is not None, (
+                    "You have specified `p_outlier`, the probability of the lapse "
+                    + "distribution but did not specify the distribution."
+                )
                 out_shape = sims_out.shape[:-1]
                 replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
                 replace = np.stack([replace, replace], axis=-1)
@@ -367,12 +370,13 @@ def make_distribution(
             logp = loglik(data, *dist_params)
 
             if list_params[-1] == "p_outlier":
+                dist = get_distribution_from_prior(lapse).dist(**lapse.args)
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)
                     + p_outlier
                     * pt.exp(
                         pm.logp(
-                            get_distribution_from_prior(lapse).dist(**lapse.args),
+                            dist,
                             data[:, 0],
                         )
                     )

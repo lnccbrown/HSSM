@@ -81,7 +81,7 @@ def test_param_creation_non_regression():
         include=[v, a, z, t],
     )
 
-    pv, pa, pz, pt, ptheta = model.params.values()
+    pv, pa, pz, pt, ptheta, _ = model.params.values()
     assert pv.is_truncated
     assert pa.is_truncated
     assert pz.is_truncated
