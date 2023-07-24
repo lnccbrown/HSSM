@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
 import pymc as pm
+from bambi.model_components import DistributionalComponent
 from numpy.typing import ArrayLike
 from pytensor.graph.op import Op
 
@@ -37,6 +38,7 @@ from hssm.param import (
 )
 from hssm.utils import (
     HSSMModelGraph,
+    _print_prior,
     download_hf,
     get_alias_dict,
     merge_dicts,
@@ -133,7 +135,10 @@ class HSSM:
     lapse : optional
         The lapse distribution. This argument is required only if `p_outlier` is not
         `None`. Defaults to Uniform(0.0, 10.0).
-
+    hierarchical : optional
+        If True, and if there is a `participant_id` field in `data`, will by default
+        turn any unspecified parameter theta into a regression with
+        "theta ~ 1 + (1|participant_id)" and default priors set by `bambi`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -176,10 +181,12 @@ class HSSM:
         loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
+        hierarchical: bool = True,
         **kwargs,
     ):
         self.data = data
         self._inference_obj = None
+        self.hierarchical = hierarchical and "participant_id" in data.columns
 
         if loglik_kind is None:
             if model not in default_model_config:
@@ -300,21 +307,17 @@ class HSSM:
             include, self.model_config
         )
 
-        for param in self.params:
-            if param.name == self._parent:
-                self._parent_param = param
-                break
-
+        self._parent_param = self.params[self.list_params[0]]
         assert self._parent_param is not None
 
-        params_is_reg = [param.is_regression for param in self.params]
+        params_is_reg = [param.is_regression for param in self.params.values()]
 
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
-        # a small negative value).
+        # a large negative value).
         self.bounds = {
-            param.name: param.bounds
-            for param in self.params
+            name: param.bounds
+            for name, param in self.params.items()
             if param.is_regression and param.bounds is not None
         }
 
@@ -409,7 +412,9 @@ class HSSM:
 
     def _transform_params(
         self, include: list[dict] | None, model_config: Config
-    ) -> tuple[list[Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
+    ) -> tuple[
+        dict[str, Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str
+    ]:
         """Transform parameters.
 
         Transforms a list of dictionaries containing parameter information into a
@@ -433,7 +438,7 @@ class HSSM:
             - An optional dict of link functions for Bambi.
         """
         processed = []
-        params = []
+        params: dict[str, Param] = {}
         if include:
             for param_dict in include:
                 name = param_dict["name"]
@@ -446,19 +451,31 @@ class HSSM:
                 param = _create_param(
                     param_dict, model_config, is_parent=name == self._parent
                 )
-                params.append(param)
+                params[name] = param
 
         for param_str in self.list_params:
             if param_str not in processed:
-                param = _create_param(
-                    param_str, model_config, is_parent=param_str == self._parent
-                )
-                params.append(param)
+                is_parent = param_str == self._parent
+                if self.hierarchical:
+                    bounds = (
+                        model_config["bounds"].get(param_str)
+                        if "bounds" in model_config
+                        else None
+                    )
+                    param = Param(
+                        param_str,
+                        formula="1 + (1|participant_id)",
+                        link="identity",
+                        bounds=bounds,
+                        is_parent=is_parent,
+                    )
+                else:
+                    param = _create_param(param_str, model_config, is_parent=is_parent)
+                params[param_str] = param
 
-        if len(params) != len(self.list_params):
-            raise ValueError("Please provide a correct set of priors")
+        sorted_params = {k: params[k] for k in self.list_params}
 
-        return params, *_parse_bambi(params)
+        return sorted_params, *_parse_bambi(list(sorted_params.values()))
 
     def sample(
         self,
@@ -578,7 +595,7 @@ class HSSM:
             distribution. Defaults to ``None`` which means both observed and unobserved
             RVs.
         omit_offsets
-            Whether to omit offset terms in the plot. Defaults to ``True``.
+            Whether to omit offset terms. Defaults to ``True``.
         random_seed
             Seed for the random number generator.
 
@@ -688,8 +705,37 @@ class HSSM:
         output.append("Parameters:")
         output.append("")
 
-        for param in self.params:
-            output.append(str(param))
+        for param in self.params.values():
+            name = "c(rt, response)" if param.is_parent else param.name
+            output.append(f"{param.name}:")
+
+            component = self.model.components[name]
+
+            # Regression case:
+            if param.is_regression:
+                assert isinstance(component, DistributionalComponent)
+                output.append(f"    Formula: {param.formula}")
+                output.append("    Priors:")
+                intercept_term = component.intercept_term
+                if intercept_term is not None:
+                    output.append(_print_prior(intercept_term))
+                for _, common_term in component.common_terms.items():
+                    output.append(_print_prior(common_term))
+                for _, group_specific_term in component.group_specific_terms.items():
+                    output.append(_print_prior(group_specific_term))
+                output.append(f"    Link: {param.link}")
+            # None regression case
+            else:
+                if param.is_parent:
+                    prior = (
+                        component.intercept_term.prior
+                        if param.prior is None
+                        else param.prior
+                    )
+                else:
+                    prior = component.prior
+                output.append(f"    Prior: {prior}")
+            output.append(f"    Explicit bounds: {param.bounds}")
 
         if self.p_outlier is not None:
             output.append("")

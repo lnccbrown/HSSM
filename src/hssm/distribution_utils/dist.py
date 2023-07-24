@@ -111,7 +111,8 @@ def make_ssm_rv(
         logging.warning(
             "You supplied a model '%s', which is currently not supported in "
             + "the ssm_simulators package. An error will be thrown when sampling from "
-            + "the random variable or when using any posterior sampling methods.",
+            + "the random variable or when using any "
+            + "posterior posterior sampling methods.",
             model_name,
         )
 
@@ -123,8 +124,6 @@ def make_ssm_rv(
         """WFPT random variable."""
 
         name: str = "SSM_RV"
-
-        # NOTE: This is wrong at the moment, but necessary
         # to get around the support checking in PyMC that would result in error
         ndim_supp: int = 1
 
@@ -134,6 +133,11 @@ def make_ssm_rv(
         _list_params = list_params
         _lapse = lapse
 
+        # PyTensor, as of version 2.12, enforces a check to ensure that
+        # at least one parameter has the same ndims as the support.
+        # This overrides that check and ensures that the dimension checks are correct.
+        # For more information, see this issue
+        # https://github.com/lnccbrown/HSSM/issues/36
         def _supp_shape_from_params(*args, **kwargs):
             return (2,)
 
@@ -163,6 +167,28 @@ def make_ssm_rv(
             -------
             np.ndarray
                 An array of `(rt, response)` generated from the distribution.
+
+            Note
+            ----
+            How size is handled in this method:
+
+            We apply multiple tricks to get this method to work with ssm_simulators.
+
+            First, size could be an array with one element. We squeeze the array and
+            use that element as size.
+
+            Then, size could depend on whether the parameters passed to this method.
+            If all parameters passed are scalar, that is the easy case. We just
+            assemble all parameters into a 1D array and pass it to the `theta`
+            argument. In this case, size is number of observations.
+
+            If one of the parameters is a vector, which happens one or more parameters
+            is the target of a regression. In this case, we take the size of the
+            parameter with the largest size. If size is None, we will set size to be
+            this largest size. If size is not None, we check if size is a multiple of
+            the largest size. If not, an error is thrown. Otherwise, we assemble the
+            parameter as a matrix and pass it as the `theta` argument. The multiple then
+            becomes how many samples we draw from each trial.
             """
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is undetermined,

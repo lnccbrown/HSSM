@@ -17,7 +17,7 @@ from pymc.distributions.dist_math import check_parameters
 
 from ..distribution_utils.dist import make_distribution
 
-OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
+LOGP_LB = pm.floatX(-66.1)
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
@@ -220,8 +220,8 @@ def logp_ddm(
     a: float,
     z: float,
     t: float,
-    err: float = 1e-7,
-    k_terms: int = 10,
+    err: float = 1e-15,
+    k_terms: int = 20,
     epsilon: float = 1e-15,
 ) -> np.ndarray:
     """Compute analytical likelihood for the DDM model with `sv`.
@@ -263,11 +263,11 @@ def logp_ddm(
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
 
-    p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(OUT_OF_BOUNDS_VAL))
+    p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
 
     logp = pt.where(
         rt <= epsilon,
-        OUT_OF_BOUNDS_VAL,
+        LOGP_LB,
         pt.log(p)
         - v_flipped * a * z_flipped
         - (v_flipped**2 * rt / 2.0)
@@ -287,8 +287,8 @@ def logp_ddm_sdv(
     z: float,
     t: float,
     sv: float,
-    err: float = 1e-7,
-    k_terms: int = 10,
+    err: float = 1e-15,
+    k_terms: int = 20,
     epsilon: float = 1e-15,
 ) -> np.ndarray:
     """Compute the log-likelihood of the drift diffusion model f(t|v,a,z).
@@ -334,11 +334,11 @@ def logp_ddm_sdv(
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
 
-    p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(OUT_OF_BOUNDS_VAL))
+    p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
 
     logp = pt.switch(
         rt <= epsilon,
-        OUT_OF_BOUNDS_VAL,
+        LOGP_LB,
         pt.log(p)
         + (
             (a * z_flipped * sv) ** 2

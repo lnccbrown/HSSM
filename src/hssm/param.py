@@ -366,7 +366,7 @@ def _parse_bambi(
 
         if formula is not None:
             formulas.append(formula)
-        if priors is not None:
+        if prior is not None:
             priors |= prior
         if link is not None:
             links |= link

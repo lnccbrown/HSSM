@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import arviz as az
+import bambi as bmb
 import numpy as np
 import pandas as pd
 import pytensor
@@ -138,7 +139,7 @@ def test_transform_params_general(data, include, should_raise_exception):
         model = HSSM(data=data, include=include)
         # Check model properties using a loop
         param_names = ["v", "a", "z", "t"]
-        model_param_names = sorted([param.name for param in model.params])
+        model_param_names = sorted([param.name for param in model.params.values()])
         assert model_param_names == sorted(param_names)
         assert len(model.params) == 4
         trace = model.sample(cores=1, chains=1, draws=10, tune=10)
@@ -219,7 +220,9 @@ def test_model_with_approx_differentiable_likelihood_type(data_angle):
 
 
 def test_sample_prior_predictive(data):
-    model_no_regression = HSSM(data=data.iloc[:10, :])
+    data = data.iloc[:10, :]
+
+    model_no_regression = HSSM(data=data)
     rng = np.random.default_rng()
 
     prior_predictive_1 = model_no_regression.sample_prior_predictive(draws=10)
@@ -227,7 +230,59 @@ def test_sample_prior_predictive(data):
         draws=10, random_seed=rng
     )
 
-    model_regression = HSSM(
-        data=data.iloc[:10, :], include=[dict(name="v", formula="v ~ 1 + x")]
-    )
+    model_regression = HSSM(data=data, include=[dict(name="v", formula="v ~ 1 + x")])
     prior_predictive_3 = model_regression.sample_prior_predictive(draws=10)
+
+    model_regression_a = HSSM(data=data, include=[dict(name="a", formula="a ~ 1 + x")])
+    prior_predictive_4 = model_regression_a.sample_prior_predictive(draws=10)
+
+    model_regression_multi = HSSM(
+        data=data,
+        include=[
+            dict(name="v", formula="v ~ 1 + x"),
+            dict(name="a", formula="a ~ 1 + y"),
+        ],
+    )
+    prior_predictive_5 = model_regression_multi.sample_prior_predictive(draws=10)
+
+    data["subject_id"] = np.arange(10)
+
+    model_regression_random_effect = HSSM(
+        data=data,
+        include=[
+            dict(name="v", formula="v ~ (1|subject_id) + x"),
+            dict(name="a", formula="a ~ (1|subject_id) + y"),
+        ],
+    )
+    prior_predictive_6 = model_regression_random_effect.sample_prior_predictive(
+        draws=10
+    )
+
+
+def test_hierarchical(data):
+    data = data.iloc[:10, :].copy()
+    data["participant_id"] = np.arange(10)
+
+    model = HSSM(data=data)
+    assert all(param.is_regression for param in model.params.values())
+
+    model = HSSM(data=data, v=bmb.Prior("Uniform", lower=-10.0, upper=10.0))
+    assert all(
+        param.is_regression for param in model.params.values() if param.name != "v"
+    )
+
+    model = HSSM(data=data, a=bmb.Prior("Uniform", lower=0.0, upper=10.0))
+    assert all(
+        param.is_regression for param in model.params.values() if param.name != "a"
+    )
+
+    model = HSSM(
+        data=data,
+        v=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
+        a=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
+    )
+    assert all(
+        param.is_regression
+        for param in model.params.values()
+        if param.name not in ["v", "a"]
+    )

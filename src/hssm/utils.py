@@ -15,7 +15,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Iterable, Literal, NewType
 
 import pytensor
-from bambi.terms import CommonTerm, GroupSpecificTerm
+from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from huggingface_hub import hf_hub_download
 from jax.config import config
 from pymc.model_graph import ModelGraph
@@ -123,7 +123,9 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
             alias_dict |= {"Intercept": parent_name}
         else:
             for name, term in model.response_component.terms.items():
-                if isinstance(term, (CommonTerm, GroupSpecificTerm)):
+                if isinstance(
+                    term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
+                ):
                     alias_dict |= {name: f"{parent_name}_{name}"}
     else:
         alias_dict = {"c(rt, response)": {"c(rt, response)": "rt,response"}}
@@ -133,7 +135,9 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
                     alias_dict["c(rt, response)"] |= {"Intercept": parent_name}
                 else:
                     for name, term in model.response_component.terms.items():
-                        if isinstance(term, CommonTerm):
+                        if isinstance(
+                            term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
+                        ):
                             alias_dict["c(rt, response)"] |= {
                                 name: f"{parent_name}_{name}"
                             }
@@ -283,3 +287,22 @@ def set_floatX(dtype: Literal["float32", "float64"], jax: bool = True):
             f'Setting "jax_enable_x64" to {mapping[dtype]}. '
             + "If this is not intended, please set `jax` to False"
         )
+
+
+def _print_prior(term: CommonTerm | GroupSpecificTerm):
+    """Make the output string of a term.
+
+    If prior is a float, print x: prior. Otherwise, print x ~ prior.
+
+    Parameters
+    ----------
+    term
+        A BaseTerm in Bambi
+    """
+    term_name = term.alias or term.name
+    prior = term._prior
+
+    if isinstance(prior, float):
+        return f"        {term_name}: {prior}"
+
+    return f"        {term_name} ~ {prior}"
