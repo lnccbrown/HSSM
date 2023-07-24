@@ -321,7 +321,11 @@ class HSSM:
         self._parent_param = self.params[self.list_params[0]]
         assert self._parent_param is not None
 
-        params_is_reg = [param.is_regression for param in self.params.values()]
+        params_is_reg = [
+            param.is_regression
+            for param_name, param in self.params.items()
+            if param_name != "p_outlier"
+        ]
 
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
@@ -388,13 +392,22 @@ class HSSM:
                 rv=self.model_config.get("rv", self.model_name),
                 onnx_model=self.loglik,
                 list_params=self.list_params,
-                backend=self.model_config.get("backend", "jax"),
+                backend=self.model_config.get("backend", "pytensor"),
                 params_is_reg=params_is_reg,
                 bounds=self.bounds,
                 lapse=self.lapse,
             )
 
-        assert self.model_distribution is not None
+            # TODO: Fix jax backend
+            if (
+                self.model_config.get("backend", "pytensor") == "jax"
+                and any(params_is_reg)
+                and self.has_lapse
+            ):
+                raise ValueError(
+                    "'jax' backend with regression is not working right now when lapse "
+                    + "distribution is enabled."
+                )
 
         self.family = make_family(
             self.model_distribution,
