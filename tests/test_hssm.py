@@ -138,10 +138,10 @@ def test_transform_params_general(data, include, should_raise_exception):
     else:
         model = HSSM(data=data, include=include)
         # Check model properties using a loop
-        param_names = ["v", "a", "z", "t"]
-        model_param_names = sorted([param.name for param in model.params.values()])
-        assert model_param_names == sorted(param_names)
-        assert len(model.params) == 4
+        param_names = ["v", "a", "z", "t", "p_outlier"]
+        model_param_names = list(model.params.keys())
+        assert model_param_names == param_names
+        assert len(model.params) == 5
         trace = model.sample(cores=1, chains=1, draws=10, tune=10)
         assert isinstance(trace, az.InferenceData)
 
@@ -188,7 +188,7 @@ def test_custom_model(data, example_model_config):
 
     assert model.model_name == "custom"
     assert model.loglik_kind == "analytical"
-    assert model.list_params == example_model_config["list_params"] + ["p_outlier"]
+    assert model.list_params == example_model_config["list_params"]
 
 
 def test_model_definition_outside_include(data):
@@ -264,25 +264,33 @@ def test_hierarchical(data):
     data["participant_id"] = np.arange(10)
 
     model = HSSM(data=data)
-    assert all(param.is_regression for param in model.params.values())
+    assert all(
+        param.is_regression
+        for name, param in model.params.items()
+        if name != "p_outlier"
+    )
 
     model = HSSM(data=data, v=bmb.Prior("Uniform", lower=-10.0, upper=10.0))
     assert all(
-        param.is_regression for param in model.params.values() if param.name != "v"
+        param.is_regression
+        for name, param in model.params.items()
+        if name not in ["v", "p_outlier"]
     )
 
     model = HSSM(data=data, a=bmb.Prior("Uniform", lower=0.0, upper=10.0))
     assert all(
-        param.is_regression for param in model.params.values() if param.name != "a"
+        param.is_regression
+        for name, param in model.params.items()
+        if name not in ["a", "p_outlier"]
     )
 
     model = HSSM(
         data=data,
         v=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
-        a=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
+        a=bmb.Prior("Uniform", lower=0.0, upper=10.0),
     )
     assert all(
         param.is_regression
-        for param in model.params.values()
-        if param.name not in ["v", "a"]
+        for name, param in model.params.items()
+        if name not in ["v", "a", "p_outlier"]
     )
