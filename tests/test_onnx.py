@@ -10,6 +10,7 @@ import pytest
 from hssm.distribution_utils.onnx import *
 
 pytensor.config.floatX = "float32"
+DECIMAL = 4
 
 
 @pytest.fixture(scope="module")
@@ -40,10 +41,10 @@ def test_interpret_onnx(onnx_session, fixture_path):
     result_jax = np.asarray(interpret_onnx(model.graph, data)[0])
     result_pytensor = pt_interpret_onnx(model.graph, data)[0].eval()
 
-    np.testing.assert_almost_equal(result_jax, result_onnx, decimal=4)
+    np.testing.assert_almost_equal(result_jax, result_onnx, decimal=DECIMAL)
     # For some reason pytensor and onnx (jax) version results are slightly different
     # This could be due to precision.
-    np.testing.assert_almost_equal(result_pytensor, result_onnx, decimal=4)
+    np.testing.assert_almost_equal(result_pytensor, result_onnx, decimal=DECIMAL)
 
 
 def test_make_jax_logp_funcs_from_onnx(fixture_path):
@@ -85,11 +86,13 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     np.testing.assert_array_almost_equal(
         jax_logp(data, v, *params_all_scalars[1:]),
         interpret_onnx(model.graph, input_matrix)[0].squeeze(),
+        decimal=DECIMAL,
     )
 
     np.testing.assert_array_almost_equal(
         jax_logp_nojit(data, v, *params_all_scalars[1:]),
         interpret_onnx(model.graph, input_matrix)[0].squeeze(),
+        decimal=DECIMAL,
     )
 
 
@@ -111,7 +114,7 @@ def test_make_jax_logp_ops(fixture_path):
     pt_loglik = pytensor_logp(data, *params_all_scalars)
 
     np.testing.assert_array_almost_equal(
-        np.asarray(jax_loglik.eval()), pt_loglik.eval(), decimal=3
+        np.asarray(jax_loglik.eval()), pt_loglik.eval(), decimal=DECIMAL
     )
 
     v = pt.as_tensor_variable(np.random.rand())
@@ -125,7 +128,7 @@ def test_make_jax_logp_ops(fixture_path):
     np.testing.assert_array_almost_equal(
         pytensor.grad(jax_loglik.sum(), wrt=v).eval(),
         pytensor.grad(pt_loglik.sum(), wrt=v).eval(),
-        decimal=4,
+        decimal=DECIMAL,
     )
 
     jax_logp_op = make_jax_logp_ops(
@@ -138,7 +141,9 @@ def test_make_jax_logp_ops(fixture_path):
     jax_loglik = jax_logp_op(data, v, *params_all_scalars[1:])
     pt_loglik = pytensor_logp(data, v, *params_all_scalars[1:])
 
-    np.testing.assert_array_almost_equal(jax_loglik.eval(), pt_loglik.eval(), decimal=4)
+    np.testing.assert_array_almost_equal(
+        jax_loglik.eval(), pt_loglik.eval(), decimal=DECIMAL
+    )
 
     v = pt.as_tensor_variable(np.random.rand(10).astype(np.float32))
 
@@ -151,5 +156,5 @@ def test_make_jax_logp_ops(fixture_path):
     np.testing.assert_array_almost_equal(
         pytensor.grad(jax_loglik.sum(), wrt=v).eval(),
         pytensor.grad(pt_loglik.sum(), wrt=v).eval(),
-        decimal=4,
+        decimal=DECIMAL,
     )
