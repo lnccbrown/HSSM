@@ -481,9 +481,8 @@ class HSSM:
 
     def sample(
         self,
-        sampler: Literal[
-            "mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"
-        ] = "mcmc",
+        sampler: Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
+        | None = None,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -491,9 +490,12 @@ class HSSM:
         Parameters
         ----------
         sampler
-            The sampler to use. Can be either "mcmc" (default), "nuts_numpyro",
+            The sampler to use. Can be one of "mcmc", "nuts_numpyro",
             "nuts_blackjax", "laplace", or "vi". If using `blackbox` likelihoods,
-            this cannot be "nuts_numpyro" or "nuts_blackjax".
+            this cannot be "nuts_numpyro" or "nuts_blackjax". By default it is None, and
+            sampler will automatically be chosen: when the model uses the
+            `approx_differentiable` likelihood, and `jax` backend, "nuts_numpyro" will
+            be used. Otherwise, "mcmc" (the default PyMC NUTS sampler) will be used.
         kwargs
             Other arguments passed to bmb.Model.fit(). Please see [here]
             (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
@@ -506,6 +508,15 @@ class HSSM:
             (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
             object if `"vi"`.
         """
+        if sampler is None:
+            if (
+                self.loglik_kind == "approx_differentiable"
+                and self.model_config["backend"] == "jax"
+            ):
+                sampler = "nuts_numpyro"
+            else:
+                sampler = "mcmc"
+
         supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
 
         if sampler not in supported_samplers:
@@ -521,6 +532,18 @@ class HSSM:
 
             if "step" not in kwargs:
                 kwargs["step"] = pm.Slice(model=self.pymc_model)
+
+        if (
+            self.loglik_kind == "approx_differentiable"
+            and self.model_config["backend"] == "jax"
+            and sampler == "mcmc"
+            and kwargs.get("cores", None) != 1
+        ):
+            _logger.warning(
+                "Parallel sampling might not work with `jax` backend and the PyMC NUTS "
+                + "sampler on some platforms. Please consider using `nuts_numpyro` or "
+                + "`nuts_blackjax` sampler if that is a problem."
+            )
 
         self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
 
