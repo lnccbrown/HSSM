@@ -834,6 +834,8 @@ def _create_param(param: str | dict, model_config: dict, is_parent: bool) -> Par
                 and "formula" not in model_config
             ):
                 prior = model_config["default_priors"][name]
+            else:
+                prior = None
         else:
             prior = param["prior"]
         return Param(
