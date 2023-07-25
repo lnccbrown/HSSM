@@ -81,10 +81,10 @@ model = hssm.HSSM(
         {
             "name": "v",
             "prior": {
-                "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-                "theta": {"name": "Uniform", "lower": -1.0, "upper": 1.0},
+                "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
+                "theta": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
             },
-            "formula": "v ~ (1|subj_idx) + theta",
+            "formula": "v ~ (1|participant_id) + theta",
             "link": "identity",
         },
     ],
@@ -93,6 +93,9 @@ model = hssm.HSSM(
 # Sample from the posterior for this model
 model.sample()
 ```
+
+To quickly get started with HSSM, please follow [this tutorial](https://lnccbrown.github.io/HSSM/tutorial_notebooks/no_execute/getting_started/).
+For a deeper dive into HSSM, please follow [our main tutorial](https://lnccbrown.github.io/HSSM/tutorial_notebooks/no_execute/main_tutorial/).
 
 ## License
 
