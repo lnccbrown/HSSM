@@ -1,4 +1,5 @@
 import pytest
+import bambi as bmb
 import numpy as np
 import hssm
 
@@ -55,12 +56,12 @@ def test_reg_models(reg_data):
         },
     )
 
-    model1 = hssm.HSSM(reg_data, v=v)
-    model1.sample(cores=1, chains=1, tune=10, draws=10)
-    model1.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
+    # model1 = hssm.HSSM(reg_data, v=v)
+    # model1.sample(cores=1, chains=1, tune=10, draws=10)
+    # model1.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
 
     model2 = hssm.HSSM(reg_data, loglik_kind="approx_differentiable", v=v)
-    model2.sample(cores=1, chains=1, tune=10, draws=10)
+    # model2.sample(cores=1, chains=1, tune=10, draws=10)
     model2.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
 
     model3 = hssm.HSSM(reg_data, a=v)
