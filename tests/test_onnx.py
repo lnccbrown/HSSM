@@ -69,11 +69,13 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     np.testing.assert_array_almost_equal(
         result_boxed_function,
         interpret_onnx(model.graph, input_matrix)[0].squeeze(),
+        decimal=DECIMAL,
     )
 
     np.testing.assert_array_almost_equal(
         result_boxed_function,
         interpret_onnx(model.graph, input_matrix)[0].squeeze(),
+        decimal=DECIMAL,
     )
 
     v = np.random.rand(10)
