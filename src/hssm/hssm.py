@@ -492,7 +492,10 @@ class HSSM:
         sampler
             The sampler to use. Can be one of "mcmc", "nuts_numpyro",
             "nuts_blackjax", "laplace", or "vi". If using `blackbox` likelihoods,
-            this cannot be "nuts_numpyro" or "nuts_blackjax".
+            this cannot be "nuts_numpyro" or "nuts_blackjax". By default it is None, and
+            sampler will automatically be chosen: when the model uses the
+            `approx_differentiable` likelihood, and `jax` backend, "nuts_numpyro" will
+            be used. Otherwise, "mcmc" (the default PyMC NUTS sampler) will be used.
         kwargs
             Other arguments passed to bmb.Model.fit(). Please see [here]
             (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
@@ -511,8 +514,8 @@ class HSSM:
                 and self.model_config["backend"] == "jax"
             ):
                 sampler = "nuts_numpyro"
-        else:
-            sampler = "mcmc"
+            else:
+                sampler = "mcmc"
 
         supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
 
