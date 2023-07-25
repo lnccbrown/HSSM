@@ -47,7 +47,7 @@ def test_non_reg_models(non_reg_data):
 
 
 def test_reg_models(reg_data):
-    v = dict(
+    param_reg = dict(
         formula="v ~ 1 + x + y",
         prior={
             "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
@@ -56,18 +56,18 @@ def test_reg_models(reg_data):
         },
     )
 
-    # model1 = hssm.HSSM(reg_data, v=v)
-    # model1.sample(cores=1, chains=1, tune=10, draws=10)
-    # model1.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
+    model1 = hssm.HSSM(reg_data, v=param_reg)
+    model1.sample(cores=1, chains=1, tune=10, draws=10)
+    model1.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
 
-    model2 = hssm.HSSM(reg_data, loglik_kind="approx_differentiable", v=v)
-    # model2.sample(cores=1, chains=1, tune=10, draws=10)
+    model2 = hssm.HSSM(reg_data, loglik_kind="approx_differentiable", v=param_reg)
+    model2.sample(cores=1, chains=1, tune=10, draws=10)
     model2.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
 
-    model3 = hssm.HSSM(reg_data, a=v)
+    model3 = hssm.HSSM(reg_data, a=param_reg)
     model3.sample(cores=1, chains=1, tune=10, draws=10)
     model3.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
 
-    model4 = hssm.HSSM(reg_data, loglik_kind="approx_differentiable", a=v)
+    model4 = hssm.HSSM(reg_data, loglik_kind="approx_differentiable", a=param_reg)
     model4.sample(cores=1, chains=1, tune=10, draws=10)
     model4.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
