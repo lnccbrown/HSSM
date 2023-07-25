@@ -392,22 +392,11 @@ class HSSM:
                 rv=self.model_config.get("rv", self.model_name),
                 onnx_model=self.loglik,
                 list_params=self.list_params,
-                backend=self.model_config.get("backend", "pytensor"),
+                backend=self.model_config.get("backend", "jax"),
                 params_is_reg=params_is_reg,
                 bounds=self.bounds,
                 lapse=self.lapse,
             )
-
-            # TODO: Fix jax backend
-            if (
-                self.model_config.get("backend", "pytensor") == "jax"
-                and any(params_is_reg)
-                and self.has_lapse
-            ):
-                raise ValueError(
-                    "'jax' backend with regression is not working right now when lapse "
-                    + "distribution is enabled."
-                )
 
         self.family = make_family(
             self.model_distribution,

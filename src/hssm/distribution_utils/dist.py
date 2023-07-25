@@ -340,8 +340,19 @@ def make_distribution(
     """
     random_variable = make_ssm_rv(rv, list_params, lapse) if isinstance(rv, str) else rv
 
-    if lapse is not None and list_params[-1] != "p_outlier":
-        list_params.append("p_outlier")
+    if lapse is not None:
+        if list_params[-1] != "p_outlier":
+            list_params.append("p_outlier")
+
+        data = pt.dvector()
+        lapse_logp = pm.logp(
+            get_distribution_from_prior(lapse).dist(**lapse.args),
+            data,
+        )
+        lapse_func = pytensor.function(
+            [data],
+            lapse_logp,
+        )
 
     class SSMDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""
@@ -352,7 +363,6 @@ def make_distribution(
         # NOTE: rv_op is an INSTANCE of RandomVariable
         rv_op = random_variable()
         params = list_params
-        _lapse = lapse
 
         @classmethod
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
@@ -366,22 +376,16 @@ def make_distribution(
             if list_params[-1] == "p_outlier":
                 p_outlier = dist_params[-1]
                 dist_params = dist_params[:-1]
+                lapse_logp = lapse_func(data[:, 0].eval())
 
-            logp = loglik(data, *dist_params)
-
-            if list_params[-1] == "p_outlier":
-                dist = get_distribution_from_prior(lapse).dist(**lapse.args)
+                logp = loglik(data, *dist_params)
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)
-                    + p_outlier
-                    * pt.exp(
-                        pm.logp(
-                            dist,
-                            data[:, 0],
-                        )
-                    )
+                    + p_outlier * pt.exp(lapse_logp)
                     + 1e-29
                 )
+            else:
+                logp = loglik(data, *dist_params)
 
             if bounds is None:
                 return logp

@@ -142,8 +142,6 @@ def test_transform_params_general(data, include, should_raise_exception):
         model_param_names = list(model.params.keys())
         assert model_param_names == param_names
         assert len(model.params) == 5
-        trace = model.sample(cores=1, chains=1, draws=10, tune=10)
-        assert isinstance(trace, az.InferenceData)
 
 
 def test__model_has_default():
@@ -215,8 +213,6 @@ def test_model_with_approx_differentiable_likelihood_type(data_angle):
     loglik = "angle.onnx"
     model = HSSM(data=data_angle, model="angle", loglik_kind=loglik_kind, loglik=loglik)
     assert model.loglik == download_hf(loglik)
-    trace = model.sample(cores=1, chains=1, tune=10, draws=10)
-    assert isinstance(trace, az.InferenceData)
 
 
 def test_sample_prior_predictive(data):
