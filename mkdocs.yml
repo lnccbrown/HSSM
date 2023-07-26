@@ -10,19 +10,19 @@ nav:
       - License: license.md
       - Changelog: changelog.md
   - Getting Started:
-      - Installation: installation.md
-      - Getting started: tutorial_notebooks/no_execute/getting_started.ipynb
+      - Installation: getting_started/installation.md
+      - Getting started: getting_started/getting_started.ipynb
   - API References:
-      - hssm: api_hssm.md
-      - hssm.distribution_utils: api_distribution_utils.md
-      - hssm.likelihoods: api_likelihoods.md
-      - hssm.config: api_defaults.md
+      - hssm: api/hssm.md
+      - hssm.distribution_utils: api/distribution_utils.md
+      - hssm.likelihoods: api/likelihoods.md
+      - hssm.config: api/defaults.md
   - Tutorials:
-      - Main tutorial: tutorial_notebooks/no_execute/main_tutorial.ipynb
-      - Understanding likelihood functions in HSSM: tutorial_notebooks/tutorial_likelihoods.ipynb
-      - Using lapse probabilities: tutorial_notebooks/no_execute/lapse_prob_and_dist.ipynb
-      - Using HSSM low-level API directly with PyMC: tutorial_notebooks/pymc.ipynb
-      - Using Models from Hugging Face: tutorial_notebooks/hugging_face_onnx_models.ipynb
+      - Main tutorial: tutorials/main_tutorial.ipynb
+      - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
+      - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
+      - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
+      - Using Models from Hugging Face: tutorials/hugging_face_onnx_models.ipynb
   - Contributing: CONTRIBUTING.md
 
 plugins:
@@ -31,7 +31,8 @@ plugins:
   - mkdocs-jupyter:
       execute: True
       execute_ignore:
-        - tutorial_notebooks/no_execute/*.ipynb
+        - getting_started/getting_started.ipynb
+        - tutorials/main_tutorial.ipynb
   - mkdocstrings:
       default_handler: python
       handlers:

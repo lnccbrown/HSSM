@@ -2,6 +2,15 @@
 
 ## 0.1.x
 
+### 0.1.3
+
+- Added the ability to specify `inf`s in bounds.
+- Fixed an issue where `nuts_numpyro` sampler fails with regression and lapse distribution.
+- Defaults to `nuts_numpyro` sampler with `approx_differentiable` likelihoods and `jax` backend.
+- Added a `hssm.show_defaults()` convenience function to print out default configs.
+- Added default `blackbox` likelihoods for `ddm` and `ddm_sdv` models.
+- Various under-the-hood documentation improvements.
+
 ### 0.1.2
 
 - Improved numerical stability of `analytical` likelihoods.
