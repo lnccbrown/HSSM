@@ -29,15 +29,9 @@ Some functionalities in HSSM are available through optional dependencies.
 
 ### Sampling with JAX through `numpyro` or `blackjax`
 
-JAX-based sampling is done through `numpyro` and `blackjax`. You need to have `numpyro`
-installed if you want to use the `nuts_numpyro` sampler.
-
-```bash
-pip install numpyro
-```
-
-Likewise, you need to have `blackjax` installed if you want to use the `nuts_blackjax`
-sampler.
+JAX-based sampling is done through `numpyro` and `blackjax`. `numpyro` is installed as
+a dependency by default. You need to have `blackjax` installed if you want to use the
+`nuts_blackjax` sampler.
 
 ```bash
 pip install blackjax
