@@ -511,7 +511,7 @@ class HSSM:
         if sampler is None:
             if (
                 self.loglik_kind == "approx_differentiable"
-                and self.model_config["backend"] == "jax"
+                and self.model_config.get("backend") == "jax"
             ):
                 sampler = "nuts_numpyro"
             else:
@@ -535,7 +535,7 @@ class HSSM:
 
         if (
             self.loglik_kind == "approx_differentiable"
-            and self.model_config["backend"] == "jax"
+            and self.model_config.get("backend") == "jax"
             and sampler == "mcmc"
             and kwargs.get("cores", None) != 1
         ):
