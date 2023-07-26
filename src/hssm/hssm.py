@@ -262,6 +262,12 @@ class HSSM:
                 self.model_config = {} if model_config is None else model_config
                 self.list_params = default_params[model][:]
 
+        if (
+            loglik_kind == "approx_differentiable"
+            and "backend" not in self.model_config
+        ):
+            self.model_config["backend"] = "jax"
+
         # Logic for determining if p_outlier and lapse is specified correctly.
         # Basically, avoid situations where only one of them is specified.
         self._parent = self.list_params[0]
@@ -753,14 +759,14 @@ class HSSM:
                 output.append(f"    Link: {param.link}")
             # None regression case
             else:
-                if param.is_parent:
+                if param.prior is None:
                     prior = (
                         component.intercept_term.prior
-                        if param.prior is None
-                        else param.prior
+                        if param.is_parent
+                        else component.prior
                     )
                 else:
-                    prior = component.prior
+                    prior = param._prior if param.is_truncated else param.prior
                 output.append(f"    Prior: {prior}")
             output.append(f"    Explicit bounds: {param.bounds}")
 

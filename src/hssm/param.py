@@ -423,8 +423,6 @@ def make_bounded_prior(prior: ParamSpec, bounds: BoundsSpec) -> float | bmb.Prio
         A float if `prior` is a float, otherwise a bmb.Prior object.
     """
     lower, upper = bounds
-    if np.isinf(lower) and np.isinf(upper):
-        return prior
 
     if isinstance(prior, float):
         if not lower <= prior <= upper:
@@ -436,10 +434,14 @@ def make_bounded_prior(prior: ParamSpec, bounds: BoundsSpec) -> float | bmb.Prio
         return prior
 
     if isinstance(prior, dict):
+        if np.isinf(lower) and np.isinf(upper):
+            return bmb.Prior(**prior)
         dist = make_truncated_dist(lower, upper, **prior)
         return bmb.Prior(name=prior["name"], dist=dist)
 
     # After handling the constant and dict case, now handle the bmb.Prior case
+    if np.isinf(lower) and np.isinf(upper):
+        return prior
     if prior.dist is not None:
         return prior
 
