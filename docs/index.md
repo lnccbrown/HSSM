@@ -17,7 +17,7 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 **License**: HSSM is licensed under [Copyright 2023, Brown University, Providence, RI](../LICENSE)
 
-**Version**: 0.1.2
+**Version**: 0.1.3
 
 - Allows approximate hierarchical Bayesian inference via various likelihood approximators.
 - Estimate impact of neural and other trial-by-trial covariates via native hierarchical mixed-regression support.
@@ -41,7 +41,7 @@ You can also install the bleeding edge version of `hssm` directly from this repo
 pip install git+https://github.com/lnccbrown/HSSM.git
 ```
 
-For more detailed guidance, please check out our [installation guide](installation.md).
+For more detailed guidance, please check out our [installation guide](getting_started/installation.md).
 
 !!! note
 
@@ -94,8 +94,8 @@ model = hssm.HSSM(
 model.sample()
 ```
 
-To quickly get started with HSSM, please follow [this tutorial](https://lnccbrown.github.io/HSSM/tutorial_notebooks/no_execute/getting_started/).
-For a deeper dive into HSSM, please follow [our main tutorial](https://lnccbrown.github.io/HSSM/tutorial_notebooks/no_execute/main_tutorial/).
+To quickly get started with HSSM, please follow [this tutorial](getting_started/getting_started.ipynb).
+For a deeper dive into HSSM, please follow [our main tutorial](tutorials/main_tutorial.ipynb).
 
 ## License
 

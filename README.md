@@ -42,7 +42,7 @@ pip install git+https://github.com/lnccbrown/HSSM.git
 ```
 
 You will need optional dependencies to use JAX-based samplers and graph the models.
-Please refer to our [installation guide](https://lnccbrown.github.io/HSSM/installation/)
+Please refer to our [installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/)
 for more detailed instructions.
 
 **Note**: Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an environment manager with Python 3.9~3.11 to prevent any problems with dependencies during the installation process. Please note that hssm is tested for python 3.9, 3.10, 3.11. Use other python versions with caution.
@@ -82,8 +82,8 @@ model = hssm.HSSM(
 model.sample()
 ```
 
-To quickly get started with HSSM, please follow [this tutorial](https://lnccbrown.github.io/HSSM/tutorial_notebooks/no_execute/getting_started/).
-For a deeper dive into HSSM, please follow [our main tutorial](https://lnccbrown.github.io/HSSM/tutorial_notebooks/no_execute/main_tutorial/).
+To quickly get started with HSSM, please follow [this tutorial](https://lnccbrown.github.io/HSSM/getting_started/getting_started/).
+For a deeper dive into HSSM, please follow [our main tutorial](https://lnccbrown.github.io/HSSM/tutorials/main_tutorial/).
 
 ## License
 
