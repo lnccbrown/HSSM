@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Union, cast
 
 import bambi as bmb
+import numpy as np
 import pymc as pm
 from bambi.backend.utils import get_distribution
 
@@ -69,6 +70,16 @@ class Param:
         self.bounds = tuple(float(x) for x in bounds) if bounds is not None else None
         self._is_truncated = False
 
+        if self.bounds is not None:
+            self.bounds = cast(BoundsSpec, self.bounds)
+            if any(not np.isscalar(bound) for bound in self.bounds):
+                raise ValueError(f"The bounds of {self.name} should both be scalar.")
+            lower, upper = self.bounds
+            assert lower < upper, (
+                f"The lower bound of {self.name} should be less than "
+                + "its upper bound."
+            )
+
         if isinstance(prior, int):
             prior = float(prior)
 
@@ -93,16 +104,16 @@ class Param:
             # The non-regression case
 
             if prior is None:
-                if bounds is None:
+                if self.bounds is None:
                     raise ValueError(
                         f"Please specify the prior or bounds for {self.name}."
                     )
-                self.prior = bmb.Prior(name="Uniform", lower=bounds[0], upper=bounds[1])
+                self.prior = _make_default_prior(self.bounds)
             else:
                 # Explicitly cast the type of prior, no runtime performance penalty
                 prior = cast(ParamSpec, prior)
 
-                if bounds is None:
+                if self.bounds is None:
                     if isinstance(prior, (float, bmb.Prior)):
                         self.prior = prior
                     else:
@@ -111,7 +122,7 @@ class Param:
                     if isinstance(prior, float):
                         self.prior = prior
                     else:
-                        self.prior = make_bounded_prior(prior, bounds)
+                        self.prior = make_bounded_prior(prior, self.bounds)
                         # self._prior is internally used for informative output
                         # Not used in inference
                         self._prior = (
@@ -412,6 +423,8 @@ def make_bounded_prior(prior: ParamSpec, bounds: BoundsSpec) -> float | bmb.Prio
         A float if `prior` is a float, otherwise a bmb.Prior object.
     """
     lower, upper = bounds
+    if np.isinf(lower) and np.isinf(upper):
+        return prior
 
     if isinstance(prior, float):
         if not lower <= prior <= upper:
@@ -468,9 +481,34 @@ def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Cal
         return pm.Truncated(
             name=name,
             dist=dist,
-            lower=lower_bound,
-            upper=upper_bound,
+            lower=lower_bound if np.isfinite(lower_bound) else None,
+            upper=upper_bound if np.isfinite(upper_bound) else None,
             initval=initval,
         )
 
     return TruncatedDist
+
+
+def _make_default_prior(bounds: tuple[float, float]) -> bmb.Prior:
+    """Make a default prior from bounds.
+
+    Parameters
+    ----------
+    bounds
+        The (lower, upper) bounds for the default prior.
+
+    Returns
+    -------
+        A bmb.Prior object representing the default prior for the provided bounds.
+    """
+    lower, upper = bounds
+    if np.isinf(lower) and np.isinf(upper):
+        return bmb.Prior("Normal", mu=0.0, sigma=2.0)
+    elif np.isinf(lower) and not np.isinf(upper):
+        return bmb.Prior("TruncatedNormal", mu=upper, upper=upper, sigma=2.0)
+    elif not np.isinf(lower) and np.isinf(upper):
+        if lower == 0:
+            return bmb.Prior("HalfNormal", sigma=2.0)
+        return bmb.Prior("TruncatedNormal", mu=lower, lower=lower, sigma=2.0)
+    else:
+        return bmb.Prior(name="Uniform", lower=lower, upper=upper)

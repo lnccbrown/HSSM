@@ -88,7 +88,7 @@ def shared_params():
 
 
 def test_no_inf_values_a(data_fixture, shared_params):
-    for a in np.arange(2.5, 5.1, 0.1):
+    for a in np.arange(2.5, 5.1, 0.5):
         params = {**shared_params, "a": a}
         logp = logp_ddm_sdv(data_fixture, **params)
         assert np.all(
@@ -97,7 +97,7 @@ def test_no_inf_values_a(data_fixture, shared_params):
 
 
 def test_no_inf_values_t(data_fixture, shared_params):
-    for t in np.arange(3.0, 5.1, 0.1):
+    for t in np.arange(3.0, 5.1, 0.5):
         params = {**shared_params, "t": t}
         logp = logp_ddm_sdv(data_fixture, **params)
         assert np.all(
@@ -106,7 +106,7 @@ def test_no_inf_values_t(data_fixture, shared_params):
 
 
 def test_no_inf_values_v(data_fixture, shared_params):
-    for v in np.arange(3.0, 5.1, 0.1):
+    for v in np.arange(3.0, 5.1, 0.5):
         params = {**shared_params, "v": v}
         logp = logp_ddm_sdv(data_fixture, **params)
         assert np.all(

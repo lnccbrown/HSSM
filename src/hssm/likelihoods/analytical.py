@@ -13,6 +13,7 @@ import numpy as np
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
+from numpy import inf
 from pymc.distributions.dist_math import check_parameters
 
 from ..distribution_utils.dist import make_distribution
@@ -357,12 +358,13 @@ def logp_ddm_sdv(
     return checked_logp
 
 
-ddm_bounds = {"z": (0.0, 1.0)}
-ddm_sdv_bounds = ddm_bounds | {
-    "v": (-3.0, 3.0),
-    "a": (0.3, 2.5),
-    "t": (0.0, 2.0),
+ddm_bounds = {
+    "v": (-inf, inf),
+    "a": (0.0, inf),
+    "z": (0.0, 1.0),
+    "t": (0.0, inf),
 }
+ddm_sdv_bounds = ddm_bounds | {"sv": (0.0, inf)}
 
 ddm_params = ["v", "a", "z", "t"]
 ddm_sdv_params = ddm_params + ["sv"]

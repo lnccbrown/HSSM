@@ -401,7 +401,7 @@ def make_distribution_from_onnx(
     rv: str | Type[RandomVariable],
     list_params: list[str],
     onnx_model: str | PathLike | onnx.ModelProto,
-    backend: str = "pytensor",
+    backend: str = "jax",
     bounds: dict | None = None,
     params_is_reg: list[bool] | None = None,
     lapse: bmb.Prior | None = None,

@@ -511,7 +511,7 @@ class HSSM:
         if sampler is None:
             if (
                 self.loglik_kind == "approx_differentiable"
-                and self.model_config["backend"] == "jax"
+                and self.model_config.get("backend") == "jax"
             ):
                 sampler = "nuts_numpyro"
             else:
@@ -535,7 +535,7 @@ class HSSM:
 
         if (
             self.loglik_kind == "approx_differentiable"
-            and self.model_config["backend"] == "jax"
+            and self.model_config.get("backend") == "jax"
             and sampler == "mcmc"
             and kwargs.get("cores", None) != 1
         ):
@@ -857,6 +857,8 @@ def _create_param(param: str | dict, model_config: dict, is_parent: bool) -> Par
                 and "formula" not in model_config
             ):
                 prior = model_config["default_priors"][name]
+            else:
+                prior = None
         else:
             prior = param["prior"]
         return Param(
