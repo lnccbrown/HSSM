@@ -24,17 +24,6 @@ USER $NB_UID
 
 ## TODO: Move these to a requirements.txt and install in a virtual env instead of as root
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir "scipy==1.10.1" && \
-    pip install --no-cache-dir "pymc>=5.6.0" && \
-    pip install --no-cache-dir "arviz>=0.14.0" && \
-    pip install --no-cache-dir "numpy>=1.23.4" && \
-    pip install --no-cache-dir "onnx>=1.12.0" && \
-    pip install --no-cache-dir "jax>=0.4.0"  && \
-    pip install --no-cache-dir "jaxlib>=0.4.0" && \
-    pip install --no-cache-dir "ssm-simulators>=0.3.0" && \
-    pip install --no-cache-dir "huggingface-hub>=0.15.1" && \
-    pip install --no-cache-dir "onnxruntime>=1.15.0" && \
-    pip install --no-cache-dir "bambi>=0.12.0" && \
     pip install --no-cache-dir "pytest>=7.3.1" && \
     pip install --no-cache-dir "black>=23.7.0" && \
     pip install --no-cache-dir "mypy>=1.4.1" && \
@@ -70,9 +59,13 @@ RUN mkdir /home/$NB_USER/tutorial_notebooks && \
     fix-permissions /home/$NB_USER
 
 # Copy example data and scripts to the example folder
-COPY /tutorial_notebooks/tutorial_likelihoods.ipynb /home/${NB_USER}/tutorial_notebooks
-COPY /tutorial_notebooks/hugging_face_onnx_models.ipynb /home/${NB_USER}/tutorial_notebooks
-COPY /tutorial_notebooks/pymc.ipynb /home/${NB_USER}/tutorial_notebooks
-COPY /tutorial_notebooks/no_execute/getting_started.ipynb /home/${NB_USER}/tutorial_notebooks/no_execute
-COPY /tutorial_notebooks/no_execute/lapse_prob_and_dist.ipynb /home/${NB_USER}/tutorial_notebooks/no_execute
-COPY /tutorial_notebooks/no_execute/main_tutorial.ipynb /home/${NB_USER}/tutorial_notebooks/no_execute
+COPY /docs/tutorial_notebooks/tutorial_likelihoods.ipynb /home/${NB_USER}/tutorial_notebooks
+COPY /docs/tutorial_notebooks/hugging_face_onnx_models.ipynb /home/${NB_USER}/tutorial_notebooks
+COPY /docs/tutorial_notebooks/pymc.ipynb /home/${NB_USER}/tutorial_notebooks
+COPY /docs/tutorial_notebooks/no_execute/getting_started.ipynb /home/${NB_USER}/tutorial_notebooks/no_execute
+COPY /docs/tutorial_notebooks/no_execute/lapse_prob_and_dist.ipynb /home/${NB_USER}/tutorial_notebooks/no_execute
+COPY /docs/tutorial_notebooks/no_execute/main_tutorial.ipynb /home/${NB_USER}/tutorial_notebooks/no_execute
+
+# Copy tests and run them
+COPY /tests /opt/conda/lib/python3.9/site-packages/hssm/tests
+RUN python -m unittest discover -s /opt/conda/lib/python3.9/site-packages/hssm/tests -p 'test_*.py'
