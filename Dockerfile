@@ -59,12 +59,7 @@ RUN mkdir /home/$NB_USER/tutorial_notebooks && \
     fix-permissions /home/$NB_USER
 
 # Copy example data and scripts to the example folder
-COPY /docs/tutorial_notebooks/tutorial_likelihoods.ipynb /home/${NB_USER}/tutorial_notebooks
-COPY /docs/tutorial_notebooks/hugging_face_onnx_models.ipynb /home/${NB_USER}/tutorial_notebooks
-COPY /docs/tutorial_notebooks/pymc.ipynb /home/${NB_USER}/tutorial_notebooks
-COPY /docs/tutorial_notebooks/no_execute/getting_started.ipynb /home/${NB_USER}/tutorial_notebooks/no_execute
-COPY /docs/tutorial_notebooks/no_execute/lapse_prob_and_dist.ipynb /home/${NB_USER}/tutorial_notebooks/no_execute
-COPY /docs/tutorial_notebooks/no_execute/main_tutorial.ipynb /home/${NB_USER}/tutorial_notebooks/no_execute
+COPY /docs/tutorial_notebooks /home/${NB_USER}/tutorial_notebooks
 
 # Copy tests and run them
 COPY /tests /opt/conda/lib/python3.9/site-packages/hssm/tests
