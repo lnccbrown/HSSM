@@ -3,7 +3,13 @@ import bambi as bmb
 import numpy as np
 
 import hssm
-from hssm.param import Param, _make_default_prior, _parse_bambi, _make_priors_recursive
+from hssm.param import (
+    Param,
+    _make_default_prior,
+    _parse_bambi,
+    _make_priors_recursive,
+    _make_bounded_prior,
+)
 
 
 def test__parse_bambi():
@@ -106,9 +112,9 @@ def test_param_creation_non_regression():
 
     assert param_a.is_truncated
     assert not param_a.is_fixed
-    assert param_a._prior is not None
+    assert param_a.prior.is_truncated
     param_a_output = param_a.__str__().split("\r\n")[1].split("Prior: ")[1]
-    assert param_a_output == param_a._prior.__str__()
+    assert param_a_output == str(param_a.prior)
 
     # A Uniform prior for `z` over (0, 1) set using bmb.Prior.
     # bounds are not set, existing default bounds will be used
@@ -128,16 +134,16 @@ def test_param_creation_non_regression():
     param_z1 = Param(**z1)
     assert param_z1.is_truncated
     assert not param_z1.is_fixed
-    assert param_z1._prior is not None
+    assert param_z1.prior.is_truncated
     param_z1_output = param_z1.__str__().split("\r\n")[1].split("Prior: ")[1]
-    assert param_z1_output == param_z1._prior.__str__()
+    assert param_z1_output == str(param_z1.prior)
 
     # A fixed value for t
     t = {"name": "t", "prior": 0.5, "bounds": (0, 1)}
     param_t = Param(**t)
     assert not param_t.is_truncated
     assert param_t.is_fixed
-    param_t_output = param_t.__str__().split("\r\n")[1].split("Value: ")[1]
+    param_t_output = str(param_t).split("\r\n")[1].split("Value: ")[1]
     assert param_t_output == str(param_t.prior)
 
     model = hssm.HSSM(
@@ -341,3 +347,45 @@ def test__make_priors_recursive():
     assert isinstance(result_prior, bmb.Prior)
     assert isinstance(result_prior.args["upper"], bmb.Prior)
     assert result_prior.args["upper"].name == "Normal"
+
+
+def test__make_bounded_prior(caplog):
+    name = "v"
+    bounds = (0, 1)
+    prior0 = 0.01
+    prior1 = -10.0
+    prior2 = dict(name="Uniform", lower=-10.0, upper=10.0)
+    prior3 = bmb.Prior(**prior2)
+    prior4 = hssm.Prior(**prior2)
+    prior5 = hssm.Prior(bounds=bounds, **prior2)
+    prior6 = bmb.Prior("Uniform", dist=lambda x: x)
+    prior7 = hssm.Prior("Uniform", dist=lambda x: x)
+
+    assert _make_bounded_prior(name, prior0, bounds) == 0.01
+
+    # pass floats that are out of bounds should raise error
+    with pytest.raises(ValueError):
+        _make_bounded_prior(name, prior1, bounds)
+
+    bounded_prior2 = _make_bounded_prior(name, prior2, bounds)
+    assert isinstance(bounded_prior2, hssm.Prior)
+    assert bounded_prior2.is_truncated
+    assert bounded_prior2.dist is not None
+    assert bounded_prior2.bounds == bounds
+
+    bounded_prior3 = _make_bounded_prior(name, prior3, bounds)
+    bounded_prior4 = _make_bounded_prior(name, prior4, bounds)
+
+    assert bounded_prior2._args == bounded_prior3._args
+    assert bounded_prior3._args == bounded_prior4._args
+    assert bounded_prior2._args == bounded_prior4._args
+
+    # pass priors that are already bounded should raise error
+    with pytest.raises(ValueError):
+        _make_bounded_prior(name, prior5, bounds)
+
+    # pass priors that are defined with `dist` should raise warnings.
+    _make_bounded_prior(name, prior6, bounds)
+    _make_bounded_prior(name, prior7, bounds)
+
+    assert caplog.records[0].msg == caplog.records[1].msg
