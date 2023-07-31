@@ -1,4 +1,4 @@
-"""bmb.Prior on steroids.
+"""A subclass of bmb.Prior that can handle bounds.
 
 This class is a subclass of bmb.Prior, which is used to temporarily represent
 a prior distribution until model build time. This class retains all functionalities
@@ -24,12 +24,23 @@ pymc_dist_args = ["rng", "initval", "dims", "observed", "total_size", "transform
 
 # mypy: disable-error-code="has-type"
 class Prior(bmb.Prior):
-    """Create a Prior object that extend the functionalities of bmb.Prior.
+    """Abstract specification of a prior.
 
     Parameters
     ----------
-    bmb
-        _description_
+    name
+        Name of prior distribution. Must be the name of a PyMC distribution
+        (e.g., ``"Normal"``, ``"Bernoulli"``, etc.)
+    auto_scale : optional
+        Whether to adjust the parameters of the prior or use them as passed.
+        Default to ``True``.
+    kwargs
+        Optional keywords specifying the parameters of the named distribution.
+    dist : optional
+        A callable that returns a valid PyMC distribution. The signature must contain
+        ``name``, ``dims``, and ``shape``, as well as its own keyworded arguments.
+    bounds : optional
+        A tuple of two floats indicating the lower and upper bounds of the prior.
     """
 
     def __init__(
