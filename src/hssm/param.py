@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Union, cast
+import logging
+from typing import Any, Union, cast
 
 import bambi as bmb
 import numpy as np
-import pymc as pm
-from bambi.backend.utils import get_distribution
+
+from .prior import Prior
 
 # PEP604 union operator "|" not supported by pylint
 # Fall back to old syntax
@@ -15,7 +16,8 @@ from bambi.backend.utils import get_distribution
 # Explicitly define types so they are more expressive
 # and reusable
 ParamSpec = Union[float, dict[str, Any], bmb.Prior]
-BoundsSpec = tuple[float, float]
+
+_logger = logging.getLogger("hssm")
 
 
 class Param:
@@ -61,7 +63,7 @@ class Param:
         prior: ParamSpec | dict[str, ParamSpec] | None = None,
         formula: str | None = None,
         link: str | bmb.Link | None = None,
-        bounds: BoundsSpec | None = None,
+        bounds: tuple[float, float] | None = None,
         is_parent: bool = False,
     ):
         self.name = name
@@ -71,7 +73,7 @@ class Param:
         self._is_truncated = False
 
         if self.bounds is not None:
-            self.bounds = cast(BoundsSpec, self.bounds)
+            self.bounds = cast(tuple[float, float], self.bounds)
             if any(not np.isscalar(bound) for bound in self.bounds):
                 raise ValueError(f"The bounds of {self.name} should both be scalar.")
             lower, upper = self.bounds
@@ -117,17 +119,12 @@ class Param:
                     if isinstance(prior, (float, bmb.Prior)):
                         self.prior = prior
                     else:
-                        self.prior = bmb.Prior(**prior)
+                        self.prior = Prior(**prior)
                 else:
                     if isinstance(prior, float):
                         self.prior = prior
                     else:
-                        self.prior = make_bounded_prior(prior, self.bounds)
-                        # self._prior is internally used for informative output
-                        # Not used in inference
-                        self._prior = (
-                            bmb.Prior(**prior) if isinstance(prior, dict) else prior
-                        )
+                        self.prior = _make_bounded_prior(self.name, prior, self.bounds)
                         self._is_truncated = True
 
             if link is not None:
@@ -262,8 +259,7 @@ class Param:
         # Output prior and bounds
         else:
             assert isinstance(self.prior, bmb.Prior)
-            prior_output = self._prior if self.is_truncated else self.prior
-            output.append(f"    Prior: {prior_output}")
+            output.append(f"    Prior: {self.prior}")
 
         output.append(f"    Explicit bounds: {self.bounds}")
         return "\r\n".join(output)
@@ -304,7 +300,7 @@ def _make_prior_dict(prior: dict[str, ParamSpec]) -> dict[str, float | bmb.Prior
     return priors
 
 
-def _make_priors_recursive(prior: dict[str, Any]) -> bmb.Prior:
+def _make_priors_recursive(prior: dict[str, Any]) -> Prior:
     """Make `bmb.Prior` objects from ``dict``s.
 
     Helper function that recursively converts a dict that might have some fields that
@@ -394,7 +390,9 @@ def _parse_bambi(
     return result_formula, result_priors, result_links
 
 
-def make_bounded_prior(prior: ParamSpec, bounds: BoundsSpec) -> float | bmb.Prior:
+def _make_bounded_prior(
+    param_name: str, prior: ParamSpec, bounds: tuple[float, float]
+) -> float | Prior:
     """Create prior within specific bounds.
 
     Helper function that creates a prior within specified bounds. Works in the
@@ -419,76 +417,43 @@ def make_bounded_prior(prior: ParamSpec, bounds: BoundsSpec) -> float | bmb.Prio
 
     Returns
     -------
-    float | bmb.Prior
-        A float if `prior` is a float, otherwise a bmb.Prior object.
+    float | Prior
+        A float if `prior` is a float, otherwise a hssm.Prior object.
     """
     lower, upper = bounds
 
     if isinstance(prior, float):
         if not lower <= prior <= upper:
             raise ValueError(
-                f"The fixed prior should be between {lower:.4f} and {upper:.4f}, "
-                + f"got {prior:.4f}."
+                f"The fixed prior for {param_name} should be between {lower:.4f} and "
+                + f"{upper:.4f}, got {prior:.4f}."
             )
 
         return prior
 
     if isinstance(prior, dict):
-        if np.isinf(lower) and np.isinf(upper):
-            return bmb.Prior(**prior)
-        dist = make_truncated_dist(lower, upper, **prior)
-        return bmb.Prior(name=prior["name"], dist=dist)
+        return Prior(bounds=bounds, **prior)
 
-    # After handling the constant and dict case, now handle the bmb.Prior case
-    if np.isinf(lower) and np.isinf(upper):
-        return prior
-    if prior.dist is not None:
+    if isinstance(prior, Prior) and prior.is_truncated:
+        raise ValueError(
+            f"The prior that you provided for {param_name} is already truncated."
+        )
+
+    if isinstance(prior, bmb.Prior) and prior.dist is not None:
+        _logger.warning(
+            "The prior you have provided for %s is specified with the `dist`"
+            + " argument. We assume that it's already bounded and will not apply bounds"
+            + " to it.",
+            param_name,
+        )
         return prior
 
+    # Handles the case where prior is bmb.Prior or prior is hssm.Prior but not
+    # truncated
     name = prior.name
     args = prior.args
 
-    dist = make_truncated_dist(lower, upper, name=name, **args)
-
-    return bmb.Prior(name=name, dist=dist)
-
-
-def make_truncated_dist(lower_bound: float, upper_bound: float, **kwargs) -> Callable:
-    """Create custom functions with truncated priors.
-
-    Helper function that creates a custom function with truncated priors.
-
-    Parameters
-    ----------
-    lower_bound
-        The lower bound for the distribution.
-    upper_bound
-        The upper bound for the distribution.
-    kwargs
-        Typically a dictionary with a name for the name of the Prior distribution
-        and other arguments passed to bmb.Prior object.
-
-    Returns
-    -------
-    Callable
-        A distribution (TensorVariable) created with pm.Truncated().
-    """
-    dist_name = kwargs["name"]
-    dist_kwargs = {k: v for k, v in kwargs.items() if k != "name"}
-
-    initval = dist_kwargs.pop("initval") if "initval" in dist_kwargs else None
-
-    def TruncatedDist(name):
-        dist = get_distribution(dist_name).dist(**dist_kwargs)
-        return pm.Truncated(
-            name=name,
-            dist=dist,
-            lower=lower_bound if np.isfinite(lower_bound) else None,
-            upper=upper_bound if np.isfinite(upper_bound) else None,
-            initval=initval,
-        )
-
-    return TruncatedDist
+    return Prior(name=name, bounds=bounds, **args)
 
 
 def _make_default_prior(bounds: tuple[float, float]) -> bmb.Prior:

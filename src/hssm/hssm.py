@@ -766,7 +766,7 @@ class HSSM:
                         else component.prior
                     )
                 else:
-                    prior = param._prior if param.is_truncated else param.prior
+                    prior = param.prior
                 output.append(f"    Prior: {prior}")
             output.append(f"    Explicit bounds: {param.bounds}")
 
