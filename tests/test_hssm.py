@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import arviz as az
 import bambi as bmb
 import numpy as np
 import pandas as pd
@@ -9,7 +8,6 @@ import pytest
 import ssms
 
 from hssm import HSSM
-from hssm.hssm import _model_has_default
 from hssm.utils import download_hf
 from hssm.likelihoods import DDM, logp_ddm
 
@@ -144,29 +142,25 @@ def test_transform_params_general(data, include, should_raise_exception):
         assert len(model.params) == 5
 
 
-def test__model_has_default():
-    assert _model_has_default("ddm", "analytical")
-    assert not _model_has_default("ddm", "blackbox")
-    assert not _model_has_default("custom", "analytical")
-
-
 def test_custom_model(data, example_model_config):
     with pytest.raises(
         ValueError, match="When using a custom model, please provide a `loglik_kind.`"
     ):
         model = HSSM(data=data, model="custom")
 
-    with pytest.raises(ValueError, match="Please provide a valid `loglik`."):
+    with pytest.raises(
+        ValueError, match="Please provide `list_params` via `model_config`."
+    ):
         model = HSSM(data=data, model="custom", loglik_kind="analytical")
 
     with pytest.raises(
-        ValueError, match="For custom models, please provide a valid `model_config`."
+        ValueError, match="Please provide `list_params` via `model_config`."
     ):
         model = HSSM(data=data, model="custom", loglik=DDM, loglik_kind="analytical")
 
     with pytest.raises(
         ValueError,
-        match="For custom models, please provide `list_params` in `model_config`.",
+        match="Please provide `list_params` via `model_config`.",
     ):
         model = HSSM(
             data=data,
@@ -179,14 +173,22 @@ def test_custom_model(data, example_model_config):
     model = HSSM(
         data=data,
         model="custom",
-        model_config=example_model_config,
+        model_config={
+            "list_params": ["v", "a", "z", "t"],
+            "bounds": {
+                "v": (-3.0, 3.0),
+                "a": (0.3, 2.5),
+                "z": (0.1, 0.9),
+                "t": (0.0, 2.0),
+            },
+        },
         loglik=logp_ddm,
         loglik_kind="analytical",
     )
 
     assert model.model_name == "custom"
     assert model.loglik_kind == "analytical"
-    assert model.list_params == example_model_config["list_params"]
+    assert model.list_params == ["v", "a", "z", "t", "p_outlier"]
 
 
 def test_model_definition_outside_include(data):
