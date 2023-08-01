@@ -1,13 +1,14 @@
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
 
-# HSSM image found at zenkavi/hssm
+# To build using this image
+# docker build -t zenkavi/hssm:0.0.3 -f Dockerfile .
+
+# HSSM images built with this Dockerfile can be found at zenkavi/hssm
 # docker pull zenkavi/hssm
 
 ARG BASE_CONTAINER=jupyter/minimal-notebook:python-3.9
 FROM $BASE_CONTAINER
-
-LABEL maintainer="Zeynep Enkavi <zenkavi@caltech.edu>"
 
 USER root
 
@@ -54,13 +55,10 @@ USER $NB_UID
 WORKDIR $HOME
 	
 # Create a folder for example
-RUN mkdir /home/$NB_USER/tutorial_notebooks && \
-    mkdir /home/$NB_USER/tutorial_notebooks/no_execute && \
+RUN mkdir -p /home/$NB_USER/docs/tutorials && \
+    mkdir -p /home/$NB_USER/docs/getting_started && \
     fix-permissions /home/$NB_USER
 
 # Copy example data and scripts to the example folder
-COPY /docs/tutorial_notebooks /home/${NB_USER}/tutorial_notebooks
-
-# Copy tests and run them
-COPY /tests /opt/conda/lib/python3.9/site-packages/hssm/tests
-RUN python -m unittest discover -s /opt/conda/lib/python3.9/site-packages/hssm/tests -p 'test_*.py'
+COPY /docs/tutorials /home/${NB_USER}/docs/tutorials
+COPY /docs/getting_started /home/${NB_USER}/docs/getting_started
