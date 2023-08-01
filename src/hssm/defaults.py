@@ -64,9 +64,8 @@ default_model_config: DefaultConfigs = {
                 "bounds": ddm_bounds,
                 "default_priors": {
                     "t": {
-                        "name": "Uniform",
-                        "lower": 0.0,
-                        "upper": 2.0,
+                        "name": "HalfNormal",
+                        "sigma": 2.0,
                         "initval": 0.1,
                     },
                 },
@@ -94,9 +93,8 @@ default_model_config: DefaultConfigs = {
                 "bounds": ddm_bounds,
                 "default_priors": {
                     "t": {
-                        "name": "Uniform",
-                        "lower": 0.0,
-                        "upper": 2.0,
+                        "name": "HalfNormal",
+                        "sigma": 2.0,
                         "initval": 0.1,
                     },
                 },
