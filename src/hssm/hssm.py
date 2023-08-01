@@ -685,12 +685,21 @@ class HSSM:
                     )
                 else:
                     prior, bounds = self.model_config.get_defaults(param_str)
-                    param = Param(
-                        name=param_str,
-                        prior=prior,
-                        bounds=bounds,
-                        is_parent=is_parent,
-                    )
+                    if prior is None:
+                        param = Param(
+                            name=param_str,
+                            prior=prior,
+                            bounds=bounds,
+                            is_parent=is_parent,
+                        )
+                    else:
+                        param = Param(
+                            name=param_str,
+                            prior=prior,
+                            bounds=None,
+                            is_parent=is_parent,
+                        )
+                        param.bounds = bounds
                 not_in_include[param_str] = param
 
         processed |= not_in_include

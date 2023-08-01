@@ -327,12 +327,12 @@ def _make_priors_recursive(prior: dict[str, Any]) -> Prior:
 def _parse_bambi(
     params: dict[str, Param],
 ) -> tuple[bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
-    """From a list of Params, retrieve three items that helps with bambi model building.
+    """From a dict of Params, retrieve three items that helps with bambi model building.
 
     Parameters
     ----------
     params
-        A list of Param objects.
+        A dict of Param objects.
 
     Returns
     -------
