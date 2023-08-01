@@ -8,7 +8,7 @@ hssm.set_floatX("float32")
 
 @pytest.fixture
 def non_reg_data():
-    data = hssm.simulate_data(model="ddm", theta=[0.5, 1.5, 0.5, 0.8], size=1000)
+    data = hssm.simulate_data(model="ddm", theta=[0.5, 1.5, 0.5, 0.1], size=1000)
     return data
 
 
