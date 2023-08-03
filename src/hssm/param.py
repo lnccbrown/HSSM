@@ -102,6 +102,12 @@ class Param:
                 "Cannot process the object. It has already been processed."
             )
 
+        if self.name is None:
+            raise ValueError(
+                "One or more parameters do not have a name. "
+                + "Please ensure that names are specified to all of them."
+            )
+
         if self.bounds is not None:
             if any(not np.isscalar(bound) for bound in self.bounds):
                 raise ValueError(f"The bounds of {self.name} should both be scalar.")

@@ -680,6 +680,11 @@ class HSSM:
 
         for param in include:
             name = param["name"]
+            if name is None:
+                raise ValueError(
+                    "One or more parameters do not have a name. "
+                    + "Please ensure that names are specified to all of them."
+                )
             if name not in self.list_params:
                 raise ValueError(f"{name} is not included in the list of parameters.")
             param_with_default = self._fill_default(param, name)
