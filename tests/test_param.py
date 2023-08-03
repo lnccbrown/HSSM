@@ -16,7 +16,7 @@ def test__parse_bambi():
     prior_dict = {"name": "Uniform", "lower": 0.3, "upper": 1.0}
     prior_obj = bmb.Prior("Uniform", lower=0.3, upper=1.0)
 
-    param_parent_non_regression = Param("v", prior=prior_dict, is_parent=True)
+    param_parent_non_regression = Param("v", prior=prior_dict)
     param_parent_regression = Param(
         "v",
         formula="1 + x1",
@@ -24,8 +24,13 @@ def test__parse_bambi():
             "Intercept": prior_dict,
             "x1": prior_dict,
         },
-        is_parent=True,
     )
+
+    param_parent_non_regression.set_parent()
+    param_parent_non_regression.convert()
+
+    param_parent_regression.set_parent()
+    param_parent_regression.convert()
 
     empty_dict = {}
     dict_one_parent_non_regression = {"v": param_parent_non_regression}
@@ -64,7 +69,8 @@ def test_param_creation_non_regression():
         },
     }
 
-    param_v = Param(**v, is_parent=False)
+    param_v = Param(**v)
+    param_v.convert()
 
     assert param_v.name == "v"
     assert isinstance(param_v.prior, bmb.Prior)
@@ -83,7 +89,8 @@ def test_param_creation_non_regression():
         "bounds": (0, 1e5),
     }
 
-    param_a = Param(**a, is_parent=False)
+    param_a = Param(**a)
+    param_a.convert()
 
     assert param_a.is_truncated
     assert not param_a.is_fixed
@@ -95,7 +102,8 @@ def test_param_creation_non_regression():
     # bounds are not set, existing default bounds will be used
     z = {"name": "z", "prior": bmb.Prior("Uniform", lower=0.0, upper=1.0)}
 
-    param_z = Param(**z, is_parent=False)
+    param_z = Param(**z)
+    param_z.convert()
     assert not param_z.is_truncated
     assert not param_z.is_regression
     assert not param_z.is_fixed
@@ -107,6 +115,7 @@ def test_param_creation_non_regression():
     }
 
     param_z1 = Param(**z1)
+    param_z1.convert()
     assert param_z1.is_truncated
     assert not param_z1.is_fixed
     assert param_z1.prior.is_truncated
@@ -116,6 +125,7 @@ def test_param_creation_non_regression():
     # A fixed value for t
     t = {"name": "t", "prior": 0.5, "bounds": (0, 1)}
     param_t = Param(**t)
+    param_t.convert()
     assert not param_t.is_truncated
     assert param_t.is_fixed
     param_t_output = str(param_t).split("\r\n")[1].split("Value: ")[1]
@@ -152,6 +162,7 @@ def test_param_creation_regression():
     }
 
     v_reg_param = Param(**v_reg)
+    v_reg_param.convert()
 
     assert v_reg_param.is_regression
     assert not v_reg_param.is_fixed
@@ -216,6 +227,7 @@ def test__make_default_prior():
 
 def test_param_non_regression():
     param_value = Param("a", prior=0.5)
+    param_value.convert()
 
     param_dict = Param(
         "z",
@@ -225,8 +237,10 @@ def test_param_non_regression():
             "lower": 0.8,
         },
     )
+    param_dict.convert()
 
     param_prior = Param("t", prior=bmb.Prior("Uniform", upper=0.5, lower=0.8))
+    param_prior.convert()
 
     assert param_value.name == "a"
     assert isinstance(param_dict.prior, bmb.Prior)
@@ -236,8 +250,8 @@ def test_param_non_regression():
     assert param_value.link is None
     assert param_prior.formula is None
 
-    formula1, d1, link1 = param_dict._parse_bambi()  # pylint: disable=W0212
-    formula2, d2, link2 = param_prior._parse_bambi()  # pylint: disable=W0212
+    formula1, d1, link1 = param_dict.parse_bambi()  # pylint: disable=W0212
+    formula2, d2, link2 = param_prior.parse_bambi()  # pylint: disable=W0212
 
     assert formula1 is None and formula2 is None
     assert isinstance(d1["z"], bmb.Prior)
@@ -253,10 +267,10 @@ def test_param_non_regression():
     with pytest.raises(
         ValueError, match="`link` should be None if no regression is specified."
     ):
-        Param("t", 0.5, link="identity")
+        Param("t", 0.5, link="identity").convert()
 
     with pytest.raises(ValueError, match="Please specify the prior or bounds for a."):
-        Param("a")
+        Param("a").convert()
 
 
 def test_param_regression():
@@ -281,7 +295,12 @@ def test_param_regression():
         "a", formula="a ~ 1 + x1", prior=priors_dict, link=fake_link
     )
 
-    param_reg_parent = Param("a", formula="a ~ 1 + x1", is_parent=True)
+    param_reg_parent = Param("a", formula="a ~ 1 + x1")
+
+    param_reg_formula1.convert()
+    param_reg_formula2.convert()
+    param_reg_parent.set_parent()
+    param_reg_parent.convert()
 
     assert param_reg_formula1.formula == "a ~ 1 + x1"
     assert isinstance(param_reg_formula2.link, bmb.Link)
@@ -291,15 +310,15 @@ def test_param_regression():
     assert isinstance(dep_priors2["Intercept"], bmb.Prior)
     assert dep_priors2["Intercept"] == dep_priors2["x1"]
 
-    formula1, d1, link1 = param_reg_formula1._parse_bambi()  # pylint: disable=W0212
-    formula2, d2, link2 = param_reg_formula2._parse_bambi()  # pylint: disable=W0212
+    formula1, d1, link1 = param_reg_formula1.parse_bambi()  # pylint: disable=W0212
+    formula2, d2, link2 = param_reg_formula2.parse_bambi()  # pylint: disable=W0212
 
     assert formula1 == formula2
     assert d1 == d2
     assert link1["a"] == "identity"
     assert link2["a"].name == "Fake"
 
-    formula3, d3, _ = param_reg_parent._parse_bambi()  # pylint: disable=W0212
+    formula3, d3, _ = param_reg_parent.parse_bambi()  # pylint: disable=W0212
 
     assert formula3 == "c(rt, response) ~ 1 + x1"
     assert param_reg_parent.formula == "a ~ 1 + x1"

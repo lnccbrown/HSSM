@@ -52,28 +52,57 @@ class Param:
         If provided, the prior will be created with boundary checks. If this
         parameter is specified as a regression, boundary checks will be skipped at
         this point.
-    is_parent
-        Determines if this parameter is a "parent" parameter. If so, the response
-        term for the formula will be "c(rt, response)". Default is False.
     """
 
     def __init__(
         self,
-        name: str,
+        name: str | None = None,
         prior: ParamSpec | dict[str, ParamSpec] | None = None,
         formula: str | None = None,
         link: str | bmb.Link | None = None,
         bounds: tuple[float, float] | None = None,
-        is_parent: bool = False,
     ):
         self.name = name
+        self.prior = prior
         self.formula = formula
-        self._parent = is_parent
-        self.bounds = tuple(float(x) for x in bounds) if bounds is not None else None
+        self.link = link
+        self.bounds = bounds
         self._is_truncated = False
+        self._is_parent = False
+        self._is_converted = False
+        self._do_not_truncate = False
+
+        # The initializer does not do anything immediately after the object is initiated
+        # because things could still change.
+
+    def update(self, **kwargs):
+        """Update the initial information stored in the class."""
+        if self._is_converted:
+            raise ValueError("Cannot update the object. It has already been processed.")
+        for attr, value in kwargs.items():
+            if not hasattr(attr):
+                raise ValueError(f"{attr} does not exist.")
+            setattr(self, attr, value)
+
+    def set_parent(self):
+        """Set the Param as parent."""
+        self._is_parent = True
+
+    def do_not_truncate(self):
+        """Flag that prior should not be truncated.
+
+        This is most likely because both default prior and default bounds are supplied.
+        """
+        self._do_not_truncate = True
+
+    def convert(self):
+        """Process the information passed to the class."""
+        if self._is_converted:
+            raise ValueError(
+                "Cannot process the object. It has already been processed."
+            )
 
         if self.bounds is not None:
-            self.bounds = cast(tuple[float, float], self.bounds)
             if any(not np.isscalar(bound) for bound in self.bounds):
                 raise ValueError(f"The bounds of {self.name} should both be scalar.")
             lower, upper = self.bounds
@@ -82,30 +111,32 @@ class Param:
                 + "its upper bound."
             )
 
-        if isinstance(prior, int):
-            prior = float(prior)
+        if isinstance(self.prior, int):
+            self.prior = float(self.prior)
 
-        if formula is not None:
+        if self.formula is not None:
             # The regression case
 
-            self.formula = formula if "~" in formula else f"{name} ~ {formula}"
+            self.formula = (
+                self.formula if "~" in self.formula else f"{self.name} ~ {self.formula}"
+            )
 
-            if isinstance(prior, (float, bmb.Prior)):
+            if isinstance(self.prior, (float, bmb.Prior)):
                 raise ValueError(
                     "Please specify priors for each individual parameter in the "
                     + "regression."
                 )
 
-            self.prior: float | bmb.Prior = (
-                _make_prior_dict(prior) if prior is not None else prior
+            self.prior = (
+                _make_prior_dict(self.prior) if self.prior is not None else self.prior
             )
 
-            self.link = "identity" if link is None else link
+            self.link = "identity" if self.link is None else self.link
 
         else:
             # The non-regression case
 
-            if prior is None:
+            if self.prior is None:
                 if self.bounds is None:
                     raise ValueError(
                         f"Please specify the prior or bounds for {self.name}."
@@ -113,24 +144,24 @@ class Param:
                 self.prior = _make_default_prior(self.bounds)
             else:
                 # Explicitly cast the type of prior, no runtime performance penalty
-                prior = cast(ParamSpec, prior)
+                self.prior = cast(ParamSpec, self.prior)
 
-                if self.bounds is None:
-                    if isinstance(prior, (float, bmb.Prior)):
-                        self.prior = prior
-                    else:
-                        self.prior = Prior(**prior)
+                if self.bounds is None or self._do_not_truncate:
+                    if isinstance(self.prior, dict):
+                        self.prior = Prior(**self.prior)
                 else:
-                    if isinstance(prior, float):
-                        self.prior = prior
-                    else:
-                        self.prior = _make_bounded_prior(self.name, prior, self.bounds)
+                    if isinstance(self.prior, (dict, bmb.Prior)):
+                        self.prior = _make_bounded_prior(
+                            self.name, self.prior, self.bounds
+                        )
                         self._is_truncated = True
 
-            if link is not None:
+            if self.link is not None:
                 raise ValueError("`link` should be None if no regression is specified.")
 
             self.link = None
+
+        self._is_converted = True
 
     @property
     def is_regression(self) -> bool:
@@ -152,7 +183,7 @@ class Param:
         bool
             A boolean that indicates if the parameter is a parent or not.
         """
-        return self._parent
+        return self._is_parent
 
     @property
     def is_fixed(self) -> bool:
@@ -178,7 +209,7 @@ class Param:
         """
         return self._is_truncated
 
-    def _parse_bambi(
+    def parse_bambi(
         self,
     ) -> tuple:
         """
@@ -197,7 +228,7 @@ class Param:
         # Again, to satisfy type checker
         # Equivalent to `if self.is_regression`
         if self.formula is not None:
-            left_side = "c(rt, response)" if self._parent else self.name
+            left_side = "c(rt, response)" if self._is_parent else self.name
 
             right_side = self.formula.split("~")[1]
             right_side = right_side.strip()
@@ -209,9 +240,9 @@ class Param:
 
             return formula, prior, link
 
-        formula = "c(rt, response) ~ 1" if self._parent else None
+        formula = "c(rt, response) ~ 1" if self._is_parent else None
 
-        if self._parent:
+        if self._is_parent:
             prior = {"c(rt, response)": {"Intercept": self.prior}}
             link = {self.name: "identity"}
         else:
@@ -229,6 +260,7 @@ class Param:
             regression or not.
         """
         output = []
+        assert self.name is not None
         output.append(self.name + ":")
 
         # Simplest case: float
@@ -252,6 +284,7 @@ class Param:
             else:
                 output.append("        Unspecified. Using defaults")
 
+            assert self.link is not None
             link = self.link if isinstance(self.link, str) else self.link.name
             output.append(f"    Link: {link}")
 
@@ -274,6 +307,20 @@ class Param:
             regression or not.
         """
         return self.__repr__()
+
+    def __getitem__(self, attr):
+        """Return the value of an attribute.
+
+        Mainly a convenience function to mimic the behavior of a dict.
+        """
+        return getattr(self, attr)
+
+    def __setitem__(self, attr, value):
+        """Set the value of an attribute.
+
+        Mainly a convenience function to mimic the behavior of a dict.
+        """
+        setattr(attr, value)
 
 
 def _make_prior_dict(prior: dict[str, ParamSpec]) -> dict[str, float | bmb.Prior]:
@@ -351,7 +398,7 @@ def _parse_bambi(
     links: dict[str, str | bmb.Link] = {}
 
     for _, param in params.items():
-        formula, prior, link = param._parse_bambi()
+        formula, prior, link = param.parse_bambi()
 
         if formula is not None:
             formulas.append(formula)
