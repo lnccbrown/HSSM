@@ -9,24 +9,15 @@ This file defines the entry class HSSM.
 from __future__ import annotations
 
 import logging
-from copy import deepcopy
 from inspect import isclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Literal, cast
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 import bambi as bmb
 import pymc as pm
+import pytensor
 from bambi.model_components import DistributionalComponent
-from numpy.typing import ArrayLike
-from pytensor.graph.op import Op
 
-from hssm.config import (
-    Config,
-    LoglikKind,
-    SupportedModels,
-    default_model_config,
-    default_params,
-)
 from hssm.distribution_utils import (
     make_blackbox_op,
     make_distribution,
@@ -35,6 +26,7 @@ from hssm.distribution_utils import (
 )
 from hssm.param import (
     Param,
+    _make_default_prior,
     _parse_bambi,
 )
 from hssm.utils import (
@@ -43,8 +35,9 @@ from hssm.utils import (
     _process_param_in_kwargs,
     download_hf,
     get_alias_dict,
-    merge_dicts,
 )
+
+from .config import Config, ModelConfig
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -52,9 +45,11 @@ if TYPE_CHECKING:
     import arviz as az
     import numpy as np
     import pandas as pd
-    import pytensor
 
-LogLikeFunc = Callable[..., ArrayLike]
+    from hssm.defaults import (
+        LoglikKind,
+        SupportedModels,
+    )
 
 _logger = logging.getLogger("hssm")
 
@@ -180,8 +175,13 @@ class HSSM:
         data: pd.DataFrame,
         model: SupportedModels | str = "ddm",
         include: list[dict] | None = None,
-        model_config: Config | None = None,
-        loglik: str | PathLike | LogLikeFunc | pytensor.graph.Op | None = None,
+        model_config: ModelConfig | dict | None = None,
+        loglik: str
+        | PathLike
+        | Callable
+        | pytensor.graph.Op
+        | type[pm.Distribution]
+        | None = None,
         loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
@@ -191,147 +191,49 @@ class HSSM:
         self.data = data
         self._inference_obj = None
         self.hierarchical = hierarchical and "participant_id" in data.columns
-        self.has_lapse = p_outlier is not None and p_outlier != 0
 
-        if loglik_kind is None:
-            if model not in default_model_config:
-                raise ValueError(
-                    "When using a custom model, please provide a `loglik_kind.`"
-                )
-            # Setting loglik_kind to be the first of analytical or
-            # approx_differentiable
-            for kind in ["analytical", "approx_differentiable", "blackbox"]:
-                model = cast(SupportedModels, model)
-                if kind in default_model_config[model]:
-                    kind = cast(LoglikKind, kind)
-                    loglik_kind = kind
-                    break
-            if loglik_kind is None:
-                raise ValueError(
-                    "No default model_config is found. Please provide a `loglik_kind."
-                )
-        else:
-            if loglik_kind not in [
-                "analytical",
-                "approx_differentiable",
-                "blackbox",
-            ]:
-                raise ValueError(
-                    "'loglike_kind', when provided, must be one of "
-                    + '"analytical", "approx_differentiable", "blackbox".'
-                )
-
-        self.loglik_kind = loglik_kind
-        self.model_name = model
-
-        # Check if model has default config
-        if _model_has_default(self.model_name, self.loglik_kind):
-            model = cast(SupportedModels, model)
-            default_config = default_model_config[model][loglik_kind]
-
-            self.model_config = (
-                deepcopy(default_config)
-                if model_config is None
-                else merge_dicts(default_config, model_config)
+        # Construct a model_config from defaults
+        self.model_config = Config.from_defaults(model, loglik_kind)
+        # Update defaults with user-provided config, if any
+        if model_config is not None:
+            self.model_config.update_config(
+                model_config
+                if isinstance(model_config, ModelConfig)
+                else ModelConfig(**model_config)  # also serves as dict validation
             )
-            self.loglik = self.model_config["loglik"] if loglik is None else loglik
-            self.list_params = default_params[model][:]
-        else:
-            # If there is no default, we require a log-likelihood
-            if loglik is None:
-                raise ValueError("Please provide a valid `loglik`.")
-            self.loglik = loglik
+        # Update loglik with user-provided value
+        self.model_config.update_loglik(loglik)
+        # Ensure that all required fields are valid
+        self.model_config.validate()
 
-            if model not in default_model_config:
-                # For custom models, require model_config
-                if model_config is None:
-                    raise ValueError(
-                        "For custom models, please provide a valid `model_config`."
-                    )
-                if "list_params" not in model_config:
-                    raise ValueError(
-                        "For custom models, please provide `list_params` in "
-                        + "`model_config`."
-                    )
-                self.model_config = model_config
-                self.list_params = model_config["list_params"]
-            else:
-                # For supported models without configs,
-                # We don't require a model_config (because list_params is known)
-                model = cast(SupportedModels, model)
-                self.model_config = {} if model_config is None else model_config
-                self.list_params = default_params[model][:]
-
-        if (
-            loglik_kind == "approx_differentiable"
-            and "backend" not in self.model_config
-        ):
-            self.model_config["backend"] = "jax"
-
-        # Logic for determining if p_outlier and lapse is specified correctly.
-        # Basically, avoid situations where only one of them is specified.
+        # Set up shortcuts so old code will work
+        self.list_params = self.model_config.list_params
+        self.model_name = self.model_config.model_name
+        self.loglik = self.model_config.loglik
+        self.loglik_kind = self.model_config.loglik_kind
         self._parent = self.list_params[0]
-        if self.has_lapse and lapse is None:
-            raise ValueError(
-                "You have specified `p_outlier`. Please also specify `lapse`."
-            )
-        if lapse is not None and not self.has_lapse:
-            _logger.warning(
-                "You have specified the `lapse` argument to include a lapse "
-                + "distribution, but `p_outlier` is set to either 0 or None. "
-                + "Your lapse distribution will be ignored."
-            )
-        if "p_outlier" in self.list_params and self.list_params[-1] != "p_outlier":
-            raise ValueError(
-                "Please do not include 'p_outlier' in `list_params`. "
-                + "We automatically append it to `list_params` when `p_outlier` "
-                + "parameter is not None"
-            )
 
+        # Process lapse distribution
+        self.has_lapse = p_outlier is not None and p_outlier != 0
+        self._check_lapse(lapse)
         if self.has_lapse and self.list_params[-1] != "p_outlier":
             self.list_params.append("p_outlier")
 
-        if include is None:
-            include = []
-        params_in_include = [param["name"] for param in include]
-
-        # Process kwargs
-        # If any of the keys is found in `list_params` it is a parameter specification
-        # We add the parameter specification to `include`, which will be processed later
-        # together with other parameter specifications in `include`.
-        # Otherwise we create another dict and pass it to `bmb.Model`.
-        other_kwargs: dict[Any, Any] = {}
-        for k, v in kwargs.items():
-            if k in self.list_params:
-                if k in params_in_include:
-                    raise ValueError(
-                        f'Parameter "{k}" is already specified in `include`.'
-                    )
-                include.append(_process_param_in_kwargs(k, v))
-            else:
-                other_kwargs |= {k: v}
-
-        # Process p_outliers the same way.
-        if self.has_lapse:
-            if "p_outlier" in params_in_include:
-                raise ValueError(
-                    "Please do not specify `p_outlier` in `include`. "
-                    + "Please specify it with `p_outlier` instead."
-                )
-            include.append(_process_param_in_kwargs("p_outlier", p_outlier))
-
-        self.params, self.formula, self.priors, self.link = self._transform_params(
-            include, self.model_config
+        # Process kwargs and p_outlier and add them to include
+        include, other_kwargs = self._add_kwargs_and_p_outlier_to_include(
+            include, kwargs, p_outlier
         )
+
+        # Process parameter specifications include
+        processed = self._process_include(include)
+        # Process parameter specifications not in include
+        self.params = self._process_rest(processed)
+
+        # Get the bambi formula, priors, and link
+        self.formula, self.priors, self.link = _parse_bambi(self.params)
 
         self._parent_param = self.params[self.list_params[0]]
         assert self._parent_param is not None
-
-        params_is_reg = [
-            param.is_regression
-            for param_name, param in self.params.items()
-            if param_name != "p_outlier"
-        ]
 
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
@@ -342,67 +244,11 @@ class HSSM:
             if param.is_regression and param.bounds is not None
         }
 
+        # Set p_outlier and lapse
         self.p_outlier = self.params.get("p_outlier")
         self.lapse = lapse if self.has_lapse else None
 
-        ### Logic for different types of likelihoods:
-        # -`analytical` and `blackbox`:
-        #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
-        #     function).
-        # - `approx_differentiable`:
-        #     In addition to `pm.Distribution` and any arbitrary function, it can also
-        #     be an str (which we will download from hugging face) or a Pathlike
-        #     which we will download and make a distribution.
-
-        # If user has already provided a log-likelihood function as a distribution
-        # Use it directly as the distribution
-        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
-            self.model_distribution = self.loglik
-        # If the user has provided an Op
-        # Wrap it around with a distribution
-        elif isinstance(self.loglik, Op):
-            self.model_distribution = make_distribution(
-                self.model_config.get("rv", self.model_name),
-                loglik=self.loglik,
-                list_params=self.list_params,
-                bounds=self.bounds,
-                lapse=self.lapse,
-            )  # type: ignore
-        # If the user has provided a callable (an arbitrary likelihood function)
-        # If `loglik_kind` is `blackbox`, wrap it in an op and then a distribution
-        # Otherwise, we assume that this function is differentiable with `pytensor`
-        # and wrap it directly in a distribution.
-        elif callable(self.loglik):
-            if self.loglik_kind == "blackbox":
-                self.loglik = make_blackbox_op(self.loglik)
-            self.model_distribution = make_distribution(
-                self.model_config.get("rv", self.model_name),
-                loglik=self.loglik,
-                list_params=self.list_params,
-                bounds=self.bounds,
-                lapse=self.lapse,
-            )  # type: ignore
-        # All other situations
-        else:
-            if self.loglik_kind != "approx_differentiable":
-                raise ValueError(
-                    "You set `loglik_kind` to `approx_differentiable "
-                    + "but did not provide a pm.Distribution, an Op, or a callable "
-                    + "as `loglik`."
-                )
-            if isinstance(self.loglik, str):
-                if not Path(self.loglik).exists():
-                    self.loglik = download_hf(self.loglik)
-
-            self.model_distribution = make_distribution_from_onnx(
-                rv=self.model_config.get("rv", self.model_name),
-                onnx_model=self.loglik,
-                list_params=self.list_params,
-                backend=self.model_config.get("backend", "jax"),
-                params_is_reg=params_is_reg,
-                bounds=self.bounds,
-                lapse=self.lapse,
-            )
+        self.model_distribution = self._make_model_distribution()
 
         self.family = make_family(
             self.model_distribution,
@@ -417,73 +263,6 @@ class HSSM:
 
         self._aliases = get_alias_dict(self.model, self._parent_param)
         self.set_alias(self._aliases)
-
-    def _transform_params(
-        self, include: list[dict] | None, model_config: Config
-    ) -> tuple[
-        dict[str, Param], bmb.Formula, dict | None, dict[str, str | bmb.Link] | str
-    ]:
-        """Transform parameters.
-
-        Transforms a list of dictionaries containing parameter information into a
-        list of Param objects. This function creates a formula, priors,and a link for
-        the Bambi package based on the parameters.
-
-        Parameters
-        ----------
-        include
-            A list of dictionaries containing information about the parameters.
-        model_config
-            A dict for the configuration for the model.
-
-        Returns
-        -------
-        list[Param], bmb.Formula, dict | None, dict | str
-            A tuple of 4 items, the latter 3 are for creating the bambi model.
-            - A list of the same length as self.list_params containing Param objects.
-            - A bmb.formula object.
-            - An optional dict containing prior information for Bambi.
-            - An optional dict of link functions for Bambi.
-        """
-        processed = []
-        params: dict[str, Param] = {}
-        if include:
-            for param_dict in include:
-                name = param_dict["name"]
-                processed.append(name)
-                for k in param_dict.keys():
-                    if k not in ["name", "formula", "prior", "link", "bounds"]:
-                        raise ValueError(
-                            f"Invalid key {k} for the specification of {name}!"
-                        )
-                param = _create_param(
-                    param_dict, model_config, is_parent=name == self._parent
-                )
-                params[name] = param
-
-        for param_str in self.list_params:
-            if param_str not in processed:
-                is_parent = param_str == self._parent
-                if self.hierarchical:
-                    bounds = (
-                        model_config["bounds"].get(param_str)
-                        if "bounds" in model_config
-                        else None
-                    )
-                    param = Param(
-                        param_str,
-                        formula="1 + (1|participant_id)",
-                        link="identity",
-                        bounds=bounds,
-                        is_parent=is_parent,
-                    )
-                else:
-                    param = _create_param(param_str, model_config, is_parent=is_parent)
-                params[param_str] = param
-
-        sorted_params = {k: params[k] for k in self.list_params}
-
-        return sorted_params, *_parse_bambi(list(sorted_params.values()))
 
     def sample(
         self,
@@ -517,7 +296,7 @@ class HSSM:
         if sampler is None:
             if (
                 self.loglik_kind == "approx_differentiable"
-                and self.model_config.get("backend") == "jax"
+                and self.model_config.backend == "jax"
             ):
                 sampler = "nuts_numpyro"
             else:
@@ -541,7 +320,7 @@ class HSSM:
 
         if (
             self.loglik_kind == "approx_differentiable"
-            and self.model_config.get("backend") == "jax"
+            and self.model_config.backend == "jax"
             and sampler == "mcmc"
             and kwargs.get("cores", None) != 1
         ):
@@ -804,89 +583,192 @@ class HSSM:
 
         return self._inference_obj
 
-
-def _model_has_default(model: SupportedModels | str, loglik_kind: LoglikKind) -> bool:
-    """Determine if the specified model has default configs.
-
-    Also checks if `model` and `loglik_kind` are valid.
-
-    Parameters
-    ----------
-    model
-        User-specified model type.
-    loglik_kind
-        User-specified likelihood kind.
-
-    Returns
-    -------
-    bool
-        Whether the model is supported.
-    """
-    if model not in default_model_config:
-        return False
-
-    model = cast(SupportedModels, model)
-    return loglik_kind in default_model_config[model]
-
-
-def _create_param(param: str | dict, model_config: dict, is_parent: bool) -> Param:
-    """Create a Param object.
-
-    Parameters
-    ----------
-    param
-        A dict or str containing parameter settings.
-    model_config
-        A dict containing the config for the model.
-    is_parent
-        Indicates whether this current param is a parent in bambi.
-
-    Returns
-    -------
-    Param
-        A Param object with info form param and model_config injected.
-    """
-    if isinstance(param, dict):
-        name = param["name"]
-        if "bounds" not in param:
-            bounds = (
-                model_config["bounds"].get(name, None)
-                if "bounds" in model_config
-                else None
+    def _check_lapse(self, lapse):
+        """Determine if p_outlier and lapse is specified correctly."""
+        # Basically, avoid situations where only one of them is specified.
+        if self.has_lapse and lapse is None:
+            raise ValueError(
+                "You have specified `p_outlier`. Please also specify `lapse`."
             )
-        else:
-            bounds = param["bounds"]
-        if "prior" not in param or param["prior"] is None:
-            if (
-                "default_priors" in model_config
-                and name in model_config["default_priors"]
-                and "formula" not in model_config
-            ):
-                prior = model_config["default_priors"][name]
-            else:
-                prior = None
-        else:
-            prior = param["prior"]
-        return Param(
-            name=name,
-            prior=prior,
-            formula=param.get("formula"),
-            link=param.get("link"),
-            bounds=bounds,
-            is_parent=is_parent,
-        )
+        if lapse is not None and not self.has_lapse:
+            _logger.warning(
+                "You have specified the `lapse` argument to include a lapse "
+                + "distribution, but `p_outlier` is set to either 0 or None. "
+                + "Your lapse distribution will be ignored."
+            )
+        if "p_outlier" in self.list_params and self.list_params[-1] != "p_outlier":
+            raise ValueError(
+                "Please do not include 'p_outlier' in `list_params`. "
+                + "We automatically append it to `list_params` when `p_outlier` "
+                + "parameter is not None"
+            )
 
-    bounds = (
-        model_config["bounds"].get(param, None) if "bounds" in model_config else None
-    )
-    prior = (
-        model_config["default_priors"].get(param, None)
-        if "default_priors" in model_config
-        else None
-    )
-    return Param(
-        name=param,
-        prior=prior,
-        bounds=bounds,
-        is_parent=is_parent,
-    )
+    def _fill_default(self, p: dict, param: str) -> dict:
+        """Fill parameter specification in include with defaults from config."""
+        default_prior, default_bounds = self.model_config.get_defaults(param)
+        if p.get("bounds") is None:
+            p["bounds"] = default_bounds
+
+        if "formula" not in p and p.get("prior") is None:
+            if default_prior is not None:
+                p["prior"] = default_prior
+            else:
+                if p["bounds"] is not None:
+                    p["prior"] = _make_default_prior(p["bounds"])
+
+        return p
+
+    def _add_kwargs_and_p_outlier_to_include(
+        self, include, kwargs, p_outlier
+    ) -> tuple[list, dict]:
+        """Process kwargs and p_outlier and add them to include."""
+        if include is None:
+            include = []
+        params_in_include = [param["name"] for param in include]
+
+        # Process kwargs
+        # If any of the keys is found in `list_params` it is a parameter specification
+        # We add the parameter specification to `include`, which will be processed later
+        # together with other parameter specifications in `include`.
+        # Otherwise we create another dict and pass it to `bmb.Model`.
+        other_kwargs: dict[Any, Any] = {}
+        for k, v in kwargs.items():
+            if k in self.list_params:
+                if k in params_in_include:
+                    raise ValueError(
+                        f'Parameter "{k}" is already specified in `include`.'
+                    )
+                include.append(_process_param_in_kwargs(k, v))
+            else:
+                other_kwargs |= {k: v}
+
+        # Process p_outliers the same way.
+        if self.has_lapse:
+            if "p_outlier" in params_in_include:
+                raise ValueError(
+                    "Please do not specify `p_outlier` in `include`. "
+                    + "Please specify it with `p_outlier` instead."
+                )
+            include.append(_process_param_in_kwargs("p_outlier", p_outlier))
+
+        return include, other_kwargs
+
+    def _process_include(self, include: list) -> dict[str, Param]:
+        """Turn parameter specs in include into Params."""
+        result: dict[str, Param] = {}
+
+        for param in include:
+            name = param["name"]
+            if name not in self.list_params:
+                raise ValueError(f"{name} is not included in the list of parameters.")
+            param_with_default = self._fill_default(param, name)
+            is_parent = name == self._parent
+            result[name] = Param(is_parent=is_parent, **param_with_default)
+
+        return result
+
+    def _process_rest(self, processed: dict[str, Param]) -> dict[str, Param]:
+        """Turn parameter specs not in include into Params."""
+        not_in_include = {}
+
+        for param_str in self.list_params:
+            if param_str not in processed:
+                is_parent = param_str == self._parent
+                if self.hierarchical:
+                    bounds = self.model_config.bounds.get(param_str)
+                    param = Param(
+                        param_str,
+                        formula="1 + (1|participant_id)",
+                        link="identity",
+                        bounds=bounds,
+                        is_parent=is_parent,
+                    )
+                else:
+                    prior, bounds = self.model_config.get_defaults(param_str)
+                    if prior is None:
+                        param = Param(
+                            name=param_str,
+                            prior=prior,
+                            bounds=bounds,
+                            is_parent=is_parent,
+                        )
+                    else:
+                        param = Param(
+                            name=param_str,
+                            prior=prior,
+                            bounds=None,
+                            is_parent=is_parent,
+                        )
+                        param.bounds = bounds
+                not_in_include[param_str] = param
+
+        processed |= not_in_include
+        sorted_params = {k: processed[k] for k in self.list_params}
+
+        return sorted_params
+
+    def _make_model_distribution(self) -> type[pm.Distribution]:
+        """Make a pm.Distribution for the model."""
+        ### Logic for different types of likelihoods:
+        # -`analytical` and `blackbox`:
+        #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
+        #     function).
+        # - `approx_differentiable`:
+        #     In addition to `pm.Distribution` and any arbitrary function, it can also
+        #     be an str (which we will download from hugging face) or a Pathlike
+        #     which we will download and make a distribution.
+
+        # If user has already provided a log-likelihood function as a distribution
+        # Use it directly as the distribution
+        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
+            return self.loglik
+        # If the user has provided an Op
+        # Wrap it around with a distribution
+        if isinstance(self.loglik, pytensor.graph.Op):
+            return make_distribution(
+                rv=self.model_config.rv or self.model_name,
+                loglik=self.loglik,
+                list_params=self.list_params,
+                bounds=self.bounds,
+                lapse=self.lapse,
+            )  # type: ignore
+        # If the user has provided a callable (an arbitrary likelihood function)
+        # If `loglik_kind` is `blackbox`, wrap it in an op and then a distribution
+        # Otherwise, we assume that this function is differentiable with `pytensor`
+        # and wrap it directly in a distribution.
+        if callable(self.loglik):
+            if self.loglik_kind == "blackbox":
+                self.loglik = make_blackbox_op(self.loglik)
+            return make_distribution(
+                rv=self.model_config.rv or self.model_name,
+                loglik=self.loglik,
+                list_params=self.list_params,
+                bounds=self.bounds,
+                lapse=self.lapse,
+            )  # type: ignore
+        # All other situations
+        if self.loglik_kind != "approx_differentiable":
+            raise ValueError(
+                "You set `loglik_kind` to `approx_differentiable "
+                + "but did not provide a pm.Distribution, an Op, or a callable "
+                + "as `loglik`."
+            )
+        if isinstance(self.loglik, str):
+            if not Path(self.loglik).exists():
+                self.loglik = download_hf(self.loglik)
+
+        params_is_reg = [
+            param.is_regression
+            for param_name, param in self.params.items()
+            if param_name != "p_outlier"
+        ]
+
+        return make_distribution_from_onnx(
+            rv=self.model_config.rv or self.model_name,
+            onnx_model=self.loglik,
+            list_params=self.list_params,
+            backend=self.model_config.backend or "jax",
+            params_is_reg=params_is_reg,
+            bounds=self.bounds,
+            lapse=self.lapse,
+        )

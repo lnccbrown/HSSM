@@ -325,14 +325,14 @@ def _make_priors_recursive(prior: dict[str, Any]) -> Prior:
 
 
 def _parse_bambi(
-    params: list[Param],
+    params: dict[str, Param],
 ) -> tuple[bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
-    """From a list of Params, retrieve three items that helps with bambi model building.
+    """From a dict of Params, retrieve three items that helps with bambi model building.
 
     Parameters
     ----------
     params
-        A list of Param objects.
+        A dict of Param objects.
 
     Returns
     -------
@@ -346,29 +346,11 @@ def _parse_bambi(
     if not params:
         return bmb.Formula("c(rt, response) ~ 1"), None, "identity"
 
-    # Then, we check how many parameters in the specified list of params are parent.
-    num_parents = sum(param.is_parent for param in params)
-
-    # In the case where there is more than one parent:
-    assert num_parents <= 1, "More than one parent is specified!"
-
     formulas = []
     priors: dict[str, Any] = {}
     links: dict[str, str | bmb.Link] = {}
-    params_copy = params.copy()
 
-    parent_param = None
-
-    if num_parents == 1:
-        for idx, param in enumerate(params):
-            if param.is_parent:
-                parent_param = params_copy.pop(idx)
-                break
-
-        assert parent_param is not None
-        params_copy.insert(0, parent_param)
-
-    for param in params_copy:
+    for _, param in params.items():
         formula, prior, link = param._parse_bambi()
 
         if formula is not None:
@@ -378,13 +360,8 @@ def _parse_bambi(
         if link is not None:
             links |= link
 
-    result_formula: bmb.Formula = (
-        bmb.Formula("c(rt, response) ~ 1", *formulas)
-        if num_parents == 0
-        else bmb.Formula(formulas[0], *formulas[1:])
-    )
+    result_formula: bmb.Formula = bmb.Formula(formulas[0], *formulas[1:])
     result_priors = None if not priors else priors
-
     result_links: dict | str = "identity" if not links else links
 
     return result_formula, result_priors, result_links

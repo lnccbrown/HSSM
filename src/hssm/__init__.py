@@ -3,8 +3,9 @@
 import logging
 import sys
 
-from .config import show_defaults
+from .config import ModelConfig
 from .datasets import load_data
+from .defaults import show_defaults
 from .hssm import HSSM
 from .prior import Prior
 from .simulator import simulate_data
@@ -15,4 +16,12 @@ _logger.setLevel(logging.INFO)
 handler = logging.StreamHandler(stream=sys.stdout)
 _logger.addHandler(handler)
 
-__all__ = ["HSSM", "load_data", "Prior", "simulate_data", "set_floatX", "show_defaults"]
+__all__ = [
+    "HSSM",
+    "load_data",
+    "ModelConfig",
+    "Prior",
+    "simulate_data",
+    "set_floatX",
+    "show_defaults",
+]
