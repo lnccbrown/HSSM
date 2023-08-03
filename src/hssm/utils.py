@@ -81,6 +81,7 @@ def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
         A dict that indicates how Bambi should alias its parameters.
     """
     assert parent.is_parent, "This Param object should be a parent!"
+    assert parent.name is not None
 
     result_dict = {"c(rt, response)": "rt,response"}
 
