@@ -5,7 +5,7 @@ import hssm
 from hssm.config import Config, ModelConfig
 
 
-def test_from_default():
+def test_from_defaults():
     # Case 1: Has default prior
     config1 = Config.from_defaults("ddm", "analytical")
 

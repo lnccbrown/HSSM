@@ -13,15 +13,14 @@ pytensor.config.floatX = "float32"
 DECIMAL = 4
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def fixture_path():
     return Path(__file__).parent / "fixtures"
 
 
-@pytest.fixture(scope="module")
-def onnx_session():
-    fixture_dir = Path(__file__).parent / "fixtures"
-    model_path = str(fixture_dir / "angle.onnx")
+@pytest.fixture
+def onnx_session(fixture_path):
+    model_path = str(fixture_path / "angle.onnx")
 
     return onnxruntime.InferenceSession(model_path, None)
 
