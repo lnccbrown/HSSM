@@ -71,7 +71,7 @@ def test_lapse_distribution():
     np.testing.assert_array_equal(random_sample_a, random_sample_b)
 
 
-def test_apply_param_bouds_to_loglik():
+def test_apply_param_bounds_to_loglik():
     """Tests the function in separation."""
     logp = np.random.normal(size=1000)
 
