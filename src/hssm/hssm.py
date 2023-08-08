@@ -174,7 +174,7 @@ class HSSM:
         self,
         data: pd.DataFrame,
         model: SupportedModels | str = "ddm",
-        include: list[dict] | None = None,
+        include: list[dict | Param] | None = None,
         model_config: ModelConfig | dict | None = None,
         loglik: str
         | PathLike
@@ -603,18 +603,39 @@ class HSSM:
                 + "parameter is not None"
             )
 
-    def _fill_default(self, p: dict, param: str) -> dict:
+    def _fill_default(self, p: dict | Param, param_name: str) -> dict | Param:
         """Fill parameter specification in include with defaults from config."""
-        default_prior, default_bounds = self.model_config.get_defaults(param)
-        if p.get("bounds") is None:
-            p["bounds"] = default_bounds
+        default_prior, default_bounds = self.model_config.get_defaults(param_name)
+        filled_default_bounds = False
+        if isinstance(p, dict):
+            if p.get("bounds") is None:
+                p["bounds"] = default_bounds
+                filled_default_bounds = True
 
-        if "formula" not in p and p.get("prior") is None:
-            if default_prior is not None:
-                p["prior"] = default_prior
-            else:
-                if p["bounds"] is not None:
-                    p["prior"] = _make_default_prior(p["bounds"])
+            if "formula" not in p and p.get("prior") is None:
+                if default_prior is not None:
+                    p["prior"] = default_prior
+                    if filled_default_bounds:
+                        p_param = Param(**p)
+                        p_param.do_not_truncate()
+                        return p_param
+                else:
+                    if p["bounds"] is not None:
+                        p["prior"] = _make_default_prior(p["bounds"])
+
+        else:
+            if not p.bounds:
+                p.bounds = default_bounds
+                filled_default_bounds = True
+
+            if not p.formula and not p.prior:
+                if default_prior is not None:
+                    p.prior = default_prior
+                    if filled_default_bounds:
+                        p.do_not_truncate()
+                else:
+                    if p.bounds is not None:
+                        p.prior = _make_default_prior(p.bounds)
 
         return p
 
@@ -653,17 +674,27 @@ class HSSM:
 
         return include, other_kwargs
 
-    def _process_include(self, include: list) -> dict[str, Param]:
+    def _process_include(self, include: list[dict | Param]) -> dict[str, Param]:
         """Turn parameter specs in include into Params."""
         result: dict[str, Param] = {}
 
         for param in include:
             name = param["name"]
+            if name is None:
+                raise ValueError(
+                    "One or more parameters do not have a name. "
+                    + "Please ensure that names are specified to all of them."
+                )
             if name not in self.list_params:
                 raise ValueError(f"{name} is not included in the list of parameters.")
             param_with_default = self._fill_default(param, name)
-            is_parent = name == self._parent
-            result[name] = Param(is_parent=is_parent, **param_with_default)
+            result[name] = (
+                Param(**param_with_default)
+                if isinstance(param_with_default, dict)
+                else param_with_default
+            )
+            if name == self._parent:
+                result[name].set_parent()
 
         return result
 
@@ -673,7 +704,6 @@ class HSSM:
 
         for param_str in self.list_params:
             if param_str not in processed:
-                is_parent = param_str == self._parent
                 if self.hierarchical:
                     bounds = self.model_config.bounds.get(param_str)
                     param = Param(
@@ -681,29 +711,22 @@ class HSSM:
                         formula="1 + (1|participant_id)",
                         link="identity",
                         bounds=bounds,
-                        is_parent=is_parent,
                     )
                 else:
                     prior, bounds = self.model_config.get_defaults(param_str)
-                    if prior is None:
-                        param = Param(
-                            name=param_str,
-                            prior=prior,
-                            bounds=bounds,
-                            is_parent=is_parent,
-                        )
-                    else:
-                        param = Param(
-                            name=param_str,
-                            prior=prior,
-                            bounds=None,
-                            is_parent=is_parent,
-                        )
-                        param.bounds = bounds
+                    param = Param(param_str, prior=prior, bounds=bounds)
+                    param.do_not_truncate()
+                if param_str == self._parent:
+                    param.set_parent()
                 not_in_include[param_str] = param
 
         processed |= not_in_include
-        sorted_params = {k: processed[k] for k in self.list_params}
+        sorted_params = {}
+
+        for param_name in self.list_params:
+            processed_param = processed[param_name]
+            processed_param.convert()
+            sorted_params[param_name] = processed_param
 
         return sorted_params
 

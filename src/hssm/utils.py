@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Iterable, Literal, NewType
+from typing import Any, Iterable, Literal, NewType
 
 import bambi as bmb
 import pytensor
@@ -23,8 +23,7 @@ from jax.config import config
 from pymc.model_graph import ModelGraph
 from pytensor import function
 
-if TYPE_CHECKING:
-    from .param import Param
+from .param import Param
 
 _logger = logging.getLogger("hssm")
 
@@ -82,6 +81,7 @@ def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
         A dict that indicates how Bambi should alias its parameters.
     """
     assert parent.is_parent, "This Param object should be a parent!"
+    assert parent.name is not None
 
     result_dict = {"c(rt, response)": "rt,response"}
 
@@ -280,15 +280,16 @@ def set_floatX(dtype: Literal["float32", "float64"], jax: bool = True):
         raise ValueError('`dtype` must be either "float32" or "float64".')
 
     pytensor.config.floatX = dtype
-    _logger.info(f"Setting PyTensor floatX type to {dtype}.")
+    _logger.info("Setting PyTensor floatX type to %s.", dtype)
 
     if jax:
-        mapping = dict(float32=False, float64=True)
-        config.update("jax_enable_x64", mapping[dtype])
+        jax_enable_x64 = dtype == "float64"
+        config.update("jax_enable_x64", jax_enable_x64)
 
         _logger.info(
-            f'Setting "jax_enable_x64" to {mapping[dtype]}. '
-            + "If this is not intended, please set `jax` to False."
+            'Setting "jax_enable_x64" to %s. '
+            + "If this is not intended, please set `jax` to False.",
+            jax_enable_x64,
         )
 
 
@@ -315,7 +316,9 @@ def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:
     return f"        {term_name} ~ {prior}"
 
 
-def _process_param_in_kwargs(name, prior: float | dict | bmb.Prior) -> dict:
+def _process_param_in_kwargs(
+    name, prior: float | dict | bmb.Prior | Param
+) -> dict | Param:
     """Process parameters specified in kwargs.
 
     Parameters
@@ -342,7 +345,11 @@ def _process_param_in_kwargs(name, prior: float | dict | bmb.Prior) -> dict:
             return prior | {"name": name}
         else:
             return {"name": name, "prior": prior}
+    elif isinstance(prior, Param):
+        prior["name"] = name
+        return prior
     else:
         raise ValueError(
-            f"Parameter {name} must be a float, a dict, or a bmb.Prior object."
+            f"Parameter {name} must be a float, a dict, a bmb.Prior, "
+            + "or a hssm.Param object."
         )
