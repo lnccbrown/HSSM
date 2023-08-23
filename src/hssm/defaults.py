@@ -13,6 +13,7 @@ from .likelihoods.analytical import (
     logp_ddm,
     logp_ddm_sdv,
 )
+from .likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox
 from .param import ParamSpec, _make_default_prior
 
 LogLik = Union[str, PathLike, Callable, Op, type[Distribution]]
@@ -81,6 +82,18 @@ default_model_config: DefaultConfigs = {
                     "t": (0.0, 2.0),
                 },
             },
+            "blackbox": {
+                "loglik": logp_ddm_bbox,
+                "backend": None,
+                "bounds": ddm_bounds,
+                "default_priors": {
+                    "t": {
+                        "name": "HalfNormal",
+                        "sigma": 2.0,
+                        "initval": 0.1,
+                    },
+                },
+            },
         },
     },
     "ddm_sdv": {
@@ -109,6 +122,18 @@ default_model_config: DefaultConfigs = {
                     "z": (0.1, 0.9),
                     "t": (0.0, 2.0),
                     "sv": (0.0, 1.0),
+                },
+            },
+            "blackbox": {
+                "loglik": logp_ddm_sdv_bbox,
+                "backend": None,
+                "bounds": ddm_bounds,
+                "default_priors": {
+                    "t": {
+                        "name": "HalfNormal",
+                        "sigma": 2.0,
+                        "initval": 0.1,
+                    },
                 },
             },
         },
