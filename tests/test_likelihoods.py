@@ -10,7 +10,8 @@ import pytest
 from numpy.random import rand
 
 # pylint: disable=C0413
-from hssm.likelihoods.analytical import compare_k, logp_ddm_sdv
+from hssm.likelihoods.analytical import compare_k, logp_ddm, logp_ddm_sdv
+from hssm.likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox
 
 
 def test_kterm(data_ddm):
@@ -97,3 +98,18 @@ def test_no_inf_values_v(data_ddm, shared_params):
         assert np.all(
             np.isfinite(logp.eval())
         ), f"log_pdf_sv() returned non-finite values for v = {v}."
+
+
+def test_bbox(data_ddm):
+    true_values = (0.5, 1.5, 0.5, 0.5)
+    true_values_sdv = (0.5, 1.5, 0.5, 0.5, 0)
+    data = data_ddm.values
+
+    np.testing.assert_almost_equal(
+        logp_ddm(data, *true_values).eval(), logp_ddm_bbox(data, *true_values)
+    )
+
+    np.testing.assert_almost_equal(
+        logp_ddm_sdv(data, *true_values_sdv).eval(),
+        logp_ddm_sdv_bbox(data, *true_values_sdv),
+    )
