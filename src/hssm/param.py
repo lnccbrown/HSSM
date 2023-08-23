@@ -377,49 +377,6 @@ def _make_priors_recursive(prior: dict[str, Any]) -> Prior:
     return bmb.Prior(**prior)
 
 
-def _parse_bambi(
-    params: dict[str, Param],
-) -> tuple[bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
-    """From a dict of Params, retrieve three items that helps with bambi model building.
-
-    Parameters
-    ----------
-    params
-        A dict of Param objects.
-
-    Returns
-    -------
-    tuple
-        A tuple containing:
-            1. A bmb.Formula object.
-            2. A dictionary of priors, if any is specified.
-            3. A dictionary of link functions, if any is specified.
-    """
-    # Handle the edge case where list_params is empty:
-    if not params:
-        return bmb.Formula("c(rt, response) ~ 1"), None, "identity"
-
-    formulas = []
-    priors: dict[str, Any] = {}
-    links: dict[str, str | bmb.Link] = {}
-
-    for _, param in params.items():
-        formula, prior, link = param.parse_bambi()
-
-        if formula is not None:
-            formulas.append(formula)
-        if prior is not None:
-            priors |= prior
-        if link is not None:
-            links |= link
-
-    result_formula: bmb.Formula = bmb.Formula(formulas[0], *formulas[1:])
-    result_priors = None if not priors else priors
-    result_links: dict | str = "identity" if not links else links
-
-    return result_formula, result_priors, result_links
-
-
 def _make_bounded_prior(
     param_name: str, prior: ParamSpec, bounds: tuple[float, float]
 ) -> float | Prior:

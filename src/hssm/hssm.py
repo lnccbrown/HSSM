@@ -27,7 +27,6 @@ from hssm.distribution_utils import (
 from hssm.param import (
     Param,
     _make_default_prior,
-    _parse_bambi,
 )
 from hssm.utils import (
     HSSMModelGraph,
@@ -211,7 +210,6 @@ class HSSM:
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
-        self._parent = self.list_params[0]
 
         # Process lapse distribution
         self.has_lapse = p_outlier is not None and p_outlier != 0
@@ -225,15 +223,17 @@ class HSSM:
         )
 
         # Process parameter specifications include
-        processed = self._process_include(include)
+        processed = self._preprocess_include(include)
         # Process parameter specifications not in include
-        self.params = self._process_rest(processed)
+        self.params = self._preprocess_rest(processed)
+        # Find the parent parameter
+        self._parent, self._parent_param = self._find_parent()
+        assert self._parent_param is not None
+
+        self._process_all()
 
         # Get the bambi formula, priors, and link
-        self.formula, self.priors, self.link = _parse_bambi(self.params)
-
-        self._parent_param = self.params[self.list_params[0]]
-        assert self._parent_param is not None
+        self.formula, self.priors, self.link = self._parse_bambi()
 
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
@@ -249,6 +249,8 @@ class HSSM:
         self.lapse = lapse if self.has_lapse else None
 
         self.model_distribution = self._make_model_distribution()
+
+        print(self.formula, self._parent)
 
         self.family = make_family(
             self.model_distribution,
@@ -674,7 +676,7 @@ class HSSM:
 
         return include, other_kwargs
 
-    def _process_include(self, include: list[dict | Param]) -> dict[str, Param]:
+    def _preprocess_include(self, include: list[dict | Param]) -> dict[str, Param]:
         """Turn parameter specs in include into Params."""
         result: dict[str, Param] = {}
 
@@ -693,12 +695,10 @@ class HSSM:
                 if isinstance(param_with_default, dict)
                 else param_with_default
             )
-            if name == self._parent:
-                result[name].set_parent()
 
         return result
 
-    def _process_rest(self, processed: dict[str, Param]) -> dict[str, Param]:
+    def _preprocess_rest(self, processed: dict[str, Param]) -> dict[str, Param]:
         """Turn parameter specs not in include into Params."""
         not_in_include = {}
 
@@ -716,19 +716,86 @@ class HSSM:
                     prior, bounds = self.model_config.get_defaults(param_str)
                     param = Param(param_str, prior=prior, bounds=bounds)
                     param.do_not_truncate()
-                if param_str == self._parent:
-                    param.set_parent()
                 not_in_include[param_str] = param
 
         processed |= not_in_include
         sorted_params = {}
 
         for param_name in self.list_params:
-            processed_param = processed[param_name]
-            processed_param.convert()
-            sorted_params[param_name] = processed_param
+            sorted_params[param_name] = processed[param_name]
 
         return sorted_params
+
+    def _find_parent(self) -> tuple[str, Param]:
+        """Find the parent param for the model.
+
+        The first param that has a regression will be set as parent. If none of the
+        params is a regression, then the first param will be set as parent.
+
+        Returns
+        -------
+        str
+            The name of the param as string
+        Param
+            The parent Param object
+        """
+        for param_str in self.list_params:
+            param = self.params[param_str]
+            if param.is_regression:
+                param.set_parent()
+                return param_str, param
+
+        param_str = self.list_params[0]
+        param = self.params[param_str]
+        param.set_parent()
+        return param_str, param
+
+    def _process_all(self):
+        """Process all params."""
+        for param in self.list_params:
+            self.params[param].convert()
+
+    def _parse_bambi(
+        self,
+    ) -> tuple[bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
+        """Retrieve three items that helps with bambi model building.
+
+        Returns
+        -------
+        tuple
+            A tuple containing:
+                1. A bmb.Formula object.
+                2. A dictionary of priors, if any is specified.
+                3. A dictionary of link functions, if any is specified.
+        """
+        # Handle the edge case where list_params is empty:
+        if not self.params:
+            return bmb.Formula("c(rt, response) ~ 1"), None, "identity"
+
+        parent_formula = None
+        other_formulas = []
+        priors: dict[str, Any] = {}
+        links: dict[str, str | bmb.Link] = {}
+
+        for _, param in self.params.items():
+            formula, prior, link = param.parse_bambi()
+
+            if param.is_parent:
+                parent_formula = formula
+            else:
+                if formula is not None:
+                    other_formulas.append(formula)
+            if prior is not None:
+                priors |= prior
+            if link is not None:
+                links |= link
+
+        assert parent_formula is not None
+        result_formula: bmb.Formula = bmb.Formula(parent_formula, *other_formulas)
+        result_priors = None if not priors else priors
+        result_links: dict | str = "identity" if not links else links
+
+        return result_formula, result_priors, result_links
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
