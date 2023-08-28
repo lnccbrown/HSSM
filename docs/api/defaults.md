@@ -8,6 +8,7 @@ The module includes a dictionary, `default_model_config`, that provides default 
 
 - `ddm`
 - `ddm_sdv`
+- `full_ddm`
 - `angle`
 - `levy`
 - `ornstein`
@@ -72,7 +73,7 @@ For each model, a dictionary is defined containing configurations for each `Logl
   - v: Uniform (-10.0, 10.0)
   - sv: HalfNormal with sigma 2.0
   - a: HalfNormal with sigma 2.0
-  - t: Uniform (0.0, 5.0) with initial value 0.0
+  - t: Uniform (0.0, 5.0) with initial value 0.1
 
 #### Approx Differentiable
 - **Log-likelihood kind:** Approx Differentiable
