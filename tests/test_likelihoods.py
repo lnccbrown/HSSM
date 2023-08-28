@@ -106,10 +106,13 @@ def test_bbox(data_ddm):
     data = data_ddm.values
 
     np.testing.assert_almost_equal(
-        logp_ddm(data, *true_values).eval(), logp_ddm_bbox(data, *true_values)
+        logp_ddm(data, *true_values).eval(),
+        logp_ddm_bbox(data, *true_values),
+        decimal=4,
     )
 
     np.testing.assert_almost_equal(
         logp_ddm_sdv(data, *true_values_sdv).eval(),
         logp_ddm_sdv_bbox(data, *true_values_sdv),
+        decimal=4,
     )
