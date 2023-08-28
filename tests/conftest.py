@@ -34,7 +34,7 @@ def data_angle():
 def data_ddm_reg():
     # Generate some fake simulation data
     intercept = 0.3
-    x = np.random.uniform(0.5, 0.2, size=1000)
+    x = np.random.uniform(0.5, 0.7, size=1000)
     y = np.random.uniform(0.4, 0.1, size=1000)
 
     v = intercept + 0.8 * x + 0.3 * y
