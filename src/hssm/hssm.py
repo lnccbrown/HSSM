@@ -250,8 +250,6 @@ class HSSM:
 
         self.model_distribution = self._make_model_distribution()
 
-        print(self.formula, self._parent)
-
         self.family = make_family(
             self.model_distribution,
             self.list_params,
