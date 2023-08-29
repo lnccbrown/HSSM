@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from os import PathLike
-from typing import Any, Callable, Type
+from typing import Any, Callable, Iterable, Type
 
 import bambi as bmb
 import numpy as np
@@ -199,7 +199,14 @@ def make_ssm_rv(
             if not np.isscalar(size):
                 size = np.squeeze(size)
 
-            arg_arrays = [np.asarray(arg) for arg in args]
+            num_params = len(cls._list_params)
+
+            # TODO: We need to figure out what to do with extra_fields when
+            # doing posterior predictive sampling. Right now nothing is done.
+            if num_params < len(args):
+                arg_arrays = [np.asarray(arg) for arg in args[:num_params]]
+            else:
+                arg_arrays = [np.asarray(arg) for arg in args]
 
             p_outlier = None
 
@@ -299,6 +306,7 @@ def make_distribution(
     list_params: list[str],
     bounds: dict | None = None,
     lapse: bmb.Prior | None = None,
+    extra_fields: list[np.ndarray] | None = None,
 ) -> Type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -325,6 +333,9 @@ def make_distribution(
         Example: {"parameter": (lower_boundary, upper_boundary)}.
     lapse : optional
         A bmb.Prior object representing the lapse distribution.
+    extra_fields : optional
+        An optional list of arrays that are stored in the class created and will be
+        used in likelihood calculation. Defaults to None.
 
     Returns
     -------
@@ -337,13 +348,13 @@ def make_distribution(
         if list_params[-1] != "p_outlier":
             list_params.append("p_outlier")
 
-        data = pt.dvector()
+        data_vector = pt.dvector()
         lapse_logp = pm.logp(
             get_distribution_from_prior(lapse).dist(**lapse.args),
-            data,
+            data_vector,
         )
         lapse_func = pytensor.function(
-            [data],
+            [data_vector],
             lapse_logp,
         )
 
@@ -356,29 +367,39 @@ def make_distribution(
         # NOTE: rv_op is an INSTANCE of RandomVariable
         rv_op = random_variable()
         params = list_params
+        _extra_fields = extra_fields
 
         @classmethod
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
             dist_params = [
                 pt.as_tensor_variable(pm.floatX(kwargs[param])) for param in cls.params
             ]
+            if cls._extra_fields:
+                dist_params += [pm.floatX(field) for field in cls._extra_fields]
             other_kwargs = {k: v for k, v in kwargs.items() if k not in cls.params}
             return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
+            num_params = len(list_params)
+            extra_fields: Iterable[np.ndarray] = []
+
+            if num_params < len(dist_params):
+                extra_fields = dist_params[num_params:]
+                dist_params = dist_params[:num_params]
+
             if list_params[-1] == "p_outlier":
                 p_outlier = dist_params[-1]
                 dist_params = dist_params[:-1]
                 lapse_logp = lapse_func(data[:, 0].eval())
 
-                logp = loglik(data, *dist_params)
+                logp = loglik(data, *dist_params, *extra_fields)
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)
                     + p_outlier * pt.exp(lapse_logp)
                     + 1e-29
                 )
             else:
-                logp = loglik(data, *dist_params)
+                logp = loglik(data, *dist_params, *extra_fields)
 
             if bounds is None:
                 return logp
@@ -398,6 +419,7 @@ def make_distribution_from_onnx(
     bounds: dict | None = None,
     params_is_reg: list[bool] | None = None,
     lapse: bmb.Prior | None = None,
+    extra_fields: list[np.ndarray] | None = None,
 ) -> Type[pm.Distribution]:
     """Make a PyMC distribution from an ONNX model.
 
@@ -429,6 +451,9 @@ def make_distribution_from_onnx(
         corresponding position in `list_params` is a regression.
     lapse : optional
         A bmb.Prior object representing the lapse distribution.
+    extra_fields : optional
+        An optional list of arrays that are stored in the class created and will be
+        used in likelihood calculation. Defaults to None.
 
     Returns
     -------
@@ -446,21 +471,28 @@ def make_distribution_from_onnx(
             list_params,
             bounds=bounds,
             lapse=lapse,
+            extra_fields=extra_fields,
         )
     if backend == "jax":
         if params_is_reg is None:
             params_is_reg = [False for param in list_params if param != "p_outlier"]
+
+        if extra_fields:
+            params_is_reg += [True for _ in extra_fields]
+
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
             onnx_model,
             params_is_reg,
         )
         lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+
         return make_distribution(
             rv,
             lan_logp_jax,
             list_params,
             bounds=bounds,
             lapse=lapse,
+            extra_fields=extra_fields,
         )
 
     raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")
@@ -581,6 +613,7 @@ def make_distribution_from_blackbox(
     loglik: Callable,
     list_params: list[str],
     bounds: dict | None = None,
+    extra_fields: list[np.ndarray] | None = None,
 ) -> Type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -604,6 +637,9 @@ def make_distribution_from_blackbox(
     bounds : optional
         A dictionary with parameters as keys (a string) and its boundaries as values.
         Example: {"parameter": (lower_boundary, upper_boundary)}.
+    extra_fields : optional
+        An optional list of arrays that are stored in the class created and will be
+        used in likelihood calculation. Defaults to None.
 
     Returns
     -------
@@ -612,4 +648,6 @@ def make_distribution_from_blackbox(
     """
     blackbox_op = make_blackbox_op(loglik)
 
-    return make_distribution(rv, blackbox_op, list_params, bounds)
+    return make_distribution(
+        rv, blackbox_op, list_params, bounds, extra_fields=extra_fields
+    )
