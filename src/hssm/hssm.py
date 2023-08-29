@@ -95,6 +95,10 @@ class HSSM:
             `ssm_simulators` package. If `model` is not supported in `ssm_simulators`,
             a warning will be raised letting the user know that sampling from the
             `RandomVariable` will result in errors.
+        - `"extra_fields"`: Optional. A list of strings indicating the additional
+            columns in `data` that will be passed to the likelihood function for
+            calculation. This is helpful if the likelihood function depends on data
+            other than the observed data and the parameter values.
     loglik : optional
         A likelihood function. Defaults to None. Requirements are:
 
@@ -210,6 +214,12 @@ class HSSM:
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
+        self.extra_fields = self.model_config.extra_fields
+
+        if self.extra_fields:
+            for field in self.extra_fields:
+                if field not in self.data.columns:
+                    raise ValueError(f"Field {field} not found in data.")
 
         # Process lapse distribution
         self.has_lapse = p_outlier is not None and p_outlier != 0
@@ -330,6 +340,9 @@ class HSSM:
                 + "`nuts_blackjax` sampler if that is a problem."
             )
 
+        if self.extra_fields:
+            self._update_extra_fields(self.data)
+
         self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
 
         return self.traces
@@ -384,6 +397,10 @@ class HSSM:
                     + "Please either provide an idata object or sample the model first."
                 )
             idata = self._inference_obj
+
+        if data is not None and self.extra_fields:
+            self._update_extra_fields(data)
+
         return self.model.predict(idata, kind, data, inplace, include_group_specific)
 
     def sample_prior_predictive(
@@ -819,6 +836,9 @@ class HSSM:
                 list_params=self.list_params,
                 bounds=self.bounds,
                 lapse=self.lapse,
+                extra_fields=None
+                if not self.extra_fields
+                else [self.data[field].values for field in self.extra_fields],
             )  # type: ignore
         # If the user has provided a callable (an arbitrary likelihood function)
         # If `loglik_kind` is `blackbox`, wrap it in an op and then a distribution
@@ -833,6 +853,9 @@ class HSSM:
                 list_params=self.list_params,
                 bounds=self.bounds,
                 lapse=self.lapse,
+                extra_fields=None
+                if not self.extra_fields
+                else [self.data[field].values for field in self.extra_fields],
             )  # type: ignore
         # All other situations
         if self.loglik_kind != "approx_differentiable":
@@ -859,4 +882,19 @@ class HSSM:
             params_is_reg=params_is_reg,
             bounds=self.bounds,
             lapse=self.lapse,
+            extra_fields=None
+            if not self.extra_fields
+            else [self.data[field].values for field in self.extra_fields],
         )
+
+    def _update_extra_fields(self, new_data: pd.DataFrame):
+        """Update the extra fields data in self.model_distribution.
+
+        Parameters
+        ----------
+        new_data
+            A DataFrame containing new data for update.
+        """
+        self.model_distribution.extra_fields = [
+            new_data[field].values for field in self.extra_fields
+        ]
