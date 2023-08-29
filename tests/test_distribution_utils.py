@@ -1,9 +1,12 @@
 import bambi as bmb
 import numpy as np
+import pymc as pm
 import pytest
 
+import hssm
 from hssm import distribution_utils
 from hssm.distribution_utils.dist import apply_param_bounds_to_loglik, make_distribution
+from hssm.likelihoods.analytical import logp_ddm, DDM
 
 
 def test_make_ssm_rv():
@@ -151,4 +154,54 @@ def test_make_distribution():
         data[~out_of_bound_indices]
         * scalar_in_bound
         * random_vector[~out_of_bound_indices],
+    )
+
+
+def test_extra_fields(data_ddm):
+    ones = np.ones(len(data_ddm))
+    x = ones * 0.5
+    y = ones * 2
+
+    def logp_ddm_extra_fields(data, v, a, z, t, x, y):
+        return logp_ddm(data, v, a, z, t) * x * y
+
+    DDM_WITH_XY = make_distribution(
+        rv="ddm",
+        loglik=logp_ddm_extra_fields,
+        list_params=["v", "a", "z", "t"],
+        extra_fields=[x, y],
+    )
+
+    true_values = dict(v=0.5, a=1.5, z=0.5, t=0.5)
+
+    np.testing.assert_almost_equal(
+        pm.logp(DDM.dist(**true_values), data_ddm).eval(),
+        pm.logp(DDM_WITH_XY.dist(**true_values), data_ddm).eval(),
+    )
+
+    data_ddm_copy = data_ddm.copy()
+    data_ddm_copy["x"] = x
+    data_ddm_copy["y"] = y
+
+    ddm_model_xy = hssm.HSSM(
+        data=data_ddm_copy, model_config=dict(extra_fields=["x", "y"]), p_outlier=None
+    )
+
+    np.testing.assert_almost_equal(
+        pm.logp(DDM.dist(**true_values), data_ddm).eval(),
+        pm.logp(ddm_model_xy.model_distribution.dist(**true_values), data_ddm).eval(),
+    )
+
+    ddm_model = hssm.HSSM(data=data_ddm)
+    ddm_model_p = hssm.HSSM(
+        data=data_ddm_copy, model_config=dict(extra_fields=["x", "y"])
+    )
+    np.testing.assert_almost_equal(
+        pm.logp(
+            ddm_model.model_distribution.dist(**true_values, p_outlier=0.05), data_ddm
+        ).eval(),
+        pm.logp(
+            ddm_model_p.model_distribution.dist(**true_values, p_outlier=0.05),
+            data_ddm,
+        ).eval(),
     )
