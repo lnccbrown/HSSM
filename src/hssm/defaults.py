@@ -42,6 +42,7 @@ class LoglikConfig(TypedDict):
     backend: Optional[Literal["jax", "pytensor"]]
     default_priors: dict[str, ParamSpec]
     bounds: dict[str, tuple[float, float]]
+    extra_fields: Optional[list[str]]
 
 
 LoglikConfigs = dict[LoglikKind, LoglikConfig]
@@ -73,6 +74,7 @@ default_model_config: DefaultConfigs = {
                         "initval": 0.1,
                     },
                 },
+                "extra_fields": None,
             },
             "approx_differentiable": {
                 "loglik": "ddm.onnx",
@@ -84,6 +86,7 @@ default_model_config: DefaultConfigs = {
                     "z": (0.0, 1.0),
                     "t": (0.0, 2.0),
                 },
+                "extra_fields": None,
             },
             "blackbox": {
                 "loglik": logp_ddm_bbox,
@@ -96,6 +99,7 @@ default_model_config: DefaultConfigs = {
                         "initval": 0.1,
                     },
                 },
+                "extra_fields": None,
             },
         },
     },
@@ -114,6 +118,7 @@ default_model_config: DefaultConfigs = {
                         "initval": 0.1,
                     },
                 },
+                "extra_fields": None,
             },
             "approx_differentiable": {
                 "loglik": "ddm_sdv.onnx",
@@ -126,6 +131,7 @@ default_model_config: DefaultConfigs = {
                     "t": (0.0, 2.0),
                     "sv": (0.0, 1.0),
                 },
+                "extra_fields": None,
             },
             "blackbox": {
                 "loglik": logp_ddm_sdv_bbox,
@@ -138,6 +144,7 @@ default_model_config: DefaultConfigs = {
                         "initval": 0.1,
                     },
                 },
+                "extra_fields": None,
             },
         },
     },
@@ -156,6 +163,7 @@ default_model_config: DefaultConfigs = {
                         "initval": 0.1,
                     },
                 },
+                "extra_fields": None,
             }
         },
     },
@@ -174,6 +182,7 @@ default_model_config: DefaultConfigs = {
                     "t": (0.001, 2.0),
                     "theta": (-0.1, 1.3),
                 },
+                "extra_fields": None,
             },
         },
     },
@@ -192,6 +201,7 @@ default_model_config: DefaultConfigs = {
                     "alpha": (1.0, 2.0),
                     "t": (1e-3, 2.0),
                 },
+                "extra_fields": None,
             },
         },
     },
@@ -210,6 +220,7 @@ default_model_config: DefaultConfigs = {
                     "g": (-1.0, 1.0),
                     "t": (1e-3, 2.0),
                 },
+                "extra_fields": None,
             },
         },
     },
@@ -229,6 +240,7 @@ default_model_config: DefaultConfigs = {
                     "alpha": (0.31, 4.99),
                     "beta": (0.31, 6.99),
                 },
+                "extra_fields": None,
             },
         },
     },
@@ -250,6 +262,7 @@ default_model_config: DefaultConfigs = {
                     "ndt": (0.0, 2.0),
                     "theta": (-0.1, 1.45),
                 },
+                "extra_fields": None,
             },
         },
     },
@@ -268,6 +281,7 @@ default_model_config: DefaultConfigs = {
                     "a": (0.3, 2.5),
                     "t": (0.0, 2.0),
                 },
+                "extra_fields": None,
             },
         },
     },

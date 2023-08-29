@@ -25,6 +25,7 @@ class Config:
     loglik: LogLik | None = None
     backend: Literal["jax", "pytensor"] | None = None
     rv: RandomVariable | None = None
+    extra_fields: list[str] | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
@@ -162,3 +163,4 @@ class ModelConfig:
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     backend: Literal["jax", "pytensor"] | None = None
     rv: RandomVariable | None = None
+    extra_fields: list[str] | None = None
