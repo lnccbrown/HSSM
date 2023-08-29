@@ -216,10 +216,7 @@ class HSSM:
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
 
-        if self.extra_fields:
-            for field in self.extra_fields:
-                if field not in self.data.columns:
-                    raise ValueError(f"Field {field} not found in data.")
+        self._check_extra_fields()
 
         # Process lapse distribution
         self.has_lapse = p_outlier is not None and p_outlier != 0
@@ -340,8 +337,8 @@ class HSSM:
                 + "`nuts_blackjax` sampler if that is a problem."
             )
 
-        if self.extra_fields:
-            self._update_extra_fields(self.data)
+        if self._check_extra_fields():
+            self._update_extra_fields()
 
         self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
 
@@ -398,7 +395,7 @@ class HSSM:
                 )
             idata = self._inference_obj
 
-        if data is not None and self.extra_fields:
+        if self._check_extra_fields(data):
             self._update_extra_fields(data)
 
         return self.model.predict(idata, kind, data, inplace, include_group_specific)
@@ -887,7 +884,21 @@ class HSSM:
             else [self.data[field].values for field in self.extra_fields],
         )
 
-    def _update_extra_fields(self, new_data: pd.DataFrame):
+    def _check_extra_fields(self, data: pd.DataFrame | None = None) -> bool:
+        """Check if every field in self.extra_fields exists in data."""
+        if not self.extra_fields:
+            return False
+
+        if not data:
+            data = self.data
+
+        for field in self.extra_fields:
+            if field not in data.columns:
+                raise ValueError(f"Field {field} not found in data.")
+
+        return True
+
+    def _update_extra_fields(self, new_data: pd.DataFrame | None = None):
         """Update the extra fields data in self.model_distribution.
 
         Parameters
@@ -895,6 +906,9 @@ class HSSM:
         new_data
             A DataFrame containing new data for update.
         """
+        if not new_data:
+            new_data = self.data
+
         self.model_distribution.extra_fields = [
             new_data[field].values for field in self.extra_fields
         ]
