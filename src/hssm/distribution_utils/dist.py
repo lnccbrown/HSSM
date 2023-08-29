@@ -191,6 +191,9 @@ def make_ssm_rv(
                 size = args[-1]
                 args = args[:-1]
 
+            if size is None:
+                size = 1
+
             # Although we got around the ndims_supp issue, the size parameter passed
             # here is still an array with one element. We need to take it out.
             if not np.isscalar(size):
@@ -225,7 +228,7 @@ def make_ssm_rv(
                 # All parameters are scalars
 
                 theta = np.stack(arg_arrays)
-                n_samples = 1 if not size else size
+                n_samples = size
             else:
                 # Preprocess all parameters, reshape them into a matrix of dimension
                 # (size, n_params) where size is the number of elements in the largest
@@ -240,7 +243,7 @@ def make_ssm_rv(
                     [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
                 )
 
-                if size is None:
+                if size is None or size == 1:
                     n_samples = 1
                 elif size % new_data_size != 0:
                     raise ValueError(
