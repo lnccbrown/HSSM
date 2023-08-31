@@ -6,16 +6,32 @@ import hddm_wfpt
 import numpy as np
 
 
+def hddm_to_hssm(func):
+    """Make HDDM likelihood function compatible with HSSM."""
+
+    def outer(data: np.ndarray, *args, **kwargs):
+        x = data[:, 0] * np.where(data[:, 1] == 1, 1.0, -1.0).astype(np.float64)
+        size = len(data)
+
+        args_list = [_broadcast(param, size) for param in args]
+        kwargs = {k: _broadcast(param, size) for k, param in kwargs.items()}
+
+        logp = func(x, *args_list, *kwargs)
+        logp = np.where(np.isfinite(logp), logp, -66.1)
+
+        return logp.astype(data.dtype)
+
+    return outer
+
+
+@hddm_to_hssm
 def logp_ddm_bbox(data: np.ndarray, v, a, z, t) -> np.ndarray:
     """Compute blackbox log-likelihoods for ddm models."""
-    x = (data[:, 0] * data[:, 1]).astype(np.float64)
     size = len(data)
-
-    v, a, z, t = [_broadcast(param, size) for param in [v, a, z, t]]
     zeros = np.zeros(size, dtype=np.float64)
 
-    logp = hddm_wfpt.wfpt.wiener_logp_array(
-        x=x,
+    return hddm_wfpt.wfpt.wiener_logp_array(
+        x=data,
         v=v,
         sv=zeros,
         a=a * 2,  # Ensure compatibility with HSSM.
@@ -26,23 +42,17 @@ def logp_ddm_bbox(data: np.ndarray, v, a, z, t) -> np.ndarray:
         err=1e-8,
     )
 
-    logp = np.where(np.isfinite(logp), logp, -66.1)
 
-    return logp.astype(data.dtype)
-
-
+@hddm_to_hssm
 def logp_ddm_sdv_bbox(data: np.ndarray, v, a, z, t, sv) -> np.ndarray:
     """Compute blackbox log-likelihoods for ddm_sdv models."""
-    x = (data[:, 0] * data[:, 1]).astype(np.float64)
-    size = len(x)
-
-    v, a, z, t, sv = [_broadcast(param, size) for param in [v, a, z, t, sv]]
+    size = len(data)
     zeros = np.zeros(size, dtype=np.float64)
 
-    logp = hddm_wfpt.wfpt.wiener_logp_array(
-        x=x,
+    return hddm_wfpt.wfpt.wiener_logp_array(
+        x=data,
         v=v,
-        sv=zeros,
+        sv=sv,
         a=a * 2,  # Ensure compatibility with HSSM.
         z=z,
         sz=zeros,
@@ -51,22 +61,12 @@ def logp_ddm_sdv_bbox(data: np.ndarray, v, a, z, t, sv) -> np.ndarray:
         err=1e-8,
     )
 
-    logp = np.where(np.isfinite(logp), logp, -66.1)
 
-    return logp.astype(data.dtype)
-
-
+@hddm_to_hssm
 def logp_full_ddm(data: np.ndarray, v, a, z, t, sv, sz, st):
     """Compute blackbox log-likelihoods for full_ddm models."""
-    x = (data[:, 0] * data[:, 1]).astype(np.float64)
-    size = len(x)
-
-    v, a, z, t, sv, sz, st = [
-        _broadcast(param, size) for param in [v, a, z, t, sv, sz, st]
-    ]
-
-    logp = hddm_wfpt.wfpt.wiener_logp_array(
-        x=x,
+    return hddm_wfpt.wfpt.wiener_logp_array(
+        x=data,
         v=v,
         sv=sv,
         a=a * 2,  # Ensure compatibility with HSSM.
@@ -76,10 +76,6 @@ def logp_full_ddm(data: np.ndarray, v, a, z, t, sv, sz, st):
         st=st,
         err=1e-8,
     )
-
-    logp = np.where(np.isfinite(logp), logp, -66.1)
-
-    return logp.astype(data.dtype)
 
 
 def _broadcast(x: float | np.ndarray, size: int):
