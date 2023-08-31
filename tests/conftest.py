@@ -33,9 +33,9 @@ def data_angle():
 @pytest.fixture(scope="module")
 def data_ddm_reg():
     # Generate some fake simulation data
-    intercept = 0.3
-    x = np.random.uniform(0.5, 0.7, size=1000)
-    y = np.random.uniform(0.4, 0.1, size=1000)
+    intercept = 1.5
+    x = np.random.uniform(-5.0, 5.0, size=1000)
+    y = np.random.uniform(-5.0, 5.0, size=1000)
 
     v = intercept + 0.8 * x + 0.3 * y
     true_values = np.column_stack(
