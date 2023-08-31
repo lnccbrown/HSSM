@@ -477,6 +477,8 @@ def make_distribution_from_onnx(
         if params_is_reg is None:
             params_is_reg = [False for param in list_params if param != "p_outlier"]
 
+        # Extra fields are passed to the likelihood functions as vectors
+        # They do not need to be broadcast, so param_is_reg is padded with True
         if extra_fields:
             params_is_reg += [True for _ in extra_fields]
 
