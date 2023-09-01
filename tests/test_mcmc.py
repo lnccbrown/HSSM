@@ -7,6 +7,8 @@ hssm.set_floatX("float32")
 
 def test_non_reg_models(data_ddm):
     model1 = hssm.HSSM(data_ddm)
+    model1.sample_prior_predictive(draws=10)
+
     model1.sample(cores=1, chains=1, tune=10, draws=10)
     model1.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
 
@@ -17,6 +19,8 @@ def test_non_reg_models(data_ddm):
     model3 = hssm.HSSM(data_ddm, loglik_kind="blackbox")
     model3.sample(cores=1, chains=1, tune=10, draws=10)
     model3.sample(cores=1, chains=1, tune=10, draws=10)
+
+    model1.sample_posterior_predictive(data=data_ddm.iloc[:10, :])
 
 
 def test_reg_models(data_ddm_reg):
@@ -30,6 +34,8 @@ def test_reg_models(data_ddm_reg):
     )
 
     model1 = hssm.HSSM(data_ddm_reg, v=param_reg)
+    model1.sample_prior_predictive(draws=10)
+
     model1.sample(cores=1, chains=1, tune=10, draws=10)
     model1.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
 
@@ -42,6 +48,8 @@ def test_reg_models(data_ddm_reg):
 
     with pytest.raises(ValueError):
         model3.sample(sampler="nuts_numpyro", cores=1, chains=1, tune=10, draws=10)
+
+    model1.sample_posterior_predictive(data=data_ddm_reg.iloc[:10, :])
 
 
 def test_reg_models_a(data_ddm_reg):
