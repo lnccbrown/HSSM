@@ -3,16 +3,19 @@ from os import PathLike
 from typing import Callable, Literal, Optional, TypedDict, Union
 
 import bambi as bmb
+import numpy as np
 from pymc import Distribution
 from pytensor.graph.op import Op
 
 from .likelihoods.analytical import (
     ddm_bounds,
     ddm_params,
+    ddm_sdv_bounds,
     ddm_sdv_params,
     logp_ddm,
     logp_ddm_sdv,
 )
+from .likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox, logp_full_ddm
 from .param import ParamSpec, _make_default_prior
 
 LogLik = Union[str, PathLike, Callable, Op, type[Distribution]]
@@ -20,6 +23,7 @@ LogLik = Union[str, PathLike, Callable, Op, type[Distribution]]
 SupportedModels = Literal[
     "ddm",
     "ddm_sdv",
+    "full_ddm",
     "angle",
     "levy",
     "ornstein",
@@ -81,6 +85,18 @@ default_model_config: DefaultConfigs = {
                     "t": (0.0, 2.0),
                 },
             },
+            "blackbox": {
+                "loglik": logp_ddm_bbox,
+                "backend": None,
+                "bounds": ddm_bounds,
+                "default_priors": {
+                    "t": {
+                        "name": "HalfNormal",
+                        "sigma": 2.0,
+                        "initval": 0.1,
+                    },
+                },
+            },
         },
     },
     "ddm_sdv": {
@@ -111,6 +127,36 @@ default_model_config: DefaultConfigs = {
                     "sv": (0.0, 1.0),
                 },
             },
+            "blackbox": {
+                "loglik": logp_ddm_sdv_bbox,
+                "backend": None,
+                "bounds": ddm_sdv_bounds,
+                "default_priors": {
+                    "t": {
+                        "name": "HalfNormal",
+                        "sigma": 2.0,
+                        "initval": 0.1,
+                    },
+                },
+            },
+        },
+    },
+    "full_ddm": {
+        "list_params": ["v", "a", "z", "t", "sv", "sz", "st"],
+        "description": "The full Drift Diffusion Model (DDM)",
+        "likelihoods": {
+            "blackbox": {
+                "loglik": logp_full_ddm,
+                "backend": None,
+                "bounds": ddm_sdv_bounds | {"sz": (0, np.inf), "st": (0, np.inf)},
+                "default_priors": {
+                    "t": {
+                        "name": "HalfNormal",
+                        "sigma": 2.0,
+                        "initval": 0.1,
+                    },
+                },
+            }
         },
     },
     "angle": {

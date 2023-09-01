@@ -6,56 +6,9 @@ import hssm
 from hssm.param import (
     Param,
     _make_default_prior,
-    _parse_bambi,
     _make_priors_recursive,
     _make_bounded_prior,
 )
-
-
-def test__parse_bambi():
-    prior_dict = {"name": "Uniform", "lower": 0.3, "upper": 1.0}
-    prior_obj = bmb.Prior("Uniform", lower=0.3, upper=1.0)
-
-    param_parent_non_regression = Param("v", prior=prior_dict)
-    param_parent_regression = Param(
-        "v",
-        formula="1 + x1",
-        prior={
-            "Intercept": prior_dict,
-            "x1": prior_dict,
-        },
-    )
-
-    param_parent_non_regression.set_parent()
-    param_parent_non_regression.convert()
-
-    param_parent_regression.set_parent()
-    param_parent_regression.convert()
-
-    empty_dict = {}
-    dict_one_parent_non_regression = {"v": param_parent_non_regression}
-    dict_one_parent_regression = {"v": param_parent_regression}
-
-    f0, p0, l0 = _parse_bambi(empty_dict)
-
-    assert f0.main == "c(rt, response) ~ 1"
-    assert p0 is None
-    assert l0 == "identity"
-
-    f3, p3, l3 = _parse_bambi(dict_one_parent_non_regression)
-
-    assert f3.main == "c(rt, response) ~ 1"
-    assert p3 is not None
-    assert p3["c(rt, response)"]["Intercept"] == prior_obj
-    assert l3 == {"v": "identity"}
-
-    f4, p4, l4 = _parse_bambi(dict_one_parent_regression)
-
-    assert f4.main == "c(rt, response) ~ 1 + x1"
-    assert p4 is not None
-    assert p4["c(rt, response)"]["Intercept"] == prior_obj
-    assert p4["c(rt, response)"]["x1"] == prior_obj
-    assert l4 == {"v": "identity"}
 
 
 def test_param_creation_non_regression():

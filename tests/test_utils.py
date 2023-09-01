@@ -64,11 +64,13 @@ def test_get_alias_dict():
 
     assert alias_regression["c(rt, response)"] == "rt,response"
     assert alias_regression["Intercept"] == "v_Intercept"
+    assert alias_regression["x"] == "v_x"
     assert alias_regression["1|group"] == "v_1|group"
 
-    assert alias_regression_a["c(rt, response)"]["c(rt, response)"] == "rt,response"
-    assert alias_regression_a["c(rt, response)"]["Intercept"] == "v"
-    assert alias_regression_a["a"]["a"] == "a"
+    assert alias_regression_a["c(rt, response)"] == "rt,response"
+    assert alias_regression_a["Intercept"] == "a_Intercept"
+    assert alias_regression_a["x"] == "a_x"
+    assert alias_regression_a["1|group"] == "a_1|group"
 
 
 def test_set_floatX():

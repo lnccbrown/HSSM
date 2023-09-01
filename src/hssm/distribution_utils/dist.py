@@ -59,13 +59,8 @@ def apply_param_bounds_to_loglik(
     """
     dist_params_dict = dict(zip(list_params, dist_params))
 
-    bounds = {
-        k: (
-            pm.floatX(v[0]),
-            pm.floatX(v[1]),
-        )
-        for k, v in bounds.items()
-    }
+    bounds = {k: (pm.floatX(v[0]), pm.floatX(v[1])) for k, v in bounds.items()}
+    out_of_bounds_mask = pt.zeros_like(logp, dtype=bool)
 
     for param_name, param in dist_params_dict.items():
         # It cannot be assumed that each parameter will have bounds.
@@ -75,15 +70,10 @@ def apply_param_bounds_to_loglik(
 
         lower_bound, upper_bound = bounds[param_name]
 
-        out_of_bounds_mask = pt.bitwise_or(
-            pt.lt(param, lower_bound), pt.gt(param, upper_bound)
-        )
+        param_mask = pt.bitwise_or(pt.lt(param, lower_bound), pt.gt(param, upper_bound))
+        out_of_bounds_mask = pt.bitwise_or(out_of_bounds_mask, param_mask)
 
-        broadcasted_mask = pt.broadcast_to(
-            out_of_bounds_mask, logp.shape
-        )  # typing: ignore
-
-        logp = pt.where(broadcasted_mask, OUT_OF_BOUNDS_VAL, logp)
+    logp = pt.where(out_of_bounds_mask, OUT_OF_BOUNDS_VAL, logp)
 
     return logp
 
