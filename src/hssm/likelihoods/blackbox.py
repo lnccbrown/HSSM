@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+import hddm_wfpt
 import numpy as np
-
-from .hddm_wfpt import wfpt
 
 
 def hddm_to_hssm(func):
@@ -31,7 +30,7 @@ def logp_ddm_bbox(data: np.ndarray, v, a, z, t) -> np.ndarray:
     size = len(data)
     zeros = np.zeros(size, dtype=np.float64)
 
-    return wfpt.wiener_logp_array(
+    return hddm_wfpt.wfpt.wiener_logp_array(
         x=data,
         v=v,
         sv=zeros,
@@ -50,7 +49,7 @@ def logp_ddm_sdv_bbox(data: np.ndarray, v, a, z, t, sv) -> np.ndarray:
     size = len(data)
     zeros = np.zeros(size, dtype=np.float64)
 
-    return wfpt.wiener_logp_array(
+    return hddm_wfpt.wfpt.wiener_logp_array(
         x=data,
         v=v,
         sv=sv,
@@ -66,7 +65,7 @@ def logp_ddm_sdv_bbox(data: np.ndarray, v, a, z, t, sv) -> np.ndarray:
 @hddm_to_hssm
 def logp_full_ddm(data: np.ndarray, v, a, z, t, sv, sz, st):
     """Compute blackbox log-likelihoods for full_ddm models."""
-    return wfpt.wiener_logp_array(
+    return hddm_wfpt.wfpt.wiener_logp_array(
         x=data,
         v=v,
         sv=sv,
