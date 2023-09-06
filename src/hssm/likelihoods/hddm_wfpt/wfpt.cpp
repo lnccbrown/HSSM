@@ -3,13 +3,22 @@
 /* BEGIN: Cython Metadata
 {
     "distutils": {
-        "depends": [],
+        "depends": [
+            "/private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/core/include/numpy/arrayobject.h",
+            "/private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/core/include/numpy/arrayscalars.h",
+            "/private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/core/include/numpy/ndarrayobject.h",
+            "/private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/core/include/numpy/ndarraytypes.h",
+            "/private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/core/include/numpy/ufuncobject.h"
+        ],
         "extra_compile_args": [
             "-stdlib=libc++"
         ],
         "extra_link_args": [
             "-stdlib=libc++",
             "-mmacosx-version-min=10.9"
+        ],
+        "include_dirs": [
+            "/private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/core/include"
         ],
         "language": "c++",
         "name": "wfpt",
@@ -1183,7 +1192,7 @@ static CYTHON_INLINE float __PYX_NAN() {
 #include <stdio.h>
 
     /* Using NumPy API declarations from "numpy/__init__.cython-30.pxd" */
-
+    
 #include "numpy/arrayobject.h"
 #include "numpy/ndarrayobject.h"
 #include "numpy/ndarraytypes.h"
@@ -1531,17 +1540,17 @@ typedef struct {
 
 /* #### Code section: numeric_typedefs ### */
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":730
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":730
  * # in Cython to enable them only on the right systems.
- *
+ * 
  * ctypedef npy_int8       int8_t             # <<<<<<<<<<<<<<
  * ctypedef npy_int16      int16_t
  * ctypedef npy_int32      int32_t
  */
 typedef npy_int8 __pyx_t_5numpy_int8_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":731
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":731
+ * 
  * ctypedef npy_int8       int8_t
  * ctypedef npy_int16      int16_t             # <<<<<<<<<<<<<<
  * ctypedef npy_int32      int32_t
@@ -1549,7 +1558,7 @@ typedef npy_int8 __pyx_t_5numpy_int8_t;
  */
 typedef npy_int16 __pyx_t_5numpy_int16_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":732
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":732
  * ctypedef npy_int8       int8_t
  * ctypedef npy_int16      int16_t
  * ctypedef npy_int32      int32_t             # <<<<<<<<<<<<<<
@@ -1558,7 +1567,7 @@ typedef npy_int16 __pyx_t_5numpy_int16_t;
  */
 typedef npy_int32 __pyx_t_5numpy_int32_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":733
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":733
  * ctypedef npy_int16      int16_t
  * ctypedef npy_int32      int32_t
  * ctypedef npy_int64      int64_t             # <<<<<<<<<<<<<<
@@ -1567,17 +1576,17 @@ typedef npy_int32 __pyx_t_5numpy_int32_t;
  */
 typedef npy_int64 __pyx_t_5numpy_int64_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":737
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":737
  * #ctypedef npy_int128     int128_t
- *
+ * 
  * ctypedef npy_uint8      uint8_t             # <<<<<<<<<<<<<<
  * ctypedef npy_uint16     uint16_t
  * ctypedef npy_uint32     uint32_t
  */
 typedef npy_uint8 __pyx_t_5numpy_uint8_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":738
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":738
+ * 
  * ctypedef npy_uint8      uint8_t
  * ctypedef npy_uint16     uint16_t             # <<<<<<<<<<<<<<
  * ctypedef npy_uint32     uint32_t
@@ -1585,7 +1594,7 @@ typedef npy_uint8 __pyx_t_5numpy_uint8_t;
  */
 typedef npy_uint16 __pyx_t_5numpy_uint16_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":739
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":739
  * ctypedef npy_uint8      uint8_t
  * ctypedef npy_uint16     uint16_t
  * ctypedef npy_uint32     uint32_t             # <<<<<<<<<<<<<<
@@ -1594,7 +1603,7 @@ typedef npy_uint16 __pyx_t_5numpy_uint16_t;
  */
 typedef npy_uint32 __pyx_t_5numpy_uint32_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":740
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":740
  * ctypedef npy_uint16     uint16_t
  * ctypedef npy_uint32     uint32_t
  * ctypedef npy_uint64     uint64_t             # <<<<<<<<<<<<<<
@@ -1603,17 +1612,17 @@ typedef npy_uint32 __pyx_t_5numpy_uint32_t;
  */
 typedef npy_uint64 __pyx_t_5numpy_uint64_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":744
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":744
  * #ctypedef npy_uint128    uint128_t
- *
+ * 
  * ctypedef npy_float32    float32_t             # <<<<<<<<<<<<<<
  * ctypedef npy_float64    float64_t
  * #ctypedef npy_float80    float80_t
  */
 typedef npy_float32 __pyx_t_5numpy_float32_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":745
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":745
+ * 
  * ctypedef npy_float32    float32_t
  * ctypedef npy_float64    float64_t             # <<<<<<<<<<<<<<
  * #ctypedef npy_float80    float80_t
@@ -1621,83 +1630,83 @@ typedef npy_float32 __pyx_t_5numpy_float32_t;
  */
 typedef npy_float64 __pyx_t_5numpy_float64_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":754
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":754
  * # The int types are mapped a bit surprising --
  * # numpy.int corresponds to 'l' and numpy.long to 'q'
  * ctypedef npy_long       int_t             # <<<<<<<<<<<<<<
  * ctypedef npy_longlong   longlong_t
- *
+ * 
  */
 typedef npy_long __pyx_t_5numpy_int_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":755
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":755
  * # numpy.int corresponds to 'l' and numpy.long to 'q'
  * ctypedef npy_long       int_t
  * ctypedef npy_longlong   longlong_t             # <<<<<<<<<<<<<<
- *
+ * 
  * ctypedef npy_ulong      uint_t
  */
 typedef npy_longlong __pyx_t_5numpy_longlong_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":757
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":757
  * ctypedef npy_longlong   longlong_t
- *
+ * 
  * ctypedef npy_ulong      uint_t             # <<<<<<<<<<<<<<
  * ctypedef npy_ulonglong  ulonglong_t
- *
+ * 
  */
 typedef npy_ulong __pyx_t_5numpy_uint_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":758
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":758
+ * 
  * ctypedef npy_ulong      uint_t
  * ctypedef npy_ulonglong  ulonglong_t             # <<<<<<<<<<<<<<
- *
+ * 
  * ctypedef npy_intp       intp_t
  */
 typedef npy_ulonglong __pyx_t_5numpy_ulonglong_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":760
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":760
  * ctypedef npy_ulonglong  ulonglong_t
- *
+ * 
  * ctypedef npy_intp       intp_t             # <<<<<<<<<<<<<<
  * ctypedef npy_uintp      uintp_t
- *
+ * 
  */
 typedef npy_intp __pyx_t_5numpy_intp_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":761
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":761
+ * 
  * ctypedef npy_intp       intp_t
  * ctypedef npy_uintp      uintp_t             # <<<<<<<<<<<<<<
- *
+ * 
  * ctypedef npy_double     float_t
  */
 typedef npy_uintp __pyx_t_5numpy_uintp_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":763
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":763
  * ctypedef npy_uintp      uintp_t
- *
+ * 
  * ctypedef npy_double     float_t             # <<<<<<<<<<<<<<
  * ctypedef npy_double     double_t
  * ctypedef npy_longdouble longdouble_t
  */
 typedef npy_double __pyx_t_5numpy_float_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":764
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":764
+ * 
  * ctypedef npy_double     float_t
  * ctypedef npy_double     double_t             # <<<<<<<<<<<<<<
  * ctypedef npy_longdouble longdouble_t
- *
+ * 
  */
 typedef npy_double __pyx_t_5numpy_double_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":765
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":765
  * ctypedef npy_double     float_t
  * ctypedef npy_double     double_t
  * ctypedef npy_longdouble longdouble_t             # <<<<<<<<<<<<<<
- *
+ * 
  * ctypedef npy_cfloat      cfloat_t
  */
 typedef npy_longdouble __pyx_t_5numpy_longdouble_t;
@@ -1730,38 +1739,38 @@ static CYTHON_INLINE __pyx_t_double_complex __pyx_t_double_complex_from_parts(do
 
 /*--- Type declarations ---*/
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":767
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":767
  * ctypedef npy_longdouble longdouble_t
- *
+ * 
  * ctypedef npy_cfloat      cfloat_t             # <<<<<<<<<<<<<<
  * ctypedef npy_cdouble     cdouble_t
  * ctypedef npy_clongdouble clongdouble_t
  */
 typedef npy_cfloat __pyx_t_5numpy_cfloat_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":768
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":768
+ * 
  * ctypedef npy_cfloat      cfloat_t
  * ctypedef npy_cdouble     cdouble_t             # <<<<<<<<<<<<<<
  * ctypedef npy_clongdouble clongdouble_t
- *
+ * 
  */
 typedef npy_cdouble __pyx_t_5numpy_cdouble_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":769
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":769
  * ctypedef npy_cfloat      cfloat_t
  * ctypedef npy_cdouble     cdouble_t
  * ctypedef npy_clongdouble clongdouble_t             # <<<<<<<<<<<<<<
- *
+ * 
  * ctypedef npy_cdouble     complex_t
  */
 typedef npy_clongdouble __pyx_t_5numpy_clongdouble_t;
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":771
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":771
  * ctypedef npy_clongdouble clongdouble_t
- *
+ * 
  * ctypedef npy_cdouble     complex_t             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline object PyArray_MultiIterNew1(a):
  */
 typedef npy_cdouble __pyx_t_5numpy_complex_t;
@@ -1769,7 +1778,7 @@ struct __pyx_opt_args_4wfpt_full_pdf;
 
 /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":104
  *     return exp(log(p) + ((a*z*sv)**2 - 2*a*v*z - (v**2)*x)/(2*(sv**2)*x+2))/sqrt((sv**2)*x+1)/(a**2)
- *
+ * 
  * cpdef double full_pdf(double x, double v, double sv, double a, double             # <<<<<<<<<<<<<<
  *                       z, double sz, double t, double st, double err, int
  *                       n_st=2, int n_sz=2, bint use_adaptive=1, double
@@ -4074,8 +4083,8 @@ static int __pyx_m_traverse(PyObject *m, visitproc visit, void *arg) {
 #define __pyx_codeobj__22 __pyx_mstate_global->__pyx_codeobj__22
 /* #### Code section: module_code ### */
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":245
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":245
+ * 
  *         @property
  *         cdef inline PyObject* base(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns a borrowed reference to the object owning the data/memory.
@@ -4093,19 +4102,19 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_7ndarray_4base_base(PyArrayObject 
   #endif
   __Pyx_TraceCall("base", __pyx_f[1], 245, 1, __PYX_ERR(1, 245, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":248
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":248
  *             """Returns a borrowed reference to the object owning the data/memory.
  *             """
  *             return PyArray_BASE(self)             # <<<<<<<<<<<<<<
- *
+ * 
  *         @property
  */
   __Pyx_TraceLine(248,1,__PYX_ERR(1, 248, __pyx_L1_error))
   __pyx_r = PyArray_BASE(__pyx_v_self);
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":245
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":245
+ * 
  *         @property
  *         cdef inline PyObject* base(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns a borrowed reference to the object owning the data/memory.
@@ -4127,8 +4136,8 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_7ndarray_4base_base(PyArrayObject 
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":251
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":251
+ * 
  *         @property
  *         cdef inline dtype descr(self):             # <<<<<<<<<<<<<<
  *             """Returns an owned reference to the dtype of the array.
@@ -4146,11 +4155,11 @@ static CYTHON_INLINE PyArray_Descr *__pyx_f_5numpy_7ndarray_5descr_descr(PyArray
   __Pyx_RefNannySetupContext("descr", 0);
   __Pyx_TraceCall("descr", __pyx_f[1], 251, 0, __PYX_ERR(1, 251, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":254
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":254
  *             """Returns an owned reference to the dtype of the array.
  *             """
  *             return <dtype>PyArray_DESCR(self)             # <<<<<<<<<<<<<<
- *
+ * 
  *         @property
  */
   __Pyx_TraceLine(254,0,__PYX_ERR(1, 254, __pyx_L1_error))
@@ -4160,8 +4169,8 @@ static CYTHON_INLINE PyArray_Descr *__pyx_f_5numpy_7ndarray_5descr_descr(PyArray
   __pyx_r = ((PyArray_Descr *)__pyx_t_1);
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":251
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":251
+ * 
  *         @property
  *         cdef inline dtype descr(self):             # <<<<<<<<<<<<<<
  *             """Returns an owned reference to the dtype of the array.
@@ -4179,8 +4188,8 @@ static CYTHON_INLINE PyArray_Descr *__pyx_f_5numpy_7ndarray_5descr_descr(PyArray
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":257
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":257
+ * 
  *         @property
  *         cdef inline int ndim(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns the number of dimensions in the array.
@@ -4198,19 +4207,19 @@ static CYTHON_INLINE int __pyx_f_5numpy_7ndarray_4ndim_ndim(PyArrayObject *__pyx
   #endif
   __Pyx_TraceCall("ndim", __pyx_f[1], 257, 1, __PYX_ERR(1, 257, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":260
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":260
  *             """Returns the number of dimensions in the array.
  *             """
  *             return PyArray_NDIM(self)             # <<<<<<<<<<<<<<
- *
+ * 
  *         @property
  */
   __Pyx_TraceLine(260,1,__PYX_ERR(1, 260, __pyx_L1_error))
   __pyx_r = PyArray_NDIM(__pyx_v_self);
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":257
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":257
+ * 
  *         @property
  *         cdef inline int ndim(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns the number of dimensions in the array.
@@ -4232,8 +4241,8 @@ static CYTHON_INLINE int __pyx_f_5numpy_7ndarray_4ndim_ndim(PyArrayObject *__pyx
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":263
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":263
+ * 
  *         @property
  *         cdef inline npy_intp *shape(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns a pointer to the dimensions/shape of the array.
@@ -4251,19 +4260,19 @@ static CYTHON_INLINE npy_intp *__pyx_f_5numpy_7ndarray_5shape_shape(PyArrayObjec
   #endif
   __Pyx_TraceCall("shape", __pyx_f[1], 263, 1, __PYX_ERR(1, 263, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":268
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":268
  *             Can return NULL for 0-dimensional arrays.
  *             """
  *             return PyArray_DIMS(self)             # <<<<<<<<<<<<<<
- *
+ * 
  *         @property
  */
   __Pyx_TraceLine(268,1,__PYX_ERR(1, 268, __pyx_L1_error))
   __pyx_r = PyArray_DIMS(__pyx_v_self);
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":263
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":263
+ * 
  *         @property
  *         cdef inline npy_intp *shape(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns a pointer to the dimensions/shape of the array.
@@ -4285,8 +4294,8 @@ static CYTHON_INLINE npy_intp *__pyx_f_5numpy_7ndarray_5shape_shape(PyArrayObjec
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":271
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":271
+ * 
  *         @property
  *         cdef inline npy_intp *strides(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns a pointer to the strides of the array.
@@ -4304,19 +4313,19 @@ static CYTHON_INLINE npy_intp *__pyx_f_5numpy_7ndarray_7strides_strides(PyArrayO
   #endif
   __Pyx_TraceCall("strides", __pyx_f[1], 271, 1, __PYX_ERR(1, 271, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":275
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":275
  *             The number of elements matches the number of dimensions of the array (ndim).
  *             """
  *             return PyArray_STRIDES(self)             # <<<<<<<<<<<<<<
- *
+ * 
  *         @property
  */
   __Pyx_TraceLine(275,1,__PYX_ERR(1, 275, __pyx_L1_error))
   __pyx_r = PyArray_STRIDES(__pyx_v_self);
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":271
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":271
+ * 
  *         @property
  *         cdef inline npy_intp *strides(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns a pointer to the strides of the array.
@@ -4338,8 +4347,8 @@ static CYTHON_INLINE npy_intp *__pyx_f_5numpy_7ndarray_7strides_strides(PyArrayO
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":278
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":278
+ * 
  *         @property
  *         cdef inline npy_intp size(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns the total size (in number of elements) of the array.
@@ -4357,19 +4366,19 @@ static CYTHON_INLINE npy_intp __pyx_f_5numpy_7ndarray_4size_size(PyArrayObject *
   #endif
   __Pyx_TraceCall("size", __pyx_f[1], 278, 1, __PYX_ERR(1, 278, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":281
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":281
  *             """Returns the total size (in number of elements) of the array.
  *             """
  *             return PyArray_SIZE(self)             # <<<<<<<<<<<<<<
- *
+ * 
  *         @property
  */
   __Pyx_TraceLine(281,1,__PYX_ERR(1, 281, __pyx_L1_error))
   __pyx_r = PyArray_SIZE(__pyx_v_self);
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":278
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":278
+ * 
  *         @property
  *         cdef inline npy_intp size(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns the total size (in number of elements) of the array.
@@ -4391,8 +4400,8 @@ static CYTHON_INLINE npy_intp __pyx_f_5numpy_7ndarray_4size_size(PyArrayObject *
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":284
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":284
+ * 
  *         @property
  *         cdef inline char* data(self) nogil:             # <<<<<<<<<<<<<<
  *             """The pointer to the data buffer as a char*.
@@ -4410,19 +4419,19 @@ static CYTHON_INLINE char *__pyx_f_5numpy_7ndarray_4data_data(PyArrayObject *__p
   #endif
   __Pyx_TraceCall("data", __pyx_f[1], 284, 1, __PYX_ERR(1, 284, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":290
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":290
  *             of `PyArray_DATA()` instead, which returns a 'void*'.
  *             """
  *             return PyArray_BYTES(self)             # <<<<<<<<<<<<<<
- *
+ * 
  *     ctypedef unsigned char      npy_bool
  */
   __Pyx_TraceLine(290,1,__PYX_ERR(1, 290, __pyx_L1_error))
   __pyx_r = PyArray_BYTES(__pyx_v_self);
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":284
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":284
+ * 
  *         @property
  *         cdef inline char* data(self) nogil:             # <<<<<<<<<<<<<<
  *             """The pointer to the data buffer as a char*.
@@ -4444,12 +4453,12 @@ static CYTHON_INLINE char *__pyx_f_5numpy_7ndarray_4data_data(PyArrayObject *__p
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":773
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":773
  * ctypedef npy_cdouble     complex_t
- *
+ * 
  * cdef inline object PyArray_MultiIterNew1(a):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(1, <void*>a)
- *
+ * 
  */
 
 static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew1(PyObject *__pyx_v_a) {
@@ -4463,11 +4472,11 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew1(PyObject *__
   __Pyx_RefNannySetupContext("PyArray_MultiIterNew1", 0);
   __Pyx_TraceCall("PyArray_MultiIterNew1", __pyx_f[1], 773, 0, __PYX_ERR(1, 773, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":774
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":774
+ * 
  * cdef inline object PyArray_MultiIterNew1(a):
  *     return PyArray_MultiIterNew(1, <void*>a)             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline object PyArray_MultiIterNew2(a, b):
  */
   __Pyx_TraceLine(774,0,__PYX_ERR(1, 774, __pyx_L1_error))
@@ -4478,12 +4487,12 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew1(PyObject *__
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":773
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":773
  * ctypedef npy_cdouble     complex_t
- *
+ * 
  * cdef inline object PyArray_MultiIterNew1(a):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(1, <void*>a)
- *
+ * 
  */
 
   /* function exit code */
@@ -4498,12 +4507,12 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew1(PyObject *__
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":776
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":776
  *     return PyArray_MultiIterNew(1, <void*>a)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew2(a, b):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(2, <void*>a, <void*>b)
- *
+ * 
  */
 
 static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew2(PyObject *__pyx_v_a, PyObject *__pyx_v_b) {
@@ -4517,11 +4526,11 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew2(PyObject *__
   __Pyx_RefNannySetupContext("PyArray_MultiIterNew2", 0);
   __Pyx_TraceCall("PyArray_MultiIterNew2", __pyx_f[1], 776, 0, __PYX_ERR(1, 776, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":777
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":777
+ * 
  * cdef inline object PyArray_MultiIterNew2(a, b):
  *     return PyArray_MultiIterNew(2, <void*>a, <void*>b)             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline object PyArray_MultiIterNew3(a, b, c):
  */
   __Pyx_TraceLine(777,0,__PYX_ERR(1, 777, __pyx_L1_error))
@@ -4532,12 +4541,12 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew2(PyObject *__
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":776
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":776
  *     return PyArray_MultiIterNew(1, <void*>a)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew2(a, b):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(2, <void*>a, <void*>b)
- *
+ * 
  */
 
   /* function exit code */
@@ -4552,12 +4561,12 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew2(PyObject *__
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":779
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":779
  *     return PyArray_MultiIterNew(2, <void*>a, <void*>b)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew3(a, b, c):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(3, <void*>a, <void*>b, <void*> c)
- *
+ * 
  */
 
 static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew3(PyObject *__pyx_v_a, PyObject *__pyx_v_b, PyObject *__pyx_v_c) {
@@ -4571,11 +4580,11 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew3(PyObject *__
   __Pyx_RefNannySetupContext("PyArray_MultiIterNew3", 0);
   __Pyx_TraceCall("PyArray_MultiIterNew3", __pyx_f[1], 779, 0, __PYX_ERR(1, 779, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":780
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":780
+ * 
  * cdef inline object PyArray_MultiIterNew3(a, b, c):
  *     return PyArray_MultiIterNew(3, <void*>a, <void*>b, <void*> c)             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline object PyArray_MultiIterNew4(a, b, c, d):
  */
   __Pyx_TraceLine(780,0,__PYX_ERR(1, 780, __pyx_L1_error))
@@ -4586,12 +4595,12 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew3(PyObject *__
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":779
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":779
  *     return PyArray_MultiIterNew(2, <void*>a, <void*>b)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew3(a, b, c):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(3, <void*>a, <void*>b, <void*> c)
- *
+ * 
  */
 
   /* function exit code */
@@ -4606,12 +4615,12 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew3(PyObject *__
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":782
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":782
  *     return PyArray_MultiIterNew(3, <void*>a, <void*>b, <void*> c)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew4(a, b, c, d):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(4, <void*>a, <void*>b, <void*>c, <void*> d)
- *
+ * 
  */
 
 static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew4(PyObject *__pyx_v_a, PyObject *__pyx_v_b, PyObject *__pyx_v_c, PyObject *__pyx_v_d) {
@@ -4625,11 +4634,11 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew4(PyObject *__
   __Pyx_RefNannySetupContext("PyArray_MultiIterNew4", 0);
   __Pyx_TraceCall("PyArray_MultiIterNew4", __pyx_f[1], 782, 0, __PYX_ERR(1, 782, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":783
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":783
+ * 
  * cdef inline object PyArray_MultiIterNew4(a, b, c, d):
  *     return PyArray_MultiIterNew(4, <void*>a, <void*>b, <void*>c, <void*> d)             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline object PyArray_MultiIterNew5(a, b, c, d, e):
  */
   __Pyx_TraceLine(783,0,__PYX_ERR(1, 783, __pyx_L1_error))
@@ -4640,12 +4649,12 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew4(PyObject *__
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":782
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":782
  *     return PyArray_MultiIterNew(3, <void*>a, <void*>b, <void*> c)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew4(a, b, c, d):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(4, <void*>a, <void*>b, <void*>c, <void*> d)
- *
+ * 
  */
 
   /* function exit code */
@@ -4660,12 +4669,12 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew4(PyObject *__
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":785
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":785
  *     return PyArray_MultiIterNew(4, <void*>a, <void*>b, <void*>c, <void*> d)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew5(a, b, c, d, e):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(5, <void*>a, <void*>b, <void*>c, <void*> d, <void*> e)
- *
+ * 
  */
 
 static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew5(PyObject *__pyx_v_a, PyObject *__pyx_v_b, PyObject *__pyx_v_c, PyObject *__pyx_v_d, PyObject *__pyx_v_e) {
@@ -4679,11 +4688,11 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew5(PyObject *__
   __Pyx_RefNannySetupContext("PyArray_MultiIterNew5", 0);
   __Pyx_TraceCall("PyArray_MultiIterNew5", __pyx_f[1], 785, 0, __PYX_ERR(1, 785, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":786
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":786
+ * 
  * cdef inline object PyArray_MultiIterNew5(a, b, c, d, e):
  *     return PyArray_MultiIterNew(5, <void*>a, <void*>b, <void*>c, <void*> d, <void*> e)             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline tuple PyDataType_SHAPE(dtype d):
  */
   __Pyx_TraceLine(786,0,__PYX_ERR(1, 786, __pyx_L1_error))
@@ -4694,12 +4703,12 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew5(PyObject *__
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":785
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":785
  *     return PyArray_MultiIterNew(4, <void*>a, <void*>b, <void*>c, <void*> d)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew5(a, b, c, d, e):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(5, <void*>a, <void*>b, <void*>c, <void*> d, <void*> e)
- *
+ * 
  */
 
   /* function exit code */
@@ -4714,9 +4723,9 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyArray_MultiIterNew5(PyObject *__
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":788
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":788
  *     return PyArray_MultiIterNew(5, <void*>a, <void*>b, <void*>c, <void*> d, <void*> e)
- *
+ * 
  * cdef inline tuple PyDataType_SHAPE(dtype d):             # <<<<<<<<<<<<<<
  *     if PyDataType_HASSUBARRAY(d):
  *         return <tuple>d.subarray.shape
@@ -4733,8 +4742,8 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyDataType_SHAPE(PyArray_Descr *__
   __Pyx_RefNannySetupContext("PyDataType_SHAPE", 0);
   __Pyx_TraceCall("PyDataType_SHAPE", __pyx_f[1], 788, 0, __PYX_ERR(1, 788, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":789
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":789
+ * 
  * cdef inline tuple PyDataType_SHAPE(dtype d):
  *     if PyDataType_HASSUBARRAY(d):             # <<<<<<<<<<<<<<
  *         return <tuple>d.subarray.shape
@@ -4744,7 +4753,7 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyDataType_SHAPE(PyArray_Descr *__
   __pyx_t_1 = PyDataType_HASSUBARRAY(__pyx_v_d);
   if (__pyx_t_1) {
 
-    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":790
+    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":790
  * cdef inline tuple PyDataType_SHAPE(dtype d):
  *     if PyDataType_HASSUBARRAY(d):
  *         return <tuple>d.subarray.shape             # <<<<<<<<<<<<<<
@@ -4757,8 +4766,8 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyDataType_SHAPE(PyArray_Descr *__
     __pyx_r = ((PyObject*)__pyx_v_d->subarray->shape);
     goto __pyx_L0;
 
-    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":789
- *
+    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":789
+ * 
  * cdef inline tuple PyDataType_SHAPE(dtype d):
  *     if PyDataType_HASSUBARRAY(d):             # <<<<<<<<<<<<<<
  *         return <tuple>d.subarray.shape
@@ -4766,12 +4775,12 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyDataType_SHAPE(PyArray_Descr *__
  */
   }
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":792
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":792
  *         return <tuple>d.subarray.shape
  *     else:
  *         return ()             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(792,0,__PYX_ERR(1, 792, __pyx_L1_error))
   /*else*/ {
@@ -4781,9 +4790,9 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyDataType_SHAPE(PyArray_Descr *__
     goto __pyx_L0;
   }
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":788
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":788
  *     return PyArray_MultiIterNew(5, <void*>a, <void*>b, <void*>c, <void*> d, <void*> e)
- *
+ * 
  * cdef inline tuple PyDataType_SHAPE(dtype d):             # <<<<<<<<<<<<<<
  *     if PyDataType_HASSUBARRAY(d):
  *         return <tuple>d.subarray.shape
@@ -4800,9 +4809,9 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_PyDataType_SHAPE(PyArray_Descr *__
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":967
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":967
  *     int _import_umath() except -1
- *
+ * 
  * cdef inline void set_array_base(ndarray arr, object base):             # <<<<<<<<<<<<<<
  *     Py_INCREF(base) # important to do this before stealing the reference below!
  *     PyArray_SetBaseObject(arr, base)
@@ -4818,29 +4827,29 @@ static CYTHON_INLINE void __pyx_f_5numpy_set_array_base(PyArrayObject *__pyx_v_a
   __Pyx_RefNannySetupContext("set_array_base", 0);
   __Pyx_TraceCall("set_array_base", __pyx_f[1], 967, 0, __PYX_ERR(1, 967, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":968
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":968
+ * 
  * cdef inline void set_array_base(ndarray arr, object base):
  *     Py_INCREF(base) # important to do this before stealing the reference below!             # <<<<<<<<<<<<<<
  *     PyArray_SetBaseObject(arr, base)
- *
+ * 
  */
   __Pyx_TraceLine(968,0,__PYX_ERR(1, 968, __pyx_L1_error))
   Py_INCREF(__pyx_v_base);
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":969
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":969
  * cdef inline void set_array_base(ndarray arr, object base):
  *     Py_INCREF(base) # important to do this before stealing the reference below!
  *     PyArray_SetBaseObject(arr, base)             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline object get_array_base(ndarray arr):
  */
   __Pyx_TraceLine(969,0,__PYX_ERR(1, 969, __pyx_L1_error))
   __pyx_t_1 = PyArray_SetBaseObject(__pyx_v_arr, __pyx_v_base); if (unlikely(__pyx_t_1 == ((int)-1))) __PYX_ERR(1, 969, __pyx_L1_error)
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":967
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":967
  *     int _import_umath() except -1
- *
+ * 
  * cdef inline void set_array_base(ndarray arr, object base):             # <<<<<<<<<<<<<<
  *     Py_INCREF(base) # important to do this before stealing the reference below!
  *     PyArray_SetBaseObject(arr, base)
@@ -4855,9 +4864,9 @@ static CYTHON_INLINE void __pyx_f_5numpy_set_array_base(PyArrayObject *__pyx_v_a
   __Pyx_RefNannyFinishContext();
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":971
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":971
  *     PyArray_SetBaseObject(arr, base)
- *
+ * 
  * cdef inline object get_array_base(ndarray arr):             # <<<<<<<<<<<<<<
  *     base = PyArray_BASE(arr)
  *     if base is NULL:
@@ -4875,8 +4884,8 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_get_array_base(PyArrayObject *__py
   __Pyx_RefNannySetupContext("get_array_base", 0);
   __Pyx_TraceCall("get_array_base", __pyx_f[1], 971, 0, __PYX_ERR(1, 971, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":972
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":972
+ * 
  * cdef inline object get_array_base(ndarray arr):
  *     base = PyArray_BASE(arr)             # <<<<<<<<<<<<<<
  *     if base is NULL:
@@ -4885,7 +4894,7 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_get_array_base(PyArrayObject *__py
   __Pyx_TraceLine(972,0,__PYX_ERR(1, 972, __pyx_L1_error))
   __pyx_v_base = PyArray_BASE(__pyx_v_arr);
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":973
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":973
  * cdef inline object get_array_base(ndarray arr):
  *     base = PyArray_BASE(arr)
  *     if base is NULL:             # <<<<<<<<<<<<<<
@@ -4896,19 +4905,19 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_get_array_base(PyArrayObject *__py
   __pyx_t_1 = (__pyx_v_base == NULL);
   if (__pyx_t_1) {
 
-    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":974
+    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":974
  *     base = PyArray_BASE(arr)
  *     if base is NULL:
  *         return None             # <<<<<<<<<<<<<<
  *     return <object>base
- *
+ * 
  */
     __Pyx_TraceLine(974,0,__PYX_ERR(1, 974, __pyx_L1_error))
     __Pyx_XDECREF(__pyx_r);
     __pyx_r = Py_None; __Pyx_INCREF(Py_None);
     goto __pyx_L0;
 
-    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":973
+    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":973
  * cdef inline object get_array_base(ndarray arr):
  *     base = PyArray_BASE(arr)
  *     if base is NULL:             # <<<<<<<<<<<<<<
@@ -4917,11 +4926,11 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_get_array_base(PyArrayObject *__py
  */
   }
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":975
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":975
  *     if base is NULL:
  *         return None
  *     return <object>base             # <<<<<<<<<<<<<<
- *
+ * 
  * # Versions of the import_* functions which are more suitable for
  */
   __Pyx_TraceLine(975,0,__PYX_ERR(1, 975, __pyx_L1_error))
@@ -4930,9 +4939,9 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_get_array_base(PyArrayObject *__py
   __pyx_r = ((PyObject *)__pyx_v_base);
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":971
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":971
  *     PyArray_SetBaseObject(arr, base)
- *
+ * 
  * cdef inline object get_array_base(ndarray arr):             # <<<<<<<<<<<<<<
  *     base = PyArray_BASE(arr)
  *     if base is NULL:
@@ -4949,7 +4958,7 @@ static CYTHON_INLINE PyObject *__pyx_f_5numpy_get_array_base(PyArrayObject *__py
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":979
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":979
  * # Versions of the import_* functions which are more suitable for
  * # Cython code.
  * cdef inline int import_array() except -1:             # <<<<<<<<<<<<<<
@@ -4975,7 +4984,7 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_array(void) {
   __Pyx_RefNannySetupContext("import_array", 0);
   __Pyx_TraceCall("import_array", __pyx_f[1], 979, 0, __PYX_ERR(1, 979, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":980
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":980
  * # Cython code.
  * cdef inline int import_array() except -1:
  *     try:             # <<<<<<<<<<<<<<
@@ -4992,7 +5001,7 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_array(void) {
     __Pyx_XGOTREF(__pyx_t_3);
     /*try:*/ {
 
-      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":981
+      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":981
  * cdef inline int import_array() except -1:
  *     try:
  *         __pyx_import_array()             # <<<<<<<<<<<<<<
@@ -5002,7 +5011,7 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_array(void) {
       __Pyx_TraceLine(981,0,__PYX_ERR(1, 981, __pyx_L3_error))
       __pyx_t_4 = _import_array(); if (unlikely(__pyx_t_4 == ((int)-1))) __PYX_ERR(1, 981, __pyx_L3_error)
 
-      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":980
+      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":980
  * # Cython code.
  * cdef inline int import_array() except -1:
  *     try:             # <<<<<<<<<<<<<<
@@ -5016,12 +5025,12 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_array(void) {
     goto __pyx_L8_try_end;
     __pyx_L3_error:;
 
-    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":982
+    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":982
  *     try:
  *         __pyx_import_array()
  *     except Exception:             # <<<<<<<<<<<<<<
  *         raise ImportError("numpy.core.multiarray failed to import")
- *
+ * 
  */
     __Pyx_TraceLine(982,0,__PYX_ERR(1, 982, __pyx_L5_except_error))
     __pyx_t_4 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(&((PyTypeObject*)PyExc_Exception)[0])));
@@ -5032,11 +5041,11 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_array(void) {
       __Pyx_XGOTREF(__pyx_t_6);
       __Pyx_XGOTREF(__pyx_t_7);
 
-      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":983
+      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":983
  *         __pyx_import_array()
  *     except Exception:
  *         raise ImportError("numpy.core.multiarray failed to import")             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline int import_umath() except -1:
  */
       __Pyx_TraceLine(983,0,__PYX_ERR(1, 983, __pyx_L5_except_error))
@@ -5048,7 +5057,7 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_array(void) {
     }
     goto __pyx_L5_except_error;
 
-    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":980
+    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":980
  * # Cython code.
  * cdef inline int import_array() except -1:
  *     try:             # <<<<<<<<<<<<<<
@@ -5064,7 +5073,7 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_array(void) {
     __pyx_L8_try_end:;
   }
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":979
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":979
  * # Versions of the import_* functions which are more suitable for
  * # Cython code.
  * cdef inline int import_array() except -1:             # <<<<<<<<<<<<<<
@@ -5088,9 +5097,9 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_array(void) {
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":985
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":985
  *         raise ImportError("numpy.core.multiarray failed to import")
- *
+ * 
  * cdef inline int import_umath() except -1:             # <<<<<<<<<<<<<<
  *     try:
  *         _import_umath()
@@ -5114,8 +5123,8 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_umath(void) {
   __Pyx_RefNannySetupContext("import_umath", 0);
   __Pyx_TraceCall("import_umath", __pyx_f[1], 985, 0, __PYX_ERR(1, 985, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":986
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":986
+ * 
  * cdef inline int import_umath() except -1:
  *     try:             # <<<<<<<<<<<<<<
  *         _import_umath()
@@ -5131,7 +5140,7 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_umath(void) {
     __Pyx_XGOTREF(__pyx_t_3);
     /*try:*/ {
 
-      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":987
+      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":987
  * cdef inline int import_umath() except -1:
  *     try:
  *         _import_umath()             # <<<<<<<<<<<<<<
@@ -5141,8 +5150,8 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_umath(void) {
       __Pyx_TraceLine(987,0,__PYX_ERR(1, 987, __pyx_L3_error))
       __pyx_t_4 = _import_umath(); if (unlikely(__pyx_t_4 == ((int)-1))) __PYX_ERR(1, 987, __pyx_L3_error)
 
-      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":986
- *
+      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":986
+ * 
  * cdef inline int import_umath() except -1:
  *     try:             # <<<<<<<<<<<<<<
  *         _import_umath()
@@ -5155,12 +5164,12 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_umath(void) {
     goto __pyx_L8_try_end;
     __pyx_L3_error:;
 
-    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":988
+    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":988
  *     try:
  *         _import_umath()
  *     except Exception:             # <<<<<<<<<<<<<<
  *         raise ImportError("numpy.core.umath failed to import")
- *
+ * 
  */
     __Pyx_TraceLine(988,0,__PYX_ERR(1, 988, __pyx_L5_except_error))
     __pyx_t_4 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(&((PyTypeObject*)PyExc_Exception)[0])));
@@ -5171,11 +5180,11 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_umath(void) {
       __Pyx_XGOTREF(__pyx_t_6);
       __Pyx_XGOTREF(__pyx_t_7);
 
-      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":989
+      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":989
  *         _import_umath()
  *     except Exception:
  *         raise ImportError("numpy.core.umath failed to import")             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline int import_ufunc() except -1:
  */
       __Pyx_TraceLine(989,0,__PYX_ERR(1, 989, __pyx_L5_except_error))
@@ -5187,8 +5196,8 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_umath(void) {
     }
     goto __pyx_L5_except_error;
 
-    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":986
- *
+    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":986
+ * 
  * cdef inline int import_umath() except -1:
  *     try:             # <<<<<<<<<<<<<<
  *         _import_umath()
@@ -5203,9 +5212,9 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_umath(void) {
     __pyx_L8_try_end:;
   }
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":985
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":985
  *         raise ImportError("numpy.core.multiarray failed to import")
- *
+ * 
  * cdef inline int import_umath() except -1:             # <<<<<<<<<<<<<<
  *     try:
  *         _import_umath()
@@ -5227,9 +5236,9 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_umath(void) {
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":991
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":991
  *         raise ImportError("numpy.core.umath failed to import")
- *
+ * 
  * cdef inline int import_ufunc() except -1:             # <<<<<<<<<<<<<<
  *     try:
  *         _import_umath()
@@ -5253,8 +5262,8 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_ufunc(void) {
   __Pyx_RefNannySetupContext("import_ufunc", 0);
   __Pyx_TraceCall("import_ufunc", __pyx_f[1], 991, 0, __PYX_ERR(1, 991, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":992
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":992
+ * 
  * cdef inline int import_ufunc() except -1:
  *     try:             # <<<<<<<<<<<<<<
  *         _import_umath()
@@ -5270,7 +5279,7 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_ufunc(void) {
     __Pyx_XGOTREF(__pyx_t_3);
     /*try:*/ {
 
-      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":993
+      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":993
  * cdef inline int import_ufunc() except -1:
  *     try:
  *         _import_umath()             # <<<<<<<<<<<<<<
@@ -5280,8 +5289,8 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_ufunc(void) {
       __Pyx_TraceLine(993,0,__PYX_ERR(1, 993, __pyx_L3_error))
       __pyx_t_4 = _import_umath(); if (unlikely(__pyx_t_4 == ((int)-1))) __PYX_ERR(1, 993, __pyx_L3_error)
 
-      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":992
- *
+      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":992
+ * 
  * cdef inline int import_ufunc() except -1:
  *     try:             # <<<<<<<<<<<<<<
  *         _import_umath()
@@ -5294,12 +5303,12 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_ufunc(void) {
     goto __pyx_L8_try_end;
     __pyx_L3_error:;
 
-    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":994
+    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":994
  *     try:
  *         _import_umath()
  *     except Exception:             # <<<<<<<<<<<<<<
  *         raise ImportError("numpy.core.umath failed to import")
- *
+ * 
  */
     __Pyx_TraceLine(994,0,__PYX_ERR(1, 994, __pyx_L5_except_error))
     __pyx_t_4 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(&((PyTypeObject*)PyExc_Exception)[0])));
@@ -5310,12 +5319,12 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_ufunc(void) {
       __Pyx_XGOTREF(__pyx_t_6);
       __Pyx_XGOTREF(__pyx_t_7);
 
-      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":995
+      /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":995
  *         _import_umath()
  *     except Exception:
  *         raise ImportError("numpy.core.umath failed to import")             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
       __Pyx_TraceLine(995,0,__PYX_ERR(1, 995, __pyx_L5_except_error))
       __pyx_t_8 = __Pyx_PyObject_Call(__pyx_builtin_ImportError, __pyx_tuple__2, NULL); if (unlikely(!__pyx_t_8)) __PYX_ERR(1, 995, __pyx_L5_except_error)
@@ -5326,8 +5335,8 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_ufunc(void) {
     }
     goto __pyx_L5_except_error;
 
-    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":992
- *
+    /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":992
+ * 
  * cdef inline int import_ufunc() except -1:
  *     try:             # <<<<<<<<<<<<<<
  *         _import_umath()
@@ -5342,9 +5351,9 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_ufunc(void) {
     __pyx_L8_try_end:;
   }
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":991
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":991
  *         raise ImportError("numpy.core.umath failed to import")
- *
+ * 
  * cdef inline int import_ufunc() except -1:             # <<<<<<<<<<<<<<
  *     try:
  *         _import_umath()
@@ -5366,9 +5375,9 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_ufunc(void) {
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":998
- *
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":998
+ * 
+ * 
  * cdef inline bint is_timedelta64_object(object obj):             # <<<<<<<<<<<<<<
  *     """
  *     Cython equivalent of `isinstance(obj, np.timedelta64)`
@@ -5384,20 +5393,20 @@ static CYTHON_INLINE int __pyx_f_5numpy_is_timedelta64_object(PyObject *__pyx_v_
   __Pyx_RefNannySetupContext("is_timedelta64_object", 0);
   __Pyx_TraceCall("is_timedelta64_object", __pyx_f[1], 998, 0, __PYX_ERR(1, 998, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1010
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1010
  *     bool
  *     """
  *     return PyObject_TypeCheck(obj, &PyTimedeltaArrType_Type)             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(1010,0,__PYX_ERR(1, 1010, __pyx_L1_error))
   __pyx_r = PyObject_TypeCheck(__pyx_v_obj, (&PyTimedeltaArrType_Type));
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":998
- *
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":998
+ * 
+ * 
  * cdef inline bint is_timedelta64_object(object obj):             # <<<<<<<<<<<<<<
  *     """
  *     Cython equivalent of `isinstance(obj, np.timedelta64)`
@@ -5413,9 +5422,9 @@ static CYTHON_INLINE int __pyx_f_5numpy_is_timedelta64_object(PyObject *__pyx_v_
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1013
- *
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1013
+ * 
+ * 
  * cdef inline bint is_datetime64_object(object obj):             # <<<<<<<<<<<<<<
  *     """
  *     Cython equivalent of `isinstance(obj, np.datetime64)`
@@ -5431,20 +5440,20 @@ static CYTHON_INLINE int __pyx_f_5numpy_is_datetime64_object(PyObject *__pyx_v_o
   __Pyx_RefNannySetupContext("is_datetime64_object", 0);
   __Pyx_TraceCall("is_datetime64_object", __pyx_f[1], 1013, 0, __PYX_ERR(1, 1013, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1025
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1025
  *     bool
  *     """
  *     return PyObject_TypeCheck(obj, &PyDatetimeArrType_Type)             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(1025,0,__PYX_ERR(1, 1025, __pyx_L1_error))
   __pyx_r = PyObject_TypeCheck(__pyx_v_obj, (&PyDatetimeArrType_Type));
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1013
- *
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1013
+ * 
+ * 
  * cdef inline bint is_datetime64_object(object obj):             # <<<<<<<<<<<<<<
  *     """
  *     Cython equivalent of `isinstance(obj, np.datetime64)`
@@ -5460,9 +5469,9 @@ static CYTHON_INLINE int __pyx_f_5numpy_is_datetime64_object(PyObject *__pyx_v_o
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1028
- *
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1028
+ * 
+ * 
  * cdef inline npy_datetime get_datetime64_value(object obj) nogil:             # <<<<<<<<<<<<<<
  *     """
  *     returns the int64 value underlying scalar numpy datetime64 object
@@ -5479,20 +5488,20 @@ static CYTHON_INLINE npy_datetime __pyx_f_5numpy_get_datetime64_value(PyObject *
   #endif
   __Pyx_TraceCall("get_datetime64_value", __pyx_f[1], 1028, 1, __PYX_ERR(1, 1028, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1035
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1035
  *     also needed.  That can be found using `get_datetime64_unit`.
  *     """
  *     return (<PyDatetimeScalarObject*>obj).obval             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(1035,1,__PYX_ERR(1, 1035, __pyx_L1_error))
   __pyx_r = ((PyDatetimeScalarObject *)__pyx_v_obj)->obval;
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1028
- *
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1028
+ * 
+ * 
  * cdef inline npy_datetime get_datetime64_value(object obj) nogil:             # <<<<<<<<<<<<<<
  *     """
  *     returns the int64 value underlying scalar numpy datetime64 object
@@ -5513,9 +5522,9 @@ static CYTHON_INLINE npy_datetime __pyx_f_5numpy_get_datetime64_value(PyObject *
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1038
- *
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1038
+ * 
+ * 
  * cdef inline npy_timedelta get_timedelta64_value(object obj) nogil:             # <<<<<<<<<<<<<<
  *     """
  *     returns the int64 value underlying scalar numpy timedelta64 object
@@ -5532,20 +5541,20 @@ static CYTHON_INLINE npy_timedelta __pyx_f_5numpy_get_timedelta64_value(PyObject
   #endif
   __Pyx_TraceCall("get_timedelta64_value", __pyx_f[1], 1038, 1, __PYX_ERR(1, 1038, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1042
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1042
  *     returns the int64 value underlying scalar numpy timedelta64 object
  *     """
  *     return (<PyTimedeltaScalarObject*>obj).obval             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(1042,1,__PYX_ERR(1, 1042, __pyx_L1_error))
   __pyx_r = ((PyTimedeltaScalarObject *)__pyx_v_obj)->obval;
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1038
- *
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1038
+ * 
+ * 
  * cdef inline npy_timedelta get_timedelta64_value(object obj) nogil:             # <<<<<<<<<<<<<<
  *     """
  *     returns the int64 value underlying scalar numpy timedelta64 object
@@ -5566,9 +5575,9 @@ static CYTHON_INLINE npy_timedelta __pyx_f_5numpy_get_timedelta64_value(PyObject
   return __pyx_r;
 }
 
-/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1045
- *
- *
+/* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1045
+ * 
+ * 
  * cdef inline NPY_DATETIMEUNIT get_datetime64_unit(object obj) nogil:             # <<<<<<<<<<<<<<
  *     """
  *     returns the unit part of the dtype for a numpy datetime64 object.
@@ -5585,7 +5594,7 @@ static CYTHON_INLINE NPY_DATETIMEUNIT __pyx_f_5numpy_get_datetime64_unit(PyObjec
   #endif
   __Pyx_TraceCall("get_datetime64_unit", __pyx_f[1], 1045, 1, __PYX_ERR(1, 1045, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1049
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1049
  *     returns the unit part of the dtype for a numpy datetime64 object.
  *     """
  *     return <NPY_DATETIMEUNIT>(<PyDatetimeScalarObject*>obj).obmeta.base             # <<<<<<<<<<<<<<
@@ -5594,9 +5603,9 @@ static CYTHON_INLINE NPY_DATETIMEUNIT __pyx_f_5numpy_get_datetime64_unit(PyObjec
   __pyx_r = ((NPY_DATETIMEUNIT)((PyDatetimeScalarObject *)__pyx_v_obj)->obmeta.base);
   goto __pyx_L0;
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1045
- *
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1045
+ * 
+ * 
  * cdef inline NPY_DATETIMEUNIT get_datetime64_unit(object obj) nogil:             # <<<<<<<<<<<<<<
  *     """
  *     returns the unit part of the dtype for a numpy datetime64 object.
@@ -5619,7 +5628,7 @@ static CYTHON_INLINE NPY_DATETIMEUNIT __pyx_f_5numpy_get_datetime64_unit(PyObjec
 
 /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":28
  *     T max[T](T a, T b)
- *
+ * 
  * cdef double ftt_01w(double tt, double w, double err) nogil:             # <<<<<<<<<<<<<<
  *     """Compute f(t|0,1,w) for the likelihood of the drift diffusion model using the method
  *     and implementation of Navarro & Fuss, 2009.
@@ -5646,7 +5655,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
   __Pyx_TraceCall("ftt_01w", __pyx_f[2], 28, 1, __PYX_ERR(2, 28, __pyx_L1_error));
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":36
- *
+ * 
  *     # calculate number of terms needed for large t
  *     if M_PI*tt*err<1: # if error threshold is set low enough             # <<<<<<<<<<<<<<
  *         kl=sqrt(-2*log(M_PI*tt*err)/(M_PI**2*tt)) # bound
@@ -5677,7 +5686,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
     __pyx_v_kl = std::max<double>(__pyx_v_kl, (1. / (M_PI * sqrt(__pyx_v_tt))));
 
     /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":36
- *
+ * 
  *     # calculate number of terms needed for large t
  *     if M_PI*tt*err<1: # if error threshold is set low enough             # <<<<<<<<<<<<<<
  *         kl=sqrt(-2*log(M_PI*tt*err)/(M_PI**2*tt)) # bound
@@ -5690,7 +5699,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
  *         kl=max(kl,1./(M_PI*sqrt(tt))) # ensure boundary conditions met
  *     else: # if error threshold set too high
  *         kl=1./(M_PI*sqrt(tt)) # set to boundary condition             # <<<<<<<<<<<<<<
- *
+ * 
  *     # calculate number of terms needed for small t
  */
   __Pyx_TraceLine(40,1,__PYX_ERR(2, 40, __pyx_L1_error))
@@ -5700,7 +5709,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
   __pyx_L3:;
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":43
- *
+ * 
  *     # calculate number of terms needed for small t
  *     if 2*sqrt(2*M_PI*tt)*err<1: # if error threshold is set low enough             # <<<<<<<<<<<<<<
  *         ks=2+sqrt(-2*tt*log(2*sqrt(2*M_PI*tt)*err)) # bound
@@ -5731,7 +5740,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
     __pyx_v_ks = std::max<double>(__pyx_v_ks, (sqrt(__pyx_v_tt) + 1.0));
 
     /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":43
- *
+ * 
  *     # calculate number of terms needed for small t
  *     if 2*sqrt(2*M_PI*tt)*err<1: # if error threshold is set low enough             # <<<<<<<<<<<<<<
  *         ks=2+sqrt(-2*tt*log(2*sqrt(2*M_PI*tt)*err)) # bound
@@ -5744,7 +5753,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
  *         ks=max(ks,sqrt(tt)+1) # ensure boundary conditions are met
  *     else: # if error threshold was set too high
  *         ks=2 # minimal kappa for that case             # <<<<<<<<<<<<<<
- *
+ * 
  *     # compute f(tt|0,1,w)
  */
   __Pyx_TraceLine(47,1,__PYX_ERR(2, 47, __pyx_L1_error))
@@ -5754,7 +5763,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
   __pyx_L4:;
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":50
- *
+ * 
  *     # compute f(tt|0,1,w)
  *     p=0 #initialize density             # <<<<<<<<<<<<<<
  *     if ks<kl: # if small t is better (i.e., lambda<0)
@@ -5820,7 +5829,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
  *         for k from lower <= k <= upper: # loop over k
  *             p+=(w+2*k)*exp(-(pow((w+2*k),2))/2/tt) # increment sum             # <<<<<<<<<<<<<<
  *         p/=sqrt(2*M_PI*pow(tt,3)) # add con_stant term
- *
+ * 
  */
       __Pyx_TraceLine(56,1,__PYX_ERR(2, 56, __pyx_L1_error))
       __pyx_v_p = (__pyx_v_p + ((__pyx_v_w + (2 * __pyx_v_k)) * exp((((-pow((__pyx_v_w + (2 * __pyx_v_k)), 2.0)) / 2.0) / __pyx_v_tt))));
@@ -5830,7 +5839,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
  *         for k from lower <= k <= upper: # loop over k
  *             p+=(w+2*k)*exp(-(pow((w+2*k),2))/2/tt) # increment sum
  *         p/=sqrt(2*M_PI*pow(tt,3)) # add con_stant term             # <<<<<<<<<<<<<<
- *
+ * 
  *     else: # if large t is better...
  */
     __Pyx_TraceLine(57,1,__PYX_ERR(2, 57, __pyx_L1_error))
@@ -5847,7 +5856,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
   }
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":60
- *
+ * 
  *     else: # if large t is better...
  *         K=<int>(ceil(kl)) # round to smallest integer meeting error             # <<<<<<<<<<<<<<
  *         for k from 1 <= k <= K:
@@ -5873,7 +5882,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
  *         for k from 1 <= k <= K:
  *             p+=k*exp(-(pow(k,2))*(M_PI**2)*tt/2)*sin(k*M_PI*w) # increment sum             # <<<<<<<<<<<<<<
  *         p*=M_PI # add con_stant term
- *
+ * 
  */
       __Pyx_TraceLine(62,1,__PYX_ERR(2, 62, __pyx_L1_error))
       __pyx_v_p = (__pyx_v_p + ((__pyx_v_k * exp(((((-pow(__pyx_v_k, 2.0)) * pow(M_PI, 2.0)) * __pyx_v_tt) / 2.0))) * sin(((__pyx_v_k * M_PI) * __pyx_v_w))));
@@ -5883,7 +5892,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
  *         for k from 1 <= k <= K:
  *             p+=k*exp(-(pow(k,2))*(M_PI**2)*tt/2)*sin(k*M_PI*w) # increment sum
  *         p*=M_PI # add con_stant term             # <<<<<<<<<<<<<<
- *
+ * 
  *     return p
  */
     __Pyx_TraceLine(63,1,__PYX_ERR(2, 63, __pyx_L1_error))
@@ -5893,9 +5902,9 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":65
  *         p*=M_PI # add con_stant term
- *
+ * 
  *     return p             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline double prob_ub(double v, double a, double z) nogil:
  */
   __Pyx_TraceLine(65,1,__PYX_ERR(2, 65, __pyx_L1_error))
@@ -5904,7 +5913,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":28
  *     T max[T](T a, T b)
- *
+ * 
  * cdef double ftt_01w(double tt, double w, double err) nogil:             # <<<<<<<<<<<<<<
  *     """Compute f(t|0,1,w) for the likelihood of the drift diffusion model using the method
  *     and implementation of Navarro & Fuss, 2009.
@@ -5927,7 +5936,7 @@ static double __pyx_f_4wfpt_ftt_01w(double __pyx_v_tt, double __pyx_v_w, double 
 
 /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":67
  *     return p
- *
+ * 
  * cdef inline double prob_ub(double v, double a, double z) nogil:             # <<<<<<<<<<<<<<
  *     """Probability of hitting upper boundary."""
  *     if v == 0:
@@ -5980,7 +5989,7 @@ static CYTHON_INLINE double __pyx_f_4wfpt_prob_ub(double __pyx_v_v, double __pyx
  *         return z
  *     else:
  *         return (exp(-2 * a * z * v) - 1) / (exp(-2 * a * v) - 1)             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef double pdf(double x, double v, double a, double w, double err) nogil:
  */
   __Pyx_TraceLine(72,1,__PYX_ERR(2, 72, __pyx_L1_error))
@@ -5991,7 +6000,7 @@ static CYTHON_INLINE double __pyx_f_4wfpt_prob_ub(double __pyx_v_v, double __pyx
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":67
  *     return p
- *
+ * 
  * cdef inline double prob_ub(double v, double a, double z) nogil:             # <<<<<<<<<<<<<<
  *     """Probability of hitting upper boundary."""
  *     if v == 0:
@@ -6014,7 +6023,7 @@ static CYTHON_INLINE double __pyx_f_4wfpt_prob_ub(double __pyx_v_v, double __pyx
 
 /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":74
  *         return (exp(-2 * a * z * v) - 1) / (exp(-2 * a * v) - 1)
- *
+ * 
  * cdef double pdf(double x, double v, double a, double w, double err) nogil:             # <<<<<<<<<<<<<<
  *     """Compute the likelihood of the drift diffusion model f(t|v,a,z) using the method
  *     and implementation of Navarro & Fuss, 2009.
@@ -6042,7 +6051,7 @@ static double __pyx_f_4wfpt_pdf(double __pyx_v_x, double __pyx_v_v, double __pyx
  *     """
  *     if x <= 0:             # <<<<<<<<<<<<<<
  *         return 0
- *
+ * 
  */
   __Pyx_TraceLine(78,1,__PYX_ERR(2, 78, __pyx_L1_error))
   __pyx_t_1 = (__pyx_v_x <= 0.0);
@@ -6052,7 +6061,7 @@ static double __pyx_f_4wfpt_pdf(double __pyx_v_x, double __pyx_v_v, double __pyx
  *     """
  *     if x <= 0:
  *         return 0             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef double tt = x/a**2 # use normalized time
  */
     __Pyx_TraceLine(79,1,__PYX_ERR(2, 79, __pyx_L1_error))
@@ -6064,25 +6073,25 @@ static double __pyx_f_4wfpt_pdf(double __pyx_v_x, double __pyx_v_v, double __pyx
  *     """
  *     if x <= 0:             # <<<<<<<<<<<<<<
  *         return 0
- *
+ * 
  */
   }
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":81
  *         return 0
- *
+ * 
  *     cdef double tt = x/a**2 # use normalized time             # <<<<<<<<<<<<<<
  *     cdef double p = ftt_01w(tt, w, err) #get f(t|0,1,w)
- *
+ * 
  */
   __Pyx_TraceLine(81,1,__PYX_ERR(2, 81, __pyx_L1_error))
   __pyx_v_tt = (__pyx_v_x / pow(__pyx_v_a, 2.0));
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":82
- *
+ * 
  *     cdef double tt = x/a**2 # use normalized time
  *     cdef double p = ftt_01w(tt, w, err) #get f(t|0,1,w)             # <<<<<<<<<<<<<<
- *
+ * 
  *     # convert to f(t|v,a,w)
  */
   __Pyx_TraceLine(82,1,__PYX_ERR(2, 82, __pyx_L1_error))
@@ -6090,10 +6099,10 @@ static double __pyx_f_4wfpt_pdf(double __pyx_v_x, double __pyx_v_v, double __pyx
   __pyx_v_p = __pyx_t_2;
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":85
- *
+ * 
  *     # convert to f(t|v,a,w)
  *     return p*exp(-v*a*w -(pow(v,2))*x/2.)/(pow(a,2))             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef double pdf_sv(double x, double v, double sv, double a, double z, double err) nogil:
  */
   __Pyx_TraceLine(85,1,__PYX_ERR(2, 85, __pyx_L1_error))
@@ -6102,7 +6111,7 @@ static double __pyx_f_4wfpt_pdf(double __pyx_v_x, double __pyx_v_v, double __pyx
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":74
  *         return (exp(-2 * a * z * v) - 1) / (exp(-2 * a * v) - 1)
- *
+ * 
  * cdef double pdf(double x, double v, double a, double w, double err) nogil:             # <<<<<<<<<<<<<<
  *     """Compute the likelihood of the drift diffusion model f(t|v,a,z) using the method
  *     and implementation of Navarro & Fuss, 2009.
@@ -6126,7 +6135,7 @@ static double __pyx_f_4wfpt_pdf(double __pyx_v_x, double __pyx_v_v, double __pyx
 
 /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":87
  *     return p*exp(-v*a*w -(pow(v,2))*x/2.)/(pow(a,2))
- *
+ * 
  * cdef double pdf_sv(double x, double v, double sv, double a, double z, double err) nogil:             # <<<<<<<<<<<<<<
  *     """Compute the likelihood of the drift diffusion model f(t|v,a,z,sv) using the method
  *     and implementation of Navarro & Fuss, 2009.
@@ -6154,7 +6163,7 @@ static double __pyx_f_4wfpt_pdf_sv(double __pyx_v_x, double __pyx_v_v, double __
  *     """
  *     if x <= 0:             # <<<<<<<<<<<<<<
  *         return 0
- *
+ * 
  */
   __Pyx_TraceLine(92,1,__PYX_ERR(2, 92, __pyx_L1_error))
   __pyx_t_1 = (__pyx_v_x <= 0.0);
@@ -6164,7 +6173,7 @@ static double __pyx_f_4wfpt_pdf_sv(double __pyx_v_x, double __pyx_v_v, double __
  *     """
  *     if x <= 0:
  *         return 0             # <<<<<<<<<<<<<<
- *
+ * 
  *     if sv==0:
  */
     __Pyx_TraceLine(93,1,__PYX_ERR(2, 93, __pyx_L1_error))
@@ -6176,26 +6185,26 @@ static double __pyx_f_4wfpt_pdf_sv(double __pyx_v_x, double __pyx_v_v, double __
  *     """
  *     if x <= 0:             # <<<<<<<<<<<<<<
  *         return 0
- *
+ * 
  */
   }
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":95
  *         return 0
- *
+ * 
  *     if sv==0:             # <<<<<<<<<<<<<<
  *         return pdf(x, v, a, z, err)
- *
+ * 
  */
   __Pyx_TraceLine(95,1,__PYX_ERR(2, 95, __pyx_L1_error))
   __pyx_t_1 = (__pyx_v_sv == 0.0);
   if (__pyx_t_1) {
 
     /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":96
- *
+ * 
  *     if sv==0:
  *         return pdf(x, v, a, z, err)             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef double tt = x/(pow(a,2)) # use normalized time
  */
     __Pyx_TraceLine(96,1,__PYX_ERR(2, 96, __pyx_L1_error))
@@ -6205,28 +6214,28 @@ static double __pyx_f_4wfpt_pdf_sv(double __pyx_v_x, double __pyx_v_v, double __
 
     /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":95
  *         return 0
- *
+ * 
  *     if sv==0:             # <<<<<<<<<<<<<<
  *         return pdf(x, v, a, z, err)
- *
+ * 
  */
   }
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":98
  *         return pdf(x, v, a, z, err)
- *
+ * 
  *     cdef double tt = x/(pow(a,2)) # use normalized time             # <<<<<<<<<<<<<<
  *     cdef double p  = ftt_01w(tt, z, err) #get f(t|0,1,w)
- *
+ * 
  */
   __Pyx_TraceLine(98,1,__PYX_ERR(2, 98, __pyx_L1_error))
   __pyx_v_tt = (__pyx_v_x / pow(__pyx_v_a, 2.0));
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":99
- *
+ * 
  *     cdef double tt = x/(pow(a,2)) # use normalized time
  *     cdef double p  = ftt_01w(tt, z, err) #get f(t|0,1,w)             # <<<<<<<<<<<<<<
- *
+ * 
  *     # convert to f(t|v,a,w)
  */
   __Pyx_TraceLine(99,1,__PYX_ERR(2, 99, __pyx_L1_error))
@@ -6234,10 +6243,10 @@ static double __pyx_f_4wfpt_pdf_sv(double __pyx_v_x, double __pyx_v_v, double __
   __pyx_v_p = __pyx_t_2;
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":102
- *
+ * 
  *     # convert to f(t|v,a,w)
  *     return exp(log(p) + ((a*z*sv)**2 - 2*a*v*z - (v**2)*x)/(2*(sv**2)*x+2))/sqrt((sv**2)*x+1)/(a**2)             # <<<<<<<<<<<<<<
- *
+ * 
  * cpdef double full_pdf(double x, double v, double sv, double a, double
  */
   __Pyx_TraceLine(102,1,__PYX_ERR(2, 102, __pyx_L1_error))
@@ -6246,7 +6255,7 @@ static double __pyx_f_4wfpt_pdf_sv(double __pyx_v_x, double __pyx_v_v, double __
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":87
  *     return p*exp(-v*a*w -(pow(v,2))*x/2.)/(pow(a,2))
- *
+ * 
  * cdef double pdf_sv(double x, double v, double sv, double a, double z, double err) nogil:             # <<<<<<<<<<<<<<
  *     """Compute the likelihood of the drift diffusion model f(t|v,a,z,sv) using the method
  *     and implementation of Navarro & Fuss, 2009.
@@ -6270,13 +6279,13 @@ static double __pyx_f_4wfpt_pdf_sv(double __pyx_v_x, double __pyx_v_v, double __
 
 /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":104
  *     return exp(log(p) + ((a*z*sv)**2 - 2*a*v*z - (v**2)*x)/(2*(sv**2)*x+2))/sqrt((sv**2)*x+1)/(a**2)
- *
+ * 
  * cpdef double full_pdf(double x, double v, double sv, double a, double             # <<<<<<<<<<<<<<
  *                       z, double sz, double t, double st, double err, int
  *                       n_st=2, int n_sz=2, bint use_adaptive=1, double
  */
 
-static PyObject *__pyx_pw_4wfpt_1full_pdf(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_1full_pdf(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -6319,7 +6328,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
   }
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":111
- *
+ * 
  *     # Check if parpameters are valid
  *     if (z<0) or (z>1) or (a<0) or (t<0) or (st<0) or (sv<0) or (sz<0) or (sz>1) or \             # <<<<<<<<<<<<<<
  *        ((fabs(x)-(t-st/2.))<0) or (z+sz/2.>1) or (z-sz/2.<0) or (t-st/2.<0):
@@ -6380,7 +6389,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
  *     if (z<0) or (z>1) or (a<0) or (t<0) or (st<0) or (sv<0) or (sz<0) or (sz>1) or \
  *        ((fabs(x)-(t-st/2.))<0) or (z+sz/2.>1) or (z-sz/2.<0) or (t-st/2.<0):             # <<<<<<<<<<<<<<
  *         return 0
- *
+ * 
  */
   __Pyx_TraceLine(112,1,__PYX_ERR(2, 112, __pyx_L1_error))
   __pyx_t_2 = ((fabs(__pyx_v_x) - (__pyx_v_t - (__pyx_v_st / 2.))) < 0.0);
@@ -6406,7 +6415,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
   __pyx_L4_bool_binop_done:;
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":111
- *
+ * 
  *     # Check if parpameters are valid
  *     if (z<0) or (z>1) or (a<0) or (t<0) or (st<0) or (sv<0) or (sz<0) or (sz>1) or \             # <<<<<<<<<<<<<<
  *        ((fabs(x)-(t-st/2.))<0) or (z+sz/2.>1) or (z-sz/2.<0) or (t-st/2.<0):
@@ -6419,7 +6428,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
  *     if (z<0) or (z>1) or (a<0) or (t<0) or (st<0) or (sv<0) or (sz<0) or (sz>1) or \
  *        ((fabs(x)-(t-st/2.))<0) or (z+sz/2.>1) or (z-sz/2.<0) or (t-st/2.<0):
  *         return 0             # <<<<<<<<<<<<<<
- *
+ * 
  *     # transform x,v,z if x is upper bound response
  */
     __Pyx_TraceLine(113,1,__PYX_ERR(2, 113, __pyx_L1_error))
@@ -6427,7 +6436,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
     goto __pyx_L0;
 
     /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":111
- *
+ * 
  *     # Check if parpameters are valid
  *     if (z<0) or (z>1) or (a<0) or (t<0) or (st<0) or (sv<0) or (sz<0) or (sz>1) or \             # <<<<<<<<<<<<<<
  *        ((fabs(x)-(t-st/2.))<0) or (z+sz/2.>1) or (z-sz/2.<0) or (t-st/2.<0):
@@ -6436,7 +6445,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
   }
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":116
- *
+ * 
  *     # transform x,v,z if x is upper bound response
  *     if x > 0:             # <<<<<<<<<<<<<<
  *         v = -v
@@ -6451,7 +6460,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
  *     if x > 0:
  *         v = -v             # <<<<<<<<<<<<<<
  *         z = 1.-z
- *
+ * 
  */
     __Pyx_TraceLine(117,1,__PYX_ERR(2, 117, __pyx_L1_error))
     __pyx_v_v = (-__pyx_v_v);
@@ -6460,14 +6469,14 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
  *     if x > 0:
  *         v = -v
  *         z = 1.-z             # <<<<<<<<<<<<<<
- *
+ * 
  *     x = fabs(x)
  */
     __Pyx_TraceLine(118,1,__PYX_ERR(2, 118, __pyx_L1_error))
     __pyx_v_z = (1. - __pyx_v_z);
 
     /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":116
- *
+ * 
  *     # transform x,v,z if x is upper bound response
  *     if x > 0:             # <<<<<<<<<<<<<<
  *         v = -v
@@ -6477,9 +6486,9 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":120
  *         z = 1.-z
- *
+ * 
  *     x = fabs(x)             # <<<<<<<<<<<<<<
- *
+ * 
  *     if st<1e-3:
  */
   __Pyx_TraceLine(120,1,__PYX_ERR(2, 120, __pyx_L1_error))
@@ -6487,7 +6496,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":122
  *     x = fabs(x)
- *
+ * 
  *     if st<1e-3:             # <<<<<<<<<<<<<<
  *         st = 0
  *     if sz <1e-3:
@@ -6497,7 +6506,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
   if (__pyx_t_1) {
 
     /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":123
- *
+ * 
  *     if st<1e-3:
  *         st = 0             # <<<<<<<<<<<<<<
  *     if sz <1e-3:
@@ -6508,7 +6517,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
 
     /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":122
  *     x = fabs(x)
- *
+ * 
  *     if st<1e-3:             # <<<<<<<<<<<<<<
  *         st = 0
  *     if sz <1e-3:
@@ -6520,7 +6529,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
  *         st = 0
  *     if sz <1e-3:             # <<<<<<<<<<<<<<
  *         sz = 0
- *
+ * 
  */
   __Pyx_TraceLine(124,1,__PYX_ERR(2, 124, __pyx_L1_error))
   __pyx_t_1 = (__pyx_v_sz < 1e-3);
@@ -6530,7 +6539,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
  *         st = 0
  *     if sz <1e-3:
  *         sz = 0             # <<<<<<<<<<<<<<
- *
+ * 
  *     if (sz==0):
  */
     __Pyx_TraceLine(125,1,__PYX_ERR(2, 125, __pyx_L1_error))
@@ -6541,13 +6550,13 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
  *         st = 0
  *     if sz <1e-3:             # <<<<<<<<<<<<<<
  *         sz = 0
- *
+ * 
  */
   }
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":127
  *         sz = 0
- *
+ * 
  *     if (sz==0):             # <<<<<<<<<<<<<<
  *         if (st==0): #sv=0,sz=0,st=0
  *             return pdf_sv(x - t, v, sv, a, z, err)
@@ -6557,7 +6566,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
   if (__pyx_t_1) {
 
     /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":128
- *
+ * 
  *     if (sz==0):
  *         if (st==0): #sv=0,sz=0,st=0             # <<<<<<<<<<<<<<
  *             return pdf_sv(x - t, v, sv, a, z, err)
@@ -6580,7 +6589,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
       goto __pyx_L0;
 
       /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":128
- *
+ * 
  *     if (sz==0):
  *         if (st==0): #sv=0,sz=0,st=0             # <<<<<<<<<<<<<<
  *             return pdf_sv(x - t, v, sv, a, z, err)
@@ -6625,7 +6634,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
  *                 return adaptiveSimpsons_1D(x,  v, sv, a, z, t, err, z, z, t-st/2., t+st/2., simps_err, n_st)
  *             else:
  *                 return simpson_1D(x, v, sv, a, z, t, err, z, z, 0, t-st/2., t+st/2., n_st)             # <<<<<<<<<<<<<<
- *
+ * 
  *     else: #sz=$
  */
       __Pyx_TraceLine(134,1,__PYX_ERR(2, 134, __pyx_L1_error))
@@ -6638,7 +6647,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
 
     /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":127
  *         sz = 0
- *
+ * 
  *     if (sz==0):             # <<<<<<<<<<<<<<
  *         if (st==0): #sv=0,sz=0,st=0
  *             return pdf_sv(x - t, v, sv, a, z, err)
@@ -6646,7 +6655,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
   }
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":137
- *
+ * 
  *     else: #sz=$
  *         if (st==0): #sv=0,sz=$,st=0             # <<<<<<<<<<<<<<
  *             if use_adaptive:
@@ -6703,7 +6712,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
       }
 
       /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":137
- *
+ * 
  *     else: #sz=$
  *         if (st==0): #sv=0,sz=$,st=0             # <<<<<<<<<<<<<<
  *             if use_adaptive:
@@ -6759,7 +6768,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":104
  *     return exp(log(p) + ((a*z*sv)**2 - 2*a*v*z - (v**2)*x)/(2*(sv**2)*x+2))/sqrt((sv**2)*x+1)/(a**2)
- *
+ * 
  * cpdef double full_pdf(double x, double v, double sv, double a, double             # <<<<<<<<<<<<<<
  *                       z, double sz, double t, double st, double err, int
  *                       n_st=2, int n_sz=2, bint use_adaptive=1, double
@@ -6782,7 +6791,7 @@ static double __pyx_f_4wfpt_full_pdf(double __pyx_v_x, double __pyx_v_v, double 
 }
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_1full_pdf(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_1full_pdf(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -6791,7 +6800,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_full_pdf, "full_pdf(double x, double v, double sv, double a, double z, double sz, double t, double st, double err, int n_st=2, int n_sz=2, bool use_adaptive=1, double simps_err=1e-3) -> double\nfull pdf");
 static PyMethodDef __pyx_mdef_4wfpt_1full_pdf = {"full_pdf", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_1full_pdf, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_full_pdf};
-static PyObject *__pyx_pw_4wfpt_1full_pdf(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_1full_pdf(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -7108,7 +7117,7 @@ static PyObject *__pyx_pf_4wfpt_full_pdf(CYTHON_UNUSED PyObject *__pyx_self, dou
 
 /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":12
  * include 'pdf.pxi'
- *
+ * 
  * cdef double simpson_1D(double x, double v, double sv, double a, double z, double t, double err,             # <<<<<<<<<<<<<<
  *                         double lb_z, double ub_z, int n_sz, double lb_t, double ub_t, int n_st) nogil:
  *     #assert ((n_sz&1)==0 and (n_st&1)==0), "n_st and n_sz have to be even"
@@ -7139,7 +7148,7 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
   __Pyx_TraceCall("simpson_1D", __pyx_f[3], 12, 1, __PYX_ERR(3, 12, __pyx_L1_error));
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":18
- *
+ * 
  *     cdef double ht, hz
  *     cdef int n = max(n_st, n_sz)             # <<<<<<<<<<<<<<
  *     if n_st==0: #integration over z
@@ -7235,7 +7244,7 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
  *         ht = (ub_t-lb_t)/n
  *         lb_z = z             # <<<<<<<<<<<<<<
  *         ub_z = z
- *
+ * 
  */
     __Pyx_TraceLine(27,1,__PYX_ERR(3, 27, __pyx_L1_error))
     __pyx_v_lb_z = __pyx_v_z;
@@ -7244,7 +7253,7 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
  *         ht = (ub_t-lb_t)/n
  *         lb_z = z
  *         ub_z = z             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef double S = pdf_sv(x - lb_t, v, sv, a, lb_z, err)
  */
     __Pyx_TraceLine(28,1,__PYX_ERR(3, 28, __pyx_L1_error))
@@ -7254,7 +7263,7 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":30
  *         ub_z = z
- *
+ * 
  *     cdef double S = pdf_sv(x - lb_t, v, sv, a, lb_z, err)             # <<<<<<<<<<<<<<
  *     cdef double z_tag, t_tag, y
  *     cdef int i
@@ -7265,7 +7274,7 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":34
  *     cdef int i
- *
+ * 
  *     for i from 1 <= i <= n:             # <<<<<<<<<<<<<<
  *         z_tag = lb_z + hz * i
  *         t_tag = lb_t + ht * i
@@ -7275,7 +7284,7 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
   for (__pyx_v_i = 1; __pyx_v_i <= __pyx_t_3; __pyx_v_i++) {
 
     /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":35
- *
+ * 
  *     for i from 1 <= i <= n:
  *         z_tag = lb_z + hz * i             # <<<<<<<<<<<<<<
  *         t_tag = lb_t + ht * i
@@ -7355,7 +7364,7 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
  *             S += (2 * y)
  *     S = S - y #the last term should be f(b) and not 2*f(b) so we subtract y             # <<<<<<<<<<<<<<
  *     S = S / ((ub_t-lb_t)+(ub_z-lb_z)) #the right function if pdf_sv()/sz or pdf_sv()/st
- *
+ * 
  */
   __Pyx_TraceLine(42,1,__PYX_ERR(3, 42, __pyx_L1_error))
   __pyx_v_S = (__pyx_v_S - __pyx_v_y);
@@ -7364,7 +7373,7 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
  *             S += (2 * y)
  *     S = S - y #the last term should be f(b) and not 2*f(b) so we subtract y
  *     S = S / ((ub_t-lb_t)+(ub_z-lb_z)) #the right function if pdf_sv()/sz or pdf_sv()/st             # <<<<<<<<<<<<<<
- *
+ * 
  *     return ((ht+hz) * S / 3)
  */
   __Pyx_TraceLine(43,1,__PYX_ERR(3, 43, __pyx_L1_error))
@@ -7372,9 +7381,9 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":45
  *     S = S / ((ub_t-lb_t)+(ub_z-lb_z)) #the right function if pdf_sv()/sz or pdf_sv()/st
- *
+ * 
  *     return ((ht+hz) * S / 3)             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef double simpson_2D(double x, double v, double sv, double a, double z, double t, double err, double lb_z, double ub_z, int n_sz, double lb_t, double ub_t, int n_st) nogil:
  */
   __Pyx_TraceLine(45,1,__PYX_ERR(3, 45, __pyx_L1_error))
@@ -7383,7 +7392,7 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":12
  * include 'pdf.pxi'
- *
+ * 
  * cdef double simpson_1D(double x, double v, double sv, double a, double z, double t, double err,             # <<<<<<<<<<<<<<
  *                         double lb_z, double ub_z, int n_sz, double lb_t, double ub_t, int n_st) nogil:
  *     #assert ((n_sz&1)==0 and (n_st&1)==0), "n_st and n_sz have to be even"
@@ -7407,7 +7416,7 @@ static double __pyx_f_4wfpt_simpson_1D(double __pyx_v_x, double __pyx_v_v, doubl
 
 /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":47
  *     return ((ht+hz) * S / 3)
- *
+ * 
  * cdef double simpson_2D(double x, double v, double sv, double a, double z, double t, double err, double lb_z, double ub_z, int n_sz, double lb_t, double ub_t, int n_st) nogil:             # <<<<<<<<<<<<<<
  *     #assert ((n_sz&1)==0 and (n_st&1)==0), "n_st and n_sz have to be even"
  *     #assert ((ub_t-lb_t)*(ub_z-lb_z)>0 and (n_sz*n_st)>0), "the function is defined for 2D-integration only, lb_t: %f, ub_t %f, lb_z %f, ub_z %f, n_sz: %d, n_st %d" % (lb_t, ub_t, lb_z, ub_z, n_sz, n_st)
@@ -7436,9 +7445,9 @@ static double __pyx_f_4wfpt_simpson_2D(double __pyx_v_x, double __pyx_v_v, doubl
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":56
  *     cdef int i_t
- *
+ * 
  *     ht = (ub_t-lb_t)/n_st             # <<<<<<<<<<<<<<
- *
+ * 
  *     S = simpson_1D(x, v, sv, a, z, lb_t, err, lb_z, ub_z, n_sz, 0, 0, 0)
  */
   __Pyx_TraceLine(56,1,__PYX_ERR(3, 56, __pyx_L1_error))
@@ -7446,9 +7455,9 @@ static double __pyx_f_4wfpt_simpson_2D(double __pyx_v_x, double __pyx_v_v, doubl
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":58
  *     ht = (ub_t-lb_t)/n_st
- *
+ * 
  *     S = simpson_1D(x, v, sv, a, z, lb_t, err, lb_z, ub_z, n_sz, 0, 0, 0)             # <<<<<<<<<<<<<<
- *
+ * 
  *     for i_t  from 1 <= i_t <= n_st:
  */
   __Pyx_TraceLine(58,1,__PYX_ERR(3, 58, __pyx_L1_error))
@@ -7457,7 +7466,7 @@ static double __pyx_f_4wfpt_simpson_2D(double __pyx_v_x, double __pyx_v_v, doubl
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":60
  *     S = simpson_1D(x, v, sv, a, z, lb_t, err, lb_z, ub_z, n_sz, 0, 0, 0)
- *
+ * 
  *     for i_t  from 1 <= i_t <= n_st:             # <<<<<<<<<<<<<<
  *         t_tag = lb_t + ht * i_t
  *         y = simpson_1D(x, v, sv, a, z, t_tag, err, lb_z, ub_z, n_sz, 0, 0, 0)
@@ -7467,7 +7476,7 @@ static double __pyx_f_4wfpt_simpson_2D(double __pyx_v_x, double __pyx_v_v, doubl
   for (__pyx_v_i_t = 1; __pyx_v_i_t <= __pyx_t_2; __pyx_v_i_t++) {
 
     /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":61
- *
+ * 
  *     for i_t  from 1 <= i_t <= n_st:
  *         t_tag = lb_t + ht * i_t             # <<<<<<<<<<<<<<
  *         y = simpson_1D(x, v, sv, a, z, t_tag, err, lb_z, ub_z, n_sz, 0, 0, 0)
@@ -7537,7 +7546,7 @@ static double __pyx_f_4wfpt_simpson_2D(double __pyx_v_x, double __pyx_v_v, doubl
  *             S += (2 * y)
  *     S = S - y #the last term should be f(b) and not 2*f(b) so we subtract y             # <<<<<<<<<<<<<<
  *     S = S/ (ub_t-lb_t)
- *
+ * 
  */
   __Pyx_TraceLine(67,1,__PYX_ERR(3, 67, __pyx_L1_error))
   __pyx_v_S = (__pyx_v_S - __pyx_v_y);
@@ -7546,7 +7555,7 @@ static double __pyx_f_4wfpt_simpson_2D(double __pyx_v_x, double __pyx_v_v, doubl
  *             S += (2 * y)
  *     S = S - y #the last term should be f(b) and not 2*f(b) so we subtract y
  *     S = S/ (ub_t-lb_t)             # <<<<<<<<<<<<<<
- *
+ * 
  *     return (ht * S / 3)
  */
   __Pyx_TraceLine(68,1,__PYX_ERR(3, 68, __pyx_L1_error))
@@ -7554,9 +7563,9 @@ static double __pyx_f_4wfpt_simpson_2D(double __pyx_v_x, double __pyx_v_v, doubl
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":70
  *     S = S/ (ub_t-lb_t)
- *
+ * 
  *     return (ht * S / 3)             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef double adaptiveSimpsonsAux(double x, double v, double sv, double a, double z, double t, double pdf_err,
  */
   __Pyx_TraceLine(70,1,__PYX_ERR(3, 70, __pyx_L1_error))
@@ -7565,7 +7574,7 @@ static double __pyx_f_4wfpt_simpson_2D(double __pyx_v_x, double __pyx_v_v, doubl
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":47
  *     return ((ht+hz) * S / 3)
- *
+ * 
  * cdef double simpson_2D(double x, double v, double sv, double a, double z, double t, double err, double lb_z, double ub_z, int n_sz, double lb_t, double ub_t, int n_st) nogil:             # <<<<<<<<<<<<<<
  *     #assert ((n_sz&1)==0 and (n_st&1)==0), "n_st and n_sz have to be even"
  *     #assert ((ub_t-lb_t)*(ub_z-lb_z)>0 and (n_sz*n_st)>0), "the function is defined for 2D-integration only, lb_t: %f, ub_t %f, lb_z %f, ub_z %f, n_sz: %d, n_st %d" % (lb_t, ub_t, lb_z, ub_z, n_sz, n_st)
@@ -7589,7 +7598,7 @@ static double __pyx_f_4wfpt_simpson_2D(double __pyx_v_x, double __pyx_v_v, doubl
 
 /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":72
  *     return (ht * S / 3)
- *
+ * 
  * cdef double adaptiveSimpsonsAux(double x, double v, double sv, double a, double z, double t, double pdf_err,             # <<<<<<<<<<<<<<
  *                                  double lb_z, double ub_z, double lb_t, double ub_t, double ZT, double simps_err,
  *                                  double S, double f_beg, double f_end, double f_mid, int bottom) nogil:
@@ -7626,7 +7635,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":81
  *     #print "in AdaptiveSimpsAux: lb_z: %f, ub_z: %f, lb_t %f, ub_t %f, f_beg: %f, f_end: %f, bottom: %d" % (lb_z, ub_z, lb_t, ub_t, f_beg, f_end, bottom)
- *
+ * 
  *     if (ub_t-lb_t) == 0: #integration over sz             # <<<<<<<<<<<<<<
  *         h = ub_z - lb_z
  *         z_c = (ub_z + lb_z)/2.
@@ -7636,7 +7645,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
   if (__pyx_t_1) {
 
     /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":82
- *
+ * 
  *     if (ub_t-lb_t) == 0: #integration over sz
  *         h = ub_z - lb_z             # <<<<<<<<<<<<<<
  *         z_c = (ub_z + lb_z)/2.
@@ -7690,7 +7699,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
  *         t_c = t
  *         t_d = t             # <<<<<<<<<<<<<<
  *         t_e = t
- *
+ * 
  */
     __Pyx_TraceLine(87,1,__PYX_ERR(3, 87, __pyx_L1_error))
     __pyx_v_t_d = __pyx_v_t;
@@ -7699,7 +7708,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
  *         t_c = t
  *         t_d = t
  *         t_e = t             # <<<<<<<<<<<<<<
- *
+ * 
  *     else: #integration over t
  */
     __Pyx_TraceLine(88,1,__PYX_ERR(3, 88, __pyx_L1_error))
@@ -7707,7 +7716,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
 
     /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":81
  *     #print "in AdaptiveSimpsAux: lb_z: %f, ub_z: %f, lb_t %f, ub_t %f, f_beg: %f, f_end: %f, bottom: %d" % (lb_z, ub_z, lb_t, ub_t, f_beg, f_end, bottom)
- *
+ * 
  *     if (ub_t-lb_t) == 0: #integration over sz             # <<<<<<<<<<<<<<
  *         h = ub_z - lb_z
  *         z_c = (ub_z + lb_z)/2.
@@ -7716,7 +7725,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
   }
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":91
- *
+ * 
  *     else: #integration over t
  *         h = ub_t - lb_t             # <<<<<<<<<<<<<<
  *         t_c = (ub_t + lb_t)/2.
@@ -7771,7 +7780,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
  *         z_c = z
  *         z_d = z             # <<<<<<<<<<<<<<
  *         z_e = z
- *
+ * 
  */
     __Pyx_TraceLine(96,1,__PYX_ERR(3, 96, __pyx_L1_error))
     __pyx_v_z_d = __pyx_v_z;
@@ -7780,7 +7789,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
  *         z_c = z
  *         z_d = z
  *         z_e = z             # <<<<<<<<<<<<<<
- *
+ * 
  *     fd = pdf_sv(x - t_d, v, sv, a, z_d, pdf_err)/ZT
  */
     __Pyx_TraceLine(97,1,__PYX_ERR(3, 97, __pyx_L1_error))
@@ -7790,20 +7799,20 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":99
  *         z_e = z
- *
+ * 
  *     fd = pdf_sv(x - t_d, v, sv, a, z_d, pdf_err)/ZT             # <<<<<<<<<<<<<<
  *     fe = pdf_sv(x - t_e, v, sv, a, z_e, pdf_err)/ZT
- *
+ * 
  */
   __Pyx_TraceLine(99,1,__PYX_ERR(3, 99, __pyx_L1_error))
   __pyx_t_2 = __pyx_f_4wfpt_pdf_sv((__pyx_v_x - __pyx_v_t_d), __pyx_v_v, __pyx_v_sv, __pyx_v_a, __pyx_v_z_d, __pyx_v_pdf_err); if (unlikely(__pyx_t_2 == ((double)-1) && __Pyx_ErrOccurredWithGIL())) __PYX_ERR(3, 99, __pyx_L1_error)
   __pyx_v_fd = (__pyx_t_2 / __pyx_v_ZT);
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":100
- *
+ * 
  *     fd = pdf_sv(x - t_d, v, sv, a, z_d, pdf_err)/ZT
  *     fe = pdf_sv(x - t_e, v, sv, a, z_e, pdf_err)/ZT             # <<<<<<<<<<<<<<
- *
+ * 
  *     Sleft = (h/12)*(f_beg + 4*fd + f_mid)
  */
   __Pyx_TraceLine(100,1,__PYX_ERR(3, 100, __pyx_L1_error))
@@ -7812,7 +7821,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":102
  *     fe = pdf_sv(x - t_e, v, sv, a, z_e, pdf_err)/ZT
- *
+ * 
  *     Sleft = (h/12)*(f_beg + 4*fd + f_mid)             # <<<<<<<<<<<<<<
  *     Sright = (h/12)*(f_mid + 4*fe + f_end)
  *     S2 = Sleft + Sright
@@ -7821,7 +7830,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
   __pyx_v_Sleft = ((__pyx_v_h / 12.0) * ((__pyx_v_f_beg + (4.0 * __pyx_v_fd)) + __pyx_v_f_mid));
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":103
- *
+ * 
  *     Sleft = (h/12)*(f_beg + 4*fd + f_mid)
  *     Sright = (h/12)*(f_mid + 4*fe + f_end)             # <<<<<<<<<<<<<<
  *     S2 = Sleft + Sright
@@ -7912,7 +7921,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":72
  *     return (ht * S / 3)
- *
+ * 
  * cdef double adaptiveSimpsonsAux(double x, double v, double sv, double a, double z, double t, double pdf_err,             # <<<<<<<<<<<<<<
  *                                  double lb_z, double ub_z, double lb_t, double ub_t, double ZT, double simps_err,
  *                                  double S, double f_beg, double f_end, double f_mid, int bottom) nogil:
@@ -7936,7 +7945,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux(double __pyx_v_x, double __pyx_v
 
 /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":114
  *                                  Sright, f_mid, f_end, fe, bottom-1)
- *
+ * 
  * cdef double adaptiveSimpsons_1D(double x, double v, double sv, double a, double z, double t,             # <<<<<<<<<<<<<<
  *                               double pdf_err, double lb_z, double ub_z, double lb_t, double ub_t,
  *                               double simps_err, int maxRecursionDepth) nogil:
@@ -7968,7 +7977,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":120
  *     cdef double h
- *
+ * 
  *     if (ub_t - lb_t) == 0: #integration over z             # <<<<<<<<<<<<<<
  *         lb_t = t
  *         ub_t = t
@@ -7978,7 +7987,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
   if (__pyx_t_1) {
 
     /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":121
- *
+ * 
  *     if (ub_t - lb_t) == 0: #integration over z
  *         lb_t = t             # <<<<<<<<<<<<<<
  *         ub_t = t
@@ -8009,7 +8018,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
 
     /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":120
  *     cdef double h
- *
+ * 
  *     if (ub_t - lb_t) == 0: #integration over z             # <<<<<<<<<<<<<<
  *         lb_t = t
  *         ub_t = t
@@ -8033,7 +8042,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
  *         h = (ub_t-lb_t)
  *         lb_z = z             # <<<<<<<<<<<<<<
  *         ub_z = z
- *
+ * 
  */
     __Pyx_TraceLine(126,1,__PYX_ERR(3, 126, __pyx_L1_error))
     __pyx_v_lb_z = __pyx_v_z;
@@ -8042,7 +8051,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
  *         h = (ub_t-lb_t)
  *         lb_z = z
  *         ub_z = z             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef double ZT = h
  */
     __Pyx_TraceLine(127,1,__PYX_ERR(3, 127, __pyx_L1_error))
@@ -8052,7 +8061,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":129
  *         ub_z = z
- *
+ * 
  *     cdef double ZT = h             # <<<<<<<<<<<<<<
  *     cdef double c_t = (lb_t + ub_t)/2.
  *     cdef double c_z = (lb_z + ub_z)/2.
@@ -8061,11 +8070,11 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
   __pyx_v_ZT = __pyx_v_h;
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":130
- *
+ * 
  *     cdef double ZT = h
  *     cdef double c_t = (lb_t + ub_t)/2.             # <<<<<<<<<<<<<<
  *     cdef double c_z = (lb_z + ub_z)/2.
- *
+ * 
  */
   __Pyx_TraceLine(130,1,__PYX_ERR(3, 130, __pyx_L1_error))
   __pyx_v_c_t = ((__pyx_v_lb_t + __pyx_v_ub_t) / 2.);
@@ -8074,14 +8083,14 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
  *     cdef double ZT = h
  *     cdef double c_t = (lb_t + ub_t)/2.
  *     cdef double c_z = (lb_z + ub_z)/2.             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef double f_beg, f_end, f_mid, S
  */
   __Pyx_TraceLine(131,1,__PYX_ERR(3, 131, __pyx_L1_error))
   __pyx_v_c_z = ((__pyx_v_lb_z + __pyx_v_ub_z) / 2.);
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":134
- *
+ * 
  *     cdef double f_beg, f_end, f_mid, S
  *     f_beg = pdf_sv(x - lb_t, v, sv, a, lb_z, pdf_err)/ZT             # <<<<<<<<<<<<<<
  *     f_end = pdf_sv(x - ub_t, v, sv, a, ub_z, pdf_err)/ZT
@@ -8138,7 +8147,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
  *                                  lb_z, ub_z, lb_t, ub_t, ZT, simps_err,
  *                                  S, f_beg, f_end, f_mid, maxRecursionDepth)
  *     return res             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef double adaptiveSimpsonsAux_2D(double x, double v, double sv,
  */
   __Pyx_TraceLine(141,1,__PYX_ERR(3, 141, __pyx_L1_error))
@@ -8147,7 +8156,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":114
  *                                  Sright, f_mid, f_end, fe, bottom-1)
- *
+ * 
  * cdef double adaptiveSimpsons_1D(double x, double v, double sv, double a, double z, double t,             # <<<<<<<<<<<<<<
  *                               double pdf_err, double lb_z, double ub_z, double lb_t, double ub_t,
  *                               double simps_err, int maxRecursionDepth) nogil:
@@ -8171,7 +8180,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_1D(double __pyx_v_x, double __pyx_v
 
 /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":143
  *     return res
- *
+ * 
  * cdef double adaptiveSimpsonsAux_2D(double x, double v, double sv,             # <<<<<<<<<<<<<<
  *                                    double a, double z, double t, double
  *                                    pdf_err, double err_1d, double lb_z,
@@ -8205,7 +8214,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":156
  *     #print "in AdaptiveSimpsAux_2D: lb_z: %f, ub_z: %f, lb_t %f, ub_t %f, f_beg: %f, f_end: %f, bottom: %d" % (lb_z, ub_z, lb_t, ub_t, f_beg, f_end, bottom)
- *
+ * 
  *     cdef double t_c = (ub_t + lb_t)/2.             # <<<<<<<<<<<<<<
  *     cdef double t_d = (lb_t + t_c)/2.
  *     cdef double t_e = (t_c  + ub_t)/2.
@@ -8214,7 +8223,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
   __pyx_v_t_c = ((__pyx_v_ub_t + __pyx_v_lb_t) / 2.);
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":157
- *
+ * 
  *     cdef double t_c = (ub_t + lb_t)/2.
  *     cdef double t_d = (lb_t + t_c)/2.             # <<<<<<<<<<<<<<
  *     cdef double t_e = (t_c  + ub_t)/2.
@@ -8228,7 +8237,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
  *     cdef double t_d = (lb_t + t_c)/2.
  *     cdef double t_e = (t_c  + ub_t)/2.             # <<<<<<<<<<<<<<
  *     cdef double h = ub_t - lb_t
- *
+ * 
  */
   __Pyx_TraceLine(158,1,__PYX_ERR(3, 158, __pyx_L1_error))
   __pyx_v_t_e = ((__pyx_v_t_c + __pyx_v_ub_t) / 2.);
@@ -8237,7 +8246,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
  *     cdef double t_d = (lb_t + t_c)/2.
  *     cdef double t_e = (t_c  + ub_t)/2.
  *     cdef double h = ub_t - lb_t             # <<<<<<<<<<<<<<
- *
+ * 
  *     fd = adaptiveSimpsons_1D(x, v, sv, a, z, t_d, pdf_err, lb_z, ub_z,
  */
   __Pyx_TraceLine(159,1,__PYX_ERR(3, 159, __pyx_L1_error))
@@ -8245,7 +8254,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":161
  *     cdef double h = ub_t - lb_t
- *
+ * 
  *     fd = adaptiveSimpsons_1D(x, v, sv, a, z, t_d, pdf_err, lb_z, ub_z,             # <<<<<<<<<<<<<<
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st
  *     fe = adaptiveSimpsons_1D(x, v, sv, a, z, t_e, pdf_err, lb_z, ub_z,
@@ -8254,7 +8263,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
   __pyx_t_1 = __pyx_f_4wfpt_adaptiveSimpsons_1D(__pyx_v_x, __pyx_v_v, __pyx_v_sv, __pyx_v_a, __pyx_v_z, __pyx_v_t_d, __pyx_v_pdf_err, __pyx_v_lb_z, __pyx_v_ub_z, 0.0, 0.0, __pyx_v_err_1d, __pyx_v_maxRecursionDepth_sz); if (unlikely(__pyx_t_1 == ((double)-1) && __Pyx_ErrOccurredWithGIL())) __PYX_ERR(3, 161, __pyx_L1_error)
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":162
- *
+ * 
  *     fd = adaptiveSimpsons_1D(x, v, sv, a, z, t_d, pdf_err, lb_z, ub_z,
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st             # <<<<<<<<<<<<<<
  *     fe = adaptiveSimpsons_1D(x, v, sv, a, z, t_e, pdf_err, lb_z, ub_z,
@@ -8268,7 +8277,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st
  *     fe = adaptiveSimpsons_1D(x, v, sv, a, z, t_e, pdf_err, lb_z, ub_z,             # <<<<<<<<<<<<<<
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st
- *
+ * 
  */
   __Pyx_TraceLine(163,1,__PYX_ERR(3, 163, __pyx_L1_error))
   __pyx_t_1 = __pyx_f_4wfpt_adaptiveSimpsons_1D(__pyx_v_x, __pyx_v_v, __pyx_v_sv, __pyx_v_a, __pyx_v_z, __pyx_v_t_e, __pyx_v_pdf_err, __pyx_v_lb_z, __pyx_v_ub_z, 0.0, 0.0, __pyx_v_err_1d, __pyx_v_maxRecursionDepth_sz); if (unlikely(__pyx_t_1 == ((double)-1) && __Pyx_ErrOccurredWithGIL())) __PYX_ERR(3, 163, __pyx_L1_error)
@@ -8277,7 +8286,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st
  *     fe = adaptiveSimpsons_1D(x, v, sv, a, z, t_e, pdf_err, lb_z, ub_z,
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st             # <<<<<<<<<<<<<<
- *
+ * 
  *     Sleft = (h/12)*(f_beg + 4*fd + f_mid)
  */
   __Pyx_TraceLine(164,1,__PYX_ERR(3, 164, __pyx_L1_error))
@@ -8285,7 +8294,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":166
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st
- *
+ * 
  *     Sleft = (h/12)*(f_beg + 4*fd + f_mid)             # <<<<<<<<<<<<<<
  *     Sright = (h/12)*(f_mid + 4*fe + f_end)
  *     S2 = Sleft + Sright
@@ -8294,11 +8303,11 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
   __pyx_v_Sleft = ((__pyx_v_h / 12.0) * ((__pyx_v_f_beg + (4.0 * __pyx_v_fd)) + __pyx_v_f_mid));
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":167
- *
+ * 
  *     Sleft = (h/12)*(f_beg + 4*fd + f_mid)
  *     Sright = (h/12)*(f_mid + 4*fe + f_end)             # <<<<<<<<<<<<<<
  *     S2 = Sleft + Sright
- *
+ * 
  */
   __Pyx_TraceLine(167,1,__PYX_ERR(3, 167, __pyx_L1_error))
   __pyx_v_Sright = ((__pyx_v_h / 12.0) * ((__pyx_v_f_mid + (4.0 * __pyx_v_fe)) + __pyx_v_f_end));
@@ -8307,7 +8316,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
  *     Sleft = (h/12)*(f_beg + 4*fd + f_mid)
  *     Sright = (h/12)*(f_mid + 4*fe + f_end)
  *     S2 = Sleft + Sright             # <<<<<<<<<<<<<<
- *
+ * 
  *     if (bottom <= 0 or fabs(S2 - S) <= 15*err_2d):
  */
   __Pyx_TraceLine(168,1,__PYX_ERR(3, 168, __pyx_L1_error))
@@ -8315,10 +8324,10 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":170
  *     S2 = Sleft + Sright
- *
+ * 
  *     if (bottom <= 0 or fabs(S2 - S) <= 15*err_2d):             # <<<<<<<<<<<<<<
  *         return S2 + (S2 - S)/15;
- *
+ * 
  */
   __Pyx_TraceLine(170,1,__PYX_ERR(3, 170, __pyx_L1_error))
   __pyx_t_3 = (__pyx_v_bottom <= 0);
@@ -8333,10 +8342,10 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
   if (__pyx_t_2) {
 
     /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":171
- *
+ * 
  *     if (bottom <= 0 or fabs(S2 - S) <= 15*err_2d):
  *         return S2 + (S2 - S)/15;             # <<<<<<<<<<<<<<
- *
+ * 
  *     return adaptiveSimpsonsAux_2D(x, v, sv, a, z, t, pdf_err, err_1d,
  */
     __Pyx_TraceLine(171,1,__PYX_ERR(3, 171, __pyx_L1_error))
@@ -8345,16 +8354,16 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
 
     /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":170
  *     S2 = Sleft + Sright
- *
+ * 
  *     if (bottom <= 0 or fabs(S2 - S) <= 15*err_2d):             # <<<<<<<<<<<<<<
  *         return S2 + (S2 - S)/15;
- *
+ * 
  */
   }
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":173
  *         return S2 + (S2 - S)/15;
- *
+ * 
  *     return adaptiveSimpsonsAux_2D(x, v, sv, a, z, t, pdf_err, err_1d,             # <<<<<<<<<<<<<<
  *                                  lb_z, ub_z, lb_t, t_c, st, err_2d/2,
  *                                  Sleft, f_beg, f_mid, fd, maxRecursionDepth_sz, bottom-1) + \
@@ -8385,7 +8394,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":143
  *     return res
- *
+ * 
  * cdef double adaptiveSimpsonsAux_2D(double x, double v, double sv,             # <<<<<<<<<<<<<<
  *                                    double a, double z, double t, double
  *                                    pdf_err, double err_1d, double lb_z,
@@ -8408,8 +8417,8 @@ static double __pyx_f_4wfpt_adaptiveSimpsonsAux_2D(double __pyx_v_x, double __py
 }
 
 /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":181
- *
- *
+ * 
+ * 
  * cdef double adaptiveSimpsons_2D(double x, double v, double sv, double a, double z, double t,             # <<<<<<<<<<<<<<
  *                                  double pdf_err, double lb_z, double ub_z, double lb_t, double ub_t,
  *                                  double simps_err, int maxRecursionDepth_sz, int maxRecursionDepth_st) nogil:
@@ -8442,9 +8451,9 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_2D(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":185
  *                                  double simps_err, int maxRecursionDepth_sz, int maxRecursionDepth_st) nogil:
- *
+ * 
  *     cdef double h = (ub_t-lb_t)             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef double st = (ub_t - lb_t)
  */
   __Pyx_TraceLine(185,1,__PYX_ERR(3, 185, __pyx_L1_error))
@@ -8452,7 +8461,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_2D(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":187
  *     cdef double h = (ub_t-lb_t)
- *
+ * 
  *     cdef double st = (ub_t - lb_t)             # <<<<<<<<<<<<<<
  *     cdef double c_t = (lb_t + ub_t)/2.
  *     cdef double c_z = (lb_z + ub_z)/2.
@@ -8461,11 +8470,11 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_2D(double __pyx_v_x, double __pyx_v
   __pyx_v_st = (__pyx_v_ub_t - __pyx_v_lb_t);
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":188
- *
+ * 
  *     cdef double st = (ub_t - lb_t)
  *     cdef double c_t = (lb_t + ub_t)/2.             # <<<<<<<<<<<<<<
  *     cdef double c_z = (lb_z + ub_z)/2.
- *
+ * 
  */
   __Pyx_TraceLine(188,1,__PYX_ERR(3, 188, __pyx_L1_error))
   __pyx_v_c_t = ((__pyx_v_lb_t + __pyx_v_ub_t) / 2.);
@@ -8474,18 +8483,18 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_2D(double __pyx_v_x, double __pyx_v
  *     cdef double st = (ub_t - lb_t)
  *     cdef double c_t = (lb_t + ub_t)/2.
  *     cdef double c_z = (lb_z + ub_z)/2.             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef double f_beg, f_end, f_mid, S
  */
   __Pyx_TraceLine(189,1,__PYX_ERR(3, 189, __pyx_L1_error))
   __pyx_v_c_z = ((__pyx_v_lb_z + __pyx_v_ub_z) / 2.);
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":192
- *
+ * 
  *     cdef double f_beg, f_end, f_mid, S
  *     cdef double err_1d = simps_err             # <<<<<<<<<<<<<<
  *     cdef double err_2d = simps_err
- *
+ * 
  */
   __Pyx_TraceLine(192,1,__PYX_ERR(3, 192, __pyx_L1_error))
   __pyx_v_err_1d = __pyx_v_simps_err;
@@ -8494,7 +8503,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_2D(double __pyx_v_x, double __pyx_v
  *     cdef double f_beg, f_end, f_mid, S
  *     cdef double err_1d = simps_err
  *     cdef double err_2d = simps_err             # <<<<<<<<<<<<<<
- *
+ * 
  *     f_beg = adaptiveSimpsons_1D(x, v, sv, a, z, lb_t, pdf_err, lb_z, ub_z,
  */
   __Pyx_TraceLine(193,1,__PYX_ERR(3, 193, __pyx_L1_error))
@@ -8502,19 +8511,19 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_2D(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":195
  *     cdef double err_2d = simps_err
- *
+ * 
  *     f_beg = adaptiveSimpsons_1D(x, v, sv, a, z, lb_t, pdf_err, lb_z, ub_z,             # <<<<<<<<<<<<<<
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st
- *
+ * 
  */
   __Pyx_TraceLine(195,1,__PYX_ERR(3, 195, __pyx_L1_error))
   __pyx_t_1 = __pyx_f_4wfpt_adaptiveSimpsons_1D(__pyx_v_x, __pyx_v_v, __pyx_v_sv, __pyx_v_a, __pyx_v_z, __pyx_v_lb_t, __pyx_v_pdf_err, __pyx_v_lb_z, __pyx_v_ub_z, 0.0, 0.0, __pyx_v_err_1d, __pyx_v_maxRecursionDepth_sz); if (unlikely(__pyx_t_1 == ((double)-1) && __Pyx_ErrOccurredWithGIL())) __PYX_ERR(3, 195, __pyx_L1_error)
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":196
- *
+ * 
  *     f_beg = adaptiveSimpsons_1D(x, v, sv, a, z, lb_t, pdf_err, lb_z, ub_z,
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st             # <<<<<<<<<<<<<<
- *
+ * 
  *     f_end = adaptiveSimpsons_1D(x, v, sv, a, z, ub_t, pdf_err, lb_z, ub_z,
  */
   __Pyx_TraceLine(196,1,__PYX_ERR(3, 196, __pyx_L1_error))
@@ -8522,7 +8531,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_2D(double __pyx_v_x, double __pyx_v
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":198
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st
- *
+ * 
  *     f_end = adaptiveSimpsons_1D(x, v, sv, a, z, ub_t, pdf_err, lb_z, ub_z,             # <<<<<<<<<<<<<<
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st
  *     f_mid = adaptiveSimpsons_1D(x, v, sv, a, z, (lb_t+ub_t)/2, pdf_err, lb_z, ub_z,
@@ -8531,7 +8540,7 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_2D(double __pyx_v_x, double __pyx_v
   __pyx_t_1 = __pyx_f_4wfpt_adaptiveSimpsons_1D(__pyx_v_x, __pyx_v_v, __pyx_v_sv, __pyx_v_a, __pyx_v_z, __pyx_v_ub_t, __pyx_v_pdf_err, __pyx_v_lb_z, __pyx_v_ub_z, 0.0, 0.0, __pyx_v_err_1d, __pyx_v_maxRecursionDepth_sz); if (unlikely(__pyx_t_1 == ((double)-1) && __Pyx_ErrOccurredWithGIL())) __PYX_ERR(3, 198, __pyx_L1_error)
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":199
- *
+ * 
  *     f_end = adaptiveSimpsons_1D(x, v, sv, a, z, ub_t, pdf_err, lb_z, ub_z,
  *                               0, 0, err_1d, maxRecursionDepth_sz)/st             # <<<<<<<<<<<<<<
  *     f_mid = adaptiveSimpsons_1D(x, v, sv, a, z, (lb_t+ub_t)/2, pdf_err, lb_z, ub_z,
@@ -8591,8 +8600,8 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_2D(double __pyx_v_x, double __pyx_v
   goto __pyx_L0;
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":181
- *
- *
+ * 
+ * 
  * cdef double adaptiveSimpsons_2D(double x, double v, double sv, double a, double z, double t,             # <<<<<<<<<<<<<<
  *                                  double pdf_err, double lb_z, double ub_z, double lb_t, double ub_t,
  *                                  double simps_err, int maxRecursionDepth_sz, int maxRecursionDepth_st) nogil:
@@ -8616,14 +8625,14 @@ static double __pyx_f_4wfpt_adaptiveSimpsons_2D(double __pyx_v_x, double __pyx_v
 
 /* "wfpt.pyx":32
  * include 'integrate.pxi'
- *
+ * 
  * def pdf_array(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz,             # <<<<<<<<<<<<<<
  *               double t, double st, double err=1e-4, bint logp=0, int n_st=2, int n_sz=2, bint use_adaptive=1,
  *               double simps_err=1e-3, double p_outlier=0, double w_outlier=0):
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_3pdf_array(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_3pdf_array(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -8632,7 +8641,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_2pdf_array, "pdf_array(ndarray x, double v, double sv, double a, double z, double sz, double t, double st, double err=1e-4, bool logp=0, int n_st=2, int n_sz=2, bool use_adaptive=1, double simps_err=1e-3, double p_outlier=0, double w_outlier=0)");
 static PyMethodDef __pyx_mdef_4wfpt_3pdf_array = {"pdf_array", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_3pdf_array, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_2pdf_array};
-static PyObject *__pyx_pw_4wfpt_3pdf_array(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_3pdf_array(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -9018,7 +9027,7 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
 
   /* "wfpt.pyx":36
  *               double simps_err=1e-3, double p_outlier=0, double w_outlier=0):
- *
+ * 
  *     cdef Py_ssize_t size = x.shape[0]             # <<<<<<<<<<<<<<
  *     cdef Py_ssize_t i
  *     cdef np.ndarray[double, ndim = 1] y = np.empty(size, dtype=np.double)
@@ -9031,7 +9040,7 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
  *     cdef Py_ssize_t size = x.shape[0]
  *     cdef Py_ssize_t i
  *     cdef np.ndarray[double, ndim = 1] y = np.empty(size, dtype=np.double)             # <<<<<<<<<<<<<<
- *
+ * 
  *     for i in prange(size, nogil=True):
  */
   __Pyx_TraceLine(38,0,__PYX_ERR(0, 38, __pyx_L1_error))
@@ -9077,7 +9086,7 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
 
   /* "wfpt.pyx":40
  *     cdef np.ndarray[double, ndim = 1] y = np.empty(size, dtype=np.double)
- *
+ * 
  *     for i in prange(size, nogil=True):             # <<<<<<<<<<<<<<
  *         y[i] = full_pdf(x[i], v, sv, a, z, sz, t, st, err,
  *                         n_st, n_sz, use_adaptive, simps_err)
@@ -9126,11 +9135,11 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
                             __pyx_v_i = (Py_ssize_t)(0 + 1 * __pyx_t_9);
 
                             /* "wfpt.pyx":41
- *
+ * 
  *     for i in prange(size, nogil=True):
  *         y[i] = full_pdf(x[i], v, sv, a, z, sz, t, st, err,             # <<<<<<<<<<<<<<
  *                         n_st, n_sz, use_adaptive, simps_err)
- *
+ * 
  */
                             __Pyx_TraceLine(41,1,__PYX_ERR(0, 41, __pyx_L8_error))
                             __pyx_t_11 = __pyx_v_i;
@@ -9139,7 +9148,7 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
  *     for i in prange(size, nogil=True):
  *         y[i] = full_pdf(x[i], v, sv, a, z, sz, t, st, err,
  *                         n_st, n_sz, use_adaptive, simps_err)             # <<<<<<<<<<<<<<
- *
+ * 
  *     y = y * (1 - p_outlier) + (w_outlier * p_outlier)
  */
                             __Pyx_TraceLine(42,1,__PYX_ERR(0, 42, __pyx_L8_error))
@@ -9151,11 +9160,11 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
                             __pyx_t_12 = __pyx_f_4wfpt_full_pdf((*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_x.rcbuffer->pybuffer.buf, __pyx_t_11, __pyx_pybuffernd_x.diminfo[0].strides)), __pyx_v_v, __pyx_v_sv, __pyx_v_a, __pyx_v_z, __pyx_v_sz, __pyx_v_t, __pyx_v_st, __pyx_v_err, 0, &__pyx_t_13); if (unlikely(__pyx_t_12 == ((double)-1) && __Pyx_ErrOccurredWithGIL())) __PYX_ERR(0, 41, __pyx_L8_error)
 
                             /* "wfpt.pyx":41
- *
+ * 
  *     for i in prange(size, nogil=True):
  *         y[i] = full_pdf(x[i], v, sv, a, z, sz, t, st, err,             # <<<<<<<<<<<<<<
  *                         n_st, n_sz, use_adaptive, simps_err)
- *
+ * 
  */
                             __Pyx_TraceLine(41,1,__PYX_ERR(0, 41, __pyx_L8_error))
                             __pyx_t_11 = __pyx_v_i;
@@ -9243,7 +9252,7 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
 
       /* "wfpt.pyx":40
  *     cdef np.ndarray[double, ndim = 1] y = np.empty(size, dtype=np.double)
- *
+ * 
  *     for i in prange(size, nogil=True):             # <<<<<<<<<<<<<<
  *         y[i] = full_pdf(x[i], v, sv, a, z, sz, t, st, err,
  *                         n_st, n_sz, use_adaptive, simps_err)
@@ -9270,7 +9279,7 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
 
   /* "wfpt.pyx":44
  *                         n_st, n_sz, use_adaptive, simps_err)
- *
+ * 
  *     y = y * (1 - p_outlier) + (w_outlier * p_outlier)             # <<<<<<<<<<<<<<
  *     if logp == 1:
  *         return np.log(y)
@@ -9311,7 +9320,7 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
   __pyx_t_4 = 0;
 
   /* "wfpt.pyx":45
- *
+ * 
  *     y = y * (1 - p_outlier) + (w_outlier * p_outlier)
  *     if logp == 1:             # <<<<<<<<<<<<<<
  *         return np.log(y)
@@ -9362,7 +9371,7 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
     goto __pyx_L0;
 
     /* "wfpt.pyx":45
- *
+ * 
  *     y = y * (1 - p_outlier) + (w_outlier * p_outlier)
  *     if logp == 1:             # <<<<<<<<<<<<<<
  *         return np.log(y)
@@ -9374,7 +9383,7 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
  *         return np.log(y)
  *     else:
  *         return y             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline bint p_outlier_in_range(double p_outlier):
  */
   __Pyx_TraceLine(48,0,__PYX_ERR(0, 48, __pyx_L1_error))
@@ -9387,7 +9396,7 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
 
   /* "wfpt.pyx":32
  * include 'integrate.pxi'
- *
+ * 
  * def pdf_array(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz,             # <<<<<<<<<<<<<<
  *               double t, double st, double err=1e-4, bint logp=0, int n_st=2, int n_sz=2, bint use_adaptive=1,
  *               double simps_err=1e-3, double p_outlier=0, double w_outlier=0):
@@ -9423,10 +9432,10 @@ static PyObject *__pyx_pf_4wfpt_2pdf_array(CYTHON_UNUSED PyObject *__pyx_self, P
 
 /* "wfpt.pyx":50
  *         return y
- *
+ * 
  * cdef inline bint p_outlier_in_range(double p_outlier):             # <<<<<<<<<<<<<<
  *     return (p_outlier >= 0) & (p_outlier <= 1)
- *
+ * 
  */
 
 static CYTHON_INLINE int __pyx_f_4wfpt_p_outlier_in_range(double __pyx_v_p_outlier) {
@@ -9440,11 +9449,11 @@ static CYTHON_INLINE int __pyx_f_4wfpt_p_outlier_in_range(double __pyx_v_p_outli
   __Pyx_TraceCall("p_outlier_in_range", __pyx_f[0], 50, 0, __PYX_ERR(0, 50, __pyx_L1_error));
 
   /* "wfpt.pyx":51
- *
+ * 
  * cdef inline bint p_outlier_in_range(double p_outlier):
  *     return (p_outlier >= 0) & (p_outlier <= 1)             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(51,0,__PYX_ERR(0, 51, __pyx_L1_error))
   __pyx_r = ((__pyx_v_p_outlier >= 0.0) & (__pyx_v_p_outlier <= 1.0));
@@ -9452,10 +9461,10 @@ static CYTHON_INLINE int __pyx_f_4wfpt_p_outlier_in_range(double __pyx_v_p_outli
 
   /* "wfpt.pyx":50
  *         return y
- *
+ * 
  * cdef inline bint p_outlier_in_range(double p_outlier):             # <<<<<<<<<<<<<<
  *     return (p_outlier >= 0) & (p_outlier <= 1)
- *
+ * 
  */
 
   /* function exit code */
@@ -9469,15 +9478,15 @@ static CYTHON_INLINE int __pyx_f_4wfpt_p_outlier_in_range(double __pyx_v_p_outli
 }
 
 /* "wfpt.pyx":54
- *
- *
+ * 
+ * 
  * def wiener_like(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz, double t,             # <<<<<<<<<<<<<<
  *                 double st, double err, int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-8,
  *                 double p_outlier=0, double w_outlier=0.1):
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_5wiener_like(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_5wiener_like(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -9486,7 +9495,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_4wiener_like, "wiener_like(ndarray x, double v, double sv, double a, double z, double sz, double t, double st, double err, int n_st=10, int n_sz=10, bool use_adaptive=1, double simps_err=1e-8, double p_outlier=0, double w_outlier=0.1)");
 static PyMethodDef __pyx_mdef_4wfpt_5wiener_like = {"wiener_like", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_5wiener_like, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_4wiener_like};
-static PyObject *__pyx_pw_4wfpt_5wiener_like(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_5wiener_like(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -9856,7 +9865,7 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
  *     cdef double p
  *     cdef double sum_logp = 0             # <<<<<<<<<<<<<<
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  */
   __Pyx_TraceLine(60,0,__PYX_ERR(0, 60, __pyx_L1_error))
   __pyx_v_sum_logp = 0.0;
@@ -9865,7 +9874,7 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
  *     cdef double p
  *     cdef double sum_logp = 0
  *     cdef double wp_outlier = w_outlier * p_outlier             # <<<<<<<<<<<<<<
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  */
   __Pyx_TraceLine(61,0,__PYX_ERR(0, 61, __pyx_L1_error))
@@ -9873,10 +9882,10 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
 
   /* "wfpt.pyx":63
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         return -np.inf
- *
+ * 
  */
   __Pyx_TraceLine(63,0,__PYX_ERR(0, 63, __pyx_L1_error))
   __pyx_t_2 = __pyx_f_4wfpt_p_outlier_in_range(__pyx_v_p_outlier); if (unlikely(__pyx_t_2 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 63, __pyx_L1_error)
@@ -9884,10 +9893,10 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
   if (__pyx_t_3) {
 
     /* "wfpt.pyx":64
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  *         return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *     for i in range(size):
  */
     __Pyx_TraceLine(64,0,__PYX_ERR(0, 64, __pyx_L1_error))
@@ -9906,16 +9915,16 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
 
     /* "wfpt.pyx":63
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         return -np.inf
- *
+ * 
  */
   }
 
   /* "wfpt.pyx":66
  *         return -np.inf
- *
+ * 
  *     for i in range(size):             # <<<<<<<<<<<<<<
  *         p = full_pdf(x[i], v, sv, a, z, sz, t, st, err,
  *                      n_st, n_sz, use_adaptive, simps_err)
@@ -9927,7 +9936,7 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
     __pyx_v_i = __pyx_t_8;
 
     /* "wfpt.pyx":67
- *
+ * 
  *     for i in range(size):
  *         p = full_pdf(x[i], v, sv, a, z, sz, t, st, err,             # <<<<<<<<<<<<<<
  *                      n_st, n_sz, use_adaptive, simps_err)
@@ -9967,7 +9976,7 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
  *         p = p * (1 - p_outlier) + wp_outlier
  *         if p == 0:             # <<<<<<<<<<<<<<
  *             return -np.inf
- *
+ * 
  */
     __Pyx_TraceLine(71,0,__PYX_ERR(0, 71, __pyx_L1_error))
     __pyx_t_3 = (__pyx_v_p == 0.0);
@@ -9977,7 +9986,7 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
  *         p = p * (1 - p_outlier) + wp_outlier
  *         if p == 0:
  *             return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *         sum_logp += log(p)
  */
       __Pyx_TraceLine(72,0,__PYX_ERR(0, 72, __pyx_L1_error))
@@ -9999,15 +10008,15 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
  *         p = p * (1 - p_outlier) + wp_outlier
  *         if p == 0:             # <<<<<<<<<<<<<<
  *             return -np.inf
- *
+ * 
  */
     }
 
     /* "wfpt.pyx":74
  *             return -np.inf
- *
+ * 
  *         sum_logp += log(p)             # <<<<<<<<<<<<<<
- *
+ * 
  *     return sum_logp
  */
     __Pyx_TraceLine(74,0,__PYX_ERR(0, 74, __pyx_L1_error))
@@ -10016,9 +10025,9 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
 
   /* "wfpt.pyx":76
  *         sum_logp += log(p)
- *
+ * 
  *     return sum_logp             # <<<<<<<<<<<<<<
- *
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,
  */
   __Pyx_TraceLine(76,0,__PYX_ERR(0, 76, __pyx_L1_error))
@@ -10030,8 +10039,8 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
   goto __pyx_L0;
 
   /* "wfpt.pyx":54
- *
- *
+ * 
+ * 
  * def wiener_like(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz, double t,             # <<<<<<<<<<<<<<
  *                 double st, double err, int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-8,
  *                 double p_outlier=0, double w_outlier=0.1):
@@ -10061,14 +10070,14 @@ static PyObject *__pyx_pf_4wfpt_4wiener_like(CYTHON_UNUSED PyObject *__pyx_self,
 
 /* "wfpt.pyx":78
  *     return sum_logp
- *
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,             # <<<<<<<<<<<<<<
  *                       int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_7wiener_like_multi(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_7wiener_like_multi(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -10077,7 +10086,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_6wiener_like_multi, "wiener_like_multi(ndarray x, v, sv, a, z, sz, t, st, double err, multi=None, int n_st=10, int n_sz=10, bool use_adaptive=1, double simps_err=1e-3, double p_outlier=0, double w_outlier=0)");
 static PyMethodDef __pyx_mdef_4wfpt_7wiener_like_multi = {"wiener_like_multi", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_7wiener_like_multi, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_6wiener_like_multi};
-static PyObject *__pyx_pw_4wfpt_7wiener_like_multi(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_7wiener_like_multi(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -10485,7 +10494,7 @@ static PyObject *__pyx_pf_4wfpt_6wiener_like_multi(CYTHON_UNUSED PyObject *__pyx
  *     cdef double p = 0
  *     cdef double sum_logp = 0             # <<<<<<<<<<<<<<
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  */
   __Pyx_TraceLine(84,0,__PYX_ERR(0, 84, __pyx_L1_error))
   __pyx_v_sum_logp = 0.0;
@@ -10494,7 +10503,7 @@ static PyObject *__pyx_pf_4wfpt_6wiener_like_multi(CYTHON_UNUSED PyObject *__pyx
  *     cdef double p = 0
  *     cdef double sum_logp = 0
  *     cdef double wp_outlier = w_outlier * p_outlier             # <<<<<<<<<<<<<<
- *
+ * 
  *     if multi is None:
  */
   __Pyx_TraceLine(85,0,__PYX_ERR(0, 85, __pyx_L1_error))
@@ -10502,7 +10511,7 @@ static PyObject *__pyx_pf_4wfpt_6wiener_like_multi(CYTHON_UNUSED PyObject *__pyx
 
   /* "wfpt.pyx":87
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  *     if multi is None:             # <<<<<<<<<<<<<<
  *         return full_pdf(x, v, sv, a, z, sz, t, st, err)
  *     else:
@@ -10512,7 +10521,7 @@ static PyObject *__pyx_pf_4wfpt_6wiener_like_multi(CYTHON_UNUSED PyObject *__pyx
   if (__pyx_t_2) {
 
     /* "wfpt.pyx":88
- *
+ * 
  *     if multi is None:
  *         return full_pdf(x, v, sv, a, z, sz, t, st, err)             # <<<<<<<<<<<<<<
  *     else:
@@ -10537,7 +10546,7 @@ static PyObject *__pyx_pf_4wfpt_6wiener_like_multi(CYTHON_UNUSED PyObject *__pyx
 
     /* "wfpt.pyx":87
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  *     if multi is None:             # <<<<<<<<<<<<<<
  *         return full_pdf(x, v, sv, a, z, sz, t, st, err)
  *     else:
@@ -10843,7 +10852,7 @@ static PyObject *__pyx_pf_4wfpt_6wiener_like_multi(CYTHON_UNUSED PyObject *__pyx
  *                 p = prob_ub(params_iter['v'], params_iter['a'], params_iter['z'])
  *             else: # x[i] == -999.
  *                 p = 1 - prob_ub(params_iter['v'], params_iter['a'], params_iter['z'])             # <<<<<<<<<<<<<<
- *
+ * 
  *             sum_logp += log(p)
  */
       __Pyx_TraceLine(104,0,__PYX_ERR(0, 104, __pyx_L1_error))
@@ -10867,9 +10876,9 @@ static PyObject *__pyx_pf_4wfpt_6wiener_like_multi(CYTHON_UNUSED PyObject *__pyx
 
       /* "wfpt.pyx":106
  *                 p = 1 - prob_ub(params_iter['v'], params_iter['a'], params_iter['z'])
- *
+ * 
  *             sum_logp += log(p)             # <<<<<<<<<<<<<<
- *
+ * 
  *         return sum_logp
  */
       __Pyx_TraceLine(106,0,__PYX_ERR(0, 106, __pyx_L1_error))
@@ -10878,9 +10887,9 @@ static PyObject *__pyx_pf_4wfpt_6wiener_like_multi(CYTHON_UNUSED PyObject *__pyx
 
     /* "wfpt.pyx":108
  *             sum_logp += log(p)
- *
+ * 
  *         return sum_logp             # <<<<<<<<<<<<<<
- *
+ * 
  * def wiener_logp_array(np.ndarray[double, ndim=1] x,
  */
     __Pyx_TraceLine(108,0,__PYX_ERR(0, 108, __pyx_L1_error))
@@ -10894,7 +10903,7 @@ static PyObject *__pyx_pf_4wfpt_6wiener_like_multi(CYTHON_UNUSED PyObject *__pyx
 
   /* "wfpt.pyx":78
  *     return sum_logp
- *
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,             # <<<<<<<<<<<<<<
  *                       int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
@@ -10928,14 +10937,14 @@ static PyObject *__pyx_pf_4wfpt_6wiener_like_multi(CYTHON_UNUSED PyObject *__pyx
 
 /* "wfpt.pyx":110
  *         return sum_logp
- *
+ * 
  * def wiener_logp_array(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[double, ndim=1] v,
  *                       np.ndarray[double, ndim=1] sv,
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_9wiener_logp_array(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_9wiener_logp_array(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -10944,7 +10953,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_8wiener_logp_array, "wiener_logp_array(ndarray x, ndarray v, ndarray sv, ndarray a, ndarray z, ndarray sz, ndarray t, ndarray st, double err, int n_st=10, int n_sz=10, bool use_adaptive=1, double simps_err=1e-8, double p_outlier=0, double w_outlier=0.1)");
 static PyMethodDef __pyx_mdef_4wfpt_9wiener_logp_array = {"wiener_logp_array", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_9wiener_logp_array, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_8wiener_logp_array};
-static PyObject *__pyx_pw_4wfpt_9wiener_logp_array(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_9wiener_logp_array(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -11402,7 +11411,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
 
   /* "wfpt.pyx":126
  *                       double w_outlier=0.1):
- *
+ * 
  *     cdef Py_ssize_t size = x.shape[0]             # <<<<<<<<<<<<<<
  *     cdef Py_ssize_t i
  *     cdef np.ndarray[double, ndim=1] logp = np.empty(size, dtype=np.double)
@@ -11463,7 +11472,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
  *     cdef np.ndarray[double, ndim=1] logp = np.empty(size, dtype=np.double)
  *     cdef double p
  *     cdef double wp_outlier = w_outlier * p_outlier             # <<<<<<<<<<<<<<
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  */
   __Pyx_TraceLine(130,0,__PYX_ERR(0, 130, __pyx_L1_error))
@@ -11471,7 +11480,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
 
   /* "wfpt.pyx":132
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         logp[:] = -np.inf
  *         return logp
@@ -11482,11 +11491,11 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
   if (__pyx_t_9) {
 
     /* "wfpt.pyx":133
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  *         logp[:] = -np.inf             # <<<<<<<<<<<<<<
  *         return logp
- *
+ * 
  */
     __Pyx_TraceLine(133,0,__PYX_ERR(0, 133, __pyx_L1_error))
     __Pyx_GetModuleGlobalName(__pyx_t_6, __pyx_n_s_np); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 133, __pyx_L1_error)
@@ -11504,7 +11513,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
  *     if not p_outlier_in_range(p_outlier):
  *         logp[:] = -np.inf
  *         return logp             # <<<<<<<<<<<<<<
- *
+ * 
  *     for i in range(size):
  */
     __Pyx_TraceLine(134,0,__PYX_ERR(0, 134, __pyx_L1_error))
@@ -11515,7 +11524,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
 
     /* "wfpt.pyx":132
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         logp[:] = -np.inf
  *         return logp
@@ -11524,7 +11533,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
 
   /* "wfpt.pyx":136
  *         return logp
- *
+ * 
  *     for i in range(size):             # <<<<<<<<<<<<<<
  *         p = full_pdf(x[i], v[i], sv[i], a[i], z[i], sz[i], t[i], st[i], err,
  *                      n_st, n_sz, use_adaptive, simps_err)
@@ -11536,11 +11545,11 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
     __pyx_v_i = __pyx_t_12;
 
     /* "wfpt.pyx":137
- *
+ * 
  *     for i in range(size):
  *         p = full_pdf(x[i], v[i], sv[i], a[i], z[i], sz[i], t[i], st[i], err,             # <<<<<<<<<<<<<<
  *                      n_st, n_sz, use_adaptive, simps_err)
- *
+ * 
  */
     __Pyx_TraceLine(137,0,__PYX_ERR(0, 137, __pyx_L1_error))
     __pyx_t_13 = __pyx_v_i;
@@ -11556,7 +11565,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
  *     for i in range(size):
  *         p = full_pdf(x[i], v[i], sv[i], a[i], z[i], sz[i], t[i], st[i], err,
  *                      n_st, n_sz, use_adaptive, simps_err)             # <<<<<<<<<<<<<<
- *
+ * 
  *         # If one probability = 0, the log sum will be -Inf
  */
     __Pyx_TraceLine(138,0,__PYX_ERR(0, 138, __pyx_L1_error))
@@ -11569,10 +11578,10 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
     __pyx_v_p = __pyx_t_21;
 
     /* "wfpt.pyx":141
- *
+ * 
  *         # If one probability = 0, the log sum will be -Inf
  *         p = p * (1 - p_outlier) + wp_outlier             # <<<<<<<<<<<<<<
- *
+ * 
  *         if p == 0:
  */
     __Pyx_TraceLine(141,0,__PYX_ERR(0, 141, __pyx_L1_error))
@@ -11580,7 +11589,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
 
     /* "wfpt.pyx":143
  *         p = p * (1 - p_outlier) + wp_outlier
- *
+ * 
  *         if p == 0:             # <<<<<<<<<<<<<<
  *             logp[i] = -np.inf
  *         else:
@@ -11590,7 +11599,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
     if (__pyx_t_9) {
 
       /* "wfpt.pyx":144
- *
+ * 
  *         if p == 0:
  *             logp[i] = -np.inf             # <<<<<<<<<<<<<<
  *         else:
@@ -11612,7 +11621,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
 
       /* "wfpt.pyx":143
  *         p = p * (1 - p_outlier) + wp_outlier
- *
+ * 
  *         if p == 0:             # <<<<<<<<<<<<<<
  *             logp[i] = -np.inf
  *         else:
@@ -11624,7 +11633,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
  *             logp[i] = -np.inf
  *         else:
  *             logp[i] = np.log(p)             # <<<<<<<<<<<<<<
- *
+ * 
  *     return logp
  */
     __Pyx_TraceLine(146,0,__PYX_ERR(0, 146, __pyx_L1_error))
@@ -11669,9 +11678,9 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
 
   /* "wfpt.pyx":148
  *             logp[i] = np.log(p)
- *
+ * 
  *     return logp             # <<<<<<<<<<<<<<
- *
+ * 
  * def wiener_like_rlddm(np.ndarray[double, ndim=1] x,
  */
   __Pyx_TraceLine(148,0,__PYX_ERR(0, 148, __pyx_L1_error))
@@ -11682,7 +11691,7 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
 
   /* "wfpt.pyx":110
  *         return sum_logp
- *
+ * 
  * def wiener_logp_array(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[double, ndim=1] v,
  *                       np.ndarray[double, ndim=1] sv,
@@ -11732,14 +11741,14 @@ static PyObject *__pyx_pf_4wfpt_8wiener_logp_array(CYTHON_UNUSED PyObject *__pyx
 
 /* "wfpt.pyx":150
  *     return logp
- *
+ * 
  * def wiener_like_rlddm(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[long, ndim=1] response,
  *                       np.ndarray[double, ndim=1] feedback,
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_11wiener_like_rlddm(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_11wiener_like_rlddm(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -11748,7 +11757,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_10wiener_like_rlddm, "wiener_like_rlddm(ndarray x, ndarray response, ndarray feedback, ndarray split_by, double q, double alpha, double pos_alpha, double v, double sv, double a, double z, double sz, double t, double st, double err, int n_st=10, int n_sz=10, bool use_adaptive=1, double simps_err=1e-8, double p_outlier=0, double w_outlier=0)");
 static PyMethodDef __pyx_mdef_4wfpt_11wiener_like_rlddm = {"wiener_like_rlddm", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_11wiener_like_rlddm, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_10wiener_like_rlddm};
-static PyObject *__pyx_pw_4wfpt_11wiener_like_rlddm(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_11wiener_like_rlddm(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -12386,7 +12395,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *     cdef np.ndarray[double, ndim=1] feedbacks
  *     cdef np.ndarray[long, ndim=1] responses
  *     cdef np.ndarray[long, ndim=1] unique = np.unique(split_by)             # <<<<<<<<<<<<<<
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  */
   __Pyx_TraceLine(171,0,__PYX_ERR(0, 171, __pyx_L1_error))
@@ -12433,10 +12442,10 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
 
   /* "wfpt.pyx":173
  *     cdef np.ndarray[long, ndim=1] unique = np.unique(split_by)
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         return -np.inf
- *
+ * 
  */
   __Pyx_TraceLine(173,0,__PYX_ERR(0, 173, __pyx_L1_error))
   __pyx_t_10 = __pyx_f_4wfpt_p_outlier_in_range(__pyx_v_p_outlier); if (unlikely(__pyx_t_10 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 173, __pyx_L1_error)
@@ -12444,10 +12453,10 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
   if (__pyx_t_11) {
 
     /* "wfpt.pyx":174
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  *         return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *     if pos_alpha==100.00:
  */
     __Pyx_TraceLine(174,0,__PYX_ERR(0, 174, __pyx_L1_error))
@@ -12466,16 +12475,16 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
 
     /* "wfpt.pyx":173
  *     cdef np.ndarray[long, ndim=1] unique = np.unique(split_by)
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         return -np.inf
- *
+ * 
  */
   }
 
   /* "wfpt.pyx":176
  *         return -np.inf
- *
+ * 
  *     if pos_alpha==100.00:             # <<<<<<<<<<<<<<
  *         pos_alfa = alpha
  *     else:
@@ -12485,7 +12494,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
   if (__pyx_t_11) {
 
     /* "wfpt.pyx":177
- *
+ * 
  *     if pos_alpha==100.00:
  *         pos_alfa = alpha             # <<<<<<<<<<<<<<
  *     else:
@@ -12496,7 +12505,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
 
     /* "wfpt.pyx":176
  *         return -np.inf
- *
+ * 
  *     if pos_alpha==100.00:             # <<<<<<<<<<<<<<
  *         pos_alfa = alpha
  *     else:
@@ -12508,7 +12517,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *         pos_alfa = alpha
  *     else:
  *         pos_alfa = pos_alpha             # <<<<<<<<<<<<<<
- *
+ * 
  *     # unique represent # of conditions
  */
   __Pyx_TraceLine(179,0,__PYX_ERR(0, 179, __pyx_L1_error))
@@ -12518,7 +12527,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
   __pyx_L4:;
 
   /* "wfpt.pyx":182
- *
+ * 
  *     # unique represent # of conditions
  *     for j in range(unique.shape[0]):             # <<<<<<<<<<<<<<
  *         s = unique[j]
@@ -12672,7 +12681,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *         s_size = xs.shape[0]
  *         qs[0] = q             # <<<<<<<<<<<<<<
  *         qs[1] = q
- *
+ * 
  */
     __Pyx_TraceLine(189,0,__PYX_ERR(0, 189, __pyx_L1_error))
     __pyx_t_15 = 0;
@@ -12682,7 +12691,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *         s_size = xs.shape[0]
  *         qs[0] = q
  *         qs[1] = q             # <<<<<<<<<<<<<<
- *
+ * 
  *         # don't calculate pdf for first trial but still update q
  */
     __Pyx_TraceLine(190,0,__PYX_ERR(0, 190, __pyx_L1_error))
@@ -12690,7 +12699,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
     *__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_15, __pyx_pybuffernd_qs.diminfo[0].strides) = __pyx_v_q;
 
     /* "wfpt.pyx":193
- *
+ * 
  *         # don't calculate pdf for first trial but still update q
  *         if feedbacks[0] > qs[responses[0]]:             # <<<<<<<<<<<<<<
  *             alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
@@ -12714,7 +12723,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
       __pyx_v_alfa = (pow(2.718281828459, __pyx_v_pos_alfa) / (1.0 + pow(2.718281828459, __pyx_v_pos_alfa)));
 
       /* "wfpt.pyx":193
- *
+ * 
  *         # don't calculate pdf for first trial but still update q
  *         if feedbacks[0] > qs[responses[0]]:             # <<<<<<<<<<<<<<
  *             alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
@@ -12727,7 +12736,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *             alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
  *         else:
  *             alfa = (2.718281828459**alpha) / (1 + 2.718281828459**alpha)             # <<<<<<<<<<<<<<
- *
+ * 
  *         # qs[1] is upper bound, qs[0] is lower bound. feedbacks is reward
  */
     __Pyx_TraceLine(196,0,__PYX_ERR(0, 196, __pyx_L1_error))
@@ -12741,7 +12750,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *         # received on current trial.
  *         qs[responses[0]] = qs[responses[0]] + \             # <<<<<<<<<<<<<<
  *             alfa * (feedbacks[0] - qs[responses[0]])
- *
+ * 
  */
     __Pyx_TraceLine(200,0,__PYX_ERR(0, 200, __pyx_L1_error))
     __pyx_t_22 = 0;
@@ -12751,7 +12760,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *         # received on current trial.
  *         qs[responses[0]] = qs[responses[0]] + \
  *             alfa * (feedbacks[0] - qs[responses[0]])             # <<<<<<<<<<<<<<
- *
+ * 
  *         # loop through all trials in current condition
  */
     __Pyx_TraceLine(201,0,__PYX_ERR(0, 201, __pyx_L1_error))
@@ -12764,7 +12773,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *         # received on current trial.
  *         qs[responses[0]] = qs[responses[0]] + \             # <<<<<<<<<<<<<<
  *             alfa * (feedbacks[0] - qs[responses[0]])
- *
+ * 
  */
     __Pyx_TraceLine(200,0,__PYX_ERR(0, 200, __pyx_L1_error))
     __pyx_t_26 = 0;
@@ -12772,7 +12781,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
     *__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_27, __pyx_pybuffernd_qs.diminfo[0].strides) = ((*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_23, __pyx_pybuffernd_qs.diminfo[0].strides)) + (__pyx_v_alfa * ((*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_feedbacks.rcbuffer->pybuffer.buf, __pyx_t_15, __pyx_pybuffernd_feedbacks.diminfo[0].strides)) - (*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_25, __pyx_pybuffernd_qs.diminfo[0].strides)))));
 
     /* "wfpt.pyx":204
- *
+ * 
  *         # loop through all trials in current condition
  *         for i in range(1, s_size):             # <<<<<<<<<<<<<<
  *             p = full_pdf(xs[i], ((qs[1] - qs[0]) * v), sv, a, z,
@@ -12838,7 +12847,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *             if p == 0:
  *                 return -np.inf             # <<<<<<<<<<<<<<
  *             sum_logp += log(p)
- *
+ * 
  */
         __Pyx_TraceLine(210,0,__PYX_ERR(0, 210, __pyx_L1_error))
         __Pyx_XDECREF(__pyx_r);
@@ -12867,7 +12876,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *             if p == 0:
  *                 return -np.inf
  *             sum_logp += log(p)             # <<<<<<<<<<<<<<
- *
+ * 
  *             # get learning rate for current trial. if pos_alpha is not in
  */
       __Pyx_TraceLine(211,0,__PYX_ERR(0, 211, __pyx_L1_error))
@@ -12911,7 +12920,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *                 alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
  *             else:
  *                 alfa = (2.718281828459**alpha) / (1 + 2.718281828459**alpha)             # <<<<<<<<<<<<<<
- *
+ * 
  *             # qs[1] is upper bound, qs[0] is lower bound. feedbacks is reward
  */
       __Pyx_TraceLine(219,0,__PYX_ERR(0, 219, __pyx_L1_error))
@@ -12936,7 +12945,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *             qs[responses[i]] = qs[responses[i]] + \
  *                 alfa * (feedbacks[i] - qs[responses[i]])             # <<<<<<<<<<<<<<
  *     return sum_logp
- *
+ * 
  */
       __Pyx_TraceLine(224,0,__PYX_ERR(0, 224, __pyx_L1_error))
       __pyx_t_15 = __pyx_v_i;
@@ -12961,8 +12970,8 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
  *             qs[responses[i]] = qs[responses[i]] + \
  *                 alfa * (feedbacks[i] - qs[responses[i]])
  *     return sum_logp             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(225,0,__PYX_ERR(0, 225, __pyx_L1_error))
   __Pyx_XDECREF(__pyx_r);
@@ -12974,7 +12983,7 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
 
   /* "wfpt.pyx":150
  *     return logp
- *
+ * 
  * def wiener_like_rlddm(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[long, ndim=1] response,
  *                       np.ndarray[double, ndim=1] feedback,
@@ -13027,15 +13036,15 @@ static PyObject *__pyx_pf_4wfpt_10wiener_like_rlddm(CYTHON_UNUSED PyObject *__py
 }
 
 /* "wfpt.pyx":228
- *
- *
+ * 
+ * 
  * def wiener_like_rlssm_nn(str model,             # <<<<<<<<<<<<<<
  *                       np.ndarray[double, ndim=1] x,
  *                       np.ndarray[long, ndim=1] response,
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_13wiener_like_rlssm_nn(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_13wiener_like_rlssm_nn(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -13044,7 +13053,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_12wiener_like_rlssm_nn, "wiener_like_rlssm_nn(unicode model, ndarray x, ndarray response, ndarray feedback, ndarray split_by, double q, ndarray params_ssm, ndarray params_rl, ndarray params_bnds, double p_outlier=0, double w_outlier=0, network=None)");
 static PyMethodDef __pyx_mdef_4wfpt_13wiener_like_rlssm_nn = {"wiener_like_rlssm_nn", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_13wiener_like_rlssm_nn, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_12wiener_like_rlssm_nn};
-static PyObject *__pyx_pw_4wfpt_13wiener_like_rlssm_nn(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_13wiener_like_rlssm_nn(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -13090,7 +13099,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
  *                       np.ndarray[double, ndim=1] params_rl,
  *                       np.ndarray[double, ndim=2] params_bnds,
  *                       double p_outlier=0, double w_outlier=0, network = None):             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef double v = params_ssm[0]
  */
     values[11] = __Pyx_Arg_NewRef_FASTCALL(((PyObject *)Py_None));
@@ -13307,8 +13316,8 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __pyx_r = __pyx_pf_4wfpt_12wiener_like_rlssm_nn(__pyx_self, __pyx_v_model, __pyx_v_x, __pyx_v_response, __pyx_v_feedback, __pyx_v_split_by, __pyx_v_q, __pyx_v_params_ssm, __pyx_v_params_rl, __pyx_v_params_bnds, __pyx_v_p_outlier, __pyx_v_w_outlier, __pyx_v_network);
 
   /* "wfpt.pyx":228
- *
- *
+ * 
+ * 
  * def wiener_like_rlssm_nn(str model,             # <<<<<<<<<<<<<<
  *                       np.ndarray[double, ndim=1] x,
  *                       np.ndarray[long, ndim=1] response,
@@ -13525,20 +13534,20 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
 
   /* "wfpt.pyx":239
  *                       double p_outlier=0, double w_outlier=0, network = None):
- *
+ * 
  *     cdef double v = params_ssm[0]             # <<<<<<<<<<<<<<
  *     cdef double rl_alpha = params_rl[0]
- *
+ * 
  */
   __Pyx_TraceLine(239,0,__PYX_ERR(0, 239, __pyx_L1_error))
   __pyx_t_1 = 0;
   __pyx_v_v = (*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_params_ssm.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_params_ssm.diminfo[0].strides));
 
   /* "wfpt.pyx":240
- *
+ * 
  *     cdef double v = params_ssm[0]
  *     cdef double rl_alpha = params_rl[0]             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef Py_ssize_t size = x.shape[0]
  */
   __Pyx_TraceLine(240,0,__PYX_ERR(0, 240, __pyx_L1_error))
@@ -13547,7 +13556,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
 
   /* "wfpt.pyx":242
  *     cdef double rl_alpha = params_rl[0]
- *
+ * 
  *     cdef Py_ssize_t size = x.shape[0]             # <<<<<<<<<<<<<<
  *     cdef Py_ssize_t i, j, i_p
  *     cdef Py_ssize_t s_size
@@ -13771,7 +13780,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *     cdef np.ndarray[float, ndim=2] data = np.zeros((size, n_params + 2), dtype = np.float32)
  *     cdef float ll_min = -16.11809             # <<<<<<<<<<<<<<
  *     cdef int cumm_s_size = 0
- *
+ * 
  */
   __Pyx_TraceLine(259,0,__PYX_ERR(0, 259, __pyx_L1_error))
   __pyx_v_ll_min = -16.11809;
@@ -13780,7 +13789,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *     cdef np.ndarray[float, ndim=2] data = np.zeros((size, n_params + 2), dtype = np.float32)
  *     cdef float ll_min = -16.11809
  *     cdef int cumm_s_size = 0             # <<<<<<<<<<<<<<
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  */
   __Pyx_TraceLine(260,0,__PYX_ERR(0, 260, __pyx_L1_error))
@@ -13788,10 +13797,10 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
 
   /* "wfpt.pyx":262
  *     cdef int cumm_s_size = 0
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         return -np.inf
- *
+ * 
  */
   __Pyx_TraceLine(262,0,__PYX_ERR(0, 262, __pyx_L1_error))
   __pyx_t_12 = __pyx_f_4wfpt_p_outlier_in_range(__pyx_v_p_outlier); if (unlikely(__pyx_t_12 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 262, __pyx_L1_error)
@@ -13799,10 +13808,10 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
   if (__pyx_t_13) {
 
     /* "wfpt.pyx":263
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  *         return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *     # Check for boundary violations -- if true, return -np.inf
  */
     __Pyx_TraceLine(263,0,__PYX_ERR(0, 263, __pyx_L1_error))
@@ -13821,15 +13830,15 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
 
     /* "wfpt.pyx":262
  *     cdef int cumm_s_size = 0
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         return -np.inf
- *
+ * 
  */
   }
 
   /* "wfpt.pyx":266
- *
+ * 
  *     # Check for boundary violations -- if true, return -np.inf
  *     for i_p in np.arange(1, len(params_ssm)):             # <<<<<<<<<<<<<<
  *         lower_bnd = params_bnds[0][i_p]
@@ -13916,7 +13925,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *     for i_p in np.arange(1, len(params_ssm)):
  *         lower_bnd = params_bnds[0][i_p]             # <<<<<<<<<<<<<<
  *         upper_bnd = params_bnds[1][i_p]
- *
+ * 
  */
     __Pyx_TraceLine(267,0,__PYX_ERR(0, 267, __pyx_L1_error))
     __pyx_t_4 = __Pyx_GetItemInt(((PyObject *)__pyx_v_params_bnds), 0, long, 1, __Pyx_PyInt_From_long, 0, 0, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 267, __pyx_L1_error)
@@ -13931,7 +13940,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *     for i_p in np.arange(1, len(params_ssm)):
  *         lower_bnd = params_bnds[0][i_p]
  *         upper_bnd = params_bnds[1][i_p]             # <<<<<<<<<<<<<<
- *
+ * 
  *         if params_ssm[i_p] < lower_bnd or params_ssm[i_p] > upper_bnd:
  */
     __Pyx_TraceLine(268,0,__PYX_ERR(0, 268, __pyx_L1_error))
@@ -13945,10 +13954,10 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
 
     /* "wfpt.pyx":270
  *         upper_bnd = params_bnds[1][i_p]
- *
+ * 
  *         if params_ssm[i_p] < lower_bnd or params_ssm[i_p] > upper_bnd:             # <<<<<<<<<<<<<<
  *             return -np.inf
- *
+ * 
  */
     __Pyx_TraceLine(270,0,__PYX_ERR(0, 270, __pyx_L1_error))
     __pyx_t_1 = __pyx_v_i_p;
@@ -13975,11 +13984,11 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
     if (__pyx_t_13) {
 
       /* "wfpt.pyx":271
- *
+ * 
  *         if params_ssm[i_p] < lower_bnd or params_ssm[i_p] > upper_bnd:
  *             return -np.inf             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
       __Pyx_TraceLine(271,0,__PYX_ERR(0, 271, __pyx_L1_error))
       __Pyx_XDECREF(__pyx_r);
@@ -13998,15 +14007,15 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
 
       /* "wfpt.pyx":270
  *         upper_bnd = params_bnds[1][i_p]
- *
+ * 
  *         if params_ssm[i_p] < lower_bnd or params_ssm[i_p] > upper_bnd:             # <<<<<<<<<<<<<<
  *             return -np.inf
- *
+ * 
  */
     }
 
     /* "wfpt.pyx":266
- *
+ * 
  *     # Check for boundary violations -- if true, return -np.inf
  *     for i_p in np.arange(1, len(params_ssm)):             # <<<<<<<<<<<<<<
  *         lower_bnd = params_bnds[0][i_p]
@@ -14017,8 +14026,8 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
   /* "wfpt.pyx":274
- *
- *
+ * 
+ * 
  *     if len(params_rl) == 2:             # <<<<<<<<<<<<<<
  *         pos_alfa = params_rl[1]
  *     else:
@@ -14029,7 +14038,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
   if (__pyx_t_13) {
 
     /* "wfpt.pyx":275
- *
+ * 
  *     if len(params_rl) == 2:
  *         pos_alfa = params_rl[1]             # <<<<<<<<<<<<<<
  *     else:
@@ -14040,8 +14049,8 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
     __pyx_v_pos_alfa = (*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_params_rl.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_params_rl.diminfo[0].strides));
 
     /* "wfpt.pyx":274
- *
- *
+ * 
+ * 
  *     if len(params_rl) == 2:             # <<<<<<<<<<<<<<
  *         pos_alfa = params_rl[1]
  *     else:
@@ -14053,8 +14062,8 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *         pos_alfa = params_rl[1]
  *     else:
  *         pos_alfa = params_rl[0]             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(277,0,__PYX_ERR(0, 277, __pyx_L1_error))
   /*else*/ {
@@ -14064,7 +14073,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
   __pyx_L10:;
 
   /* "wfpt.pyx":281
- *
+ * 
  *     # unique represent # of conditions
  *     for j in range(unique.shape[0]):             # <<<<<<<<<<<<<<
  *         s = unique[j]
@@ -14218,7 +14227,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *         s_size = xs.shape[0]
  *         qs[0] = q             # <<<<<<<<<<<<<<
  *         qs[1] = q
- *
+ * 
  */
     __Pyx_TraceLine(288,0,__PYX_ERR(0, 288, __pyx_L1_error))
     __pyx_t_1 = 0;
@@ -14228,7 +14237,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *         s_size = xs.shape[0]
  *         qs[0] = q
  *         qs[1] = q             # <<<<<<<<<<<<<<
- *
+ * 
  *         responses_qs = responses
  */
     __Pyx_TraceLine(289,0,__PYX_ERR(0, 289, __pyx_L1_error))
@@ -14237,10 +14246,10 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
 
     /* "wfpt.pyx":291
  *         qs[1] = q
- *
+ * 
  *         responses_qs = responses             # <<<<<<<<<<<<<<
  *         responses_qs[responses_qs == -1] = 0
- *
+ * 
  */
     __Pyx_TraceLine(291,0,__PYX_ERR(0, 291, __pyx_L1_error))
     {
@@ -14264,10 +14273,10 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
     __Pyx_XDECREF_SET(__pyx_v_responses_qs, ((PyArrayObject *)__pyx_v_responses));
 
     /* "wfpt.pyx":292
- *
+ * 
  *         responses_qs = responses
  *         responses_qs[responses_qs == -1] = 0             # <<<<<<<<<<<<<<
- *
+ * 
  *         # don't calculate pdf for first trial but still update q
  */
     __Pyx_TraceLine(292,0,__PYX_ERR(0, 292, __pyx_L1_error))
@@ -14276,7 +14285,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
     /* "wfpt.pyx":295
- *
+ * 
  *         # don't calculate pdf for first trial but still update q
  *         if feedbacks[0] > qs[responses_qs[0]]:             # <<<<<<<<<<<<<<
  *             alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
@@ -14300,7 +14309,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
       __pyx_v_alfa = (pow(2.718281828459, __pyx_v_pos_alfa) / (1.0 + pow(2.718281828459, __pyx_v_pos_alfa)));
 
       /* "wfpt.pyx":295
- *
+ * 
  *         # don't calculate pdf for first trial but still update q
  *         if feedbacks[0] > qs[responses_qs[0]]:             # <<<<<<<<<<<<<<
  *             alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
@@ -14313,8 +14322,8 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *             alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
  *         else:
  *             alfa = (2.718281828459**rl_alpha) / (1 + 2.718281828459**rl_alpha)             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
     __Pyx_TraceLine(298,0,__PYX_ERR(0, 298, __pyx_L1_error))
     /*else*/ {
@@ -14327,7 +14336,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *         # received on current trial.
  *         qs[responses_qs[0]] = qs[responses_qs[0]] + \             # <<<<<<<<<<<<<<
  *             alfa * (feedbacks[0] - qs[responses_qs[0]])
- *
+ * 
  */
     __Pyx_TraceLine(303,0,__PYX_ERR(0, 303, __pyx_L1_error))
     __pyx_t_25 = 0;
@@ -14337,8 +14346,8 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *         # received on current trial.
  *         qs[responses_qs[0]] = qs[responses_qs[0]] + \
  *             alfa * (feedbacks[0] - qs[responses_qs[0]])             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
     __Pyx_TraceLine(304,0,__PYX_ERR(0, 304, __pyx_L1_error))
     __pyx_t_1 = 0;
@@ -14350,7 +14359,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *         # received on current trial.
  *         qs[responses_qs[0]] = qs[responses_qs[0]] + \             # <<<<<<<<<<<<<<
  *             alfa * (feedbacks[0] - qs[responses_qs[0]])
- *
+ * 
  */
     __Pyx_TraceLine(303,0,__PYX_ERR(0, 303, __pyx_L1_error))
     __pyx_t_29 = 0;
@@ -14358,8 +14367,8 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
     *__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_30, __pyx_pybuffernd_qs.diminfo[0].strides) = ((*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_26, __pyx_pybuffernd_qs.diminfo[0].strides)) + (__pyx_v_alfa * ((*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_feedbacks.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_feedbacks.diminfo[0].strides)) - (*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_28, __pyx_pybuffernd_qs.diminfo[0].strides)))));
 
     /* "wfpt.pyx":307
- *
- *
+ * 
+ * 
  *         data[0, 0] = 0.0             # <<<<<<<<<<<<<<
  *         # loop through all trials in current condition
  *         for i in range(1, s_size):
@@ -14401,7 +14410,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *             # Check for boundary violations -- if true, return -np.inf
  *             if data[cumm_s_size + i, 0] < params_bnds[0][0] or data[cumm_s_size + i, 0] > params_bnds[1][0]:             # <<<<<<<<<<<<<<
  *                 return -np.inf
- *
+ * 
  */
       __Pyx_TraceLine(312,0,__PYX_ERR(0, 312, __pyx_L1_error))
       __pyx_t_27 = (__pyx_v_cumm_s_size + __pyx_v_i);
@@ -14445,7 +14454,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *             # Check for boundary violations -- if true, return -np.inf
  *             if data[cumm_s_size + i, 0] < params_bnds[0][0] or data[cumm_s_size + i, 0] > params_bnds[1][0]:
  *                 return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *             # get learning rate for current trial. if pos_alpha is not in
  */
         __Pyx_TraceLine(313,0,__PYX_ERR(0, 313, __pyx_L1_error))
@@ -14467,7 +14476,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *             # Check for boundary violations -- if true, return -np.inf
  *             if data[cumm_s_size + i, 0] < params_bnds[0][0] or data[cumm_s_size + i, 0] > params_bnds[1][0]:             # <<<<<<<<<<<<<<
  *                 return -np.inf
- *
+ * 
  */
       }
 
@@ -14509,7 +14518,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *                 alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
  *             else:
  *                 alfa = (2.718281828459**rl_alpha) / (1 + 2.718281828459**rl_alpha)             # <<<<<<<<<<<<<<
- *
+ * 
  *             # qs[1] is upper bound, qs[0] is lower bound. feedbacks is reward
  */
       __Pyx_TraceLine(321,0,__PYX_ERR(0, 321, __pyx_L1_error))
@@ -14534,7 +14543,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *             qs[responses_qs[i]] = qs[responses_qs[i]] + \
  *                 alfa * (feedbacks[i] - qs[responses_qs[i]])             # <<<<<<<<<<<<<<
  *         cumm_s_size += s_size
- *
+ * 
  */
       __Pyx_TraceLine(326,0,__PYX_ERR(0, 326, __pyx_L1_error))
       __pyx_t_27 = __pyx_v_i;
@@ -14558,19 +14567,19 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *             qs[responses_qs[i]] = qs[responses_qs[i]] + \
  *                 alfa * (feedbacks[i] - qs[responses_qs[i]])
  *         cumm_s_size += s_size             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
     __Pyx_TraceLine(327,0,__PYX_ERR(0, 327, __pyx_L1_error))
     __pyx_v_cumm_s_size = (__pyx_v_cumm_s_size + __pyx_v_s_size);
   }
 
   /* "wfpt.pyx":330
- *
- *
+ * 
+ * 
  *     data[:, 1:n_params] = np.tile(params_ssm[1:], (size, 1)).astype(np.float32)             # <<<<<<<<<<<<<<
  *     data[:, n_params:] = np.stack([x, response], axis = 1)
- *
+ * 
  */
   __Pyx_TraceLine(330,0,__PYX_ERR(0, 330, __pyx_L1_error))
   __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_np); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 330, __pyx_L1_error)
@@ -14663,10 +14672,10 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
   /* "wfpt.pyx":331
- *
+ * 
  *     data[:, 1:n_params] = np.tile(params_ssm[1:], (size, 1)).astype(np.float32)
  *     data[:, n_params:] = np.stack([x, response], axis = 1)             # <<<<<<<<<<<<<<
- *
+ * 
  *     # Call to network:
  */
   __Pyx_TraceLine(331,0,__PYX_ERR(0, 331, __pyx_L1_error))
@@ -14714,7 +14723,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
   /* "wfpt.pyx":334
- *
+ * 
  *     # Call to network:
  *     if p_outlier == 0:             # <<<<<<<<<<<<<<
  *         sum_logp = np.sum(np.core.umath.maximum(network.predict_on_batch(data), ll_min))
@@ -14826,7 +14835,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
     __pyx_v_sum_logp = __pyx_t_35;
 
     /* "wfpt.pyx":334
- *
+ * 
  *     # Call to network:
  *     if p_outlier == 0:             # <<<<<<<<<<<<<<
  *         sum_logp = np.sum(np.core.umath.maximum(network.predict_on_batch(data), ll_min))
@@ -14839,7 +14848,7 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
  *         sum_logp = np.sum(np.core.umath.maximum(network.predict_on_batch(data), ll_min))
  *     else:
  *         sum_logp = np.sum(np.log(np.exp(np.core.umath.maximum(network.predict_on_batch(data), ll_min)) * (1.0 - p_outlier) + (w_outlier * p_outlier)))             # <<<<<<<<<<<<<<
- *
+ * 
  *     return sum_logp
  */
   __Pyx_TraceLine(337,0,__PYX_ERR(0, 337, __pyx_L1_error))
@@ -15009,10 +15018,10 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
 
   /* "wfpt.pyx":339
  *         sum_logp = np.sum(np.log(np.exp(np.core.umath.maximum(network.predict_on_batch(data), ll_min)) * (1.0 - p_outlier) + (w_outlier * p_outlier)))
- *
+ * 
  *     return sum_logp             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(339,0,__PYX_ERR(0, 339, __pyx_L1_error))
   __Pyx_XDECREF(__pyx_r);
@@ -15023,8 +15032,8 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
   goto __pyx_L0;
 
   /* "wfpt.pyx":228
- *
- *
+ * 
+ * 
  * def wiener_like_rlssm_nn(str model,             # <<<<<<<<<<<<<<
  *                       np.ndarray[double, ndim=1] x,
  *                       np.ndarray[long, ndim=1] response,
@@ -15097,15 +15106,15 @@ static PyObject *__pyx_pf_4wfpt_12wiener_like_rlssm_nn(CYTHON_UNUSED PyObject *_
 }
 
 /* "wfpt.pyx":342
- *
- *
+ * 
+ * 
  * def wiener_like_rl(np.ndarray[long, ndim=1] response,             # <<<<<<<<<<<<<<
  *                    np.ndarray[double, ndim=1] feedback,
  *                    np.ndarray[long, ndim=1] split_by,
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_15wiener_like_rl(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_15wiener_like_rl(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -15114,7 +15123,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_14wiener_like_rl, "wiener_like_rl(ndarray response, ndarray feedback, ndarray split_by, double q, double alpha, double pos_alpha, double v, double z, double err=1e-4, int n_st=10, int n_sz=10, bool use_adaptive=1, double simps_err=1e-8, double p_outlier=0, double w_outlier=0)");
 static PyMethodDef __pyx_mdef_4wfpt_15wiener_like_rl = {"wiener_like_rl", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_15wiener_like_rl, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_14wiener_like_rl};
-static PyObject *__pyx_pw_4wfpt_15wiener_like_rl(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_15wiener_like_rl(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -15643,7 +15652,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *     cdef np.ndarray[double, ndim=1] feedbacks
  *     cdef np.ndarray[long, ndim=1] responses
  *     cdef np.ndarray[long, ndim=1] unique = np.unique(split_by)             # <<<<<<<<<<<<<<
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  */
   __Pyx_TraceLine(361,0,__PYX_ERR(0, 361, __pyx_L1_error))
@@ -15690,10 +15699,10 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
 
   /* "wfpt.pyx":363
  *     cdef np.ndarray[long, ndim=1] unique = np.unique(split_by)
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         return -np.inf
- *
+ * 
  */
   __Pyx_TraceLine(363,0,__PYX_ERR(0, 363, __pyx_L1_error))
   __pyx_t_10 = __pyx_f_4wfpt_p_outlier_in_range(__pyx_v_p_outlier); if (unlikely(__pyx_t_10 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 363, __pyx_L1_error)
@@ -15701,10 +15710,10 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
   if (__pyx_t_11) {
 
     /* "wfpt.pyx":364
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  *         return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *     if pos_alpha==100.00:
  */
     __Pyx_TraceLine(364,0,__PYX_ERR(0, 364, __pyx_L1_error))
@@ -15723,16 +15732,16 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
 
     /* "wfpt.pyx":363
  *     cdef np.ndarray[long, ndim=1] unique = np.unique(split_by)
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         return -np.inf
- *
+ * 
  */
   }
 
   /* "wfpt.pyx":366
  *         return -np.inf
- *
+ * 
  *     if pos_alpha==100.00:             # <<<<<<<<<<<<<<
  *         pos_alfa = alpha
  *     else:
@@ -15742,7 +15751,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
   if (__pyx_t_11) {
 
     /* "wfpt.pyx":367
- *
+ * 
  *     if pos_alpha==100.00:
  *         pos_alfa = alpha             # <<<<<<<<<<<<<<
  *     else:
@@ -15753,7 +15762,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
 
     /* "wfpt.pyx":366
  *         return -np.inf
- *
+ * 
  *     if pos_alpha==100.00:             # <<<<<<<<<<<<<<
  *         pos_alfa = alpha
  *     else:
@@ -15765,7 +15774,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *         pos_alfa = alpha
  *     else:
  *         pos_alfa = pos_alpha             # <<<<<<<<<<<<<<
- *
+ * 
  *     # unique represent # of conditions
  */
   __Pyx_TraceLine(369,0,__PYX_ERR(0, 369, __pyx_L1_error))
@@ -15775,7 +15784,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
   __pyx_L4:;
 
   /* "wfpt.pyx":372
- *
+ * 
  *     # unique represent # of conditions
  *     for j in range(unique.shape[0]):             # <<<<<<<<<<<<<<
  *         s = unique[j]
@@ -15891,7 +15900,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *         s_size = responses.shape[0]
  *         qs[0] = q             # <<<<<<<<<<<<<<
  *         qs[1] = q
- *
+ * 
  */
     __Pyx_TraceLine(378,0,__PYX_ERR(0, 378, __pyx_L1_error))
     __pyx_t_15 = 0;
@@ -15901,7 +15910,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *         s_size = responses.shape[0]
  *         qs[0] = q
  *         qs[1] = q             # <<<<<<<<<<<<<<
- *
+ * 
  *         # don't calculate pdf for first trial but still update q
  */
     __Pyx_TraceLine(379,0,__PYX_ERR(0, 379, __pyx_L1_error))
@@ -15909,7 +15918,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
     *__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_15, __pyx_pybuffernd_qs.diminfo[0].strides) = __pyx_v_q;
 
     /* "wfpt.pyx":382
- *
+ * 
  *         # don't calculate pdf for first trial but still update q
  *         if feedbacks[0] > qs[responses[0]]:             # <<<<<<<<<<<<<<
  *             alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
@@ -15933,7 +15942,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
       __pyx_v_alfa = (pow(2.718281828459, __pyx_v_pos_alfa) / (1.0 + pow(2.718281828459, __pyx_v_pos_alfa)));
 
       /* "wfpt.pyx":382
- *
+ * 
  *         # don't calculate pdf for first trial but still update q
  *         if feedbacks[0] > qs[responses[0]]:             # <<<<<<<<<<<<<<
  *             alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
@@ -15946,7 +15955,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *             alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
  *         else:
  *             alfa = (2.718281828459**alpha) / (1 + 2.718281828459**alpha)             # <<<<<<<<<<<<<<
- *
+ * 
  *         # qs[1] is upper bound, qs[0] is lower bound. feedbacks is reward
  */
     __Pyx_TraceLine(385,0,__PYX_ERR(0, 385, __pyx_L1_error))
@@ -15960,7 +15969,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *         # received on current trial.
  *         qs[responses[0]] = qs[responses[0]] + \             # <<<<<<<<<<<<<<
  *             alfa * (feedbacks[0] - qs[responses[0]])
- *
+ * 
  */
     __Pyx_TraceLine(389,0,__PYX_ERR(0, 389, __pyx_L1_error))
     __pyx_t_21 = 0;
@@ -15970,7 +15979,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *         # received on current trial.
  *         qs[responses[0]] = qs[responses[0]] + \
  *             alfa * (feedbacks[0] - qs[responses[0]])             # <<<<<<<<<<<<<<
- *
+ * 
  *         # loop through all trials in current condition
  */
     __Pyx_TraceLine(390,0,__PYX_ERR(0, 390, __pyx_L1_error))
@@ -15983,7 +15992,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *         # received on current trial.
  *         qs[responses[0]] = qs[responses[0]] + \             # <<<<<<<<<<<<<<
  *             alfa * (feedbacks[0] - qs[responses[0]])
- *
+ * 
  */
     __Pyx_TraceLine(389,0,__PYX_ERR(0, 389, __pyx_L1_error))
     __pyx_t_25 = 0;
@@ -15991,10 +16000,10 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
     *__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_26, __pyx_pybuffernd_qs.diminfo[0].strides) = ((*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_22, __pyx_pybuffernd_qs.diminfo[0].strides)) + (__pyx_v_alfa * ((*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_feedbacks.rcbuffer->pybuffer.buf, __pyx_t_15, __pyx_pybuffernd_feedbacks.diminfo[0].strides)) - (*__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_24, __pyx_pybuffernd_qs.diminfo[0].strides)))));
 
     /* "wfpt.pyx":393
- *
+ * 
  *         # loop through all trials in current condition
  *         for i in range(1, s_size):             # <<<<<<<<<<<<<<
- *
+ * 
  *             drift = (qs[1] - qs[0]) * v
  */
     __Pyx_TraceLine(393,0,__PYX_ERR(0, 393, __pyx_L1_error))
@@ -16005,9 +16014,9 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
 
       /* "wfpt.pyx":395
  *         for i in range(1, s_size):
- *
+ * 
  *             drift = (qs[1] - qs[0]) * v             # <<<<<<<<<<<<<<
- *
+ * 
  *             if drift == 0:
  */
       __Pyx_TraceLine(395,0,__PYX_ERR(0, 395, __pyx_L1_error))
@@ -16017,7 +16026,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
 
       /* "wfpt.pyx":397
  *             drift = (qs[1] - qs[0]) * v
- *
+ * 
  *             if drift == 0:             # <<<<<<<<<<<<<<
  *                 p = 0.5
  *             else:
@@ -16027,7 +16036,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
       if (__pyx_t_11) {
 
         /* "wfpt.pyx":398
- *
+ * 
  *             if drift == 0:
  *                 p = 0.5             # <<<<<<<<<<<<<<
  *             else:
@@ -16038,7 +16047,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
 
         /* "wfpt.pyx":397
  *             drift = (qs[1] - qs[0]) * v
- *
+ * 
  *             if drift == 0:             # <<<<<<<<<<<<<<
  *                 p = 0.5
  *             else:
@@ -16084,7 +16093,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *                 else:
  *                     p = 1 - (2.718281828459**(-2 * z * drift) - 1) / \             # <<<<<<<<<<<<<<
  *                         (2.718281828459**(-2 * drift) - 1)
- *
+ * 
  */
         __Pyx_TraceLine(404,0,__PYX_ERR(0, 404, __pyx_L1_error))
         /*else*/ {
@@ -16093,7 +16102,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *                 else:
  *                     p = 1 - (2.718281828459**(-2 * z * drift) - 1) / \
  *                         (2.718281828459**(-2 * drift) - 1)             # <<<<<<<<<<<<<<
- *
+ * 
  *             # If one probability = 0, the log sum will be -Inf
  */
           __Pyx_TraceLine(405,0,__PYX_ERR(0, 405, __pyx_L1_error))
@@ -16104,7 +16113,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
       __pyx_L10:;
 
       /* "wfpt.pyx":408
- *
+ * 
  *             # If one probability = 0, the log sum will be -Inf
  *             p = p * (1 - p_outlier) + wp_outlier             # <<<<<<<<<<<<<<
  *             if p == 0:
@@ -16118,7 +16127,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *             p = p * (1 - p_outlier) + wp_outlier
  *             if p == 0:             # <<<<<<<<<<<<<<
  *                 return -np.inf
- *
+ * 
  */
       __Pyx_TraceLine(409,0,__PYX_ERR(0, 409, __pyx_L1_error))
       __pyx_t_11 = (__pyx_v_p == 0.0);
@@ -16128,7 +16137,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *             p = p * (1 - p_outlier) + wp_outlier
  *             if p == 0:
  *                 return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *             sum_logp += log(p)
  */
         __Pyx_TraceLine(410,0,__PYX_ERR(0, 410, __pyx_L1_error))
@@ -16150,15 +16159,15 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *             p = p * (1 - p_outlier) + wp_outlier
  *             if p == 0:             # <<<<<<<<<<<<<<
  *                 return -np.inf
- *
+ * 
  */
       }
 
       /* "wfpt.pyx":412
  *                 return -np.inf
- *
+ * 
  *             sum_logp += log(p)             # <<<<<<<<<<<<<<
- *
+ * 
  *             # get learning rate for current trial. if pos_alpha is not in
  */
       __Pyx_TraceLine(412,0,__PYX_ERR(0, 412, __pyx_L1_error))
@@ -16202,7 +16211,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *                 alfa = (2.718281828459**pos_alfa) / (1 + 2.718281828459**pos_alfa)
  *             else:
  *                 alfa = (2.718281828459**alpha) / (1 + 2.718281828459**alpha)             # <<<<<<<<<<<<<<
- *
+ * 
  *             # qs[1] is upper bound, qs[0] is lower bound. feedbacks is reward
  */
       __Pyx_TraceLine(420,0,__PYX_ERR(0, 420, __pyx_L1_error))
@@ -16227,7 +16236,7 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *             qs[responses[i]] = qs[responses[i]] + \
  *                 alfa * (feedbacks[i] - qs[responses[i]])             # <<<<<<<<<<<<<<
  *     return sum_logp
- *
+ * 
  */
       __Pyx_TraceLine(425,0,__PYX_ERR(0, 425, __pyx_L1_error))
       __pyx_t_24 = __pyx_v_i;
@@ -16252,8 +16261,8 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
  *             qs[responses[i]] = qs[responses[i]] + \
  *                 alfa * (feedbacks[i] - qs[responses[i]])
  *     return sum_logp             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(426,0,__PYX_ERR(0, 426, __pyx_L1_error))
   __Pyx_XDECREF(__pyx_r);
@@ -16264,8 +16273,8 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
   goto __pyx_L0;
 
   /* "wfpt.pyx":342
- *
- *
+ * 
+ * 
  * def wiener_like_rl(np.ndarray[long, ndim=1] response,             # <<<<<<<<<<<<<<
  *                    np.ndarray[double, ndim=1] feedback,
  *                    np.ndarray[long, ndim=1] split_by,
@@ -16313,15 +16322,15 @@ static PyObject *__pyx_pf_4wfpt_14wiener_like_rl(CYTHON_UNUSED PyObject *__pyx_s
 }
 
 /* "wfpt.pyx":429
- *
- *
+ * 
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,             # <<<<<<<<<<<<<<
  *                       int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_17wiener_like_multi(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_17wiener_like_multi(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -16330,7 +16339,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_16wiener_like_multi, "wiener_like_multi(ndarray x, v, sv, a, z, sz, t, st, double err, multi=None, int n_st=10, int n_sz=10, bool use_adaptive=1, double simps_err=1e-3, double p_outlier=0, double w_outlier=0)");
 static PyMethodDef __pyx_mdef_4wfpt_17wiener_like_multi = {"wiener_like_multi", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_17wiener_like_multi, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_16wiener_like_multi};
-static PyObject *__pyx_pw_4wfpt_17wiener_like_multi(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_17wiener_like_multi(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -16738,7 +16747,7 @@ static PyObject *__pyx_pf_4wfpt_16wiener_like_multi(CYTHON_UNUSED PyObject *__py
  *     cdef double p = 0
  *     cdef double sum_logp = 0             # <<<<<<<<<<<<<<
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  */
   __Pyx_TraceLine(435,0,__PYX_ERR(0, 435, __pyx_L1_error))
   __pyx_v_sum_logp = 0.0;
@@ -16747,7 +16756,7 @@ static PyObject *__pyx_pf_4wfpt_16wiener_like_multi(CYTHON_UNUSED PyObject *__py
  *     cdef double p = 0
  *     cdef double sum_logp = 0
  *     cdef double wp_outlier = w_outlier * p_outlier             # <<<<<<<<<<<<<<
- *
+ * 
  *     if multi is None:
  */
   __Pyx_TraceLine(436,0,__PYX_ERR(0, 436, __pyx_L1_error))
@@ -16755,7 +16764,7 @@ static PyObject *__pyx_pf_4wfpt_16wiener_like_multi(CYTHON_UNUSED PyObject *__py
 
   /* "wfpt.pyx":438
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  *     if multi is None:             # <<<<<<<<<<<<<<
  *         return full_pdf(x, v, sv, a, z, sz, t, st, err)
  *     else:
@@ -16765,7 +16774,7 @@ static PyObject *__pyx_pf_4wfpt_16wiener_like_multi(CYTHON_UNUSED PyObject *__py
   if (__pyx_t_2) {
 
     /* "wfpt.pyx":439
- *
+ * 
  *     if multi is None:
  *         return full_pdf(x, v, sv, a, z, sz, t, st, err)             # <<<<<<<<<<<<<<
  *     else:
@@ -16790,7 +16799,7 @@ static PyObject *__pyx_pf_4wfpt_16wiener_like_multi(CYTHON_UNUSED PyObject *__py
 
     /* "wfpt.pyx":438
  *     cdef double wp_outlier = w_outlier * p_outlier
- *
+ * 
  *     if multi is None:             # <<<<<<<<<<<<<<
  *         return full_pdf(x, v, sv, a, z, sz, t, st, err)
  *     else:
@@ -17096,7 +17105,7 @@ static PyObject *__pyx_pf_4wfpt_16wiener_like_multi(CYTHON_UNUSED PyObject *__py
  *                 p = prob_ub(params_iter['v'], params_iter['a'], params_iter['z'])
  *             else: # x[i] == -999.
  *                 p = 1 - prob_ub(params_iter['v'], params_iter['a'], params_iter['z'])             # <<<<<<<<<<<<<<
- *
+ * 
  *             sum_logp += log(p)
  */
       __Pyx_TraceLine(455,0,__PYX_ERR(0, 455, __pyx_L1_error))
@@ -17120,9 +17129,9 @@ static PyObject *__pyx_pf_4wfpt_16wiener_like_multi(CYTHON_UNUSED PyObject *__py
 
       /* "wfpt.pyx":457
  *                 p = 1 - prob_ub(params_iter['v'], params_iter['a'], params_iter['z'])
- *
+ * 
  *             sum_logp += log(p)             # <<<<<<<<<<<<<<
- *
+ * 
  *         return sum_logp
  */
       __Pyx_TraceLine(457,0,__PYX_ERR(0, 457, __pyx_L1_error))
@@ -17131,10 +17140,10 @@ static PyObject *__pyx_pf_4wfpt_16wiener_like_multi(CYTHON_UNUSED PyObject *__py
 
     /* "wfpt.pyx":459
  *             sum_logp += log(p)
- *
+ * 
  *         return sum_logp             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
     __Pyx_TraceLine(459,0,__PYX_ERR(0, 459, __pyx_L1_error))
     __Pyx_XDECREF(__pyx_r);
@@ -17146,8 +17155,8 @@ static PyObject *__pyx_pf_4wfpt_16wiener_like_multi(CYTHON_UNUSED PyObject *__py
   }
 
   /* "wfpt.pyx":429
- *
- *
+ * 
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,             # <<<<<<<<<<<<<<
  *                       int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
@@ -17180,15 +17189,15 @@ static PyObject *__pyx_pf_4wfpt_16wiener_like_multi(CYTHON_UNUSED PyObject *__py
 }
 
 /* "wfpt.pyx":462
- *
- *
+ * 
+ * 
  * def wiener_like_multi_rlddm(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[long, ndim=1] response,
  *                       np.ndarray[double, ndim=1] feedback,
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_19wiener_like_multi_rlddm(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_19wiener_like_multi_rlddm(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -17197,7 +17206,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_18wiener_like_multi_rlddm, "wiener_like_multi_rlddm(ndarray x, ndarray response, ndarray feedback, ndarray split_by, double q, v, sv, a, z, sz, t, st, alpha, double err, multi=None, int n_st=10, int n_sz=10, bool use_adaptive=1, double simps_err=1e-3, double p_outlier=0, double w_outlier=0)");
 static PyMethodDef __pyx_mdef_4wfpt_19wiener_like_multi_rlddm = {"wiener_like_multi_rlddm", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_19wiener_like_multi_rlddm, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_18wiener_like_multi_rlddm};
-static PyObject *__pyx_pw_4wfpt_19wiener_like_multi_rlddm(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_19wiener_like_multi_rlddm(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -17599,8 +17608,8 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __pyx_r = __pyx_pf_4wfpt_18wiener_like_multi_rlddm(__pyx_self, __pyx_v_x, __pyx_v_response, __pyx_v_feedback, __pyx_v_split_by, __pyx_v_q, __pyx_v_v, __pyx_v_sv, __pyx_v_a, __pyx_v_z, __pyx_v_sz, __pyx_v_t, __pyx_v_st, __pyx_v_alpha, __pyx_v_err, __pyx_v_multi, __pyx_v_n_st, __pyx_v_n_sz, __pyx_v_use_adaptive, __pyx_v_simps_err, __pyx_v_p_outlier, __pyx_v_w_outlier);
 
   /* "wfpt.pyx":462
- *
- *
+ * 
+ * 
  * def wiener_like_multi_rlddm(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[long, ndim=1] response,
  *                       np.ndarray[double, ndim=1] feedback,
@@ -17762,7 +17771,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
  *     cdef double wp_outlier = w_outlier * p_outlier
  *     cdef int s
  *     cdef np.ndarray[double, ndim=1] qs = np.array([q, q])             # <<<<<<<<<<<<<<
- *
+ * 
  *     if multi is None:
  */
   __Pyx_TraceLine(476,0,__PYX_ERR(0, 476, __pyx_L1_error))
@@ -17822,7 +17831,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
 
   /* "wfpt.pyx":478
  *     cdef np.ndarray[double, ndim=1] qs = np.array([q, q])
- *
+ * 
  *     if multi is None:             # <<<<<<<<<<<<<<
  *         return full_pdf(x, v, sv, a, z, sz, t, st, err)
  *     else:
@@ -17832,7 +17841,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
   if (__pyx_t_9) {
 
     /* "wfpt.pyx":479
- *
+ * 
  *     if multi is None:
  *         return full_pdf(x, v, sv, a, z, sz, t, st, err)             # <<<<<<<<<<<<<<
  *     else:
@@ -17857,7 +17866,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
 
     /* "wfpt.pyx":478
  *     cdef np.ndarray[double, ndim=1] qs = np.array([q, q])
- *
+ * 
  *     if multi is None:             # <<<<<<<<<<<<<<
  *         return full_pdf(x, v, sv, a, z, sz, t, st, err)
  *     else:
@@ -18004,7 +18013,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
  *         for i in range(size):
  *             for param in multi:             # <<<<<<<<<<<<<<
  *                 params_iter[param] = params[param][i]
- *
+ * 
  */
       __Pyx_TraceLine(486,0,__PYX_ERR(0, 486, __pyx_L1_error))
       if (likely(PyList_CheckExact(__pyx_v_multi)) || PyTuple_CheckExact(__pyx_v_multi)) {
@@ -18053,7 +18062,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
  *         for i in range(size):
  *             for param in multi:
  *                 params_iter[param] = params[param][i]             # <<<<<<<<<<<<<<
- *
+ * 
  *             if (i != 0):
  */
         __Pyx_TraceLine(487,0,__PYX_ERR(0, 487, __pyx_L1_error))
@@ -18070,7 +18079,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
  *         for i in range(size):
  *             for param in multi:             # <<<<<<<<<<<<<<
  *                 params_iter[param] = params[param][i]
- *
+ * 
  */
         __Pyx_TraceLine(486,0,__PYX_ERR(0, 486, __pyx_L1_error))
       }
@@ -18078,7 +18087,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
 
       /* "wfpt.pyx":489
  *                 params_iter[param] = params[param][i]
- *
+ * 
  *             if (i != 0):             # <<<<<<<<<<<<<<
  *                 if (split_by[i] != split_by[i-1]):
  *                     qs[0] = q
@@ -18088,7 +18097,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
       if (__pyx_t_9) {
 
         /* "wfpt.pyx":490
- *
+ * 
  *             if (i != 0):
  *                 if (split_by[i] != split_by[i-1]):             # <<<<<<<<<<<<<<
  *                     qs[0] = q
@@ -18114,7 +18123,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
  *                 if (split_by[i] != split_by[i-1]):
  *                     qs[0] = q             # <<<<<<<<<<<<<<
  *                     qs[1] = q
- *
+ * 
  */
           __Pyx_TraceLine(491,0,__PYX_ERR(0, 491, __pyx_L1_error))
           __pyx_t_19 = 0;
@@ -18124,7 +18133,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
  *                 if (split_by[i] != split_by[i-1]):
  *                     qs[0] = q
  *                     qs[1] = q             # <<<<<<<<<<<<<<
- *
+ * 
  *             p = full_pdf(x[i], params_iter['v'] * (qs[1] - qs[0]),
  */
           __Pyx_TraceLine(492,0,__PYX_ERR(0, 492, __pyx_L1_error))
@@ -18132,7 +18141,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
           *__Pyx_BufPtrStrided1d(double *, __pyx_pybuffernd_qs.rcbuffer->pybuffer.buf, __pyx_t_19, __pyx_pybuffernd_qs.diminfo[0].strides) = __pyx_v_q;
 
           /* "wfpt.pyx":490
- *
+ * 
  *             if (i != 0):
  *                 if (split_by[i] != split_by[i-1]):             # <<<<<<<<<<<<<<
  *                     qs[0] = q
@@ -18142,7 +18151,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
 
         /* "wfpt.pyx":489
  *                 params_iter[param] = params[param][i]
- *
+ * 
  *             if (i != 0):             # <<<<<<<<<<<<<<
  *                 if (split_by[i] != split_by[i-1]):
  *                     qs[0] = q
@@ -18151,7 +18160,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
 
       /* "wfpt.pyx":494
  *                     qs[1] = q
- *
+ * 
  *             p = full_pdf(x[i], params_iter['v'] * (qs[1] - qs[0]),             # <<<<<<<<<<<<<<
  *                          params_iter['sv'], params_iter['a'], params_iter['z'],
  *                          params_iter['sz'], params_iter[
@@ -18175,7 +18184,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
       __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
       /* "wfpt.pyx":495
- *
+ * 
  *             p = full_pdf(x[i], params_iter['v'] * (qs[1] - qs[0]),
  *                          params_iter['sv'], params_iter['a'], params_iter['z'],             # <<<<<<<<<<<<<<
  *                          params_iter['sz'], params_iter[
@@ -18227,7 +18236,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
 
       /* "wfpt.pyx":494
  *                     qs[1] = q
- *
+ * 
  *             p = full_pdf(x[i], params_iter['v'] * (qs[1] - qs[0]),             # <<<<<<<<<<<<<<
  *                          params_iter['sv'], params_iter['a'], params_iter['z'],
  *                          params_iter['sz'], params_iter[
@@ -18246,7 +18255,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
  *                          err, n_st, n_sz, use_adaptive, simps_err)
  *             p = p * (1 - p_outlier) + wp_outlier             # <<<<<<<<<<<<<<
  *             sum_logp += log(p)
- *
+ * 
  */
       __Pyx_TraceLine(499,0,__PYX_ERR(0, 499, __pyx_L1_error))
       __pyx_v_p = ((__pyx_v_p * (1.0 - __pyx_v_p_outlier)) + __pyx_v_wp_outlier);
@@ -18255,7 +18264,7 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
  *                          err, n_st, n_sz, use_adaptive, simps_err)
  *             p = p * (1 - p_outlier) + wp_outlier
  *             sum_logp += log(p)             # <<<<<<<<<<<<<<
- *
+ * 
  *             alfa = (2.718281828459**params_iter['alpha']) / (1 + 2.718281828459**params_iter['alpha'])
  */
       __Pyx_TraceLine(500,0,__PYX_ERR(0, 500, __pyx_L1_error))
@@ -18263,10 +18272,10 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
 
       /* "wfpt.pyx":502
  *             sum_logp += log(p)
- *
+ * 
  *             alfa = (2.718281828459**params_iter['alpha']) / (1 + 2.718281828459**params_iter['alpha'])             # <<<<<<<<<<<<<<
  *             qs[response[i]] = qs[response[i]] + alfa * (feedback[i] - qs[response[i]])
- *
+ * 
  */
       __Pyx_TraceLine(502,0,__PYX_ERR(0, 502, __pyx_L1_error))
       __pyx_t_4 = __Pyx_PyObject_Dict_GetItem(__pyx_v_params_iter, __pyx_n_u_alpha); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 502, __pyx_L1_error)
@@ -18290,10 +18299,10 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
       __pyx_t_5 = 0;
 
       /* "wfpt.pyx":503
- *
+ * 
  *             alfa = (2.718281828459**params_iter['alpha']) / (1 + 2.718281828459**params_iter['alpha'])
  *             qs[response[i]] = qs[response[i]] + alfa * (feedback[i] - qs[response[i]])             # <<<<<<<<<<<<<<
- *
+ * 
  *         return sum_logp
  */
       __Pyx_TraceLine(503,0,__PYX_ERR(0, 503, __pyx_L1_error))
@@ -18339,10 +18348,10 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
 
     /* "wfpt.pyx":505
  *             qs[response[i]] = qs[response[i]] + alfa * (feedback[i] - qs[response[i]])
- *
+ * 
  *         return sum_logp             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
     __Pyx_TraceLine(505,0,__PYX_ERR(0, 505, __pyx_L1_error))
     __Pyx_XDECREF(__pyx_r);
@@ -18354,8 +18363,8 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
   }
 
   /* "wfpt.pyx":462
- *
- *
+ * 
+ * 
  * def wiener_like_multi_rlddm(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[long, ndim=1] response,
  *                       np.ndarray[double, ndim=1] feedback,
@@ -18401,15 +18410,15 @@ static PyObject *__pyx_pf_4wfpt_18wiener_like_multi_rlddm(CYTHON_UNUSED PyObject
 }
 
 /* "wfpt.pyx":508
- *
- *
+ * 
+ * 
  * def wiener_like_rlssm_nn_reg(np.ndarray[float, ndim=2] data,             # <<<<<<<<<<<<<<
  *                       np.ndarray[float, ndim=2] rl_arr,
  *                       np.ndarray[double, ndim=1] x,
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_21wiener_like_rlssm_nn_reg(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_21wiener_like_rlssm_nn_reg(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -18418,7 +18427,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_20wiener_like_rlssm_nn_reg, "wiener_like_rlssm_nn_reg(ndarray data, ndarray rl_arr, ndarray x, ndarray response, ndarray feedback, ndarray split_by, double q, ndarray params_bnds, double p_outlier=0, double w_outlier=0, network=None)");
 static PyMethodDef __pyx_mdef_4wfpt_21wiener_like_rlssm_nn_reg = {"wiener_like_rlssm_nn_reg", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_21wiener_like_rlssm_nn_reg, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_20wiener_like_rlssm_nn_reg};
-static PyObject *__pyx_pw_4wfpt_21wiener_like_rlssm_nn_reg(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_21wiener_like_rlssm_nn_reg(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -18665,8 +18674,8 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __pyx_r = __pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(__pyx_self, __pyx_v_data, __pyx_v_rl_arr, __pyx_v_x, __pyx_v_response, __pyx_v_feedback, __pyx_v_split_by, __pyx_v_q, __pyx_v_params_bnds, __pyx_v_p_outlier, __pyx_v_w_outlier, __pyx_v_network);
 
   /* "wfpt.pyx":508
- *
- *
+ * 
+ * 
  * def wiener_like_rlssm_nn_reg(np.ndarray[float, ndim=2] data,             # <<<<<<<<<<<<<<
  *                       np.ndarray[float, ndim=2] rl_arr,
  *                       np.ndarray[double, ndim=1] x,
@@ -19055,7 +19064,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *     cdef np.ndarray[float, ndim=2] data_copy = data
  *     cdef float ll_min = -16.11809             # <<<<<<<<<<<<<<
  *     cdef int cumm_s_size = 0
- *
+ * 
  */
   __Pyx_TraceLine(533,0,__PYX_ERR(0, 533, __pyx_L1_error))
   __pyx_v_ll_min = -16.11809;
@@ -19064,7 +19073,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *     cdef np.ndarray[float, ndim=2] data_copy = data
  *     cdef float ll_min = -16.11809
  *     cdef int cumm_s_size = 0             # <<<<<<<<<<<<<<
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  */
   __Pyx_TraceLine(534,0,__PYX_ERR(0, 534, __pyx_L1_error))
@@ -19072,10 +19081,10 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
 
   /* "wfpt.pyx":536
  *     cdef int cumm_s_size = 0
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         return -np.inf
- *
+ * 
  */
   __Pyx_TraceLine(536,0,__PYX_ERR(0, 536, __pyx_L1_error))
   __pyx_t_10 = __pyx_f_4wfpt_p_outlier_in_range(__pyx_v_p_outlier); if (unlikely(__pyx_t_10 == ((int)-1) && PyErr_Occurred())) __PYX_ERR(0, 536, __pyx_L1_error)
@@ -19083,10 +19092,10 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
   if (__pyx_t_11) {
 
     /* "wfpt.pyx":537
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  *         return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *     # Check for boundary violations -- if true, return -np.inf
  */
     __Pyx_TraceLine(537,0,__PYX_ERR(0, 537, __pyx_L1_error))
@@ -19105,15 +19114,15 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
 
     /* "wfpt.pyx":536
  *     cdef int cumm_s_size = 0
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):             # <<<<<<<<<<<<<<
  *         return -np.inf
- *
+ * 
  */
   }
 
   /* "wfpt.pyx":540
- *
+ * 
  *     # Check for boundary violations -- if true, return -np.inf
  *     for i_p in np.arange(1, data.shape[1]-2):             # <<<<<<<<<<<<<<
  *         lower_bnd = params_bnds[0][i_p]
@@ -19200,7 +19209,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *     for i_p in np.arange(1, data.shape[1]-2):
  *         lower_bnd = params_bnds[0][i_p]             # <<<<<<<<<<<<<<
  *         upper_bnd = params_bnds[1][i_p]
- *
+ * 
  */
     __Pyx_TraceLine(541,0,__PYX_ERR(0, 541, __pyx_L1_error))
     __pyx_t_2 = __Pyx_GetItemInt(((PyObject *)__pyx_v_params_bnds), 0, long, 1, __Pyx_PyInt_From_long, 0, 0, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 541, __pyx_L1_error)
@@ -19215,7 +19224,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *     for i_p in np.arange(1, data.shape[1]-2):
  *         lower_bnd = params_bnds[0][i_p]
  *         upper_bnd = params_bnds[1][i_p]             # <<<<<<<<<<<<<<
- *
+ * 
  *         if data[:,i_p].min() < lower_bnd or data[:,i_p].max() > upper_bnd:
  */
     __Pyx_TraceLine(542,0,__PYX_ERR(0, 542, __pyx_L1_error))
@@ -19229,10 +19238,10 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
 
     /* "wfpt.pyx":544
  *         upper_bnd = params_bnds[1][i_p]
- *
+ * 
  *         if data[:,i_p].min() < lower_bnd or data[:,i_p].max() > upper_bnd:             # <<<<<<<<<<<<<<
  *             return -np.inf
- *
+ * 
  */
     __Pyx_TraceLine(544,0,__PYX_ERR(0, 544, __pyx_L1_error))
     __pyx_t_6 = PyInt_FromSsize_t(__pyx_v_i_p); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 544, __pyx_L1_error)
@@ -19329,10 +19338,10 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
     if (__pyx_t_11) {
 
       /* "wfpt.pyx":545
- *
+ * 
  *         if data[:,i_p].min() < lower_bnd or data[:,i_p].max() > upper_bnd:
  *             return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *     # unique represent # of conditions
  */
       __Pyx_TraceLine(545,0,__PYX_ERR(0, 545, __pyx_L1_error))
@@ -19352,15 +19361,15 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
 
       /* "wfpt.pyx":544
  *         upper_bnd = params_bnds[1][i_p]
- *
+ * 
  *         if data[:,i_p].min() < lower_bnd or data[:,i_p].max() > upper_bnd:             # <<<<<<<<<<<<<<
  *             return -np.inf
- *
+ * 
  */
     }
 
     /* "wfpt.pyx":540
- *
+ * 
  *     # Check for boundary violations -- if true, return -np.inf
  *     for i_p in np.arange(1, data.shape[1]-2):             # <<<<<<<<<<<<<<
  *         lower_bnd = params_bnds[0][i_p]
@@ -19371,7 +19380,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
   /* "wfpt.pyx":548
- *
+ * 
  *     # unique represent # of conditions
  *     for j in range(unique.shape[0]):             # <<<<<<<<<<<<<<
  *         s = unique[j]
@@ -19525,7 +19534,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *         s_size = xs.shape[0]
  *         qs[0] = q             # <<<<<<<<<<<<<<
  *         qs[1] = q
- *
+ * 
  */
     __Pyx_TraceLine(555,0,__PYX_ERR(0, 555, __pyx_L1_error))
     __pyx_t_17 = 0;
@@ -19535,7 +19544,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *         s_size = xs.shape[0]
  *         qs[0] = q
  *         qs[1] = q             # <<<<<<<<<<<<<<
- *
+ * 
  *         responses_qs = responses
  */
     __Pyx_TraceLine(556,0,__PYX_ERR(0, 556, __pyx_L1_error))
@@ -19544,10 +19553,10 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
 
     /* "wfpt.pyx":558
  *         qs[1] = q
- *
+ * 
  *         responses_qs = responses             # <<<<<<<<<<<<<<
  *         responses_qs[responses_qs == -1] = 0
- *
+ * 
  */
     __Pyx_TraceLine(558,0,__PYX_ERR(0, 558, __pyx_L1_error))
     {
@@ -19571,10 +19580,10 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
     __Pyx_XDECREF_SET(__pyx_v_responses_qs, ((PyArrayObject *)__pyx_v_responses));
 
     /* "wfpt.pyx":559
- *
+ * 
  *         responses_qs = responses
  *         responses_qs[responses_qs == -1] = 0             # <<<<<<<<<<<<<<
- *
+ * 
  *         # loop through all trials in current condition
  */
     __Pyx_TraceLine(559,0,__PYX_ERR(0, 559, __pyx_L1_error))
@@ -19583,7 +19592,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
     /* "wfpt.pyx":562
- *
+ * 
  *         # loop through all trials in current condition
  *         for i in range(0, s_size):             # <<<<<<<<<<<<<<
  *             tp_scale = data[cumm_s_size + i, 0]
@@ -19615,7 +19624,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *             tp_scale = data[cumm_s_size + i, 0]
  *             if tp_scale < 0:             # <<<<<<<<<<<<<<
  *                 return -np.inf
- *
+ * 
  */
       __Pyx_TraceLine(564,0,__PYX_ERR(0, 564, __pyx_L1_error))
       __pyx_t_4 = PyObject_RichCompare(__pyx_v_tp_scale, __pyx_int_0, Py_LT); __Pyx_XGOTREF(__pyx_t_4); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 564, __pyx_L1_error)
@@ -19627,7 +19636,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *             tp_scale = data[cumm_s_size + i, 0]
  *             if tp_scale < 0:
  *                 return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *             data_copy[cumm_s_size + i, 0] = (qs[1] - qs[0]) * tp_scale
  */
         __Pyx_TraceLine(565,0,__PYX_ERR(0, 565, __pyx_L1_error))
@@ -19649,15 +19658,15 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *             tp_scale = data[cumm_s_size + i, 0]
  *             if tp_scale < 0:             # <<<<<<<<<<<<<<
  *                 return -np.inf
- *
+ * 
  */
       }
 
       /* "wfpt.pyx":567
  *                 return -np.inf
- *
+ * 
  *             data_copy[cumm_s_size + i, 0] = (qs[1] - qs[0]) * tp_scale             # <<<<<<<<<<<<<<
- *
+ * 
  *             # Check for boundary violations -- if true, return -np.inf
  */
       __Pyx_TraceLine(567,0,__PYX_ERR(0, 567, __pyx_L1_error))
@@ -19675,11 +19684,11 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
       *__Pyx_BufPtrStrided2d(float *, __pyx_pybuffernd_data_copy.rcbuffer->pybuffer.buf, __pyx_t_17, __pyx_pybuffernd_data_copy.diminfo[0].strides, __pyx_t_26, __pyx_pybuffernd_data_copy.diminfo[1].strides) = __pyx_t_27;
 
       /* "wfpt.pyx":570
- *
+ * 
  *             # Check for boundary violations -- if true, return -np.inf
  *             if data_copy[cumm_s_size + i, 0] < params_bnds[0][0] or data_copy[cumm_s_size + i, 0] > params_bnds[1][0]:             # <<<<<<<<<<<<<<
  *                 return -np.inf
- *
+ * 
  */
       __Pyx_TraceLine(570,0,__PYX_ERR(0, 570, __pyx_L1_error))
       __pyx_t_26 = (__pyx_v_cumm_s_size + __pyx_v_i);
@@ -19723,7 +19732,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *             # Check for boundary violations -- if true, return -np.inf
  *             if data_copy[cumm_s_size + i, 0] < params_bnds[0][0] or data_copy[cumm_s_size + i, 0] > params_bnds[1][0]:
  *                 return -np.inf             # <<<<<<<<<<<<<<
- *
+ * 
  *             rl_alpha = rl_arr[cumm_s_size + i, 0]
  */
         __Pyx_TraceLine(571,0,__PYX_ERR(0, 571, __pyx_L1_error))
@@ -19741,20 +19750,20 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
         goto __pyx_L0;
 
         /* "wfpt.pyx":570
- *
+ * 
  *             # Check for boundary violations -- if true, return -np.inf
  *             if data_copy[cumm_s_size + i, 0] < params_bnds[0][0] or data_copy[cumm_s_size + i, 0] > params_bnds[1][0]:             # <<<<<<<<<<<<<<
  *                 return -np.inf
- *
+ * 
  */
       }
 
       /* "wfpt.pyx":573
  *                 return -np.inf
- *
+ * 
  *             rl_alpha = rl_arr[cumm_s_size + i, 0]             # <<<<<<<<<<<<<<
  *             alfa = (2.718281828459**rl_alpha) / (1 + 2.718281828459**rl_alpha)
- *
+ * 
  */
       __Pyx_TraceLine(573,0,__PYX_ERR(0, 573, __pyx_L1_error))
       __pyx_t_26 = (__pyx_v_cumm_s_size + __pyx_v_i);
@@ -19762,10 +19771,10 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
       __pyx_v_rl_alpha = (*__Pyx_BufPtrStrided2d(float *, __pyx_pybuffernd_rl_arr.rcbuffer->pybuffer.buf, __pyx_t_26, __pyx_pybuffernd_rl_arr.diminfo[0].strides, __pyx_t_17, __pyx_pybuffernd_rl_arr.diminfo[1].strides));
 
       /* "wfpt.pyx":574
- *
+ * 
  *             rl_alpha = rl_arr[cumm_s_size + i, 0]
  *             alfa = (2.718281828459**rl_alpha) / (1 + 2.718281828459**rl_alpha)             # <<<<<<<<<<<<<<
- *
+ * 
  *             qs[responses_qs[i]] = qs[responses_qs[i]] + \
  */
       __Pyx_TraceLine(574,0,__PYX_ERR(0, 574, __pyx_L1_error))
@@ -19773,7 +19782,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
 
       /* "wfpt.pyx":576
  *             alfa = (2.718281828459**rl_alpha) / (1 + 2.718281828459**rl_alpha)
- *
+ * 
  *             qs[responses_qs[i]] = qs[responses_qs[i]] + \             # <<<<<<<<<<<<<<
  *                 alfa * (feedbacks[i] - qs[responses_qs[i]])
  *         cumm_s_size += s_size
@@ -19783,11 +19792,11 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
       __pyx_t_26 = (*__Pyx_BufPtrStrided1d(long *, __pyx_pybuffernd_responses_qs.rcbuffer->pybuffer.buf, __pyx_t_17, __pyx_pybuffernd_responses_qs.diminfo[0].strides));
 
       /* "wfpt.pyx":577
- *
+ * 
  *             qs[responses_qs[i]] = qs[responses_qs[i]] + \
  *                 alfa * (feedbacks[i] - qs[responses_qs[i]])             # <<<<<<<<<<<<<<
  *         cumm_s_size += s_size
- *
+ * 
  */
       __Pyx_TraceLine(577,0,__PYX_ERR(0, 577, __pyx_L1_error))
       __pyx_t_28 = __pyx_v_i;
@@ -19796,7 +19805,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
 
       /* "wfpt.pyx":576
  *             alfa = (2.718281828459**rl_alpha) / (1 + 2.718281828459**rl_alpha)
- *
+ * 
  *             qs[responses_qs[i]] = qs[responses_qs[i]] + \             # <<<<<<<<<<<<<<
  *                 alfa * (feedbacks[i] - qs[responses_qs[i]])
  *         cumm_s_size += s_size
@@ -19811,7 +19820,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *             qs[responses_qs[i]] = qs[responses_qs[i]] + \
  *                 alfa * (feedbacks[i] - qs[responses_qs[i]])
  *         cumm_s_size += s_size             # <<<<<<<<<<<<<<
- *
+ * 
  *     # Call to network:
  */
     __Pyx_TraceLine(578,0,__PYX_ERR(0, 578, __pyx_L1_error))
@@ -19819,7 +19828,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
   }
 
   /* "wfpt.pyx":581
- *
+ * 
  *     # Call to network:
  *     if p_outlier == 0:             # <<<<<<<<<<<<<<
  *         sum_logp = np.sum(np.core.umath.maximum(network.predict_on_batch(data_copy), ll_min))
@@ -19931,7 +19940,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
     __pyx_v_sum_logp = __pyx_t_35;
 
     /* "wfpt.pyx":581
- *
+ * 
  *     # Call to network:
  *     if p_outlier == 0:             # <<<<<<<<<<<<<<
  *         sum_logp = np.sum(np.core.umath.maximum(network.predict_on_batch(data_copy), ll_min))
@@ -19944,7 +19953,7 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
  *         sum_logp = np.sum(np.core.umath.maximum(network.predict_on_batch(data_copy), ll_min))
  *     else:
  *         sum_logp = np.sum(np.log(np.exp(np.core.umath.maximum(network.predict_on_batch(data_copy), ll_min)) * (1.0 - p_outlier) + (w_outlier * p_outlier)))             # <<<<<<<<<<<<<<
- *
+ * 
  *     return sum_logp
  */
   __Pyx_TraceLine(584,0,__PYX_ERR(0, 584, __pyx_L1_error))
@@ -20114,9 +20123,9 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
 
   /* "wfpt.pyx":586
  *         sum_logp = np.sum(np.log(np.exp(np.core.umath.maximum(network.predict_on_batch(data_copy), ll_min)) * (1.0 - p_outlier) + (w_outlier * p_outlier)))
- *
+ * 
  *     return sum_logp             # <<<<<<<<<<<<<<
- *
+ * 
  * def wiener_like_contaminant(np.ndarray[double, ndim=1] x, np.ndarray[int, ndim=1] cont_x, double v,
  */
   __Pyx_TraceLine(586,0,__PYX_ERR(0, 586, __pyx_L1_error))
@@ -20128,8 +20137,8 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
   goto __pyx_L0;
 
   /* "wfpt.pyx":508
- *
- *
+ * 
+ * 
  * def wiener_like_rlssm_nn_reg(np.ndarray[float, ndim=2] data,             # <<<<<<<<<<<<<<
  *                       np.ndarray[float, ndim=2] rl_arr,
  *                       np.ndarray[double, ndim=1] x,
@@ -20204,14 +20213,14 @@ static PyObject *__pyx_pf_4wfpt_20wiener_like_rlssm_nn_reg(CYTHON_UNUSED PyObjec
 
 /* "wfpt.pyx":588
  *     return sum_logp
- *
+ * 
  * def wiener_like_contaminant(np.ndarray[double, ndim=1] x, np.ndarray[int, ndim=1] cont_x, double v,             # <<<<<<<<<<<<<<
  *                             double sv, double a, double z, double sz, double t, double st, double t_min,
  *                             double t_max, double err, int n_st=10, int n_sz=10, bint use_adaptive=1,
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_23wiener_like_contaminant(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_23wiener_like_contaminant(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -20220,7 +20229,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_22wiener_like_contaminant, "wiener_like_contaminant(ndarray x, ndarray cont_x, double v, double sv, double a, double z, double sz, double t, double st, double t_min, double t_max, double err, int n_st=10, int n_sz=10, bool use_adaptive=1, double simps_err=1e-8)\nWiener likelihood function where RTs could come from a\n    separate, uniform contaminant distribution.\n\n    Reference: Lee, Vandekerckhove, Navarro, & Tuernlinckx (2007)\n    ");
 static PyMethodDef __pyx_mdef_4wfpt_23wiener_like_contaminant = {"wiener_like_contaminant", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_23wiener_like_contaminant, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_22wiener_like_contaminant};
-static PyObject *__pyx_pw_4wfpt_23wiener_like_contaminant(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_23wiener_like_contaminant(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -20625,7 +20634,7 @@ static PyObject *__pyx_pf_4wfpt_22wiener_like_contaminant(CYTHON_UNUSED PyObject
  *     cdef double sum_logp = 0
  *     cdef int n_cont = np.sum(cont_x)             # <<<<<<<<<<<<<<
  *     cdef int pos_cont = 0
- *
+ * 
  */
   __Pyx_TraceLine(601,0,__PYX_ERR(0, 601, __pyx_L1_error))
   __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_np); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 601, __pyx_L1_error)
@@ -20663,7 +20672,7 @@ static PyObject *__pyx_pf_4wfpt_22wiener_like_contaminant(CYTHON_UNUSED PyObject
  *     cdef double sum_logp = 0
  *     cdef int n_cont = np.sum(cont_x)
  *     cdef int pos_cont = 0             # <<<<<<<<<<<<<<
- *
+ * 
  *     for i in prange(size, nogil=True):
  */
   __Pyx_TraceLine(602,0,__PYX_ERR(0, 602, __pyx_L1_error))
@@ -20671,7 +20680,7 @@ static PyObject *__pyx_pf_4wfpt_22wiener_like_contaminant(CYTHON_UNUSED PyObject
 
   /* "wfpt.pyx":604
  *     cdef int pos_cont = 0
- *
+ * 
  *     for i in prange(size, nogil=True):             # <<<<<<<<<<<<<<
  *         if cont_x[i] == 0:
  *             p = full_pdf(x[i], v, sv, a, z, sz, t, st, err,
@@ -20724,7 +20733,7 @@ static PyObject *__pyx_pf_4wfpt_22wiener_like_contaminant(CYTHON_UNUSED PyObject
                             __pyx_v_p = ((double)__PYX_NAN());
 
                             /* "wfpt.pyx":605
- *
+ * 
  *     for i in prange(size, nogil=True):
  *         if cont_x[i] == 0:             # <<<<<<<<<<<<<<
  *             p = full_pdf(x[i], v, sv, a, z, sz, t, st, err,
@@ -20846,13 +20855,13 @@ static PyObject *__pyx_pf_4wfpt_22wiener_like_contaminant(CYTHON_UNUSED PyObject
  *                     return -np.inf
  *             sum_logp += log(p)             # <<<<<<<<<<<<<<
  *         # If one probability = 0, the log sum will be -Inf
- *
+ * 
  */
                               __Pyx_TraceLine(611,1,__PYX_ERR(0, 611, __pyx_L8_error))
                               __pyx_v_sum_logp = (__pyx_v_sum_logp + log(__pyx_v_p));
 
                               /* "wfpt.pyx":605
- *
+ * 
  *     for i in prange(size, nogil=True):
  *         if cont_x[i] == 0:             # <<<<<<<<<<<<<<
  *             p = full_pdf(x[i], v, sv, a, z, sz, t, st, err,
@@ -20951,7 +20960,7 @@ static PyObject *__pyx_pf_4wfpt_22wiener_like_contaminant(CYTHON_UNUSED PyObject
 
       /* "wfpt.pyx":604
  *     cdef int pos_cont = 0
- *
+ * 
  *     for i in prange(size, nogil=True):             # <<<<<<<<<<<<<<
  *         if cont_x[i] == 0:
  *             p = full_pdf(x[i], v, sv, a, z, sz, t, st, err,
@@ -20977,10 +20986,10 @@ static PyObject *__pyx_pf_4wfpt_22wiener_like_contaminant(CYTHON_UNUSED PyObject
   }
 
   /* "wfpt.pyx":615
- *
+ * 
  *     # add the log likelihood of the contaminations
  *     sum_logp += n_cont * log(0.5 * 1. / (t_max - t_min))             # <<<<<<<<<<<<<<
- *
+ * 
  *     return sum_logp
  */
   __Pyx_TraceLine(615,0,__PYX_ERR(0, 615, __pyx_L1_error))
@@ -20988,9 +20997,9 @@ static PyObject *__pyx_pf_4wfpt_22wiener_like_contaminant(CYTHON_UNUSED PyObject
 
   /* "wfpt.pyx":617
  *     sum_logp += n_cont * log(0.5 * 1. / (t_max - t_min))
- *
+ * 
  *     return sum_logp             # <<<<<<<<<<<<<<
- *
+ * 
  * def gen_cdf_using_pdf(double v, double sv, double a, double z, double sz, double t, double st, double err,
  */
   __Pyx_TraceLine(617,0,__PYX_ERR(0, 617, __pyx_L1_error))
@@ -21003,7 +21012,7 @@ static PyObject *__pyx_pf_4wfpt_22wiener_like_contaminant(CYTHON_UNUSED PyObject
 
   /* "wfpt.pyx":588
  *     return sum_logp
- *
+ * 
  * def wiener_like_contaminant(np.ndarray[double, ndim=1] x, np.ndarray[int, ndim=1] cont_x, double v,             # <<<<<<<<<<<<<<
  *                             double sv, double a, double z, double sz, double t, double st, double t_min,
  *                             double t_max, double err, int n_st=10, int n_sz=10, bint use_adaptive=1,
@@ -21036,14 +21045,14 @@ static PyObject *__pyx_pf_4wfpt_22wiener_like_contaminant(CYTHON_UNUSED PyObject
 
 /* "wfpt.pyx":619
  *     return sum_logp
- *
+ * 
  * def gen_cdf_using_pdf(double v, double sv, double a, double z, double sz, double t, double st, double err,             # <<<<<<<<<<<<<<
  *                       int N=500, double time=5., int n_st=2, int n_sz=2, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_25gen_cdf_using_pdf(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_25gen_cdf_using_pdf(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -21052,7 +21061,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_24gen_cdf_using_pdf, "gen_cdf_using_pdf(double v, double sv, double a, double z, double sz, double t, double st, double err, int N=500, double time=5., int n_st=2, int n_sz=2, bool use_adaptive=1, double simps_err=1e-3, double p_outlier=0, double w_outlier=0)\n\n    generate cdf vector using the pdf\n    ");
 static PyMethodDef __pyx_mdef_4wfpt_25gen_cdf_using_pdf = {"gen_cdf_using_pdf", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_25gen_cdf_using_pdf, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_24gen_cdf_using_pdf};
-static PyObject *__pyx_pw_4wfpt_25gen_cdf_using_pdf(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_25gen_cdf_using_pdf(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -21538,7 +21547,7 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
  *             (z - sz / 2. < 0) or (t - st / 2. < 0) or (t < 0) or (st < 0) or not p_outlier_in_range(p_outlier):
  *         raise ValueError(             # <<<<<<<<<<<<<<
  *             "at least one of the parameters is out of the support")
- *
+ * 
  */
     __Pyx_TraceLine(627,0,__PYX_ERR(0, 627, __pyx_L1_error))
     __pyx_t_4 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple__18, NULL); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 627, __pyx_L1_error)
@@ -21558,7 +21567,7 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
 
   /* "wfpt.pyx":630
  *             "at least one of the parameters is out of the support")
- *
+ * 
  *     cdef np.ndarray[double, ndim = 1] x = np.linspace(-time, time, 2 * N + 1)             # <<<<<<<<<<<<<<
  *     cdef np.ndarray[double, ndim = 1] cdf_array = np.empty(x.shape[0], dtype=np.double)
  *     cdef int idx
@@ -21615,11 +21624,11 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
   __pyx_t_4 = 0;
 
   /* "wfpt.pyx":631
- *
+ * 
  *     cdef np.ndarray[double, ndim = 1] x = np.linspace(-time, time, 2 * N + 1)
  *     cdef np.ndarray[double, ndim = 1] cdf_array = np.empty(x.shape[0], dtype=np.double)             # <<<<<<<<<<<<<<
  *     cdef int idx
- *
+ * 
  */
   __Pyx_TraceLine(631,0,__PYX_ERR(0, 631, __pyx_L1_error))
   __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_np); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 631, __pyx_L1_error)
@@ -21664,11 +21673,11 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
   __pyx_t_5 = 0;
 
   /* "wfpt.pyx":635
- *
+ * 
  *     # compute pdf on the real line
  *     cdf_array = pdf_array(x, v, sv, a, z, sz, t, st, err, 0,             # <<<<<<<<<<<<<<
  *                           n_st, n_sz, use_adaptive, simps_err, p_outlier, w_outlier)
- *
+ * 
  */
   __Pyx_TraceLine(635,0,__PYX_ERR(0, 635, __pyx_L1_error))
   __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_pdf_array); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 635, __pyx_L1_error)
@@ -21694,7 +21703,7 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
  *     # compute pdf on the real line
  *     cdf_array = pdf_array(x, v, sv, a, z, sz, t, st, err, 0,
  *                           n_st, n_sz, use_adaptive, simps_err, p_outlier, w_outlier)             # <<<<<<<<<<<<<<
- *
+ * 
  *     # integrate
  */
   __Pyx_TraceLine(636,0,__PYX_ERR(0, 636, __pyx_L1_error))
@@ -21748,11 +21757,11 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
   }
 
   /* "wfpt.pyx":635
- *
+ * 
  *     # compute pdf on the real line
  *     cdf_array = pdf_array(x, v, sv, a, z, sz, t, st, err, 0,             # <<<<<<<<<<<<<<
  *                           n_st, n_sz, use_adaptive, simps_err, p_outlier, w_outlier)
- *
+ * 
  */
   __Pyx_TraceLine(635,0,__PYX_ERR(0, 635, __pyx_L1_error))
   if (!(likely(((__pyx_t_5) == Py_None) || likely(__Pyx_TypeTest(__pyx_t_5, __pyx_ptype_5numpy_ndarray))))) __PYX_ERR(0, 635, __pyx_L1_error)
@@ -21779,10 +21788,10 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
   __pyx_t_5 = 0;
 
   /* "wfpt.pyx":639
- *
+ * 
  *     # integrate
  *     cdf_array[1:] = integrate.cumtrapz(cdf_array)             # <<<<<<<<<<<<<<
- *
+ * 
  *     # normalize
  */
   __Pyx_TraceLine(639,0,__PYX_ERR(0, 639, __pyx_L1_error))
@@ -21817,10 +21826,10 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
   /* "wfpt.pyx":642
- *
+ * 
  *     # normalize
  *     cdf_array /= cdf_array[x.shape[0] - 1]             # <<<<<<<<<<<<<<
- *
+ * 
  *     return x, cdf_array
  */
   __Pyx_TraceLine(642,0,__PYX_ERR(0, 642, __pyx_L1_error))
@@ -21856,10 +21865,10 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
 
   /* "wfpt.pyx":644
  *     cdf_array /= cdf_array[x.shape[0] - 1]
- *
+ * 
  *     return x, cdf_array             # <<<<<<<<<<<<<<
- *
- *
+ * 
+ * 
  */
   __Pyx_TraceLine(644,0,__PYX_ERR(0, 644, __pyx_L1_error))
   __Pyx_XDECREF(__pyx_r);
@@ -21877,7 +21886,7 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
 
   /* "wfpt.pyx":619
  *     return sum_logp
- *
+ * 
  * def gen_cdf_using_pdf(double v, double sv, double a, double z, double sz, double t, double st, double err,             # <<<<<<<<<<<<<<
  *                       int N=500, double time=5., int n_st=2, int n_sz=2, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
@@ -21925,15 +21934,15 @@ static PyObject *__pyx_pf_4wfpt_24gen_cdf_using_pdf(CYTHON_UNUSED PyObject *__py
 }
 
 /* "wfpt.pyx":647
- *
- *
+ * 
+ * 
  * def split_cdf(np.ndarray[double, ndim=1] x, np.ndarray[double, ndim=1] data):             # <<<<<<<<<<<<<<
- *
+ * 
  *     # get length of data
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_27split_cdf(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_27split_cdf(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -21942,7 +21951,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_26split_cdf, "split_cdf(ndarray x, ndarray data)");
 static PyMethodDef __pyx_mdef_4wfpt_27split_cdf = {"split_cdf", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_27split_cdf, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_26split_cdf};
-static PyObject *__pyx_pw_4wfpt_27split_cdf(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_27split_cdf(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -22131,10 +22140,10 @@ static PyObject *__pyx_pf_4wfpt_26split_cdf(CYTHON_UNUSED PyObject *__pyx_self, 
   __pyx_pybuffernd_data.diminfo[0].strides = __pyx_pybuffernd_data.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_data.diminfo[0].shape = __pyx_pybuffernd_data.rcbuffer->pybuffer.shape[0];
 
   /* "wfpt.pyx":650
- *
+ * 
  *     # get length of data
  *     cdef int N = (len(data) - 1) / 2             # <<<<<<<<<<<<<<
- *
+ * 
  *     # lower bound is reversed
  */
   __Pyx_TraceLine(650,0,__PYX_ERR(0, 650, __pyx_L1_error))
@@ -22142,7 +22151,7 @@ static PyObject *__pyx_pf_4wfpt_26split_cdf(CYTHON_UNUSED PyObject *__pyx_self, 
   __pyx_v_N = ((__pyx_t_1 - 1) / 2);
 
   /* "wfpt.pyx":653
- *
+ * 
  *     # lower bound is reversed
  *     cdef np.ndarray[double, ndim = 1] x_lb = -x[:N][::-1]             # <<<<<<<<<<<<<<
  *     cdef np.ndarray[double, ndim = 1] lb = data[:N][::-1]
@@ -22214,7 +22223,7 @@ static PyObject *__pyx_pf_4wfpt_26split_cdf(CYTHON_UNUSED PyObject *__pyx_self, 
  *     cdef np.ndarray[double, ndim = 1] lb = data[:N][::-1]
  *     # lower bound is cumulative in the wrong direction
  *     lb = np.cumsum(np.concatenate([np.array([0]), -np.diff(lb)]))             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef np.ndarray[double, ndim = 1] x_ub = x[N + 1:]
  */
   __Pyx_TraceLine(656,0,__PYX_ERR(0, 656, __pyx_L1_error))
@@ -22370,7 +22379,7 @@ static PyObject *__pyx_pf_4wfpt_26split_cdf(CYTHON_UNUSED PyObject *__pyx_self, 
 
   /* "wfpt.pyx":658
  *     lb = np.cumsum(np.concatenate([np.array([0]), -np.diff(lb)]))
- *
+ * 
  *     cdef np.ndarray[double, ndim = 1] x_ub = x[N + 1:]             # <<<<<<<<<<<<<<
  *     cdef np.ndarray[double, ndim = 1] ub = data[N + 1:]
  *     # ub does not start at 0
@@ -22399,7 +22408,7 @@ static PyObject *__pyx_pf_4wfpt_26split_cdf(CYTHON_UNUSED PyObject *__pyx_self, 
   __pyx_t_3 = 0;
 
   /* "wfpt.pyx":659
- *
+ * 
  *     cdef np.ndarray[double, ndim = 1] x_ub = x[N + 1:]
  *     cdef np.ndarray[double, ndim = 1] ub = data[N + 1:]             # <<<<<<<<<<<<<<
  *     # ub does not start at 0
@@ -22432,7 +22441,7 @@ static PyObject *__pyx_pf_4wfpt_26split_cdf(CYTHON_UNUSED PyObject *__pyx_self, 
  *     cdef np.ndarray[double, ndim = 1] ub = data[N + 1:]
  *     # ub does not start at 0
  *     ub -= ub[0]             # <<<<<<<<<<<<<<
- *
+ * 
  *     return (x_lb, lb, x_ub, ub)
  */
   __Pyx_TraceLine(661,0,__PYX_ERR(0, 661, __pyx_L1_error))
@@ -22467,9 +22476,9 @@ static PyObject *__pyx_pf_4wfpt_26split_cdf(CYTHON_UNUSED PyObject *__pyx_self, 
 
   /* "wfpt.pyx":663
  *     ub -= ub[0]
- *
+ * 
  *     return (x_lb, lb, x_ub, ub)             # <<<<<<<<<<<<<<
- *
+ * 
  * def wiener_like_multi_nn_mlp(np.ndarray[float, ndim = 2] data,
  */
   __Pyx_TraceLine(663,0,__PYX_ERR(0, 663, __pyx_L1_error))
@@ -22493,10 +22502,10 @@ static PyObject *__pyx_pf_4wfpt_26split_cdf(CYTHON_UNUSED PyObject *__pyx_self, 
   goto __pyx_L0;
 
   /* "wfpt.pyx":647
- *
- *
+ * 
+ * 
  * def split_cdf(np.ndarray[double, ndim=1] x, np.ndarray[double, ndim=1] data):             # <<<<<<<<<<<<<<
- *
+ * 
  *     # get length of data
  */
 
@@ -22544,14 +22553,14 @@ static PyObject *__pyx_pf_4wfpt_26split_cdf(CYTHON_UNUSED PyObject *__pyx_self, 
 
 /* "wfpt.pyx":665
  *     return (x_lb, lb, x_ub, ub)
- *
+ * 
  * def wiener_like_multi_nn_mlp(np.ndarray[float, ndim = 2] data,             # <<<<<<<<<<<<<<
  *                              double p_outlier = 0,
  *                              double w_outlier = 0,
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_29wiener_like_multi_nn_mlp(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_29wiener_like_multi_nn_mlp(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -22560,7 +22569,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_28wiener_like_multi_nn_mlp, "wiener_like_multi_nn_mlp(ndarray data, double p_outlier=0, double w_outlier=0, network=None)");
 static PyMethodDef __pyx_mdef_4wfpt_29wiener_like_multi_nn_mlp = {"wiener_like_multi_nn_mlp", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_29wiener_like_multi_nn_mlp, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_28wiener_like_multi_nn_mlp};
-static PyObject *__pyx_pw_4wfpt_29wiener_like_multi_nn_mlp(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_29wiener_like_multi_nn_mlp(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -22599,7 +22608,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
  *                              double w_outlier = 0,
  *                              network = None):             # <<<<<<<<<<<<<<
  *                              #**kwargs):
- *
+ * 
  */
     values[3] = __Pyx_Arg_NewRef_FASTCALL(((PyObject *)Py_None));
     if (__pyx_kwds) {
@@ -22697,7 +22706,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 
   /* "wfpt.pyx":665
  *     return (x_lb, lb, x_ub, ub)
- *
+ * 
  * def wiener_like_multi_nn_mlp(np.ndarray[float, ndim = 2] data,             # <<<<<<<<<<<<<<
  *                              double p_outlier = 0,
  *                              double w_outlier = 0,
@@ -22758,16 +22767,16 @@ static PyObject *__pyx_pf_4wfpt_28wiener_like_multi_nn_mlp(CYTHON_UNUSED PyObjec
 
   /* "wfpt.pyx":676
  *     # (in that order)
- *
+ * 
  *     cdef float ll_min = -16.11809             # <<<<<<<<<<<<<<
  *     cdef float log_p
- *
+ * 
  */
   __Pyx_TraceLine(676,0,__PYX_ERR(0, 676, __pyx_L1_error))
   __pyx_v_ll_min = -16.11809;
 
   /* "wfpt.pyx":680
- *
+ * 
  *     # Call to network:
  *     if p_outlier == 0: # previous ddm_model             # <<<<<<<<<<<<<<
  *         log_p = np.sum(np.core.umath.maximum(network.predict_on_batch(data), ll_min))
@@ -22879,7 +22888,7 @@ static PyObject *__pyx_pf_4wfpt_28wiener_like_multi_nn_mlp(CYTHON_UNUSED PyObjec
     __pyx_v_log_p = __pyx_t_10;
 
     /* "wfpt.pyx":680
- *
+ * 
  *     # Call to network:
  *     if p_outlier == 0: # previous ddm_model             # <<<<<<<<<<<<<<
  *         log_p = np.sum(np.core.umath.maximum(network.predict_on_batch(data), ll_min))
@@ -22893,7 +22902,7 @@ static PyObject *__pyx_pf_4wfpt_28wiener_like_multi_nn_mlp(CYTHON_UNUSED PyObjec
  *     else:
  *         log_p = np.sum(np.log(np.exp(np.core.umath.maximum(network.predict_on_batch(data), ll_min)) * (1.0 - p_outlier) + (w_outlier * p_outlier)))             # <<<<<<<<<<<<<<
  *     return log_p
- *
+ * 
  */
   __Pyx_TraceLine(683,0,__PYX_ERR(0, 683, __pyx_L1_error))
   /*else*/ {
@@ -23064,7 +23073,7 @@ static PyObject *__pyx_pf_4wfpt_28wiener_like_multi_nn_mlp(CYTHON_UNUSED PyObjec
  *     else:
  *         log_p = np.sum(np.log(np.exp(np.core.umath.maximum(network.predict_on_batch(data), ll_min)) * (1.0 - p_outlier) + (w_outlier * p_outlier)))
  *     return log_p             # <<<<<<<<<<<<<<
- *
+ * 
  * def wiener_like_multi_nn_mlp_pdf(np.ndarray[float, ndim = 2] data,
  */
   __Pyx_TraceLine(684,0,__PYX_ERR(0, 684, __pyx_L1_error))
@@ -23077,7 +23086,7 @@ static PyObject *__pyx_pf_4wfpt_28wiener_like_multi_nn_mlp(CYTHON_UNUSED PyObjec
 
   /* "wfpt.pyx":665
  *     return (x_lb, lb, x_ub, ub)
- *
+ * 
  * def wiener_like_multi_nn_mlp(np.ndarray[float, ndim = 2] data,             # <<<<<<<<<<<<<<
  *                              double p_outlier = 0,
  *                              double w_outlier = 0,
@@ -23116,14 +23125,14 @@ static PyObject *__pyx_pf_4wfpt_28wiener_like_multi_nn_mlp(CYTHON_UNUSED PyObjec
 
 /* "wfpt.pyx":686
  *     return log_p
- *
+ * 
  * def wiener_like_multi_nn_mlp_pdf(np.ndarray[float, ndim = 2] data,             # <<<<<<<<<<<<<<
  *                                  double p_outlier = 0,
  *                                  double w_outlier = 0,
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_4wfpt_31wiener_like_multi_nn_mlp_pdf(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_31wiener_like_multi_nn_mlp_pdf(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -23132,7 +23141,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 ); /*proto*/
 PyDoc_STRVAR(__pyx_doc_4wfpt_30wiener_like_multi_nn_mlp_pdf, "wiener_like_multi_nn_mlp_pdf(ndarray data, double p_outlier=0, double w_outlier=0, network=None)");
 static PyMethodDef __pyx_mdef_4wfpt_31wiener_like_multi_nn_mlp_pdf = {"wiener_like_multi_nn_mlp_pdf", (PyCFunction)(void*)(__Pyx_PyCFunction_FastCallWithKeywords)__pyx_pw_4wfpt_31wiener_like_multi_nn_mlp_pdf, __Pyx_METH_FASTCALL|METH_KEYWORDS, __pyx_doc_4wfpt_30wiener_like_multi_nn_mlp_pdf};
-static PyObject *__pyx_pw_4wfpt_31wiener_like_multi_nn_mlp_pdf(PyObject *__pyx_self,
+static PyObject *__pyx_pw_4wfpt_31wiener_like_multi_nn_mlp_pdf(PyObject *__pyx_self, 
 #if CYTHON_METH_FASTCALL
 PyObject *const *__pyx_args, Py_ssize_t __pyx_nargs, PyObject *__pyx_kwds
 #else
@@ -23171,7 +23180,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
  *                                  double w_outlier = 0,
  *                                  network = None):             # <<<<<<<<<<<<<<
  *                                  #**kwargs):
- *
+ * 
  */
     values[3] = __Pyx_Arg_NewRef_FASTCALL(((PyObject *)Py_None));
     if (__pyx_kwds) {
@@ -23269,7 +23278,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
 
   /* "wfpt.pyx":686
  *     return log_p
- *
+ * 
  * def wiener_like_multi_nn_mlp_pdf(np.ndarray[float, ndim = 2] data,             # <<<<<<<<<<<<<<
  *                                  double p_outlier = 0,
  *                                  double w_outlier = 0,
@@ -23330,16 +23339,16 @@ static PyObject *__pyx_pf_4wfpt_30wiener_like_multi_nn_mlp_pdf(CYTHON_UNUSED PyO
 
   /* "wfpt.pyx":697
  *     # (in that order)
- *
+ * 
  *     cdef float ll_min = -16.11809             # <<<<<<<<<<<<<<
  *     cdef float log_p
- *
+ * 
  */
   __Pyx_TraceLine(697,0,__PYX_ERR(0, 697, __pyx_L1_error))
   __pyx_v_ll_min = -16.11809;
 
   /* "wfpt.pyx":701
- *
+ * 
  *     # Call to network:
  *     if p_outlier == 0: # previous ddm_model             # <<<<<<<<<<<<<<
  *         log_p = np.squeeze(np.core.umath.maximum(network.predict_on_batch(data), ll_min))
@@ -23451,7 +23460,7 @@ static PyObject *__pyx_pf_4wfpt_30wiener_like_multi_nn_mlp_pdf(CYTHON_UNUSED PyO
     __pyx_v_log_p = __pyx_t_10;
 
     /* "wfpt.pyx":701
- *
+ * 
  *     # Call to network:
  *     if p_outlier == 0: # previous ddm_model             # <<<<<<<<<<<<<<
  *         log_p = np.squeeze(np.core.umath.maximum(network.predict_on_batch(data), ll_min))
@@ -23646,7 +23655,7 @@ static PyObject *__pyx_pf_4wfpt_30wiener_like_multi_nn_mlp_pdf(CYTHON_UNUSED PyO
 
   /* "wfpt.pyx":686
  *     return log_p
- *
+ * 
  * def wiener_like_multi_nn_mlp_pdf(np.ndarray[float, ndim = 2] data,             # <<<<<<<<<<<<<<
  *                                  double p_outlier = 0,
  *                                  double w_outlier = 0,
@@ -23871,22 +23880,22 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__Pyx_InitCachedConstants", 0);
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":983
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":983
  *         __pyx_import_array()
  *     except Exception:
  *         raise ImportError("numpy.core.multiarray failed to import")             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline int import_umath() except -1:
  */
   __pyx_tuple_ = PyTuple_Pack(1, __pyx_kp_u_numpy_core_multiarray_failed_to); if (unlikely(!__pyx_tuple_)) __PYX_ERR(1, 983, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple_);
   __Pyx_GIVEREF(__pyx_tuple_);
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":989
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":989
  *         _import_umath()
  *     except Exception:
  *         raise ImportError("numpy.core.umath failed to import")             # <<<<<<<<<<<<<<
- *
+ * 
  * cdef inline int import_ufunc() except -1:
  */
   __pyx_tuple__2 = PyTuple_Pack(1, __pyx_kp_u_numpy_core_umath_failed_to_impor); if (unlikely(!__pyx_tuple__2)) __PYX_ERR(1, 989, __pyx_L1_error)
@@ -23894,22 +23903,22 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __Pyx_GIVEREF(__pyx_tuple__2);
 
   /* "wfpt.pyx":133
- *
+ * 
  *     if not p_outlier_in_range(p_outlier):
  *         logp[:] = -np.inf             # <<<<<<<<<<<<<<
  *         return logp
- *
+ * 
  */
   __pyx_slice__8 = PySlice_New(Py_None, Py_None, Py_None); if (unlikely(!__pyx_slice__8)) __PYX_ERR(0, 133, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_slice__8);
   __Pyx_GIVEREF(__pyx_slice__8);
 
   /* "wfpt.pyx":330
- *
- *
+ * 
+ * 
  *     data[:, 1:n_params] = np.tile(params_ssm[1:], (size, 1)).astype(np.float32)             # <<<<<<<<<<<<<<
  *     data[:, n_params:] = np.stack([x, response], axis = 1)
- *
+ * 
  */
   __pyx_slice__11 = PySlice_New(__pyx_int_1, Py_None, Py_None); if (unlikely(!__pyx_slice__11)) __PYX_ERR(0, 330, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_slice__11);
@@ -23920,14 +23929,14 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  *             (z - sz / 2. < 0) or (t - st / 2. < 0) or (t < 0) or (st < 0) or not p_outlier_in_range(p_outlier):
  *         raise ValueError(             # <<<<<<<<<<<<<<
  *             "at least one of the parameters is out of the support")
- *
+ * 
  */
   __pyx_tuple__18 = PyTuple_Pack(1, __pyx_kp_u_at_least_one_of_the_parameters_i); if (unlikely(!__pyx_tuple__18)) __PYX_ERR(0, 627, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__18);
   __Pyx_GIVEREF(__pyx_tuple__18);
 
   /* "wfpt.pyx":653
- *
+ * 
  *     # lower bound is reversed
  *     cdef np.ndarray[double, ndim = 1] x_lb = -x[:N][::-1]             # <<<<<<<<<<<<<<
  *     cdef np.ndarray[double, ndim = 1] lb = data[:N][::-1]
@@ -23939,7 +23948,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
 
   /* "wfpt.pyx":19
  * #from hddm.model_config import model_config
- *
+ * 
  * import scipy.integrate as integrate             # <<<<<<<<<<<<<<
  * from copy import copy
  * import numpy as np
@@ -23950,7 +23959,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":104
  *     return exp(log(p) + ((a*z*sv)**2 - 2*a*v*z - (v**2)*x)/(2*(sv**2)*x+2))/sqrt((sv**2)*x+1)/(a**2)
- *
+ * 
  * cpdef double full_pdf(double x, double v, double sv, double a, double             # <<<<<<<<<<<<<<
  *                       z, double sz, double t, double st, double err, int
  *                       n_st=2, int n_sz=2, bint use_adaptive=1, double
@@ -23965,7 +23974,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
 
   /* "wfpt.pyx":32
  * include 'integrate.pxi'
- *
+ * 
  * def pdf_array(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz,             # <<<<<<<<<<<<<<
  *               double t, double st, double err=1e-4, bint logp=0, int n_st=2, int n_sz=2, bint use_adaptive=1,
  *               double simps_err=1e-3, double p_outlier=0, double w_outlier=0):
@@ -23976,8 +23985,8 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __pyx_codeobj__4 = (PyObject*)__Pyx_PyCode_New(16, 0, 0, 19, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__28, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_hssm_likelihoods_hddm_wfpt_w, __pyx_n_s_pdf_array, 32, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__4)) __PYX_ERR(0, 32, __pyx_L1_error)
 
   /* "wfpt.pyx":54
- *
- *
+ * 
+ * 
  * def wiener_like(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz, double t,             # <<<<<<<<<<<<<<
  *                 double st, double err, int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-8,
  *                 double p_outlier=0, double w_outlier=0.1):
@@ -23989,7 +23998,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
 
   /* "wfpt.pyx":78
  *     return sum_logp
- *
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,             # <<<<<<<<<<<<<<
  *                       int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
@@ -24001,7 +24010,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
 
   /* "wfpt.pyx":110
  *         return sum_logp
- *
+ * 
  * def wiener_logp_array(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[double, ndim=1] v,
  *                       np.ndarray[double, ndim=1] sv,
@@ -24013,7 +24022,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
 
   /* "wfpt.pyx":150
  *     return logp
- *
+ * 
  * def wiener_like_rlddm(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[long, ndim=1] response,
  *                       np.ndarray[double, ndim=1] feedback,
@@ -24024,8 +24033,8 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __pyx_codeobj__9 = (PyObject*)__Pyx_PyCode_New(21, 0, 0, 36, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__32, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_hssm_likelihoods_hddm_wfpt_w, __pyx_n_s_wiener_like_rlddm, 150, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__9)) __PYX_ERR(0, 150, __pyx_L1_error)
 
   /* "wfpt.pyx":228
- *
- *
+ * 
+ * 
  * def wiener_like_rlssm_nn(str model,             # <<<<<<<<<<<<<<
  *                       np.ndarray[double, ndim=1] x,
  *                       np.ndarray[long, ndim=1] response,
@@ -24036,8 +24045,8 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __pyx_codeobj__10 = (PyObject*)__Pyx_PyCode_New(12, 0, 0, 37, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__33, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_hssm_likelihoods_hddm_wfpt_w, __pyx_n_s_wiener_like_rlssm_nn, 228, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__10)) __PYX_ERR(0, 228, __pyx_L1_error)
 
   /* "wfpt.pyx":342
- *
- *
+ * 
+ * 
  * def wiener_like_rl(np.ndarray[long, ndim=1] response,             # <<<<<<<<<<<<<<
  *                    np.ndarray[double, ndim=1] feedback,
  *                    np.ndarray[long, ndim=1] split_by,
@@ -24048,8 +24057,8 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __pyx_codeobj__12 = (PyObject*)__Pyx_PyCode_New(15, 0, 0, 30, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__34, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_hssm_likelihoods_hddm_wfpt_w, __pyx_n_s_wiener_like_rl, 342, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__12)) __PYX_ERR(0, 342, __pyx_L1_error)
 
   /* "wfpt.pyx":429
- *
- *
+ * 
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,             # <<<<<<<<<<<<<<
  *                       int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
@@ -24057,8 +24066,8 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __pyx_codeobj__13 = (PyObject*)__Pyx_PyCode_New(16, 0, 0, 24, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__30, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_hssm_likelihoods_hddm_wfpt_w, __pyx_n_s_wiener_like_multi, 429, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__13)) __PYX_ERR(0, 429, __pyx_L1_error)
 
   /* "wfpt.pyx":462
- *
- *
+ * 
+ * 
  * def wiener_like_multi_rlddm(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[long, ndim=1] response,
  *                       np.ndarray[double, ndim=1] feedback,
@@ -24069,8 +24078,8 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __pyx_codeobj__14 = (PyObject*)__Pyx_PyCode_New(21, 0, 0, 34, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__35, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_hssm_likelihoods_hddm_wfpt_w, __pyx_n_s_wiener_like_multi_rlddm, 462, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__14)) __PYX_ERR(0, 462, __pyx_L1_error)
 
   /* "wfpt.pyx":508
- *
- *
+ * 
+ * 
  * def wiener_like_rlssm_nn_reg(np.ndarray[float, ndim=2] data,             # <<<<<<<<<<<<<<
  *                       np.ndarray[float, ndim=2] rl_arr,
  *                       np.ndarray[double, ndim=1] x,
@@ -24082,7 +24091,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
 
   /* "wfpt.pyx":588
  *     return sum_logp
- *
+ * 
  * def wiener_like_contaminant(np.ndarray[double, ndim=1] x, np.ndarray[int, ndim=1] cont_x, double v,             # <<<<<<<<<<<<<<
  *                             double sv, double a, double z, double sz, double t, double st, double t_min,
  *                             double t_max, double err, int n_st=10, int n_sz=10, bint use_adaptive=1,
@@ -24094,7 +24103,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
 
   /* "wfpt.pyx":619
  *     return sum_logp
- *
+ * 
  * def gen_cdf_using_pdf(double v, double sv, double a, double z, double sz, double t, double st, double err,             # <<<<<<<<<<<<<<
  *                       int N=500, double time=5., int n_st=2, int n_sz=2, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
@@ -24105,10 +24114,10 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __pyx_codeobj__17 = (PyObject*)__Pyx_PyCode_New(16, 0, 0, 19, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__38, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_src_hssm_likelihoods_hddm_wfpt_w, __pyx_n_s_gen_cdf_using_pdf, 619, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__17)) __PYX_ERR(0, 619, __pyx_L1_error)
 
   /* "wfpt.pyx":647
- *
- *
+ * 
+ * 
  * def split_cdf(np.ndarray[double, ndim=1] x, np.ndarray[double, ndim=1] data):             # <<<<<<<<<<<<<<
- *
+ * 
  *     # get length of data
  */
   __pyx_tuple__39 = PyTuple_Pack(7, __pyx_n_s_x, __pyx_n_s_data, __pyx_n_s_N, __pyx_n_s_x_lb, __pyx_n_s_lb, __pyx_n_s_x_ub, __pyx_n_s_ub); if (unlikely(!__pyx_tuple__39)) __PYX_ERR(0, 647, __pyx_L1_error)
@@ -24118,7 +24127,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
 
   /* "wfpt.pyx":665
  *     return (x_lb, lb, x_ub, ub)
- *
+ * 
  * def wiener_like_multi_nn_mlp(np.ndarray[float, ndim = 2] data,             # <<<<<<<<<<<<<<
  *                              double p_outlier = 0,
  *                              double w_outlier = 0,
@@ -24130,7 +24139,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
 
   /* "wfpt.pyx":686
  *     return log_p
- *
+ * 
  * def wiener_like_multi_nn_mlp_pdf(np.ndarray[float, ndim = 2] data,             # <<<<<<<<<<<<<<
  *                                  double p_outlier = 0,
  *                                  double w_outlier = 0,
@@ -24234,7 +24243,7 @@ static int __Pyx_modinit_type_import_code(void) {
   /*--- Type import code ---*/
   __pyx_t_1 = PyImport_ImportModule(__Pyx_BUILTIN_MODULE_NAME); if (unlikely(!__pyx_t_1)) __PYX_ERR(4, 9, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_ptype_7cpython_4type_type = __Pyx_ImportType_3_0_2(__pyx_t_1, __Pyx_BUILTIN_MODULE_NAME, "type",
+  __pyx_ptype_7cpython_4type_type = __Pyx_ImportType_3_0_2(__pyx_t_1, __Pyx_BUILTIN_MODULE_NAME, "type", 
   #if defined(PYPY_VERSION_NUM) && PYPY_VERSION_NUM < 0x050B0000
   sizeof(PyTypeObject), __PYX_GET_STRUCT_ALIGNMENT_3_0_2(PyTypeObject),
   #elif CYTHON_COMPILING_IN_LIMITED_API
@@ -24576,8 +24585,8 @@ if (!__Pyx_RefNanny) {
   #endif
   __Pyx_TraceCall("__Pyx_PyMODINIT_FUNC PyInit_wfpt(void)", __pyx_f[0], 1, 0, __PYX_ERR(0, 1, __pyx_L1_error));
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":245
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":245
+ * 
  *         @property
  *         cdef inline PyObject* base(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns a borrowed reference to the object owning the data/memory.
@@ -24586,8 +24595,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(245,0,__PYX_ERR(1, 245, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":251
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":251
+ * 
  *         @property
  *         cdef inline dtype descr(self):             # <<<<<<<<<<<<<<
  *             """Returns an owned reference to the dtype of the array.
@@ -24596,8 +24605,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(251,0,__PYX_ERR(1, 251, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":257
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":257
+ * 
  *         @property
  *         cdef inline int ndim(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns the number of dimensions in the array.
@@ -24606,8 +24615,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(257,0,__PYX_ERR(1, 257, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":263
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":263
+ * 
  *         @property
  *         cdef inline npy_intp *shape(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns a pointer to the dimensions/shape of the array.
@@ -24616,8 +24625,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(263,0,__PYX_ERR(1, 263, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":271
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":271
+ * 
  *         @property
  *         cdef inline npy_intp *strides(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns a pointer to the strides of the array.
@@ -24626,8 +24635,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(271,0,__PYX_ERR(1, 271, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":278
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":278
+ * 
  *         @property
  *         cdef inline npy_intp size(self) nogil:             # <<<<<<<<<<<<<<
  *             """Returns the total size (in number of elements) of the array.
@@ -24636,8 +24645,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(278,0,__PYX_ERR(1, 278, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":284
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":284
+ * 
  *         @property
  *         cdef inline char* data(self) nogil:             # <<<<<<<<<<<<<<
  *             """The pointer to the data buffer as a char*.
@@ -24646,59 +24655,59 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(284,0,__PYX_ERR(1, 284, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":773
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":773
  * ctypedef npy_cdouble     complex_t
- *
+ * 
  * cdef inline object PyArray_MultiIterNew1(a):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(1, <void*>a)
- *
+ * 
  */
   __Pyx_TraceLine(773,0,__PYX_ERR(1, 773, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":776
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":776
  *     return PyArray_MultiIterNew(1, <void*>a)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew2(a, b):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(2, <void*>a, <void*>b)
- *
+ * 
  */
   __Pyx_TraceLine(776,0,__PYX_ERR(1, 776, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":779
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":779
  *     return PyArray_MultiIterNew(2, <void*>a, <void*>b)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew3(a, b, c):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(3, <void*>a, <void*>b, <void*> c)
- *
+ * 
  */
   __Pyx_TraceLine(779,0,__PYX_ERR(1, 779, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":782
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":782
  *     return PyArray_MultiIterNew(3, <void*>a, <void*>b, <void*> c)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew4(a, b, c, d):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(4, <void*>a, <void*>b, <void*>c, <void*> d)
- *
+ * 
  */
   __Pyx_TraceLine(782,0,__PYX_ERR(1, 782, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":785
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":785
  *     return PyArray_MultiIterNew(4, <void*>a, <void*>b, <void*>c, <void*> d)
- *
+ * 
  * cdef inline object PyArray_MultiIterNew5(a, b, c, d, e):             # <<<<<<<<<<<<<<
  *     return PyArray_MultiIterNew(5, <void*>a, <void*>b, <void*>c, <void*> d, <void*> e)
- *
+ * 
  */
   __Pyx_TraceLine(785,0,__PYX_ERR(1, 785, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":788
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":788
  *     return PyArray_MultiIterNew(5, <void*>a, <void*>b, <void*>c, <void*> d, <void*> e)
- *
+ * 
  * cdef inline tuple PyDataType_SHAPE(dtype d):             # <<<<<<<<<<<<<<
  *     if PyDataType_HASSUBARRAY(d):
  *         return <tuple>d.subarray.shape
@@ -24706,9 +24715,9 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(788,0,__PYX_ERR(1, 788, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":967
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":967
  *     int _import_umath() except -1
- *
+ * 
  * cdef inline void set_array_base(ndarray arr, object base):             # <<<<<<<<<<<<<<
  *     Py_INCREF(base) # important to do this before stealing the reference below!
  *     PyArray_SetBaseObject(arr, base)
@@ -24716,9 +24725,9 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(967,0,__PYX_ERR(1, 967, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":971
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":971
  *     PyArray_SetBaseObject(arr, base)
- *
+ * 
  * cdef inline object get_array_base(ndarray arr):             # <<<<<<<<<<<<<<
  *     base = PyArray_BASE(arr)
  *     if base is NULL:
@@ -24726,7 +24735,7 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(971,0,__PYX_ERR(1, 971, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":979
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":979
  * # Versions of the import_* functions which are more suitable for
  * # Cython code.
  * cdef inline int import_array() except -1:             # <<<<<<<<<<<<<<
@@ -24736,9 +24745,9 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(979,0,__PYX_ERR(1, 979, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":985
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":985
  *         raise ImportError("numpy.core.multiarray failed to import")
- *
+ * 
  * cdef inline int import_umath() except -1:             # <<<<<<<<<<<<<<
  *     try:
  *         _import_umath()
@@ -24746,9 +24755,9 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(985,0,__PYX_ERR(1, 985, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":991
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":991
  *         raise ImportError("numpy.core.umath failed to import")
- *
+ * 
  * cdef inline int import_ufunc() except -1:             # <<<<<<<<<<<<<<
  *     try:
  *         _import_umath()
@@ -24756,9 +24765,9 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(991,0,__PYX_ERR(1, 991, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":998
- *
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":998
+ * 
+ * 
  * cdef inline bint is_timedelta64_object(object obj):             # <<<<<<<<<<<<<<
  *     """
  *     Cython equivalent of `isinstance(obj, np.timedelta64)`
@@ -24766,9 +24775,9 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(998,0,__PYX_ERR(1, 998, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1013
- *
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1013
+ * 
+ * 
  * cdef inline bint is_datetime64_object(object obj):             # <<<<<<<<<<<<<<
  *     """
  *     Cython equivalent of `isinstance(obj, np.datetime64)`
@@ -24776,9 +24785,9 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(1013,0,__PYX_ERR(1, 1013, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1028
- *
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1028
+ * 
+ * 
  * cdef inline npy_datetime get_datetime64_value(object obj) nogil:             # <<<<<<<<<<<<<<
  *     """
  *     returns the int64 value underlying scalar numpy datetime64 object
@@ -24786,9 +24795,9 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(1028,0,__PYX_ERR(1, 1028, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1038
- *
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1038
+ * 
+ * 
  * cdef inline npy_timedelta get_timedelta64_value(object obj) nogil:             # <<<<<<<<<<<<<<
  *     """
  *     returns the int64 value underlying scalar numpy timedelta64 object
@@ -24796,9 +24805,9 @@ if (!__Pyx_RefNanny) {
   __Pyx_TraceLine(1038,0,__PYX_ERR(1, 1038, __pyx_L1_error))
 
 
-  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmp83e46clf/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1045
- *
- *
+  /* "../../../private/var/folders/9x/cjrfyjd9443d4_0wt9qw8fhh0000gq/T/tmpzyfj3a6z/.venv/lib/python3.9/site-packages/numpy/__init__.cython-30.pxd":1045
+ * 
+ * 
  * cdef inline NPY_DATETIMEUNIT get_datetime64_unit(object obj) nogil:             # <<<<<<<<<<<<<<
  *     """
  *     returns the unit part of the dtype for a numpy datetime64 object.
@@ -24808,7 +24817,7 @@ if (!__Pyx_RefNanny) {
 
   /* "wfpt.pyx":19
  * #from hddm.model_config import model_config
- *
+ * 
  * import scipy.integrate as integrate             # <<<<<<<<<<<<<<
  * from copy import copy
  * import numpy as np
@@ -24820,11 +24829,11 @@ if (!__Pyx_RefNanny) {
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
   /* "wfpt.pyx":20
- *
+ * 
  * import scipy.integrate as integrate
  * from copy import copy             # <<<<<<<<<<<<<<
  * import numpy as np
- *
+ * 
  */
   __Pyx_TraceLine(20,0,__PYX_ERR(0, 20, __pyx_L1_error))
   __pyx_t_2 = PyList_New(1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 20, __pyx_L1_error)
@@ -24845,7 +24854,7 @@ if (!__Pyx_RefNanny) {
  * import scipy.integrate as integrate
  * from copy import copy
  * import numpy as np             # <<<<<<<<<<<<<<
- *
+ * 
  * cimport numpy as np
  */
   __Pyx_TraceLine(21,0,__PYX_ERR(0, 21, __pyx_L1_error))
@@ -24856,7 +24865,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":6
  * #cython: boundscheck=False
- *
+ * 
  * import numpy as np             # <<<<<<<<<<<<<<
  * cimport numpy as np
  * cimport cython
@@ -24869,7 +24878,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":28
  *     T max[T](T a, T b)
- *
+ * 
  * cdef double ftt_01w(double tt, double w, double err) nogil:             # <<<<<<<<<<<<<<
  *     """Compute f(t|0,1,w) for the likelihood of the drift diffusion model using the method
  *     and implementation of Navarro & Fuss, 2009.
@@ -24879,7 +24888,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":67
  *     return p
- *
+ * 
  * cdef inline double prob_ub(double v, double a, double z) nogil:             # <<<<<<<<<<<<<<
  *     """Probability of hitting upper boundary."""
  *     if v == 0:
@@ -24889,7 +24898,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":74
  *         return (exp(-2 * a * z * v) - 1) / (exp(-2 * a * v) - 1)
- *
+ * 
  * cdef double pdf(double x, double v, double a, double w, double err) nogil:             # <<<<<<<<<<<<<<
  *     """Compute the likelihood of the drift diffusion model f(t|v,a,z) using the method
  *     and implementation of Navarro & Fuss, 2009.
@@ -24899,7 +24908,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":87
  *     return p*exp(-v*a*w -(pow(v,2))*x/2.)/(pow(a,2))
- *
+ * 
  * cdef double pdf_sv(double x, double v, double sv, double a, double z, double err) nogil:             # <<<<<<<<<<<<<<
  *     """Compute the likelihood of the drift diffusion model f(t|v,a,z,sv) using the method
  *     and implementation of Navarro & Fuss, 2009.
@@ -24909,7 +24918,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/pdf.pxi":104
  *     return exp(log(p) + ((a*z*sv)**2 - 2*a*v*z - (v**2)*x)/(2*(sv**2)*x+2))/sqrt((sv**2)*x+1)/(a**2)
- *
+ * 
  * cpdef double full_pdf(double x, double v, double sv, double a, double             # <<<<<<<<<<<<<<
  *                       z, double sz, double t, double st, double err, int
  *                       n_st=2, int n_sz=2, bint use_adaptive=1, double
@@ -24924,7 +24933,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":12
  * include 'pdf.pxi'
- *
+ * 
  * cdef double simpson_1D(double x, double v, double sv, double a, double z, double t, double err,             # <<<<<<<<<<<<<<
  *                         double lb_z, double ub_z, int n_sz, double lb_t, double ub_t, int n_st) nogil:
  *     #assert ((n_sz&1)==0 and (n_st&1)==0), "n_st and n_sz have to be even"
@@ -24934,7 +24943,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":47
  *     return ((ht+hz) * S / 3)
- *
+ * 
  * cdef double simpson_2D(double x, double v, double sv, double a, double z, double t, double err, double lb_z, double ub_z, int n_sz, double lb_t, double ub_t, int n_st) nogil:             # <<<<<<<<<<<<<<
  *     #assert ((n_sz&1)==0 and (n_st&1)==0), "n_st and n_sz have to be even"
  *     #assert ((ub_t-lb_t)*(ub_z-lb_z)>0 and (n_sz*n_st)>0), "the function is defined for 2D-integration only, lb_t: %f, ub_t %f, lb_z %f, ub_z %f, n_sz: %d, n_st %d" % (lb_t, ub_t, lb_z, ub_z, n_sz, n_st)
@@ -24944,7 +24953,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":72
  *     return (ht * S / 3)
- *
+ * 
  * cdef double adaptiveSimpsonsAux(double x, double v, double sv, double a, double z, double t, double pdf_err,             # <<<<<<<<<<<<<<
  *                                  double lb_z, double ub_z, double lb_t, double ub_t, double ZT, double simps_err,
  *                                  double S, double f_beg, double f_end, double f_mid, int bottom) nogil:
@@ -24954,7 +24963,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":114
  *                                  Sright, f_mid, f_end, fe, bottom-1)
- *
+ * 
  * cdef double adaptiveSimpsons_1D(double x, double v, double sv, double a, double z, double t,             # <<<<<<<<<<<<<<
  *                               double pdf_err, double lb_z, double ub_z, double lb_t, double ub_t,
  *                               double simps_err, int maxRecursionDepth) nogil:
@@ -24964,7 +24973,7 @@ if (!__Pyx_RefNanny) {
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":143
  *     return res
- *
+ * 
  * cdef double adaptiveSimpsonsAux_2D(double x, double v, double sv,             # <<<<<<<<<<<<<<
  *                                    double a, double z, double t, double
  *                                    pdf_err, double err_1d, double lb_z,
@@ -24973,8 +24982,8 @@ if (!__Pyx_RefNanny) {
 
 
   /* "src/hssm/likelihoods/hddm_wfpt/integrate.pxi":181
- *
- *
+ * 
+ * 
  * cdef double adaptiveSimpsons_2D(double x, double v, double sv, double a, double z, double t,             # <<<<<<<<<<<<<<
  *                                  double pdf_err, double lb_z, double ub_z, double lb_t, double ub_t,
  *                                  double simps_err, int maxRecursionDepth_sz, int maxRecursionDepth_st) nogil:
@@ -24983,11 +24992,11 @@ if (!__Pyx_RefNanny) {
 
 
   /* "wfpt.pyx":33
- *
+ * 
  * def pdf_array(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz,
  *               double t, double st, double err=1e-4, bint logp=0, int n_st=2, int n_sz=2, bint use_adaptive=1,             # <<<<<<<<<<<<<<
  *               double simps_err=1e-3, double p_outlier=0, double w_outlier=0):
- *
+ * 
  */
   __Pyx_TraceLine(33,0,__PYX_ERR(0, 33, __pyx_L1_error))
   __pyx_t_3 = PyFloat_FromDouble(((double)1e-4)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 33, __pyx_L1_error)
@@ -25005,7 +25014,7 @@ if (!__Pyx_RefNanny) {
  * def pdf_array(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz,
  *               double t, double st, double err=1e-4, bint logp=0, int n_st=2, int n_sz=2, bint use_adaptive=1,
  *               double simps_err=1e-3, double p_outlier=0, double w_outlier=0):             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef Py_ssize_t size = x.shape[0]
  */
   __Pyx_TraceLine(34,0,__PYX_ERR(0, 34, __pyx_L1_error))
@@ -25018,7 +25027,7 @@ if (!__Pyx_RefNanny) {
 
   /* "wfpt.pyx":32
  * include 'integrate.pxi'
- *
+ * 
  * def pdf_array(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz,             # <<<<<<<<<<<<<<
  *               double t, double st, double err=1e-4, bint logp=0, int n_st=2, int n_sz=2, bint use_adaptive=1,
  *               double simps_err=1e-3, double p_outlier=0, double w_outlier=0):
@@ -25059,16 +25068,16 @@ if (!__Pyx_RefNanny) {
 
   /* "wfpt.pyx":50
  *         return y
- *
+ * 
  * cdef inline bint p_outlier_in_range(double p_outlier):             # <<<<<<<<<<<<<<
  *     return (p_outlier >= 0) & (p_outlier <= 1)
- *
+ * 
  */
   __Pyx_TraceLine(50,0,__PYX_ERR(0, 50, __pyx_L1_error))
 
 
   /* "wfpt.pyx":55
- *
+ * 
  * def wiener_like(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz, double t,
  *                 double st, double err, int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-8,             # <<<<<<<<<<<<<<
  *                 double p_outlier=0, double w_outlier=0.1):
@@ -25098,8 +25107,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_GOTREF(__pyx_t_5);
 
   /* "wfpt.pyx":54
- *
- *
+ * 
+ * 
  * def wiener_like(np.ndarray[double, ndim=1] x, double v, double sv, double a, double z, double sz, double t,             # <<<<<<<<<<<<<<
  *                 double st, double err, int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-8,
  *                 double p_outlier=0, double w_outlier=0.1):
@@ -25133,7 +25142,7 @@ if (!__Pyx_RefNanny) {
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
   /* "wfpt.pyx":79
- *
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,
  *                       int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-3,             # <<<<<<<<<<<<<<
  *                       double p_outlier=0, double w_outlier=0):
@@ -25164,7 +25173,7 @@ if (!__Pyx_RefNanny) {
 
   /* "wfpt.pyx":78
  *     return sum_logp
- *
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,             # <<<<<<<<<<<<<<
  *                       int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
@@ -25249,7 +25258,7 @@ if (!__Pyx_RefNanny) {
  *                       double simps_err=1e-8,
  *                       double p_outlier=0,             # <<<<<<<<<<<<<<
  *                       double w_outlier=0.1):
- *
+ * 
  */
   __Pyx_TraceLine(123,0,__PYX_ERR(0, 123, __pyx_L1_error))
   __pyx_t_6 = PyFloat_FromDouble(((double)0.0)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 123, __pyx_L1_error)
@@ -25259,7 +25268,7 @@ if (!__Pyx_RefNanny) {
  *                       double simps_err=1e-8,
  *                       double p_outlier=0,
  *                       double w_outlier=0.1):             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef Py_ssize_t size = x.shape[0]
  */
   __Pyx_TraceLine(124,0,__PYX_ERR(0, 124, __pyx_L1_error))
@@ -25268,7 +25277,7 @@ if (!__Pyx_RefNanny) {
 
   /* "wfpt.pyx":110
  *         return sum_logp
- *
+ * 
  * def wiener_logp_array(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[double, ndim=1] v,
  *                       np.ndarray[double, ndim=1] sv,
@@ -25333,7 +25342,7 @@ if (!__Pyx_RefNanny) {
 
   /* "wfpt.pyx":150
  *     return logp
- *
+ * 
  * def wiener_like_rlddm(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[long, ndim=1] response,
  *                       np.ndarray[double, ndim=1] feedback,
@@ -25370,7 +25379,7 @@ if (!__Pyx_RefNanny) {
  *                       np.ndarray[double, ndim=1] params_rl,
  *                       np.ndarray[double, ndim=2] params_bnds,
  *                       double p_outlier=0, double w_outlier=0, network = None):             # <<<<<<<<<<<<<<
- *
+ * 
  *     cdef double v = params_ssm[0]
  */
   __Pyx_TraceLine(237,0,__PYX_ERR(0, 237, __pyx_L1_error))
@@ -25380,8 +25389,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_GOTREF(__pyx_t_10);
 
   /* "wfpt.pyx":228
- *
- *
+ * 
+ * 
  * def wiener_like_rlssm_nn(str model,             # <<<<<<<<<<<<<<
  *                       np.ndarray[double, ndim=1] x,
  *                       np.ndarray[long, ndim=1] response,
@@ -25438,8 +25447,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_GOTREF(__pyx_t_4);
 
   /* "wfpt.pyx":342
- *
- *
+ * 
+ * 
  * def wiener_like_rl(np.ndarray[long, ndim=1] response,             # <<<<<<<<<<<<<<
  *                    np.ndarray[double, ndim=1] feedback,
  *                    np.ndarray[long, ndim=1] split_by,
@@ -25476,7 +25485,7 @@ if (!__Pyx_RefNanny) {
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
   /* "wfpt.pyx":430
- *
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,
  *                       int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-3,             # <<<<<<<<<<<<<<
  *                       double p_outlier=0, double w_outlier=0):
@@ -25506,8 +25515,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_GOTREF(__pyx_t_9);
 
   /* "wfpt.pyx":429
- *
- *
+ * 
+ * 
  * def wiener_like_multi(np.ndarray[double, ndim=1] x, v, sv, a, z, sz, t, st, double err, multi=None,             # <<<<<<<<<<<<<<
  *                       int n_st=10, int n_sz=10, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
@@ -25574,8 +25583,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_GOTREF(__pyx_t_2);
 
   /* "wfpt.pyx":462
- *
- *
+ * 
+ * 
  * def wiener_like_multi_rlddm(np.ndarray[double, ndim=1] x,             # <<<<<<<<<<<<<<
  *                       np.ndarray[long, ndim=1] response,
  *                       np.ndarray[double, ndim=1] feedback,
@@ -25625,8 +25634,8 @@ if (!__Pyx_RefNanny) {
   __Pyx_GOTREF(__pyx_t_4);
 
   /* "wfpt.pyx":508
- *
- *
+ * 
+ * 
  * def wiener_like_rlssm_nn_reg(np.ndarray[float, ndim=2] data,             # <<<<<<<<<<<<<<
  *                       np.ndarray[float, ndim=2] rl_arr,
  *                       np.ndarray[double, ndim=1] x,
@@ -25678,7 +25687,7 @@ if (!__Pyx_RefNanny) {
 
   /* "wfpt.pyx":588
  *     return sum_logp
- *
+ * 
  * def wiener_like_contaminant(np.ndarray[double, ndim=1] x, np.ndarray[int, ndim=1] cont_x, double v,             # <<<<<<<<<<<<<<
  *                             double sv, double a, double z, double sz, double t, double st, double t_min,
  *                             double t_max, double err, int n_st=10, int n_sz=10, bint use_adaptive=1,
@@ -25706,7 +25715,7 @@ if (!__Pyx_RefNanny) {
   __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
   /* "wfpt.pyx":620
- *
+ * 
  * def gen_cdf_using_pdf(double v, double sv, double a, double z, double sz, double t, double st, double err,
  *                       int N=500, double time=5., int n_st=2, int n_sz=2, bint use_adaptive=1, double simps_err=1e-3,             # <<<<<<<<<<<<<<
  *                       double p_outlier=0, double w_outlier=0):
@@ -25741,7 +25750,7 @@ if (!__Pyx_RefNanny) {
 
   /* "wfpt.pyx":619
  *     return sum_logp
- *
+ * 
  * def gen_cdf_using_pdf(double v, double sv, double a, double z, double sz, double t, double st, double err,             # <<<<<<<<<<<<<<
  *                       int N=500, double time=5., int n_st=2, int n_sz=2, bint use_adaptive=1, double simps_err=1e-3,
  *                       double p_outlier=0, double w_outlier=0):
@@ -25781,10 +25790,10 @@ if (!__Pyx_RefNanny) {
   __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
 
   /* "wfpt.pyx":647
- *
- *
+ * 
+ * 
  * def split_cdf(np.ndarray[double, ndim=1] x, np.ndarray[double, ndim=1] data):             # <<<<<<<<<<<<<<
- *
+ * 
  *     # get length of data
  */
   __Pyx_TraceLine(647,0,__PYX_ERR(0, 647, __pyx_L1_error))
@@ -25794,7 +25803,7 @@ if (!__Pyx_RefNanny) {
   __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
 
   /* "wfpt.pyx":666
- *
+ * 
  * def wiener_like_multi_nn_mlp(np.ndarray[float, ndim = 2] data,
  *                              double p_outlier = 0,             # <<<<<<<<<<<<<<
  *                              double w_outlier = 0,
@@ -25817,7 +25826,7 @@ if (!__Pyx_RefNanny) {
 
   /* "wfpt.pyx":665
  *     return (x_lb, lb, x_ub, ub)
- *
+ * 
  * def wiener_like_multi_nn_mlp(np.ndarray[float, ndim = 2] data,             # <<<<<<<<<<<<<<
  *                              double p_outlier = 0,
  *                              double w_outlier = 0,
@@ -25842,7 +25851,7 @@ if (!__Pyx_RefNanny) {
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
   /* "wfpt.pyx":687
- *
+ * 
  * def wiener_like_multi_nn_mlp_pdf(np.ndarray[float, ndim = 2] data,
  *                                  double p_outlier = 0,             # <<<<<<<<<<<<<<
  *                                  double w_outlier = 0,
@@ -25865,7 +25874,7 @@ if (!__Pyx_RefNanny) {
 
   /* "wfpt.pyx":686
  *     return log_p
- *
+ * 
  * def wiener_like_multi_nn_mlp_pdf(np.ndarray[float, ndim = 2] data,             # <<<<<<<<<<<<<<
  *                                  double p_outlier = 0,
  *                                  double w_outlier = 0,
@@ -28156,7 +28165,7 @@ static PyObject* __Pyx_PyInt_SubtractObjC(PyObject *op1, PyObject *op2, long int
         const long b = intval;
         long x;
         long a = PyInt_AS_LONG(op1);
-
+        
             x = (long)((unsigned long)a - (unsigned long)b);
             if (likely((x^a) >= 0 || (x^~b) >= 0))
                 return PyInt_FromLong(x);
@@ -28256,8 +28265,8 @@ static PyObject* __Pyx_PyInt_SubtractObjC(PyObject *op1, PyObject *op2, long int
                 llx = lla - llb;
             return PyLong_FromLongLong(llx);
 #endif
-
-
+        
+        
     }
     #endif
     if (PyFloat_CheckExact(op1)) {
@@ -28268,7 +28277,7 @@ static PyObject* __Pyx_PyInt_SubtractObjC(PyObject *op1, PyObject *op2, long int
         double a = PyFloat_AS_DOUBLE(op1);
 #endif
             double result;
-
+            
             PyFPE_START_PROTECT("subtract", return NULL)
             result = ((double)a) - (double)b;
             PyFPE_END_PROTECT(result)
@@ -28289,7 +28298,7 @@ static PyObject* __Pyx_PyInt_AddCObj(PyObject *op1, PyObject *op2, long intval, 
         const long a = intval;
         long x;
         long b = PyInt_AS_LONG(op2);
-
+        
             x = (long)((unsigned long)a + (unsigned long)b);
             if (likely((x^a) >= 0 || (x^b) >= 0))
                 return PyInt_FromLong(x);
@@ -28389,8 +28398,8 @@ static PyObject* __Pyx_PyInt_AddCObj(PyObject *op1, PyObject *op2, long intval, 
                 llx = lla + llb;
             return PyLong_FromLongLong(llx);
 #endif
-
-
+        
+        
     }
     #endif
     if (PyFloat_CheckExact(op2)) {
@@ -28401,7 +28410,7 @@ static PyObject* __Pyx_PyInt_AddCObj(PyObject *op1, PyObject *op2, long intval, 
         double b = PyFloat_AS_DOUBLE(op2);
 #endif
             double result;
-
+            
             PyFPE_START_PROTECT("add", return NULL)
             result = ((double)a) + (double)b;
             PyFPE_END_PROTECT(result)

@@ -16,8 +16,8 @@ keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
+pymc = ">=5.6.0,<5.8.0"
 scipy = "1.10.1"
-pymc = "^5.6.0"
 arviz = "^0.14.0"
 numpy = "^1.23.4"
 onnx = "^1.12.0"
@@ -161,7 +161,14 @@ ignore = [
     "TID252",
 ]
 
-exclude = [".github", "docs", "notebook", "tests"]
+exclude = [
+    ".github",
+    "docs",
+    "notebook",
+    "tests",
+    "src/hssm/likelihoods/hddm_wfpt/cdfdif_wrapper.c",
+    "src/hssm/likelihoods/hddm_wfpt/wfpt.cpp",
+]
 
 [tool.ruff.pydocstyle]
 convention = "numpy"
@@ -170,14 +177,9 @@ convention = "numpy"
 ignore_missing_imports = true
 
 [tool.poetry.build]
+generate-setup-file = false
 script = "build.py"
 
 [build-system]
-requires = [
-    "poetry-core>=1.4.0",
-    "setuptools",
-    "wheel",
-    "Cython>=0.29.32",
-    "numpy >= 1.23.4",
-]
+requires = ["poetry-core", "Cython", "numpy"]
 build-backend = "poetry.core.masonry.api"
