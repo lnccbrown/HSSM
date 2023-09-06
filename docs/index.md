@@ -11,13 +11,13 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 **Contacts**: alexander_fengler@brown.edu
 
-**Github**: https://github.com/lnccbrown/HSSM
+**GitHub**: https://github.com/lnccbrown/HSSM
 
 **Copyright**: This document has been placed in the public domain.
 
 **License**: HSSM is licensed under [Copyright 2023, Brown University, Providence, RI](../LICENSE)
 
-**Version**: 0.1.3
+**Version**: 0.1.4
 
 - Allows approximate hierarchical Bayesian inference via various likelihood approximators.
 - Estimate impact of neural and other trial-by-trial covariates via native hierarchical mixed-regression support.
@@ -103,8 +103,10 @@ HSSM is licensed under [Copyright 2023, Brown University, Providence, RI](LICENS
 
 ## Support
 
-For questions, bug reports, or other unexpected issues, please open an issue on the GitHub repository.
+For questions, please feel free to [open a discussion](https://github.com/lnccbrown/HSSM/discussions).
+
+For bug reports and feature requests, please feel free to [open an issue](https://github.com/lnccbrown/HSSM/issues) using the corresponding template.
 
 ## Contributing
 
-If you want to contribute to this project, please familiarize yourself with our [contribution guidelines](CONTRIBUTING.md).
+If you want to contribute to this project, please follow our [contribution guidelines](CONTRIBUTING.md).

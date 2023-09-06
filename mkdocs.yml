@@ -16,7 +16,7 @@ nav:
       - hssm: api/hssm.md
       - hssm.distribution_utils: api/distribution_utils.md
       - hssm.likelihoods: api/likelihoods.md
-      - hssm.config: api/defaults.md
+      - hssm.defaults: api/defaults.md
   - Tutorials:
       - Main tutorial: tutorials/main_tutorial.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
@@ -33,6 +33,7 @@ plugins:
       execute_ignore:
         - getting_started/getting_started.ipynb
         - tutorials/main_tutorial.ipynb
+        - tutorials/likelihoods.ipynb
   - mkdocstrings:
       default_handler: python
       handlers:

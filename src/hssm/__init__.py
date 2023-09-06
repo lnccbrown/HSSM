@@ -17,6 +17,8 @@ _logger.setLevel(logging.INFO)
 handler = logging.StreamHandler(stream=sys.stdout)
 _logger.addHandler(handler)
 
+__version__ = "0.1.4"
+
 __all__ = [
     "HSSM",
     "load_data",

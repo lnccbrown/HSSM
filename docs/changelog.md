@@ -2,6 +2,15 @@
 
 ## 0.1.x
 
+### 0.1.4
+
+- Added support of `blackbox` likelihoods for `ddm` and `ddm_sdv` models.
+- Added support for `full_ddm` models via `blackbox` likelihoods.
+- Added the ability to use `hssm.Param` and `hssm.Prior` to specify model parameters.
+- Added support for non-parameter fields to be involved in the computation of likelihoods.
+- Major refactor of the code to improve readability and maintainability.
+- Fixed a bug in model.sample_posterior_predictive().
+
 ### 0.1.3
 
 - Added the ability to specify `inf`s in bounds.
