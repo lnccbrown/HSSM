@@ -169,6 +169,9 @@ convention = "numpy"
 [tool.mypy]
 ignore_missing_imports = true
 
+[tool.poetry.build]
+script = "build.py"
+
 [build-system]
 requires = [
     "poetry-core>=1.4.0",
