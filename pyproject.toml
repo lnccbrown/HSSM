@@ -16,7 +16,7 @@ keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
-pymc = ">=5.6.0,<5.8.0"
+pymc = ">=5.6.0,<5.7.0"
 scipy = "1.10.1"
 arviz = "^0.14.0"
 numpy = "^1.23.4"
