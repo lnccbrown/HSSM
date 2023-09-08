@@ -34,6 +34,8 @@ plugins:
         - getting_started/getting_started.ipynb
         - tutorials/main_tutorial.ipynb
         - tutorials/likelihoods.ipynb
+        - .ipynb_checkpoints/*.ipynb
+      allow_errors: false
   - mkdocstrings:
       default_handler: python
       handlers:

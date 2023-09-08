@@ -2,6 +2,15 @@
 
 ## 0.1.x
 
+### 0.1.5
+
+We fixed the errors in v0.1.4. Sorry for the convenience! If you have accidentally
+downloaded v0.1.4, please make sure that you update hssm to the current version.
+
+- We made Cython dependencies of this package available via pypi. We have also built
+wheels for (almost) all platforms so there is no need to build these Cython
+dependencies.
+
 ### 0.1.4
 
 - Added support of `blackbox` likelihoods for `ddm` and `ddm_sdv` models.
