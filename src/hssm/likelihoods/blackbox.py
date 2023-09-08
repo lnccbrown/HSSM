@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-
-from .hddm_wfpt import wfpt
+from hddm_wfpt import wfpt
 
 
 def hddm_to_hssm(func):
