@@ -70,3 +70,5 @@ site/
 
 # folders in the repository
 /notebooks
+
+*.so

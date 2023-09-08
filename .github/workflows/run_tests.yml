@@ -51,3 +51,6 @@ jobs:
 
       - name: Run tests
         run: poetry run pytest
+
+      - name: build docs
+        run: poetry run mkdocs build
