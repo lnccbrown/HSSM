@@ -1,5 +1,6 @@
 """HSSM - Hierarchical Sequential Sampling Models."""
 
+import importlib.metadata
 import logging
 import sys
 
@@ -17,7 +18,7 @@ _logger.setLevel(logging.INFO)
 handler = logging.StreamHandler(stream=sys.stdout)
 _logger.addHandler(handler)
 
-__version__ = "0.1.5"
+__version__ = importlib.metadata.version(__package__ or __name__)
 
 __all__ = [
     "HSSM",

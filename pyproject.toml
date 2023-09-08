@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "HSSM"
-version = "0.1.4"
-description = ""
+version = "0.1.5"
+description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     "Alexander Fengler <alexander_fengler@brown.edu>",
     "Paul Xu <yang_xu@brown.edu>",
@@ -28,6 +28,7 @@ huggingface-hub = "^0.15.1"
 onnxruntime = "^1.15.0"
 bambi = "^0.12.0"
 numpyro = "^0.12.1"
+hddm-wfpt = "^0.1.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
@@ -176,10 +177,6 @@ convention = "numpy"
 [tool.mypy]
 ignore_missing_imports = true
 
-[tool.poetry.build]
-generate-setup-file = false
-script = "build.py"
-
 [build-system]
-requires = ["poetry-core", "Cython", "numpy"]
+requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
