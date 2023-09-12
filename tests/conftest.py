@@ -2,7 +2,7 @@ import pytest
 
 import numpy as np
 import pandas as pd
-import ssms
+from ssms.basic_simulators.simulator import simulator
 
 import hssm
 
@@ -10,9 +10,7 @@ import hssm
 @pytest.fixture(scope="module")
 def data_ddm():
     v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 0.5]
-    obs_ddm = ssms.basic_simulators.simulator(
-        [v_true, a_true, z_true, t_true], model="ddm", n_samples=100
-    )
+    obs_ddm = simulator([v_true, a_true, z_true, t_true], model="ddm", n_samples=100)
     obs_ddm = np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
     data = pd.DataFrame(obs_ddm, columns=["rt", "response"])
 
@@ -22,7 +20,7 @@ def data_ddm():
 @pytest.fixture(scope="module")
 def data_angle():
     v_true, a_true, z_true, t_true, theta_true = [0.5, 1.5, 0.5, 0.5, 0.3]
-    obs_angle = ssms.basic_simulators.simulator(
+    obs_angle = simulator(
         [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=100
     )
     obs_angle = np.column_stack([obs_angle["rts"][:, 0], obs_angle["choices"][:, 0]])
