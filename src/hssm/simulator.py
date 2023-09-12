@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-from ssms.basic_simulators import simulator
+from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config
 
 if TYPE_CHECKING:
