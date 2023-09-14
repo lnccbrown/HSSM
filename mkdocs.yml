@@ -22,7 +22,6 @@ nav:
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
-      - Using Models from Hugging Face: tutorials/hugging_face_onnx_models.ipynb
   - Contributing: CONTRIBUTING.md
 
 plugins:
