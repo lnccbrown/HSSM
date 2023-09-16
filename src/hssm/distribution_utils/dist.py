@@ -21,7 +21,7 @@ from bambi.backend.utils import get_distribution_from_prior
 from numpy.typing import ArrayLike
 from pytensor.graph.op import Apply, Op
 from pytensor.tensor.random.op import RandomVariable
-from ssms.basic_simulators import simulator
+from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
 
 from .onnx import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
