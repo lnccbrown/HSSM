@@ -1,21 +1,24 @@
-<div style="position: relative; width: 100%;">
-  <img src="images/mainlogo.png" style="width: 250px;">
-  <a href="https://ccbs.carney.brown.edu/brainstorm" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%);">
-    <img src="images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
-  </a>
+<div>
+    <a href="https://ccbs.carney.brown.edu/brainstorm" style="display: block; float: right; padding: 10px">
+        <img src="images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
+    </a>
+    <img src="images/mainlogo.png" style="width: 250px;">
 </div>
 
-HSSM is a Python toolbox that provides a seamless combination of state-of-the-art likelihood approximation methods with the wider ecosystem of probabilistic programming languages. It facilitates flexible hierarchical model building and inference via modern MCMC samplers. HSSM is user-friendly and provides the ability to rigorously estimate the impact of neural and other trial-by-trial covariates through parameter-wise mixed-effects models for a large variety of cognitive process models.
+![PyPI](https://img.shields.io/pypi/v/hssm)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/HSSM?link=https%3A%2F%2Fpypi.org%2Fproject%2Fhssm%2F)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/hssm)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/lnccbrown/HSSM)
+![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/lnccbrown/HSSM/run_tests.yml)
+![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
-**Authors**: Alexander Fengler, Aisulu Omar, Paul Xu, Krishn Bera, Michael J. Frank
+**HSSM** (Hierarchical Sequential Sampling Modeling) is a modern Python toolbox that provides state-of-the-art likelihood approximation methods within the Python Bayesian ecosystem. It facilitates hierarchical model building and inference via fast and robust MCMC samplers. User-friendly, extensible, and flexible, HSSM can rigorously estimate the impact of neural and other trial-by-trial covariates through parameter-wise mixed-effects models for a large variety of cognitive process models.
 
-**Contacts**: alexander_fengler@brown.edu
 
-**GitHub**: https://github.com/lnccbrown/HSSM
+HSSM is a [BRAINSTORM](https://ccbs.carney.brown.edu/brainstorm) project in collaboration with the [Center for Computation and Visualization (CCV)](https://ccv.brown.edu/) and the [Center for Computational Brain Science](https://ccbs.carney.brown.edu/) within the [Carney Institute at Brown University](https://www.brown.edu/carney/).
 
-**Copyright**: This document has been placed in the public domain.
-
-**License**: HSSM is licensed under [Copyright 2023, Brown University, Providence, RI](../LICENSE)
+## Features
 
 - Allows approximate hierarchical Bayesian inference via various likelihood approximators.
 - Estimate impact of neural and other trial-by-trial covariates via native hierarchical mixed-regression support.
@@ -29,13 +32,13 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 `hssm` is available through PyPI. You can install it with Pip via:
 
-```
+```bash
 pip install hssm
 ```
 
 You can also install the bleeding edge version of `hssm` directly from this repo:
 
-```
+```bash
 pip install git+https://github.com/lnccbrown/HSSM.git
 ```
 
