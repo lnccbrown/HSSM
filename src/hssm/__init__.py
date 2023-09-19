@@ -1,4 +1,11 @@
-"""HSSM - Hierarchical Sequential Sampling Models."""
+"""Top-level entry to the HSSM package.
+
+The `hssm` module is the top-level entry to the HSSM package. It exports some of the
+most important classes, including the `HSSM` class that handles model creation and
+sampling. You will also find utility classes such as `hssm.Prior`, `hssm.ModelConfig`,
+and `hssm.Param`, with which users will often interface. Additionally, most frequently
+used utility functions can also be found.
+"""
 
 import importlib.metadata
 import logging

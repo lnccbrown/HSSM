@@ -28,7 +28,7 @@ plugins:
   - search
   - autorefs
   - mkdocs-jupyter:
-      execute: True
+      execute: true
       execute_ignore:
         - getting_started/getting_started.ipynb
         - tutorials/main_tutorial.ipynb
@@ -52,13 +52,19 @@ plugins:
             docstring_section_style: "list"
             show_root_members_full_path: true
             show_object_full_path: false
-            show_category_heading: true
+            show_category_heading: false
             show_signature_annotations: true
             show_source: false
-            group_by_category: false
+            group_by_category: true
             signature_crossrefs: true
+            summary: true
+            filters:
+            - "!^_"
 theme:
   logo: images/navlogo.png
+  font:
+    text: Noto Sans
+    code: Roboto Mono
   name: material
   custom_dir: docs/overrides
   features:
@@ -76,13 +82,16 @@ theme:
   palette:
     # Palette toggle for automatic mode
     - media: "(prefers-color-scheme)"
+      scheme: ocean
+      primary: custom
       toggle:
         icon: material/brightness-auto
         name: Switch to light mode
 
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
-      scheme: default
+      scheme: ocean
+      primary: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
@@ -90,6 +99,7 @@ theme:
     # Palette toggle for dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
+      primary: custom
       toggle:
         icon: material/brightness-4
         name: Switch to system preference
@@ -101,8 +111,11 @@ extra_css:
   - "styles/extra.css"
 
 markdown_extensions:
+  - toc:
+      permalink: true
   - admonition
   - pymdownx.highlight:
+      use_pygments: true
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
