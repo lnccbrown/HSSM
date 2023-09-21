@@ -22,7 +22,9 @@ def fixture_path():
 def onnx_session(fixture_path):
     model_path = str(fixture_path / "angle.onnx")
 
-    return onnxruntime.InferenceSession(model_path, None)
+    return onnxruntime.InferenceSession(
+        model_path, None, providers=["CPUExecutionProvider"]
+    )
 
 
 def test_interpret_onnx(onnx_session, fixture_path):
