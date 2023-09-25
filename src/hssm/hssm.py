@@ -9,6 +9,7 @@ This file defines the entry class HSSM.
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from inspect import isclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal
@@ -835,7 +836,7 @@ class HSSM:
                 lapse=self.lapse,
                 extra_fields=None
                 if not self.extra_fields
-                else [self.data[field].values for field in self.extra_fields],
+                else [deepcopy(self.data[field].values) for field in self.extra_fields],
             )  # type: ignore
         # If the user has provided a callable (an arbitrary likelihood function)
         # If `loglik_kind` is `blackbox`, wrap it in an op and then a distribution
@@ -852,7 +853,7 @@ class HSSM:
                 lapse=self.lapse,
                 extra_fields=None
                 if not self.extra_fields
-                else [self.data[field].values for field in self.extra_fields],
+                else [deepcopy(self.data[field].values) for field in self.extra_fields],
             )  # type: ignore
         # All other situations
         if self.loglik_kind != "approx_differentiable":
@@ -881,7 +882,7 @@ class HSSM:
             lapse=self.lapse,
             extra_fields=None
             if not self.extra_fields
-            else [self.data[field].values for field in self.extra_fields],
+            else [deepcopy(self.data[field].values) for field in self.extra_fields],
         )
 
     def _check_extra_fields(self, data: pd.DataFrame | None = None) -> bool:
