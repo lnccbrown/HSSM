@@ -132,6 +132,7 @@ class Config:
 
         self.default_priors |= user_config.default_priors
         self.bounds |= user_config.bounds
+        self.extra_fields = user_config.extra_fields
 
     def validate(self) -> None:
         """Ensure that mandatory fields are not None."""
