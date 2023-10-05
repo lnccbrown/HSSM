@@ -48,9 +48,11 @@ For more detailed guidance, please check out our [installation guide](getting_st
 
     Possible solutions to any issues with installations with hssm can be located
     [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an
-    environment manager with Python 3.9~3.11 to prevent any problems with dependencies
-    during the installation process. Please note that hssm is tested for python 3.9, 3.10,
-    3.11. Use other python versions with caution.
+    environment manager with Python 3.10~3.11 to prevent any problems with dependencies
+    during the installation process. Please note that hssm is tested for python 3.10,
+    3.11. As of HSSM v0.1.6, support for Python 3.9 is dropped. Use other python
+    versions with caution.
+
 
 ### Setting global float type
 
