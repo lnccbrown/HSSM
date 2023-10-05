@@ -4,8 +4,6 @@ This module handles LAN-related operations, such as producing log-likelihood fun
 from onnx model files and wrapping jax log-likelihood functions in pytensor Ops.
 """
 
-from __future__ import annotations
-
 from os import PathLike
 from typing import Callable
 

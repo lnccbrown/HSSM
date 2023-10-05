@@ -5,8 +5,6 @@ of the WFPT distribution here:
 https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b.
 """
 
-from __future__ import annotations
-
 from typing import Type
 
 import numpy as np

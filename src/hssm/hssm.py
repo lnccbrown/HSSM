@@ -6,18 +6,24 @@ sequential sampling models.
 This file defines the entry class HSSM.
 """
 
-from __future__ import annotations
-
 import logging
 from inspect import isclass
+from os import PathLike
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Literal
+from typing import Any, Callable, Literal
 
+import arviz as az
 import bambi as bmb
+import numpy as np
+import pandas as pd
 import pymc as pm
 import pytensor
 from bambi.model_components import DistributionalComponent
 
+from hssm.defaults import (
+    LoglikKind,
+    SupportedModels,
+)
 from hssm.distribution_utils import (
     make_blackbox_op,
     make_distribution,
@@ -37,18 +43,6 @@ from hssm.utils import (
 )
 
 from .config import Config, ModelConfig
-
-if TYPE_CHECKING:
-    from os import PathLike
-
-    import arviz as az
-    import numpy as np
-    import pandas as pd
-
-    from hssm.defaults import (
-        LoglikKind,
-        SupportedModels,
-    )
 
 _logger = logging.getLogger("hssm")
 

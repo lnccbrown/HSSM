@@ -9,8 +9,6 @@ bmb.Prior but adds the following:
 3. The ability to shorten the output of bmb.Prior.
 """
 
-from __future__ import annotations
-
 from typing import Callable
 
 import bambi as bmb

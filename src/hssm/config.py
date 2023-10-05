@@ -1,6 +1,5 @@
 """Config and ModelConfig classes that process configs."""
 
-
 from __future__ import annotations
 
 from copy import deepcopy

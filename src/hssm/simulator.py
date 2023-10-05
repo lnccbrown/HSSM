@@ -1,16 +1,10 @@
 """Simulates data with basic ssm_simulators."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 import numpy as np
 import pandas as pd
+from numpy.typing import ArrayLike
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config
-
-if TYPE_CHECKING:
-    from numpy.typing import ArrayLike
 
 
 def simulate_data(
