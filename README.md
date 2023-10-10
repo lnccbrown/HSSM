@@ -47,7 +47,12 @@ You will need optional dependencies to use JAX-based samplers and graph the mode
 Please refer to our [installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/)
 for more detailed instructions.
 
-**Note**: Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an environment manager with Python 3.9~3.11 to prevent any problems with dependencies during the installation process. Please note that hssm is tested for python 3.9, 3.10, 3.11. Use other python versions with caution.
+**Note**: Possible solutions to any issues with installations with hssm can be located
+    [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an
+    environment manager with Python 3.10~3.11 to prevent any problems with dependencies
+    during the installation process. Please note that hssm is tested for python 3.10,
+    3.11. As of HSSM v0.1.6, support for Python 3.9 is dropped. Use other python
+    versions with caution.
 
 ## Example
 

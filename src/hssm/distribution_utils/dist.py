@@ -5,8 +5,6 @@ distributions that support arbitrary log-likelihood functions and random number
 generation ops.
 """
 
-from __future__ import annotations
-
 import logging
 from os import PathLike
 from typing import Any, Callable, Iterable, Type

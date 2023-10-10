@@ -1,7 +1,5 @@
 """Black box likelihoods written in Cython for "ddm" and "ddm_sdv" models."""
 
-from __future__ import annotations
-
 import numpy as np
 from hddm_wfpt import wfpt
 

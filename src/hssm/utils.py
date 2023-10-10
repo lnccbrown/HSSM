@@ -9,8 +9,6 @@ these representations in Bambi-compatible formats through convenience function
 _parse_bambi().
 """
 
-from __future__ import annotations
-
 import logging
 from copy import deepcopy
 from typing import Any, Iterable, Literal, NewType
