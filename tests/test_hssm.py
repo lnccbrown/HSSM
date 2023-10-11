@@ -224,21 +224,27 @@ def test_hierarchical(data_ddm):
     data_ddm = data_ddm.iloc[:10, :].copy()
     data_ddm["participant_id"] = np.arange(10)
 
-    model = HSSM(data=data_ddm)
+    model = HSSM(data=data_ddm, hierarchical=True)
     assert all(
         param.is_regression
         for name, param in model.params.items()
         if name != "p_outlier"
     )
 
-    model = HSSM(data=data_ddm, v=bmb.Prior("Uniform", lower=-10.0, upper=10.0))
+    model = HSSM(
+        data=data_ddm,
+        v=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
+        hierarchical=True,
+    )
     assert all(
         param.is_regression
         for name, param in model.params.items()
         if name not in ["v", "p_outlier"]
     )
 
-    model = HSSM(data=data_ddm, a=bmb.Prior("Uniform", lower=0.0, upper=10.0))
+    model = HSSM(
+        data=data_ddm, a=bmb.Prior("Uniform", lower=0.0, upper=10.0), hierarchical=True
+    )
     assert all(
         param.is_regression
         for name, param in model.params.items()
@@ -249,6 +255,7 @@ def test_hierarchical(data_ddm):
         data=data_ddm,
         v=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
         a=bmb.Prior("Uniform", lower=0.0, upper=10.0),
+        hierarchical=True,
     )
     assert all(
         param.is_regression

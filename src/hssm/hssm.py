@@ -183,12 +183,18 @@ class HSSM:
         loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
-        hierarchical: bool = True,
+        hierarchical: bool = False,
         **kwargs,
     ):
         self.data = data
         self._inference_obj = None
-        self.hierarchical = hierarchical and "participant_id" in data.columns
+        self.hierarchical = hierarchical
+
+        if self.hierarchical and "participant_id" not in self.data.columns:
+            raise ValueError(
+                "You have specified a hierarchical model, but there is no "
+                + "`participant_id` field in the DataFrame that you have passed."
+            )
 
         # Construct a model_config from defaults
         self.model_config = Config.from_defaults(model, loglik_kind)
