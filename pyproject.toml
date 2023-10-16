@@ -29,6 +29,7 @@ onnxruntime = "^1.15.0"
 bambi = "^0.12.0"
 numpyro = "^0.12.1"
 hddm-wfpt = "^0.1.1"
+seaborn = "^0.13.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
