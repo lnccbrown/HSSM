@@ -15,10 +15,12 @@ from typing import Any, Callable, Literal
 
 import arviz as az
 import bambi as bmb
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
 import pytensor
+import xarray as xr
 from bambi.model_components import DistributionalComponent
 
 from hssm.defaults import (
@@ -514,6 +516,103 @@ class HSSM:
 
         return graphviz
 
+    def plot_trace(
+        self,
+        data: az.InferenceData | None = None,
+        include_deterministic: bool = False,
+        tight_layout: bool = True,
+        **kwargs,
+    ) -> None:
+        """Generate trace plot with ArviZ but with additional convenience features.
+
+        This is a simple wrapper for the az.plot_trace() function. By default, it
+        filters out the deterministic values from the plot. Please see the
+        [arviz documentation]
+        (https://arviz-devs.github.io/arviz/api/generated/arviz.plot_trace.html)
+        for additional parameters that can be specified.
+
+        Parameters
+        ----------
+        data : optional
+            An ArviZ InferenceData object. If None, the traces stored in the model will
+            be used.
+        include_deterministic : optional
+            Whether to include deterministic variables in the plot. Defaults to False.
+            Note that if include_deteministic is set to False and and `var_names` is
+            provided, the `var_names` provided will be modified to also exclude the
+            deterministic values. If this is not desirable, set `include_deterministic`
+            to True.
+        tight_layout : optional
+            Whether to call plt.tight_layout() after plotting. Defaults to True.
+        """
+        data = data or self.traces
+
+        if not include_deterministic:
+            var_names = self._get_deterministic_var_names()
+            if var_names:
+                if "var_names" in kwargs:
+                    if isinstance(kwargs["var_names"], str):
+                        if kwargs["var_names"] not in var_names:
+                            var_names.append(kwargs["var_names"])
+                        kwargs["var_names"] = var_names
+                    elif isinstance(kwargs["var_names"], list):
+                        kwargs["var_names"] = list(
+                            set(var_names) | set(kwargs["var_names"])
+                        )
+                    elif kwargs["var_names"] is None:
+                        kwargs["var_names"] = var_names
+                    else:
+                        raise ValueError(
+                            "`var_names` must be a string, a list of strings, or None."
+                        )
+                else:
+                    kwargs["var_names"] = var_names
+
+        az.plot_trace(data, **kwargs)
+
+        if tight_layout:
+            plt.tight_layout()
+
+    def summary(
+        self,
+        data: az.InferenceData | None = None,
+        include_deterministic: bool = False,
+        **kwargs,
+    ) -> pd.DataFrame | xr.Dataset:
+        """Produce a summary table with ArviZ but with additional convenience features.
+
+        This is a simple wrapper for the az.summary() function. By default, it
+        filters out the deterministic values from the plot. Please see the
+        [arviz documentation]
+        (https://arviz-devs.github.io/arviz/api/generated/arviz.summary.html)
+        for additional parameters that can be specified.
+
+        Parameters
+        ----------
+        data
+            An ArviZ InferenceData object. If None, the traces stored in the model will
+            be used.
+        include_deterministic
+            Whether to include deterministic variables in the plot. Defaults to False.
+            Note that if include_deteministic is set to False and and `var_names` is
+            provided, the `var_names` provided will be modified to also exclude the
+            deterministic values. If this is not desirable, set `include_deterministic`
+            to True.
+
+        Returns
+        -------
+        pd.DataFrame | xr.Dataset
+            A pandas DataFrame or xarray Dataset containing the summary statistics.
+        """
+        data = data or self.traces
+
+        if not include_deterministic:
+            var_names = self._get_deterministic_var_names()
+            if var_names:
+                kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
+
+        return az.summary(data, **kwargs)
+
     def __repr__(self) -> str:
         """Create a representation of the model."""
         output = []
@@ -913,3 +1012,12 @@ class HSSM:
         self.model_distribution.extra_fields = [
             new_data[field].values for field in self.extra_fields
         ]
+
+    def _get_deterministic_var_names(self) -> list[str]:
+        """Filter out the deterministic variables in var_names."""
+        var_names = [
+            f"~{param_name}"
+            for param_name, param in self.params.items()
+            if param.is_regression and not param.is_parent
+        ]
+        return var_names
