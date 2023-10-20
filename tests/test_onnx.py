@@ -52,7 +52,7 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     """Tests whether the jax logp functions returned from jax_logp_funcs from onnx
     returns the same values to interpret_onnx.
     """
-    model = onnx.load(fixture_path / "test.onnx")
+    model = onnx.load(fixture_path / "angle.onnx")
 
     jax_logp, _, jax_logp_nojit = make_jax_logp_funcs_from_onnx(
         model, params_is_reg=[False] * 5
@@ -103,7 +103,7 @@ def test_make_jax_logp_ops(fixture_path):
     """Tests whether the logp Op returned from make_jax_logp_ops with different backends
     work the same way.
     """
-    model = onnx.load(fixture_path / "test.onnx")
+    model = onnx.load(fixture_path / "angle.onnx")
 
     jax_logp_op = make_jax_logp_ops(
         *make_jax_logp_funcs_from_onnx(model, params_is_reg=[False] * 5)
