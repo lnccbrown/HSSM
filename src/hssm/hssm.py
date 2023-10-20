@@ -15,11 +15,13 @@ from typing import Any, Callable, Literal
 
 import arviz as az
 import bambi as bmb
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
 import pytensor
+import seaborn as sns
 import xarray as xr
 from bambi.model_components import DistributionalComponent
 
@@ -41,10 +43,12 @@ from hssm.utils import (
     HSSMModelGraph,
     _print_prior,
     _process_param_in_kwargs,
+    _random_sample,
     download_hf,
     get_alias_dict,
 )
 
+from . import plotting
 from .config import Config, ModelConfig
 
 _logger = logging.getLogger("hssm")
@@ -197,6 +201,8 @@ class HSSM:
                 "You have specified a hierarchical model, but there is no "
                 + "`participant_id` field in the DataFrame that you have passed."
             )
+
+        self.n_responses = int(np.max(self.data["response"].values)) + 1
 
         # Construct a model_config from defaults
         self.model_config = Config.from_defaults(model, loglik_kind)
@@ -354,6 +360,7 @@ class HSSM:
         inplace: bool = True,
         include_group_specific: bool = True,
         kind: Literal["pps", "mean"] = "pps",
+        n_samples: int | float | None = None,
     ) -> az.InferenceData | None:
         """Perform posterior predictive sampling from the HSSM model.
 
@@ -379,6 +386,17 @@ class HSSM:
             latter returns the draws from the posterior predictive distribution
             (i.e. the posterior probability distribution for a new observation).
             Defaults to `"pps"`.
+        n_samples
+            The number of samples to draw from the posterior predictive distribution
+            from each chain.
+            When it's an integer >= 1, the number of samples to be extracted from the
+            `draw` dimension. If this integer is larger than the number of posterior
+            samples in each chain, all posterior samples will be used
+            in posterior predictive sampling. When a float between 0 and 1, the
+            proportion of samples from the draw dimension from each chain to be used in
+            posterior predictive sampling.. If this proportion is very
+            small, at least one sample will be used. When None, all posterior samples
+            will be used. Defaults to None.
 
         Raises
         ------
@@ -401,7 +419,46 @@ class HSSM:
         if self._check_extra_fields(data):
             self._update_extra_fields(data)
 
+        if n_samples is not None:
+            # Make a copy of idata, set its posterior to a random sample of the original
+            idata_copy = idata.copy()
+            idata_random_sample = _random_sample(
+                idata["posterior"], n_samples=n_samples
+            )
+            setattr(idata_copy, "posterior", idata_random_sample)
+
+            # If the user specifies an inplace operation, we need to modify the original
+            if inplace:
+                idata_copy_with_pps = self.model.predict(
+                    idata_copy, kind, data, False, include_group_specific
+                )
+                setattr(
+                    idata,
+                    "posterior_predictive",
+                    idata_copy_with_pps.posterior_predictive,
+                )
+
+                return None
+
+            return self.model.predict(
+                idata_copy, kind, data, False, include_group_specific
+            )
+
         return self.model.predict(idata, kind, data, inplace, include_group_specific)
+
+    def plot_posterior_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
+        """Produce a posterior predictive plot.
+
+        Equivalent to calling `hssm.plotting.plot_posterior_predictive()` with the
+        model. Please see that function for
+        [full documentation][hssm.plotting.plot_posterior_predictive].
+
+        Returns
+        -------
+        mpl.axes.Axes | sns.FacetGrid
+            The matplotlib axis or seaborn FacetGrid object containing the plot.
+        """
+        return plotting.plot_posterior_predictive(self, **kwargs)
 
     def sample_prior_predictive(
         self,
@@ -536,19 +593,19 @@ class HSSM:
         data : optional
             An ArviZ InferenceData object. If None, the traces stored in the model will
             be used.
-        include_deterministic : optional
-            Whether to include deterministic variables in the plot. Defaults to False.
-            Note that if include_deteministic is set to False and and `var_names` is
+        include_computed_values : optional
+            Whether to include computed_values variables in the plot. Defaults to False.
+            Note that if include_computed_values is set to False and and `var_names` is
             provided, the `var_names` provided will be modified to also exclude the
-            deterministic values. If this is not desirable, set `include_deterministic`
-            to True.
+            computed_values values. If this is not desirable, set
+            `include_computed_values` to True.
         tight_layout : optional
             Whether to call plt.tight_layout() after plotting. Defaults to True.
         """
         data = data or self.traces
 
         if not include_deterministic:
-            var_names = self._get_deterministic_var_names()
+            var_names = self._get_computed_var_names(data)
             if var_names:
                 if "var_names" in kwargs:
                     if isinstance(kwargs["var_names"], str):
@@ -576,7 +633,7 @@ class HSSM:
     def summary(
         self,
         data: az.InferenceData | None = None,
-        include_deterministic: bool = False,
+        include_computed_values: bool = False,
         **kwargs,
     ) -> pd.DataFrame | xr.Dataset:
         """Produce a summary table with ArviZ but with additional convenience features.
@@ -592,12 +649,12 @@ class HSSM:
         data
             An ArviZ InferenceData object. If None, the traces stored in the model will
             be used.
-        include_deterministic
-            Whether to include deterministic variables in the plot. Defaults to False.
-            Note that if include_deteministic is set to False and and `var_names` is
+        include_computed_values : optional
+            Whether to include computed_values variables in the plot. Defaults to False.
+            Note that if include_computed_values is set to False and and `var_names` is
             provided, the `var_names` provided will be modified to also exclude the
-            deterministic values. If this is not desirable, set `include_deterministic`
-            to True.
+            computed_values values. If this is not desirable, set
+            `include_computed_values` to True.
 
         Returns
         -------
@@ -606,8 +663,8 @@ class HSSM:
         """
         data = data or self.traces
 
-        if not include_deterministic:
-            var_names = self._get_deterministic_var_names()
+        if not include_computed_values:
+            var_names = self._get_computed_var_names(data)
             if var_names:
                 kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
 
@@ -1013,11 +1070,14 @@ class HSSM:
             new_data[field].values for field in self.extra_fields
         ]
 
-    def _get_deterministic_var_names(self) -> list[str]:
+    def _get_computed_var_names(self, idata) -> list[str]:
         """Filter out the deterministic variables in var_names."""
         var_names = [
             f"~{param_name}"
             for param_name, param in self.params.items()
             if param.is_regression and not param.is_parent
         ]
+
+        if "rt,response_mean" in idata["posterior"].data_vars:
+            var_names.append("~rt,response_mean")
         return var_names
