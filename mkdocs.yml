@@ -14,12 +14,14 @@ nav:
       - Getting started: getting_started/getting_started.ipynb
   - API References:
       - hssm: api/hssm.md
+      - hssm.plotting: api/plotting.md
       - hssm.distribution_utils: api/distribution_utils.md
       - hssm.likelihoods: api/likelihoods.md
       - hssm.defaults: api/defaults.md
   - Tutorials:
       - Main tutorial: tutorials/main_tutorial.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
+      - Plotting in HSSM: tutorials/plotting.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
   - Contributing: CONTRIBUTING.md
@@ -59,7 +61,7 @@ plugins:
             signature_crossrefs: true
             summary: true
             filters:
-            - "!^_"
+              - "!^_"
 theme:
   logo: images/navlogo.png
   font:
