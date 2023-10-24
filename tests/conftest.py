@@ -1,12 +1,15 @@
 import pytest
 
 import arviz as az
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 import xarray as xr
 from ssms.basic_simulators.simulator import simulator
 
 import hssm
+
+mpl.use("Agg")
 
 
 @pytest.fixture(scope="module")

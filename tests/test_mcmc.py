@@ -1,12 +1,10 @@
 import pytest
 
 import arviz as az
-import matplotlib
 import matplotlib.pyplot as plt
 import hssm
 import pymc as pm
 
-matplotlib.use("Agg")
 hssm.set_floatX("float32")
 
 parameter_names = "loglik_kind,backend,sampler,step,expected"
@@ -72,7 +70,7 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
 
     # Only runs once
     if loglik_kind == "analytical" and sampler is None:
-        assert not model._get_computed_var_names(model.traces)
+        assert not model._get_deterministic_var_names(model.traces)
         # test summary:
         summary = model.summary()
         assert summary.shape[0] == 4
@@ -102,7 +100,7 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
 
     # Only runs once
     if loglik_kind == "analytical" and sampler is None:
-        assert not model._get_computed_var_names(model.traces)
+        assert not model._get_deterministic_var_names(model.traces)
         # test summary:
         summary = model.summary()
         assert summary.shape[0] == 6
@@ -143,7 +141,7 @@ def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expec
 
     # Only runs once
     if loglik_kind == "analytical" and sampler is None:
-        assert model._get_computed_var_names(model.traces) == ["~a"]
+        assert model._get_deterministic_var_names(model.traces) == ["~a"]
         # test summary:
         summary = model.summary()
         assert summary.shape[0] == 8
