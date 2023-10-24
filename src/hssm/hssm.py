@@ -202,7 +202,7 @@ class HSSM:
                 + "`participant_id` field in the DataFrame that you have passed."
             )
 
-        self.n_responses = int(np.max(self.data["response"].values)) + 1
+        self.n_responses = len(self.data["response"].unique())
 
         # Construct a model_config from defaults
         self.model_config = Config.from_defaults(model, loglik_kind)
@@ -420,22 +420,20 @@ class HSSM:
             self._update_extra_fields(data)
 
         if n_samples is not None:
-            # Make a copy of idata, set its posterior to a random sample of the original
+            # Make a copy of idata, set the `posterior` group to be a random sub-sample
+            # of the original (draw dimension gets sub-sampled)
             idata_copy = idata.copy()
             idata_random_sample = _random_sample(
-                idata["posterior"], n_samples=n_samples
+                idata_copy["posterior"], n_samples=n_samples
             )
-            setattr(idata_copy, "posterior", idata_random_sample)
+            delattr(idata_copy, "posterior")
+            idata_copy.add_groups(posterior=idata_random_sample)
 
             # If the user specifies an inplace operation, we need to modify the original
             if inplace:
-                idata_copy_with_pps = self.model.predict(
-                    idata_copy, kind, data, False, include_group_specific
-                )
-                setattr(
-                    idata,
-                    "posterior_predictive",
-                    idata_copy_with_pps.posterior_predictive,
+                self.model.predict(idata_copy, kind, data, True, include_group_specific)
+                idata.add_groups(
+                    posterior_predictive=idata_copy["posterior_predictive"]
                 )
 
                 return None
@@ -593,19 +591,19 @@ class HSSM:
         data : optional
             An ArviZ InferenceData object. If None, the traces stored in the model will
             be used.
-        include_computed_values : optional
-            Whether to include computed_values variables in the plot. Defaults to False.
-            Note that if include_computed_values is set to False and and `var_names` is
+        include deterministic : optional
+            Whether to include deterministic variables in the plot. Defaults to False.
+            Note that if include deterministic is set to False and and `var_names` is
             provided, the `var_names` provided will be modified to also exclude the
-            computed_values values. If this is not desirable, set
-            `include_computed_values` to True.
+         deterministic values. If this is not desirable, set
+            `include deterministic` to True.
         tight_layout : optional
             Whether to call plt.tight_layout() after plotting. Defaults to True.
         """
         data = data or self.traces
 
         if not include_deterministic:
-            var_names = self._get_computed_var_names(data)
+            var_names = self._get_deterministic_var_names(data)
             if var_names:
                 if "var_names" in kwargs:
                     if isinstance(kwargs["var_names"], str):
@@ -633,7 +631,7 @@ class HSSM:
     def summary(
         self,
         data: az.InferenceData | None = None,
-        include_computed_values: bool = False,
+        include_deterministic: bool = False,
         **kwargs,
     ) -> pd.DataFrame | xr.Dataset:
         """Produce a summary table with ArviZ but with additional convenience features.
@@ -649,12 +647,12 @@ class HSSM:
         data
             An ArviZ InferenceData object. If None, the traces stored in the model will
             be used.
-        include_computed_values : optional
-            Whether to include computed_values variables in the plot. Defaults to False.
-            Note that if include_computed_values is set to False and and `var_names` is
+        include_deterministic : optional
+            Whether to include deterministic variables in the plot. Defaults to False.
+            Note that if include_deterministic is set to False and and `var_names` is
             provided, the `var_names` provided will be modified to also exclude the
-            computed_values values. If this is not desirable, set
-            `include_computed_values` to True.
+            deterministic values. If this is not desirable, set
+            `include_deterministic` to True.
 
         Returns
         -------
@@ -663,8 +661,8 @@ class HSSM:
         """
         data = data or self.traces
 
-        if not include_computed_values:
-            var_names = self._get_computed_var_names(data)
+        if not include_deterministic:
+            var_names = self._get_deterministic_var_names(data)
             if var_names:
                 kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
 
@@ -1070,7 +1068,7 @@ class HSSM:
             new_data[field].values for field in self.extra_fields
         ]
 
-    def _get_computed_var_names(self, idata) -> list[str]:
+    def _get_deterministic_var_names(self, idata) -> list[str]:
         """Filter out the deterministic variables in var_names."""
         var_names = [
             f"~{param_name}"
