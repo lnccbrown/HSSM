@@ -3,11 +3,39 @@
 import pytest
 
 import arviz as az
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
 
-from hssm.plotting.utils import _get_plotting_df, _xarray_to_df
+import hssm
+from hssm.plotting.utils import (
+    _get_plotting_df,
+    _xarray_to_df,
+    _get_title,
+    _subset_df,
+    _row_mask_with_error,
+)
+from hssm.plotting.posterior_predictive import (
+    _plot_posterior_predictive_1D,
+    _plot_posterior_predictive_2D,
+    plot_posterior_predictive,
+)
+
+
+def test__get_title():
+    assert _get_title(("a"), ("b")) == "a = b"
+    assert _get_title(("a", "b"), ("c", "d")) == "a = c | b = d"
+
+
+def test__subset_df(cavanagh_test):
+    with pytest.raises(ValueError):
+        _row_mask_with_error(cavanagh_test, "conf", "Bad value")
+    cav_subset = cavanagh_test.loc[
+        (cavanagh_test["participant_id"] == 1) & (cavanagh_test["conf"] == "LC"), :
+    ]
+    subset_from_func = _subset_df(cavanagh_test, ["participant_id", "conf"], [1, "LC"])
+    assert cav_subset.equals(subset_from_func)
 
 
 @pytest.mark.parametrize(
@@ -53,9 +81,142 @@ def test__get_plotting_df(posterior, cavanagh_test):
     df = _get_plotting_df(idata, cavanagh_test, extra_dims=["participant_id", "conf"])
     assert len(df) == 2500
     assert not isinstance(df.index, pd.MultiIndex)
-    assert df.columns.to_list() == ["rt", "response", "participant_id", "conf"]
+    assert df.columns.to_list() == [
+        "observed",
+        "rt",
+        "response",
+        "participant_id",
+        "conf",
+    ]
     assert df.isna().sum().sum() == 0
     np.testing.assert_array_equal(
-        df.iloc[2000:, :].values,
+        df.iloc[2000:, 1:].values,
         cavanagh_test.loc[:, ["rt", "response", "participant_id", "conf"]].values,
+    )
+
+    df_no_original = _get_plotting_df(idata, data=None)
+    assert df_no_original.shape == (2000, 3)
+    assert df_no_original.columns.to_list() == ["observed", "rt", "response"]
+
+    with pytest.raises(ValueError):
+        _get_plotting_df(idata, data=None, extra_dims=["participant_id", "conf"])
+
+
+def test__plot_posterior_predictive_1D(cav_idata, cavanagh_test):
+    df = _get_plotting_df(
+        cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+    )
+    df["Response Time"] = df["rt"] * np.where(df["response"] == 0, -1, 1)
+
+    _, ax1 = plt.subplots()
+    ax1 = _plot_posterior_predictive_1D(df, ax=ax1)
+    assert len(ax1.get_lines()) == 2
+
+    _, ax2 = plt.subplots()
+    ax2 = _plot_posterior_predictive_1D(df, plot_data=False, ax=ax2)
+    assert len(ax2.get_lines()) == 1
+
+
+def test__plot_posterior_predictive_2D(cav_idata, cavanagh_test):
+    df = _get_plotting_df(
+        cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+    )
+    df["Response Time"] = df["rt"] * np.where(df["response"] == 0, -1, 1)
+
+    g1 = _plot_posterior_predictive_2D(
+        df,
+        row="participant_id",
+        col="conf",
+    )
+    assert len(g1.fig.axes) == 5 * 2
+    assert len(g1.fig.axes[0].get_lines()) == 2
+
+    g2 = _plot_posterior_predictive_2D(
+        df,
+        plot_data=False,
+        row="participant_id",
+        col="conf",
+    )
+    assert len(g2.fig.axes) == 5 * 2
+    assert len(g2.fig.axes[0].get_lines()) == 1
+
+
+def test_plot_posterior_predictive(cav_idata, cavanagh_test):
+    # Mock model object
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        include=[
+            {
+                "name": "v",
+                "prior": {
+                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
+                    "theta": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
+                },
+                "formula": "v ~ (1|participant_id) + theta",
+                "link": "identity",
+            },
+        ],
+    )  # Doesn't matter what model or data we use here
+    with pytest.raises(ValueError):
+        plot_posterior_predictive(model)
+
+    model._inference_obj = cav_idata.copy()
+    _, ax1 = plt.subplots()
+    ax1 = plot_posterior_predictive(model, ax=ax1)  # Should work directly
+    assert len(ax1.get_lines()) == 2
+
+    delattr(model.traces, "posterior_predictive")
+    _, ax2 = plt.subplots()
+    ax2 = plot_posterior_predictive(
+        model, ax=ax2, n_samples=2
+    )  # Should sample posterior predictive
+    assert len(ax2.get_lines()) == 2
+    assert "posterior_predictive" in model.traces
+    assert model.traces.posterior_predictive.draw.size == 2
+
+    with pytest.raises(ValueError):
+        plot_posterior_predictive(model, groups="participant_id")
+    with pytest.raises(ValueError):
+        plot_posterior_predictive(model, groups_order=["5", "4"])
+
+    plots = plot_posterior_predictive(
+        model, row="stim", col="participant_id", groups="conf"
+    )
+    assert len(plots) == 2
+    # Lengths might defer because of subsetting the data frame
+    assert len(plots[0].fig.axes) == 5
+    assert len(plots[1].fig.axes) == 5 * 2
+
+    plots = plot_posterior_predictive(
+        model,
+        row="stim",
+        plot_data=False,
+        col="participant_id",
+        groups="conf",
+        groups_order=["LC"],
+    )
+    assert len(plots) == 1
+    assert len(plots[0].fig.axes) == 5
+    assert len(plots[0].fig.axes[0].get_lines()) == 1
+
+    with pytest.raises(ValueError):
+        plot_posterior_predictive(
+            model,
+            row="stim",
+            plot_data=False,
+            col="participant_id",
+            groups=["conf", "dbs"],
+            groups_order=["LC"],
+        )
+
+    plots = plot_posterior_predictive(
+        model,
+        row="stim",
+        plot_data=False,
+        col="participant_id",
+        groups=["conf", "dbs"],
+        groups_order={"conf": ["LC"]},
+    )
+    assert len(plots) == len(
+        cavanagh_test[cavanagh_test["conf"] == "LC"].groupby(["conf", "dbs"])
     )
