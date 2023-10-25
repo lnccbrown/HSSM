@@ -6,7 +6,11 @@ from ssms.basic_simulators.simulator import simulator
 from jax.config import config
 
 import hssm
-from hssm.utils import set_floatX
+from hssm.utils import (
+    set_floatX,
+    _generate_random_indices,
+    _random_sample,
+)
 
 
 def test_get_alias_dict():
@@ -85,3 +89,76 @@ def test_set_floatX():
     set_floatX("float64")
     assert pytensor.config.floatX == "float64"
     assert config.read("jax_enable_x64")
+
+
+@pytest.mark.parametrize(
+    ["n_samples", "n_draws", "expected"],
+    [
+        (0, 100, "error"),
+        (1, 100, 1),
+        (100, 100, 100),
+        (101, 100, None),
+        (1.0, 100, 100),
+        (0.0, 100, "error"),
+        (0.5, 100, 50),
+        (2.0, 100, "error"),
+        (None, 100, None),
+        (0.5, 0, "error"),
+    ],
+)
+def test__generate_random_indice(caplog, n_samples, n_draws, expected):
+    """Test _generate_random_indices."""
+    if expected == "error":
+        with pytest.raises(ValueError):
+            indices = _generate_random_indices(n_samples, n_draws)
+    else:
+        indices = _generate_random_indices(n_samples, n_draws)
+        if expected is None:
+            assert indices is None
+        else:
+            assert indices.dtype == np.int64
+            assert len(indices) == expected
+            assert np.all(indices < n_draws)
+            assert np.all(indices >= 0)
+            if n_samples > n_draws:
+                assert "n_samples > n_draws" in caplog.text
+
+
+def assertions(caplog, obj, n_samples, expected):
+    if expected == "error":
+        with pytest.raises(ValueError):
+            sampled_obj = _random_sample(obj, n_samples=n_samples)
+    else:
+        sampled_obj = _random_sample(obj, n_samples=n_samples)
+        assert sampled_obj.draw.size == expected
+        assert sampled_obj.chain.size == 2
+        assert type(sampled_obj) == type(obj)
+        if n_samples and n_samples > obj.draw.size:
+            assert "n_samples > n_draws" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ["n_samples", "expected"],
+    [
+        (0, "error"),
+        (1, 1),
+        (100, 100),
+        (501, 500),
+        (0.0, "error"),
+        (0.5, 250),
+        (1.0, 500),
+        (2.0, "error"),
+        (None, 500),
+    ],
+)
+def test__random_sample(
+    caplog,
+    cav_idata,
+    n_samples,
+    expected,
+):
+    posterior = cav_idata.posterior
+    posterior_predictive = cav_idata.posterior_predictive
+
+    assertions(caplog, posterior, n_samples, expected)
+    assertions(caplog, posterior_predictive, n_samples, expected)

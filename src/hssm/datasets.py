@@ -19,7 +19,12 @@ DATASETS = {
         filename="cavanagh_theta",
         path=os.path.join(base_dir, "hssm/datasets/cavanagh_theta_nn.csv"),
         description="Description for cavanagh_theta dataset",
-    )
+    ),
+    "cavanagh_theta_old": FileMetadata(
+        filename="cavanagh_theta",
+        path=os.path.join(base_dir, "hssm/datasets/cavanagh_theta_nn_old.csv"),
+        description="Description for the original cavanagh_theta dataset",
+    ),
 }
 
 

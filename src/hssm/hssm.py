@@ -15,10 +15,14 @@ from typing import Any, Callable, Literal
 
 import arviz as az
 import bambi as bmb
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
 import pytensor
+import seaborn as sns
+import xarray as xr
 from bambi.model_components import DistributionalComponent
 
 from hssm.defaults import (
@@ -39,10 +43,12 @@ from hssm.utils import (
     HSSMModelGraph,
     _print_prior,
     _process_param_in_kwargs,
+    _random_sample,
     download_hf,
     get_alias_dict,
 )
 
+from . import plotting
 from .config import Config, ModelConfig
 
 _logger = logging.getLogger("hssm")
@@ -195,6 +201,8 @@ class HSSM:
                 "You have specified a hierarchical model, but there is no "
                 + "`participant_id` field in the DataFrame that you have passed."
             )
+
+        self.n_responses = len(self.data["response"].unique())
 
         # Construct a model_config from defaults
         self.model_config = Config.from_defaults(model, loglik_kind)
@@ -352,6 +360,7 @@ class HSSM:
         inplace: bool = True,
         include_group_specific: bool = True,
         kind: Literal["pps", "mean"] = "pps",
+        n_samples: int | float | None = None,
     ) -> az.InferenceData | None:
         """Perform posterior predictive sampling from the HSSM model.
 
@@ -377,6 +386,17 @@ class HSSM:
             latter returns the draws from the posterior predictive distribution
             (i.e. the posterior probability distribution for a new observation).
             Defaults to `"pps"`.
+        n_samples
+            The number of samples to draw from the posterior predictive distribution
+            from each chain.
+            When it's an integer >= 1, the number of samples to be extracted from the
+            `draw` dimension. If this integer is larger than the number of posterior
+            samples in each chain, all posterior samples will be used
+            in posterior predictive sampling. When a float between 0 and 1, the
+            proportion of samples from the draw dimension from each chain to be used in
+            posterior predictive sampling.. If this proportion is very
+            small, at least one sample will be used. When None, all posterior samples
+            will be used. Defaults to None.
 
         Raises
         ------
@@ -399,7 +419,44 @@ class HSSM:
         if self._check_extra_fields(data):
             self._update_extra_fields(data)
 
+        if n_samples is not None:
+            # Make a copy of idata, set the `posterior` group to be a random sub-sample
+            # of the original (draw dimension gets sub-sampled)
+            idata_copy = idata.copy()
+            idata_random_sample = _random_sample(
+                idata_copy["posterior"], n_samples=n_samples
+            )
+            delattr(idata_copy, "posterior")
+            idata_copy.add_groups(posterior=idata_random_sample)
+
+            # If the user specifies an inplace operation, we need to modify the original
+            if inplace:
+                self.model.predict(idata_copy, kind, data, True, include_group_specific)
+                idata.add_groups(
+                    posterior_predictive=idata_copy["posterior_predictive"]
+                )
+
+                return None
+
+            return self.model.predict(
+                idata_copy, kind, data, False, include_group_specific
+            )
+
         return self.model.predict(idata, kind, data, inplace, include_group_specific)
+
+    def plot_posterior_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
+        """Produce a posterior predictive plot.
+
+        Equivalent to calling `hssm.plotting.plot_posterior_predictive()` with the
+        model. Please see that function for
+        [full documentation][hssm.plotting.plot_posterior_predictive].
+
+        Returns
+        -------
+        mpl.axes.Axes | sns.FacetGrid
+            The matplotlib axis or seaborn FacetGrid object containing the plot.
+        """
+        return plotting.plot_posterior_predictive(self, **kwargs)
 
     def sample_prior_predictive(
         self,
@@ -513,6 +570,103 @@ class HSSM:
             return graphviz_
 
         return graphviz
+
+    def plot_trace(
+        self,
+        data: az.InferenceData | None = None,
+        include_deterministic: bool = False,
+        tight_layout: bool = True,
+        **kwargs,
+    ) -> None:
+        """Generate trace plot with ArviZ but with additional convenience features.
+
+        This is a simple wrapper for the az.plot_trace() function. By default, it
+        filters out the deterministic values from the plot. Please see the
+        [arviz documentation]
+        (https://arviz-devs.github.io/arviz/api/generated/arviz.plot_trace.html)
+        for additional parameters that can be specified.
+
+        Parameters
+        ----------
+        data : optional
+            An ArviZ InferenceData object. If None, the traces stored in the model will
+            be used.
+        include deterministic : optional
+            Whether to include deterministic variables in the plot. Defaults to False.
+            Note that if include deterministic is set to False and and `var_names` is
+            provided, the `var_names` provided will be modified to also exclude the
+         deterministic values. If this is not desirable, set
+            `include deterministic` to True.
+        tight_layout : optional
+            Whether to call plt.tight_layout() after plotting. Defaults to True.
+        """
+        data = data or self.traces
+
+        if not include_deterministic:
+            var_names = self._get_deterministic_var_names(data)
+            if var_names:
+                if "var_names" in kwargs:
+                    if isinstance(kwargs["var_names"], str):
+                        if kwargs["var_names"] not in var_names:
+                            var_names.append(kwargs["var_names"])
+                        kwargs["var_names"] = var_names
+                    elif isinstance(kwargs["var_names"], list):
+                        kwargs["var_names"] = list(
+                            set(var_names) | set(kwargs["var_names"])
+                        )
+                    elif kwargs["var_names"] is None:
+                        kwargs["var_names"] = var_names
+                    else:
+                        raise ValueError(
+                            "`var_names` must be a string, a list of strings, or None."
+                        )
+                else:
+                    kwargs["var_names"] = var_names
+
+        az.plot_trace(data, **kwargs)
+
+        if tight_layout:
+            plt.tight_layout()
+
+    def summary(
+        self,
+        data: az.InferenceData | None = None,
+        include_deterministic: bool = False,
+        **kwargs,
+    ) -> pd.DataFrame | xr.Dataset:
+        """Produce a summary table with ArviZ but with additional convenience features.
+
+        This is a simple wrapper for the az.summary() function. By default, it
+        filters out the deterministic values from the plot. Please see the
+        [arviz documentation]
+        (https://arviz-devs.github.io/arviz/api/generated/arviz.summary.html)
+        for additional parameters that can be specified.
+
+        Parameters
+        ----------
+        data
+            An ArviZ InferenceData object. If None, the traces stored in the model will
+            be used.
+        include_deterministic : optional
+            Whether to include deterministic variables in the plot. Defaults to False.
+            Note that if include_deterministic is set to False and and `var_names` is
+            provided, the `var_names` provided will be modified to also exclude the
+            deterministic values. If this is not desirable, set
+            `include_deterministic` to True.
+
+        Returns
+        -------
+        pd.DataFrame | xr.Dataset
+            A pandas DataFrame or xarray Dataset containing the summary statistics.
+        """
+        data = data or self.traces
+
+        if not include_deterministic:
+            var_names = self._get_deterministic_var_names(data)
+            if var_names:
+                kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
+
+        return az.summary(data, **kwargs)
 
     def __repr__(self) -> str:
         """Create a representation of the model."""
@@ -913,3 +1067,15 @@ class HSSM:
         self.model_distribution.extra_fields = [
             new_data[field].values for field in self.extra_fields
         ]
+
+    def _get_deterministic_var_names(self, idata) -> list[str]:
+        """Filter out the deterministic variables in var_names."""
+        var_names = [
+            f"~{param_name}"
+            for param_name, param in self.params.items()
+            if param.is_regression and not param.is_parent
+        ]
+
+        if "rt,response_mean" in idata["posterior"].data_vars:
+            var_names.append("~rt,response_mean")
+        return var_names

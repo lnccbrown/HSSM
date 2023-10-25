@@ -1,10 +1,15 @@
 import pytest
 
+import arviz as az
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
+import xarray as xr
 from ssms.basic_simulators.simulator import simulator
 
 import hssm
+
+mpl.use("Agg")
 
 
 @pytest.fixture(scope="module")
@@ -50,3 +55,18 @@ def data_ddm_reg():
     dataset_reg_v["y"] = y
 
     return dataset_reg_v
+
+
+@pytest.fixture
+def cav_idata():
+    return az.from_netcdf("tests/fixtures/cavanagh_idata.nc")
+
+
+@pytest.fixture
+def posterior():
+    return xr.open_dataarray("tests/fixtures/cavanagh_idata_pps.nc")
+
+
+@pytest.fixture
+def cavanagh_test():
+    return pd.read_csv("tests/fixtures/cavanagh_theta_test.csv", index_col=None)
