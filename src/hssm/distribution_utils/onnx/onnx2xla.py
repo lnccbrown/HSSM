@@ -151,7 +151,7 @@ def interpret_onnx(graph, *args):
     """
     vals = dict(
         {n.name: a for n, a in zip(graph.input, args)},
-        **{n.name: _asarray(n) for n in graph.initializer}
+        **{n.name: _asarray(n) for n in graph.initializer},
     )
     for node in graph.node:
         args = (vals[name] for name in node.input)
