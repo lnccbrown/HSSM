@@ -59,6 +59,9 @@ def test_lapse_distribution():
     )
 
     assert random_sample_1.shape == (10, 2)
+    assert -1.0 in random_sample_1[:, 1]
+    assert 1.0 in random_sample_1[:, 1]
+    assert 0 not in random_sample_1[:, 1]
 
     rng1 = np.random.default_rng(10)
     rng2 = np.random.default_rng(10)

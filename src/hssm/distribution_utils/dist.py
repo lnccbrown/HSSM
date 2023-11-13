@@ -279,19 +279,24 @@ def make_ssm_rv(
                 )
                 out_shape = sims_out.shape[:-1]
                 replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
-                replace = np.stack([replace, replace], axis=-1)
-                n_draws = np.prod(out_shape)
+                replace_n = int(np.sum(replace, axis=None))
+                if replace_n == 0:
+                    return sims_out
+                replace_shape = (*out_shape[:-1], replace_n)
+                replace_mask = np.stack([replace, replace], axis=-1)
+                n_draws = np.prod(replace_shape)
                 lapse_rt = pm.draw(
                     get_distribution_from_prior(cls._lapse).dist(**cls._lapse.args),
                     n_draws,
                     random_seed=rng,
-                ).reshape(out_shape)
-                lapse_response = rng.binomial(n=1, p=0.5, size=out_shape)
+                ).reshape(replace_shape)
+                lapse_response = rng.binomial(n=1, p=0.5, size=replace_shape)
+                lapse_response = np.where(lapse_response == 1, 1, -1)
                 lapse_output = np.stack(
                     [lapse_rt, lapse_response],
                     axis=-1,
                 )
-                np.putmask(sims_out, replace, lapse_output)
+                np.putmask(sims_out, replace_mask, lapse_output)
 
             return sims_out
 
