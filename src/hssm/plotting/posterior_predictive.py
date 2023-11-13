@@ -2,33 +2,50 @@
 
 import logging
 from itertools import product
-from typing import Iterable, Mapping
+from typing import Iterable
 
 import arviz as az
 import matplotlib as mpl
-
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from .utils import _get_plotting_df, _get_title, _subset_df
+from .utils import (
+    _check_groups_and_groups_order,
+    _check_sample_size,
+    _get_plotting_df,
+    _get_title,
+    _subset_df,
+    _use_traces_or_sample,
+)
 
 _logger = logging.getLogger("hssm")
+
+
+def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 100) -> np.ndarray:
+    return pd.Series(
+        np.histogram(a, bins=bins, density=True)[0],  # type: ignore
+        name="bin_n",
+        copy=False,
+    )
 
 
 def _plot_posterior_predictive_1D(
     data: pd.DataFrame,
     plot_data: bool = True,
-    palette: str | list | dict | None = None,
-    stat: str = "density",
-    binwidth: float | tuple[float, float] | None = 0.1,
-    element: str | bool = "step",
-    title: str | None = None,
+    bins: int | np.ndarray | str | None = 100,
+    range: tuple[float, float] | None = None,
+    step: bool = False,
+    interval: tuple[float, float] | None = None,
+    colors: str | list[str] | None = None,
+    linestyles: str | list[str] = "-",
+    linewidths: float | list[float] = 1.25,
+    title: str | None = "Posterior Predictive Distribution",
     xlabel: str | None = "Response Time",
-    ylabel: str | None = None,
+    ylabel: str | None = "Density",
     **kwargs,
-) -> sns.FacetGrid:
+) -> mpl.axes.Axes:
     """Plot the posterior predictive distribution against the observed data.
 
     Check the `plot_posterior_predictive` function below for docstring.
@@ -38,24 +55,81 @@ def _plot_posterior_predictive_1D(
     mpl.Axes
         A matplotlib Axes object containing the plot.
     """
-    data = data if plot_data else data.loc[data["observed"] == "predicted", :]
-    ax = sns.histplot(
-        data=data,
-        hue="observed" if plot_data else None,
-        stat=stat,
-        x="Response Time",
-        fill=False,
-        binwidth=binwidth,
-        element=element,
-        palette=palette or ["#ec205b", "#338fb8"],
-        common_bins=False,
-        common_norm=False,
+    if "color" in kwargs:
+        del kwargs["color"]
+    colors = colors or ["#ec205b", "#338fb8"]
+
+    styles: dict[str, str | float] = {}
+
+    if plot_data and isinstance(colors, str):
+        raise ValueError("When `plot_data=True`, `colors` must be a list or dict.")
+
+    styles["color"] = colors[0] if isinstance(colors, list) else colors
+    styles["linestyle"] = linestyles[0] if isinstance(linestyles, list) else linestyles
+    styles["linewidth"] = linewidths[0] if isinstance(linewidths, list) else linewidths
+
+    predicted = data.loc[data["observed"] == "predicted", "rt"]
+    bin_edges = np.histogram_bin_edges(predicted, bins=bins, range=range)  # type: ignore
+
+    if "ax" in kwargs:
+        ax = kwargs.pop("ax")
+    else:
+        ax = plt.gca()
+
+    hists = (
+        predicted.groupby(["chain", "draw"])
+        .apply(_histogram, bins=bin_edges)
+        .reset_index(level=2, name="rt")
+        .rename(columns={"level_2": "bin_n"})
+    )
+    hists_groupby = hists.groupby("bin_n")["rt"]
+    hists_mean = hists_groupby.mean()
+
+    ax.plot(
+        bin_edges[:-1],
+        hists_mean,
+        drawstyle="steps" if step else "default",
+        **styles,
         **kwargs,
     )
+
+    if interval is not None:
+        hists_lower = hists_groupby.quantile(interval[0])
+        hists_upper = hists_groupby.quantile(interval[1])
+        ax.fill_between(
+            bin_edges[:-1],
+            hists_lower,
+            hists_upper,
+            color=styles["color"],
+            alpha=0.1,
+            **kwargs,
+        )
+
+    if plot_data:
+        styles["color"] = colors[1]
+        styles["linestyle"] = (
+            linestyles[1] if isinstance(linestyles, list) else linestyles
+        )
+        styles["linewidth"] = (
+            linewidths[1] if isinstance(linewidths, list) else linewidths
+        )
+
+        observed = data.loc[data["observed"] == "observed", "rt"]
+        data_hist = _histogram(observed.values, bins=bin_edges)
+        ax.plot(
+            bin_edges[:-1],
+            data_hist,
+            drawstyle="steps" if step else "default",
+            **styles,
+            **kwargs,
+        )
+
     if title:
         ax.set_title(title)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
+    if xlabel:
+        ax.set_xlabel(xlabel)
+    if ylabel:
+        ax.set_ylabel(ylabel)
 
     return ax
 
@@ -66,14 +140,17 @@ def _plot_posterior_predictive_2D(
     row: str | None = None,
     col: str | None = None,
     col_wrap: int | None = None,
-    palette: str | list | dict | None = None,
-    stat: str = "density",
-    binwidth: float | tuple[float, float] | None = 0.1,
-    element: str | bool = "step",
-    grid_kwargs: dict | None = None,
-    title: str | None = None,
+    bins: int | np.ndarray | str | None = 100,
+    range: tuple[float, float] | None = None,
+    step: bool = False,
+    interval: tuple[float, float] | None = None,
+    colors: str | list[str] | None = None,
+    linestyles: str | list[str] = "-",
+    linewidths: float | list[float] = 1.25,
+    title: str | None = "Posterior Predictive Distribution",
     xlabel: str | None = "Response Time",
-    ylabel: str | None = None,
+    ylabel: str | None = "Density",
+    grid_kwargs: dict | None = None,
     **kwargs,
 ) -> sns.FacetGrid:
     """Plot the posterior predictive distribution against the observed data.
@@ -85,35 +162,42 @@ def _plot_posterior_predictive_2D(
     sns.FacetGrid
         A seaborn FacetGrid object containing the plot.
     """
-    data = data if plot_data else data.loc[data["observed"] == "predicted", :]
     g = sns.FacetGrid(
         data=data,
         col=col,
         row=row,
         col_wrap=col_wrap,
         legend_out=True,
-        hue="observed" if plot_data else None,
-        palette=palette or ["#ec205b", "#338fb8"],
         **(grid_kwargs or {}),
     )
 
     g.map_dataframe(
-        sns.histplot,
-        x="Response Time",
-        stat=stat,
-        fill=False,
-        binwidth=binwidth,
-        element=element,
-        common_bins=False,
-        common_norm=False,
+        _plot_posterior_predictive_1D,
+        plot_data=plot_data,
+        bins=bins,
+        range=range,
+        step=step,
+        interval=interval,
+        colors=colors,
+        linestyles=linestyles,
+        linewidths=linewidths,
+        title=None,
+        xlabel=xlabel,
+        ylabel=ylabel,
         **kwargs,
     )
 
-    g.add_legend(title="", label_order=["observed", "predicted"])
+    if plot_data:
+        g.add_legend(
+            dict(zip(["predicted", "observed"], g.fig.axes[0].get_lines())),
+            title="",
+            label_order=["observed", "predicted"],
+        )
 
     if title:
         g.fig.subplots_adjust(top=0.9)
         g.fig.suptitle(title)
+
     g.set_xlabels(xlabel)
     g.set_ylabels(ylabel)
 
@@ -131,13 +215,16 @@ def plot_posterior_predictive(
     col_wrap: int | None = None,
     groups: str | Iterable[str] | None = None,
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
-    palette: str | list | dict | None = None,
-    stat: str = "density",
-    binwidth: float | tuple[float, float] | None = 0.1,
-    element: str | bool = "step",
-    title: str | None = None,
+    bins: int | np.ndarray | str | None = 100,
+    range: tuple[float, float] | None = None,
+    step: bool = False,
+    interval: tuple[float, float] | None = None,
+    colors: str | list[str] | None = None,
+    linestyles: str | list[str] = "-",
+    linewidths: float | list[float] = 1.25,
+    title: str | None = "Posterior Predictive Distribution",
     xlabel: str | None = "Response Time",
-    ylabel: str | None = None,
+    ylabel: str | None = "Density",
     grid_kwargs: dict | None = None,
     **kwargs,
 ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
@@ -200,115 +287,97 @@ def plot_posterior_predictive(
         order in which the groups appear in the data. Only when `groups` is a string,
         this can be an iterable of strings. Otherwise, this is a dictionary mapping the
         dimension name to the order of the groups in that dimension.
-    palette : optional
-        Colors to use for the different levels of the hue variable. Should be something
-        that can be interpreted by color_palette(), or a dictionary mapping hue levels
-        to matplotlib colors., by default None.
-    stat : optional
-        The stats to be plotted. By default `"density"`. Other options include `"kde"`,
-        etc. Please see the documentation for the [`sns.histplot` function]
-        (https://seaborn.pydata.org/generated/seaborn.histplot.html) for more options.
-    binwidth : optional
-        A number or a pair of numbers. Width of each bin. There are two other binning
-        options: `bins` and `binrange`. Please see the documentation for the
-        [`sns.histplot` function]
-        (https://seaborn.pydata.org/generated/seaborn.histplot.html) for how to use
-        them. in combination to control the bins. This argument overrides bins but can
-        be used with `binrange.`
-    element : optional
-        Visual representation of the histogram statistic. Only relevant with univariate
-        data. Default is `"step"`. Other options include `"bars"` and `"poly"`.
+    bins : optional
+        Specification of hist bins, by default 100. There are three options:
+        - A string describing the binning strategy (passed to `np.histogram_bin_edges`).
+        - A list-like defining the bin edges.
+        - An integer defining the number of bins to be used.
+    range : optional
+        The lower and upper range of the bins. Lower and upper outliers are ignored. If
+        not provided, range is simply the minimum and the maximum of the data, by
+        default None.
+    step : optional
+        Whether to plot the distributions as a step function or a smooth density plot,
+        by default False.
+    interval : optional
+        A two-tuple of floats indicating the interval of uncertainty, by default None.
+        The values in the tuple should be between 0 and 1, indicating the percentiles
+        used to compute the interval. For example, (0.05, 0.95) will compute the 90%
+        interval. There should be at least 50 posterior predictive samples for each
+        chain for this to work properly. A warning message will be displayed if there
+        are fewer than 50 posterior samples. If None, no interval is plotted.
+    colors : optional
+        Colors to use for the different levels of the hue variable. When a `str`, the
+        color of posterior predictives, in which case an error will be thrown if
+        `plot_data` is `True`. When a length-2 iterable, indicates the colors in the
+        order of posterior predictives and observed data. The values must be
+        interpretable by matplotlib. When None, use default color palette, by default
+        None.
+    linestyles : optional
+        Linestyles to use for the different levels of the hue variable. When a `str`,
+        the linestyle of both distributions. When a length-2 iterable, indicates the
+        linestyles in the order of posterior predictives and observed data. The values
+        must be interpretable by matplotlib. When None, use solid lines, by default "-".
+    linewidths : optional
+        Linewidths to use for the different levels of the hue variable. When a `float`,
+        the linewidth of both distributions. When a length-2 iterable, indicates the
+        linewidths in the order of posterior predictives and observed data, by default
+        1.25.
+    title : optional
+        The title of the plot, by default "Posterior Predictive Distribution". Ignored
+        when `groups` is provided.
+    xlabel : optional
+        The label for the x-axis, by default "Response Time".
+    ylabel : optional
+        The label for the y-axis, by default "Density".
     grid_kwargs : optional
         Additional keyword arguments are passed to the [`sns.FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
         when any of row or col is provided. When producing a single plot, these
         arguments are ignored.
     kwargs : optional
-        Additional keyword arguments passed to the [sns.`histplot` function]
-        (https://seaborn.pydata.org/generated/seaborn.histplot.html).
+        Additional keyword arguments passed to ax.plot() functions.
 
     Returns
     -------
     mpl.axes.Axes | sns.FacetGrid
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
-    if groups is None:
-        if groups_order is not None:
-            raise ValueError("`group_order` is only valid when `group` is provided.")
-    else:
-        if row is None or col is None:
-            raise ValueError(
-                "When `group` is provided, both `row` and `col` must be provided."
-            )
-        if groups_order is not None:
-            if isinstance(groups_order, Iterable) and not isinstance(
-                groups_order, Mapping
-            ):
-                if not isinstance(groups, str):
-                    raise ValueError(
-                        "`groups_order` can be a List-like only when `groups` is a str."
-                    )
-                groups_order = {groups: groups_order}
-            elif isinstance(groups_order, dict):
-                if not set(groups_order.keys()).issubset(set(groups)):
-                    raise ValueError(
-                        "`groups_order` can only contain keys that are in `groups`."
-                    )
-        else:
-            groups_order = {}
-        if isinstance(groups, str):
-            groups = [groups]
-
-    # First, determine whether posterior predictive samples are available
-    # If not, we need to sample from the posterior
-    if idata is None:
-        if model.traces is None:
-            raise ValueError(
-                "No InferenceData object provided. Please provide an InferenceData "
-                + "object or sample the model first using model.sample()."
-            )
-        idata = model.traces
+    groups, groups_order = _check_groups_and_groups_order(
+        groups, groups_order, row, col
+    )
 
     extra_dims = [e for e in [row, col] if e is not None] or None
     if extra_dims is not None and groups is not None:
         extra_dims += list(groups)
 
     if data is None:
-        if not extra_dims and not plot_data and "posterior_predictive" in idata:
+        if (
+            (not extra_dims)
+            and (not plot_data)
+            and (idata is not None)
+            and ("posterior_predictive" in idata)
+        ):
             # Allows data to be None only when plot_data=False and no extra_dims
             # and posterior predictive samples are available
             data = None
         else:
             data = model.data
 
-    if "posterior_predictive" not in idata:
-        _logger.info(
-            "No posterior predictive samples found. Generating posterior predictive "
-            + "samples using the provided InferenceData object and the original data. "
-            + "This will modify the provided InferenceData object, or if not provided, "
-            + "the traces object stored inside the model."
-        )
-        model.sample_posterior_predictive(
-            idata=idata,
-            data=data,
-            inplace=True,
-            n_samples=n_samples,
-        )
-        plotting_df = _get_plotting_df(
-            idata, data, extra_dims=extra_dims, n_samples=None
-        )
-    else:
-        plotting_df = _get_plotting_df(
-            idata, data, extra_dims=extra_dims, n_samples=n_samples
-        )
+    idata, sampled = _use_traces_or_sample(model, data, idata, n_samples=n_samples)
+
+    plotting_df = _get_plotting_df(
+        idata, data, extra_dims=extra_dims, n_samples=None if sampled else n_samples
+    )
+
+    if interval is not None:
+        _check_sample_size(plotting_df)
 
     # Flip the rt values if necessary
-    if np.any(plotting_df["rt"] == 0):
-        plotting_df["rt"] = np.where(plotting_df["rt"] == 0, -1, 1)
+    if np.any(plotting_df["response"] == 0):
+        plotting_df["response"] = np.where(plotting_df["response"] == 0, -1, 1)
     if model.n_responses == 2:
-        plotting_df["Response Time"] = plotting_df["rt"] * plotting_df["response"]
-    else:
-        plotting_df["Response Time"] = plotting_df["rt"]
+        plotting_df["rt"] = plotting_df["rt"] * plotting_df["response"]
 
     # Then, plot the posterior predictive distribution against the observed data
     # Determine whether we are producing a single plot or a grid of plots
@@ -317,10 +386,13 @@ def plot_posterior_predictive(
         ax = _plot_posterior_predictive_1D(
             data=plotting_df,
             plot_data=plot_data,
-            stat=stat,
-            binwidth=binwidth,
-            element=element,
-            palette=palette,
+            bins=bins,
+            range=range,
+            step=step,
+            interval=interval,
+            colors=colors,
+            linestyles=linestyles,
+            linewidths=linewidths,
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
@@ -339,10 +411,13 @@ def plot_posterior_predictive(
             row=row,
             col=col,
             col_wrap=col_wrap,
-            palette=palette,
-            stat=stat,
-            binwidth=binwidth,
-            element=element,
+            bins=bins,
+            range=range,
+            step=step,
+            interval=interval,
+            colors=colors,
+            linestyles=linestyles,
+            linewidths=linewidths,
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
@@ -375,10 +450,13 @@ def plot_posterior_predictive(
             row=row,
             col=col,
             col_wrap=col_wrap,
-            palette=palette,
-            stat=stat,
-            binwidth=binwidth,
-            element=element,
+            bins=bins,
+            range=range,
+            step=step,
+            interval=interval,
+            colors=colors,
+            linestyles=linestyles,
+            linewidths=linewidths,
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
