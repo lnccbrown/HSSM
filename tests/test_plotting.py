@@ -15,6 +15,7 @@ from hssm.plotting.utils import (
     _get_title,
     _subset_df,
     _row_mask_with_error,
+    _process_df_for_qp_plot,
 )
 from hssm.plotting.posterior_predictive import (
     _plot_posterior_predictive_1D,
@@ -63,11 +64,12 @@ def test__xarray_to_df(caplog, posterior, n_samples, expected):
             assert "n_samples > n_draws" in caplog.text
 
         assert len(df) == expected
-        assert not isinstance(df.index, pd.MultiIndex)
-        assert df.index.name == "rt,response_obs"
-        assert df.index[0] == 0
-        assert df.index[-1] == 499
-        assert np.all(df.index.value_counts() == expected // 500)
+        assert isinstance(df.index, pd.MultiIndex)
+        assert df.index.names == ["chain", "draw", "obs_n"]
+        obs_n = df.index.get_level_values(2)
+        assert obs_n[0] == 0
+        assert obs_n[-1] == 499
+        assert np.all(obs_n.value_counts() == expected // 500)
         assert df.columns[0] == "rt"
 
 
@@ -80,7 +82,8 @@ def test__get_plotting_df(posterior, cavanagh_test):
 
     df = _get_plotting_df(idata, cavanagh_test, extra_dims=["participant_id", "conf"])
     assert len(df) == 2500
-    assert not isinstance(df.index, pd.MultiIndex)
+    assert isinstance(df.index, pd.MultiIndex)
+    print(df)
     assert df.columns.to_list() == [
         "observed",
         "rt",
@@ -220,3 +223,11 @@ def test_plot_posterior_predictive(cav_idata, cavanagh_test):
     assert len(plots) == len(
         cavanagh_test[cavanagh_test["conf"] == "LC"].groupby(["conf", "dbs"])
     )
+
+
+def test__process_df_for_qp_plot(cav_idata, cavanagh_test):
+    df = _get_plotting_df(cav_idata, cavanagh_test, extra_dims=["participant_id"])
+    n_chain = cav_idata.posterior_predictive["rt,response"].chain.size
+    n_draw = cav_idata.posterior_predictive["rt,response"].draw.size
+
+    processed_df = _process_df_for_qp_plot(df, 6, "response", "participant_id")
