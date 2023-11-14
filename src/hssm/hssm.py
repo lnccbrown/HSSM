@@ -937,10 +937,11 @@ class HSSM:
     def _override_defaults(self, default: Literal["prior", "link"]):
         """Override the default priors or links."""
         for param in self.list_params:
+            param_obj = self.params[param]
             if default == "prior":
-                param.override_default_priors(self.data)
+                param_obj.override_default_priors(self.data)
             elif default == "link":
-                param.override_default_link()
+                param_obj.override_default_link()
 
     def _process_all(self):
         """Process all params."""
