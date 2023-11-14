@@ -1,7 +1,7 @@
 """Plotting utilities for HSSM."""
 
 import logging
-from typing import Any, Iterable, Mapping, cast
+from typing import Any, Iterable, cast
 
 import arviz as az
 import numpy as np
@@ -311,7 +311,7 @@ def _check_groups_and_groups_order(
             )
         if groups_order is not None:
             if isinstance(groups_order, Iterable) and not isinstance(
-                groups_order, Mapping
+                groups_order, dict
             ):
                 if not isinstance(groups, str):
                     raise ValueError(
