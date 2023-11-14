@@ -5,7 +5,9 @@ from typing import Any, Union, cast
 
 import bambi as bmb
 import numpy as np
+import pandas as pd
 
+from .link import Link
 from .prior import Prior
 
 # PEP604 union operator "|" not supported by pylint
@@ -69,6 +71,15 @@ class Param:
         self._is_parent = False
         self._is_converted = False
         self._do_not_truncate = False
+        self._link_specified = link is not None
+
+        # Provides a convenient way to specify the link function
+        if self.link == "gen_logit":
+            if self.bounds is None:
+                raise ValueError(
+                    "Bounds must be specified for generalized log link function."
+                )
+            self.link = Link("gen_logit", bounds=self.bounds)
 
         # The initializer does not do anything immediately after the object is initiated
         # because things could still change.
@@ -81,6 +92,62 @@ class Param:
             if not hasattr(attr):
                 raise ValueError(f"{attr} does not exist.")
             setattr(self, attr, value)
+
+    def override_default_link(self):
+        """Override the default link function.
+
+        This is most likely because both default prior and default bounds are supplied.
+        """
+        if self._is_converted:
+            raise ValueError(
+                (
+                    "Cannot override the default link function for parameter %s."
+                    + " The object has already been processed."
+                )
+                % self.name,
+            )
+
+        if not self.is_regression or self._link_specified:
+            return  # do nothing
+
+        if self.bounds is None:
+            raise ValueError(
+                (
+                    "Cannot override the default link function. Bounds are not"
+                    + " specified for parameter %s."
+                )
+                % self.name,
+            )
+
+        lower, upper = self.bounds
+
+        if np.isneginf(lower) and np.isposinf(upper):
+            return
+        elif lower == 0.0 and np.isposinf(upper):
+            self.link = "log"
+        if not np.isneginf(lower) and not np.isposinf(upper):
+            self.link = Link("gen_logit", bounds=self.bounds)
+        else:
+            _logger.warning(
+                "The bounds for parameter %s (%f, %f) seems strange. Nothing is done to"
+                + " the link function. Please check if they are correct.",
+                self.name,
+                lower,
+                upper,
+            )
+
+    def override_default_priors(self, data: pd.DataFrame):
+        """Override the default priors.
+
+        By supplying priors for all parameters in the regression, we can override the
+        defaults that Bambi uses.
+
+        Parameters
+        ----------
+        data
+            The data used to fit the model.
+        """
+        return  # Will implement in the next PR
 
     def set_parent(self):
         """Set the Param as parent."""
