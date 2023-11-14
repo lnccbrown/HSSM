@@ -15,6 +15,7 @@ from .config import ModelConfig
 from .datasets import load_data
 from .defaults import show_defaults
 from .hssm import HSSM
+from .link import Link
 from .param import Param
 from .prior import Prior
 from .simulator import simulate_data
@@ -29,6 +30,7 @@ __version__ = importlib.metadata.version(__package__ or __name__)
 
 __all__ = [
     "HSSM",
+    "Link",
     "load_data",
     "ModelConfig",
     "Param",
