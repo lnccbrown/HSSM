@@ -2,7 +2,7 @@
 
 import logging
 from itertools import product
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable
 
 import arviz as az
 import matplotlib as mpl
@@ -36,8 +36,8 @@ def _plot_quantile_probability_1D(
     xlabel: str | None = "Proportion",
     ylabel: str | None = None,
     xticklabels: Iterable["str"] | None = None,
-    data_kwargs: Mapping[str, Any] | None = None,
-    pps_kwargs: Mapping[str, Any] | None = None,
+    data_kwargs: dict[str, Any] | None = None,
+    pps_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ) -> mpl.axes.Axes:
     """Produce one quantile probability plot.
@@ -129,9 +129,9 @@ def _plot_quantile_probability_2D(
     xlabel: str | None = "Proportion",
     ylabel: str | None = None,
     xticklabels: Iterable["str"] | None = None,
-    grid_kwargs: Mapping[str, Any] | None = None,
-    data_kwargs: Mapping[str, Any] | None = None,
-    pps_kwargs: Mapping[str, Any] | None = None,
+    grid_kwargs: dict[str, Any] | None = None,
+    data_kwargs: dict[str, Any] | None = None,
+    pps_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ) -> sns.FacetGrid:
     """Plot the quantile probabilities against the observed data.
@@ -207,9 +207,9 @@ def plot_quantile_probability(
     xlabel: str | None = "Proportion",
     ylabel: str | None = None,
     xticklabels: Iterable["str"] | None = None,
-    grid_kwargs: Mapping[str, Any] | None = None,
-    data_kwargs: Mapping[str, Any] | None = None,
-    pps_kwargs: Mapping[str, Any] | None = None,
+    grid_kwargs: dict[str, Any] | None = None,
+    data_kwargs: dict[str, Any] | None = None,
+    pps_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ) -> sns.FacetGrid:
     """Plot the quantile probabilities against the observed data.

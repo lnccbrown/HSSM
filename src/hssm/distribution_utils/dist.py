@@ -7,7 +7,7 @@ generation ops.
 
 import logging
 from os import PathLike
-from typing import Any, Callable, Iterable, Type
+from typing import Any, Callable, Type
 
 import bambi as bmb
 import numpy as np
@@ -384,7 +384,7 @@ def make_distribution(
 
         def logp(data, *dist_params):  # pylint: disable=E0213
             num_params = len(list_params)
-            extra_fields: Iterable[np.ndarray] = []
+            extra_fields = []
 
             if num_params < len(dist_params):
                 extra_fields = dist_params[num_params:]
