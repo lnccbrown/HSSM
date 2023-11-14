@@ -21,7 +21,7 @@ nav:
   - Tutorials:
       - Main tutorial: tutorials/main_tutorial.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
-      - Plotting in HSSM: tutorials/plotting.ipynb
+      # - Plotting in HSSM: tutorials/plotting.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
   - Contributing: CONTRIBUTING.md
