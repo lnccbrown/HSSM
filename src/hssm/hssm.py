@@ -142,6 +142,12 @@ class HSSM:
         If True, and if there is a `participant_id` field in `data`, will by default
         turn any unspecified parameter theta into a regression with
         "theta ~ 1 + (1|participant_id)" and default priors set by `bambi`.
+    default : optional
+        If "link", will override the default links for all parameters with a regression
+        with a generalized log link function defined by the bounds of the parameter.
+        If "prior", will override the bambi default priors for all parameters with a
+        regression with a set of priors defined by HSSM. If None, no default will be
+        overridden. Defaults to None if `hierarchical` is False, otherwise "prior".
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -190,6 +196,7 @@ class HSSM:
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
         hierarchical: bool = False,
+        default: Literal["prior", "link"] | None = None,
         **kwargs,
     ):
         self.data = data
@@ -201,6 +208,14 @@ class HSSM:
                 "You have specified a hierarchical model, but there is no "
                 + "`participant_id` field in the DataFrame that you have passed."
             )
+
+        if self.hierarchical:
+            if default is None:
+                self.override_strategy: Literal["prior", "link"] | None = "prior"
+            else:
+                self.override_strategy = default
+        else:
+            self.override_strategy = default
 
         self.n_responses = len(self.data["response"].unique())
 
@@ -245,6 +260,9 @@ class HSSM:
         # Find the parent parameter
         self._parent, self._parent_param = self._find_parent()
         assert self._parent_param is not None
+
+        if self.override_strategy is not None:
+            self._override_defaults(self.override_strategy)
 
         self._process_all()
 
@@ -876,7 +894,6 @@ class HSSM:
                     param = Param(
                         param_str,
                         formula="1 + (1|participant_id)",
-                        link="identity",
                         bounds=bounds,
                     )
                 else:
@@ -916,6 +933,14 @@ class HSSM:
         param = self.params[param_str]
         param.set_parent()
         return param_str, param
+
+    def _override_defaults(self, default: Literal["prior", "link"]):
+        """Override the default priors or links."""
+        for param in self.list_params:
+            if default == "prior":
+                param.override_default_priors(self.data)
+            elif default == "link":
+                param.override_default_link()
 
     def _process_all(self):
         """Process all params."""
