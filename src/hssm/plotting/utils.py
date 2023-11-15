@@ -264,7 +264,17 @@ def _process_df_for_qp_plot(
     pd.DataFrame
         The dataframe with `quantile`, `rt`, and `cond` variables.
     """
+    if isinstance(q, Iterable):
+        if any(q_elem < 0 or q_elem > 1 for q_elem in q):
+            raise ValueError("All elements in `q` must be between 0 and 1.")
+
     if isinstance(q, int):
+        if q >= 10:
+            _logger.warning(
+                "The number of quantiles (%d) is high. Generally 4-5 quantiles are"
+                + " ideal for visualizing the data.",
+                q,
+            )
         q = np.linspace(0, 1, q)[1:-1]
 
     # flip the rts
