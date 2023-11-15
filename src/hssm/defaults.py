@@ -123,7 +123,13 @@ default_model_config: DefaultConfigs = {
             "approx_differentiable": {
                 "loglik": "ddm_sdv.onnx",
                 "backend": "jax",
-                "default_priors": {},
+                "default_priors": {
+                    "t": {
+                        "name": "HalfNormal",
+                        "sigma": 2.0,
+                        "initval": 0.1,
+                    },
+                },
                 "bounds": {
                     "v": (-3.0, 3.0),
                     "a": (0.3, 2.5),
