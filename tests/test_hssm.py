@@ -214,7 +214,7 @@ def test_hierarchical(data_ddm):
         for name, param in model.params.items()
         if name != "p_outlier"
     )
-    assert model.override_strategy == "prior"
+    assert model.prior_settings == "safe"
 
     model = HSSM(
         data=data_ddm,
@@ -265,7 +265,9 @@ def test_override_default_link(caplog, data_ddm_reg):
     param_t = param_v | dict(name="t", formula="t ~ 1 + x + y", bounds=(0.1, np.inf))
 
     model = HSSM(
-        data=data_ddm_reg, include=[param_v, param_a, param_z, param_t], default="link"
+        data=data_ddm_reg,
+        include=[param_v, param_a, param_z, param_t],
+        link_settings="log_logit",
     )
 
     assert model.params["v"].link == "identity"

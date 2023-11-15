@@ -116,7 +116,7 @@ def test_param_creation_non_regression():
             model="angle", theta=[0.5, 1.5, 0.5, 0.5, 0.3], size=10
         ),
         include=[v, a, z, t],
-        default="link",
+        link_settings="log_logit",
     )
 
     for param in model_1.params.values():
@@ -191,7 +191,7 @@ def test_param_creation_regression():
         data=dataset_reg_v,
         model="ddm",
         include=[v_reg],
-        default="link",
+        link_settings="log_logit",
     )
 
     assert model_reg_v.params["v"].link == "identity"
