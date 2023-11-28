@@ -24,6 +24,7 @@ import pytensor
 import seaborn as sns
 import xarray as xr
 from bambi.model_components import DistributionalComponent
+from bambi.transformations import transformations_namespace
 
 from hssm.defaults import (
     LoglikKind,
@@ -164,6 +165,15 @@ class HSSM:
         recommended when you are using hierarchical models.
         The default value is `None` when `hierarchical` is `False` and `"safe"` when
         `hierarchical` is `True`.
+    center_predictors : optional
+        If `True`, and if there is an intercept in the common terms, the
+        data is centered by subtracting the mean. The centering is undone after sampling
+        to provide the actual intercept in all distributional components that have an
+        intercept. Note that this changes the interpretation of the prior on the
+        intercept because it refers to the intercept of the centered data.
+    extra_namespace : optional
+        Additional user supplied variables with transformations or data to include in
+        the environment where the formula is evaluated. Defaults to `None`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -214,6 +224,8 @@ class HSSM:
         hierarchical: bool = False,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = None,
+        center_predictors: bool = False,
+        extra_namespace: dict[str, Any] | None = None,
         **kwargs,
     ):
         self.data = data
@@ -231,6 +243,11 @@ class HSSM:
 
         self.link_settings = link_settings
         self.prior_settings = prior_settings
+
+        additional_namespace = transformations_namespace.copy()
+        if extra_namespace is not None:
+            additional_namespace.update(extra_namespace)
+        self.additional_namespace = additional_namespace
 
         responses = self.data["response"].unique().astype(int)
         self.n_responses = len(responses)
@@ -312,7 +329,13 @@ class HSSM:
         )
 
         self.model = bmb.Model(
-            self.formula, data, family=self.family, priors=self.priors, **other_kwargs
+            self.formula,
+            data=data,
+            family=self.family,
+            priors=self.priors,
+            center_predictors=center_predictors,
+            extra_namespace=extra_namespace,
+            **other_kwargs,
         )
 
         self._aliases = get_alias_dict(self.model, self._parent_param)
@@ -852,6 +875,8 @@ class HSSM:
         """Process kwargs and p_outlier and add them to include."""
         if include is None:
             include = []
+        else:
+            include = include.copy()
         params_in_include = [param["name"] for param in include]
 
         # Process kwargs
@@ -956,15 +981,26 @@ class HSSM:
 
     def _override_defaults(self):
         """Override the default priors or links."""
+        is_ddm = (
+            self.model in ["ddm", "ddm_sdv"] and self.loglik_kind == "analytical"
+        ) or (self.model == "ddm_full" and self.loglik_kind == "blackbox")
         for param in self.list_params:
             param_obj = self.params[param]
             if self.prior_settings == "safe":
-                param_obj.override_default_priors(self.data)
+                if is_ddm:
+                    param_obj.override_default_priors_ddm(
+                        self.data, self.additional_namespace
+                    )
+                else:
+                    param_obj.override_default_priors(
+                        self.data, self.additional_namespace
+                    )
             elif self.link_settings == "log_logit":
                 param_obj.override_default_link()
 
     def _process_all(self):
         """Process all params."""
+        assert self.list_params is not None
         for param in self.list_params:
             self.params[param].convert()
 
