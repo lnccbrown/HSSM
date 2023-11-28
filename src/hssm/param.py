@@ -6,11 +6,11 @@ from typing import Any, Union, cast
 import bambi as bmb
 import numpy as np
 import pandas as pd
+from deepcopy import deepcopy
 from formulae import design_matrices
 
 from .link import Link
 from .prior import Prior, get_default_prior, get_hddm_default_prior
-from .utils import merge_dicts
 
 # PEP604 union operator "|" not supported by pylint
 # Fall back to old syntax
@@ -648,3 +648,14 @@ def _make_default_prior(bounds: tuple[float, float]) -> bmb.Prior:
         return bmb.Prior("TruncatedNormal", mu=lower, lower=lower, sigma=2.0)
     else:
         return bmb.Prior(name="Uniform", lower=lower, upper=upper)
+
+
+def merge_dicts(dict1: dict, dict2: dict) -> dict:
+    """Recursively merge two dictionaries."""
+    merged = deepcopy(dict1)
+    for key, value in dict2.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged

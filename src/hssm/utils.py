@@ -10,7 +10,6 @@ _parse_bambi().
 """
 
 import logging
-from copy import deepcopy
 from typing import Any, Iterable, Literal, NewType
 
 import bambi as bmb
@@ -52,17 +51,6 @@ def download_hf(path: str):
      hf_hub_download function.
     """
     return hf_hub_download(repo_id=REPO_ID, filename=path)
-
-
-def merge_dicts(dict1: dict, dict2: dict) -> dict:
-    """Recursively merge two dictionaries."""
-    merged = deepcopy(dict1)
-    for key, value in dict2.items():
-        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
-            merged[key] = merge_dicts(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
 
 
 def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
