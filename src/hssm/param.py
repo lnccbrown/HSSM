@@ -1,12 +1,12 @@
 """The Param utility class."""
 
 import logging
-from typing import Any, Union, cast
+from copy import deepcopy
+from typing import Any, Literal, Union, cast
 
 import bambi as bmb
 import numpy as np
 import pandas as pd
-from deepcopy import deepcopy
 from formulae import design_matrices
 
 from .link import Link
@@ -100,7 +100,7 @@ class Param:
 
         This is most likely because both default prior and default bounds are supplied.
         """
-        self._ensure_not_converted()
+        self._ensure_not_converted(context="link")
 
         if not self.is_regression or self._link_specified:
             return  # do nothing
@@ -144,7 +144,7 @@ class Param:
         eval_env
             The environment used to evaluate the formula.
         """
-        self._ensure_not_converted()
+        self._ensure_not_converted(context="prior")
 
         if not self.is_regression:
             return
@@ -195,7 +195,7 @@ class Param:
         eval_env
             The environment used to evaluate the formula.
         """
-        self._ensure_not_converted()
+        self._ensure_not_converted(context="prior")
         assert self.name is not None
 
         if not self.is_regression:
@@ -238,7 +238,7 @@ class Param:
             prior = cast(dict[str, ParamSpec], self.prior)
             self.prior = merge_dicts(override_priors, prior)
 
-    def _get_design_matrices(self, data: pd.DataFrame, eval_env: dict[str, Any]):
+    def _get_design_matrices(self, data: pd.DataFrame, extra_namespace: dict[str, Any]):
         """Get the design matrices for the regression.
 
         Parameters
@@ -251,19 +251,17 @@ class Param:
         formula = cast(str, self.formula)
         rhs = formula.split("~")[1]
         formula = "rt ~ " + rhs
-        dm = design_matrices(formula, data=data, eval_env=eval_env)
+        dm = design_matrices(formula, data=data, extra_namespace=extra_namespace)
 
         return dm
 
-    def _ensure_not_converted(self):
+    def _ensure_not_converted(self, context=Literal["link", "prior"]):
         """Ensure that the object has not been converted."""
         if self._is_converted:
+            context = "link function" if context == "link" else "priors"
             raise ValueError(
-                (
-                    "Cannot override the default priors for parameter %s."
-                    + " The object has already been processed."
-                )
-                % self.name,
+                f"Cannot override the default {context} for parameter {self.name}."
+                + " The object has already been processed."
             )
 
     def set_parent(self):

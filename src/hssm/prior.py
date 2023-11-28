@@ -146,7 +146,9 @@ def _make_truncated_dist(
 
 
 def generate_prior(
-    dist: str | dict | int | float, bounds: tuple[float, float] | None = None, **kwargs
+    dist: str | dict | int | float | Prior,
+    bounds: tuple[float, float] | None = None,
+    **kwargs,
 ):
     """Generate a Prior distribution.
 
@@ -184,10 +186,12 @@ def generate_prior(
         prior: Prior | int | float = Prior(dist, bounds=bounds, **default_settings)
     elif isinstance(dist, dict):
         prior_settings = dist.copy()
-        dist = prior_settings.pop("dist")
+        dist_name: str = prior_settings.pop("dist")
         for k, v in prior_settings.items():
             prior_settings[k] = generate_prior(v)
-        prior = generate_prior(dist, bounds=bounds, **prior_settings)
+        prior = Prior(dist_name, bounds=bounds, **prior_settings)
+    elif isinstance(dist, Prior):
+        prior = dist
     elif isinstance(dist, (int, float)):
         if bounds is not None:
             lower, upper = bounds
@@ -246,9 +250,9 @@ def get_default_prior(term_type: str, bounds: tuple[float, float] | None):
         else:
             prior = generate_prior("Normal")
     elif term_type == "group_intercept":
-        prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=bounds)
+        prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
     elif term_type == "group_specific":
-        prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
+        prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
     else:
         raise ValueError("Unrecognized term type.")
     return prior
@@ -263,7 +267,7 @@ def get_hddm_default_prior(
     elif term_type == "common_intercept":
         prior = generate_prior(HDDM_MU[param], bounds=bounds)
     elif term_type == "group_intercept":
-        prior = generate_prior(HDDM_SETTINGS_GROUP[param], bounds=bounds)
+        prior = generate_prior(HDDM_SETTINGS_GROUP[param], bounds=None)
     elif term_type == "group_specific":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
     else:
@@ -274,6 +278,9 @@ def get_hddm_default_prior(
 HSSM_SETTINGS_DISTRIBUTIONS: dict[Any, Any] = {
     "Normal": {"mu": 0.0, "sigma": 0.25},
     "Weibull": {"alpha": 1.5, "beta": 0.3},
+    "HalfNormal": {"sigma": 0.25},
+    "Beta": {"alpha": 1.0, "beta": 1.0},
+    "Gamma": {"k": 1.0, "theta": 1.0},
 }
 
 HDDM_MU: dict[Any, Any] = {

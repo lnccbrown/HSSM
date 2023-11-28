@@ -165,12 +165,6 @@ class HSSM:
         recommended when you are using hierarchical models.
         The default value is `None` when `hierarchical` is `False` and `"safe"` when
         `hierarchical` is `True`.
-    center_predictors : optional
-        If `True`, and if there is an intercept in the common terms, the
-        data is centered by subtracting the mean. The centering is undone after sampling
-        to provide the actual intercept in all distributional components that have an
-        intercept. Note that this changes the interpretation of the prior on the
-        intercept because it refers to the intercept of the centered data.
     extra_namespace : optional
         Additional user supplied variables with transformations or data to include in
         the environment where the formula is evaluated. Defaults to `None`.
@@ -224,7 +218,6 @@ class HSSM:
         hierarchical: bool = False,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = None,
-        center_predictors: bool = False,
         extra_namespace: dict[str, Any] | None = None,
         **kwargs,
     ):
@@ -333,7 +326,6 @@ class HSSM:
             data=data,
             family=self.family,
             priors=self.priors,
-            center_predictors=center_predictors,
             extra_namespace=extra_namespace,
             **other_kwargs,
         )
@@ -938,7 +930,7 @@ class HSSM:
                     bounds = self.model_config.bounds.get(param_str)
                     param = Param(
                         param_str,
-                        formula="1 + (1|participant_id)",
+                        formula=f"{param_str} ~ 1 + (1|participant_id)",
                         bounds=bounds,
                     )
                 else:
@@ -982,8 +974,8 @@ class HSSM:
     def _override_defaults(self):
         """Override the default priors or links."""
         is_ddm = (
-            self.model in ["ddm", "ddm_sdv"] and self.loglik_kind == "analytical"
-        ) or (self.model == "ddm_full" and self.loglik_kind == "blackbox")
+            self.model_name in ["ddm", "ddm_sdv"] and self.loglik_kind == "analytical"
+        ) or (self.model_name == "ddm_full" and self.loglik_kind == "blackbox")
         for param in self.list_params:
             param_obj = self.params[param]
             if self.prior_settings == "safe":
