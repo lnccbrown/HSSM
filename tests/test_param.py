@@ -23,7 +23,15 @@ def test_param_creation_non_regression():
     }
 
     param_v = Param(**v)
+    param_v.override_default_link()
     param_v.convert()
+
+    with pytest.raises(
+        ValueError,
+        match="Cannot override the default link function for parameter v."
+        + " The object has already been processed.",
+    ):
+        param_v.override_default_link()
 
     assert param_v.name == "v"
     assert isinstance(param_v.prior, bmb.Prior)
@@ -43,9 +51,11 @@ def test_param_creation_non_regression():
     }
 
     param_a = Param(**a)
+    param_a.override_default_link()
     param_a.convert()
 
     assert param_a.is_truncated
+    assert param_a.link is None
     assert not param_a.is_fixed
     assert param_a.prior.is_truncated
     param_a_output = param_a.__str__().split("\r\n")[1].split("Prior: ")[1]
@@ -100,6 +110,18 @@ def test_param_creation_non_regression():
     assert pt.is_fixed
     assert not ptheta.is_truncated
 
+    model_1 = hssm.HSSM(
+        model="angle",
+        data=hssm.simulate_data(
+            model="angle", theta=[0.5, 1.5, 0.5, 0.5, 0.3], size=10
+        ),
+        include=[v, a, z, t],
+        link_settings="log_logit",
+    )
+
+    for param in model_1.params.values():
+        assert param.link is None
+
 
 def test_param_creation_regression():
     v_reg = {
@@ -111,16 +133,27 @@ def test_param_creation_regression():
             "y": bmb.Prior("Uniform", lower=0.0, upper=1.0),
             "z": 0.1,
         },
-        "link": "identity",
     }
 
     v_reg_param = Param(**v_reg)
+    with pytest.raises(
+        ValueError,
+        match="Cannot override the default link function. Bounds are not"
+        + " specified for parameter v.",
+    ):
+        v_reg_param.override_default_link()
     v_reg_param.convert()
 
     assert v_reg_param.is_regression
     assert not v_reg_param.is_fixed
     assert not v_reg_param.is_truncated
     assert v_reg_param.formula == v_reg["formula"]
+    with pytest.raises(
+        ValueError,
+        match="Cannot override the default link function for parameter v."
+        + " The object has already been processed.",
+    ):
+        v_reg_param.override_default_link()
 
     # Generate some fake simulation data
     intercept = 0.3
@@ -153,6 +186,15 @@ def test_param_creation_regression():
     assert not v_reg_param.is_fixed
     assert not v_reg_param.is_truncated
     assert v_reg_param.formula == v_reg["formula"]
+
+    model_reg_v = hssm.HSSM(
+        data=dataset_reg_v,
+        model="ddm",
+        include=[v_reg],
+        link_settings="log_logit",
+    )
+
+    assert model_reg_v.params["v"].link == "identity"
 
 
 def test__make_default_prior():
@@ -336,3 +378,42 @@ def test__make_bounded_prior(caplog):
     _make_bounded_prior(name, prior7, bounds)
 
     assert caplog.records[0].msg == caplog.records[1].msg
+
+
+some_forumla = "1 + x + y"
+
+
+@pytest.mark.parametrize(
+    ("formula", "link", "bounds", "result"),
+    [
+        (None, None, (0, 1), None),
+        (some_forumla, None, None, "Error"),
+        (some_forumla, None, (0, 1), "gen_logit"),
+        (some_forumla, None, (0, np.inf), "log"),
+        (some_forumla, None, (-np.inf, 1), "warning"),
+        (some_forumla, None, (-np.inf, np.inf), "identity"),
+        (some_forumla, "logit", None, "logit"),
+        (some_forumla, "gen_logit", None, "Error"),
+    ],
+)
+def test_param_override_default_link(caplog, formula, link, bounds, result):
+    if result == "Error":
+        with pytest.raises(ValueError):
+            param = Param("a", formula=formula, link=link, bounds=bounds)
+            param.override_default_link()
+    else:
+        param = Param("a", formula=formula, link=link, bounds=bounds)
+        param.override_default_link()
+        param.convert()
+        if result == "warning":
+            assert "strange" in caplog.records[0].msg
+        else:
+            if result == "gen_logit":
+                assert isinstance(param.link, hssm.Link)
+            elif result is None:
+                assert param.link is None
+            else:
+                assert param.link == result
+
+        with pytest.raises(ValueError):
+            param.override_default_link()

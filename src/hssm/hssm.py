@@ -141,7 +141,29 @@ class HSSM:
     hierarchical : optional
         If True, and if there is a `participant_id` field in `data`, will by default
         turn any unspecified parameter theta into a regression with
-        "theta ~ 1 + (1|participant_id)" and default priors set by `bambi`.
+        "theta ~ 1 + (1|participant_id)" and default priors set by `bambi`. Also changes
+        default values of `link_settings` and `prior_settings`. Defaults to False.
+    link_settings : optional
+        An optional string literal that indicates the link functions to use for each
+        parameter. Helpful for hierarchical models where sampling might get stuck/
+        very slow. Can be one of the following:
+
+        - `"log_logit"`: applies log link functions to positive parameters and
+        generalized logit link functions to parameters that have explicit bounds.
+        - `None`: unless otherwise specified, the `"identity"` link functions will be
+        used.
+        The default value is `None`.
+    prior_settings : optional
+        An optional string literal that indicates the prior distributions to use for
+        each parameter. Helpful for hierarchical models where sampling might get stuck/
+        very slow. Can be one of the following:
+
+        - `"safe"`: HSSM will scan all parameters in the model and apply safe priors to
+        all parameters that do not have explicit bounds.
+        - `None`: HSSM will use bambi to provide default priors for all parameters. Not
+        recommended when you are using hierarchical models.
+        The default value is `None` when `hierarchical` is `False` and `"safe"` when
+        `hierarchical` is `True`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -190,6 +212,8 @@ class HSSM:
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
         hierarchical: bool = False,
+        link_settings: Literal["log_logit"] | None = None,
+        prior_settings: Literal["safe"] | None = None,
         **kwargs,
     ):
         self.data = data
@@ -202,7 +226,20 @@ class HSSM:
                 + "`participant_id` field in the DataFrame that you have passed."
             )
 
-        self.n_responses = len(self.data["response"].unique())
+        if self.hierarchical and prior_settings is None:
+            prior_settings = "safe"
+
+        self.link_settings = link_settings
+        self.prior_settings = prior_settings
+
+        responses = self.data["response"].unique().astype(int)
+        self.n_responses = len(responses)
+        if self.n_responses == 2:
+            if -1 not in responses or 1 not in responses:
+                raise ValueError(
+                    "The response column must contain only -1 and 1 when there are "
+                    + "two responses."
+                )
 
         # Construct a model_config from defaults
         self.model_config = Config.from_defaults(model, loglik_kind)
@@ -246,6 +283,7 @@ class HSSM:
         self._parent, self._parent_param = self._find_parent()
         assert self._parent_param is not None
 
+        self._override_defaults()
         self._process_all()
 
         # Get the bambi formula, priors, and link
@@ -876,7 +914,6 @@ class HSSM:
                     param = Param(
                         param_str,
                         formula="1 + (1|participant_id)",
-                        link="identity",
                         bounds=bounds,
                     )
                 else:
@@ -916,6 +953,15 @@ class HSSM:
         param = self.params[param_str]
         param.set_parent()
         return param_str, param
+
+    def _override_defaults(self):
+        """Override the default priors or links."""
+        for param in self.list_params:
+            param_obj = self.params[param]
+            if self.prior_settings == "safe":
+                param_obj.override_default_priors(self.data)
+            elif self.link_settings == "log_logit":
+                param_obj.override_default_link()
 
     def _process_all(self):
         """Process all params."""
