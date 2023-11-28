@@ -6,9 +6,11 @@ from typing import Any, Union, cast
 import bambi as bmb
 import numpy as np
 import pandas as pd
+from formulae import design_matrices
 
 from .link import Link
-from .prior import Prior
+from .prior import Prior, get_default_prior, get_hddm_default_prior
+from .utils import merge_dicts
 
 # PEP604 union operator "|" not supported by pylint
 # Fall back to old syntax
@@ -98,14 +100,7 @@ class Param:
 
         This is most likely because both default prior and default bounds are supplied.
         """
-        if self._is_converted:
-            raise ValueError(
-                (
-                    "Cannot override the default link function for parameter %s."
-                    + " The object has already been processed."
-                )
-                % self.name,
-            )
+        self._ensure_not_converted()
 
         if not self.is_regression or self._link_specified:
             return  # do nothing
@@ -136,8 +131,8 @@ class Param:
                 upper,
             )
 
-    def override_default_priors(self, data: pd.DataFrame):
-        """Override the default priors.
+    def override_default_priors(self, data: pd.DataFrame, eval_env: dict[str, Any]):
+        """Override the default priors - the general case.
 
         By supplying priors for all parameters in the regression, we can override the
         defaults that Bambi uses.
@@ -146,8 +141,130 @@ class Param:
         ----------
         data
             The data used to fit the model.
+        eval_env
+            The environment used to evaluate the formula.
         """
-        return  # Will implement in the next PR
+        self._ensure_not_converted()
+
+        if not self.is_regression:
+            return
+
+        override_priors = {}
+        dm = self._get_design_matrices(data, eval_env)
+
+        has_common_intercept = False
+        for name, term in dm.common.terms.items():
+            if term.kind == "intercept":
+                has_common_intercept = True
+                override_priors[name] = get_default_prior(
+                    "common_intercept", self.bounds
+                )
+            else:
+                override_priors[name] = get_default_prior("common", bounds=None)
+
+        for name, term in dm.group.terms.items():
+            if term.kind == "intercept":
+                if has_common_intercept:
+                    override_priors[name] = get_default_prior(
+                        "group_intercept", self.bounds
+                    )
+                else:
+                    # treat the term as any other group-specific term
+                    override_priors[name] = get_default_prior(
+                        "group_specific", bounds=None
+                    )
+            else:
+                override_priors[name] = get_default_prior("group_specific", bounds=None)
+
+        if not self.prior:
+            self.prior = override_priors
+        else:
+            prior = cast(dict[str, ParamSpec], self.prior)
+            self.prior = merge_dicts(override_priors, prior)
+
+    def override_default_priors_ddm(self, data: pd.DataFrame, eval_env: dict[str, Any]):
+        """Override the default priors - the ddm case.
+
+        By supplying priors for all parameters in the regression, we can override the
+        defaults that Bambi uses.
+
+        Parameters
+        ----------
+        data
+            The data used to fit the model.
+        eval_env
+            The environment used to evaluate the formula.
+        """
+        self._ensure_not_converted()
+        assert self.name is not None
+
+        if not self.is_regression:
+            return
+
+        override_priors = {}
+        dm = self._get_design_matrices(data, eval_env)
+
+        has_common_intercept = False
+        for name, term in dm.common.terms.items():
+            if term.kind == "intercept":
+                has_common_intercept = True
+                override_priors[name] = get_hddm_default_prior(
+                    "common_intercept", self.name, self.bounds
+                )
+            else:
+                override_priors[name] = get_hddm_default_prior(
+                    "common", self.name, bounds=None
+                )
+
+        for name, term in dm.group.terms.items():
+            if term.kind == "intercept":
+                if has_common_intercept:
+                    override_priors[name] = get_hddm_default_prior(
+                        "group_intercept", self.name, bounds=self.bounds
+                    )
+                else:
+                    # treat the term as any other group-specific term
+                    override_priors[name] = get_hddm_default_prior(
+                        "group_intercept", self.name, bounds=None
+                    )
+            else:
+                override_priors[name] = get_hddm_default_prior(
+                    "group_specific", self.name, bounds=None
+                )
+
+        if not self.prior:
+            self.prior = override_priors
+        else:
+            prior = cast(dict[str, ParamSpec], self.prior)
+            self.prior = merge_dicts(override_priors, prior)
+
+    def _get_design_matrices(self, data: pd.DataFrame, eval_env: dict[str, Any]):
+        """Get the design matrices for the regression.
+
+        Parameters
+        ----------
+        data
+            A pandas DataFrame
+        eval_env
+            The evaluation environment
+        """
+        formula = cast(str, self.formula)
+        rhs = formula.split("~")[1]
+        formula = "rt ~ " + rhs
+        dm = design_matrices(formula, data=data, eval_env=eval_env)
+
+        return dm
+
+    def _ensure_not_converted(self):
+        """Ensure that the object has not been converted."""
+        if self._is_converted:
+            raise ValueError(
+                (
+                    "Cannot override the default priors for parameter %s."
+                    + " The object has already been processed."
+                )
+                % self.name,
+            )
 
     def set_parent(self):
         """Set the Param as parent."""
