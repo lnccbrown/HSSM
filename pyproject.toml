@@ -69,7 +69,7 @@ profile = "black"
 
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+target-version = "py310"
 unfixable = ["E711"]
 
 select = [
@@ -166,14 +166,7 @@ ignore = [
     "TID252",
 ]
 
-exclude = [
-    ".github",
-    "docs",
-    "notebook",
-    "tests",
-    "src/hssm/likelihoods/hddm_wfpt/cdfdif_wrapper.c",
-    "src/hssm/likelihoods/hddm_wfpt/wfpt.cpp",
-]
+exclude = [".github", "docs", "notebook", "tests"]
 
 [tool.ruff.pydocstyle]
 convention = "numpy"

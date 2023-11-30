@@ -165,13 +165,11 @@ class Param:
         for name, term in dm.group.terms.items():
             if term.kind == "intercept":
                 if has_common_intercept:
-                    override_priors[name] = get_default_prior(
-                        "group_intercept", self.bounds
-                    )
+                    override_priors[name] = get_default_prior("group_intercept", None)
                 else:
                     # treat the term as any other group-specific term
                     override_priors[name] = get_default_prior(
-                        "group_specific", bounds=None
+                        "group_specific", bounds=self.bounds
                     )
             else:
                 override_priors[name] = get_default_prior("group_specific", bounds=None)
@@ -220,12 +218,12 @@ class Param:
             if term.kind == "intercept":
                 if has_common_intercept:
                     override_priors[name] = get_hddm_default_prior(
-                        "group_intercept", self.name, bounds=self.bounds
+                        "group_intercept", self.name, bounds=None
                     )
                 else:
                     # treat the term as any other group-specific term
                     override_priors[name] = get_hddm_default_prior(
-                        "group_intercept", self.name, bounds=None
+                        "group_intercept", self.name, bounds=self.bounds
                     )
             else:
                 override_priors[name] = get_hddm_default_prior(
