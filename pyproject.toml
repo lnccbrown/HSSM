@@ -132,6 +132,8 @@ ignore = [
     "B020",
     # Function definition does not bind loop variable
     "B023",
+    # zip()` without an explicit `strict=
+    "B905",
     # Functions defined inside a loop must not use variables redefined in the loop
     # "B301",  # not yet implemented
     # Too many arguments to function call

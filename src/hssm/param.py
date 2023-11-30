@@ -168,8 +168,13 @@ class Param:
                     override_priors[name] = get_default_prior("group_intercept", None)
                 else:
                     # treat the term as any other group-specific term
+                    _logger.warning(
+                        f"No common intercept. Bounds for parameter {self.name} is not"
+                        + " applied due to a current limitation of Bambi."
+                        + " This will change in the future."
+                    )
                     override_priors[name] = get_default_prior(
-                        "group_specific", bounds=self.bounds
+                        "group_specific", bounds=None
                     )
             else:
                 override_priors[name] = get_default_prior("group_specific", bounds=None)
@@ -222,8 +227,13 @@ class Param:
                     )
                 else:
                     # treat the term as any other group-specific term
+                    _logger.warning(
+                        f"No common intercept. Bounds for parameter {self.name} is not"
+                        + " applied due to a current limitation of Bambi."
+                        + " This will change in the future."
+                    )
                     override_priors[name] = get_hddm_default_prior(
-                        "group_intercept", self.name, bounds=self.bounds
+                        "group_intercept", self.name, bounds=None
                     )
             else:
                 override_priors[name] = get_hddm_default_prior(
