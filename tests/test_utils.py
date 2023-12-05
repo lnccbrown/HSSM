@@ -12,6 +12,8 @@ from hssm.utils import (
     _random_sample,
 )
 
+hssm.set_floatX("float32")
+
 
 def test_get_alias_dict():
     # Simulate some data:

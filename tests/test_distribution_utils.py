@@ -9,6 +9,8 @@ from hssm import distribution_utils
 from hssm.distribution_utils.dist import apply_param_bounds_to_loglik, make_distribution
 from hssm.likelihoods.analytical import logp_ddm, DDM
 
+hssm.set_floatX("float32")
+
 
 def test_make_ssm_rv():
     params = ["v", "a", "z", "t"]

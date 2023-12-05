@@ -23,6 +23,8 @@ from hssm.plotting.posterior_predictive import (
     plot_posterior_predictive,
 )
 
+hssm.set_floatX("float32")
+
 
 def test__get_title():
     assert _get_title(("a"), ("b")) == "a = b"

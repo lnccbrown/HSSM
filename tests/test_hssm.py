@@ -2,15 +2,14 @@ from pathlib import Path
 
 import bambi as bmb
 import numpy as np
-import pandas as pd
-import pytensor
 import pytest
 
+import hssm
 from hssm import HSSM
 from hssm.utils import download_hf
 from hssm.likelihoods import DDM, logp_ddm
 
-pytensor.config.floatX = "float32"
+hssm.set_floatX("float32")
 
 param_v = {
     "name": "v",

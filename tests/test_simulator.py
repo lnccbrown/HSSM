@@ -2,7 +2,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import hssm
 from hssm.simulator import simulate_data
+
+hssm.set_floatX("float32")
 
 
 def test_simulator():
