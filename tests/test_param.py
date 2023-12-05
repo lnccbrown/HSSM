@@ -9,6 +9,9 @@ from hssm.param import (
     _make_priors_recursive,
     _make_bounded_prior,
 )
+from hssm.defaults import default_model_config
+
+hssm.set_floatX("float64")
 
 
 def test_param_creation_non_regression():
@@ -417,3 +420,307 @@ def test_param_override_default_link(caplog, formula, link, bounds, result):
 
         with pytest.raises(ValueError):
             param.override_default_link()
+
+
+def _check_group_prior(group_prior):
+    assert isinstance(group_prior, bmb.Prior)
+    assert group_prior.dist is None
+    assert group_prior.name == "Normal"
+
+    mu = group_prior.args["mu"]
+    sigma = group_prior.args["sigma"]
+
+    assert isinstance(group_prior, bmb.Prior)
+    assert mu.name == "Normal"
+    assert mu.args["mu"] == 0.0
+    assert mu.args["sigma"] == 0.25
+
+    assert isinstance(group_prior, bmb.Prior)
+    assert sigma.name == "Weibull"
+    assert sigma.args["alpha"] == 1.5
+    assert sigma.args["beta"] == 0.3
+
+
+angle_params = default_model_config["angle"]["list_params"]
+angle_bounds = default_model_config["angle"]["likelihoods"]["approx_differentiable"][
+    "bounds"
+].values()
+param_and_bounds = zip(angle_params, angle_bounds)
+
+
+@pytest.mark.parametrize(
+    ("param_name", "bounds"),
+    param_and_bounds,
+)
+def test_param_override_default_priors(cavanagh_test, caplog, param_name, bounds):
+    # Shouldn't do anything if the param is not a regression
+    param_non_reg = Param(
+        name=param_name,
+        prior={},
+    )
+    param_non_reg.override_default_priors(cavanagh_test, {})
+    assert not param_non_reg.prior
+
+    # The basic regression case, no group-specific terms
+    param = Param(
+        name=param_name,
+        formula=f"{param_name} ~ 1 + theta",
+        bounds=bounds,
+    )
+
+    param.override_default_priors(cavanagh_test, {})
+
+    assert param.prior is not None
+
+    intercept_prior = param.prior["Intercept"]
+    slope_prior = param.prior["theta"]
+
+    assert isinstance(intercept_prior, hssm.Prior)
+    assert intercept_prior.is_truncated
+    assert intercept_prior.bounds == bounds
+    assert intercept_prior.dist is not None
+    lower, upper = intercept_prior.bounds
+    _mu = intercept_prior._args["mu"]
+    if isinstance(_mu, np.ndarray):
+        assert _mu.item() == (lower + upper) / 2
+    else:
+        assert _mu == (lower + upper) / 2
+    assert intercept_prior._args["sigma"] == 0.25
+
+    assert isinstance(slope_prior, bmb.Prior)
+    assert slope_prior.dist is None
+    assert slope_prior.args["mu"] == 0.0
+    assert slope_prior.args["sigma"] == 0.25
+
+    unif_prior = {"name": "Uniform", "lower": 0.0, "upper": 1.0}
+    set_prior = {
+        "Intercept": unif_prior,
+        "theta": unif_prior,
+    }
+
+    param_with_prior = Param(
+        name=param_name,
+        formula=f"{param_name} ~ 1 + theta",
+        bounds=bounds,
+        prior=set_prior,
+    )
+
+    param_with_prior.override_default_priors(cavanagh_test, {})
+    assert param_with_prior.prior == set_prior
+
+    # The regression case, with group-specific terms
+    param_group = Param(
+        name=param_name,
+        formula=f"{param_name} ~ 1 + (1 + theta | participant_id)",
+        bounds=bounds,
+    )
+
+    param_group.override_default_priors(cavanagh_test, {})
+
+    assert all(
+        param in param_group.prior
+        for param in ["Intercept", "1|participant_id", "theta|participant_id"]
+    )
+
+    assert param_group.prior["Intercept"].is_truncated
+
+    group_intercept_prior = param_group.prior["1|participant_id"]
+    group_slope_prior = param_group.prior["theta|participant_id"]
+
+    _check_group_prior(group_intercept_prior)
+    _check_group_prior(group_slope_prior)
+
+    param_no_common_intercept = Param(
+        name=param_name,
+        formula=f"{param_name} ~ 0 + (1 + theta | participant_id)",
+        bounds=bounds,
+    )
+
+    param_no_common_intercept.override_default_priors(cavanagh_test, {})
+    assert "limitation" in caplog.records[0].msg
+
+    assert "Intercept" not in param_no_common_intercept.prior
+    group_intercept_prior = param_group.prior["1|participant_id"]
+    group_slope_prior = param_group.prior["theta|participant_id"]
+
+    _check_group_prior(group_intercept_prior)
+    _check_group_prior(group_slope_prior)
+
+
+v_mu = {"name": "Normal", "mu": 2.0, "sigma": 3.0}
+v_sigma = {"name": "HalfNormal", "sigma": 2.0}
+v_prior = {"name": "Normal", "mu": v_mu, "sigma": v_sigma}
+
+a_mu = {"name": "Gamma", "alpha": 1.5, "beta": 0.75}
+a_sigma = {"name": "HalfNormal", "sigma": 0.1}
+a_prior = {"name": "Gamma", "alpha": a_mu, "beta": a_sigma}
+
+z_mu = {"name": "Normal", "mu": 0.5, "sigma": 0.5}
+z_sigma = {"name": "HalfNormal", "sigma": 0.05}
+z_prior = {"name": "Beta", "alpha": z_mu, "beta": z_sigma}
+
+t_mu = {"name": "Gamma", "alpha": 0.4, "beta": 0.2}
+t_sigma = {"name": "HalfNormal", "sigma": 1}
+t_prior = {"name": "Normal", "mu": t_mu, "sigma": t_sigma}
+
+sv = {"name": "HalfNormal", "sigma": 2.0}
+st = {"name": "HalfNormal", "sigma": 0.3}
+sz = {"name": "Beta", "alpha": 1.0, "beta": 1.0}
+
+
+@pytest.mark.parametrize(
+    ("param_name", "mu", "prior"),
+    [
+        ("v", v_mu, v_prior),
+        ("a", a_mu, a_prior),
+        ("z", z_mu, z_prior),
+        ("t", t_mu, t_prior),
+    ],
+)
+def test_param_override_default_priors_ddm(
+    cavanagh_test, caplog, param_name, mu, prior
+):
+    # Shouldn't do anything if the param is not a regression
+    param_non_reg = Param(
+        name=param_name,
+        prior={},
+    )
+    param_non_reg.override_default_priors_ddm(cavanagh_test, {})
+    assert not param_non_reg.prior
+
+    bounds = (-10, 10)
+
+    # The basic regression case, no group-specific terms
+    param = Param(
+        name=param_name,
+        formula=f"{param_name} ~ 1 + theta",
+        bounds=bounds,  # invalid, just for testing
+    )
+
+    param.override_default_priors_ddm(cavanagh_test, {})
+
+    intercept_prior = param.prior["Intercept"]
+    slope_prior = param.prior["theta"]
+
+    assert isinstance(intercept_prior, hssm.Prior)
+    assert intercept_prior.bounds == bounds
+    assert intercept_prior.dist is not None
+    mu1 = mu.copy()
+    assert intercept_prior.name == mu1.pop("name")
+    for key, val in mu1.items():
+        val1 = intercept_prior._args[key]
+        if isinstance(val, np.ndarray):
+            val1 = val1.item()
+        assert val1 == val
+
+    assert isinstance(slope_prior, bmb.Prior)
+    assert slope_prior.dist is None
+    assert slope_prior.args["mu"] == 0.0
+    assert slope_prior.args["sigma"] == 0.25
+
+    # If prior is set, do not override
+    unif_prior = {"name": "Uniform", "lower": 0.0, "upper": 1.0}
+    set_prior = {
+        "Intercept": unif_prior,
+        "theta": unif_prior,
+    }
+
+    param_with_prior = Param(
+        name=param_name,
+        formula=f"{param_name} ~ 1 + theta",
+        bounds=bounds,
+        prior=set_prior,
+    )
+
+    param_with_prior.override_default_priors_ddm(cavanagh_test, {})
+    assert param_with_prior.prior == set_prior
+
+    # The regression case, with group-specific terms
+    param_group = Param(
+        name=param_name,
+        formula=f"{param_name} ~ 1 + (1 + theta | participant_id)",
+        bounds=bounds,
+    )
+
+    param_group.override_default_priors_ddm(cavanagh_test, {})
+
+    assert all(
+        param in param_group.prior
+        for param in ["Intercept", "1|participant_id", "theta|participant_id"]
+    )
+
+    assert param_group.prior["Intercept"].is_truncated
+
+    group_intercept_prior = param_group.prior["1|participant_id"]
+    group_slope_prior = param_group.prior["theta|participant_id"]
+
+    def _check_group_prior_intercept_ddm(group_prior, prior):
+        assert isinstance(group_prior, bmb.Prior)
+        assert group_prior.dist is None
+        prior1 = prior.copy()
+        assert group_prior.name == prior1.pop("name")
+        for key, val in prior1.items():
+            hyperprior = group_prior.args[key]
+            val1 = val.copy()
+            assert hyperprior.name == val1.pop("name")
+            for key2, val2 in val1.items():
+                assert hyperprior.args[key2] == val2
+
+    _check_group_prior_intercept_ddm(group_intercept_prior, prior)
+    _check_group_prior(group_slope_prior)
+
+    param_no_common_intercept = Param(
+        name=param_name,
+        formula=f"{param_name} ~ 0 + (1 + theta | participant_id)",
+        bounds=bounds,
+    )
+
+    param_no_common_intercept.override_default_priors_ddm(cavanagh_test, {})
+    assert "limitation" in caplog.records[0].msg
+
+    assert "Intercept" not in param_no_common_intercept.prior
+    group_intercept_prior = param_group.prior["1|participant_id"]
+    group_slope_prior = param_group.prior["theta|participant_id"]
+
+    _check_group_prior_intercept_ddm(group_intercept_prior, prior)
+    _check_group_prior(group_slope_prior)
+
+
+def test_hssm_override_default_prior(cavanagh_test):
+    model1 = hssm.HSSM(
+        model="angle",
+        data=cavanagh_test,
+        hierarchical=False,
+        include=[
+            {
+                "name": "v",
+                "formula": "v ~ 1 + C(conf)",
+            }
+        ],
+        prior_settings="safe",
+    )
+
+    param_v = model1.params["v"]
+    assert param_v.prior["Intercept"].name == "Normal"
+    assert param_v.prior["Intercept"].is_truncated
+
+    model2 = hssm.HSSM(
+        model="ddm",
+        data=cavanagh_test,
+        hierarchical=True,
+        include=[
+            {
+                "name": "v",
+                "formula": "v ~ 1 + theta",
+                "prior": {"Intercept": {"name": "Uniform", "lower": -10, "upper": 10}},
+            },
+        ],
+        prior_settings="safe",
+    )
+    param_v = model2.params["v"]
+    assert param_v.prior["Intercept"].name == "Uniform"
+    assert param_v.prior["theta"].name == "Normal"
+
+    param_a = model2.params["a"]
+    assert param_a.prior["Intercept"].name == a_mu["name"]
+    assert "1|participant_id" in param_a.prior
