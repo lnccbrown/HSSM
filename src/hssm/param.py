@@ -153,37 +153,43 @@ class Param:
         dm = self._get_design_matrices(data, eval_env)
 
         has_common_intercept = False
-        for name, term in dm.common.terms.items():
-            if term.kind == "intercept":
-                has_common_intercept = True
-                override_priors[name] = get_default_prior(
-                    "common_intercept", self.bounds
-                )
-            else:
-                override_priors[name] = get_default_prior("common", bounds=None)
-
-        for name, term in dm.group.terms.items():
-            if term.kind == "intercept":
-                if has_common_intercept:
-                    override_priors[name] = get_default_prior("group_intercept", None)
-                else:
-                    # treat the term as any other group-specific term
-                    _logger.warning(
-                        f"No common intercept. Bounds for parameter {self.name} is not"
-                        + " applied due to a current limitation of Bambi."
-                        + " This will change in the future."
+        if dm.common is not None:
+            for name, term in dm.common.terms.items():
+                if term.kind == "intercept":
+                    has_common_intercept = True
+                    override_priors[name] = get_default_prior(
+                        "common_intercept", self.bounds
                     )
+                else:
+                    override_priors[name] = get_default_prior("common", bounds=None)
+
+        if dm.group is not None:
+            for name, term in dm.group.terms.items():
+                if term.kind == "intercept":
+                    if has_common_intercept:
+                        override_priors[name] = get_default_prior(
+                            "group_intercept", None
+                        )
+                    else:
+                        # treat the term as any other group-specific term
+                        _logger.warning(
+                            f"No common intercept. Bounds for parameter {self.name} is"
+                            + " not applied due to a current limitation of Bambi."
+                            + " This will change in the future."
+                        )
+                        override_priors[name] = get_default_prior(
+                            "group_specific", bounds=None
+                        )
+                else:
                     override_priors[name] = get_default_prior(
                         "group_specific", bounds=None
                     )
-            else:
-                override_priors[name] = get_default_prior("group_specific", bounds=None)
 
         if not self.prior:
             self.prior = override_priors
         else:
             prior = cast(dict[str, ParamSpec], self.prior)
-            self.prior = merge_dicts(override_priors, prior)
+            self.prior = override_priors | prior
 
     def override_default_priors_ddm(self, data: pd.DataFrame, eval_env: dict[str, Any]):
         """Override the default priors - the ddm case.
@@ -208,43 +214,45 @@ class Param:
         dm = self._get_design_matrices(data, eval_env)
 
         has_common_intercept = False
-        for name, term in dm.common.terms.items():
-            if term.kind == "intercept":
-                has_common_intercept = True
-                override_priors[name] = get_hddm_default_prior(
-                    "common_intercept", self.name, self.bounds
-                )
-            else:
-                override_priors[name] = get_hddm_default_prior(
-                    "common", self.name, bounds=None
-                )
-
-        for name, term in dm.group.terms.items():
-            if term.kind == "intercept":
-                if has_common_intercept:
+        if dm.common is not None:
+            for name, term in dm.common.terms.items():
+                if term.kind == "intercept":
+                    has_common_intercept = True
                     override_priors[name] = get_hddm_default_prior(
-                        "group_intercept", self.name, bounds=None
+                        "common_intercept", self.name, self.bounds
                     )
                 else:
-                    # treat the term as any other group-specific term
-                    _logger.warning(
-                        f"No common intercept. Bounds for parameter {self.name} is not"
-                        + " applied due to a current limitation of Bambi."
-                        + " This will change in the future."
-                    )
                     override_priors[name] = get_hddm_default_prior(
-                        "group_intercept", self.name, bounds=None
+                        "common", self.name, bounds=None
                     )
-            else:
-                override_priors[name] = get_hddm_default_prior(
-                    "group_specific", self.name, bounds=None
-                )
+
+        if dm.group is not None:
+            for name, term in dm.group.terms.items():
+                if term.kind == "intercept":
+                    if has_common_intercept:
+                        override_priors[name] = get_hddm_default_prior(
+                            "group_intercept", self.name, bounds=None
+                        )
+                    else:
+                        # treat the term as any other group-specific term
+                        _logger.warning(
+                            f"No common intercept. Bounds for parameter {self.name} is"
+                            + " not applied due to a current limitation of Bambi."
+                            + " This will change in the future."
+                        )
+                        override_priors[name] = get_hddm_default_prior(
+                            "group_intercept", self.name, bounds=None
+                        )
+                else:
+                    override_priors[name] = get_hddm_default_prior(
+                        "group_specific", self.name, bounds=None
+                    )
 
         if not self.prior:
             self.prior = override_priors
         else:
             prior = cast(dict[str, ParamSpec], self.prior)
-            self.prior = merge_dicts(override_priors, prior)
+            self.prior = override_priors | prior
 
     def _get_design_matrices(self, data: pd.DataFrame, extra_namespace: dict[str, Any]):
         """Get the design matrices for the regression.
