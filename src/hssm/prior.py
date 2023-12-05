@@ -8,7 +8,7 @@ bmb.Prior but adds the following:
 2. The ability to still print out the prior before the truncation.
 3. The ability to shorten the output of bmb.Prior.
 """
-
+from copy import deepcopy
 from statistics import mean
 from typing import Any, Callable
 
@@ -179,13 +179,13 @@ def generate_prior(
         The Prior instance.
     """
     if isinstance(dist, str):
-        default_settings = HSSM_SETTINGS_DISTRIBUTIONS[dist]
+        default_settings = deepcopy(HSSM_SETTINGS_DISTRIBUTIONS[dist])
         if kwargs:
             for k, v in kwargs.items():
                 default_settings[k] = generate_prior(v)
         prior: Prior | int | float = Prior(dist, bounds=bounds, **default_settings)
     elif isinstance(dist, dict):
-        prior_settings = dist.copy()
+        prior_settings = deepcopy(dist)
         dist_name: str = prior_settings.pop("dist")
         for k, v in prior_settings.items():
             prior_settings[k] = generate_prior(v)
@@ -214,8 +214,9 @@ def get_default_prior(term_type: str, bounds: tuple[float, float] | None):
 
     * common_intercept: Bounded Normal prior (N(mean(bounds), 0.25)).
     * common: Normal prior (N(0, 0.25)).
-    * group_intercept: Normal prior where its sigma has a HalfFlat hyperprior.
-    * group_specific: Normal prior where its sigma has a HalfNormal hyperprior.
+    * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3). It's supposed to
+    be bounded but Bambi does not fully support it yet.
+    * group_specific: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3).
 
     This function is taken from bambi.priors.prior.py and modified to handle hssm-
     specific situations.
@@ -242,6 +243,7 @@ def get_default_prior(term_type: str, bounds: tuple[float, float] | None):
     elif term_type == "common_intercept":
         if bounds is not None:
             if any(np.isinf(b) for b in bounds):
+                # TODO: Make it more specific.
                 prior = generate_prior("Normal", bounds=bounds)
             else:
                 prior = generate_prior(
@@ -280,7 +282,7 @@ HSSM_SETTINGS_DISTRIBUTIONS: dict[Any, Any] = {
     "Weibull": {"alpha": 1.5, "beta": 0.3},
     "HalfNormal": {"sigma": 0.25},
     "Beta": {"alpha": 1.0, "beta": 1.0},
-    "Gamma": {"k": 1.0, "theta": 1.0},
+    "Gamma": {"alpha": 1.0, "beta": 1.0},
 }
 
 HDDM_MU: dict[Any, Any] = {
@@ -295,9 +297,9 @@ HDDM_SIGMA: dict[Any, Any] = {
     "a": {"dist": "HalfNormal", "sigma": 0.1},
     "z": {"dist": "HalfNormal", "sigma": 0.05},
     "t": {"dist": "HalfNormal", "sigma": 1.0},
-    "sv": {"dist": "HalfNormal", "sigma": 2.0},
-    "sz": {"dist": "Beta", "alpha": 1.0, "beta": 3.0},
-    "st": {"dist": "HalfNormal", "sigma": 0.3},
+    # "sv": {"dist": "HalfNormal", "sigma": 2.0},
+    # "sz": {"dist": "Beta", "alpha": 1.0, "beta": 3.0},
+    # "st": {"dist": "HalfNormal", "sigma": 0.3},
 }
 
 HDDM_SETTINGS_GROUP: dict[Any, Any] = {
