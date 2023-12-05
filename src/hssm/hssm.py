@@ -974,8 +974,8 @@ class HSSM:
     def _override_defaults(self):
         """Override the default priors or links."""
         is_ddm = (
-            self.model_name in ["ddm", "ddm_sdv"] and self.loglik_kind == "analytical"
-        ) or (self.model_name == "ddm_full" and self.loglik_kind == "blackbox")
+            self.model_name == "ddm" and self.loglik_kind == "analytical"
+        )  # or (self.model_name == "ddm_full" and self.loglik_kind == "blackbox")
         for param in self.list_params:
             param_obj = self.params[param]
             if self.prior_settings == "safe":
