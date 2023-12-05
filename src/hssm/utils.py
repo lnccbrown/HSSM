@@ -18,7 +18,7 @@ import pytensor
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from huggingface_hub import hf_hub_download
-from jax.config import config
+from jax import config
 from pymc.model_graph import ModelGraph
 from pytensor import function
 
