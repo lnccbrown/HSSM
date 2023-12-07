@@ -337,6 +337,7 @@ class HSSM:
         self,
         sampler: Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
         | None = None,
+        init: str | None = None,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -350,6 +351,9 @@ class HSSM:
             sampler will automatically be chosen: when the model uses the
             `approx_differentiable` likelihood, and `jax` backend, "nuts_numpyro" will
             be used. Otherwise, "mcmc" (the default PyMC NUTS sampler) will be used.
+        init: optional
+            Initialization method to use for the sampler. If any of the NUTS samplers
+            is used, defaults to `"adapt_diag"`. Otherwise, defaults to `"auto"`.
         kwargs
             Other arguments passed to bmb.Model.fit(). Please see [here]
             (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
@@ -385,7 +389,7 @@ class HSSM:
                 )
 
             if "step" not in kwargs:
-                kwargs["step"] = pm.Slice(model=self.pymc_model)
+                kwargs |= {"step": pm.Slice(model=self.pymc_model)}
 
         if (
             self.loglik_kind == "approx_differentiable"
@@ -402,7 +406,15 @@ class HSSM:
         if self._check_extra_fields():
             self._update_extra_fields()
 
-        self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
+        if init is None:
+            if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]:
+                init = "adapt_diag"
+            else:
+                init = "auto"
+
+        self._inference_obj = self.model.fit(
+            inference_method=sampler, init=init, **kwargs
+        )
 
         return self.traces
 
