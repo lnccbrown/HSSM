@@ -286,7 +286,7 @@ def test_param_regression():
         "x1": bmb.Prior("Normal", mu=0, sigma=0.5),
     }
 
-    param_reg_formula1 = Param("a", formula="1 + x1", prior=priors_dict)
+    param_reg_formula1 = Param("a", formula="a ~ 1 + x1", prior=priors_dict)
     param_reg_formula2 = Param(
         "a", formula="a ~ 1 + x1", prior=priors_dict, link=fake_link
     )
