@@ -282,29 +282,35 @@ HSSM_SETTINGS_DISTRIBUTIONS: dict[Any, Any] = {
     "Weibull": {"alpha": 1.5, "beta": 0.3},
     "HalfNormal": {"sigma": 0.25},
     "Beta": {"alpha": 1.0, "beta": 1.0},
-    "Gamma": {"alpha": 1.0, "beta": 1.0},
+    "Gamma": {"mu": 1.0, "sigma": 1.0},
 }
 
 HDDM_MU: dict[Any, Any] = {
     "v": {"dist": "Normal", "mu": 2.0, "sigma": 3.0},
-    "a": {"dist": "Gamma", "alpha": 1.5, "beta": 0.75},
-    "z": {"dist": "Normal", "mu": 0.5, "sigma": 0.5},
-    "t": {"dist": "Gamma", "alpha": 0.4, "beta": 0.2},
+    "a": {"dist": "Gamma", "mu": 1.5, "sigma": 0.75},
+    "z": {"dist": "Gamma", "mu": 10, "sigma": 10},
+    "t": {"dist": "Gamma", "mu": 0.4, "sigma": 0.2},
+    "sv": {"dist": "HalfNormal", "sigma": 2.0},
+    "st": {"dist": "HalfNormal", "sigma": 0.3},
+    "sz": {"dist": "HalfNormal", "sigma": 0.5},
 }
 
 HDDM_SIGMA: dict[Any, Any] = {
     "v": {"dist": "HalfNormal", "sigma": 2.0},
     "a": {"dist": "HalfNormal", "sigma": 0.1},
-    "z": {"dist": "HalfNormal", "sigma": 0.05},
+    "z": {"dist": "Gamma", "mu": 10, "sigma": 10},
     "t": {"dist": "HalfNormal", "sigma": 1.0},
-    # "sv": {"dist": "HalfNormal", "sigma": 2.0},
-    # "sz": {"dist": "Beta", "alpha": 1.0, "beta": 3.0},
-    # "st": {"dist": "HalfNormal", "sigma": 0.3},
+    "sv": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
+    "sz": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
+    "st": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
 }
 
 HDDM_SETTINGS_GROUP: dict[Any, Any] = {
     "v": {"dist": "Normal", "mu": HDDM_MU["v"], "sigma": HDDM_SIGMA["v"]},
-    "a": {"dist": "Gamma", "alpha": HDDM_MU["a"], "beta": HDDM_SIGMA["a"]},
+    "a": {"dist": "Gamma", "mu": HDDM_MU["a"], "sigma": HDDM_SIGMA["a"]},
     "z": {"dist": "Beta", "alpha": HDDM_MU["z"], "beta": HDDM_SIGMA["z"]},
     "t": {"dist": "Normal", "mu": HDDM_MU["t"], "sigma": HDDM_SIGMA["t"]},
+    "sv": {"dist": "Gamma", "mu": HDDM_MU["sv"], "sigma": HDDM_SIGMA["sv"]},
+    "sz": {"dist": "Gamma", "mu": HDDM_MU["sz"], "sigma": HDDM_SIGMA["sz"]},
+    "st": {"dist": "Gamma", "mu": HDDM_MU["st"], "sigma": HDDM_SIGMA["st"]},
 }

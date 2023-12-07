@@ -11,8 +11,6 @@ from hssm.param import (
 )
 from hssm.defaults import default_model_config
 
-hssm.set_floatX("float64")
-
 
 def test_param_creation_non_regression():
     # Test different param creation strategies
@@ -453,6 +451,8 @@ param_and_bounds = zip(angle_params, angle_bounds)
     param_and_bounds,
 )
 def test_param_override_default_priors(cavanagh_test, caplog, param_name, bounds):
+    # Necessary for verifying the values of certain parameters of the priors
+    hssm.set_floatX("float64")
     # Shouldn't do anything if the param is not a regression
     param_non_reg = Param(
         name=param_name,
@@ -537,7 +537,8 @@ def test_param_override_default_priors(cavanagh_test, caplog, param_name, bounds
     )
 
     param_no_common_intercept.override_default_priors(cavanagh_test, {})
-    assert "limitation" in caplog.records[0].msg
+    print(caplog.records)
+    assert "limitation" in caplog.records[-1].msg
 
     assert "Intercept" not in param_no_common_intercept.prior
     group_intercept_prior = param_group.prior["1|participant_id"]
@@ -546,26 +547,25 @@ def test_param_override_default_priors(cavanagh_test, caplog, param_name, bounds
     _check_group_prior(group_intercept_prior)
     _check_group_prior(group_slope_prior)
 
+    # Change back after testing
+    hssm.set_floatX("float32")
+
 
 v_mu = {"name": "Normal", "mu": 2.0, "sigma": 3.0}
 v_sigma = {"name": "HalfNormal", "sigma": 2.0}
 v_prior = {"name": "Normal", "mu": v_mu, "sigma": v_sigma}
 
-a_mu = {"name": "Gamma", "alpha": 1.5, "beta": 0.75}
+a_mu = {"name": "Gamma", "mu": 1.5, "sigma": 0.75}
 a_sigma = {"name": "HalfNormal", "sigma": 0.1}
-a_prior = {"name": "Gamma", "alpha": a_mu, "beta": a_sigma}
+a_prior = {"name": "Gamma", "mu": a_mu, "sigma": a_sigma}
 
-z_mu = {"name": "Normal", "mu": 0.5, "sigma": 0.5}
-z_sigma = {"name": "HalfNormal", "sigma": 0.05}
+z_mu = {"name": "Gamma", "mu": 10.0, "sigma": 10.0}
+z_sigma = {"name": "Gamma", "mu": 10.0, "sigma": 10.0}
 z_prior = {"name": "Beta", "alpha": z_mu, "beta": z_sigma}
 
-t_mu = {"name": "Gamma", "alpha": 0.4, "beta": 0.2}
+t_mu = {"name": "Gamma", "mu": 0.4, "sigma": 0.2}
 t_sigma = {"name": "HalfNormal", "sigma": 1}
 t_prior = {"name": "Normal", "mu": t_mu, "sigma": t_sigma}
-
-sv = {"name": "HalfNormal", "sigma": 2.0}
-st = {"name": "HalfNormal", "sigma": 0.3}
-sz = {"name": "Beta", "alpha": 1.0, "beta": 1.0}
 
 
 @pytest.mark.parametrize(
@@ -580,6 +580,8 @@ sz = {"name": "Beta", "alpha": 1.0, "beta": 1.0}
 def test_param_override_default_priors_ddm(
     cavanagh_test, caplog, param_name, mu, prior
 ):
+    # Necessary for verifying the values of certain parameters of the priors
+    hssm.set_floatX("float64")
     # Shouldn't do anything if the param is not a regression
     param_non_reg = Param(
         name=param_name,
@@ -609,9 +611,7 @@ def test_param_override_default_priors_ddm(
     assert intercept_prior.name == mu1.pop("name")
     for key, val in mu1.items():
         val1 = intercept_prior._args[key]
-        if isinstance(val, np.ndarray):
-            val1 = val1.item()
-        assert val1 == val
+        np.testing.assert_almost_equal(val1, val)
 
     assert isinstance(slope_prior, bmb.Prior)
     assert slope_prior.dist is None
@@ -676,7 +676,7 @@ def test_param_override_default_priors_ddm(
     )
 
     param_no_common_intercept.override_default_priors_ddm(cavanagh_test, {})
-    assert "limitation" in caplog.records[0].msg
+    assert "limitation" in caplog.records[-1].msg
 
     assert "Intercept" not in param_no_common_intercept.prior
     group_intercept_prior = param_group.prior["1|participant_id"]
@@ -684,6 +684,9 @@ def test_param_override_default_priors_ddm(
 
     _check_group_prior_intercept_ddm(group_intercept_prior, prior)
     _check_group_prior(group_slope_prior)
+
+    # Change back after testing
+    hssm.set_floatX("float32")
 
 
 def test_hssm_override_default_prior(cavanagh_test):
