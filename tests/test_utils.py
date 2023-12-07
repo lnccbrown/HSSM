@@ -3,7 +3,7 @@ import pandas as pd
 import pytensor
 import pytest
 from ssms.basic_simulators.simulator import simulator
-from jax.config import config
+from jax import config
 
 import hssm
 from hssm.utils import (
