@@ -318,11 +318,6 @@ class Param:
 
         if self.formula is not None:
             # The regression case
-
-            self.formula = (
-                self.formula if "~" in self.formula else f"{self.name} ~ {self.formula}"
-            )
-
             if isinstance(self.prior, (float, bmb.Prior)):
                 raise ValueError(
                     "Please specify priors for each individual parameter in the "
