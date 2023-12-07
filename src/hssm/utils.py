@@ -324,7 +324,7 @@ def _process_param_in_kwargs(
     Raises
     ------
     ValueError
-        When `prior` is not a `float`, a `dict`, or a `b`mb.Prior` object.
+        When `prior` is not a `float`, a `dict`, or a `bmb.Prior` object.
     """
     if isinstance(prior, (int, float, bmb.Prior)):
         return {"name": name, "prior": prior}

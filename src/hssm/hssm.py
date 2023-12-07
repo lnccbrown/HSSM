@@ -644,11 +644,11 @@ class HSSM:
         data : optional
             An ArviZ InferenceData object. If None, the traces stored in the model will
             be used.
-        include deterministic : optional
+        include_deterministic : optional
             Whether to include deterministic variables in the plot. Defaults to False.
             Note that if include deterministic is set to False and and `var_names` is
             provided, the `var_names` provided will be modified to also exclude the
-         deterministic values. If this is not desirable, set
+            deterministic values. If this is not desirable, set
             `include deterministic` to True.
         tight_layout : optional
             Whether to call plt.tight_layout() after plotting. Defaults to True.
