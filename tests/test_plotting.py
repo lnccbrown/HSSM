@@ -266,8 +266,66 @@ def test__plot_quantile_probability_1D(cav_idata, cavanagh_test):
     ax = _plot_quantile_probability_1D(df, cond="stim")
 
     assert has_twin(ax)
-    assert len(ax.get_lines()) == 3
+    assert ax.get_xlabel() == "Proportion"
+    assert ax.get_ylabel() == "rt"
+    assert ax.get_title() == "Quantile Probability Plot"
 
-    ax1 = _plot_quantile_probability_1D(df, cond="stim", q=6)
-    assert has_twin(ax1)
-    assert len(ax1.get_lines()) == 4
+
+def test__plot_quantile_probability_2D(cav_idata, cavanagh_test):
+    df = _get_plotting_df(
+        cav_idata, cavanagh_test, extra_dims=["participant_id", "stim"]
+    )
+    g = _plot_quantile_probability_2D(df, cond="stim", col="participant_id", col_wrap=3)
+
+    assert len(g.fig.axes) == 10
+
+    df = _get_plotting_df(
+        cav_idata, cavanagh_test, extra_dims=["participant_id", "stim", "conf"]
+    )
+    g = _plot_quantile_probability_2D(df, cond="stim", col="participant_id", row="conf")
+
+    assert len(g.fig.axes) == 5 * 4
+
+
+def test_plot_quantile_probability(cav_idata, cavanagh_test):
+    # Mock model object
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        include=[
+            {
+                "name": "v",
+                "prior": {
+                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
+                    "theta": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
+                },
+                "formula": "v ~ (1|participant_id) + theta",
+                "link": "identity",
+            },
+        ],
+    )  # Doesn't matter what model or data we use here
+    with pytest.raises(ValueError):
+        plot_quantile_probability(model, cond="stim")
+
+    model._inference_obj = cav_idata.copy()
+    ax1 = plot_quantile_probability(
+        model, cond="stim", data=cavanagh_test
+    )  # Should work directly
+    assert len(ax1.get_lines()) == 9
+
+    delattr(model.traces, "posterior_predictive")
+    ax2 = plot_quantile_probability(
+        model, cond="stim", data=cavanagh_test, n_samples=2
+    )  # Should sample posterior predictive
+    assert len(ax2.get_lines()) == 9
+    assert "posterior_predictive" in model.traces
+    assert model.traces.posterior_predictive.draw.size == 2
+
+    with pytest.raises(ValueError):
+        plot_quantile_probability(model, groups="participant_id", cond="stim")
+    with pytest.raises(ValueError):
+        plot_quantile_probability(model, groups_order=["5", "4"], cond="stim")
+
+    plots = plot_quantile_probability(
+        model, row="dbs", col="participant_id", cond="stim", groups="conf"
+    )
+    assert len(plots) == 2
