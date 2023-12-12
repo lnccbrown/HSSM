@@ -188,7 +188,7 @@ def _plot_quantile_probability_2D(
 def plot_quantile_probability(
     model,
     cond: str,
-    data: pd.DataFrame,
+    data: pd.DataFrame | None = None,
     idata: az.InferenceData | None = None,
     n_samples: int = 20,
     x: str = "proportion",
@@ -219,7 +219,7 @@ def plot_quantile_probability(
         A model object that has a `plot_quantile_probability` method.
     cond
         The column in `data` that indicates the conditions.
-    data
+    data : optional
         A pandas DataFrame containing the observed data. If None, the data from
         `idata.observed_data` will be used.
     idata : optional
@@ -301,6 +301,9 @@ def plot_quantile_probability(
     mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
         A seaborn FacetGrid object containing the plot.
     """
+    if data is None:
+        data = model.data
+
     groups, groups_order = _check_groups_and_groups_order(
         groups, groups_order, row, col
     )
