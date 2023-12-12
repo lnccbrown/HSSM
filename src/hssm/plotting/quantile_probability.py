@@ -94,7 +94,6 @@ def _plot_quantile_probability_1D(
     )
     xticks = ticks_and_labels[x]
     xticklabels = xticklabels or ticks_and_labels[cond]
-    print(xticks, xticklabels)
     secax = ax.twiny()
     secax.set_xticks(xticks)
     secax.set_xticklabels(xticklabels)

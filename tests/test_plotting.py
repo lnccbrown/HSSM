@@ -22,6 +22,11 @@ from hssm.plotting.posterior_predictive import (
     _plot_posterior_predictive_2D,
     plot_posterior_predictive,
 )
+from hssm.plotting.quantile_probability import (
+    _plot_quantile_probability_1D,
+    _plot_quantile_probability_2D,
+    plot_quantile_probability,
+)
 
 
 def test__get_title():
@@ -226,8 +231,43 @@ def test_plot_posterior_predictive(cav_idata, cavanagh_test):
 
 
 def test__process_df_for_qp_plot(cav_idata, cavanagh_test):
-    df = _get_plotting_df(cav_idata, cavanagh_test, extra_dims=["participant_id"])
-    n_chain = cav_idata.posterior_predictive["rt,response"].chain.size
-    n_draw = cav_idata.posterior_predictive["rt,response"].draw.size
+    df = _get_plotting_df(
+        cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+    )
 
-    processed_df = _process_df_for_qp_plot(df, 6, "response", "participant_id")
+    processed_df = _process_df_for_qp_plot(df, 6, "conf", None)
+
+    assert "conf" in processed_df.columns
+    assert "is_correct" in processed_df.columns
+    assert processed_df["quantile"].nunique() == 4
+    assert np.all(
+        processed_df.groupby(["observed", "chain", "draw", "conf", "quantile"])[
+            "proportion"
+        ].sum()
+        == 1
+    )
+
+
+def has_twin(ax):
+    """Checks if an axes has a twin axes with the same bounds.
+
+    Credit: https://stackoverflow.com/questions/36209575/how-to-detect-if-a-twin-axis-has-been-generated-for-a-matplotlib-axis
+    """
+    for other_ax in ax.figure.axes:
+        if other_ax is ax:
+            continue
+        if other_ax.bbox.bounds == ax.bbox.bounds:
+            return True
+    return False
+
+
+def test__plot_quantile_probability_1D(cav_idata, cavanagh_test):
+    df = _get_plotting_df(cav_idata, cavanagh_test, extra_dims=["stim"])
+    ax = _plot_quantile_probability_1D(df, cond="stim")
+
+    assert has_twin(ax)
+    assert len(ax.get_lines()) == 3
+
+    ax1 = _plot_quantile_probability_1D(df, cond="stim", q=6)
+    assert has_twin(ax1)
+    assert len(ax1.get_lines()) == 4
