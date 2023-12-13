@@ -1000,7 +1000,7 @@ class HSSM:
                     param_obj.override_default_priors(
                         self.data, self.additional_namespace
                     )
-            elif self.link_settings == "log_logit":
+            if self.link_settings == "log_logit":
                 param_obj.override_default_link()
 
     def _process_all(self):
