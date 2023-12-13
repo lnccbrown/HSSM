@@ -78,3 +78,10 @@ class Link(bmb.Link):
             return np.log((x - a) / (b - x))
 
         return link_
+
+    def __str__(self):
+        """Return a string representation of the link function."""
+        if self.name == "gen_logit":
+            lower, upper = self.bounds
+            return f"Generalized logit link function with bounds ({lower}, {upper})"
+        return super().__str__()
