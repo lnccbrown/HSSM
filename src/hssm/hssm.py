@@ -24,6 +24,7 @@ import pytensor
 import seaborn as sns
 import xarray as xr
 from bambi.model_components import DistributionalComponent
+from bambi.transformations import transformations_namespace
 
 from hssm.defaults import (
     LoglikKind,
@@ -164,6 +165,9 @@ class HSSM:
         recommended when you are using hierarchical models.
         The default value is `None` when `hierarchical` is `False` and `"safe"` when
         `hierarchical` is `True`.
+    extra_namespace : optional
+        Additional user supplied variables with transformations or data to include in
+        the environment where the formula is evaluated. Defaults to `None`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -214,6 +218,7 @@ class HSSM:
         hierarchical: bool = False,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = None,
+        extra_namespace: dict[str, Any] | None = None,
         **kwargs,
     ):
         self.data = data
@@ -231,6 +236,11 @@ class HSSM:
 
         self.link_settings = link_settings
         self.prior_settings = prior_settings
+
+        additional_namespace = transformations_namespace.copy()
+        if extra_namespace is not None:
+            additional_namespace.update(extra_namespace)
+        self.additional_namespace = additional_namespace
 
         responses = self.data["response"].unique().astype(int)
         self.n_responses = len(responses)
@@ -312,7 +322,12 @@ class HSSM:
         )
 
         self.model = bmb.Model(
-            self.formula, data, family=self.family, priors=self.priors, **other_kwargs
+            self.formula,
+            data=data,
+            family=self.family,
+            priors=self.priors,
+            extra_namespace=extra_namespace,
+            **other_kwargs,
         )
 
         self._aliases = get_alias_dict(self.model, self._parent_param)
@@ -322,6 +337,7 @@ class HSSM:
         self,
         sampler: Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
         | None = None,
+        init: str | None = None,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -335,6 +351,9 @@ class HSSM:
             sampler will automatically be chosen: when the model uses the
             `approx_differentiable` likelihood, and `jax` backend, "nuts_numpyro" will
             be used. Otherwise, "mcmc" (the default PyMC NUTS sampler) will be used.
+        init: optional
+            Initialization method to use for the sampler. If any of the NUTS samplers
+            is used, defaults to `"adapt_diag"`. Otherwise, defaults to `"auto"`.
         kwargs
             Other arguments passed to bmb.Model.fit(). Please see [here]
             (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
@@ -370,7 +389,7 @@ class HSSM:
                 )
 
             if "step" not in kwargs:
-                kwargs["step"] = pm.Slice(model=self.pymc_model)
+                kwargs |= {"step": pm.Slice(model=self.pymc_model)}
 
         if (
             self.loglik_kind == "approx_differentiable"
@@ -387,7 +406,15 @@ class HSSM:
         if self._check_extra_fields():
             self._update_extra_fields()
 
-        self._inference_obj = self.model.fit(inference_method=sampler, **kwargs)
+        if init is None:
+            if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]:
+                init = "adapt_diag"
+            else:
+                init = "auto"
+
+        self._inference_obj = self.model.fit(
+            inference_method=sampler, init=init, **kwargs
+        )
 
         return self.traces
 
@@ -629,11 +656,11 @@ class HSSM:
         data : optional
             An ArviZ InferenceData object. If None, the traces stored in the model will
             be used.
-        include deterministic : optional
+        include_deterministic : optional
             Whether to include deterministic variables in the plot. Defaults to False.
             Note that if include deterministic is set to False and and `var_names` is
             provided, the `var_names` provided will be modified to also exclude the
-         deterministic values. If this is not desirable, set
+            deterministic values. If this is not desirable, set
             `include deterministic` to True.
         tight_layout : optional
             Whether to call plt.tight_layout() after plotting. Defaults to True.
@@ -852,6 +879,8 @@ class HSSM:
         """Process kwargs and p_outlier and add them to include."""
         if include is None:
             include = []
+        else:
+            include = include.copy()
         params_in_include = [param["name"] for param in include]
 
         # Process kwargs
@@ -913,7 +942,7 @@ class HSSM:
                     bounds = self.model_config.bounds.get(param_str)
                     param = Param(
                         param_str,
-                        formula="1 + (1|participant_id)",
+                        formula=f"{param_str} ~ 1 + (1|participant_id)",
                         bounds=bounds,
                     )
                 else:
@@ -956,15 +985,27 @@ class HSSM:
 
     def _override_defaults(self):
         """Override the default priors or links."""
+        is_ddm = (
+            self.model_name in ["ddm", "ddm_sdv", "ddm_full"]
+            and self.loglik_kind != "approx_differentiable"
+        )
         for param in self.list_params:
             param_obj = self.params[param]
             if self.prior_settings == "safe":
-                param_obj.override_default_priors(self.data)
+                if is_ddm:
+                    param_obj.override_default_priors_ddm(
+                        self.data, self.additional_namespace
+                    )
+                else:
+                    param_obj.override_default_priors(
+                        self.data, self.additional_namespace
+                    )
             elif self.link_settings == "log_logit":
                 param_obj.override_default_link()
 
     def _process_all(self):
         """Process all params."""
+        assert self.list_params is not None
         for param in self.list_params:
             self.params[param].convert()
 

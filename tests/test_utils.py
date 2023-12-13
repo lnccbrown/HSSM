@@ -3,7 +3,7 @@ import pandas as pd
 import pytensor
 import pytest
 from ssms.basic_simulators.simulator import simulator
-from jax.config import config
+from jax import config
 
 import hssm
 from hssm.utils import (
@@ -11,6 +11,8 @@ from hssm.utils import (
     _generate_random_indices,
     _random_sample,
 )
+
+hssm.set_floatX("float32")
 
 
 def test_get_alias_dict():
