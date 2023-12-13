@@ -255,6 +255,8 @@ def get_default_prior(term_type: str, bounds: tuple[float, float] | None):
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
     elif term_type == "group_specific":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
+    elif term_type == "group_intercept_with_common":
+        prior = generate_prior("Normal", mu=0.0, sigma="Weibull")
     else:
         raise ValueError("Unrecognized term type.")
     return prior

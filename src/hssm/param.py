@@ -120,7 +120,7 @@ class Param:
             return
         elif lower == 0.0 and np.isposinf(upper):
             self.link = "log"
-        if not np.isneginf(lower) and not np.isposinf(upper):
+        elif not np.isneginf(lower) and not np.isposinf(upper):
             self.link = Link("gen_logit", bounds=self.bounds)
         else:
             _logger.warning(
@@ -168,7 +168,7 @@ class Param:
                 if term.kind == "intercept":
                     if has_common_intercept:
                         override_priors[name] = get_default_prior(
-                            "group_intercept", None
+                            "group_intercept_with_common", bounds=None
                         )
                     else:
                         # treat the term as any other group-specific term
@@ -178,7 +178,7 @@ class Param:
                             + " This will change in the future."
                         )
                         override_priors[name] = get_default_prior(
-                            "group_specific", bounds=None
+                            "group_intercept", bounds=None
                         )
                 else:
                     override_priors[name] = get_default_prior(
@@ -230,8 +230,8 @@ class Param:
             for name, term in dm.group.terms.items():
                 if term.kind == "intercept":
                     if has_common_intercept:
-                        override_priors[name] = get_hddm_default_prior(
-                            "group_intercept", self.name, bounds=None
+                        override_priors[name] = get_default_prior(
+                            "group_intercept_with_common", bounds=None
                         )
                     else:
                         # treat the term as any other group-specific term

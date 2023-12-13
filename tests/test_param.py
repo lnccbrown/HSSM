@@ -439,6 +439,22 @@ def _check_group_prior(group_prior):
     assert sigma.args["beta"] == 0.3
 
 
+def _check_group_prior_with_common(group_prior):
+    assert isinstance(group_prior, bmb.Prior)
+    assert group_prior.dist is None
+    assert group_prior.name == "Normal"
+
+    mu = group_prior.args["mu"]
+    sigma = group_prior.args["sigma"]
+
+    assert mu == 0.0
+
+    assert isinstance(group_prior, bmb.Prior)
+    assert sigma.name == "Weibull"
+    assert sigma.args["alpha"] == 1.5
+    assert sigma.args["beta"] == 0.3
+
+
 angle_params = default_model_config["angle"]["list_params"]
 angle_bounds = default_model_config["angle"]["likelihoods"]["approx_differentiable"][
     "bounds"
@@ -527,7 +543,7 @@ def test_param_override_default_priors(cavanagh_test, caplog, param_name, bounds
     group_intercept_prior = param_group.prior["1|participant_id"]
     group_slope_prior = param_group.prior["theta|participant_id"]
 
-    _check_group_prior(group_intercept_prior)
+    _check_group_prior_with_common(group_intercept_prior)
     _check_group_prior(group_slope_prior)
 
     param_no_common_intercept = Param(
@@ -541,8 +557,8 @@ def test_param_override_default_priors(cavanagh_test, caplog, param_name, bounds
     assert "limitation" in caplog.records[-1].msg
 
     assert "Intercept" not in param_no_common_intercept.prior
-    group_intercept_prior = param_group.prior["1|participant_id"]
-    group_slope_prior = param_group.prior["theta|participant_id"]
+    group_intercept_prior = param_no_common_intercept.prior["1|participant_id"]
+    group_slope_prior = param_no_common_intercept.prior["theta|participant_id"]
 
     _check_group_prior(group_intercept_prior)
     _check_group_prior(group_slope_prior)
@@ -666,7 +682,7 @@ def test_param_override_default_priors_ddm(
             for key2, val2 in val1.items():
                 assert hyperprior.args[key2] == val2
 
-    _check_group_prior_intercept_ddm(group_intercept_prior, prior)
+    _check_group_prior_with_common(group_intercept_prior)
     _check_group_prior(group_slope_prior)
 
     param_no_common_intercept = Param(
@@ -679,8 +695,8 @@ def test_param_override_default_priors_ddm(
     assert "limitation" in caplog.records[-1].msg
 
     assert "Intercept" not in param_no_common_intercept.prior
-    group_intercept_prior = param_group.prior["1|participant_id"]
-    group_slope_prior = param_group.prior["theta|participant_id"]
+    group_intercept_prior = param_no_common_intercept.prior["1|participant_id"]
+    group_slope_prior = param_no_common_intercept.prior["theta|participant_id"]
 
     _check_group_prior_intercept_ddm(group_intercept_prior, prior)
     _check_group_prior(group_slope_prior)
