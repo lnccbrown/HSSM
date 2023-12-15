@@ -496,6 +496,20 @@ class HSSM:
         """
         return plotting.plot_posterior_predictive(self, **kwargs)
 
+    def plot_quantile_probability(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
+        """Produce a quantile probability plot.
+
+        Equivalent to calling `hssm.plotting.plot_quantile_probability()` with the
+        model. Please see that function for
+        [full documentation][hssm.plotting.plot_quantile_probability].
+
+        Returns
+        -------
+        mpl.axes.Axes | sns.FacetGrid
+            The matplotlib axis or seaborn FacetGrid object containing the plot.
+        """
+        return plotting.plot_quantile_probability(self, **kwargs)
+
     def sample_prior_predictive(
         self,
         draws: int = 500,
