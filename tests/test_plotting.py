@@ -22,6 +22,11 @@ from hssm.plotting.posterior_predictive import (
     _plot_posterior_predictive_2D,
     plot_posterior_predictive,
 )
+from hssm.plotting.quantile_probability import (
+    _plot_quantile_probability_1D,
+    _plot_quantile_probability_2D,
+    plot_quantile_probability,
+)
 
 hssm.set_floatX("float32")
 
@@ -228,8 +233,101 @@ def test_plot_posterior_predictive(cav_idata, cavanagh_test):
 
 
 def test__process_df_for_qp_plot(cav_idata, cavanagh_test):
-    df = _get_plotting_df(cav_idata, cavanagh_test, extra_dims=["participant_id"])
-    n_chain = cav_idata.posterior_predictive["rt,response"].chain.size
-    n_draw = cav_idata.posterior_predictive["rt,response"].draw.size
+    df = _get_plotting_df(
+        cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+    )
 
-    processed_df = _process_df_for_qp_plot(df, 6, "response", "participant_id")
+    processed_df = _process_df_for_qp_plot(df, 6, "conf", None)
+
+    assert "conf" in processed_df.columns
+    assert "is_correct" in processed_df.columns
+    assert processed_df["quantile"].nunique() == 4
+    assert np.all(
+        processed_df.groupby(["observed", "chain", "draw", "conf", "quantile"])[
+            "proportion"
+        ].sum()
+        == 1
+    )
+
+
+def has_twin(ax):
+    """Checks if an axes has a twin axes with the same bounds.
+
+    Credit: https://stackoverflow.com/questions/36209575/how-to-detect-if-a-twin-axis-has-been-generated-for-a-matplotlib-axis
+    """
+    for other_ax in ax.figure.axes:
+        if other_ax is ax:
+            continue
+        if other_ax.bbox.bounds == ax.bbox.bounds:
+            return True
+    return False
+
+
+def test__plot_quantile_probability_1D(cav_idata, cavanagh_test):
+    df = _get_plotting_df(cav_idata, cavanagh_test, extra_dims=["stim"])
+    ax = _plot_quantile_probability_1D(df, cond="stim")
+
+    assert has_twin(ax)
+    assert ax.get_xlabel() == "Proportion"
+    assert ax.get_ylabel() == "rt"
+    assert ax.get_title() == "Quantile Probability Plot"
+
+
+def test__plot_quantile_probability_2D(cav_idata, cavanagh_test):
+    df = _get_plotting_df(
+        cav_idata, cavanagh_test, extra_dims=["participant_id", "stim"]
+    )
+    g = _plot_quantile_probability_2D(df, cond="stim", col="participant_id", col_wrap=3)
+
+    assert len(g.fig.axes) == 10
+
+    df = _get_plotting_df(
+        cav_idata, cavanagh_test, extra_dims=["participant_id", "stim", "conf"]
+    )
+    g = _plot_quantile_probability_2D(df, cond="stim", col="participant_id", row="conf")
+
+    assert len(g.fig.axes) == 5 * 4
+
+
+def test_plot_quantile_probability(cav_idata, cavanagh_test):
+    # Mock model object
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        include=[
+            {
+                "name": "v",
+                "prior": {
+                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
+                    "theta": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
+                },
+                "formula": "v ~ (1|participant_id) + theta",
+                "link": "identity",
+            },
+        ],
+    )  # Doesn't matter what model or data we use here
+    with pytest.raises(ValueError):
+        plot_quantile_probability(model, cond="stim")
+
+    model._inference_obj = cav_idata.copy()
+    ax1 = plot_quantile_probability(
+        model, cond="stim", data=cavanagh_test
+    )  # Should work directly
+    assert len(ax1.get_lines()) == 9
+
+    delattr(model.traces, "posterior_predictive")
+    ax2 = plot_quantile_probability(
+        model, cond="stim", data=cavanagh_test, n_samples=2
+    )  # Should sample posterior predictive
+    assert len(ax2.get_lines()) == 9
+    assert "posterior_predictive" in model.traces
+    assert model.traces.posterior_predictive.draw.size == 2
+
+    with pytest.raises(ValueError):
+        plot_quantile_probability(model, groups="participant_id", cond="stim")
+    with pytest.raises(ValueError):
+        plot_quantile_probability(model, groups_order=["5", "4"], cond="stim")
+
+    plots = plot_quantile_probability(
+        model, row="dbs", col="participant_id", cond="stim", groups="conf"
+    )
+    assert len(plots) == 2
