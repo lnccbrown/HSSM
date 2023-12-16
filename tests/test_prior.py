@@ -3,7 +3,10 @@ import pytest
 import bambi as bmb
 import numpy as np
 
+import hssm
 from hssm import Prior
+
+hssm.set_floatX("float32")
 
 
 def test_truncation():

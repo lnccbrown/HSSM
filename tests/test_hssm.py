@@ -2,15 +2,14 @@ from pathlib import Path
 
 import bambi as bmb
 import numpy as np
-import pandas as pd
-import pytensor
 import pytest
 
+import hssm
 from hssm import HSSM
 from hssm.utils import download_hf
 from hssm.likelihoods import DDM, logp_ddm
 
-pytensor.config.floatX = "float32"
+hssm.set_floatX("float32")
 
 param_v = {
     "name": "v",
@@ -190,7 +189,7 @@ def test_sample_prior_predictive(data_ddm_reg):
     )
     prior_predictive_5 = model_regression_multi.sample_prior_predictive(draws=10)
 
-    data_ddm_reg["subject_id"] = np.arange(10)
+    data_ddm_reg.loc[:, "subject_id"] = np.arange(10)
 
     model_regression_random_effect = HSSM(
         data=data_ddm_reg,

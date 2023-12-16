@@ -1,5 +1,7 @@
 import hssm
 
+hssm.set_floatX("float32")
+
 
 def test_sample_posterior_predictive(cav_idata, cavanagh_test):
     model = hssm.HSSM(

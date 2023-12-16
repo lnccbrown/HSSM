@@ -28,6 +28,8 @@ from hssm.plotting.quantile_probability import (
     plot_quantile_probability,
 )
 
+hssm.set_floatX("float32")
+
 
 def test__get_title():
     assert _get_title(("a"), ("b")) == "a = b"

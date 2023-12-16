@@ -12,6 +12,7 @@ nav:
   - Getting Started:
       - Installation: getting_started/installation.md
       - Getting started: getting_started/getting_started.ipynb
+      - Hierarchical modeling: getting_started/hierarchical_modeling.ipynb
   - API References:
       - hssm: api/hssm.md
       - hssm.plotting: api/plotting.md
@@ -33,6 +34,7 @@ plugins:
       execute: true
       execute_ignore:
         - getting_started/getting_started.ipynb
+        - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
         - tutorials/likelihoods.ipynb
         - .ipynb_checkpoints/*.ipynb
@@ -126,5 +128,5 @@ markdown_extensions:
   - pymdownx.superfences
   - attr_list
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg

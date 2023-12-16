@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.x
+
+### 0.2.0
+
+This is a major version update! Many changes have taken place in this version:
+
+#### Breaking changes
+
+When `hierarchical` argument of `hssm.HSSM` is set to `True`, HSSM will look into the
+`data` provided for the `participant_id` field. If it does not exist, an error will
+be thrown.
+
+### New features
+
+- Added `link_settings` and `prior_settings` arguments to `hssm.HSSM`, which allows HSSM
+  to use intelligent default priors and link functions for complex hierarchical models.
+
+- Added an `hssm.plotting` submodule with `plot_posterior_predictive()` and
+  `plot_quantile_probability` for creating posterior predictive plots and quantile
+  probability plots.
+
+- Added an `extra_fields` argument to `hssm.HSSM` to pass additional data to the
+  likelihood function computation.
+
+- Limited `PyMC`, `pytensor`, `numpy`, and `jax` dependency versions for compatibility.
+
 ## 0.1.x
 
 ### 0.1.5
@@ -8,8 +34,8 @@ We fixed the errors in v0.1.4. Sorry for the convenience! If you have accidental
 downloaded v0.1.4, please make sure that you update hssm to the current version.
 
 - We made Cython dependencies of this package available via pypi. We have also built
-wheels for (almost) all platforms so there is no need to build these Cython
-dependencies.
+  wheels for (almost) all platforms so there is no need to build these Cython
+  dependencies.
 
 ### 0.1.4
 

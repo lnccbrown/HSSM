@@ -4,6 +4,8 @@ import pytest
 import hssm
 from hssm.config import Config, ModelConfig
 
+hssm.set_floatX("float32")
+
 
 def test_from_defaults():
     # Case 1: Has default prior

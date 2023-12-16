@@ -7,9 +7,10 @@ import pytensor
 import pytensor.tensor as pt
 import pytest
 
+import hssm
 from hssm.distribution_utils.onnx import *
 
-pytensor.config.floatX = "float32"
+hssm.set_floatX("float32")
 DECIMAL = 4
 
 

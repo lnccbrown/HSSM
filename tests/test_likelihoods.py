@@ -9,9 +9,13 @@ import numpy as np
 import pytest
 from numpy.random import rand
 
+import hssm
+
 # pylint: disable=C0413
 from hssm.likelihoods.analytical import compare_k, logp_ddm, logp_ddm_sdv
 from hssm.likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox
+
+hssm.set_floatX("float32")
 
 
 def test_kterm(data_ddm):
