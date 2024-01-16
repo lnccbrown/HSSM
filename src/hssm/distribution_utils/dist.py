@@ -29,7 +29,7 @@ LogLikeGrad = Callable[..., ArrayLike]
 
 _logger = logging.getLogger("hssm")
 
-OUT_OF_BOUNDS_VAL = pm.floatX(-66.1)
+LOGP_LB = pm.floatX(-66.1)
 
 
 def apply_param_bounds_to_loglik(
@@ -71,9 +71,49 @@ def apply_param_bounds_to_loglik(
         param_mask = pt.bitwise_or(pt.lt(param, lower_bound), pt.gt(param, upper_bound))
         out_of_bounds_mask = pt.bitwise_or(out_of_bounds_mask, param_mask)
 
-    logp = pt.where(out_of_bounds_mask, OUT_OF_BOUNDS_VAL, logp)
+    logp = pt.where(out_of_bounds_mask, LOGP_LB, logp)
 
     return logp
+
+
+def ensure_positive_ndt(data, logp, list_params, dist_params):
+    """Ensure that the non-decision time is always positive.
+
+    Replaces the log probability of the model with a lower bound if the non-decision
+    time is not positive.
+
+    Parameters
+    ----------
+    data
+        A two-column numpy array with response time and response.
+    logp
+        The log-likelihoods.
+    list_params
+        A list of parameters that the log-likelihood accepts. The order of the
+        parameters in the list will determine the order in which the parameters
+        are passed to the log-likelihood function.
+    dist_params
+        A list of parameters used in the likelihood computation. The parameters
+        can be both scalars and arrays.
+
+    Returns
+    -------
+    float
+        The log-likelihood of the model.
+    """
+    rt = data[:, 0]
+
+    if "t" not in list_params:
+        return logp
+
+    t = dist_params[list_params.index("t")]
+
+    return pt.where(
+        # consistent with the epsilon in the analytical likelihood
+        rt - t <= 1e-15,
+        LOGP_LB,
+        logp,
+    )
 
 
 def make_ssm_rv(
@@ -404,12 +444,14 @@ def make_distribution(
             else:
                 logp = loglik(data, *dist_params, *extra_fields)
 
-            if bounds is None:
-                return logp
+            if bounds is not None:
+                logp = apply_param_bounds_to_loglik(
+                    logp, list_params, *dist_params, bounds=bounds
+                )
 
-            return apply_param_bounds_to_loglik(
-                logp, list_params, *dist_params, bounds=bounds
-            )
+            # Ensure that non-decision time is always smaller than rt.
+            # Assuming that the non-decision time parameter is always named "t".
+            return ensure_positive_ndt(data, logp, list_params, dist_params)
 
     return SSMDistribution
 
