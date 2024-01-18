@@ -31,13 +31,13 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 ## Installation
 
-`hssm` is available through PyPI. You can install it with Pip via:
+`hssm` is available through PyPI. You can install it with pip via:
 
 ```
 pip install hssm
 ```
 
-You can also install the bleeding edge version of `hssm` directly from this repo:
+You can also install the bleeding-edge version of `hssm` directly from this repo:
 
 ```
 pip install git+https://github.com/lnccbrown/HSSM.git
@@ -51,7 +51,7 @@ for more detailed instructions.
 [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an
 environment manager with Python 3.10~3.11 to prevent any problems with dependencies
 during the installation process. Please note that hssm is tested for python 3.10,
-3.11. As of HSSM v0.1.6, support for Python 3.9 is dropped. Use other python
+3.11. As of HSSM v0.2.0, support for Python 3.9 is dropped. Use other python
 versions with caution.
 
 ## Example

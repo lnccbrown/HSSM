@@ -15,7 +15,6 @@
 
 **HSSM** (Hierarchical Sequential Sampling Modeling) is a modern Python toolbox that provides state-of-the-art likelihood approximation methods within the Python Bayesian ecosystem. It facilitates hierarchical model building and inference via fast and robust MCMC samplers. User-friendly, extensible, and flexible, HSSM can rigorously estimate the impact of neural and other trial-by-trial covariates through parameter-wise mixed-effects models for a large variety of cognitive process models.
 
-
 HSSM is a [BRAINSTORM](https://ccbs.carney.brown.edu/brainstorm) project in collaboration with the [Center for Computation and Visualization (CCV)](https://ccv.brown.edu/) and the [Center for Computational Brain Science](https://ccbs.carney.brown.edu/) within the [Carney Institute at Brown University](https://www.brown.edu/carney/).
 
 ## Features
@@ -30,7 +29,7 @@ HSSM is a [BRAINSTORM](https://ccbs.carney.brown.edu/brainstorm) project in coll
 
 ## Installation
 
-`hssm` is available through PyPI. You can install it with Pip via:
+`hssm` is available through PyPI. You can install it with pip via:
 
 ```bash
 pip install hssm
@@ -50,9 +49,8 @@ For more detailed guidance, please check out our [installation guide](getting_st
     [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an
     environment manager with Python 3.10~3.11 to prevent any problems with dependencies
     during the installation process. Please note that hssm is tested for python 3.10,
-    3.11. As of HSSM v0.1.6, support for Python 3.9 is dropped. Use other python
+    3.11. As of HSSM v0.2.0, support for Python 3.9 is dropped. Use other python
     versions with caution.
-
 
 ### Setting global float type
 
