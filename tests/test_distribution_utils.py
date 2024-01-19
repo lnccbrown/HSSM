@@ -6,7 +6,11 @@ import pytensor.tensor as pt
 
 import hssm
 from hssm import distribution_utils
-from hssm.distribution_utils.dist import apply_param_bounds_to_loglik, make_distribution
+from hssm.distribution_utils.dist import (
+    apply_param_bounds_to_loglik,
+    make_distribution,
+    ensure_positive_ndt,
+)
 from hssm.likelihoods.analytical import logp_ddm, DDM
 
 hssm.set_floatX("float32")
@@ -123,9 +127,10 @@ def test_apply_param_bounds_to_loglik():
 def test_make_distribution():
     def fake_logp_function(data, param1, param2):
         """Make up a fake log likelihood function for this test only."""
-        return data * param1 * param2
+        return data[:, 0] * param1 * param2
 
-    data = np.random.normal(size=1000)
+    data = np.zeros((1000, 2))
+    data[:, 0] = np.random.normal(size=1000)
     bounds = {"param1": [-1.0, 1.0], "param2": [-1.0, 1.0]}
 
     Dist = make_distribution(
@@ -143,7 +148,7 @@ def test_make_distribution():
 
     np.testing.assert_array_equal(
         Dist.logp(data, scalar_in_bound, scalar_in_bound).eval(),
-        data * scalar_in_bound * scalar_in_bound,
+        data[:, 0] * scalar_in_bound * scalar_in_bound,
     )
 
     np.testing.assert_array_equal(
@@ -157,7 +162,7 @@ def test_make_distribution():
 
     np.testing.assert_array_equal(
         results_vector[~out_of_bound_indices],
-        data[~out_of_bound_indices]
+        data[:, 0][~out_of_bound_indices]
         * scalar_in_bound
         * random_vector[~out_of_bound_indices],
     )
@@ -227,3 +232,19 @@ def test_extra_fields(data_ddm):
         ).eval(),
         ddm_model_p_logp_lapse.eval(),
     )
+
+
+def test_ensure_positive_ndt():
+    data = np.zeros((1000, 2))
+    data[:, 0] = np.random.uniform(size=1000)
+
+    logp = np.random.uniform(size=1000)
+
+    list_params = ["v", "a", "z", "t"]
+    dist_params = [0.5] * 4
+
+    after_replacement = ensure_positive_ndt(data, logp, list_params, dist_params).eval()
+    mask = data[:, 0] - 0.5 <= 1e-15
+
+    assert np.all(after_replacement[mask] == np.array(-66.1))
+    assert np.all(after_replacement[~mask] == logp[~mask])

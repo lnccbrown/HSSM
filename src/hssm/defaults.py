@@ -251,7 +251,7 @@ default_model_config: DefaultConfigs = {
         },
     },
     "race_no_bias_angle_4": {
-        "list_params": ["v0", "v1", "v2", "v3", "a", "z", "ndt", "theta"],
+        "list_params": ["v0", "v1", "v2", "v3", "a", "z", "t", "theta"],
         "description": None,
         "likelihoods": {
             "approx_differentiable": {
@@ -265,7 +265,7 @@ default_model_config: DefaultConfigs = {
                     "v3": (0.0, 2.5),
                     "a": (1.0, 3.0),
                     "z": (0.0, 0.9),
-                    "ndt": (0.0, 2.0),
+                    "t": (0.0, 2.0),
                     "theta": (-0.1, 1.45),
                 },
                 "extra_fields": None,
