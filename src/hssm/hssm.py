@@ -28,6 +28,7 @@ from bambi.transformations import transformations_namespace
 
 from hssm.defaults import (
     LoglikKind,
+    MissingDataNetwork,
     SupportedModels,
 )
 from hssm.distribution_utils import (
@@ -219,9 +220,17 @@ class HSSM:
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = None,
         extra_namespace: dict[str, Any] | None = None,
+        missing_data: bool = False,
+        deadline: bool = False,
+        na_value: float = -999.0,
+        loglik_missing_data: str
+        | PathLike
+        | Callable
+        | pytensor.graph.Op
+        | None = None,
         **kwargs,
     ):
-        self.data = data
+        self.data = data.copy()
         self._inference_obj = None
         self.hierarchical = hierarchical
 
@@ -241,6 +250,15 @@ class HSSM:
         if extra_namespace is not None:
             additional_namespace.update(extra_namespace)
         self.additional_namespace = additional_namespace
+
+        # Update data based on missing_data and deadline
+        self.data = self._handle_missing_data_and_deadline(
+            self.data, missing_data, deadline, na_value
+        )
+        # Set self.missing_data_network based on `missing_data` and `deadline`
+        self.missing_data_network = _set_missing_data_and_deadline(
+            missing_data, deadline
+        )
 
         responses = self.data["response"].unique().astype(int)
         self.n_responses = len(responses)
@@ -1180,3 +1198,82 @@ class HSSM:
         if "rt,response_mean" in idata["posterior"].data_vars:
             var_names.append("~rt,response_mean")
         return var_names
+
+    def _handle_missing_data_and_deadline(
+        self, data: pd.DataFrame, missing_data: bool, deadline: bool, na_value: float
+    ) -> pd.DataFrame:
+        """Handle missing data and deadline."""
+        if not missing_data:
+            if pd.isna(na_value):
+                na_dropped = data.dropna(subset=["rt"])
+            else:
+                na_dropped = data.loc[data["rt"] != na_value, :]
+
+            if len(na_dropped) != len(data):
+                _logger.warn(
+                    "`missing_data` is set to False, "
+                    + "but you have missing data in your dataset. "
+                    + "Missing data will be dropped."
+                )
+            data = na_dropped
+
+            _check_data_after_processing(data, filter=False)
+        else:
+            # Create a shallow copy to avoid modifying the original dataframe
+            if pd.isna(na_value):
+                data["rt"] = data["rt"].fillna(-999.0)
+            else:
+                data["rt"] = data["rt"].replace(na_value, -999.0)
+
+            _check_data_after_processing(data, filter=True)
+
+        if deadline:
+            if "deadline" not in data.columns:
+                raise ValueError(
+                    "You have set `deadline` to True, but `deadline` is not found in "
+                    + "your dataset."
+                )
+            else:
+                data["rt"] = np.where(data["rt"] < data["deadline"], data["rt"], -999.0)
+
+        return data
+
+
+def _set_missing_data_and_deadline(
+    missing_data: bool, deadline: bool
+) -> MissingDataNetwork:
+    """Set missing data and deadline."""
+    if not missing_data and not deadline:
+        network = MissingDataNetwork.NONE
+    elif missing_data and not deadline:
+        network = MissingDataNetwork.CPN
+    elif not missing_data and deadline:
+        network = MissingDataNetwork.OPN
+    else:
+        network = MissingDataNetwork.OPN_WITH_MISSING_DATA
+
+    return network
+
+
+def _check_data_after_processing(data: pd.DataFrame, filter: bool = False):
+    """Check if their is still missing data is after processing."""
+    if filter:
+        data = data.loc[data["rt"] != -999.0, :]
+
+    filter_exp = (
+        "besides the `na_value` that you specified"
+        if filter
+        else "after dropping the missing data"
+    )
+
+    if np.any(data["rt"] < 0):
+        raise ValueError(
+            f"You have negative reaction times in your dataset {filter_exp}. "
+            + "Please ensure that all reaction times are non-negative."
+        )
+
+    if np.any(data["rt"].isna()):
+        raise ValueError(
+            f"You have NaNs in your dataset {filter_exp}. "
+            + "Please ensure that there are no missing reaction times."
+        )

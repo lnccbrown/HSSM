@@ -1,4 +1,5 @@
 """Provide default configurations for models in the HSSM class."""
+from enum import Enum
 from os import PathLike
 from typing import Callable, Literal, Optional, TypedDict, Union
 
@@ -46,6 +47,15 @@ class LoglikConfig(TypedDict):
 
 
 LoglikConfigs = dict[LoglikKind, LoglikConfig]
+
+
+class MissingDataNetwork(Enum):
+    """Enum for the missing data network."""
+
+    NONE = 0
+    CPN = 1
+    OPN = 2
+    OPN_WITH_MISSING_DATA = 3
 
 
 class DefaultConfig(TypedDict):
