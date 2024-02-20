@@ -15,7 +15,7 @@ repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
+python = ">=3.10,<3.13"
 pymc = "^5.9.0"
 scipy = "1.10.1"
 arviz = "^0.14.0"
