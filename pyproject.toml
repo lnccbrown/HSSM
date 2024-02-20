@@ -25,7 +25,6 @@ jax = "^0.4.0,<0.4.16"
 jaxlib = ">=0.4.0,<0.4.16"
 ssm-simulators = "0.6.1"
 huggingface-hub = "^0.15.1"
-onnxruntime = "^1.15.0"
 bambi = "^0.12.0"
 numpyro = "^0.12.1"
 hddm-wfpt = "^0.1.1"
@@ -46,6 +45,7 @@ mkdocs-material = "^9.1.17"
 mkdocstrings-python = "^1.1.2"
 mkdocs-jupyter = "^0.24.1"
 graphviz = "^0.20.1"
+onnxruntime = "^1.15.0"
 
 [tool.black]
 line-length = 88
