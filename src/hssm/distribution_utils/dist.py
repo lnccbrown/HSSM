@@ -7,7 +7,8 @@ generation ops.
 
 import logging
 from os import PathLike
-from typing import Any, Callable, Type
+from pathlib import Path
+from typing import Any, Callable, Literal, Type
 
 import bambi as bmb
 import numpy as np
@@ -17,12 +18,18 @@ import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
 from numpy.typing import ArrayLike
-from pytensor.graph.op import Apply, Op
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
 
-from .onnx import make_jax_logp_funcs_from_onnx, make_jax_logp_ops, make_pytensor_logp
+from ..utils import download_hf
+from .blackbox import make_blackbox_op
+from .onnx import (
+    make_jax_logp_funcs_from_onnx,
+    make_jax_logp_ops,
+    make_jax_logp_ops_no_data,
+    make_pytensor_logp,
+)
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
@@ -456,95 +463,6 @@ def make_distribution(
     return SSMDistribution
 
 
-def make_distribution_from_onnx(
-    rv: str | Type[RandomVariable],
-    list_params: list[str],
-    onnx_model: str | PathLike | onnx.ModelProto,
-    backend: str = "jax",
-    bounds: dict | None = None,
-    params_is_reg: list[bool] | None = None,
-    lapse: bmb.Prior | None = None,
-    extra_fields: list[np.ndarray] | None = None,
-) -> Type[pm.Distribution]:
-    """Make a PyMC distribution from an ONNX model.
-
-    Produces a PyMC distribution that uses the provided base or ONNX model as
-    its log-likelihood function.
-
-    Parameters
-    ----------
-    rv
-        A RandomVariable Op (a class, not an instance) or a string indicating the model.
-        If a string, a RandomVariable class will be created automatically with its
-        `rng_fn` class method generated using the simulator identified with this string
-        from the `ssm_simulators` package. If the string is not one of the supported
-        models in the `ssm_simulators` package, a warning will be raised, and any
-        attempt to sample from the RandomVariable will result in an error.
-    list_params
-        A list of the names of the parameters following the order of how they are fed
-        to the network.
-    onnx_model
-        The path of the ONNX model, or one already loaded in memory.
-    backend
-        Whether to use "pytensor" or "jax" as the backend of the log-likelihood
-        computation. If `jax`, the function will be wrapped in an pytensor Op.
-    bounds : optional
-        A dictionary with parameters as keys (a string) and its boundaries
-        as values.Example: {"parameter": (lower_boundary, upper_boundary)}.
-    params_is_reg : optional
-        A list of booleans indicating whether each parameter in the
-        corresponding position in `list_params` is a regression.
-    lapse : optional
-        A bmb.Prior object representing the lapse distribution.
-    extra_fields : optional
-        An optional list of arrays that are stored in the class created and will be
-        used in likelihood calculation. Defaults to None.
-
-    Returns
-    -------
-    Type[pm.Distribution]
-        A PyMC Distribution class that uses the ONNX model as its log-likelihood
-        function.
-    """
-    if isinstance(onnx_model, (str, PathLike)):
-        onnx_model = onnx.load(str(onnx_model))
-    if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp(onnx_model)
-        return make_distribution(
-            rv,
-            lan_logp_pt,
-            list_params,
-            bounds=bounds,
-            lapse=lapse,
-            extra_fields=extra_fields,
-        )
-    if backend == "jax":
-        if params_is_reg is None:
-            params_is_reg = [False for param in list_params if param != "p_outlier"]
-
-        # Extra fields are passed to the likelihood functions as vectors
-        # They do not need to be broadcast, so param_is_reg is padded with True
-        if extra_fields:
-            params_is_reg += [True for _ in extra_fields]
-
-        logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
-            onnx_model,
-            params_is_reg,
-        )
-        lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
-
-        return make_distribution(
-            rv,
-            lan_logp_jax,
-            list_params,
-            bounds=bounds,
-            lapse=lapse,
-            extra_fields=extra_fields,
-        )
-
-    raise ValueError("Currently only 'pytensor' and 'jax' backends are supported.")
-
-
 def make_family(
     dist: Type[pm.Distribution],
     list_params: list[str],
@@ -592,109 +510,87 @@ class SSMFamily(bmb.Family):
         return np.arange(2)
 
 
-def make_blackbox_op(logp: Callable) -> Op:
-    """Wrap an arbitrary function in a pytensor Op.
+def make_likelihood_callable(
+    loglik: pytensor.graph.Op | Callable | PathLike | str,
+    loglik_kind: Literal["analytical", "approx_differentiable", "blackbox"],
+    backend: Literal["pytensor", "jax", "cython", "other"] | None,
+    params_is_reg: list[bool] | None = None,
+    data_dim: int = 2,
+) -> pytensor.graph.Op | Callable:
+    """Make a callable for the likelihood function.
+
+    This function is intended to be general to support different kinds of likelihood
+    functions.
 
     Parameters
     ----------
-    logp
-        A python function that represents the log-likelihood function. The function
-        needs to have signature of logp(data, *dist_params) where `data` is a
-        two-column numpy array and `dist_params`represents all parameters passed to the
-        function.
-
-    Returns
-    -------
-    Op
-        An pytensor op that wraps the log-likelihood function.
-    """
-
-    class BlackBoxOp(Op):  # pylint: disable=W0223
-        """Wraps an arbitrary function in a pytensor Op."""
-
-        def make_node(self, data, *dist_params):
-            """Take the inputs to the Op and puts them in a list.
-
-            Also specifies the output types in a list, then feed them to the Apply node.
-
-            Parameters
-            ----------
-            data
-                A two-column numpy array with response time and response.
-            dist_params
-                A list of parameters used in the likelihood computation. The parameters
-                can be both scalars and arrays.
-            """
-            inputs = [
-                pt.as_tensor_variable(data),
-            ] + [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
-
-            outputs = [pt.vector()]
-
-            return Apply(self, inputs, outputs)
-
-        def perform(self, node, inputs, output_storage):
-            """Perform the Apply node.
-
-            Parameters
-            ----------
-            inputs
-                This is a list of data from which the values stored in
-                output_storage are to be computed using non-symbolic language.
-            output_storage
-                This is a list of storage cells where the output
-                is to be stored. A storage cell is a one-element list. It is
-                forbidden to change the length of the list(s) contained in
-                output_storage. There is one storage cell for each output of
-                the Op.
-            """
-            result = logp(*inputs)
-            output_storage[0][0] = np.asarray(result, dtype=node.outputs[0].dtype)
-
-    blackbox_op = BlackBoxOp()
-    return blackbox_op
-
-
-def make_distribution_from_blackbox(
-    rv: str | Type[RandomVariable],
-    loglik: Callable,
-    list_params: list[str],
-    bounds: dict | None = None,
-    extra_fields: list[np.ndarray] | None = None,
-) -> Type[pm.Distribution]:
-    """Make a `pymc.Distribution`.
-
-    Constructs a `pymc.Distribution` from a blackbox likelihood function
-
-    Parameters
-    ----------
-    rv
-        A RandomVariable Op (a class, not an instance) or a string indicating the model.
-        If a string, a RandomVariable class will be created automatically with its
-        `rng_fn` class method generated using the simulator identified with this string
-        from the `ssm_simulators` package. If the string is not one of the supported
-        models in the `ssm_simulators` package, a warning will be raised, and any
-        attempt to sample from the RandomVariable will result in an error.
     loglik
-        A loglikelihood function. It can be any Callable in Python.
-    list_params
-        A list of parameters that the log-likelihood accepts. The order of the
-        parameters in the list will determine the order in which the parameters
-        are passed to the log-likelihood function.
-    bounds : optional
-        A dictionary with parameters as keys (a string) and its boundaries as values.
-        Example: {"parameter": (lower_boundary, upper_boundary)}.
-    extra_fields : optional
-        An optional list of arrays that are stored in the class created and will be
-        used in likelihood calculation. Defaults to None.
-
-    Returns
-    -------
-    Type[pm.Distribution]
-        A pymc.Distribution that uses the log-likelihood function.
+        The log-likelihood function. It can be a string, a path to an ONNX model, a
+        pytensor Op, or a python function.
+    loglik_kind
+        The kind of the log-likelihood for the model. This parameter controls
+        how the likelihood function is wrapped.
+    backend : Optional
+        The backend to use for the log-likelihood function.
     """
-    blackbox_op = make_blackbox_op(loglik)
+    if isinstance(loglik, pytensor.graph.Op):
+        return loglik
 
-    return make_distribution(
-        rv, blackbox_op, list_params, bounds, extra_fields=extra_fields
-    )
+    if callable(loglik):
+        # In the analytical case, if `backend` is None or `pytensor`, we can use the
+        # callable directly. Otherwise, we wrap it in a BlackBoxOp.
+        if loglik_kind == "analytical":
+            if backend is None or backend == "pytensor":
+                return loglik
+            return make_blackbox_op(loglik, data_dim)
+
+        # In the approx_differentiable case or the blackbox case, unless the backend
+        # is `pytensor`, we wrap the callable in a BlackBoxOp.
+        if backend == "pytensor":
+            return loglik
+            # In all other cases, we assume that the callable cannot be directly
+            # used in the backend and thus we wrap it in a BlackBoxOp
+        return make_blackbox_op(loglik, data_dim)
+
+    # Other cases, when `loglik` is a string or a PathLike.
+    if loglik_kind != "approx_differentiable":
+        raise ValueError(
+            "You set `loglik_kind` to `approx_differentiable "
+            + "but did not provide a pm.Distribution, an Op, or a callable "
+            + "as `loglik`."
+        )
+
+    if backend is None or backend not in ["pytensor", "jax"]:
+        raise ValueError(
+            "You set `loglik_kind` to `approx_differentiable` "
+            + "but did not provide `pytensor` or `jax` as backend."
+        )
+
+    if params_is_reg is None:
+        raise ValueError(
+            "You set `loglik_kind` to `approx_differentiable` "
+            + "but did not provide `params_is_reg`."
+        )
+
+    if isinstance(loglik, (str, PathLike)):
+        if not Path(loglik).exists():
+            loglik = download_hf(str(loglik))
+
+    onnx_model = onnx.load(str(loglik))
+
+    if backend == "pytensor":
+        lan_logp_pt = make_pytensor_logp(onnx_model, data_dim)
+        return lan_logp_pt
+    if backend == "jax":
+        logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
+            onnx_model,
+            params_is_reg,
+            data_dim,
+        )
+        if data_dim == 0:
+            lan_logp_jax = make_jax_logp_ops_no_data(logp, logp_grad, logp_nojit)
+        else:
+            lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+        return lan_logp_jax
+
+    raise ValueError("Incorrect likelihood specification.")

@@ -27,6 +27,7 @@ LogLikeGrad = Callable[..., ArrayLike]
 def make_jax_logp_funcs_from_onnx(
     model: str | PathLike | onnx.ModelProto,
     params_is_reg: list[bool],
+    data_dim: int = 2,
 ) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]:
     """Make a jax function and its Vector-Jacobian Product from an ONNX Model.
 
@@ -50,6 +51,63 @@ def make_jax_logp_funcs_from_onnx(
     loaded_model = (
         onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
     )
+
+    if data_dim == 0:
+
+        def logp_no_data(*dist_params: float) -> float:
+            """Compute the log-likelihood.
+
+            A function that computes the element-wise log-likelihoods given one
+            data point and arbitrary numbers of parameters as scalars.
+
+            Parameters
+            ----------
+            data
+                A 1-D length 2 array with response time and response that
+                represents one data point
+            dist_params
+                A list of parameters used in the likelihood computation.
+
+            Returns
+            -------
+            float
+                The element-wise log-likelihoods.
+            """
+            # Makes a matrix to feed to the LAN model
+            input_vector = jnp.array(dist_params)
+
+            return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
+
+        # The vectorization of the logp function
+        vmap_logp_no_data = vmap(
+            logp_no_data,
+            in_axes=[0 if is_regression else None for is_regression in params_is_reg],
+        )
+
+        def vjp_vmap_logp_no_data(
+            *dist_params: list[float | ArrayLike], gz: ArrayLike
+        ) -> list[ArrayLike]:
+            """Compute the VJP of the log-likelihood function.
+
+            Parameters
+            ----------
+            data
+                A two-column numpy array with response time and response.
+            dist_params
+                A list of parameters used in the likelihood computation.
+            gz
+                The value of vmap_logp at which the VJP is evaluated, typically is just
+                vmap_logp(data, *dist_params)
+
+            Returns
+            -------
+            list[ArrayLike]
+                The VJP of the log-likelihood function computed at gz.
+            """
+            _, vjp_fn = vjp(vmap_logp_no_data, *dist_params)
+            return vjp_fn(gz)[1:]
+
+        return jit(vmap_logp_no_data), jit(vjp_vmap_logp_no_data), vmap_logp_no_data
 
     def logp(data: np.ndarray, *dist_params: float) -> float:
         """Compute the log-likelihood.
@@ -253,8 +311,147 @@ def make_jax_logp_ops(
     return lan_logp_op
 
 
+def make_jax_logp_ops_no_data(
+    logp: LogLikeFunc,
+    logp_vjp: LogLikeGrad,
+    logp_nojit: LogLikeFunc,
+) -> Op:
+    """Wrap the JAX functions and its gradient in pytensor Ops.
+
+    Parameters
+    ----------
+    logp
+        A JAX function that represents the feed-forward operation of the LAN
+        network.
+    logp_vjp
+        The Jax function that calculates the VJP of the logp function.
+    logp_nojit
+        The non-jit version of logp.
+
+    Returns
+    -------
+    Op
+        An pytensor op that wraps the feed-forward operation and can be used with
+        pytensor.grad.
+    """
+
+    class LANLogpOp_No_Data(Op):  # pylint: disable=W0223
+        """Wraps a JAX function in an pytensor Op."""
+
+        def make_node(self, *dist_params):
+            """Take the inputs to the Op and puts them in a list.
+
+            Also specifies the output types in a list, then feed them to the Apply node.
+
+            Parameters
+            ----------
+            data
+                A two-column numpy array with response time and response.
+            dist_params
+                A list of parameters used in the likelihood computation. The parameters
+                can be both scalars and arrays.
+            """
+            inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
+
+            outputs = [pt.vector()]
+
+            return Apply(self, inputs, outputs)
+
+        def perform(self, node, inputs, output_storage):
+            """Perform the Apply node.
+
+            Parameters
+            ----------
+            inputs
+                This is a list of data from which the values stored in
+                output_storage are to be computed using non-symbolic language.
+            output_storage
+                This is a list of storage cells where the output
+                is to be stored. A storage cell is a one-element list. It is
+                forbidden to change the length of the list(s) contained in
+                output_storage. There is one storage cell for each output of
+                the Op.
+            """
+            result = logp(*inputs)
+            output_storage[0][0] = np.asarray(result, dtype=node.outputs[0].dtype)
+
+        def grad(self, inputs, output_gradients):
+            """Perform the pytensor.grad() operation.
+
+            Parameters
+            ----------
+            inputs
+                The same as the inputs produced in `make_node`.
+            output_gradients
+                Holds the results of the perform `perform` method.
+
+            Notes
+            -----
+                It should output the VJP of the Op. In other words, if this `Op`
+                outputs `y`, and the gradient at `y` is grad(x), the required output
+                is y*grad(x).
+            """
+            results = lan_logp_vjp_op_no_data(*inputs, gz=output_gradients[0])
+            output = results
+
+            return output
+
+    class LANLogpVJPOp_No_Data(Op):  # pylint: disable=W0223
+        """Wraps the VJP operation of a jax function in an pytensor op."""
+
+        def make_node(self, *dist_params, gz):
+            """Take the inputs to the Op and puts them in a list.
+
+            Also specifies the output types in a list, then feed them to the Apply node.
+
+            Parameters
+            ----------
+            data:
+                A two-column numpy array with response time and response.
+            dist_params:
+                A list of parameters used in the likelihood computation.
+            """
+            inputs = [
+                pt.as_tensor_variable(dist_param) for dist_param in dist_params
+            ] + [pt.as_tensor_variable(gz)]
+            outputs = [inp.type() for inp in inputs[:-1]]
+
+            return Apply(self, inputs, outputs)
+
+        def perform(self, node, inputs, outputs):
+            """Perform the Apply node.
+
+            Parameters
+            ----------
+            inputs
+                This is a list of data from which the values stored in
+                `output_storage` are to be computed using non-symbolic language.
+            output_storage
+                This is a list of storage cells where the output
+                is to be stored. A storage cell is a one-element list. It is
+                forbidden to change the length of the list(s) contained in
+                output_storage. There is one storage cell for each output of
+                the Op.
+            """
+            results = logp_vjp(*inputs[:-1], gz=inputs[-1])
+
+            for i, result in enumerate(results):
+                outputs[i][0] = np.asarray(result, dtype=node.outputs[i].dtype)
+
+    lan_logp_op_no_data = LANLogpOp_No_Data()
+    lan_logp_vjp_op_no_data = LANLogpVJPOp_No_Data()
+
+    # Unwraps the JAX function for sampling with JAX backend.
+    @jax_funcify.register(LANLogpOp_No_Data)
+    def logp_op_dispatch(op, **kwargs):  # pylint: disable=W0612,W0613
+        return logp_nojit
+
+    return lan_logp_op_no_data
+
+
 def make_pytensor_logp(
     model: str | PathLike | onnx.ModelProto,
+    data_dim: int = 2,
 ) -> Callable[..., ArrayLike]:
     """Convert onnx model file to pytensor.
 
@@ -280,14 +477,14 @@ def make_pytensor_logp(
 
     def logp(data: np.ndarray, *dist_params: list[float | ArrayLike]) -> ArrayLike:
         # Specify input layer of MLP
-        data = data.reshape((-1, 2))
-        inputs = pt.zeros((data.shape[0], len(dist_params) + 2))
+        data = data.reshape((-1, data_dim)) if data_dim > 1 else data
+        inputs = pt.zeros((data.shape[0], len(dist_params) + data_dim))
         for i, dist_param in enumerate(dist_params):
             inputs = pt.set_subtensor(
                 inputs[:, i],
                 dist_param,
             )
-        inputs = pt.set_subtensor(inputs[:, -2:], data)
+        inputs = pt.set_subtensor(inputs[:, -data_dim:], data)
 
         # Returns elementwise log-likelihoods
         return pt.squeeze(pt_interpret_onnx(loaded_model.graph, inputs)[0])

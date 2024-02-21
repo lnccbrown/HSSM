@@ -10,7 +10,6 @@ import logging
 from copy import deepcopy
 from inspect import isclass
 from os import PathLike
-from pathlib import Path
 from typing import Any, Callable, Literal
 
 import arviz as az
@@ -32,10 +31,9 @@ from hssm.defaults import (
     SupportedModels,
 )
 from hssm.distribution_utils import (
-    make_blackbox_op,
     make_distribution,
-    make_distribution_from_onnx,
     make_family,
+    make_likelihood_callable,
 )
 from hssm.param import (
     Param,
@@ -47,7 +45,6 @@ from hssm.utils import (
     _print_prior,
     _process_param_in_kwargs,
     _random_sample,
-    download_hf,
 )
 
 from . import plotting
@@ -1133,57 +1130,34 @@ class HSSM:
             return self.loglik
         # If the user has provided an Op
         # Wrap it around with a distribution
-        if isinstance(self.loglik, pytensor.graph.Op):
-            return make_distribution(
-                rv=self.model_config.rv or self.model_name,
+
+        if self.loglik_kind == "approx_differentiable":
+            params_is_reg = [
+                param.is_regression
+                for param_name, param in self.params.items()
+                if param_name != "p_outlier"
+            ]
+            if self.extra_fields is not None:
+                params_is_reg += [True for _ in self.extra_fields]
+
+            likelihood_callable = make_likelihood_callable(
                 loglik=self.loglik,
-                list_params=self.list_params,
-                bounds=self.bounds,
-                lapse=self.lapse,
-                extra_fields=None
-                if not self.extra_fields
-                else [deepcopy(self.data[field].values) for field in self.extra_fields],
-            )  # type: ignore
-        # If the user has provided a callable (an arbitrary likelihood function)
-        # If `loglik_kind` is `blackbox`, wrap it in an op and then a distribution
-        # Otherwise, we assume that this function is differentiable with `pytensor`
-        # and wrap it directly in a distribution.
-        if callable(self.loglik):
-            if self.loglik_kind == "blackbox":
-                self.loglik = make_blackbox_op(self.loglik)
-            return make_distribution(
-                rv=self.model_config.rv or self.model_name,
-                loglik=self.loglik,
-                list_params=self.list_params,
-                bounds=self.bounds,
-                lapse=self.lapse,
-                extra_fields=None
-                if not self.extra_fields
-                else [deepcopy(self.data[field].values) for field in self.extra_fields],
-            )  # type: ignore
-        # All other situations
-        if self.loglik_kind != "approx_differentiable":
-            raise ValueError(
-                "You set `loglik_kind` to `approx_differentiable "
-                + "but did not provide a pm.Distribution, an Op, or a callable "
-                + "as `loglik`."
+                loglik_kind="approx_differentiable",
+                backend=self.model_config.backend,
+                params_is_reg=params_is_reg,
             )
-        if isinstance(self.loglik, str):
-            if not Path(self.loglik).exists():
-                self.loglik = download_hf(self.loglik)
+        else:
+            likelihood_callable = make_likelihood_callable(
+                loglik=self.loglik,
+                loglik_kind=self.loglik_kind,
+                backend=self.model_config.backend,
+            )
 
-        params_is_reg = [
-            param.is_regression
-            for param_name, param in self.params.items()
-            if param_name != "p_outlier"
-        ]
-
-        return make_distribution_from_onnx(
+        self.loglik = likelihood_callable
+        return make_distribution(
             rv=self.model_config.rv or self.model_name,
-            onnx_model=self.loglik,
+            loglik=likelihood_callable,
             list_params=self.list_params,
-            backend=self.model_config.backend or "jax",
-            params_is_reg=params_is_reg,
             bounds=self.bounds,
             lapse=self.lapse,
             extra_fields=None

@@ -152,13 +152,6 @@ def test_model_definition_outside_include(data_ddm):
         HSSM(data_ddm, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
 
-def test_model_with_approx_differentiable_likelihood_type(data_angle):
-    loglik_kind = "approx_differentiable"
-    loglik = "angle.onnx"
-    model = HSSM(data=data_angle, model="angle", loglik_kind=loglik_kind, loglik=loglik)
-    assert model.loglik == download_hf(loglik)
-
-
 def test_sample_prior_predictive(data_ddm_reg):
     data_ddm_reg = data_ddm_reg.iloc[:10, :]
 
