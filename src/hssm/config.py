@@ -102,7 +102,7 @@ class Config:
                     description=default_config["description"],
                 )
 
-            return Config(model_name, loglik_kind)
+            return Config(model_name, loglik_kind, response=["rt", "response"])
 
     def update_loglik(self, loglik: Any | None) -> None:
         """Update the log-likelihood function from user input.

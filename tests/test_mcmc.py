@@ -121,7 +121,7 @@ def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expec
         },
     )
     param_reg_a = dict(
-        formula="v ~ 1 + x + y",
+        formula="a ~ 1 + x + y",
         prior={
             "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
             "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},

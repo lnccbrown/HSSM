@@ -38,7 +38,7 @@ def test_from_defaults():
     # Case 4: No supported model, provided loglik_kind
     config4 = Config.from_defaults("custom", "analytical")
     assert config4.model_name == "custom"
-    assert config4.response == None
+    assert config4.response == ["rt", "response"]
     assert config4.list_params is None
     assert config4.loglik_kind == "analytical"
     assert config4.loglik is None

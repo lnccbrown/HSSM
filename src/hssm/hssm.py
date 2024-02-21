@@ -1083,18 +1083,23 @@ class HSSM:
         for _, param in self.params.items():
             formula, prior, link = param.parse_bambi()
 
+            assert param.name is not None
+
             if param.is_parent:
                 # parent is not a regression
                 if formula is None:
                     parent_formula = f"{self.response_c} ~ 1"
-                    priors |= {self.response_c: {"Intercept": prior[param.name]}}
-                    links |= {self.response_c: "identity"}
+                    if prior is not None:
+                        priors |= {self.response_c: {"Intercept": prior[param.name]}}
+                    links |= {param.name: "identity"}
                 # parent is a regression
                 else:
                     right_side = formula.split(" ~ ")[1]
                     parent_formula = f"{self.response_c} ~ {right_side}"
-                    priors |= {self.response_c: prior[param.name]}
-                    links |= {self.response_c: link[param.name]}
+                    if prior is not None:
+                        priors |= {self.response_c: prior[param.name]}
+                    if link is not None:
+                        links |= link
             else:
                 # non-regression case
                 if formula is not None:
@@ -1108,8 +1113,6 @@ class HSSM:
         result_formula: bmb.Formula = bmb.Formula(parent_formula, *other_formulas)
         result_priors = None if not priors else priors
         result_links: dict | str = "identity" if not links else links
-
-        print(result_formula, result_priors, result_links)
 
         return result_formula, result_priors, result_links
 
