@@ -1,6 +1,7 @@
 """The Param utility class."""
 
 import logging
+import re
 from copy import deepcopy
 from typing import Any, Literal, Union, cast
 
@@ -11,9 +12,6 @@ from formulae import design_matrices
 
 from .link import Link
 from .prior import Prior, get_default_prior, get_hddm_default_prior
-
-# PEP604 union operator "|" not supported by pylint
-# Fall back to old syntax
 
 # Explicitly define types so they are more expressive
 # and reusable
@@ -425,25 +423,28 @@ class Param:
         # Again, to satisfy type checker
         # Equivalent to `if self.is_regression`
         if self.formula is not None:
-            left_side = "c(rt, response)" if self._is_parent else self.name
-
-            right_side = self.formula.split("~")[1]
-            right_side = right_side.strip()
+            split_formula = re.split(r"\s?~\s?", self.formula)[:2]
+            if len(split_formula) != 2:
+                raise ValueError(f"The formula is incorrect: {self.formula}.")
+            left_side, right_side = split_formula
+            if left_side != self.name:
+                raise ValueError(
+                    f"The parameter name {self.name} does not match the response "
+                    + f"variable in the formula: {self.formula}."
+                )
             formula = f"{left_side} ~ {right_side}"
 
             if self.prior is not None:
-                prior = {left_side: self.prior}
+                prior = {self.name: self.prior}
             link = {self.name: self.link}
 
             return formula, prior, link
 
-        formula = "c(rt, response) ~ 1" if self._is_parent else None
-
-        if self._is_parent:
-            prior = {"c(rt, response)": {"Intercept": self.prior}}
-            link = {self.name: "identity"}
-        else:
-            prior = {self.name: self.prior}  # type: ignore
+        assert self.name is not None
+        if self.prior is not None:
+            prior = {self.name: self.prior}
+        if self.link is not None:
+            link = {self.name: self.link}
 
         return formula, prior, link
 

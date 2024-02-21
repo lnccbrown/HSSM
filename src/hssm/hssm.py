@@ -43,11 +43,11 @@ from hssm.param import (
 )
 from hssm.utils import (
     HSSMModelGraph,
+    _get_alias_dict,
     _print_prior,
     _process_param_in_kwargs,
     _random_sample,
     download_hf,
-    get_alias_dict,
 )
 
 from . import plotting
@@ -251,15 +251,6 @@ class HSSM:
             additional_namespace.update(extra_namespace)
         self.additional_namespace = additional_namespace
 
-        # Update data based on missing_data and deadline
-        self.data = self._handle_missing_data_and_deadline(
-            self.data, missing_data, deadline, na_value
-        )
-        # Set self.missing_data_network based on `missing_data` and `deadline`
-        self.missing_data_network = _set_missing_data_and_deadline(
-            missing_data, deadline
-        )
-
         responses = self.data["response"].unique().astype(int)
         self.n_responses = len(responses)
         if self.n_responses == 2:
@@ -284,11 +275,24 @@ class HSSM:
         self.model_config.validate()
 
         # Set up shortcuts so old code will work
+        self.response = self.model_config.response
         self.list_params = self.model_config.list_params
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
+
+        # Update data based on missing_data and deadline
+        self.data = self._handle_missing_data_and_deadline(
+            self.data, missing_data, deadline, na_value
+        )
+        # Set self.missing_data_network based on `missing_data` and `deadline`
+        self.missing_data_network = _set_missing_data_and_deadline(
+            missing_data, deadline
+        )
+
+        if deadline:
+            self.response.append("deadline")
 
         self._check_extra_fields()
 
@@ -348,7 +352,10 @@ class HSSM:
             **other_kwargs,
         )
 
-        self._aliases = get_alias_dict(self.model, self._parent_param)
+        self._aliases = _get_alias_dict(
+            self.model, self._parent_param, self.response_c, self.response_str
+        )
+        print(self._aliases)
         self.set_alias(self._aliases)
 
     def sample(
@@ -611,6 +618,16 @@ class HSSM:
         self.model.set_alias(aliases)
         self.model.build()
 
+    @property
+    def response_c(self) -> str:
+        """Return the response variable names in c() format."""
+        return f"c({', '.join(self.response)})"
+
+    @property
+    def response_str(self) -> str:
+        """Return the response variable names in string format."""
+        return ",".join(self.response)
+
     # NOTE: can't annotate return type because the graphviz dependency is
     # optional
     def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
@@ -773,7 +790,7 @@ class HSSM:
         output.append(f"Model: {self.model_name}")
         output.append("")
 
-        output.append("Response variable: rt,response")
+        output.append(f"Response variable: {self.response_str}")
         output.append(f"Likelihood: {self.loglik_kind}")
         output.append(f"Observations: {len(self.data)}")
         output.append("")
@@ -784,7 +801,7 @@ class HSSM:
         for param in self.params.values():
             if param.name == "p_outlier":
                 continue
-            name = "c(rt, response)" if param.is_parent else param.name
+            name = self.response_c if param.is_parent else param.name
             output.append(f"{param.name}:")
 
             component = self.model.components[name]
@@ -1056,7 +1073,7 @@ class HSSM:
         """
         # Handle the edge case where list_params is empty:
         if not self.params:
-            return bmb.Formula("c(rt, response) ~ 1"), None, "identity"
+            return bmb.Formula(f"{self.response_c} ~ 1"), None, "identity"
 
         parent_formula = None
         other_formulas = []
@@ -1067,19 +1084,32 @@ class HSSM:
             formula, prior, link = param.parse_bambi()
 
             if param.is_parent:
-                parent_formula = formula
+                # parent is not a regression
+                if formula is None:
+                    parent_formula = f"{self.response_c} ~ 1"
+                    priors |= {self.response_c: {"Intercept": prior[param.name]}}
+                    links |= {self.response_c: "identity"}
+                # parent is a regression
+                else:
+                    right_side = formula.split(" ~ ")[1]
+                    parent_formula = f"{self.response_c} ~ {right_side}"
+                    priors |= {self.response_c: prior[param.name]}
+                    links |= {self.response_c: link[param.name]}
             else:
+                # non-regression case
                 if formula is not None:
                     other_formulas.append(formula)
-            if prior is not None:
-                priors |= prior
-            if link is not None:
-                links |= link
+                if prior is not None:
+                    priors |= prior
+                if link is not None:
+                    links |= link
 
         assert parent_formula is not None
         result_formula: bmb.Formula = bmb.Formula(parent_formula, *other_formulas)
         result_priors = None if not priors else priors
         result_links: dict | str = "identity" if not links else links
+
+        print(result_formula, result_priors, result_links)
 
         return result_formula, result_priors, result_links
 
@@ -1195,8 +1225,8 @@ class HSSM:
             if param.is_regression and not param.is_parent
         ]
 
-        if "rt,response_mean" in idata["posterior"].data_vars:
-            var_names.append("~rt,response_mean")
+        if f"{self.response_str}_mean" in idata["posterior"].data_vars:
+            var_names.append(f"~{self.response_str}_mean")
         return var_names
 
     def _handle_missing_data_and_deadline(

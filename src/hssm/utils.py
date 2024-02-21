@@ -62,7 +62,7 @@ def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
 
     Parameters
     ----------
-        parent: A Param object that represents a parent parameter.
+    parent: A Param object that represents a parent parameter.
 
     Returns
     -------
@@ -88,7 +88,9 @@ def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
     return result_dict
 
 
-def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
+def _get_alias_dict(
+    model: bmb.Model, parent: Param, response_c: str, response_str: str
+) -> dict[str, str | dict]:
     """Make a list of aliases.
 
     Iterates through a list of Param objects, and aliases a Bambi model's parameters
@@ -100,6 +102,10 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
         A Bambi model.
     parent
         The Param representation of the parent parameter.
+    response_c
+        The name of the response parameters in the c() format.
+    response_str
+        The name of the response parameters in the comma-separated format.
 
     Returns
     -------
@@ -109,7 +115,7 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
     parent_name = parent.name
 
     if len(model.distributional_components) == 1:
-        alias_dict: dict[str, Any] = {"c(rt, response)": "rt,response"}
+        alias_dict: dict[str, Any] = {response_c: response_str}
         if not parent.is_regression:
             alias_dict |= {"Intercept": parent_name}
         else:
@@ -119,19 +125,17 @@ def get_alias_dict(model: bmb.Model, parent: Param) -> dict[str, str | dict]:
                 ):
                     alias_dict |= {name: f"{parent_name}_{name}"}
     else:
-        alias_dict = {"c(rt, response)": {"c(rt, response)": "rt,response"}}
+        alias_dict = {response_c: {response_c: response_str}}
         for component_name, component in model.distributional_components.items():
             if component.response_kind == "data":
                 if not parent.is_regression:
-                    alias_dict["c(rt, response)"] |= {"Intercept": parent_name}
+                    alias_dict[response_c] |= {"Intercept": parent_name}
                 else:
                     for name, term in model.response_component.terms.items():
                         if isinstance(
                             term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
                         ):
-                            alias_dict["c(rt, response)"] |= {
-                                name: f"{parent_name}_{name}"
-                            }
+                            alias_dict[response_c] |= {name: f"{parent_name}_{name}"}
             else:
                 alias_dict[component_name] = {component_name: component_name}
 
@@ -220,8 +224,8 @@ class HSSMModelGraph(ModelGraph):
                     label=f"{self.parent.name}\n~\nDeterministic",
                     shape="box",
                 )
-                shape = fast_eval(self.model["rt,response"].shape)
-                plate_label = f"rt,response_obs({shape[0]})"
+                shape = fast_eval(self.model[self.response_str].shape)
+                plate_label = f"{self.response_str}_obs({shape[0]})"
 
                 sub.attr(
                     label=plate_label,
@@ -236,7 +240,7 @@ class HSSMModelGraph(ModelGraph):
                 if (
                     self.parent.is_regression
                     and parent.startswith(f"{self.parent.name}_")
-                    and child == "rt,response"
+                    and child == self.get_parent_names
                 ):
                     # Modify the edges so that they point to the
                     # parent parameter
@@ -245,7 +249,7 @@ class HSSMModelGraph(ModelGraph):
                     graph.edge(parent.replace(":", "&"), child.replace(":", "&"))
 
         if self.parent.is_regression:
-            graph.edge(self.parent.name, "rt,response")
+            graph.edge(self.parent.name, self.response_str)
 
         return graph
 
