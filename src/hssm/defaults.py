@@ -61,6 +61,7 @@ class MissingDataNetwork(Enum):
 class DefaultConfig(TypedDict):
     """Type for the value of DefaultConfig."""
 
+    response: list[str]
     list_params: list[str]
     description: Optional[str]
     likelihoods: LoglikConfigs
@@ -70,6 +71,7 @@ DefaultConfigs = dict[SupportedModels, DefaultConfig]
 
 default_model_config: DefaultConfigs = {
     "ddm": {
+        "response": ["rt", "response"],
         "list_params": ddm_params,
         "description": "The Drift Diffusion Model (DDM)",
         "likelihoods": {
@@ -114,6 +116,7 @@ default_model_config: DefaultConfigs = {
         },
     },
     "ddm_sdv": {
+        "response": ["rt", "response"],
         "list_params": ddm_sdv_params,
         "description": "The Drift Diffusion Model (DDM) with standard deviation for v",
         "likelihoods": {
@@ -165,6 +168,7 @@ default_model_config: DefaultConfigs = {
         },
     },
     "full_ddm": {
+        "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "t", "sv", "sz", "st"],
         "description": "The full Drift Diffusion Model (DDM)",
         "likelihoods": {
@@ -184,6 +188,7 @@ default_model_config: DefaultConfigs = {
         },
     },
     "angle": {
+        "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "t", "theta"],
         "description": None,
         "likelihoods": {
@@ -203,6 +208,7 @@ default_model_config: DefaultConfigs = {
         },
     },
     "levy": {
+        "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "alpha", "t"],
         "description": None,
         "likelihoods": {
@@ -222,6 +228,7 @@ default_model_config: DefaultConfigs = {
         },
     },
     "ornstein": {
+        "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "g", "t"],
         "description": None,
         "likelihoods": {
@@ -241,6 +248,7 @@ default_model_config: DefaultConfigs = {
         },
     },
     "weibull": {
+        "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "t", "alpha", "beta"],
         "description": None,
         "likelihoods": {
@@ -261,6 +269,7 @@ default_model_config: DefaultConfigs = {
         },
     },
     "race_no_bias_angle_4": {
+        "response": ["rt", "response"],
         "list_params": ["v0", "v1", "v2", "v3", "a", "z", "t", "theta"],
         "description": None,
         "likelihoods": {
@@ -283,6 +292,7 @@ default_model_config: DefaultConfigs = {
         },
     },
     "ddm_seq2_no_bias": {
+        "response": ["rt", "response"],
         "list_params": ["vh", "vl1", "vl2", "a", "t"],
         "description": None,
         "likelihoods": {
