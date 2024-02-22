@@ -668,7 +668,7 @@ class HSSM:
 
         graphviz = HSSMModelGraph(
             model=self.pymc_model, parent=self._parent_param
-        ).make_graph(formatting=formatting)
+        ).make_graph(formatting=formatting, response_str=self.response_str)
 
         width, height = (None, None) if figsize is None else figsize
 

@@ -172,7 +172,10 @@ class HSSMModelGraph(ModelGraph):
         super().__init__(model)
 
     def make_graph(
-        self, var_names: Iterable[VarName] | None = None, formatting: str = "plain"
+        self,
+        var_names: Iterable[VarName] | None = None,
+        formatting: str = "plain",
+        response_str: str = "rt,response",
     ):
         """Make graphviz Digraph of PyMC model.
 
@@ -224,8 +227,8 @@ class HSSMModelGraph(ModelGraph):
                     label=f"{self.parent.name}\n~\nDeterministic",
                     shape="box",
                 )
-                shape = fast_eval(self.model[self.response_str].shape)
-                plate_label = f"{self.response_str}_obs({shape[0]})"
+                shape = fast_eval(self.model[response_str].shape)
+                plate_label = f"{response_str}_obs({shape[0]})"
 
                 sub.attr(
                     label=plate_label,
@@ -249,7 +252,7 @@ class HSSMModelGraph(ModelGraph):
                     graph.edge(parent.replace(":", "&"), child.replace(":", "&"))
 
         if self.parent.is_regression:
-            graph.edge(self.parent.name, self.response_str)
+            graph.edge(self.parent.name, response_str)
 
         return graph
 
