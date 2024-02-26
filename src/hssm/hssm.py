@@ -1257,7 +1257,7 @@ def _set_missing_data_and_deadline(
     elif not missing_data and deadline:
         network = MissingDataNetwork.OPN
     else:
-        network = MissingDataNetwork.OPN_WITH_MISSING_DATA
+        network = MissingDataNetwork.CPN_WITH_DEADLINE
 
     return network
 

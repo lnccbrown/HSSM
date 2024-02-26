@@ -54,8 +54,8 @@ class MissingDataNetwork(Enum):
 
     NONE = 0
     CPN = 1
-    OPN = 2
-    OPN_WITH_MISSING_DATA = 3
+    CPN_WITH_DEADLINE = 2
+    OPN = 3
 
 
 class DefaultConfig(TypedDict):
