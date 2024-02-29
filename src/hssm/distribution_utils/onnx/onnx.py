@@ -12,7 +12,7 @@ import numpy as np
 import onnx
 import pytensor
 import pytensor.tensor as pt
-from jax import jit, vjp, vmap
+from jax import grad, jit, vjp, vmap
 from numpy.typing import ArrayLike
 from pytensor.graph import Apply, Op
 from pytensor.link.jax.dispatch import jax_funcify
@@ -76,38 +76,44 @@ def make_jax_logp_funcs_from_onnx(
             # Makes a matrix to feed to the LAN model
             input_vector = jnp.array(dist_params)
 
-            return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
+            result = interpret_onnx(loaded_model.graph, input_vector)[0]
+            return result.squeeze() if any(params_is_reg) else result
 
         # The vectorization of the logp function
-        vmap_logp_no_data = vmap(
-            logp_no_data,
-            in_axes=[0 if is_regression else None for is_regression in params_is_reg],
-        )
+        if any(params_is_reg):
+            vmap_logp_no_data = vmap(
+                logp_no_data,
+                in_axes=[
+                    0 if is_regression else None for is_regression in params_is_reg
+                ],
+            )
 
-        def vjp_vmap_logp_no_data(
-            *dist_params: list[float | ArrayLike], gz: ArrayLike
-        ) -> list[ArrayLike]:
-            """Compute the VJP of the log-likelihood function.
+            def vjp_vmap_logp_no_data(
+                *dist_params: list[float | ArrayLike], gz: ArrayLike
+            ) -> list[ArrayLike]:
+                """Compute the VJP of the log-likelihood function.
 
-            Parameters
-            ----------
-            data
-                A two-column numpy array with response time and response.
-            dist_params
-                A list of parameters used in the likelihood computation.
-            gz
-                The value of vmap_logp at which the VJP is evaluated, typically is just
-                vmap_logp(data, *dist_params)
+                Parameters
+                ----------
+                data
+                    A two-column numpy array with response time and response.
+                dist_params
+                    A list of parameters used in the likelihood computation.
+                gz
+                    The value of vmap_logp at which the VJP is evaluated, typically is
+                    just vmap_logp(data, *dist_params)
 
-            Returns
-            -------
-            list[ArrayLike]
-                The VJP of the log-likelihood function computed at gz.
-            """
-            _, vjp_fn = vjp(vmap_logp_no_data, *dist_params)
-            return vjp_fn(gz)[1:]
+                Returns
+                -------
+                list[ArrayLike]
+                    The VJP of the log-likelihood function computed at gz.
+                """
+                _, vjp_fn = vjp(vmap_logp_no_data, *dist_params)
+                return vjp_fn(gz)[1:]
 
-        return jit(vmap_logp_no_data), jit(vjp_vmap_logp_no_data), vmap_logp_no_data
+            return jit(vmap_logp_no_data), jit(vjp_vmap_logp_no_data), vmap_logp_no_data
+
+        return jit(logp_no_data), jit(grad(logp_no_data)), logp_no_data
 
     def logp(data: np.ndarray, *dist_params: float) -> float:
         """Compute the log-likelihood.
@@ -383,7 +389,7 @@ def make_jax_logp_ops_no_data(
             inputs
                 The same as the inputs produced in `make_node`.
             output_gradients
-                Holds the results of the perform `perform` method.
+                Holds the results of the `perform` method.
 
             Notes
             -----
@@ -475,10 +481,34 @@ def make_pytensor_logp(
         onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
     )
 
+    if data_dim == 0:
+
+        def logp_no_data(*dist_params: list[float | ArrayLike]) -> ArrayLike:
+            # Specify input layer of MLP
+            dist_params_tensors = [
+                pt.as_tensor_variable(param) for param in dist_params  # type: ignore
+            ]
+            n_rows = pt.max(
+                [
+                    1 if param.ndim == 0 else param.shape[0]  # type: ignore
+                    for param in dist_params_tensors
+                ]
+            )
+            inputs = pt.empty((n_rows, len(dist_params)))
+            for i, dist_param in enumerate(dist_params):
+                inputs = pt.set_subtensor(
+                    inputs[:, i],
+                    dist_param,
+                )
+
+            # Returns elementwise log-likelihoods
+            return pt.squeeze(pt_interpret_onnx(loaded_model.graph, inputs)[0])
+
+        return logp_no_data
+
     def logp(data: np.ndarray, *dist_params: list[float | ArrayLike]) -> ArrayLike:
         # Specify input layer of MLP
-        data = data.reshape((-1, data_dim)) if data_dim > 1 else data
-        inputs = pt.zeros((data.shape[0], len(dist_params) + data_dim))
+        inputs = pt.empty((data.shape[0], (len(dist_params) + data_dim)))
         for i, dist_param in enumerate(dist_params):
             inputs = pt.set_subtensor(
                 inputs[:, i],
