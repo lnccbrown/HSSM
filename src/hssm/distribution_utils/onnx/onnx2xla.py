@@ -36,7 +36,6 @@ inputs, also add these inputs as parameters with default values.
 """
 
 import jax.numpy as jnp
-import numpy as np
 import onnx
 from jax import lax
 from onnx import numpy_helper
@@ -99,12 +98,6 @@ def onnx_conv(
 
 def onnx_add(a, b, axis=None, broadcast=True):
     """Numpy-backed implementation of ONNX Add op."""
-    if broadcast:
-        axis = (a.dim - b.ndim) if axis is None else axis % a.ndim
-        assert a.shape[axis:][: b.ndim] == b.shape
-        b_shape = np.ones(a.ndim, dtype="int64")
-        b_shape[axis : axis + b.ndim] = b.shape
-        b = jnp.reshape(b, b_shape)
     return [a + b]
 
 
@@ -132,6 +125,9 @@ onnx_ops = {
     # Added by HSSM developers
     "Tanh": lambda x: [jnp.tanh(x)],
     "Gemm": onnx_gemm,
+    "Neg": lambda x: [-x],
+    "Exp": lambda x: [jnp.exp(x)],
+    "Log": lambda x: [jnp.log(x)],
 }
 
 
