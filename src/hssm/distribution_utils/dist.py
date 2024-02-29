@@ -566,12 +566,6 @@ def make_likelihood_callable(
             + "but did not provide `pytensor` or `jax` as backend."
         )
 
-    if params_is_reg is None:
-        raise ValueError(
-            "You set `loglik_kind` to `approx_differentiable` "
-            + "but did not provide `params_is_reg`."
-        )
-
     if isinstance(loglik, (str, PathLike)):
         if not Path(loglik).exists():
             loglik = download_hf(str(loglik))
@@ -582,6 +576,11 @@ def make_likelihood_callable(
         lan_logp_pt = make_pytensor_logp(onnx_model, data_dim)
         return lan_logp_pt
     if backend == "jax":
+        if params_is_reg is None:
+            raise ValueError(
+                "You set `loglik_kind` to `approx_differentiable` "
+                + "and `backend` to `jax` but did not provide `params_is_reg`."
+            )
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
             onnx_model,
             params_is_reg,
@@ -594,3 +593,74 @@ def make_likelihood_callable(
         return lan_logp_jax
 
     raise ValueError("Incorrect likelihood specification.")
+
+
+def make_missing_data_callable(
+    loglik: pytensor.graph.Op | Callable | PathLike | str,
+    is_cpn_only: bool,
+    backend: Literal["pytensor", "jax", "cython", "other"] | None = "jax",
+    params_is_reg: list[bool] | None = None,
+) -> pytensor.graph.Op | Callable:
+    """Make a secondary network for the likelihood function.
+
+    Please refer to the documentation of `make_likelihood_callable` for more.
+    """
+    return make_likelihood_callable(
+        loglik, "approx_differentiable", backend, params_is_reg, 0 if is_cpn_only else 1
+    )  # Just assume that the missing data network is always approx_differentiable
+
+
+def assemble_callables(
+    callable: pytensor.graph.Op | Callable,
+    missing_data_callable: pytensor.graph.Op | Callable,
+    is_cpn_only: bool,
+) -> Callable:
+    """Assemble the likelihood callables into a single callable.
+
+    Assembles the likelihood callables into a single callable.
+
+    Parameters
+    ----------
+    callable
+        The callable for the likelihood function.
+    missing_data_callable
+        The callable for the secondary network for the likelihood function.
+    is_cpn_only
+        Whether the missing data model is a CPN only model, in which case we do not
+        apply any data to the missing data model.
+    """
+
+    def likelihood_callable(data, *dist_params):
+        """Compute the log-likelihoood of the model."""
+        # Assuming the first column of the data is always rt
+        data = pt.as_tensor_variable(data)
+        dist_params = [pt.as_tensor_variable(param) for param in dist_params]
+
+        missing_mask = pt.eq(data[:, 0], -999.0)
+        observed_mask = pt.bitwise_not(missing_mask)
+
+        observed_data = data[observed_mask, :]
+
+        dist_params_observed = [
+            param if param.ndim == 0 else param[observed_mask] for param in dist_params
+        ]
+
+        logp_observed = callable(observed_data[:, :-1], *dist_params_observed)
+
+        dist_params_missing = [
+            param if param.ndim == 0 else param[missing_mask] for param in dist_params
+        ]
+
+        if is_cpn_only:
+            logp_missing = missing_data_callable(*dist_params_missing)
+        else:
+            missing_data = data[missing_mask, -1:]
+            logp_missing = missing_data_callable(missing_data, *dist_params_missing)
+
+        logp = pt.empty_like(missing_mask, dtype=pytensor.config.floatX)
+        logp = pt.set_subtensor(logp[observed_mask], logp_observed)
+        logp = pt.set_subtensor(logp[missing_mask], logp_missing)
+
+        return logp
+
+    return likelihood_callable
