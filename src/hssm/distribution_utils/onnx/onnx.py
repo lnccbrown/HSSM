@@ -76,8 +76,7 @@ def make_jax_logp_funcs_from_onnx(
             # Makes a matrix to feed to the LAN model
             input_vector = jnp.array(dist_params)
 
-            result = interpret_onnx(loaded_model.graph, input_vector)[0]
-            return result.squeeze() if any(params_is_reg) else result
+            return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
 
         # The vectorization of the logp function
         if any(params_is_reg):
@@ -319,8 +318,9 @@ def make_jax_logp_ops(
 
 def make_jax_logp_ops_no_data(
     logp: LogLikeFunc,
-    logp_vjp: LogLikeGrad,
+    logp_grad: LogLikeGrad,
     logp_nojit: LogLikeFunc,
+    vjp: bool = True,
 ) -> Op:
     """Wrap the JAX functions and its gradient in pytensor Ops.
 
@@ -329,7 +329,7 @@ def make_jax_logp_ops_no_data(
     logp
         A JAX function that represents the feed-forward operation of the LAN
         network.
-    logp_vjp
+    logp_grad
         The Jax function that calculates the VJP of the logp function.
     logp_nojit
         The non-jit version of logp.
@@ -341,7 +341,7 @@ def make_jax_logp_ops_no_data(
         pytensor.grad.
     """
 
-    class LANLogpOp_No_Data(Op):  # pylint: disable=W0223
+    class LANLogpOpNoData(Op):  # pylint: disable=W0223
         """Wraps a JAX function in an pytensor Op."""
 
         def make_node(self, *dist_params):
@@ -359,7 +359,7 @@ def make_jax_logp_ops_no_data(
             """
             inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
 
-            outputs = [pt.vector()]
+            outputs = [pt.vector() if vjp else pt.scalar()]
 
             return Apply(self, inputs, outputs)
 
@@ -397,58 +397,112 @@ def make_jax_logp_ops_no_data(
                 outputs `y`, and the gradient at `y` is grad(x), the required output
                 is y*grad(x).
             """
-            results = lan_logp_vjp_op_no_data(*inputs, gz=output_gradients[0])
+            if vjp:
+                results = lan_logp_grad_op(*inputs, gz=output_gradients[0])
+            else:
+                results = lan_logp_grad_op(*inputs)
             output = results
 
             return output
 
-    class LANLogpVJPOp_No_Data(Op):  # pylint: disable=W0223
-        """Wraps the VJP operation of a jax function in an pytensor op."""
+    if vjp:
 
-        def make_node(self, *dist_params, gz):
-            """Take the inputs to the Op and puts them in a list.
+        class LANLogpVJPOpNoData(Op):  # pylint: disable=W0223
+            """Wraps the VJP operation of a jax function in an pytensor op."""
 
-            Also specifies the output types in a list, then feed them to the Apply node.
+            def make_node(self, *dist_params, gz):
+                """Take the inputs to the Op and puts them in a list.
 
-            Parameters
-            ----------
-            data:
-                A two-column numpy array with response time and response.
-            dist_params:
-                A list of parameters used in the likelihood computation.
-            """
-            inputs = [
-                pt.as_tensor_variable(dist_param) for dist_param in dist_params
-            ] + [pt.as_tensor_variable(gz)]
-            outputs = [inp.type() for inp in inputs[:-1]]
+                Also specifies the output types in a list, then feed them to the Apply
+                node.
 
-            return Apply(self, inputs, outputs)
+                Parameters
+                ----------
+                data:
+                    A two-column numpy array with response time and response.
+                dist_params:
+                    A list of parameters used in the likelihood computation.
+                """
+                inputs = [
+                    pt.as_tensor_variable(dist_param) for dist_param in dist_params
+                ] + [pt.as_tensor_variable(gz)]
+                outputs = [inp.type() for inp in inputs[:-1]]
 
-        def perform(self, node, inputs, outputs):
-            """Perform the Apply node.
+                return Apply(self, inputs, outputs)
 
-            Parameters
-            ----------
-            inputs
-                This is a list of data from which the values stored in
-                `output_storage` are to be computed using non-symbolic language.
-            output_storage
-                This is a list of storage cells where the output
-                is to be stored. A storage cell is a one-element list. It is
-                forbidden to change the length of the list(s) contained in
-                output_storage. There is one storage cell for each output of
-                the Op.
-            """
-            results = logp_vjp(*inputs[:-1], gz=inputs[-1])
+            def perform(self, node, inputs, outputs):
+                """Perform the Apply node.
 
-            for i, result in enumerate(results):
-                outputs[i][0] = np.asarray(result, dtype=node.outputs[i].dtype)
+                Parameters
+                ----------
+                inputs
+                    This is a list of data from which the values stored in
+                    `output_storage` are to be computed using non-symbolic language.
+                output_storage
+                    This is a list of storage cells where the output
+                    is to be stored. A storage cell is a one-element list. It is
+                    forbidden to change the length of the list(s) contained in
+                    output_storage. There is one storage cell for each output of
+                    the Op.
+                """
+                results = logp_grad(*inputs[:-1], gz=inputs[-1])
 
-    lan_logp_op_no_data = LANLogpOp_No_Data()
-    lan_logp_vjp_op_no_data = LANLogpVJPOp_No_Data()
+                for i, result in enumerate(results):
+                    outputs[i][0] = np.asarray(result, dtype=node.outputs[i].dtype)
+
+        lan_logp_grad_op = LANLogpVJPOpNoData()
+
+    else:
+
+        class LANLogpGradOp(Op):  # pylint: disable=W0223
+            """Wraps the VJP operation of a jax function in an pytensor op."""
+
+            def make_node(self, *dist_params):
+                """Take the inputs to the Op and puts them in a list.
+
+                Also specifies the output types in a list, then feed them to the Apply
+                node.
+
+                Parameters
+                ----------
+                data:
+                    A two-column numpy array with response time and response.
+                dist_params:
+                    A list of parameters used in the likelihood computation.
+                """
+                inputs = [
+                    pt.as_tensor_variable(dist_param) for dist_param in dist_params
+                ]
+                outputs = [inp.type() for inp in inputs]
+
+                return Apply(self, inputs, outputs)
+
+            def perform(self, node, inputs, outputs):
+                """Perform the Apply node.
+
+                Parameters
+                ----------
+                inputs
+                    This is a list of data from which the values stored in
+                    `output_storage` are to be computed using non-symbolic language.
+                output_storage
+                    This is a list of storage cells where the output
+                    is to be stored. A storage cell is a one-element list. It is
+                    forbidden to change the length of the list(s) contained in
+                    output_storage. There is one storage cell for each output of
+                    the Op.
+                """
+                results = logp_grad(inputs)
+
+                for i, result in enumerate(results):
+                    outputs[i][0] = np.asarray(result, dtype=node.outputs[i].dtype)
+
+        lan_logp_grad_op: LANLogpVJPOpNoData | LANLogpGradOp = LANLogpGradOp()  # type: ignore
+
+    lan_logp_op_no_data = LANLogpOpNoData()
 
     # Unwraps the JAX function for sampling with JAX backend.
-    @jax_funcify.register(LANLogpOp_No_Data)
+    @jax_funcify.register(LANLogpOpNoData)
     def logp_op_dispatch(op, **kwargs):  # pylint: disable=W0612,W0613
         return logp_nojit
 

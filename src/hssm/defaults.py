@@ -54,8 +54,16 @@ class MissingDataNetwork(Enum):
 
     NONE = 0
     CPN = 1
-    CPN_WITH_DEADLINE = 2
+    GONOGO = 2
     OPN = 3
+
+
+missing_data_networks_suffix = {
+    MissingDataNetwork.NONE: "",
+    MissingDataNetwork.CPN: "_cpn",
+    MissingDataNetwork.GONOGO: "_gonogo",
+    MissingDataNetwork.OPN: "_opn",
+}
 
 
 class DefaultConfig(TypedDict):

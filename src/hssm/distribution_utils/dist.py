@@ -560,12 +560,6 @@ def make_likelihood_callable(
             + "as `loglik`."
         )
 
-    if backend is None or backend not in ["pytensor", "jax"]:
-        raise ValueError(
-            "You set `loglik_kind` to `approx_differentiable` "
-            + "but did not provide `pytensor` or `jax` as backend."
-        )
-
     if isinstance(loglik, (str, PathLike)):
         if not Path(loglik).exists():
             loglik = download_hf(str(loglik))
@@ -575,24 +569,23 @@ def make_likelihood_callable(
     if backend == "pytensor":
         lan_logp_pt = make_pytensor_logp(onnx_model, data_dim)
         return lan_logp_pt
-    if backend == "jax":
-        if params_is_reg is None:
-            raise ValueError(
-                "You set `loglik_kind` to `approx_differentiable` "
-                + "and `backend` to `jax` but did not provide `params_is_reg`."
-            )
-        logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
-            onnx_model,
-            params_is_reg,
-            data_dim,
-        )
-        if data_dim == 0:
-            lan_logp_jax = make_jax_logp_ops_no_data(logp, logp_grad, logp_nojit)
-        else:
-            lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
-        return lan_logp_jax
 
-    raise ValueError("Incorrect likelihood specification.")
+    if params_is_reg is None:
+        raise ValueError(
+            "You set `loglik_kind` to `approx_differentiable` "
+            + "and `backend` to `jax` but did not provide `params_is_reg`."
+        )
+    logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
+        onnx_model,
+        params_is_reg,
+        data_dim,
+    )
+    if data_dim == 0:
+        vjp = any(params_is_reg)
+        lan_logp_jax = make_jax_logp_ops_no_data(logp, logp_grad, logp_nojit, vjp)
+    else:
+        lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+    return lan_logp_jax
 
 
 def make_missing_data_callable(
@@ -614,6 +607,7 @@ def assemble_callables(
     callable: pytensor.graph.Op | Callable,
     missing_data_callable: pytensor.graph.Op | Callable,
     is_cpn_only: bool,
+    has_deadline: bool,
 ) -> Callable:
     """Assemble the likelihood callables into a single callable.
 
@@ -645,7 +639,10 @@ def assemble_callables(
             param if param.ndim == 0 else param[observed_mask] for param in dist_params
         ]
 
-        logp_observed = callable(observed_data[:, :-1], *dist_params_observed)
+        if has_deadline:
+            logp_observed = callable(observed_data[:, :-1], *dist_params_observed)
+        else:
+            logp_observed = callable(observed_data, *dist_params_observed)
 
         dist_params_missing = [
             param if param.ndim == 0 else param[missing_mask] for param in dist_params

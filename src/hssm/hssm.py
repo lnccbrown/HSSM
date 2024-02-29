@@ -29,11 +29,14 @@ from hssm.defaults import (
     LoglikKind,
     MissingDataNetwork,
     SupportedModels,
+    missing_data_networks_suffix,
 )
 from hssm.distribution_utils import (
+    assemble_callables,
     make_distribution,
     make_family,
     make_likelihood_callable,
+    make_missing_data_callable,
 )
 from hssm.param import (
     Param,
@@ -219,7 +222,7 @@ class HSSM:
         extra_namespace: dict[str, Any] | None = None,
         missing_data: bool = False,
         deadline: bool = False,
-        na_value: float = -999.0,
+        missing_data_value: float = -999.0,
         loglik_missing_data: str
         | PathLike
         | Callable
@@ -284,10 +287,11 @@ class HSSM:
                 "You have specified a loglik_missing_data function, but you have not "
                 + "set the missing_data or deadline flag to True."
             )
+        self.loglik_missing_data = loglik_missing_data
 
         # Update data based on missing_data and deadline
         self.data = self._handle_missing_data_and_deadline(
-            self.data, missing_data, deadline, na_value
+            self.data, missing_data, deadline, missing_data_value
         )
         # Set self.missing_data_network based on `missing_data` and `deadline`
         self.missing_data_network = _set_missing_data_and_deadline(
@@ -358,7 +362,6 @@ class HSSM:
         self._aliases = _get_alias_dict(
             self.model, self._parent_param, self.response_c, self.response_str
         )
-        print(self._aliases)
         self.set_alias(self._aliases)
 
     def sample(
@@ -1134,35 +1137,77 @@ class HSSM:
         # Use it directly as the distribution
         if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
             return self.loglik
-        # If the user has provided an Op
-        # Wrap it around with a distribution
+
+        # Make the callable for the likelihood
+        loglik_dim = len(self.response)
+
+        has_deadline = self.missing_data_network in (
+            MissingDataNetwork.GONOGO,
+            MissingDataNetwork.OPN,
+        )
+        if has_deadline:
+            loglik_dim -= 1
+
+        params_is_reg = [
+            param.is_regression
+            for param_name, param in self.params.items()
+            if param_name != "p_outlier"
+        ]
+        if self.extra_fields is not None:
+            params_is_reg += [True for _ in self.extra_fields]
 
         if self.loglik_kind == "approx_differentiable":
-            params_is_reg = [
-                param.is_regression
-                for param_name, param in self.params.items()
-                if param_name != "p_outlier"
-            ]
-            if self.extra_fields is not None:
-                params_is_reg += [True for _ in self.extra_fields]
-
-            likelihood_callable = make_likelihood_callable(
-                loglik=self.loglik,
-                loglik_kind="approx_differentiable",
-                backend=self.model_config.backend,
-                params_is_reg=params_is_reg,
-            )
+            if self.model_config.backend == "jax":
+                likelihood_callable = make_likelihood_callable(
+                    loglik=self.loglik,
+                    loglik_kind="approx_differentiable",
+                    backend="jax",
+                    params_is_reg=params_is_reg,
+                    data_dim=loglik_dim,
+                )
         else:
             likelihood_callable = make_likelihood_callable(
                 loglik=self.loglik,
                 loglik_kind=self.loglik_kind,
                 backend=self.model_config.backend,
+                data_dim=loglik_dim,
             )
 
         self.loglik = likelihood_callable
+
+        # Make the callable for missing data
+        # And assemble it with the callable for the likelihood
+        if self.missing_data_network != MissingDataNetwork.NONE:
+            if self.loglik_missing_data is None:
+                self.loglik_missing_data = (
+                    self.model_name
+                    + missing_data_networks_suffix[self.missing_data_network]
+                    + ".onnx"
+                )
+            is_cpn_only = self.missing_data_network == MissingDataNetwork.CPN
+
+            if self.model_config.backend != "pytensor":
+                missing_data_callable = make_missing_data_callable(
+                    self.loglik_missing_data, is_cpn_only, "jax", params_is_reg
+                )
+                print(is_cpn_only)
+            else:
+                missing_data_callable = make_missing_data_callable(
+                    self.loglik_missing_data, is_cpn_only, self.model_config.backend
+                )
+
+            self.loglik_missing_data = missing_data_callable
+
+            self.loglik = assemble_callables(
+                self.loglik,
+                self.loglik_missing_data,
+                is_cpn_only,
+                has_deadline=has_deadline,
+            )
+
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
-            loglik=likelihood_callable,
+            loglik=self.loglik,
             list_params=self.list_params,
             bounds=self.bounds,
             lapse=self.lapse,
@@ -1213,16 +1258,20 @@ class HSSM:
         return var_names
 
     def _handle_missing_data_and_deadline(
-        self, data: pd.DataFrame, missing_data: bool, deadline: bool, na_value: float
+        self,
+        data: pd.DataFrame,
+        missing_data: bool,
+        deadline: bool,
+        missing_data_value: float,
     ) -> pd.DataFrame:
         """Handle missing data and deadline."""
         if not missing_data:
             # In the case where missing_data is set to False, we need to drop the cases
             # where rt = na_value
-            if pd.isna(na_value):
+            if pd.isna(missing_data_value):
                 na_dropped = data.dropna(subset=["rt"])
             else:
-                na_dropped = data.loc[data["rt"] != na_value, :]
+                na_dropped = data.loc[data["rt"] != missing_data_value, :]
 
             if len(na_dropped) != len(data):
                 _logger.warn(
@@ -1237,10 +1286,10 @@ class HSSM:
             # missing data with a specified na_value
 
             # Create a shallow copy to avoid modifying the original dataframe
-            if pd.isna(na_value):
+            if pd.isna(missing_data_value):
                 data["rt"] = data["rt"].fillna(-999.0)
             else:
-                data["rt"] = data["rt"].replace(na_value, -999.0)
+                data["rt"] = data["rt"].replace(missing_data_value, -999.0)
 
         # After dropping or replacing missing data values, we need to ensure that there
         # are no funny values such as negative rts or NaNs in the dataset.
@@ -1270,7 +1319,7 @@ def _set_missing_data_and_deadline(
     elif not missing_data and deadline:
         network = MissingDataNetwork.OPN
     else:
-        network = MissingDataNetwork.CPN_WITH_DEADLINE
+        network = MissingDataNetwork.GONOGO
 
     if np.all(data["rt"] == -999.0):
         if network == MissingDataNetwork.CPN:
