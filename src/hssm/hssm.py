@@ -1165,6 +1165,13 @@ class HSSM:
                     params_is_reg=params_is_reg,
                     data_dim=loglik_dim,
                 )
+            else:
+                likelihood_callable = make_likelihood_callable(
+                    loglik=self.loglik,
+                    loglik_kind="approx_differentiable",
+                    backend=self.model_config.backend,
+                    data_dim=loglik_dim,
+                )
         else:
             likelihood_callable = make_likelihood_callable(
                 loglik=self.loglik,
