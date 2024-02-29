@@ -45,10 +45,11 @@ from hssm.distribution_utils import (
 )
 
 
-def test_make_missing_data_callable(data, ddm, cpn):
+def test_make_missing_data_callable_cpn(data, ddm, cpn):
     # Test corner case where data_dim == 0 (CPN case)
     # Also needs to be careful when all parameters are scalar
     # In which case the cpn callable should return a scalar
+    data = data[:, :-1]
 
     dist_params = [0.5, 0.5, 0.5, 0.3]
     dist_params_vector = dist_params.copy()
@@ -90,11 +91,11 @@ def test_make_missing_data_callable(data, ddm, cpn):
 
     missing_mask = data[:, 0] == -999.0
 
-    result_data_jax = logp_callable_jax(data[~missing_mask, :-1], *dist_params).eval()
+    result_data_jax = logp_callable_jax(data[~missing_mask, :], *dist_params).eval()
     missing_eval = cpn_callable_jax(*dist_params).eval()
 
     assembled_loglik = assemble_callables(
-        logp_callable_jax, cpn_callable_jax, is_cpn_only=True
+        logp_callable_jax, cpn_callable_jax, is_cpn_only=True, has_deadline=False
     )
 
     result_assembled = assembled_loglik(data, *dist_params).eval()
@@ -119,14 +120,17 @@ def test_make_missing_data_callable(data, ddm, cpn):
     )
 
     result_data_jax = logp_callable_jax_vector(
-        data[~missing_mask, :-1], param_vec[~missing_mask], *dist_params[1:]
+        data[~missing_mask, :], param_vec[~missing_mask], *dist_params[1:]
     ).eval()
     missing_eval = cpn_callable_jax_vector(
         param_vec[missing_mask], *dist_params[1:]
     ).eval()
 
     assembled_loglik = assemble_callables(
-        logp_callable_jax_vector, cpn_callable_jax_vector, is_cpn_only=True
+        logp_callable_jax_vector,
+        cpn_callable_jax_vector,
+        is_cpn_only=True,
+        has_deadline=False,
     )
 
     result_assembled = assembled_loglik(data, *dist_params_vector).eval()
@@ -150,7 +154,10 @@ def test_make_missing_data_callable(data, ddm, cpn):
     )
 
     assembled_loglik = assemble_callables(
-        logp_callable_pytensor, cpn_callable_pytensor, is_cpn_only=True
+        logp_callable_pytensor,
+        cpn_callable_pytensor,
+        is_cpn_only=True,
+        has_deadline=False,
     )
 
     result_assembled = assembled_loglik(data, *dist_params).eval()
@@ -163,7 +170,10 @@ def test_make_missing_data_callable(data, ddm, cpn):
 
     # Assembling two callables, the pytensor case, the vector case
     assembled_loglik = assemble_callables(
-        logp_callable_pytensor, cpn_callable_pytensor, is_cpn_only=True
+        logp_callable_pytensor,
+        cpn_callable_pytensor,
+        is_cpn_only=True,
+        has_deadline=False,
     )
 
     result_assembled = assembled_loglik(data, *dist_params_vector).eval()
@@ -224,7 +234,7 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     missing_eval = opn_callable_jax(data[missing_mask, -1:], *dist_params).eval()
 
     assembled_loglik = assemble_callables(
-        logp_callable_jax, opn_callable_jax, is_cpn_only=False
+        logp_callable_jax, opn_callable_jax, is_cpn_only=False, has_deadline=True
     )
 
     result_assembled = assembled_loglik(data, *dist_params).eval()
@@ -256,7 +266,10 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     ).eval()
 
     assembled_loglik = assemble_callables(
-        logp_callable_jax_vector, opn_callable_jax_vector, is_cpn_only=False
+        logp_callable_jax_vector,
+        opn_callable_jax_vector,
+        is_cpn_only=False,
+        has_deadline=True,
     )
 
     result_assembled = assembled_loglik(data, *dist_params_vector).eval()
@@ -280,7 +293,10 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     )
 
     assembled_loglik = assemble_callables(
-        logp_callable_pytensor, opn_callable_pytensor, is_cpn_only=False
+        logp_callable_pytensor,
+        opn_callable_pytensor,
+        is_cpn_only=False,
+        has_deadline=True,
     )
 
     result_assembled = assembled_loglik(data, *dist_params).eval()
@@ -293,7 +309,10 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
 
     # Assembling two callables, the pytensor case, the vector case
     assembled_loglik = assemble_callables(
-        logp_callable_pytensor, opn_callable_pytensor, is_cpn_only=False
+        logp_callable_pytensor,
+        opn_callable_pytensor,
+        is_cpn_only=False,
+        has_deadline=True,
     )
 
     result_assembled = assembled_loglik(data, *dist_params_vector).eval()
