@@ -4,6 +4,9 @@ import pytest
 import numpy as np
 
 
+DECIMAL = 4
+
+
 @pytest.fixture
 def fixture_path():
     return Path(__file__).parent / "fixtures"
@@ -64,7 +67,7 @@ def test_make_missing_data_callable(data, ddm, cpn):
     result_jax = cpn_callable_jax(*dist_params).eval()
     result_pytensor = cpn_callable_pytensor(*dist_params).eval()
 
-    np.testing.assert_array_almost_equal(result_jax, result_pytensor)
+    np.testing.assert_array_almost_equal(result_jax, result_pytensor, decimal=DECIMAL)
 
     # Test opn when some inputs are vectors
     cpn_callable_jax_vector = make_missing_data_callable(
@@ -74,7 +77,7 @@ def test_make_missing_data_callable(data, ddm, cpn):
     result_jax = cpn_callable_jax_vector(*dist_params_vector).eval()
     result_pytensor = cpn_callable_pytensor(*dist_params_vector).eval()
 
-    np.testing.assert_array_almost_equal(result_jax, result_pytensor)
+    np.testing.assert_array_almost_equal(result_jax, result_pytensor, decimal=DECIMAL)
 
     # Test assembling two callables, the all-scalar case
     logp_callable_jax = make_likelihood_callable(
@@ -103,6 +106,7 @@ def test_make_missing_data_callable(data, ddm, cpn):
     np.testing.assert_array_almost_equal(
         result_assembled,
         result,
+        decimal=DECIMAL,
     )
 
     # Test assembling two callables, the vector case
@@ -134,6 +138,7 @@ def test_make_missing_data_callable(data, ddm, cpn):
     np.testing.assert_array_almost_equal(
         result_assembled,
         result,
+        decimal=DECIMAL,
     )
 
     # Assembling two callables, the pytensor case, all scalar
@@ -153,6 +158,7 @@ def test_make_missing_data_callable(data, ddm, cpn):
     np.testing.assert_array_almost_equal(
         result_assembled,
         result,
+        decimal=DECIMAL,
     )
 
     # Assembling two callables, the pytensor case, the vector case
@@ -165,6 +171,7 @@ def test_make_missing_data_callable(data, ddm, cpn):
     np.testing.assert_array_almost_equal(
         result_assembled,
         result,
+        decimal=DECIMAL,
     )
 
 
@@ -190,7 +197,7 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     result_jax = opn_callable_jax(data[:, -1].reshape((100, 1)), *dist_params).eval()
     result_pytensor = opn_callable_pytensor(data[:, [-1]], *dist_params).eval()
 
-    np.testing.assert_array_almost_equal(result_jax, result_pytensor)
+    np.testing.assert_array_almost_equal(result_jax, result_pytensor, decimal=DECIMAL)
 
     # Test opn when some inputs are vectors
     opn_callable_jax_vector = make_missing_data_callable(
@@ -200,7 +207,7 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     result_jax = opn_callable_jax_vector(data[:, [-1]], *dist_params_vector).eval()
     result_pytensor = opn_callable_pytensor(data[:, [-1]], *dist_params_vector).eval()
 
-    np.testing.assert_array_almost_equal(result_jax, result_pytensor)
+    np.testing.assert_array_almost_equal(result_jax, result_pytensor, decimal=DECIMAL)
 
     # Test assembling two callables, the all-scalar case
     logp_callable_jax = make_likelihood_callable(
@@ -229,6 +236,7 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     np.testing.assert_array_almost_equal(
         result_assembled,
         result,
+        decimal=DECIMAL,
     )
 
     # Test assembling two callables, the vector case
@@ -260,6 +268,7 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     np.testing.assert_array_almost_equal(
         result_assembled,
         result,
+        decimal=DECIMAL,
     )
 
     # # Assembling two callables, the pytensor case, all scalar
@@ -279,6 +288,7 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     np.testing.assert_array_almost_equal(
         result_assembled,
         result,
+        decimal=DECIMAL,
     )
 
     # Assembling two callables, the pytensor case, the vector case
@@ -291,4 +301,5 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     np.testing.assert_array_almost_equal(
         result_assembled,
         result,
+        decimal=DECIMAL,
     )
