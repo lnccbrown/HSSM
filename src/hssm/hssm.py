@@ -279,13 +279,19 @@ class HSSM:
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
 
+        if (not missing_data and not deadline) and loglik_missing_data is not None:
+            raise ValueError(
+                "You have specified a loglik_missing_data function, but you have not "
+                + "set the missing_data or deadline flag to True."
+            )
+
         # Update data based on missing_data and deadline
         self.data = self._handle_missing_data_and_deadline(
             self.data, missing_data, deadline, na_value
         )
         # Set self.missing_data_network based on `missing_data` and `deadline`
         self.missing_data_network = _set_missing_data_and_deadline(
-            missing_data, deadline
+            missing_data, deadline, self.data
         )
 
         if deadline:
@@ -1211,6 +1217,8 @@ class HSSM:
     ) -> pd.DataFrame:
         """Handle missing data and deadline."""
         if not missing_data:
+            # In the case where missing_data is set to False, we need to drop the cases
+            # where rt = na_value
             if pd.isna(na_value):
                 na_dropped = data.dropna(subset=["rt"])
             else:
@@ -1224,15 +1232,19 @@ class HSSM:
                 )
             data = na_dropped
 
-            _check_data_after_processing(data, filter=False)
         else:
+            # In the case where missing_data is set to True, we need to replace the
+            # missing data with a specified na_value
+
             # Create a shallow copy to avoid modifying the original dataframe
             if pd.isna(na_value):
                 data["rt"] = data["rt"].fillna(-999.0)
             else:
                 data["rt"] = data["rt"].replace(na_value, -999.0)
 
-            _check_data_after_processing(data, filter=True)
+        # After dropping or replacing missing data values, we need to ensure that there
+        # are no funny values such as negative rts or NaNs in the dataset.
+        _check_data_after_setting_na_value(data, missing_data)
 
         if deadline:
             if "deadline" not in data.columns:
@@ -1247,29 +1259,51 @@ class HSSM:
 
 
 def _set_missing_data_and_deadline(
-    missing_data: bool, deadline: bool
+    missing_data: bool, deadline: bool, data: pd.DataFrame
 ) -> MissingDataNetwork:
     """Set missing data and deadline."""
     if not missing_data and not deadline:
-        network = MissingDataNetwork.NONE
-    elif missing_data and not deadline:
+        return MissingDataNetwork.NONE
+
+    if missing_data and not deadline:
         network = MissingDataNetwork.CPN
     elif not missing_data and deadline:
         network = MissingDataNetwork.OPN
     else:
         network = MissingDataNetwork.CPN_WITH_DEADLINE
 
+    if np.all(data["rt"] == -999.0):
+        if network == MissingDataNetwork.CPN:
+            raise ValueError(
+                "`missing_data` is set to True, but you have no missing data in your "
+                + "dataset."
+            )
+        elif network == MissingDataNetwork.OPN:
+            raise ValueError(
+                "`deadline` is set to True, but you have no rts exceeding the deadline."
+            )
+        else:
+            raise ValueError(
+                "`missing_data` and `deadline` are both set to True, but you have no "
+                + "missing data and/or no rts exceeding the deadline."
+            )
+
     return network
 
 
-def _check_data_after_processing(data: pd.DataFrame, filter: bool = False):
-    """Check if their is still missing data is after processing."""
-    if filter:
+def _check_data_after_setting_na_value(data: pd.DataFrame, missing_data: bool):
+    """Check if their is still missing data.
+
+    When missing data is set to False or after replacing missing data with a
+    specified na_value, we need to ensure that there are no funny values such as
+    negative rts or NaNs in the dataset.
+    """
+    if missing_data:
         data = data.loc[data["rt"] != -999.0, :]
 
     filter_exp = (
         "besides the `na_value` that you specified"
-        if filter
+        if missing_data
         else "after dropping the missing data"
     )
 
