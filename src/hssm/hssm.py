@@ -1197,7 +1197,6 @@ class HSSM:
                 missing_data_callable = make_missing_data_callable(
                     self.loglik_missing_data, is_cpn_only, "jax", params_is_reg
                 )
-                print(is_cpn_only)
             else:
                 missing_data_callable = make_missing_data_callable(
                     self.loglik_missing_data, is_cpn_only, self.model_config.backend
