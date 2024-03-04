@@ -27,7 +27,6 @@ from .blackbox import make_blackbox_op
 from .onnx import (
     make_jax_logp_funcs_from_onnx,
     make_jax_logp_ops,
-    make_jax_logp_ops_no_data,
     make_pytensor_logp,
 )
 
@@ -567,7 +566,7 @@ def make_likelihood_callable(
     onnx_model = onnx.load(str(loglik))
 
     if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp(onnx_model, data_dim)
+        lan_logp_pt = make_pytensor_logp(onnx_model)
         return lan_logp_pt
 
     if params_is_reg is None:
@@ -578,13 +577,10 @@ def make_likelihood_callable(
     logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
         onnx_model,
         params_is_reg,
-        data_dim,
+        params_only=data_dim == 0,
     )
-    if data_dim == 0:
-        vjp = any(params_is_reg)
-        lan_logp_jax = make_jax_logp_ops_no_data(logp, logp_grad, logp_nojit, vjp)
-    else:
-        lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+    lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+
     return lan_logp_jax
 
 
@@ -649,7 +645,7 @@ def assemble_callables(
         ]
 
         if is_cpn_only:
-            logp_missing = missing_data_callable(*dist_params_missing)
+            logp_missing = missing_data_callable(None, *dist_params_missing)
         else:
             missing_data = data[missing_mask, -1:]
             logp_missing = missing_data_callable(missing_data, *dist_params_missing)
