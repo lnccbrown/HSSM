@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 import numpy as np
+import pytensor
 
 
 DECIMAL = 4
@@ -51,9 +52,9 @@ def test_make_missing_data_callable_cpn(data, ddm, cpn):
     # In which case the cpn callable should return a scalar
     data = data[:, :-1]
 
-    dist_params = [0.5, 0.5, 0.5, 0.3]
+    dist_params = [0.1, 0.2, 0.4, 0.3]
     dist_params_vector = dist_params.copy()
-    param_vec = np.ones(100) * 0.5
+    param_vec = np.ones(100) * 0.1
     dist_params_vector[0] = param_vec
 
     # Test cpn when all inputs are scalars
@@ -65,18 +66,18 @@ def test_make_missing_data_callable_cpn(data, ddm, cpn):
         cpn, is_cpn_only=True, backend="pytensor"
     )
 
-    result_jax = cpn_callable_jax(*dist_params).eval()
-    result_pytensor = cpn_callable_pytensor(*dist_params).eval()
+    result_jax = cpn_callable_jax(None, *dist_params).eval()
+    result_pytensor = cpn_callable_pytensor(None, *dist_params).eval()
 
     np.testing.assert_array_almost_equal(result_jax, result_pytensor, decimal=DECIMAL)
 
-    # Test opn when some inputs are vectors
+    # Test cpn when some inputs are vectors
     cpn_callable_jax_vector = make_missing_data_callable(
         cpn, is_cpn_only=True, backend="jax", params_is_reg=[True] + [False] * 3
     )
 
-    result_jax = cpn_callable_jax_vector(*dist_params_vector).eval()
-    result_pytensor = cpn_callable_pytensor(*dist_params_vector).eval()
+    result_jax = cpn_callable_jax_vector(None, *dist_params_vector).eval()
+    result_pytensor = cpn_callable_pytensor(None, *dist_params_vector).eval()
 
     np.testing.assert_array_almost_equal(result_jax, result_pytensor, decimal=DECIMAL)
 
@@ -88,11 +89,10 @@ def test_make_missing_data_callable_cpn(data, ddm, cpn):
         params_is_reg=[False] * 4,
         data_dim=2,
     )
-
     missing_mask = data[:, 0] == -999.0
 
     result_data_jax = logp_callable_jax(data[~missing_mask, :], *dist_params).eval()
-    missing_eval = cpn_callable_jax(*dist_params).eval()
+    missing_eval = cpn_callable_jax(None, *dist_params).eval()
 
     assembled_loglik = assemble_callables(
         logp_callable_jax, cpn_callable_jax, is_cpn_only=True, has_deadline=False
@@ -123,7 +123,7 @@ def test_make_missing_data_callable_cpn(data, ddm, cpn):
         data[~missing_mask, :], param_vec[~missing_mask], *dist_params[1:]
     ).eval()
     missing_eval = cpn_callable_jax_vector(
-        param_vec[missing_mask], *dist_params[1:]
+        None, param_vec[missing_mask], *dist_params[1:]
     ).eval()
 
     assembled_loglik = assemble_callables(
@@ -186,13 +186,13 @@ def test_make_missing_data_callable_cpn(data, ddm, cpn):
 
 
 def test_make_missing_data_callable_opn(data, ddm, opn):
-    # Test edge case where data_dim == 0 (CPN case)
+    # Test edge case where data_dim == 0 (OPN case)
     # Also needs to be careful when all parameters are scalar
     # In which case the cpn callable should return a scalar
 
-    dist_params = [0.5, 0.5, 0.5, 0.3]
+    dist_params = [0.1, 0.2, 0.4, 0.3]
     dist_params_vector = dist_params.copy()
-    param_vec = np.ones(100) * 0.5
+    param_vec = np.ones(100) * 0.1
     dist_params_vector[0] = param_vec
 
     # Test cpn when all inputs are scalars
@@ -284,7 +284,7 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
         decimal=DECIMAL,
     )
 
-    # # Assembling two callables, the pytensor case, all scalar
+    # Assembling two callables, the pytensor case, all scalar
     logp_callable_pytensor = make_likelihood_callable(
         ddm,
         loglik_kind="approx_differentiable",
