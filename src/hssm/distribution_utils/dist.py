@@ -626,13 +626,14 @@ def assemble_callables(
         data = pt.as_tensor_variable(data)
         dist_params = [pt.as_tensor_variable(param) for param in dist_params]
 
-        missing_mask = pt.eq(data[:, 0], -999.0)
-        observed_mask = pt.bitwise_not(missing_mask)
+        n_missing = pt.sum(pt.eq(data[:, 0], -999.0)).astype(int)
+        if n_missing == 0:
+            raise ValueError("No missing data in the data.")
 
-        observed_data = data[observed_mask, :]
+        observed_data = data[n_missing:, :]
 
         dist_params_observed = [
-            param if param.ndim == 0 else param[observed_mask] for param in dist_params
+            param if param.ndim == 0 else param[n_missing:] for param in dist_params
         ]
 
         if has_deadline:
@@ -641,18 +642,18 @@ def assemble_callables(
             logp_observed = callable(observed_data, *dist_params_observed)
 
         dist_params_missing = [
-            param if param.ndim == 0 else param[missing_mask] for param in dist_params
+            param if param.ndim == 0 else param[:n_missing] for param in dist_params
         ]
 
         if is_cpn_only:
             logp_missing = missing_data_callable(None, *dist_params_missing)
         else:
-            missing_data = data[missing_mask, -1:]
+            missing_data = data[:n_missing, -1:]
             logp_missing = missing_data_callable(missing_data, *dist_params_missing)
 
-        logp = pt.empty_like(missing_mask, dtype=pytensor.config.floatX)
-        logp = pt.set_subtensor(logp[observed_mask], logp_observed)
-        logp = pt.set_subtensor(logp[missing_mask], logp_missing)
+        logp = pt.empty_like(data[:, 0], dtype=pytensor.config.floatX)
+        logp = pt.set_subtensor(logp[n_missing:], logp_observed)
+        logp = pt.set_subtensor(logp[:n_missing], logp_missing)
 
         return logp
 

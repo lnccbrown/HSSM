@@ -118,7 +118,7 @@ def make_jax_logp_funcs_from_onnx(
             The VJP of the log-likelihood function computed at gz.
         """
         _, vjp_fn = vjp(vmap_logp, *inputs)
-        return vjp_fn(gz)[1:]
+        return vjp_fn(gz) if params_only else vjp_fn(gz)[1:]
 
     return jit(vmap_logp), jit(vjp_vmap_logp), vmap_logp
 
@@ -252,7 +252,7 @@ def make_jax_logp_ops(
             if self.has_data:
                 inputs = [pt.as_tensor_variable(data)] + inputs
             if not self.all_scalars:
-                inputs = inputs + [pt.as_tensor_variable(gz)]
+                inputs += [pt.as_tensor_variable(gz)]
 
             if self.has_data:
                 outputs = [inp.type() for inp in inputs[1:-1]]
@@ -290,6 +290,7 @@ def make_jax_logp_ops(
                     results = logp_vjp(inputs)
                 else:
                     results = logp_vjp(*inputs[:-1], gz=inputs[-1])
+
             for i, result in enumerate(results):
                 outputs[i][0] = np.asarray(result, dtype=node.outputs[i].dtype)
 
