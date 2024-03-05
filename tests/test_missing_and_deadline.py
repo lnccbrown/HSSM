@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 import numpy as np
-import pytensor
+
+from hssm.utils import _rearrange_data
 
 
 DECIMAL = 4
@@ -36,7 +37,7 @@ def data():
     missing_indices = data[:, 0] > data[:, 2]
     data[missing_indices, 0] = -999.0
 
-    return data
+    return _rearrange_data(data)
 
 
 from hssm.distribution_utils import (
@@ -89,9 +90,9 @@ def test_make_missing_data_callable_cpn(data, ddm, cpn):
         params_is_reg=[False] * 4,
         data_dim=2,
     )
-    missing_mask = data[:, 0] == -999.0
+    n_missing = np.sum(data[:, 0] == -999.0).astype(int)
 
-    result_data_jax = logp_callable_jax(data[~missing_mask, :], *dist_params).eval()
+    result_data_jax = logp_callable_jax(data[n_missing:, :], *dist_params).eval()
     missing_eval = cpn_callable_jax(None, *dist_params).eval()
 
     assembled_loglik = assemble_callables(
@@ -101,8 +102,8 @@ def test_make_missing_data_callable_cpn(data, ddm, cpn):
     result_assembled = assembled_loglik(data, *dist_params).eval()
 
     result = np.zeros(100)
-    result[~missing_mask] = result_data_jax
-    result[missing_mask] = missing_eval
+    result[n_missing:] = result_data_jax
+    result[:n_missing] = missing_eval
 
     np.testing.assert_array_almost_equal(
         result_assembled,
@@ -120,10 +121,10 @@ def test_make_missing_data_callable_cpn(data, ddm, cpn):
     )
 
     result_data_jax = logp_callable_jax_vector(
-        data[~missing_mask, :], param_vec[~missing_mask], *dist_params[1:]
+        data[n_missing:, :], param_vec[n_missing:], *dist_params[1:]
     ).eval()
     missing_eval = cpn_callable_jax_vector(
-        None, param_vec[missing_mask], *dist_params[1:]
+        None, param_vec[:n_missing], *dist_params[1:]
     ).eval()
 
     assembled_loglik = assemble_callables(
@@ -136,8 +137,8 @@ def test_make_missing_data_callable_cpn(data, ddm, cpn):
     result_assembled = assembled_loglik(data, *dist_params_vector).eval()
 
     result = np.zeros(100)
-    result[~missing_mask] = result_data_jax
-    result[missing_mask] = missing_eval
+    result[n_missing:] = result_data_jax
+    result[:n_missing] = missing_eval
 
     np.testing.assert_array_almost_equal(
         result_assembled,
@@ -192,7 +193,7 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
 
     dist_params = [0.1, 0.2, 0.4, 0.3]
     dist_params_vector = dist_params.copy()
-    param_vec = np.ones(100) * 0.1
+    param_vec = np.ones(100) * dist_params[0]
     dist_params_vector[0] = param_vec
 
     # Test cpn when all inputs are scalars
@@ -228,10 +229,10 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
         data_dim=2,
     )
 
-    missing_mask = data[:, 0] == -999.0
+    n_missing = np.sum(data[:, 0] == -999.0).astype(int)
 
-    result_data_jax = logp_callable_jax(data[~missing_mask, :-1], *dist_params).eval()
-    missing_eval = opn_callable_jax(data[missing_mask, -1:], *dist_params).eval()
+    result_data_jax = logp_callable_jax(data[n_missing:, :-1], *dist_params).eval()
+    missing_eval = opn_callable_jax(data[:n_missing, -1:], *dist_params).eval()
 
     assembled_loglik = assemble_callables(
         logp_callable_jax, opn_callable_jax, is_cpn_only=False, has_deadline=True
@@ -240,8 +241,8 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     result_assembled = assembled_loglik(data, *dist_params).eval()
 
     result = np.zeros(100)
-    result[~missing_mask] = result_data_jax
-    result[missing_mask] = missing_eval
+    result[n_missing:] = result_data_jax
+    result[:n_missing] = missing_eval
 
     np.testing.assert_array_almost_equal(
         result_assembled,
@@ -259,10 +260,10 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     )
 
     result_data_jax = logp_callable_jax_vector(
-        data[~missing_mask, :-1], param_vec[~missing_mask], *dist_params[1:]
+        data[n_missing:, :-1], param_vec[n_missing:], *dist_params[1:]
     ).eval()
     missing_eval = opn_callable_jax_vector(
-        data[missing_mask, -1:], param_vec[missing_mask], *dist_params[1:]
+        data[:n_missing, -1:], param_vec[:n_missing], *dist_params[1:]
     ).eval()
 
     assembled_loglik = assemble_callables(
@@ -275,8 +276,8 @@ def test_make_missing_data_callable_opn(data, ddm, opn):
     result_assembled = assembled_loglik(data, *dist_params_vector).eval()
 
     result = np.zeros(100)
-    result[~missing_mask] = result_data_jax
-    result[missing_mask] = missing_eval
+    result[n_missing:] = result_data_jax
+    result[:n_missing] = missing_eval
 
     np.testing.assert_array_almost_equal(
         result_assembled,
