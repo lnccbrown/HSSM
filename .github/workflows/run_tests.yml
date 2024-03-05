@@ -49,7 +49,7 @@ jobs:
         run: poetry run ruff check .
 
       - name: Run tests
-        run: poetry run pytest
+        run: poetry run pytest -n auto -s
 
       - name: build docs
         run: poetry run mkdocs build

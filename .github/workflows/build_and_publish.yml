@@ -51,7 +51,7 @@ jobs:
         run: poetry run ruff check .
 
       - name: Run tests
-        run: poetry run pytest
+        run: poetry run pytest -n auto -s
 
   publish:
     name: Build wheel and publish to test-PyPI, and then PyPI, and publish docs
