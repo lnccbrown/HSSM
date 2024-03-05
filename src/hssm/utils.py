@@ -14,6 +14,7 @@ from typing import Any, Iterable, Literal, NewType
 
 import bambi as bmb
 import numpy as np
+import pandas as pd
 import pytensor
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
@@ -422,3 +423,32 @@ def _random_sample(
     if sampling_indices is None:
         return data
     return data.isel(draw=sampling_indices)
+
+
+def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarray:
+    """Rearrange a dataframe so that missing values are on top.
+
+    We assume the dataframe's first column can contain missing values coded as -999.0.
+
+    Parameters
+    ----------
+    df
+        The dataframe or numpy array to be rearranged.
+
+    Returns
+    -------
+    pd.DataFrame | np.ndarray
+        The rearranged dataframe.
+    """
+    if isinstance(data, pd.DataFrame):
+        missing_indices = data.iloc[:, 0] == -999.0
+        split_missing = data.loc[missing_indices, :]
+        split_not_missing = data.loc[~missing_indices, :]
+
+        return pd.concat([split_missing, split_not_missing])
+
+    missing_indices = data[:, 0] == -999.0
+    split_missing = data[missing_indices, :]
+    split_not_missing = data[~missing_indices, :]
+
+    return np.concatenate([split_missing, split_not_missing])

@@ -48,6 +48,7 @@ from hssm.utils import (
     _print_prior,
     _process_param_in_kwargs,
     _random_sample,
+    _rearrange_data,
 )
 
 from . import plotting
@@ -1211,6 +1212,8 @@ class HSSM:
                 has_deadline=has_deadline,
             )
 
+        self.data = _rearrange_data(self.data)
+
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
             loglik=self.loglik,
@@ -1271,23 +1274,23 @@ class HSSM:
         missing_data_value: float,
     ) -> pd.DataFrame:
         """Handle missing data and deadline."""
-        if not missing_data:
-            # In the case where missing_data is set to False, we need to drop the cases
-            # where rt = na_value
+        if not missing_data and not deadline:
+            # In the case where missing_data is set to False, we need to drop the
+            # cases where rt = na_value
             if pd.isna(missing_data_value):
                 na_dropped = data.dropna(subset=["rt"])
             else:
                 na_dropped = data.loc[data["rt"] != missing_data_value, :]
 
             if len(na_dropped) != len(data):
-                _logger.warn(
+                _logger.warning(
                     "`missing_data` is set to False, "
                     + "but you have missing data in your dataset. "
                     + "Missing data will be dropped."
                 )
             data = na_dropped
 
-        else:
+        elif missing_data and not deadline:
             # In the case where missing_data is set to True, we need to replace the
             # missing data with a specified na_value
 
@@ -1297,18 +1300,16 @@ class HSSM:
             else:
                 data["rt"] = data["rt"].replace(missing_data_value, -999.0)
 
-        # After dropping or replacing missing data values, we need to ensure that there
-        # are no funny values such as negative rts or NaNs in the dataset.
-        _check_data_after_setting_na_value(data, missing_data)
-
-        if deadline:
+        else:  # deadline = True
             if "deadline" not in data.columns:
                 raise ValueError(
                     "You have set `deadline` to True, but `deadline` is not found in "
                     + "your dataset."
                 )
             else:
-                data["rt"] = np.where(data["rt"] < data["deadline"], data["rt"], -999.0)
+                data.loc[:, "rt"] = np.where(
+                    data["rt"] < data["deadline"], data["rt"], -999.0
+                )
 
         return data
 
@@ -1344,32 +1345,3 @@ def _set_missing_data_and_deadline(
             )
 
     return network
-
-
-def _check_data_after_setting_na_value(data: pd.DataFrame, missing_data: bool):
-    """Check if their is still missing data.
-
-    When missing data is set to False or after replacing missing data with a
-    specified na_value, we need to ensure that there are no funny values such as
-    negative rts or NaNs in the dataset.
-    """
-    if missing_data:
-        data = data.loc[data["rt"] != -999.0, :]
-
-    filter_exp = (
-        "besides the `na_value` that you specified"
-        if missing_data
-        else "after dropping the missing data"
-    )
-
-    if np.any(data["rt"] < 0):
-        raise ValueError(
-            f"You have negative reaction times in your dataset {filter_exp}. "
-            + "Please ensure that all reaction times are non-negative."
-        )
-
-    if np.any(data["rt"].isna()):
-        raise ValueError(
-            f"You have NaNs in your dataset {filter_exp}. "
-            + "Please ensure that there are no missing reaction times."
-        )
