@@ -110,7 +110,7 @@ default_model_config: DefaultConfigs = {
             "analytical": {
                 "loglik": logp_ddm_sdv,
                 "backend": None,
-                "bounds": ddm_bounds,
+                "bounds": ddm_sdv_bounds,
                 "default_priors": {
                     "t": {
                         "name": "HalfNormal",
