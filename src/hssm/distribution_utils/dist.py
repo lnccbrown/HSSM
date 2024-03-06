@@ -512,9 +512,9 @@ class SSMFamily(bmb.Family):
 def make_likelihood_callable(
     loglik: pytensor.graph.Op | Callable | PathLike | str,
     loglik_kind: Literal["analytical", "approx_differentiable", "blackbox"],
-    backend: Literal["pytensor", "jax", "cython", "other"] | None,
+    backend: Literal["pytensor", "jax", "other"] | None,
     params_is_reg: list[bool] | None = None,
-    data_dim: int = 2,
+    params_only: bool | None = None,
 ) -> pytensor.graph.Op | Callable:
     """Make a callable for the likelihood function.
 
@@ -531,6 +531,12 @@ def make_likelihood_callable(
         how the likelihood function is wrapped.
     backend : Optional
         The backend to use for the log-likelihood function.
+    params_is_reg : Optional
+        A list of boolean values indicating whether the parameters are regression
+        parameters. Defaults to None.
+    params_only : Optional
+        Whether the missing data likelihood is takes its first argument as the data.
+        Defaults to None.
     """
     if isinstance(loglik, pytensor.graph.Op):
         return loglik
@@ -541,7 +547,7 @@ def make_likelihood_callable(
         if loglik_kind == "analytical":
             if backend is None or backend == "pytensor":
                 return loglik
-            return make_blackbox_op(loglik, data_dim)
+            return make_blackbox_op(loglik)
 
         # In the approx_differentiable case or the blackbox case, unless the backend
         # is `pytensor`, we wrap the callable in a BlackBoxOp.
@@ -549,7 +555,7 @@ def make_likelihood_callable(
             return loglik
             # In all other cases, we assume that the callable cannot be directly
             # used in the backend and thus we wrap it in a BlackBoxOp
-        return make_blackbox_op(loglik, data_dim)
+        return make_blackbox_op(loglik)
 
     # Other cases, when `loglik` is a string or a PathLike.
     if loglik_kind != "approx_differentiable":
@@ -574,10 +580,11 @@ def make_likelihood_callable(
             "You set `loglik_kind` to `approx_differentiable` "
             + "and `backend` to `jax` but did not provide `params_is_reg`."
         )
+
     logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
         onnx_model,
         params_is_reg,
-        params_only=data_dim == 0,
+        params_only=False if params_only is None else params_only,
     )
     lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
 
@@ -586,28 +593,39 @@ def make_likelihood_callable(
 
 def make_missing_data_callable(
     loglik: pytensor.graph.Op | Callable | PathLike | str,
-    is_cpn_only: bool,
-    backend: Literal["pytensor", "jax", "cython", "other"] | None = "jax",
+    backend: Literal["pytensor", "jax", "other"] | None = "jax",
     params_is_reg: list[bool] | None = None,
+    params_only: bool | None = None,
 ) -> pytensor.graph.Op | Callable:
     """Make a secondary network for the likelihood function.
 
     Please refer to the documentation of `make_likelihood_callable` for more.
     """
+    if backend == "jax":
+        if params_is_reg is None:
+            raise ValueError(
+                "You have chosen `jax` as the backend for the missing data likelihood. "
+                + "However, you have not provided any values to `params_is_reg`."
+            )
+        if params_only is None:
+            raise ValueError(
+                "You have chosen `jax` as the backend for the missing data likelihood. "
+                + "However, you have not provided any values to `params_only`."
+            )
+
+    # We assume that the missing data network is always approx_differentiable
     return make_likelihood_callable(
-        loglik, "approx_differentiable", backend, params_is_reg, 0 if is_cpn_only else 1
-    )  # Just assume that the missing data network is always approx_differentiable
+        loglik, "approx_differentiable", backend, params_is_reg, params_only
+    )
 
 
 def assemble_callables(
     callable: pytensor.graph.Op | Callable,
     missing_data_callable: pytensor.graph.Op | Callable,
-    is_cpn_only: bool,
+    params_only: bool,
     has_deadline: bool,
 ) -> Callable:
     """Assemble the likelihood callables into a single callable.
-
-    Assembles the likelihood callables into a single callable.
 
     Parameters
     ----------
@@ -615,9 +633,10 @@ def assemble_callables(
         The callable for the likelihood function.
     missing_data_callable
         The callable for the secondary network for the likelihood function.
-    is_cpn_only
-        Whether the missing data model is a CPN only model, in which case we do not
-        apply any data to the missing data model.
+    params_only
+        Whether the missing data likelihood is takes its first argument as the data.
+    has_deadline
+        Whether the model has a deadline.
     """
 
     def likelihood_callable(data, *dist_params):
@@ -645,7 +664,7 @@ def assemble_callables(
             param if param.ndim == 0 else param[:n_missing] for param in dist_params
         ]
 
-        if is_cpn_only:
+        if params_only:
             logp_missing = missing_data_callable(None, *dist_params_missing)
         else:
             missing_data = data[:n_missing, -1:]

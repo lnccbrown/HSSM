@@ -56,7 +56,7 @@ def make_jax_logp_funcs_from_onnx(
         onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
     )
 
-    all_scalars = all(not is_reg for is_reg in params_is_reg)
+    scalars_only = all(not is_reg for is_reg in params_is_reg)
 
     def logp(*inputs) -> float:
         """Compute the log-likelihood.
@@ -85,7 +85,7 @@ def make_jax_logp_funcs_from_onnx(
 
         return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
 
-    if params_only and all_scalars:
+    if params_only and scalars_only:
         return jit(logp), jit(grad(logp)), logp
 
     in_axes: list = [0 if is_regression else None for is_regression in params_is_reg]
@@ -166,10 +166,10 @@ def make_jax_logp_ops(
                 can be a mix of scalars and arrays.
             """
             inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
-            self.all_scalars = all(inp.ndim == 0 for inp in inputs)
-            self.has_data = data is not None
+            self.scalars_only = all(inp.ndim == 0 for inp in inputs)
+            self.params_only = data is not None
 
-            if self.has_data:
+            if self.params_only:
                 inputs = [pt.as_tensor_variable(data)] + inputs
 
             outputs = [pt.vector()]
@@ -212,19 +212,19 @@ def make_jax_logp_ops(
                 outputs `y`, and the gradient at `y` is grad(x), the required output
                 is y*grad(x).
             """
-            if self.has_data:
+            if self.params_only:
                 results = lan_logp_vjp_op(
                     inputs[0], *inputs[1:], gz=output_gradients[0]
                 )
             else:
-                if self.all_scalars:
+                if self.scalars_only:
                     results = lan_logp_vjp_op(None, *inputs, gz=None)
                 else:
                     results = lan_logp_vjp_op(None, *inputs, gz=output_gradients[0])
 
             output = results
 
-            if self.has_data:
+            if self.params_only:
                 output = [
                     pytensor.gradient.grad_not_implemented(self, 0, inputs[0]),
                 ] + output
@@ -246,18 +246,18 @@ def make_jax_logp_ops(
             dist_params:
                 A list of parameters used in the likelihood computation.
             """
-            self.has_data = data is not None
-            self.all_scalars = gz is None
+            self.params_only = data is not None
+            self.scalars_only = gz is None
             inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
-            if self.has_data:
+            if self.params_only:
                 inputs = [pt.as_tensor_variable(data)] + inputs
-            if not self.all_scalars:
+            if not self.scalars_only:
                 inputs += [pt.as_tensor_variable(gz)]
 
-            if self.has_data:
+            if self.params_only:
                 outputs = [inp.type() for inp in inputs[1:-1]]
             else:
-                if self.all_scalars:
+                if self.scalars_only:
                     outputs = [inp.type() for inp in inputs]
                 else:
                     outputs = [inp.type() for inp in inputs[:-1]]
@@ -279,10 +279,10 @@ def make_jax_logp_ops(
                 output_storage. There is one storage cell for each output of
                 the Op.
             """
-            if self.has_data:
+            if self.params_only:
                 results = logp_vjp(*inputs[:-1], gz=inputs[-1])
             else:
-                if self.all_scalars:
+                if self.scalars_only:
                     # NOTE: this looks like a bug, but it's not. The inputs are
                     # passed as a list so that the gradient are returned as a list.
                     # The reason why this works is that JAX can handle inputs as a

@@ -170,6 +170,23 @@ class HSSM:
     extra_namespace : optional
         Additional user supplied variables with transformations or data to include in
         the environment where the formula is evaluated. Defaults to `None`.
+    missing_data : optional
+        Specifies whether the model should handle missing data. Can be a `bool` or a
+        `float`. If `False`, and if the `rt` column contains in the data -999.0,
+        the model will drop these rows and produce a warning. If `True`, the model will
+        treat code -999.0 as missing data. If a `float` is provided, the model will
+        treat this value as the missing data value. Defaults to `False`.
+    deadline : optional
+        Specifies whether the model should handle deadline data. Can be a `bool` or a
+        `str`. If `False`, the model will not do nothing even if a deadline column is
+        provided. If `True`, the model will treat the `deadline` column as deadline
+        data. If a `str` is provided, the model will treat this value as the name of the
+        deadline column. Defaults to `False`.
+    loglik_missing_data : optional
+        A likelihood function for missing data. Please see the `loglik` parameter to see
+        how to specify the likelihood function this parameter. If nothing is provided,
+        a default likelihood function will be used. This parameter is required only if
+        either `missing_data` or `deadline` is not `False`. Defaults to `None`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -221,9 +238,8 @@ class HSSM:
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = None,
         extra_namespace: dict[str, Any] | None = None,
-        missing_data: bool = False,
-        deadline: bool = False,
-        missing_data_value: float = -999.0,
+        missing_data: bool | float = False,
+        deadline: bool | str = False,
         loglik_missing_data: str
         | PathLike
         | Callable
@@ -283,7 +299,24 @@ class HSSM:
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
 
-        if (not missing_data and not deadline) and loglik_missing_data is not None:
+        # Go-NoGo
+        if isinstance(missing_data, float):
+            self.missing_data = True
+            self.missing_data_value = missing_data
+        else:
+            self.missing_data = missing_data
+            self.missing_data_value = -999.0
+
+        if isinstance(deadline, str):
+            self.deadline = True
+            self.deadline_name = deadline
+        else:
+            self.deadline = deadline
+            self.deadline_name = "deadline"
+
+        if (
+            not self.missing_data and not self.deadline
+        ) and loglik_missing_data is not None:
             raise ValueError(
                 "You have specified a loglik_missing_data function, but you have not "
                 + "set the missing_data or deadline flag to True."
@@ -291,16 +324,14 @@ class HSSM:
         self.loglik_missing_data = loglik_missing_data
 
         # Update data based on missing_data and deadline
-        self.data = self._handle_missing_data_and_deadline(
-            self.data, missing_data, deadline, missing_data_value
-        )
+        self._handle_missing_data_and_deadline()
         # Set self.missing_data_network based on `missing_data` and `deadline`
         self.missing_data_network = _set_missing_data_and_deadline(
-            missing_data, deadline, self.data
+            self.missing_data, self.deadline, self.data
         )
 
-        if deadline:
-            self.response.append("deadline")
+        if self.deadline:
+            self.response.append(self.deadline_name)
 
         self._check_extra_fields()
 
@@ -1139,16 +1170,6 @@ class HSSM:
         if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
             return self.loglik
 
-        # Make the callable for the likelihood
-        loglik_dim = len(self.response)
-
-        has_deadline = self.missing_data_network in (
-            MissingDataNetwork.GONOGO,
-            MissingDataNetwork.OPN,
-        )
-        if has_deadline:
-            loglik_dim -= 1
-
         params_is_reg = [
             param.is_regression
             for param_name, param in self.params.items()
@@ -1164,21 +1185,18 @@ class HSSM:
                     loglik_kind="approx_differentiable",
                     backend="jax",
                     params_is_reg=params_is_reg,
-                    data_dim=loglik_dim,
                 )
             else:
                 likelihood_callable = make_likelihood_callable(
                     loglik=self.loglik,
                     loglik_kind="approx_differentiable",
                     backend=self.model_config.backend,
-                    data_dim=loglik_dim,
                 )
         else:
             likelihood_callable = make_likelihood_callable(
                 loglik=self.loglik,
                 loglik_kind=self.loglik_kind,
                 backend=self.model_config.backend,
-                data_dim=loglik_dim,
             )
 
         self.loglik = likelihood_callable
@@ -1192,15 +1210,18 @@ class HSSM:
                     + missing_data_networks_suffix[self.missing_data_network]
                     + ".onnx"
                 )
-            is_cpn_only = self.missing_data_network == MissingDataNetwork.CPN
+            params_only = self.missing_data_network == MissingDataNetwork.CPN
 
             if self.model_config.backend != "pytensor":
                 missing_data_callable = make_missing_data_callable(
-                    self.loglik_missing_data, is_cpn_only, "jax", params_is_reg
+                    self.loglik_missing_data, "jax", params_is_reg, params_only
                 )
             else:
                 missing_data_callable = make_missing_data_callable(
-                    self.loglik_missing_data, is_cpn_only, self.model_config.backend
+                    self.loglik_missing_data,
+                    self.model_config.backend,
+                    None,
+                    params_only,
                 )
 
             self.loglik_missing_data = missing_data_callable
@@ -1208,8 +1229,8 @@ class HSSM:
             self.loglik = assemble_callables(
                 self.loglik,
                 self.loglik_missing_data,
-                is_cpn_only,
-                has_deadline=has_deadline,
+                params_only,
+                has_deadline=self.deadline,
             )
 
         self.data = _rearrange_data(self.data)
@@ -1266,52 +1287,50 @@ class HSSM:
             var_names.append(f"~{self.response_str}_mean")
         return var_names
 
-    def _handle_missing_data_and_deadline(
-        self,
-        data: pd.DataFrame,
-        missing_data: bool,
-        deadline: bool,
-        missing_data_value: float,
-    ) -> pd.DataFrame:
+    def _handle_missing_data_and_deadline(self):
         """Handle missing data and deadline."""
-        if not missing_data and not deadline:
+        if not self.missing_data and not self.deadline:
             # In the case where missing_data is set to False, we need to drop the
             # cases where rt = na_value
-            if pd.isna(missing_data_value):
-                na_dropped = data.dropna(subset=["rt"])
+            if pd.isna(self.missing_data_value):
+                na_dropped = self.data.dropna(subset=["rt"])
             else:
-                na_dropped = data.loc[data["rt"] != missing_data_value, :]
+                na_dropped = self.data.loc[
+                    self.data["rt"] != self.missing_data_value, :
+                ]
 
-            if len(na_dropped) != len(data):
+            if len(na_dropped) != len(self.data):
                 _logger.warning(
                     "`missing_data` is set to False, "
                     + "but you have missing data in your dataset. "
                     + "Missing data will be dropped."
                 )
-            data = na_dropped
+            self.data = na_dropped
 
-        elif missing_data and not deadline:
+        elif self.missing_data and not self.deadline:
             # In the case where missing_data is set to True, we need to replace the
             # missing data with a specified na_value
 
             # Create a shallow copy to avoid modifying the original dataframe
-            if pd.isna(missing_data_value):
-                data["rt"] = data["rt"].fillna(-999.0)
+            if pd.isna(self.missing_data_value):
+                self.data["rt"] = self.data["rt"].fillna(-999.0)
             else:
-                data["rt"] = data["rt"].replace(missing_data_value, -999.0)
+                self.data["rt"] = self.data["rt"].replace(
+                    self.missing_data_value, -999.0
+                )
 
         else:  # deadline = True
-            if "deadline" not in data.columns:
+            if self.deadline_name not in self.data.columns:
                 raise ValueError(
-                    "You have set `deadline` to True, but `deadline` is not found in "
-                    + "your dataset."
+                    "You have specified that your data has deadline, but "
+                    + f"`{self.deadline_name}` is not found in your dataset."
                 )
             else:
-                data.loc[:, "rt"] = np.where(
-                    data["rt"] < data["deadline"], data["rt"], -999.0
+                self.data.loc[:, "rt"] = np.where(
+                    self.data["rt"] < self.data[self.deadline_name],
+                    self.data["rt"],
+                    -999.0,
                 )
-
-        return data
 
 
 def _set_missing_data_and_deadline(
