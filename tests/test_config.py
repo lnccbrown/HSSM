@@ -12,6 +12,7 @@ def test_from_defaults():
     config1 = Config.from_defaults("ddm", "analytical")
 
     assert config1.model_name == "ddm"
+    assert config1.response == ["rt", "response"]
     assert config1.list_params == ["v", "a", "z", "t"]
     assert config1.loglik_kind == "analytical"
     assert config1.loglik is not None
@@ -22,6 +23,7 @@ def test_from_defaults():
     config2 = Config.from_defaults("angle", "analytical")
 
     assert config2.model_name == "angle"
+    assert config2.response == ["rt", "response"]
     assert config2.list_params == ["v", "a", "z", "t", "theta"]
     assert config2.loglik_kind == "analytical"
     assert config2.loglik is None
@@ -36,6 +38,7 @@ def test_from_defaults():
     # Case 4: No supported model, provided loglik_kind
     config4 = Config.from_defaults("custom", "analytical")
     assert config4.model_name == "custom"
+    assert config4.response == ["rt", "response"]
     assert config4.list_params is None
     assert config4.loglik_kind == "analytical"
     assert config4.loglik is None
@@ -49,6 +52,7 @@ def test_from_defaults():
 
 def test_update_config():
     config1 = Config.from_defaults("ddm", "analytical")
+    assert config1.response == ["rt", "response"]
 
     v_prior, v_bounds = config1.get_defaults("v")
 

@@ -328,11 +328,19 @@ def plot_quantile_probability(
         idata, sampled = _use_traces_or_sample(model, data, idata, n_samples)
 
         plotting_df = _get_plotting_df(
-            idata, data, extra_dims=extra_dims, n_samples=None if sampled else n_samples
+            idata,
+            data,
+            extra_dims=extra_dims,
+            n_samples=None if sampled else n_samples,
+            response_str=model.response_str,
         )
     else:
         plotting_df = _get_plotting_df(
-            None, data, extra_dims=extra_dims, n_samples=None
+            None,
+            data,
+            extra_dims=extra_dims,
+            n_samples=None,
+            response_str=model.response_str,
         )
 
     # Flip the rt values if necessary

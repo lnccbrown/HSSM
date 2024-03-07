@@ -15,10 +15,10 @@ jobs:
         python-version: ["3.10", "3.11"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -31,7 +31,7 @@ jobs:
           installer-parallel: true
 
       - name: Load cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache
         with:
           path: .venv
@@ -51,7 +51,7 @@ jobs:
         run: poetry run ruff check .
 
       - name: Run tests
-        run: poetry run pytest
+        run: poetry run pytest -n auto -s
 
   publish:
     name: Build wheel and publish to test-PyPI, and then PyPI, and publish docs
@@ -62,10 +62,10 @@ jobs:
       fail-fast: true
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: 3.11
 
@@ -78,7 +78,7 @@ jobs:
           installer-parallel: true
 
       - name: Load cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache
         with:
           path: .venv

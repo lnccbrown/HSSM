@@ -12,6 +12,11 @@ import pytensor.tensor as pt
 from .onnx2xla import _asarray, attribute_handlers
 
 
+def onnx_add(a, b, axis=None, broadcast=True):
+    """Numpy-backed implementation of ONNX Add op."""
+    return [pt.add(a, b)]
+
+
 def pytensor_gemm(
     a, b, c=0.0, alpha=1.0, beta=1.0, transA=0, transB=0
 ):  # pylint: disable=C0103
@@ -26,13 +31,16 @@ def pytensor_gemm(
 
 
 pt_onnx_ops = {
-    "Add": pt.add,
+    "Add": lambda a, b: onnx_add(a, b),
     "Constant": lambda value: [value],
     "MatMul": lambda x, y: [pt.dot(x, y)],
     "Relu": lambda x: [pt.math.max(x, 0)],
     "Reshape": lambda x, shape: [pt.reshape(x, shape)],
     "Tanh": lambda x: [pt.tanh(x)],
     "Gemm": pytensor_gemm,
+    "Neg": lambda x: [-x],
+    "Exp": lambda x: [pt.exp(x)],
+    "Log": lambda x: [pt.log(x)],
 }
 
 
