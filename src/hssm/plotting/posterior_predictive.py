@@ -367,7 +367,11 @@ def plot_posterior_predictive(
     idata, sampled = _use_traces_or_sample(model, data, idata, n_samples=n_samples)
 
     plotting_df = _get_plotting_df(
-        idata, data, extra_dims=extra_dims, n_samples=None if sampled else n_samples
+        idata,
+        data,
+        extra_dims=extra_dims,
+        n_samples=None if sampled else n_samples,
+        response_str=model.response_str,
     )
 
     if interval is not None:

@@ -316,7 +316,7 @@ def test_param_regression():
 
     formula3, d3, _ = param_reg_parent.parse_bambi()  # pylint: disable=W0212
 
-    assert formula3 == "c(rt, response) ~ 1 + x1"
+    assert formula3 == "a ~ 1 + x1"
     assert param_reg_parent.formula == "a ~ 1 + x1"
 
     assert d3 is None

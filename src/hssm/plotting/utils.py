@@ -14,7 +14,9 @@ _logger = logging.getLogger("hssm")
 
 
 def _xarray_to_df(
-    posterior: xr.DataArray, n_samples: int | float | None
+    posterior: xr.DataArray,
+    n_samples: int | float | None,
+    response_str: str = "rt,response",
 ) -> pd.DataFrame:
     """Extract samples from posterior and converts it to a DataFrame.
 
@@ -32,6 +34,8 @@ def _xarray_to_df(
         When an integer >= 1, the number of samples to be extracted from the draw
         dimension. When a float between 0 and 1, the proportion of samples to be
         extracted from the draw dimension. When None, all samples are extracted.
+    response_str
+        The names of the response variable in the posterior.
 
     Returns
     -------
@@ -42,17 +46,17 @@ def _xarray_to_df(
 
     # Convert the posterior samples to a dataframe
     stacked = (
-        sampled_posterior.stack({"obs": ["chain", "draw", "rt,response_obs"]})
+        sampled_posterior.stack({"obs": ["chain", "draw", f"{response_str}_obs"]})
         .transpose()
         .to_pandas()
-        .rename_axis(index={"rt,response_obs": "obs_n"})
+        .rename_axis(index={f"{response_str}_obs": "obs_n"})
         .sort_index(axis=0, level=["chain", "draw", "obs_n"])
     )
 
     # Rename the columns
-    stacked.columns = ["rt", "response"]
+    stacked.columns = response_str.split(",")
 
-    return stacked
+    return stacked.loc[:, ["rt", "response"]]
 
 
 def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
@@ -86,6 +90,7 @@ def _get_plotting_df(
     data: pd.DataFrame | None = None,
     extra_dims: list[str] | None = None,
     n_samples: int | float | None = 20,
+    response_str: str = "rt,response",
 ) -> pd.DataFrame:
     """Prepare a dataframe for plotting.
 
@@ -103,6 +108,8 @@ def _get_plotting_df(
         When an interger >= 1, the number of samples to be extracted from the draw
         dimension. When a float between 0 and 1, the proportion of samples to be
         extracted from the draw dimension. When None, all samples are extracted.
+    response_str, optional
+        The names of the response variable in the posterior, by default "rt,response"
 
     Returns
     -------
@@ -121,7 +128,7 @@ def _get_plotting_df(
         return data
 
     # get the posterior samples
-    idata_posterior = idata["posterior_predictive"]["rt,response"]
+    idata_posterior = idata["posterior_predictive"][response_str]
     posterior = _xarray_to_df(idata_posterior, n_samples=n_samples)
 
     if data is None:
@@ -134,7 +141,7 @@ def _get_plotting_df(
         posterior.insert(0, "observed", "predicted")
         return posterior
 
-    if extra_dims and idata_posterior["rt,response_obs"].size != data.shape[0]:
+    if extra_dims and idata_posterior[f"{response_str}_obs"].size != data.shape[0]:
         raise ValueError(
             "The number of observations in the data and the number of posterior "
             + "samples are not equal."

@@ -10,7 +10,6 @@ import logging
 from copy import deepcopy
 from inspect import isclass
 from os import PathLike
-from pathlib import Path
 from typing import Any, Callable, Literal
 
 import arviz as az
@@ -28,13 +27,16 @@ from bambi.transformations import transformations_namespace
 
 from hssm.defaults import (
     LoglikKind,
+    MissingDataNetwork,
     SupportedModels,
+    missing_data_networks_suffix,
 )
 from hssm.distribution_utils import (
-    make_blackbox_op,
+    assemble_callables,
     make_distribution,
-    make_distribution_from_onnx,
     make_family,
+    make_likelihood_callable,
+    make_missing_data_callable,
 )
 from hssm.param import (
     Param,
@@ -42,11 +44,11 @@ from hssm.param import (
 )
 from hssm.utils import (
     HSSMModelGraph,
+    _get_alias_dict,
     _print_prior,
     _process_param_in_kwargs,
     _random_sample,
-    download_hf,
-    get_alias_dict,
+    _rearrange_data,
 )
 
 from . import plotting
@@ -168,6 +170,23 @@ class HSSM:
     extra_namespace : optional
         Additional user supplied variables with transformations or data to include in
         the environment where the formula is evaluated. Defaults to `None`.
+    missing_data : optional
+        Specifies whether the model should handle missing data. Can be a `bool` or a
+        `float`. If `False`, and if the `rt` column contains in the data -999.0,
+        the model will drop these rows and produce a warning. If `True`, the model will
+        treat code -999.0 as missing data. If a `float` is provided, the model will
+        treat this value as the missing data value. Defaults to `False`.
+    deadline : optional
+        Specifies whether the model should handle deadline data. Can be a `bool` or a
+        `str`. If `False`, the model will not do nothing even if a deadline column is
+        provided. If `True`, the model will treat the `deadline` column as deadline
+        data. If a `str` is provided, the model will treat this value as the name of the
+        deadline column. Defaults to `False`.
+    loglik_missing_data : optional
+        A likelihood function for missing data. Please see the `loglik` parameter to see
+        how to specify the likelihood function this parameter. If nothing is provided,
+        a default likelihood function will be used. This parameter is required only if
+        either `missing_data` or `deadline` is not `False`. Defaults to `None`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -219,9 +238,16 @@ class HSSM:
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = None,
         extra_namespace: dict[str, Any] | None = None,
+        missing_data: bool | float = False,
+        deadline: bool | str = False,
+        loglik_missing_data: str
+        | PathLike
+        | Callable
+        | pytensor.graph.Op
+        | None = None,
         **kwargs,
     ):
-        self.data = data
+        self.data = data.copy()
         self._inference_obj = None
         self.hierarchical = hierarchical
 
@@ -266,11 +292,46 @@ class HSSM:
         self.model_config.validate()
 
         # Set up shortcuts so old code will work
+        self.response = self.model_config.response
         self.list_params = self.model_config.list_params
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
+
+        # Go-NoGo
+        if isinstance(missing_data, float):
+            self.missing_data = True
+            self.missing_data_value = missing_data
+        else:
+            self.missing_data = missing_data
+            self.missing_data_value = -999.0
+
+        if isinstance(deadline, str):
+            self.deadline = True
+            self.deadline_name = deadline
+        else:
+            self.deadline = deadline
+            self.deadline_name = "deadline"
+
+        if (
+            not self.missing_data and not self.deadline
+        ) and loglik_missing_data is not None:
+            raise ValueError(
+                "You have specified a loglik_missing_data function, but you have not "
+                + "set the missing_data or deadline flag to True."
+            )
+        self.loglik_missing_data = loglik_missing_data
+
+        # Update data based on missing_data and deadline
+        self._handle_missing_data_and_deadline()
+        # Set self.missing_data_network based on `missing_data` and `deadline`
+        self.missing_data_network = _set_missing_data_and_deadline(
+            self.missing_data, self.deadline, self.data
+        )
+
+        if self.deadline:
+            self.response.append(self.deadline_name)
 
         self._check_extra_fields()
 
@@ -330,7 +391,9 @@ class HSSM:
             **other_kwargs,
         )
 
-        self._aliases = get_alias_dict(self.model, self._parent_param)
+        self._aliases = _get_alias_dict(
+            self.model, self._parent_param, self.response_c, self.response_str
+        )
         self.set_alias(self._aliases)
 
     def sample(
@@ -593,6 +656,16 @@ class HSSM:
         self.model.set_alias(aliases)
         self.model.build()
 
+    @property
+    def response_c(self) -> str:
+        """Return the response variable names in c() format."""
+        return f"c({', '.join(self.response)})"
+
+    @property
+    def response_str(self) -> str:
+        """Return the response variable names in string format."""
+        return ",".join(self.response)
+
     # NOTE: can't annotate return type because the graphviz dependency is
     # optional
     def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
@@ -636,7 +709,7 @@ class HSSM:
 
         graphviz = HSSMModelGraph(
             model=self.pymc_model, parent=self._parent_param
-        ).make_graph(formatting=formatting)
+        ).make_graph(formatting=formatting, response_str=self.response_str)
 
         width, height = (None, None) if figsize is None else figsize
 
@@ -755,7 +828,7 @@ class HSSM:
         output.append(f"Model: {self.model_name}")
         output.append("")
 
-        output.append("Response variable: rt,response")
+        output.append(f"Response variable: {self.response_str}")
         output.append(f"Likelihood: {self.loglik_kind}")
         output.append(f"Observations: {len(self.data)}")
         output.append("")
@@ -766,7 +839,7 @@ class HSSM:
         for param in self.params.values():
             if param.name == "p_outlier":
                 continue
-            name = "c(rt, response)" if param.is_parent else param.name
+            name = self.response_c if param.is_parent else param.name
             output.append(f"{param.name}:")
 
             component = self.model.components[name]
@@ -1038,7 +1111,7 @@ class HSSM:
         """
         # Handle the edge case where list_params is empty:
         if not self.params:
-            return bmb.Formula("c(rt, response) ~ 1"), None, "identity"
+            return bmb.Formula(f"{self.response_c} ~ 1"), None, "identity"
 
         parent_formula = None
         other_formulas = []
@@ -1048,15 +1121,31 @@ class HSSM:
         for _, param in self.params.items():
             formula, prior, link = param.parse_bambi()
 
+            assert param.name is not None
+
             if param.is_parent:
-                parent_formula = formula
+                # parent is not a regression
+                if formula is None:
+                    parent_formula = f"{self.response_c} ~ 1"
+                    if prior is not None:
+                        priors |= {self.response_c: {"Intercept": prior[param.name]}}
+                    links |= {param.name: "identity"}
+                # parent is a regression
+                else:
+                    right_side = formula.split(" ~ ")[1]
+                    parent_formula = f"{self.response_c} ~ {right_side}"
+                    if prior is not None:
+                        priors |= {self.response_c: prior[param.name]}
+                    if link is not None:
+                        links |= link
             else:
+                # non-regression case
                 if formula is not None:
                     other_formulas.append(formula)
-            if prior is not None:
-                priors |= prior
-            if link is not None:
-                links |= link
+                if prior is not None:
+                    priors |= prior
+                if link is not None:
+                    links |= link
 
         assert parent_formula is not None
         result_formula: bmb.Formula = bmb.Formula(parent_formula, *other_formulas)
@@ -1080,59 +1169,76 @@ class HSSM:
         # Use it directly as the distribution
         if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
             return self.loglik
-        # If the user has provided an Op
-        # Wrap it around with a distribution
-        if isinstance(self.loglik, pytensor.graph.Op):
-            return make_distribution(
-                rv=self.model_config.rv or self.model_name,
-                loglik=self.loglik,
-                list_params=self.list_params,
-                bounds=self.bounds,
-                lapse=self.lapse,
-                extra_fields=None
-                if not self.extra_fields
-                else [deepcopy(self.data[field].values) for field in self.extra_fields],
-            )  # type: ignore
-        # If the user has provided a callable (an arbitrary likelihood function)
-        # If `loglik_kind` is `blackbox`, wrap it in an op and then a distribution
-        # Otherwise, we assume that this function is differentiable with `pytensor`
-        # and wrap it directly in a distribution.
-        if callable(self.loglik):
-            if self.loglik_kind == "blackbox":
-                self.loglik = make_blackbox_op(self.loglik)
-            return make_distribution(
-                rv=self.model_config.rv or self.model_name,
-                loglik=self.loglik,
-                list_params=self.list_params,
-                bounds=self.bounds,
-                lapse=self.lapse,
-                extra_fields=None
-                if not self.extra_fields
-                else [deepcopy(self.data[field].values) for field in self.extra_fields],
-            )  # type: ignore
-        # All other situations
-        if self.loglik_kind != "approx_differentiable":
-            raise ValueError(
-                "You set `loglik_kind` to `approx_differentiable "
-                + "but did not provide a pm.Distribution, an Op, or a callable "
-                + "as `loglik`."
-            )
-        if isinstance(self.loglik, str):
-            if not Path(self.loglik).exists():
-                self.loglik = download_hf(self.loglik)
 
         params_is_reg = [
             param.is_regression
             for param_name, param in self.params.items()
             if param_name != "p_outlier"
         ]
+        if self.extra_fields is not None:
+            params_is_reg += [True for _ in self.extra_fields]
 
-        return make_distribution_from_onnx(
+        if self.loglik_kind == "approx_differentiable":
+            if self.model_config.backend == "jax":
+                likelihood_callable = make_likelihood_callable(
+                    loglik=self.loglik,
+                    loglik_kind="approx_differentiable",
+                    backend="jax",
+                    params_is_reg=params_is_reg,
+                )
+            else:
+                likelihood_callable = make_likelihood_callable(
+                    loglik=self.loglik,
+                    loglik_kind="approx_differentiable",
+                    backend=self.model_config.backend,
+                )
+        else:
+            likelihood_callable = make_likelihood_callable(
+                loglik=self.loglik,
+                loglik_kind=self.loglik_kind,
+                backend=self.model_config.backend,
+            )
+
+        self.loglik = likelihood_callable
+
+        # Make the callable for missing data
+        # And assemble it with the callable for the likelihood
+        if self.missing_data_network != MissingDataNetwork.NONE:
+            if self.loglik_missing_data is None:
+                self.loglik_missing_data = (
+                    self.model_name
+                    + missing_data_networks_suffix[self.missing_data_network]
+                    + ".onnx"
+                )
+            params_only = self.missing_data_network == MissingDataNetwork.CPN
+
+            if self.model_config.backend != "pytensor":
+                missing_data_callable = make_missing_data_callable(
+                    self.loglik_missing_data, "jax", params_is_reg, params_only
+                )
+            else:
+                missing_data_callable = make_missing_data_callable(
+                    self.loglik_missing_data,
+                    self.model_config.backend,
+                    None,
+                    params_only,
+                )
+
+            self.loglik_missing_data = missing_data_callable
+
+            self.loglik = assemble_callables(
+                self.loglik,
+                self.loglik_missing_data,
+                params_only,
+                has_deadline=self.deadline,
+            )
+
+        self.data = _rearrange_data(self.data)
+
+        return make_distribution(
             rv=self.model_config.rv or self.model_name,
-            onnx_model=self.loglik,
+            loglik=self.loglik,
             list_params=self.list_params,
-            backend=self.model_config.backend or "jax",
-            params_is_reg=params_is_reg,
             bounds=self.bounds,
             lapse=self.lapse,
             extra_fields=None
@@ -1177,6 +1283,84 @@ class HSSM:
             if param.is_regression and not param.is_parent
         ]
 
-        if "rt,response_mean" in idata["posterior"].data_vars:
-            var_names.append("~rt,response_mean")
+        if f"{self.response_str}_mean" in idata["posterior"].data_vars:
+            var_names.append(f"~{self.response_str}_mean")
         return var_names
+
+    def _handle_missing_data_and_deadline(self):
+        """Handle missing data and deadline."""
+        if not self.missing_data and not self.deadline:
+            # In the case where missing_data is set to False, we need to drop the
+            # cases where rt = na_value
+            if pd.isna(self.missing_data_value):
+                na_dropped = self.data.dropna(subset=["rt"])
+            else:
+                na_dropped = self.data.loc[
+                    self.data["rt"] != self.missing_data_value, :
+                ]
+
+            if len(na_dropped) != len(self.data):
+                _logger.warning(
+                    "`missing_data` is set to False, "
+                    + "but you have missing data in your dataset. "
+                    + "Missing data will be dropped."
+                )
+            self.data = na_dropped
+
+        elif self.missing_data and not self.deadline:
+            # In the case where missing_data is set to True, we need to replace the
+            # missing data with a specified na_value
+
+            # Create a shallow copy to avoid modifying the original dataframe
+            if pd.isna(self.missing_data_value):
+                self.data["rt"] = self.data["rt"].fillna(-999.0)
+            else:
+                self.data["rt"] = self.data["rt"].replace(
+                    self.missing_data_value, -999.0
+                )
+
+        else:  # deadline = True
+            if self.deadline_name not in self.data.columns:
+                raise ValueError(
+                    "You have specified that your data has deadline, but "
+                    + f"`{self.deadline_name}` is not found in your dataset."
+                )
+            else:
+                self.data.loc[:, "rt"] = np.where(
+                    self.data["rt"] < self.data[self.deadline_name],
+                    self.data["rt"],
+                    -999.0,
+                )
+
+
+def _set_missing_data_and_deadline(
+    missing_data: bool, deadline: bool, data: pd.DataFrame
+) -> MissingDataNetwork:
+    """Set missing data and deadline."""
+    if not missing_data and not deadline:
+        return MissingDataNetwork.NONE
+
+    if missing_data and not deadline:
+        network = MissingDataNetwork.CPN
+    elif not missing_data and deadline:
+        network = MissingDataNetwork.OPN
+    else:
+        network = MissingDataNetwork.GONOGO
+
+    if np.all(data["rt"] == -999.0):
+        if network == MissingDataNetwork.CPN:
+            raise ValueError(
+                "`missing_data` is set to True, but you have no missing data in your "
+                + "dataset."
+            )
+        elif network == MissingDataNetwork.OPN:
+            raise ValueError(
+                "`deadline` is set to True, but you have no rts exceeding the deadline."
+            )
+        else:
+            raise ValueError(
+                "`missing_data` and `deadline` are both set to True, but you have no "
+                + "missing data and/or no rts exceeding the deadline."
+            )
+
+    return network
