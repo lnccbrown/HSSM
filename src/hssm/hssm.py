@@ -384,10 +384,10 @@ class HSSM:
 
         self.model = bmb.Model(
             self.formula,
-            data=data,
+            data=self.data,
             family=self.family,
             priors=self.priors,
-            extra_namespace=extra_namespace,
+            extra_namespace=self.additional_namespace,
             **other_kwargs,
         )
 
