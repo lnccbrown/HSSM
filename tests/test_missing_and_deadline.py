@@ -1,9 +1,17 @@
+from itertools import product
 from pathlib import Path
 
 import pytest
+import pytensor
+import pytensor.tensor as pt
 import numpy as np
 
 from hssm.utils import _rearrange_data
+from hssm.distribution_utils import (
+    assemble_callables,
+    make_likelihood_callable,
+    make_missing_data_callable,
+)
 
 
 DECIMAL = 4
@@ -12,21 +20,6 @@ DECIMAL = 4
 @pytest.fixture
 def fixture_path():
     return Path(__file__).parent / "fixtures"
-
-
-@pytest.fixture
-def ddm(fixture_path):
-    return fixture_path / "ddm.onnx"
-
-
-@pytest.fixture
-def cpn(fixture_path):
-    return fixture_path / "ddm_cpn.onnx"
-
-
-@pytest.fixture
-def opn(fixture_path):
-    return fixture_path / "ddm_opn.onnx"
 
 
 @pytest.fixture
@@ -40,279 +33,181 @@ def data():
     return _rearrange_data(data)
 
 
-from hssm.distribution_utils import (
-    assemble_callables,
-    make_likelihood_callable,
-    make_missing_data_callable,
-)
+cases = product(["cpn", "opn"], [True, False])
 
 
-def test_make_missing_data_callable_cpn(data, ddm, cpn):
-    # Test corner case where no data is passed (CPN case)
-    # Also needs to be careful when all parameters are scalar
-    # In which case the cpn callable should return a scalar
-    data = data[:, :-1]
+@pytest.mark.parametrize("cpn, is_vector", cases)
+def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
+    is_cpn = cpn == "cpn"
+    is_deadline = not is_cpn
 
-    dist_params = [0.1, 0.2, 0.4, 0.3]
-    dist_params_vector = dist_params.copy()
-    param_vec = np.ones(100) * 0.1
-    dist_params_vector[0] = param_vec
+    if is_cpn:
+        data = data[:, :-1]
 
-    # Test cpn when all inputs are scalars
-    cpn_callable_jax = make_missing_data_callable(
-        cpn, params_only=True, backend="jax", params_is_reg=[False] * 4
-    )
+    v = pt.as_tensor_variable(np.random.rand(100) if is_vector else np.random.rand())
+    a = pt.as_tensor_variable(0.2)
+    z = pt.as_tensor_variable(0.3)
+    t = pt.as_tensor_variable(0.4)
 
-    cpn_callable_pytensor = make_missing_data_callable(
-        cpn, params_only=True, backend="pytensor"
-    )
+    dist_params = [v, a, z, t]
 
-    result_jax = cpn_callable_jax(None, *dist_params).eval()
-    result_pytensor = cpn_callable_pytensor(None, *dist_params).eval()
-
-    np.testing.assert_array_almost_equal(result_jax, result_pytensor, decimal=DECIMAL)
-
-    # Test cpn when some inputs are vectors
-    cpn_callable_jax_vector = make_missing_data_callable(
-        cpn, params_only=True, backend="jax", params_is_reg=[True] + [False] * 3
-    )
-
-    result_jax = cpn_callable_jax_vector(None, *dist_params_vector).eval()
-    result_pytensor = cpn_callable_pytensor(None, *dist_params_vector).eval()
-
-    np.testing.assert_array_almost_equal(result_jax, result_pytensor, decimal=DECIMAL)
-
-    # Test assembling two callables, the all-scalar case
-    logp_callable_jax = make_likelihood_callable(
-        ddm,
-        loglik_kind="approx_differentiable",
+    # First, test if the callables in jax and pytensor give the same result
+    missing_onnx_path = fixture_path / f"ddm_{cpn}.onnx"
+    missing_callable_jax = make_missing_data_callable(
+        missing_onnx_path,
         backend="jax",
-        params_is_reg=[False] * 4,
+        params_is_reg=[is_vector] + [False] * 3,
+        params_only=is_cpn,
     )
+
+    missing_callable_pytensor = make_missing_data_callable(
+        missing_onnx_path,
+        backend="pytensor",
+    )
+
+    missing_result_jax = missing_callable_jax(
+        None if is_cpn else data[:, -1:], *dist_params
+    ).eval()
+    missing_result_pytensor = missing_callable_pytensor(
+        None if is_cpn else data[:, -1:], *dist_params
+    ).eval()
+
+    np.testing.assert_array_almost_equal(
+        missing_result_jax,
+        missing_result_pytensor,
+        decimal=DECIMAL,
+    )
+
+    # Second, test if the gradient of the callables in jax and pytensor give the same result
+    v_grad_jax = pytensor.grad(
+        missing_callable_jax(None if is_cpn else data[:, -1:], *dist_params).sum(), v
+    ).eval()
+    v_grad_pytensor = pytensor.grad(
+        missing_callable_pytensor(None if is_cpn else data[:, -1:], *dist_params).sum(),
+        v,
+    ).eval()
+
+    np.testing.assert_array_almost_equal(
+        v_grad_jax,
+        v_grad_pytensor,
+        decimal=DECIMAL,
+    )
+
+    ###### Prepare data for testing the assembled likelihoods
+    data = _rearrange_data(data)
     n_missing = np.sum(data[:, 0] == -999.0).astype(int)
+    likelihood_onnx_path = fixture_path / "ddm.onnx"
 
-    result_data_jax = logp_callable_jax(data[n_missing:, :], *dist_params).eval()
-    missing_eval = cpn_callable_jax(None, *dist_params).eval()
-
-    assembled_loglik = assemble_callables(
-        logp_callable_jax, cpn_callable_jax, params_only=True, has_deadline=False
-    )
-
-    result_assembled = assembled_loglik(data, *dist_params).eval()
-
-    result = np.zeros(100)
-    result[n_missing:] = result_data_jax
-    result[:n_missing] = missing_eval
-
-    np.testing.assert_array_almost_equal(
-        result_assembled,
-        result,
-        decimal=DECIMAL,
-    )
-
-    # Test assembling two callables, the vector case
-    logp_callable_jax_vector = make_likelihood_callable(
-        ddm,
+    # First, test if the assembled callables give the same result as the individual
+    # callables, the jax case
+    logp_callable_jax = make_likelihood_callable(
+        likelihood_onnx_path,
         loglik_kind="approx_differentiable",
         backend="jax",
-        params_is_reg=[True] + [False] * 3,
+        params_is_reg=[is_vector] + [False] * 3,
     )
 
-    result_data_jax = logp_callable_jax_vector(
-        data[n_missing:, :], param_vec[n_missing:], *dist_params[1:]
+    result_data_jax = logp_callable_jax(
+        data[n_missing:, :] if is_cpn else data[n_missing:, :-1],
+        v[n_missing:] if is_vector else v,
+        *dist_params[1:],
     ).eval()
-    missing_eval = cpn_callable_jax_vector(
-        None, param_vec[:n_missing], *dist_params[1:]
+    missing_data_jax = missing_callable_jax(
+        None if is_cpn else data[:n_missing, -1:],
+        v[:n_missing] if is_vector else v,
+        *dist_params[1:],
     ).eval()
 
-    assembled_loglik = assemble_callables(
-        logp_callable_jax_vector,
-        cpn_callable_jax_vector,
-        params_only=True,
-        has_deadline=False,
+    assembled_loglik_jax = assemble_callables(
+        logp_callable_jax,
+        missing_callable_jax,
+        params_only=is_cpn,
+        has_deadline=is_deadline,
     )
 
-    result_assembled = assembled_loglik(data, *dist_params_vector).eval()
+    result_assembled_jax = assembled_loglik_jax(data, *dist_params).eval()
 
-    result = np.zeros(100)
-    result[n_missing:] = result_data_jax
-    result[:n_missing] = missing_eval
+    result_individual = np.zeros(100)
+    result_individual[n_missing:] = result_data_jax
+    result_individual[:n_missing] = missing_data_jax
 
     np.testing.assert_array_almost_equal(
-        result_assembled,
-        result,
+        result_assembled_jax,
+        result_individual,
         decimal=DECIMAL,
     )
 
-    # Assembling two callables, the pytensor case, all scalar
+    # Then, test if the same happens in the pytensor case
     logp_callable_pytensor = make_likelihood_callable(
-        ddm,
+        likelihood_onnx_path,
         loglik_kind="approx_differentiable",
         backend="pytensor",
     )
 
-    assembled_loglik = assemble_callables(
+    assembled_loglik_pytensor = assemble_callables(
         logp_callable_pytensor,
-        cpn_callable_pytensor,
-        params_only=True,
-        has_deadline=False,
+        missing_callable_pytensor,
+        params_only=is_cpn,
+        has_deadline=is_deadline,
     )
 
-    result_assembled = assembled_loglik(data, *dist_params).eval()
-
-    np.testing.assert_array_almost_equal(
-        result_assembled,
-        result,
-        decimal=DECIMAL,
-    )
-
-    # Assembling two callables, the pytensor case, the vector case
-    assembled_loglik = assemble_callables(
-        logp_callable_pytensor,
-        cpn_callable_pytensor,
-        params_only=True,
-        has_deadline=False,
-    )
-
-    result_assembled = assembled_loglik(data, *dist_params_vector).eval()
-
-    np.testing.assert_array_almost_equal(
-        result_assembled,
-        result,
-        decimal=DECIMAL,
-    )
-
-
-def test_make_missing_data_callable_opn(data, ddm, opn):
-    # Also needs to be careful when all parameters are scalar
-    # In which case the cpn callable should return a scalar
-
-    dist_params = [0.1, 0.2, 0.4, 0.3]
-    dist_params_vector = dist_params.copy()
-    param_vec = np.ones(100) * dist_params[0]
-    dist_params_vector[0] = param_vec
-
-    # Test cpn when all inputs are scalars
-    opn_callable_jax = make_missing_data_callable(
-        opn, params_only=False, backend="jax", params_is_reg=[False] * 4
-    )
-
-    opn_callable_pytensor = make_missing_data_callable(
-        opn, params_only=False, backend="pytensor"
-    )
-
-    result_jax = opn_callable_jax(data[:, -1].reshape((100, 1)), *dist_params).eval()
-    result_pytensor = opn_callable_pytensor(data[:, [-1]], *dist_params).eval()
-
-    np.testing.assert_array_almost_equal(result_jax, result_pytensor, decimal=DECIMAL)
-
-    # Test opn when some inputs are vectors
-    opn_callable_jax_vector = make_missing_data_callable(
-        opn, params_only=False, backend="jax", params_is_reg=[True] + [False] * 3
-    )
-
-    result_jax = opn_callable_jax_vector(data[:, [-1]], *dist_params_vector).eval()
-    result_pytensor = opn_callable_pytensor(data[:, [-1]], *dist_params_vector).eval()
-
-    np.testing.assert_array_almost_equal(result_jax, result_pytensor, decimal=DECIMAL)
-
-    # Test assembling two callables, the all-scalar case
-    logp_callable_jax = make_likelihood_callable(
-        ddm,
-        loglik_kind="approx_differentiable",
-        backend="jax",
-        params_is_reg=[False] * 4,
-    )
-
-    n_missing = np.sum(data[:, 0] == -999.0).astype(int)
-
-    result_data_jax = logp_callable_jax(data[n_missing:, :-1], *dist_params).eval()
-    missing_eval = opn_callable_jax(data[:n_missing, -1:], *dist_params).eval()
-
-    assembled_loglik = assemble_callables(
-        logp_callable_jax, opn_callable_jax, params_only=False, has_deadline=True
-    )
-
-    result_assembled = assembled_loglik(data, *dist_params).eval()
-
-    result = np.zeros(100)
-    result[n_missing:] = result_data_jax
-    result[:n_missing] = missing_eval
-
-    np.testing.assert_array_almost_equal(
-        result_assembled,
-        result,
-        decimal=DECIMAL,
-    )
-
-    # Test assembling two callables, the vector case
-    logp_callable_jax_vector = make_likelihood_callable(
-        ddm,
-        loglik_kind="approx_differentiable",
-        backend="jax",
-        params_is_reg=[True] + [False] * 3,
-    )
-
-    result_data_jax = logp_callable_jax_vector(
-        data[n_missing:, :-1], param_vec[n_missing:], *dist_params[1:]
+    result_data_pytensor = logp_callable_pytensor(
+        data[n_missing:, :] if is_cpn else data[n_missing:, :-1],
+        v[n_missing:] if is_vector else v,
+        *dist_params[1:],
     ).eval()
-    missing_eval = opn_callable_jax_vector(
-        data[:n_missing, -1:], param_vec[:n_missing], *dist_params[1:]
+    missing_data_pytensor = missing_callable_pytensor(
+        None if is_cpn else data[:n_missing, -1:],
+        v[:n_missing] if is_vector else v,
+        *dist_params[1:],
     ).eval()
 
-    assembled_loglik = assemble_callables(
-        logp_callable_jax_vector,
-        opn_callable_jax_vector,
-        params_only=False,
-        has_deadline=True,
-    )
+    result_assembled_pytensor = assembled_loglik_pytensor(data, *dist_params).eval()
 
-    result_assembled = assembled_loglik(data, *dist_params_vector).eval()
-
-    result = np.zeros(100)
-    result[n_missing:] = result_data_jax
-    result[:n_missing] = missing_eval
+    result_individual = np.zeros(100)
+    result_individual[n_missing:] = result_data_pytensor
+    result_individual[:n_missing] = missing_data_pytensor
 
     np.testing.assert_array_almost_equal(
-        result_assembled,
-        result,
+        result_assembled_pytensor,
+        result_individual,
         decimal=DECIMAL,
     )
 
-    # Assembling two callables, the pytensor case, all scalar
-    logp_callable_pytensor = make_likelihood_callable(
-        ddm,
-        loglik_kind="approx_differentiable",
-        backend="pytensor",
-    )
-
-    assembled_loglik = assemble_callables(
-        logp_callable_pytensor,
-        opn_callable_pytensor,
-        params_only=False,
-        has_deadline=True,
-    )
-
-    result_assembled = assembled_loglik(data, *dist_params).eval()
-
+    # Also test results from pytensor and jax are the same
     np.testing.assert_array_almost_equal(
-        result_assembled,
-        result,
+        result_assembled_jax,
+        result_assembled_pytensor,
         decimal=DECIMAL,
     )
 
-    # Assembling two callables, the pytensor case, the vector case
-    assembled_loglik = assemble_callables(
-        logp_callable_pytensor,
-        opn_callable_pytensor,
-        params_only=False,
-        has_deadline=True,
-    )
+    # Test if the likelihood functions produce the same gradients
+    v_grad_jax = pytensor.grad(
+        logp_callable_jax(
+            data[n_missing:, :] if is_cpn else data[n_missing:, :-1],
+            v[n_missing:] if is_vector else v,
+            *dist_params[1:],
+        ).sum(),
+        wrt=v,
+    ).eval()
+    v_grad_pytensor = pytensor.grad(
+        logp_callable_pytensor(
+            data[n_missing:, :] if is_cpn else data[n_missing:, :-1],
+            v[n_missing:] if is_vector else v,
+            *dist_params[1:],
+        ).sum(),
+        wrt=v,
+    ).eval()
 
-    result_assembled = assembled_loglik(data, *dist_params_vector).eval()
+    np.testing.assert_array_almost_equal(v_grad_jax, v_grad_pytensor, decimal=DECIMAL)
 
-    np.testing.assert_array_almost_equal(
-        result_assembled,
-        result,
-        decimal=DECIMAL,
-    )
+    # This somehow doesn't work in the cpn, non-vector case
+    # Investigate later
+    v_grad_jax = pytensor.grad(
+        assembled_loglik_jax(data, *dist_params).sum(), wrt=v
+    ).eval()
+    v_grad_pytensor = pytensor.grad(
+        assembled_loglik_pytensor(data, *dist_params).sum(), wrt=v
+    ).eval()
+
+    np.testing.assert_array_almost_equal(v_grad_jax, v_grad_pytensor, decimal=DECIMAL)

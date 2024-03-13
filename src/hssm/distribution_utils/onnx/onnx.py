@@ -58,7 +58,7 @@ def make_jax_logp_funcs_from_onnx(
 
     scalars_only = all(not is_reg for is_reg in params_is_reg)
 
-    def logp(*inputs) -> float:
+    def logp(*inputs) -> jnp.ndarray:
         """Compute the log-likelihood.
 
         A function that computes the element-wise log-likelihoods given one data point
@@ -72,7 +72,7 @@ def make_jax_logp_funcs_from_onnx(
 
         Returns
         -------
-        float
+        jnp.ndarray
             The element-wise log-likelihoods.
         """
         # Makes a matrix to feed to the LAN model
@@ -86,7 +86,8 @@ def make_jax_logp_funcs_from_onnx(
         return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
 
     if params_only and scalars_only:
-        return jit(logp), jit(grad(logp)), logp
+        logp_vec = lambda *inputs: logp(*inputs).reshape((1,))
+        return jit(logp_vec), jit(grad(logp)), logp_vec
 
     in_axes: list = [0 if is_regression else None for is_regression in params_is_reg]
     if not params_only:
@@ -192,8 +193,6 @@ def make_jax_logp_ops(
                 the Op.
             """
             result = logp(*inputs)
-            if result.ndim == 0:
-                result = result.reshape((1,))
             output_storage[0][0] = np.asarray(result, dtype=node.outputs[0].dtype)
 
         def grad(self, inputs, output_gradients):
