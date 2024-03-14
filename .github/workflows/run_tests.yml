@@ -38,16 +38,21 @@ jobs:
           pip install -e .
 
       - name: Run mypy
+        shell: bash -el {0}
         run: mypy src
 
       - name: Check styling
+        shell: bash -el {0}
         run: black . --check
 
       - name: Linting
+        shell: bash -el {0}
         run: ruff check .
 
       - name: Run tests
+        shell: bash -el {0}
         run: pytest -n auto
 
       - name: build docs
+        shell: bash -el {0}
         run: mkdocs build
