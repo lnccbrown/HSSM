@@ -6,6 +6,9 @@ on:
 jobs:
   run_tests:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
 
     strategy:
       fail-fast: true
@@ -25,34 +28,27 @@ jobs:
           channel-priority: true
 
       - name: install pymc and poetry
-        shell: bash -el {0}
         run: |
           mamba info
           mamba install -c conda-forge pymc=5.10 poetry
 
       - name: install hssm
-        shell: bash -el {0}
         run: |
           poetry export --with dev --output=requirements.txt
           pip install -r requirements.txt
           pip install -e .
 
       - name: Run mypy
-        shell: bash -el {0}
         run: mypy src
 
       - name: Check styling
-        shell: bash -el {0}
         run: black . --check
 
       - name: Linting
-        shell: bash -el {0}
         run: ruff check .
 
       - name: Run tests
-        shell: bash -el {0}
         run: pytest -n auto
 
       - name: build docs
-        shell: bash -el {0}
         run: mkdocs build
