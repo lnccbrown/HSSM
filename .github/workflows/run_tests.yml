@@ -29,11 +29,13 @@ jobs:
         run: |
           mamba info
 
-      - name: install pymc
-        run: mamba install -c conda-forge pymc=5.10
+      - name: install pymc and poetry
+        run: mamba install -c conda-forge pymc=5.10 poetry
 
       - name: install hssm
-        run: pip install -e .
+        run: |
+          poetry export --with dev --output=requirements.txt
+          pip install -r requirements.txt
 
       - name: Run mypy
         run: mypy src
