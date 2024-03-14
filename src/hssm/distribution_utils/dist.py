@@ -255,7 +255,7 @@ def make_ssm_rv(
             p_outlier = None
 
             if cls._list_params[-1] == "p_outlier":
-                p_outlier = np.squeeze(arg_arrays.pop(-1))
+                p_outlier = arg_arrays.pop(-1)
 
             iinfo32 = np.iinfo(np.uint32)
             seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
@@ -324,6 +324,11 @@ def make_ssm_rv(
                     + "distribution but did not specify the distribution."
                 )
                 out_shape = sims_out.shape[:-1]
+                print(p_outlier.shape, out_shape)
+                if p_outlier.shape[-1] == 1:
+                    p_outlier = np.broadcast_to(p_outlier, out_shape)
+                else:
+                    p_outlier = p_outlier.reshape(out_shape)
                 replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
                 replace_n = int(np.sum(replace, axis=None))
                 if replace_n == 0:
