@@ -24,15 +24,14 @@ jobs:
           channels: conda-forge,defaults
           channel-priority: true
 
-      - name: show env info
+      - name: install pymc and poetry
         shell: bash -el {0}
         run: |
           mamba info
-
-      - name: install pymc and poetry
-        run: mamba install -c conda-forge pymc=5.10 poetry
+          mamba install -c conda-forge pymc=5.10 poetry
 
       - name: install hssm
+        shell: bash -el {0}
         run: |
           poetry export --with dev --output=requirements.txt
           pip install -r requirements.txt
