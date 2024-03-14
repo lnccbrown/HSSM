@@ -324,7 +324,6 @@ def make_ssm_rv(
                     + "distribution but did not specify the distribution."
                 )
                 out_shape = sims_out.shape[:-1]
-                print(p_outlier.shape, out_shape)
                 if p_outlier.shape[-1] == 1:
                     p_outlier = np.broadcast_to(p_outlier, out_shape)
                 else:
