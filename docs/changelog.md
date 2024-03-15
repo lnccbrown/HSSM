@@ -2,6 +2,19 @@
 
 ## 0.2.x
 
+### 0.2.1
+
+We added a few new features in 0.2.1:
+
+1. We have finished updating the HSSM code base to support go-nogo data and deadline. We will provide documentation once the networks are added to our huggingface repo.
+2. We updated `hssm.distribution_utils` to streamline the creation of `pm.Distribution`s.
+3. We now support response variables other than `rt` and `response`. They can be specified through `model_config` via the new `response` field.
+
+Other minor updates
+
+- Fixed an incompatible shape error during posterior predictive sampling when `p_outlier` is estimated as a parameter.
+- Updated documentation for using `make_distribution` with PyMC.
+
 ### 0.2.0
 
 This is a major version update! Many changes have taken place in this version:

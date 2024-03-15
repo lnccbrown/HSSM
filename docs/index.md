@@ -42,7 +42,7 @@ conda create -n <your-env-name> python=3.11
 conda activate <your-env-name>
 ```
 
-Substitute `<your-env-name>` with the name of the virtual environment that you choose. HSSM 0.2.0 and above supports Python versions 3.10 and 3.11.
+Substitute `<your-env-name>` with the name of the virtual environment that you choose. HSSM 0.2.0 and above support Python versions 3.10 and 3.11.
 
 ### Step 2: Install PyMC through conda-forge
 
