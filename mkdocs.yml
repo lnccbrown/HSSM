@@ -37,6 +37,7 @@ plugins:
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
         - tutorials/likelihoods.ipynb
+        - tutorials/pymc.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:

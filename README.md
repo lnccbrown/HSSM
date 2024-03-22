@@ -31,21 +31,58 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 ## Installation
 
-`hssm` is available through PyPI. You can install it with pip via:
+**Update**: From HSSM 0.2.1 on, we recommend `conda` as the virtual environment manager for HSSM. We will also gradually make HSSM available directly through `conda-forge` in the near future. For now, please follow the instruction below to install HSSM:
 
+### Step 1: Create a conda environment
+
+If you haven't already, please follow the [Anaconda official website](https://www.anaconda.com/download) to install anaconda. We assume that you already have one of [Anaconda](https://www.anaconda.com/download), [Miniconda](https://docs.anaconda.com/free/miniconda/index.html), [miniforge](https://github.com/conda-forge/miniforge/releases), or [mambaforge](https://github.com/conda-forge/miniforge/releases) installed on your system and have access to either `conda` or `mamba` available on your command line.
+
+To create a conda environment, use the following command. Substitute `mamba` for `conda` if `mamba` is available:
+
+```bash
+conda create -n <your-env-name> python=3.11
+conda activate <your-env-name>
 ```
+
+Substitute `<your-env-name>` with the name of the virtual environment that you choose. HSSM 0.2.0 and above supports Python versions 3.10 and 3.11.
+
+### Step 2: Install PyMC through conda-forge
+
+Installation through `conda-forge` is the official way of installing PyMC. This will also install other libraries such as `libblas` that PyMC requires to run properly.
+
+```bash
+conda install -c conda-forge pymc
+```
+
+As of HSSM 0.2.1, HSSM supports PyMC 5.10.4. If a future newer version of PyMC causes compatibility issues, please specify the version of PyMC:
+
+```bash
+conda install -c conda-forge pymc=5.10
+```
+
+### Step 3: Install `hssm` through `pip`
+
+In the same environment, install `hssm` through `pip`.
+
+```bash
+pip install hssm
+```
+
+## Advanced Installation
+
+`hssm` is also available through PyPI. You can directly install it with pip into any virtual environment via:
+
+```bash
 pip install hssm
 ```
 
 You can also install the bleeding-edge version of `hssm` directly from this repo:
 
-```
+```bash
 pip install git+https://github.com/lnccbrown/HSSM.git
 ```
 
-You will need optional dependencies to use JAX-based samplers and graph the models.
-Please refer to our [installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/)
-for more detailed instructions.
+While this installation is much simpler, you might need optional dependencies to use JAX-based samplers and to produce model graphs. You might also encounter this warning message `WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.` Please refer to our [advanced installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/) for more details.
 
 **Note**: Possible solutions to any issues with installations with hssm can be located
 [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an
