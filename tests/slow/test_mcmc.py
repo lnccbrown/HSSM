@@ -53,7 +53,7 @@ def data_ddm_reg_deadline(data_ddm_reg):
 
 @pytest.fixture
 def fixture_path():
-    return Path(__file__).parent / "fixtures"
+    return Path(__file__).parent.parent / "fixtures"
 
 
 @pytest.fixture

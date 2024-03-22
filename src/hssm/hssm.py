@@ -251,12 +251,6 @@ class HSSM:
         self._inference_obj = None
         self.hierarchical = hierarchical
 
-        if self.hierarchical and "participant_id" not in self.data.columns:
-            raise ValueError(
-                "You have specified a hierarchical model, but there is no "
-                + "`participant_id` field in the DataFrame that you have passed."
-            )
-
         if self.hierarchical and prior_settings is None:
             prior_settings = "safe"
 
@@ -267,15 +261,6 @@ class HSSM:
         if extra_namespace is not None:
             additional_namespace.update(extra_namespace)
         self.additional_namespace = additional_namespace
-
-        responses = self.data["response"].unique().astype(int)
-        self.n_responses = len(responses)
-        if self.n_responses == 2:
-            if -1 not in responses or 1 not in responses:
-                raise ValueError(
-                    "The response column must contain only -1 and 1 when there are "
-                    + "two responses."
-                )
 
         # Construct a model_config from defaults
         self.model_config = Config.from_defaults(model, loglik_kind)
@@ -299,6 +284,11 @@ class HSSM:
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
+
+        self.choices = self.data["response"].unique().astype(int)
+        self.n_choices = len(self.choices)
+
+        self._pre_check_data_sanity()
 
         # Go-NoGo
         if isinstance(missing_data, float):
@@ -333,8 +323,6 @@ class HSSM:
 
         if self.deadline:
             self.response.append(self.deadline_name)
-
-        self._check_extra_fields()
 
         # Process lapse distribution
         self.has_lapse = p_outlier is not None and p_outlier != 0
@@ -375,6 +363,8 @@ class HSSM:
         self.p_outlier = self.params.get("p_outlier")
         self.lapse = lapse if self.has_lapse else None
 
+        self._post_check_data_sanity()
+
         self.model_distribution = self._make_model_distribution()
 
         self.family = make_family(
@@ -386,10 +376,10 @@ class HSSM:
 
         self.model = bmb.Model(
             self.formula,
-            data=data,
+            data=self.data,
             family=self.family,
             priors=self.priors,
-            extra_namespace=extra_namespace,
+            extra_namespace=self.additional_namespace,
             **other_kwargs,
         )
 
@@ -1338,6 +1328,53 @@ class HSSM:
                     self.data["rt"],
                     -999.0,
                 )
+
+    def _pre_check_data_sanity(self):
+        """Check if the data is clean enough for the model."""
+        for field in self.response:
+            if field not in self.data.columns:
+                raise ValueError(f"Field {field} not found in data.")
+
+        self._check_extra_fields()
+
+        if self.hierarchical:
+            if "participant_id" not in self.data.columns:
+                raise ValueError(
+                    "You have specified that your model is hierarchical, but "
+                    + "`participant_id` is not found in your dataset."
+                )
+
+        if self.n_choices == 2:
+            if -1 not in self.choices or 1 not in self.choices:
+                raise ValueError(
+                    "The response column must contain only -1 and 1 when there are "
+                    + "two responses."
+                )
+
+    def _post_check_data_sanity(self):
+        """Check if the data is clean enough for the model."""
+        if self.deadline or self.missing_data:
+            if -999.0 not in self.data["rt"].unique():
+                raise ValueError(
+                    "You have no missing data in your dataset, "
+                    + "which is not allowed when `missing_data` or `deadline` is set to"
+                    + " True."
+                )
+            rt_filtered = self.data.rt[self.data.rt != -999.0]
+        else:
+            rt_filtered = self.data.rt
+
+        if np.any(rt_filtered.isna(), axis=None):
+            raise ValueError(
+                "You have NaN response times in your dataset, "
+                + "which is not allowed."
+            )
+
+        if not np.all(rt_filtered >= 0):
+            raise ValueError(
+                "You have negative response times in your dataset, "
+                + "which is not allowed."
+            )
 
 
 def _set_missing_data_and_deadline(
