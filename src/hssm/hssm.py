@@ -286,6 +286,7 @@ class HSSM:
                 if isinstance(model_config, ModelConfig)
                 else ModelConfig(**model_config)  # also serves as dict validation
             )
+
         # Update loglik with user-provided value
         self.model_config.update_loglik(loglik)
         # Ensure that all required fields are valid
@@ -360,6 +361,7 @@ class HSSM:
         # Get the bambi formula, priors, and link
         self.formula, self.priors, self.link = self._parse_bambi()
 
+        #print(self.priors)
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
         # a large negative value).
@@ -869,6 +871,8 @@ class HSSM:
                     prior = param.prior
                 output.append(f"    Prior: {prior}")
             output.append(f"    Explicit bounds: {param.bounds}")
+            output.append(" (ignored due to link function)" if self.link_settings \
+                          is not None else "")
 
         if self.p_outlier is not None:
             # TODO: Allow regression for self.p_outlier
@@ -1078,6 +1082,11 @@ class HSSM:
         )
         for param in self.list_params:
             param_obj = self.params[param]
+            print(param)
+            print('bounds before prior settings: ', param_obj.bounds)
+
+            if self.link_settings == "log_logit":
+                param_obj.override_default_link()
             if self.prior_settings == "safe":
                 if is_ddm:
                     param_obj.override_default_priors_ddm(
@@ -1087,8 +1096,6 @@ class HSSM:
                     param_obj.override_default_priors(
                         self.data, self.additional_namespace
                     )
-            if self.link_settings == "log_logit":
-                param_obj.override_default_link()
 
     def _process_all(self):
         """Process all params."""

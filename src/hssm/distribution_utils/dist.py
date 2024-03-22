@@ -81,6 +81,9 @@ def apply_param_bounds_to_loglik(
 
     return logp
 
+# AF-TODO: define clip params
+
+
 
 def ensure_positive_ndt(data, logp, list_params, dist_params):
     """Ensure that the non-decision time is always positive.
@@ -429,6 +432,9 @@ def make_distribution(
             return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
+
+            # AF-TODO: Apply clipping here
+
             num_params = len(list_params)
             extra_fields = []
 
@@ -440,7 +446,7 @@ def make_distribution(
                 p_outlier = dist_params[-1]
                 dist_params = dist_params[:-1]
                 lapse_logp = lapse_func(data[:, 0].eval())
-
+                # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)

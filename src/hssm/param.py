@@ -156,17 +156,22 @@ class Param:
                 if term.kind == "intercept":
                     has_common_intercept = True
                     override_priors[name] = get_default_prior(
-                        "common_intercept", self.bounds
+                        "common_intercept", self.name,
+                        self.bounds, self.link
                     )
                 else:
-                    override_priors[name] = get_default_prior("common", bounds=None)
+                    override_priors[name] = get_default_prior("common",
+                                                              self.name,
+                                                              bounds=None,
+                                                              link=self.link)
 
         if dm.group is not None:
             for name, term in dm.group.terms.items():
                 if term.kind == "intercept":
                     if has_common_intercept:
                         override_priors[name] = get_default_prior(
-                            "group_intercept_with_common", bounds=None
+                            "group_intercept_with_common", self.name,
+                            bounds=None, link=self.link
                         )
                     else:
                         # treat the term as any other group-specific term
@@ -176,11 +181,13 @@ class Param:
                             + " This will change in the future."
                         )
                         override_priors[name] = get_default_prior(
-                            "group_intercept", bounds=None
+                            "group_intercept", self.name,
+                            bounds=None, link=self.link
                         )
                 else:
                     override_priors[name] = get_default_prior(
-                        "group_specific", bounds=None
+                        "group_specific", self.name,
+                        bounds=None, link=self.link,
                     )
 
         if not self.prior:
@@ -217,11 +224,12 @@ class Param:
                 if term.kind == "intercept":
                     has_common_intercept = True
                     override_priors[name] = get_hddm_default_prior(
-                        "common_intercept", self.name, self.bounds
+                        "common_intercept", self.name, self.bounds,
+                        self.link
                     )
                 else:
                     override_priors[name] = get_hddm_default_prior(
-                        "common", self.name, bounds=None
+                        "common", self.name, bounds=None, link=self.link,
                     )
 
         if dm.group is not None:
@@ -229,7 +237,9 @@ class Param:
                 if term.kind == "intercept":
                     if has_common_intercept:
                         override_priors[name] = get_default_prior(
-                            "group_intercept_with_common", bounds=None
+                            "group_intercept_with_common", self.name,
+                            bounds=None,
+                            link=self.link
                         )
                     else:
                         # treat the term as any other group-specific term
@@ -239,11 +249,13 @@ class Param:
                             + " This will change in the future."
                         )
                         override_priors[name] = get_hddm_default_prior(
-                            "group_intercept", self.name, bounds=None
+                            "group_intercept", self.name, bounds=None,
+                            link=self.link
                         )
                 else:
                     override_priors[name] = get_hddm_default_prior(
-                        "group_specific", self.name, bounds=None
+                        "group_specific", self.name, bounds=None,
+                        link=self.link
                     )
 
         if not self.prior:
@@ -266,7 +278,6 @@ class Param:
         rhs = formula.split("~")[1]
         formula = "rt ~ " + rhs
         dm = design_matrices(formula, data=data, extra_namespace=extra_namespace)
-
         return dm
 
     def _ensure_not_converted(self, context=Literal["link", "prior"]):
@@ -437,7 +448,7 @@ class Param:
             if self.prior is not None:
                 prior = {self.name: self.prior}
             link = {self.name: self.link}
-
+            print(link)
             return formula, prior, link
 
         assert self.name is not None
@@ -482,9 +493,13 @@ class Param:
             else:
                 output.append("        Unspecified. Using defaults")
 
-            assert self.link is not None
-            link = self.link if isinstance(self.link, str) else self.link.name
-            output.append(f"    Link: {link}")
+            # TODO: Link function should be optional here?
+            #assert self.link is not None
+            if self.link is not None:
+                link = self.link if isinstance(self.link, str) else self.link.name
+                output.append(f"    Link: {link}")
+            else:
+                output.append("    Link: None") # TODO: Make this Identity?
 
         # None regression case:
         # Output prior and bounds

@@ -207,7 +207,8 @@ def generate_prior(
     return prior
 
 
-def get_default_prior(term_type: str, bounds: tuple[float, float] | None):
+def get_default_prior(term_type: str, param: str, bounds: tuple[float, float] | None,
+                      link: str | bmb.Link | None):
     """Generate a Prior based on the default settings.
 
     The following summarizes default priors for each type of term:
@@ -241,7 +242,12 @@ def get_default_prior(term_type: str, bounds: tuple[float, float] | None):
     if term_type == "common":
         prior = generate_prior("Normal", bounds=None)
     elif term_type == "common_intercept":
-        if bounds is not None:
+        # We ignore bounds if link is used, since boundaries loose their meaning.
+        # TODO: This is a temporary solution, this can prob benefit form a bit of a
+        # refactoring, to define settings in a more general way.
+        if (link is not None) or (bounds is None):
+            prior = generate_prior("Normal")
+        elif (bounds is not None):
             if any(np.isinf(b) for b in bounds):
                 # TODO: Make it more specific.
                 prior = generate_prior("Normal", bounds=bounds)
@@ -249,8 +255,6 @@ def get_default_prior(term_type: str, bounds: tuple[float, float] | None):
                 prior = generate_prior(
                     "Normal", mu=mean(bounds), sigma=0.25, bounds=bounds
                 )
-        else:
-            prior = generate_prior("Normal")
     elif term_type == "group_intercept":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
     elif term_type == "group_specific":
@@ -263,22 +267,39 @@ def get_default_prior(term_type: str, bounds: tuple[float, float] | None):
 
 
 def get_hddm_default_prior(
-    term_type: str, param: str, bounds: tuple[float, float] | None
+    term_type: str, param: str, bounds: tuple[float, float] | None,
+    link: str | bmb.Link | None
 ):
+    print(link)
+    print(term_type)
     """Generate a Prior based on the default settings - the HDDM case."""
     if term_type == "common":
         prior = generate_prior("Normal", bounds=None)
     elif term_type == "common_intercept":
-        prior = generate_prior(HDDM_MU[param], bounds=bounds)
+        # TODO: This is a temporary solution, this can prob benefit form a bit of a
+        # refactoring, to define settings in a more general way.
+        print(param)
+        print(link)
+        if link is not None:
+            print('passed')
+            prior = generate_prior("Normal")
+        else:
+            prior = generate_prior(HDDM_MU[param], bounds=bounds)
     elif term_type == "group_intercept":
-        prior = generate_prior(HDDM_SETTINGS_GROUP[param], bounds=None)
+        if link is not None:
+            prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
+        else:
+            prior = generate_prior(HDDM_SETTINGS_GROUP[param], bounds=None)
+    elif term_type == "group_intercept_with_common":
+        prior = generate_prior("Normal", mu=0.0, sigma="Weibull", bounds=None)
     elif term_type == "group_specific":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
     else:
         raise ValueError("Unrecognized term type.")
+    # Should the be a `group_intercept_with_common` case in here?
     return prior
 
-
+# Q: Are higher level mean distributions actually truncated?
 HSSM_SETTINGS_DISTRIBUTIONS: dict[Any, Any] = {
     "Normal": {"mu": 0.0, "sigma": 0.25},
     "Weibull": {"alpha": 1.5, "beta": 0.3},
@@ -290,7 +311,7 @@ HSSM_SETTINGS_DISTRIBUTIONS: dict[Any, Any] = {
 HDDM_MU: dict[Any, Any] = {
     "v": {"dist": "Normal", "mu": 2.0, "sigma": 3.0},
     "a": {"dist": "Gamma", "mu": 1.5, "sigma": 0.75},
-    "z": {"dist": "Gamma", "mu": 10, "sigma": 10},
+    "z": {"dist": "Beta", "alpha": 10, "beta": 10},
     "t": {"dist": "Gamma", "mu": 0.4, "sigma": 0.2},
     "sv": {"dist": "HalfNormal", "sigma": 2.0},
     "st": {"dist": "HalfNormal", "sigma": 0.3},
@@ -300,7 +321,7 @@ HDDM_MU: dict[Any, Any] = {
 HDDM_SIGMA: dict[Any, Any] = {
     "v": {"dist": "HalfNormal", "sigma": 2.0},
     "a": {"dist": "HalfNormal", "sigma": 0.1},
-    "z": {"dist": "Gamma", "mu": 10, "sigma": 10},
+    "z": {"dist": "Weibull", "alpha": 1.2, "beta": "0.25"},
     "t": {"dist": "HalfNormal", "sigma": 1.0},
     "sv": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
     "sz": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
@@ -310,9 +331,19 @@ HDDM_SIGMA: dict[Any, Any] = {
 HDDM_SETTINGS_GROUP: dict[Any, Any] = {
     "v": {"dist": "Normal", "mu": HDDM_MU["v"], "sigma": HDDM_SIGMA["v"]},
     "a": {"dist": "Gamma", "mu": HDDM_MU["a"], "sigma": HDDM_SIGMA["a"]},
-    "z": {"dist": "Beta", "alpha": HDDM_MU["z"], "beta": HDDM_SIGMA["z"]},
+    "z": {"dist": "Beta",
+          "alpha": {"dist": "Gamma", "mu": 10, "sigma": 10},
+          "beta": {"dist": "Gamma", "mu": 10, "sigma": 10}},
     "t": {"dist": "Normal", "mu": HDDM_MU["t"], "sigma": HDDM_SIGMA["t"]},
     "sv": {"dist": "Gamma", "mu": HDDM_MU["sv"], "sigma": HDDM_SIGMA["sv"]},
     "sz": {"dist": "Gamma", "mu": HDDM_MU["sz"], "sigma": HDDM_SIGMA["sz"]},
     "st": {"dist": "Gamma", "mu": HDDM_MU["st"], "sigma": HDDM_SIGMA["st"]},
 }
+
+# INITVAL_SETTINGS_LOGIT: dict[Any, Any] = {
+#     "t" : {"initval": -4.0},
+# }
+
+# INITVAL_SETTINGS_NOLINK: dict[Any, Any] = {
+#     "t" : {"initval": 0.05},
+# }
