@@ -30,6 +30,8 @@ from hssm.defaults import (
     MissingDataNetwork,
     SupportedModels,
     missing_data_networks_suffix,
+    INITVAL_SETTINGS,
+    INITVAL_JITTER_SETTINGS,
 )
 from hssm.distribution_utils import (
     assemble_callables,
@@ -225,12 +227,9 @@ class HSSM:
         model: SupportedModels | str = "ddm",
         include: list[dict | Param] | None = None,
         model_config: ModelConfig | dict | None = None,
-        loglik: str
-        | PathLike
-        | Callable
-        | pytensor.graph.Op
-        | type[pm.Distribution]
-        | None = None,
+        loglik: (
+            str | PathLike | Callable | pytensor.graph.Op | type[pm.Distribution] | None
+        ) = None,
         loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
@@ -240,11 +239,9 @@ class HSSM:
         extra_namespace: dict[str, Any] | None = None,
         missing_data: bool | float = False,
         deadline: bool | str = False,
-        loglik_missing_data: str
-        | PathLike
-        | Callable
-        | pytensor.graph.Op
-        | None = None,
+        loglik_missing_data: (
+            str | PathLike | Callable | pytensor.graph.Op | None
+        ) = None,
         **kwargs,
     ):
         self.data = data.copy()
@@ -349,7 +346,7 @@ class HSSM:
         # Get the bambi formula, priors, and link
         self.formula, self.priors, self.link = self._parse_bambi()
 
-        #print(self.priors)
+        # print(self.priors)
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
         # a large negative value).
@@ -387,11 +384,16 @@ class HSSM:
             self.model, self._parent_param, self.response_c, self.response_str
         )
         self.set_alias(self._aliases)
+        self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
+        self._jitter_initvals(
+            jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"], vector_only=True
+        )
 
     def sample(
         self,
-        sampler: Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
-        | None = None,
+        sampler: (
+            Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"] | None
+        ) = None,
         init: str | None = None,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
@@ -861,8 +863,11 @@ class HSSM:
                     prior = param.prior
                 output.append(f"    Prior: {prior}")
             output.append(f"    Explicit bounds: {param.bounds}")
-            output.append(" (ignored due to link function)" if self.link_settings \
-                          is not None else "")
+            output.append(
+                " (ignored due to link function)"
+                if self.link_settings is not None
+                else ""
+            )
 
         if self.p_outlier is not None:
             # TODO: Allow regression for self.p_outlier
@@ -1072,8 +1077,8 @@ class HSSM:
         )
         for param in self.list_params:
             param_obj = self.params[param]
-            print(param)
-            print('bounds before prior settings: ', param_obj.bounds)
+            # print(param)
+            # print('bounds before prior settings: ', param_obj.bounds)
 
             if self.link_settings == "log_logit":
                 param_obj.override_default_link()
@@ -1238,9 +1243,11 @@ class HSSM:
             list_params=self.list_params,
             bounds=self.bounds,
             lapse=self.lapse,
-            extra_fields=None
-            if not self.extra_fields
-            else [deepcopy(self.data[field].values) for field in self.extra_fields],
+            extra_fields=(
+                None
+                if not self.extra_fields
+                else [deepcopy(self.data[field].values) for field in self.extra_fields]
+            ),
         )
 
     def _check_extra_fields(self, data: pd.DataFrame | None = None) -> bool:
@@ -1374,6 +1381,60 @@ class HSSM:
             raise ValueError(
                 "You have negative response times in your dataset, "
                 + "which is not allowed."
+            )
+
+    def _postprocess_initvals_deterministic(
+        self, initval_settings: dict = INITVAL_SETTINGS
+    ) -> None:
+        # Consider case where link functions are set to 'log_logit'
+        # or 'None'
+        if self.link_settings not in ["log_logit", "None", None]:
+            print(
+                "Not preprocessing initial values, "
+                + "because none of the two standard link settings are chosen!"
+            )
+            return None
+
+        link_setting_str = str(self.link_settings)
+        # Set initial values for particular parameters
+        for name_, starting_value in self.pymc_model.initial_point().items():
+            name_tmp = name_
+            name_tmp = name_tmp.replace("_log__", "")
+            name_tmp = name_tmp.replace("_interval__", "")
+            if name_tmp in initval_settings[link_setting_str].keys():
+                # Apply specific settings from initval_settings dictionary
+                self.pymc_model.set_initval(
+                    self.pymc_model.named_vars[name_tmp],
+                    initval_settings[link_setting_str][name_tmp],
+                )
+
+    def _jitter_initvals(
+        self, jitter_epsilon: float = 0.01, vector_only: bool = False
+    ) -> None:
+        if vector_only:
+            self.__jitter_initvals_vector_only(jitter_epsilon)
+        else:
+            self.__jitter_initvals_all(jitter_epsilon)
+
+    def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
+        initial_point_dict = self.pymc_model.initial_point()
+        for name_, starting_value in initial_point_dict.items():
+            if starting_value.ndim != 0 and starting_value.shape[0] != 1:
+                starting_value_tmp = starting_value + np.random.uniform(
+                    -jitter_epsilon, jitter_epsilon, starting_value.shape
+                ).astype(np.float32)
+                self.pymc_model.set_initval(
+                    self.pymc_model.named_vars[name_], starting_value_tmp
+                )
+
+    def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
+        initial_point_dict = self.pymc_model.initial_point()
+        for name_, starting_value in initial_point_dict.items():
+            starting_value_tmp = starting_value + np.random.uniform(
+                -jitter_epsilon, jitter_epsilon, starting_value.shape
+            ).astype(np.float32)
+            self.pymc_model.set_initval(
+                self.pymc_model.named_vars[name_], starting_value_tmp
             )
 
 

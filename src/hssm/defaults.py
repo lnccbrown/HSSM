@@ -1,4 +1,5 @@
 """Provide default configurations for models in the HSSM class."""
+
 from enum import Enum
 from os import PathLike
 from typing import Callable, Literal, Optional, TypedDict, Union
@@ -99,7 +100,7 @@ default_model_config: DefaultConfigs = {
             "approx_differentiable": {
                 "loglik": "ddm.onnx",
                 "backend": "jax",
-                "default_priors":   {
+                "default_priors": {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
@@ -325,6 +326,34 @@ default_model_config: DefaultConfigs = {
             },
         },
     },
+}
+
+INITVAL_SETTINGS = {
+    # logit link function case
+    # should never use priors with bounds,
+    # so no need to take care of _log__, and _interval__ variables
+    "log_logit": {
+        "t": -4.0,
+        "t_Intercept": -4.0,
+        "v": 0.0,
+        "a": 0.0,
+        "a_Intercept": 0.0,
+        "v_Intercept": 0.0,
+        "p_outlier": -5.0,
+    },
+    # identity link function case,
+    # need to take care of_log__ and _interval__ variables
+    "None": {
+        "t": 0.025,
+        "t_Intercept": 0.025,
+        "a": 1.5,
+        "a_Intercept": 1.5,
+        "p_outlier": 0.001,
+    },
+}
+
+INITVAL_JITTER_SETTINGS = {
+    "jitter_epsilon": 0.01,
 }
 
 

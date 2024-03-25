@@ -8,6 +8,7 @@ bmb.Prior but adds the following:
 2. The ability to still print out the prior before the truncation.
 3. The ability to shorten the output of bmb.Prior.
 """
+
 from copy import deepcopy
 from statistics import mean
 from typing import Any, Callable
@@ -73,9 +74,11 @@ class Prior(bmb.Prior):
         args = self._args if self.is_truncated else self.args
         args_str = ", ".join(
             [
-                f"{k}: {format_arg(v, 4)}"
-                if not isinstance(v, type(self))
-                else f"{k}: {v}"
+                (
+                    f"{k}: {format_arg(v, 4)}"
+                    if not isinstance(v, type(self))
+                    else f"{k}: {v}"
+                )
                 for k, v in args.items()
             ]
         )
@@ -207,8 +210,12 @@ def generate_prior(
     return prior
 
 
-def get_default_prior(term_type: str, param: str, bounds: tuple[float, float] | None,
-                      link: str | bmb.Link | None):
+def get_default_prior(
+    term_type: str,
+    param: str,
+    bounds: tuple[float, float] | None,
+    link: str | bmb.Link | None,
+):
     """Generate a Prior based on the default settings.
 
     The following summarizes default priors for each type of term:
@@ -247,7 +254,7 @@ def get_default_prior(term_type: str, param: str, bounds: tuple[float, float] | 
         # refactoring, to define settings in a more general way.
         if (link is not None) or (bounds is None):
             prior = generate_prior("Normal")
-        elif (bounds is not None):
+        elif bounds is not None:
             if any(np.isinf(b) for b in bounds):
                 # TODO: Make it more specific.
                 prior = generate_prior("Normal", bounds=bounds)
@@ -267,21 +274,23 @@ def get_default_prior(term_type: str, param: str, bounds: tuple[float, float] | 
 
 
 def get_hddm_default_prior(
-    term_type: str, param: str, bounds: tuple[float, float] | None,
-    link: str | bmb.Link | None
+    term_type: str,
+    param: str,
+    bounds: tuple[float, float] | None,
+    link: str | bmb.Link | None,
 ):
-    print(link)
-    print(term_type)
+    # print(link)
+    # print(term_type)
     """Generate a Prior based on the default settings - the HDDM case."""
     if term_type == "common":
         prior = generate_prior("Normal", bounds=None)
     elif term_type == "common_intercept":
         # TODO: This is a temporary solution, this can prob benefit form a bit of a
         # refactoring, to define settings in a more general way.
-        print(param)
-        print(link)
+        # print(param)
+        # print(link)
         if link is not None:
-            print('passed')
+            print("passed")
             prior = generate_prior("Normal")
         else:
             prior = generate_prior(HDDM_MU[param], bounds=bounds)
@@ -298,6 +307,7 @@ def get_hddm_default_prior(
         raise ValueError("Unrecognized term type.")
     # Should the be a `group_intercept_with_common` case in here?
     return prior
+
 
 # Q: Are higher level mean distributions actually truncated?
 HSSM_SETTINGS_DISTRIBUTIONS: dict[Any, Any] = {
@@ -331,9 +341,11 @@ HDDM_SIGMA: dict[Any, Any] = {
 HDDM_SETTINGS_GROUP: dict[Any, Any] = {
     "v": {"dist": "Normal", "mu": HDDM_MU["v"], "sigma": HDDM_SIGMA["v"]},
     "a": {"dist": "Gamma", "mu": HDDM_MU["a"], "sigma": HDDM_SIGMA["a"]},
-    "z": {"dist": "Beta",
-          "alpha": {"dist": "Gamma", "mu": 10, "sigma": 10},
-          "beta": {"dist": "Gamma", "mu": 10, "sigma": 10}},
+    "z": {
+        "dist": "Beta",
+        "alpha": {"dist": "Gamma", "mu": 10, "sigma": 10},
+        "beta": {"dist": "Gamma", "mu": 10, "sigma": 10},
+    },
     "t": {"dist": "Normal", "mu": HDDM_MU["t"], "sigma": HDDM_SIGMA["t"]},
     "sv": {"dist": "Gamma", "mu": HDDM_MU["sv"], "sigma": HDDM_SIGMA["sv"]},
     "sz": {"dist": "Gamma", "mu": HDDM_MU["sz"], "sigma": HDDM_SIGMA["sz"]},

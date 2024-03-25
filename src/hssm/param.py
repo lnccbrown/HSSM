@@ -156,22 +156,22 @@ class Param:
                 if term.kind == "intercept":
                     has_common_intercept = True
                     override_priors[name] = get_default_prior(
-                        "common_intercept", self.name,
-                        self.bounds, self.link
+                        "common_intercept", self.name, self.bounds, self.link
                     )
                 else:
-                    override_priors[name] = get_default_prior("common",
-                                                              self.name,
-                                                              bounds=None,
-                                                              link=self.link)
+                    override_priors[name] = get_default_prior(
+                        "common", self.name, bounds=None, link=self.link
+                    )
 
         if dm.group is not None:
             for name, term in dm.group.terms.items():
                 if term.kind == "intercept":
                     if has_common_intercept:
                         override_priors[name] = get_default_prior(
-                            "group_intercept_with_common", self.name,
-                            bounds=None, link=self.link
+                            "group_intercept_with_common",
+                            self.name,
+                            bounds=None,
+                            link=self.link,
                         )
                     else:
                         # treat the term as any other group-specific term
@@ -181,13 +181,14 @@ class Param:
                             + " This will change in the future."
                         )
                         override_priors[name] = get_default_prior(
-                            "group_intercept", self.name,
-                            bounds=None, link=self.link
+                            "group_intercept", self.name, bounds=None, link=self.link
                         )
                 else:
                     override_priors[name] = get_default_prior(
-                        "group_specific", self.name,
-                        bounds=None, link=self.link,
+                        "group_specific",
+                        self.name,
+                        bounds=None,
+                        link=self.link,
                     )
 
         if not self.prior:
@@ -224,12 +225,14 @@ class Param:
                 if term.kind == "intercept":
                     has_common_intercept = True
                     override_priors[name] = get_hddm_default_prior(
-                        "common_intercept", self.name, self.bounds,
-                        self.link
+                        "common_intercept", self.name, self.bounds, self.link
                     )
                 else:
                     override_priors[name] = get_hddm_default_prior(
-                        "common", self.name, bounds=None, link=self.link,
+                        "common",
+                        self.name,
+                        bounds=None,
+                        link=self.link,
                     )
 
         if dm.group is not None:
@@ -237,9 +240,10 @@ class Param:
                 if term.kind == "intercept":
                     if has_common_intercept:
                         override_priors[name] = get_default_prior(
-                            "group_intercept_with_common", self.name,
+                            "group_intercept_with_common",
+                            self.name,
                             bounds=None,
-                            link=self.link
+                            link=self.link,
                         )
                     else:
                         # treat the term as any other group-specific term
@@ -249,13 +253,11 @@ class Param:
                             + " This will change in the future."
                         )
                         override_priors[name] = get_hddm_default_prior(
-                            "group_intercept", self.name, bounds=None,
-                            link=self.link
+                            "group_intercept", self.name, bounds=None, link=self.link
                         )
                 else:
                     override_priors[name] = get_hddm_default_prior(
-                        "group_specific", self.name, bounds=None,
-                        link=self.link
+                        "group_specific", self.name, bounds=None, link=self.link
                     )
 
         if not self.prior:
@@ -494,12 +496,12 @@ class Param:
                 output.append("        Unspecified. Using defaults")
 
             # TODO: Link function should be optional here?
-            #assert self.link is not None
+            # assert self.link is not None
             if self.link is not None:
                 link = self.link if isinstance(self.link, str) else self.link.name
                 output.append(f"    Link: {link}")
             else:
-                output.append("    Link: None") # TODO: Make this Identity?
+                output.append("    Link: None")  # TODO: Make this Identity?
 
         # None regression case:
         # Output prior and bounds

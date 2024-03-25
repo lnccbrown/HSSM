@@ -81,8 +81,8 @@ def apply_param_bounds_to_loglik(
 
     return logp
 
-# AF-TODO: define clip params
 
+# AF-TODO: define clip params
 
 
 def ensure_positive_ndt(data, logp, list_params, dist_params):
