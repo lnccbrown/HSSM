@@ -212,7 +212,7 @@ def generate_prior(
 
 def get_default_prior(
     term_type: str,
-    param: str,
+    param: str | None,
     bounds: tuple[float, float] | None,
     link: str | bmb.Link | None,
 ):
