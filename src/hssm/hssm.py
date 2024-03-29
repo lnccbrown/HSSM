@@ -5,6 +5,7 @@ sequential sampling models.
 
 This file defines the entry class HSSM.
 """
+
 import logging
 from copy import deepcopy
 from inspect import isclass
@@ -475,10 +476,10 @@ class HSSM:
                 kwargs["jitter"] = False
             elif kwargs["jitter"]:
                 _logger.warning(
-                    "The jitter argument is set to True. " +\
-                        "This argument is not supported "
-                    + "by the numpyro backend. " +\
-                        "The jitter argument will be set to False."
+                    "The jitter argument is set to True. "
+                    + "This argument is not supported "
+                    + "by the numpyro backend. "
+                    + "The jitter argument will be set to False."
                 )
                 kwargs["jitter"] = False
         elif sampler != "nuts_numpyro":
