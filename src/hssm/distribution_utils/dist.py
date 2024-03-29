@@ -437,7 +437,6 @@ def make_distribution(
             return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
-
             # AF-TODO: Apply clipping here
 
             num_params = len(list_params)
