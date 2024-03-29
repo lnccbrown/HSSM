@@ -5,7 +5,6 @@ sequential sampling models.
 
 This file defines the entry class HSSM.
 """
-
 import logging
 from copy import deepcopy
 from inspect import isclass
@@ -26,12 +25,12 @@ from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 
 from hssm.defaults import (
+    INITVAL_JITTER_SETTINGS,
+    INITVAL_SETTINGS,
     LoglikKind,
     MissingDataNetwork,
     SupportedModels,
     missing_data_networks_suffix,
-    INITVAL_SETTINGS,
-    INITVAL_JITTER_SETTINGS,
 )
 from hssm.distribution_utils import (
     assemble_callables,
@@ -468,6 +467,30 @@ class HSSM:
                 init = "adapt_diag"
             else:
                 init = "auto"
+
+        # If sampler is finally `numpyro` make sure
+        # the jitter argument is set to False
+        if sampler == "nuts_numpyro":
+            if "jitter" not in kwargs.keys():
+                kwargs["jitter"] = False
+            elif kwargs["jitter"]:
+                _logger.warning(
+                    "The jitter argument is set to True. " +\
+                        "This argument is not supported "
+                    + "by the numpyro backend. " +\
+                        "The jitter argument will be set to False."
+                )
+                kwargs["jitter"] = False
+        elif sampler != "nuts_numpyro":
+            if "jitter" in kwargs.keys():
+                _logger.warning(
+                    "The jitter keyword argument is "
+                    + "supported only by the nuts_numpyro sampler. \n"
+                    + "The jitter argument will be ignored."
+                )
+                del kwargs["jitter"]
+            else:
+                pass
 
         self._inference_obj = self.model.fit(
             inference_method=sampler, init=init, **kwargs
@@ -1386,6 +1409,7 @@ class HSSM:
     def _postprocess_initvals_deterministic(
         self, initval_settings: dict = INITVAL_SETTINGS
     ) -> None:
+        """Set initial values for subset of parameters."""
         # Consider case where link functions are set to 'log_logit'
         # or 'None'
         if self.link_settings not in ["log_logit", "None", None]:
@@ -1411,6 +1435,7 @@ class HSSM:
     def _jitter_initvals(
         self, jitter_epsilon: float = 0.01, vector_only: bool = False
     ) -> None:
+        """Apply controlled jitter to initial values."""
         if vector_only:
             self.__jitter_initvals_vector_only(jitter_epsilon)
         else:
