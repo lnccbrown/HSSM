@@ -603,7 +603,6 @@ t_prior = {"name": "Gamma", "mu": t_mu, "sigma": t_sigma}
 def test_param_override_default_priors_ddm(
     cavanagh_test, caplog, param_name, mu, prior
 ):
-
     print("TESTING PARAM OVERRIDE DEFAULT PRIORS DDM")
     print(f"{param_name}=")
     print(f"{mu}=")
@@ -642,7 +641,6 @@ def test_param_override_default_priors_ddm(
 
     assert intercept_prior.name == mu1.pop("name")
     for key, val in mu1.items():
-
         val1 = intercept_prior._args[key]
         np.testing.assert_almost_equal(val1, val)
 
