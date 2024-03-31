@@ -122,6 +122,9 @@ def run_sample(model, sampler, step, expected):
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
+    print('TEST INPUTS WERE: ')
+    print(loglik_kind, backend, sampler, step, expected)
+
     model = hssm.HSSM(
         data_ddm, loglik_kind=loglik_kind, model_config={"backend": backend}
     )
