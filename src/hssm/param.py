@@ -450,7 +450,6 @@ class Param:
             if self.prior is not None:
                 prior = {self.name: self.prior}
             link = {self.name: self.link}
-            print(link)
             return formula, prior, link
 
         assert self.name is not None
