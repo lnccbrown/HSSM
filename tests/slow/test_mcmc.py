@@ -14,6 +14,7 @@ hssm.set_floatX("float32")
 
 # AF-TODO: Include more tests that use different link functions!
 
+
 @pytest.fixture
 def data_ddm_missing(data_ddm):
     data = data_ddm.copy()
@@ -123,8 +124,8 @@ def run_sample(model, sampler, step, expected):
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
-    print('TEST INPUTS WERE: ')
-    print('REPORTING FROM SIMPLE MODELS TEST')
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM SIMPLE MODELS TEST")
     print(loglik_kind, backend, sampler, step, expected)
 
     model = hssm.HSSM(
@@ -146,8 +147,8 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected):
-    print('TEST INPUTS WERE: ')
-    print('REPORTING FROM REG MODELS TEST')
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM REG MODELS TEST")
     print(loglik_kind, backend, sampler, step, expected)
 
     param_reg = dict(
@@ -180,8 +181,8 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expected):
-    print('TEST INPUTS WERE: ')
-    print('REPORTING FROM REG MODELS V_A TEST')
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM REG MODELS V_A TEST")
     print(loglik_kind, backend, sampler, step, expected)
     param_reg_v = dict(
         formula="v ~ 1 + x + y",
@@ -194,9 +195,14 @@ def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expec
     param_reg_a = dict(
         formula="a ~ 1 + x + y",
         prior={
-            "Intercept": {"name": "Uniform", "lower": 0.5, "upper": 3.0, "initval": 1.0},
-            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50, "initval":0.0},
-            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50, "initval":0.0},
+            "Intercept": {
+                "name": "Uniform",
+                "lower": 0.5,
+                "upper": 3.0,
+                "initval": 1.0,
+            },
+            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50, "initval": 0.0},
+            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50, "initval": 0.0},
         },
         link="identity",
     )
@@ -247,8 +253,8 @@ def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expec
 def test_simple_models_missing_data(
     data_ddm_missing, loglik_kind, backend, sampler, step, expected, cpn
 ):
-    print('TEST INPUTS WERE: ')
-    print('REPORTING FROM SIMPLE MODELS MISSING DATA TEST')
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM SIMPLE MODELS MISSING DATA TEST")
     print(loglik_kind, backend, sampler, step, expected)
 
     model = hssm.HSSM(
@@ -265,9 +271,8 @@ def test_simple_models_missing_data(
 def test_reg_models_missing_data(
     data_ddm_reg_missing, loglik_kind, backend, sampler, step, expected, cpn
 ):
-    
-    print('TEST INPUTS WERE: ')
-    print('REPORTING FROM REG MODELS MISSING DATA TEST')
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM REG MODELS MISSING DATA TEST")
     print(loglik_kind, backend, sampler, step, expected)
 
     param_reg = dict(
@@ -293,8 +298,8 @@ def test_reg_models_missing_data(
 def test_simple_models_deadline(
     data_ddm_deadline, loglik_kind, backend, sampler, step, expected, opn
 ):
-    print('TEST INPUTS WERE: ')
-    print('REPORTING FROM SIMPLE MODELS DEADLINE TEST')
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM SIMPLE MODELS DEADLINE TEST")
     print(loglik_kind, backend, sampler, step, expected)
     model = hssm.HSSM(
         data_ddm_deadline,
@@ -310,8 +315,8 @@ def test_simple_models_deadline(
 def test_reg_models_deadline(
     data_ddm_reg_deadline, loglik_kind, backend, sampler, step, expected, opn
 ):
-    print('TEST INPUTS WERE: ')
-    print('REPORTING FROM REG MODELS DEADLINE TEST')
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM REG MODELS DEADLINE TEST")
     print(loglik_kind, backend, sampler, step, expected)
 
     param_reg = dict(
