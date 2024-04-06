@@ -26,6 +26,8 @@ from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 
 from hssm.defaults import (
+    INITVAL_JITTER_SETTINGS,
+    INITVAL_SETTINGS,
     LoglikKind,
     MissingDataNetwork,
     SupportedModels,
@@ -225,12 +227,9 @@ class HSSM:
         model: SupportedModels | str = "ddm",
         include: list[dict | Param] | None = None,
         model_config: ModelConfig | dict | None = None,
-        loglik: str
-        | PathLike
-        | Callable
-        | pytensor.graph.Op
-        | type[pm.Distribution]
-        | None = None,
+        loglik: (
+            str | PathLike | Callable | pytensor.graph.Op | type[pm.Distribution] | None
+        ) = None,
         loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
@@ -240,22 +239,14 @@ class HSSM:
         extra_namespace: dict[str, Any] | None = None,
         missing_data: bool | float = False,
         deadline: bool | str = False,
-        loglik_missing_data: str
-        | PathLike
-        | Callable
-        | pytensor.graph.Op
-        | None = None,
+        loglik_missing_data: (
+            str | PathLike | Callable | pytensor.graph.Op | None
+        ) = None,
         **kwargs,
     ):
         self.data = data.copy()
         self._inference_obj = None
         self.hierarchical = hierarchical
-
-        if self.hierarchical and "participant_id" not in self.data.columns:
-            raise ValueError(
-                "You have specified a hierarchical model, but there is no "
-                + "`participant_id` field in the DataFrame that you have passed."
-            )
 
         if self.hierarchical and prior_settings is None:
             prior_settings = "safe"
@@ -268,15 +259,6 @@ class HSSM:
             additional_namespace.update(extra_namespace)
         self.additional_namespace = additional_namespace
 
-        responses = self.data["response"].unique().astype(int)
-        self.n_responses = len(responses)
-        if self.n_responses == 2:
-            if -1 not in responses or 1 not in responses:
-                raise ValueError(
-                    "The response column must contain only -1 and 1 when there are "
-                    + "two responses."
-                )
-
         # Construct a model_config from defaults
         self.model_config = Config.from_defaults(model, loglik_kind)
         # Update defaults with user-provided config, if any
@@ -286,6 +268,7 @@ class HSSM:
                 if isinstance(model_config, ModelConfig)
                 else ModelConfig(**model_config)  # also serves as dict validation
             )
+
         # Update loglik with user-provided value
         self.model_config.update_loglik(loglik)
         # Ensure that all required fields are valid
@@ -298,6 +281,11 @@ class HSSM:
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
+
+        self.choices = self.data["response"].unique().astype(int)
+        self.n_choices = len(self.choices)
+
+        self._pre_check_data_sanity()
 
         # Go-NoGo
         if isinstance(missing_data, float):
@@ -333,8 +321,6 @@ class HSSM:
         if self.deadline:
             self.response.append(self.deadline_name)
 
-        self._check_extra_fields()
-
         # Process lapse distribution
         self.has_lapse = p_outlier is not None and p_outlier != 0
         self._check_lapse(lapse)
@@ -360,6 +346,7 @@ class HSSM:
         # Get the bambi formula, priors, and link
         self.formula, self.priors, self.link = self._parse_bambi()
 
+        # print(self.priors)
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
         # a large negative value).
@@ -373,6 +360,8 @@ class HSSM:
         self.p_outlier = self.params.get("p_outlier")
         self.lapse = lapse if self.has_lapse else None
 
+        self._post_check_data_sanity()
+
         self.model_distribution = self._make_model_distribution()
 
         self.family = make_family(
@@ -384,10 +373,10 @@ class HSSM:
 
         self.model = bmb.Model(
             self.formula,
-            data=data,
+            data=self.data,
             family=self.family,
             priors=self.priors,
-            extra_namespace=extra_namespace,
+            extra_namespace=self.additional_namespace,
             **other_kwargs,
         )
 
@@ -395,11 +384,16 @@ class HSSM:
             self.model, self._parent_param, self.response_c, self.response_str
         )
         self.set_alias(self._aliases)
+        self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
+        self._jitter_initvals(
+            jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"], vector_only=True
+        )
 
     def sample(
         self,
-        sampler: Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
-        | None = None,
+        sampler: (
+            Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"] | None
+        ) = None,
         init: str | None = None,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
@@ -474,6 +468,30 @@ class HSSM:
                 init = "adapt_diag"
             else:
                 init = "auto"
+
+        # If sampler is finally `numpyro` make sure
+        # the jitter argument is set to False
+        if sampler == "nuts_numpyro":
+            if "jitter" not in kwargs.keys():
+                kwargs["jitter"] = False
+            elif kwargs["jitter"]:
+                _logger.warning(
+                    "The jitter argument is set to True. "
+                    + "This argument is not supported "
+                    + "by the numpyro backend. "
+                    + "The jitter argument will be set to False."
+                )
+                kwargs["jitter"] = False
+        elif sampler != "nuts_numpyro":
+            if "jitter" in kwargs.keys():
+                _logger.warning(
+                    "The jitter keyword argument is "
+                    + "supported only by the nuts_numpyro sampler. \n"
+                    + "The jitter argument will be ignored."
+                )
+                del kwargs["jitter"]
+            else:
+                pass
 
         self._inference_obj = self.model.fit(
             inference_method=sampler, init=init, **kwargs
@@ -869,6 +887,11 @@ class HSSM:
                     prior = param.prior
                 output.append(f"    Prior: {prior}")
             output.append(f"    Explicit bounds: {param.bounds}")
+            output.append(
+                " (ignored due to link function)"
+                if self.link_settings is not None
+                else ""
+            )
 
         if self.p_outlier is not None:
             # TODO: Allow regression for self.p_outlier
@@ -1078,6 +1101,11 @@ class HSSM:
         )
         for param in self.list_params:
             param_obj = self.params[param]
+            # print(param)
+            # print('bounds before prior settings: ', param_obj.bounds)
+
+            if self.link_settings == "log_logit":
+                param_obj.override_default_link()
             if self.prior_settings == "safe":
                 if is_ddm:
                     param_obj.override_default_priors_ddm(
@@ -1087,8 +1115,6 @@ class HSSM:
                     param_obj.override_default_priors(
                         self.data, self.additional_namespace
                     )
-            if self.link_settings == "log_logit":
-                param_obj.override_default_link()
 
     def _process_all(self):
         """Process all params."""
@@ -1241,9 +1267,11 @@ class HSSM:
             list_params=self.list_params,
             bounds=self.bounds,
             lapse=self.lapse,
-            extra_fields=None
-            if not self.extra_fields
-            else [deepcopy(self.data[field].values) for field in self.extra_fields],
+            extra_fields=(
+                None
+                if not self.extra_fields
+                else [deepcopy(self.data[field].values) for field in self.extra_fields]
+            ),
         )
 
     def _check_extra_fields(self, data: pd.DataFrame | None = None) -> bool:
@@ -1331,6 +1359,109 @@ class HSSM:
                     self.data["rt"],
                     -999.0,
                 )
+
+    def _pre_check_data_sanity(self):
+        """Check if the data is clean enough for the model."""
+        for field in self.response:
+            if field not in self.data.columns:
+                raise ValueError(f"Field {field} not found in data.")
+
+        self._check_extra_fields()
+
+        if self.hierarchical:
+            if "participant_id" not in self.data.columns:
+                raise ValueError(
+                    "You have specified that your model is hierarchical, but "
+                    + "`participant_id` is not found in your dataset."
+                )
+
+        if self.n_choices == 2:
+            if -1 not in self.choices or 1 not in self.choices:
+                raise ValueError(
+                    "The response column must contain only -1 and 1 when there are "
+                    + "two responses."
+                )
+
+    def _post_check_data_sanity(self):
+        """Check if the data is clean enough for the model."""
+        if self.deadline or self.missing_data:
+            if -999.0 not in self.data["rt"].unique():
+                raise ValueError(
+                    "You have no missing data in your dataset, "
+                    + "which is not allowed when `missing_data` or `deadline` is set to"
+                    + " True."
+                )
+            rt_filtered = self.data.rt[self.data.rt != -999.0]
+        else:
+            rt_filtered = self.data.rt
+
+        if np.any(rt_filtered.isna(), axis=None):
+            raise ValueError(
+                "You have NaN response times in your dataset, "
+                + "which is not allowed."
+            )
+
+        if not np.all(rt_filtered >= 0):
+            raise ValueError(
+                "You have negative response times in your dataset, "
+                + "which is not allowed."
+            )
+
+    def _postprocess_initvals_deterministic(
+        self, initval_settings: dict = INITVAL_SETTINGS
+    ) -> None:
+        """Set initial values for subset of parameters."""
+        # Consider case where link functions are set to 'log_logit'
+        # or 'None'
+        if self.link_settings not in ["log_logit", "None", None]:
+            print(
+                "Not preprocessing initial values, "
+                + "because none of the two standard link settings are chosen!"
+            )
+            return None
+
+        link_setting_str = str(self.link_settings)
+        # Set initial values for particular parameters
+        for name_, starting_value in self.pymc_model.initial_point().items():
+            name_tmp = name_
+            name_tmp = name_tmp.replace("_log__", "")
+            name_tmp = name_tmp.replace("_interval__", "")
+            if name_tmp in initval_settings[link_setting_str].keys():
+                # Apply specific settings from initval_settings dictionary
+                self.pymc_model.set_initval(
+                    self.pymc_model.named_vars[name_tmp],
+                    initval_settings[link_setting_str][name_tmp],
+                )
+
+    def _jitter_initvals(
+        self, jitter_epsilon: float = 0.01, vector_only: bool = False
+    ) -> None:
+        """Apply controlled jitter to initial values."""
+        if vector_only:
+            self.__jitter_initvals_vector_only(jitter_epsilon)
+        else:
+            self.__jitter_initvals_all(jitter_epsilon)
+
+    def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
+        initial_point_dict = self.pymc_model.initial_point()
+        for name_, starting_value in initial_point_dict.items():
+            if starting_value.ndim != 0 and starting_value.shape[0] != 1:
+                starting_value_tmp = starting_value + np.random.uniform(
+                    -jitter_epsilon, jitter_epsilon, starting_value.shape
+                ).astype(np.float32)
+                self.pymc_model.set_initval(
+                    self.pymc_model.named_vars[name_], starting_value_tmp
+                )
+
+    def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
+        initial_point_dict = self.pymc_model.initial_point()
+        for name_, starting_value in initial_point_dict.items():
+            starting_value_tmp = starting_value + np.random.uniform(
+                -jitter_epsilon, jitter_epsilon, starting_value.shape
+            ).astype(np.float32)
+            self.pymc_model.set_initval(
+                self.pymc_model.named_vars[name_], starting_value_tmp
+            )
 
 
 def _set_missing_data_and_deadline(

@@ -17,10 +17,8 @@ hssm.set_floatX("float32")
 
 def test_get_alias_dict():
     # Simulate some data:
-    v_true, a_true, z_true, t_true, sv_true = [0.5, 1.5, 0.5, 0.5, 0.3]
-    obs_ddm = simulator(
-        [v_true, a_true, z_true, t_true, sv_true], model="ddm", n_samples=1000
-    )
+    v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 0.5]
+    obs_ddm = simulator([v_true, a_true, z_true, t_true], model="ddm", n_samples=1000)
     obs_ddm = np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
 
     dataset = pd.DataFrame(obs_ddm, columns=["rt", "response"])

@@ -3,6 +3,7 @@
 This code compares WFPT likelihood function with
 old implementation of WFPT from (https://github.com/hddm-devs/hddm)
 """
+
 import math
 
 import numpy as np

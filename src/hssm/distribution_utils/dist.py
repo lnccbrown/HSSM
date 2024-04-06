@@ -82,6 +82,9 @@ def apply_param_bounds_to_loglik(
     return logp
 
 
+# AF-TODO: define clip params
+
+
 def ensure_positive_ndt(data, logp, list_params, dist_params):
     """Ensure that the non-decision time is always positive.
 
@@ -255,7 +258,7 @@ def make_ssm_rv(
             p_outlier = None
 
             if cls._list_params[-1] == "p_outlier":
-                p_outlier = np.squeeze(arg_arrays.pop(-1))
+                p_outlier = arg_arrays.pop(-1)
 
             iinfo32 = np.iinfo(np.uint32)
             seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
@@ -324,6 +327,11 @@ def make_ssm_rv(
                     + "distribution but did not specify the distribution."
                 )
                 out_shape = sims_out.shape[:-1]
+                if not np.isscalar(p_outlier) and len(p_outlier.shape) > 0:
+                    if p_outlier.shape[-1] == 1:
+                        p_outlier = np.broadcast_to(p_outlier, out_shape)
+                    else:
+                        p_outlier = p_outlier.reshape(out_shape)
                 replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
                 replace_n = int(np.sum(replace, axis=None))
                 if replace_n == 0:
@@ -429,6 +437,8 @@ def make_distribution(
             return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
+            # AF-TODO: Apply clipping here
+
             num_params = len(list_params)
             extra_fields = []
 
@@ -440,7 +450,7 @@ def make_distribution(
                 p_outlier = dist_params[-1]
                 dist_params = dist_params[:-1]
                 lapse_logp = lapse_func(data[:, 0].eval())
-
+                # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)

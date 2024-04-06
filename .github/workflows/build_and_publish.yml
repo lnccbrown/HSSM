@@ -8,6 +8,9 @@ on:
 jobs:
   run_tests:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
 
     strategy:
       fail-fast: true
@@ -17,41 +20,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup miniconda
+        uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: ${{ matrix.python-version }}
+          miniforge-variant: Mambaforge
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
 
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
+      - name: install pymc and poetry
+        run: |
+          mamba info
+          mamba install -c conda-forge pymc=5.10 poetry
 
-      - name: Load cache
-        uses: actions/cache@v4
-        id: cache
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
-
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction
+      - name: install hssm
+        run: |
+          poetry export --with dev --output=requirements.txt
+          pip install -r requirements.txt
+          pip install -e .
 
       - name: Run mypy
-        run: poetry run mypy src
+        run: mypy src
 
       - name: Check styling
-        run: poetry run black . --check
+        run: black . --check
 
       - name: Linting
-        run: poetry run ruff check .
+        run: ruff check .
 
       - name: Run tests
-        run: poetry run pytest -n auto -s
+        run: pytest -n auto -s
 
   publish:
     name: Build wheel and publish to test-PyPI, and then PyPI, and publish docs
