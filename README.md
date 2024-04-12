@@ -116,7 +116,7 @@ model = hssm.HSSM(
                 "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 0.1},
                 "theta": {"name": "Normal", "mu": 0.0, "sigma": 0.1},
             },
-            "formula": "v ~ theta + 1|participant_id",
+            "formula": "v ~ theta + (1|participant_id)",
             "link": "identity",
         },
     ],
