@@ -497,6 +497,11 @@ class HSSM:
             inference_method=sampler, init=init, **kwargs
         )
 
+        # 'v' was previously not part of deterministics --> compute it via posterior_predictive
+        # (works because it acts as the 'mu' parameter in the GLM as far as bambi is concerned)
+        self.sample_posterior_predictive(self._inference_obj, kind="mean")
+        # rename 'rt,response_mean' to 'v' so in the traces everything looks the way it should
+        self._inference_obj.rename_vars({"rt,response_mean": "v"}, inplace=True)
         return self.traces
 
     def sample_posterior_predictive(
@@ -526,13 +531,13 @@ class HSSM:
             If `True` will make predictions including the group specific effects.
             Otherwise, predictions are made with common effects only (i.e. group-
             specific are set to zero), by default True.
-        kind
+        kind: optional
             Indicates the type of prediction required. Can be `"mean"` or `"pps"`. The
             first returns draws from the posterior distribution of the mean, while the
             latter returns the draws from the posterior predictive distribution
             (i.e. the posterior probability distribution for a new observation).
             Defaults to `"pps"`.
-        n_samples
+        n_samples: optional
             The number of samples to draw from the posterior predictive distribution
             from each chain.
             When it's an integer >= 1, the number of samples to be extracted from the

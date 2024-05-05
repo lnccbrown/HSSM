@@ -30,7 +30,7 @@ jobs:
       - name: install pymc and poetry
         run: |
           mamba info
-          mamba install -c conda-forge pymc=5.12 poetry
+          mamba install -c conda-forge pymc=5.14 poetry
 
       - name: install hssm
         run: |
