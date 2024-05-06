@@ -500,11 +500,10 @@ class HSSM:
         # 'v' was previously not part of deterministics --> compute it via
         # posterior_predictive (works because it acts as the 'mu' parameter
         # in the GLM as far as bambi is concerned)
-        self.sample_posterior_predictive(self._inference_obj, kind="mean")
-
-        # rename 'rt,response_mean' to 'v' so in the traces everything
-        # looks the way it should
-        if self._inference_obj is not None:
+        if "v" not in self._inference_obj.posterior.data_vars.keys():
+            self.sample_posterior_predictive(self._inference_obj, kind="mean")
+            # rename 'rt,response_mean' to 'v' so in the traces everything
+            # looks the way it should
             self._inference_obj.rename_vars({"rt,response_mean": "v"}, inplace=True)
         return self.traces
 
