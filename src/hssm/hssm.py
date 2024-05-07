@@ -60,7 +60,7 @@ _logger = logging.getLogger("hssm")
 
 
 class HSSM:
-    """The Hierarchical Sequential Sampling Model (HSSM) class.
+    """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
     ----------
@@ -1327,9 +1327,6 @@ class HSSM:
             self._parent not in idata.posterior.data_vars
         ):
             var_names.remove("~" + self._parent)
-
-        # ] and not param.is_parent --> this can be skipped now, because `v` will be added to traces by default
-        # ]
 
         if f"{self.response_str}_mean" in idata["posterior"].data_vars:
             var_names.append(f"~{self.response_str}_mean")
