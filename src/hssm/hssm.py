@@ -497,14 +497,16 @@ class HSSM:
             inference_method=sampler, init=init, **kwargs
         )
 
-        # 'v' was previously not part of deterministics --> compute it via
+        # The parent was previously not part of deterministics --> compute it via
         # posterior_predictive (works because it acts as the 'mu' parameter
         # in the GLM as far as bambi is concerned)
-        if "v" not in self._inference_obj.posterior.data_vars.keys():
+        if self._parent not in self._inference_obj.posterior.data_vars.keys():
             self.sample_posterior_predictive(self._inference_obj, kind="mean")
             # rename 'rt,response_mean' to 'v' so in the traces everything
             # looks the way it should
-            self._inference_obj.rename_vars({"rt,response_mean": "v"}, inplace=True)
+            self._inference_obj.rename_vars(
+                {"rt,response_mean": self._parent}, inplace=True
+            )
         return self.traces
 
     def sample_posterior_predictive(
@@ -1316,11 +1318,21 @@ class HSSM:
         var_names = [
             f"~{param_name}"
             for param_name, param in self.params.items()
-            if param.is_regression and not param.is_parent
+            if param.is_regression
         ]
+
+        # Handle specific case where parent is not explictly in traces
+        if ("~" + self._parent in var_names) and (
+            self._parent not in idata.posterior.data_vars
+        ):
+            var_names.remove("~" + self._parent)
+
+        # ] and not param.is_parent --> this can be skipped now, because `v` will be added to traces by default
+        # ]
 
         if f"{self.response_str}_mean" in idata["posterior"].data_vars:
             var_names.append(f"~{self.response_str}_mean")
+
         return var_names
 
     def _handle_missing_data_and_deadline(self):
