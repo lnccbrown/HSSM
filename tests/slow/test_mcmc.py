@@ -224,7 +224,12 @@ def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expec
 
     # Only runs once
     if loglik_kind == "analytical" and sampler is None:
-        assert model._get_deterministic_var_names(model.traces) == ["~a", "~v"]
+        assert len(model._get_deterministic_var_names(model.traces)) == len(
+            ["~a", "~v"]
+        )
+        assert set(model._get_deterministic_var_names(model.traces)) == set(
+            ["~a", "~v"]
+        )
         # test summary:
         summary = model.summary()
         assert summary.shape[0] == 8
