@@ -102,9 +102,7 @@ def onnx_add(a, b, axis=None, broadcast=True):
 
 
 # Added by HSSM Developers
-def onnx_gemm(
-    a, b, c=0.0, alpha=1.0, beta=1.0, transA=0, transB=0
-):  # pylint: disable=C0103
+def onnx_gemm(a, b, c=0.0, alpha=1.0, beta=1.0, transA=0, transB=0):  # pylint: disable=C0103
     """Numpy-backed implementatio of Onnx Gemm op."""
     a = jnp.transpose(a) if transA else a
     b = jnp.transpose(b) if transB else b
