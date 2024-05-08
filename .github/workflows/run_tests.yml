@@ -39,13 +39,13 @@ jobs:
           pip install -e .
 
       - name: Run mypy
-        run: mypy src
+        run: mypy src/hssm
 
-      - name: Check styling
-        run: black . --check
+      - name: Check formatting
+        run: ruff format --check .
 
       - name: Linting
-        run: ruff check .
+        run: ruff check src/hssm
 
       - name: Run tests
         run: pytest -n auto -s

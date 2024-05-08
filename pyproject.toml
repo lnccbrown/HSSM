@@ -150,7 +150,7 @@ ignore = [
     "TID252",
 ]
 
-exclude = [".github", "docs", "notebook", "tests"]
+exclude = [".github", "docs", "notebook", "tests/*"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
