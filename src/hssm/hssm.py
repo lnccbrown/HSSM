@@ -493,10 +493,12 @@ class HSSM:
             else:
                 pass
 
+        # Get rid of unwanted deterministics
+        kwargs["var_names"] = [rv.name for rv in self.pymc_model.free_RVs]
+
         self._inference_obj = self.model.fit(
             inference_method=sampler, init=init, **kwargs
         )
-
         return self.traces
 
     def sample_posterior_predictive(
