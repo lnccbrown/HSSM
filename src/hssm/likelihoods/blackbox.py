@@ -61,7 +61,7 @@ def logp_ddm_sdv_bbox(data: np.ndarray, v, a, z, t, sv) -> np.ndarray:
 
 
 @hddm_to_hssm
-def logp_full_ddm(data: np.ndarray, v, a, z, t, sv, sz, st):
+def logp_full_ddm(data: np.ndarray, v, a, z, t, sz, sv, st):
     """Compute blackbox log-likelihoods for full_ddm models."""
     return wfpt.wiener_logp_array(
         x=data,

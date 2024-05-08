@@ -10,7 +10,7 @@ import pymc as pm
 
 from hssm.utils import _rearrange_data
 
-hssm.set_floatX("float32")
+hssm.set_floatX("float32", jax=True)
 
 # AF-TODO: Include more tests that use different link functions!
 
@@ -124,6 +124,8 @@ def run_sample(model, sampler, step, expected):
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
     print("TEST INPUTS WERE: ")
     print("REPORTING FROM SIMPLE MODELS TEST")
     print(loglik_kind, backend, sampler, step, expected)
@@ -147,6 +149,8 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
     print("TEST INPUTS WERE: ")
     print("REPORTING FROM REG MODELS TEST")
     print(loglik_kind, backend, sampler, step, expected)
@@ -169,7 +173,7 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
 
     # Only runs once
     if loglik_kind == "analytical" and sampler is None:
-        assert not model._get_deterministic_var_names(model.traces)
+        assert model._get_deterministic_var_names(model.traces) == ["~v"]
         # test summary:
         summary = model.summary()
         assert summary.shape[0] == 6
@@ -181,6 +185,8 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expected):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
     print("TEST INPUTS WERE: ")
     print("REPORTING FROM REG MODELS V_A TEST")
     print(loglik_kind, backend, sampler, step, expected)
@@ -218,7 +224,12 @@ def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expec
 
     # Only runs once
     if loglik_kind == "analytical" and sampler is None:
-        assert model._get_deterministic_var_names(model.traces) == ["~a"]
+        assert len(model._get_deterministic_var_names(model.traces)) == len(
+            ["~a", "~v"]
+        )
+        assert set(model._get_deterministic_var_names(model.traces)) == set(
+            ["~a", "~v"]
+        )
         # test summary:
         summary = model.summary()
         assert summary.shape[0] == 8
@@ -253,6 +264,8 @@ def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expec
 def test_simple_models_missing_data(
     data_ddm_missing, loglik_kind, backend, sampler, step, expected, cpn
 ):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
     print("TEST INPUTS WERE: ")
     print("REPORTING FROM SIMPLE MODELS MISSING DATA TEST")
     print(loglik_kind, backend, sampler, step, expected)
@@ -271,6 +284,8 @@ def test_simple_models_missing_data(
 def test_reg_models_missing_data(
     data_ddm_reg_missing, loglik_kind, backend, sampler, step, expected, cpn
 ):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
     print("TEST INPUTS WERE: ")
     print("REPORTING FROM REG MODELS MISSING DATA TEST")
     print(loglik_kind, backend, sampler, step, expected)
@@ -298,6 +313,8 @@ def test_reg_models_missing_data(
 def test_simple_models_deadline(
     data_ddm_deadline, loglik_kind, backend, sampler, step, expected, opn
 ):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
     print("TEST INPUTS WERE: ")
     print("REPORTING FROM SIMPLE MODELS DEADLINE TEST")
     print(loglik_kind, backend, sampler, step, expected)
@@ -315,6 +332,8 @@ def test_simple_models_deadline(
 def test_reg_models_deadline(
     data_ddm_reg_deadline, loglik_kind, backend, sampler, step, expected, opn
 ):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
     print("TEST INPUTS WERE: ")
     print("REPORTING FROM REG MODELS DEADLINE TEST")
     print(loglik_kind, backend, sampler, step, expected)

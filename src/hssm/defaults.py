@@ -184,7 +184,7 @@ default_model_config: DefaultConfigs = {
     },
     "full_ddm": {
         "response": ["rt", "response"],
-        "list_params": ["v", "a", "z", "t", "sv", "sz", "st"],
+        "list_params": ["v", "a", "z", "t", "sz", "sv", "st"],
         "description": "The full Drift Diffusion Model (DDM)",
         "likelihoods": {
             "blackbox": {

@@ -7,7 +7,7 @@ from hssm import HSSM
 from hssm.utils import download_hf
 from hssm.likelihoods import DDM, logp_ddm
 
-hssm.set_floatX("float32")
+hssm.set_floatX("float32", jax=True)
 
 param_v = {
     "name": "v",

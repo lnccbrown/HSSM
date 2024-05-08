@@ -351,11 +351,3 @@ HDDM_SETTINGS_GROUP: dict[Any, Any] = {
     "sz": {"dist": "Gamma", "mu": HDDM_MU["sz"], "sigma": HDDM_SIGMA["sz"]},
     "st": {"dist": "Gamma", "mu": HDDM_MU["st"], "sigma": HDDM_SIGMA["st"]},
 }
-
-# INITVAL_SETTINGS_LOGIT: dict[Any, Any] = {
-#     "t" : {"initval": -4.0},
-# }
-
-# INITVAL_SETTINGS_NOLINK: dict[Any, Any] = {
-#     "t" : {"initval": 0.05},
-# }
