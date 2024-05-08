@@ -502,7 +502,7 @@ class HSSM:
         # in the GLM as far as bambi is concerned)
         if self._inference_obj is not None:
             if self._parent not in self._inference_obj.posterior.data_vars.keys():
-                self.sample_posterior_predictive(self._inference_obj, kind="mean")
+                self.model.predict(self._inference_obj, kind="mean", inplace=True)
                 # rename 'rt,response_mean' to 'v' so in the traces everything
                 # looks the way it should
                 self._inference_obj.rename_vars(
