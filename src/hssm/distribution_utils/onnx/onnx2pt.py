@@ -17,9 +17,7 @@ def onnx_add(a, b, axis=None, broadcast=True):
     return [pt.add(a, b)]
 
 
-def pytensor_gemm(
-    a, b, c=0.0, alpha=1.0, beta=1.0, transA=0, transB=0
-):  # pylint: disable=C0103
+def pytensor_gemm(a, b, c=0.0, alpha=1.0, beta=1.0, transA=0, transB=0):  # pylint: disable=C0103
     """Perform the GEMM op.
 
     Numpy-backed implementatio, of ONNX General Matrix Multiply (GeMM) op.
