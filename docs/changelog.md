@@ -9,11 +9,16 @@ We added a few new features in 0.2.1:
 1. We have finished updating the HSSM code base to support go-nogo data and deadline. We will provide documentation once the networks are added to our huggingface repo.
 2. We updated `hssm.distribution_utils` to streamline the creation of `pm.Distribution`s.
 3. We now support response variables other than `rt` and `response`. They can be specified through `model_config` via the new `response` field.
+4. We have fixed some of the issues with convergence when using `log-logit` link functions and/or safe priors.
 
 Other minor updates
 
 - Fixed an incompatible shape error during posterior predictive sampling when `p_outlier` is estimated as a parameter.
 - Updated documentation for using `make_distribution` with PyMC.
+
+Bug fixes:
+
+- Fixed default list of parameters for `ddm_full` model and the bounds for `ddm_sdv` model.
 
 ### 0.2.0
 

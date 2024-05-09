@@ -27,78 +27,6 @@ HSSM is a [BRAINSTORM](https://ccbs.carney.brown.edu/brainstorm) project in coll
 - Native ArviZ support for plotting and other convenience functions to aid the Bayesian workflow.
 - Utilizes the ONNX format for translation of differentiable likelihood approximators across backends.
 
-## Installation
-
-**Update**: From HSSM 0.2.1 on, we recommend `conda` as the virtual environment manager for HSSM. We will also gradually make HSSM available directly through `conda-forge` in the near future. For now, please follow the instruction below to install HSSM:
-
-### Step 1: Create a conda environment
-
-If you haven't already, please follow the [Anaconda official website](https://www.anaconda.com/download) to install anaconda. We assume that you already have one of [Anaconda](https://www.anaconda.com/download), [Miniconda](https://docs.anaconda.com/free/miniconda/index.html), [miniforge](https://github.com/conda-forge/miniforge/releases), or [mambaforge](https://github.com/conda-forge/miniforge/releases) installed on your system and have access to either `conda` or `mamba` available on your command line.
-
-To create a conda environment, use the following command. Substitute `mamba` for `conda` if `mamba` is available:
-
-```bash
-conda create -n <your-env-name> python=3.11
-conda activate <your-env-name>
-```
-
-Substitute `<your-env-name>` with the name of the virtual environment that you choose. HSSM 0.2.0 and above support Python versions 3.10 and 3.11.
-
-### Step 2: Install PyMC through conda-forge
-
-Installation through `conda-forge` is the official way of installing PyMC. This will also install other libraries such as `libblas` that PyMC requires to run properly.
-
-```bash
-conda install -c conda-forge pymc
-```
-
-As of HSSM 0.2.1, HSSM supports PyMC 5.10.4. If a future newer version of PyMC causes compatibility issues, please specify the version of PyMC:
-
-```bash
-conda install -c conda-forge pymc=5.10
-```
-
-### Step 3: Install `hssm` through `pip`
-
-In the same environment, install `hssm` through `pip`.
-
-```bash
-pip install hssm
-```
-
-## Advanced Installation
-
-`hssm` is also available through PyPI. You can directly install it with pip into any virtual environment via:
-
-```
-pip install hssm
-```
-
-You can also install the bleeding-edge version of `hssm` directly from this repo:
-
-```
-pip install git+https://github.com/lnccbrown/HSSM.git
-```
-
-!!! note
-
-    While this installation is much simpler, you might need optional dependencies to use JAX-based samplers and to produce model graphs. You might also encounter this warning message `WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.` Please refer to our [advanced installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/) for more details.
-
-    Possible solutions to any issues with installations with hssm can be located
-    [here](https://github.com/lnccbrown/HSSM/discussions). We recommend leveraging an
-    environment manager with Python 3.10~3.11 to prevent any problems with dependencies
-    during the installation process. Please note that hssm is tested for python 3.10,
-    3.11. As of HSSM v0.2.0, support for Python 3.9 is dropped. Use other python
-    versions with caution.
-
-### Setting global float type
-
-Using the analytical DDM (Drift Diffusion Model) likelihood in PyMC without forcing float type to `"float32"` in PyTensor may result in warning messages during sampling, which is a known bug in PyMC v5.6.0 and earlier versions. We can use `hssm.set_floatX("float32")` to get around this for now.
-
-```python
-hssm.set_floatX("float32")
-```
-
 ## Example
 
 Here is a simple example of how to use HSSM:
@@ -136,6 +64,106 @@ model.sample()
 
 To quickly get started with HSSM, please follow [this tutorial](getting_started/getting_started.ipynb).
 For a deeper dive into HSSM, please follow [our main tutorial](tutorials/main_tutorial.ipynb).
+
+## Installation
+
+Please follow the instruction below to install HSSM onto your local workspace. We have a more detailed [installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/) for users with more special setups.
+
+**Important Update:** From HSSM 0.2.1 on, we recommend `conda` as the virtual environment manager for HSSM. We will also gradually make HSSM available directly through `conda-forge` in the near future. For now, please follow the instruction below to install HSSM:
+
+### Step 1: Create a conda environment
+
+If you haven't already, please follow the [Anaconda official website](https://www.anaconda.com/download) to install conda. We assume that you already have one of [Anaconda](https://www.anaconda.com/download), [Miniconda](https://docs.anaconda.com/free/miniconda/index.html), [miniforge](https://github.com/conda-forge/miniforge/releases), or [mambaforge](https://github.com/conda-forge/miniforge/releases) installed on your system and have access to either `conda` or `mamba` available on your command line.
+
+To create a conda environment, use the following command. Substitute `mamba` for `conda` if `mamba` is available:
+
+```bash
+conda create -n <your-env-name> python=3.11
+conda activate <your-env-name>
+```
+
+Substitute `<your-env-name>` with the name of the virtual environment that you choose. HSSM 0.2.0 and above supports Python versions 3.10 and 3.11.
+
+### Step 2: Install PyMC through conda-forge
+
+Installation through `conda-forge` is the official way of installing PyMC. This will also install other libraries such as `libblas` that PyMC requires to run properly.
+
+```bash
+conda install -c conda-forge pymc
+```
+
+### [Optional] Install JAX with CUDA support
+
+If you need to sample with GPU, please install JAX with GPU support after installing PyMC following one of the two commands below:
+
+#### Option 1: Install JAX with CUDA support via `conda`
+
+At the moment, there is a community supported conda build on conda-forge:
+
+```bash
+conda install jaxlib=*=*cuda* jax cuda-nvcc -c conda-forge -c nvidia
+```
+
+#### Option 2: Install JAX with CUDA support via `pip`
+
+Installing `jax` via `pip` should also work:
+
+```bash
+pip install jax[cuda12]
+```
+
+#### Support for Apple Silicon, AMD, and other GPUs
+
+JAX also has support other GPUs. Please follow the [Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) to install the correct version of JAX before proceeding.
+
+### Step 3: Install `hssm` through `pip`
+
+In the same environment, install `hssm` through `pip`.
+
+```bash
+pip install hssm
+```
+
+## Advanced Installation
+
+### Install HSSM directly with Pip
+
+`hssm` is also available through PyPI. You can directly install it with pip into any virtual environment via:
+
+```bash
+pip install hssm
+```
+
+!!! note
+
+    While this installation is much simpler, you might need optional dependencies to use JAX-based samplers and to produce model graphs. You might also encounter this warning message `WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.` Please refer to our [advanced installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/) for more details.
+
+### Install the dev version of HSSM
+
+You can also install the bleeding-edge version of `hssm` directly from this repo:
+
+```bash
+pip install git+https://github.com/lnccbrown/HSSM.git
+```
+
+### Install HSSM on Google Colab
+
+The good news is that Google Colab comes with PyMC and JAX pre-configured. That holds true even if you are using the GPU and TPU backend, so you simply need to install HSSM via pip on Colab regardless of the backend you are using:
+
+```bash
+!pip install hssm
+```
+
+## Troubleshooting
+
+!!! note
+
+    Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). Also feel free to start a new
+    discussion thread if you don't find answers there. We recommend installing HSSM into
+    a new conda environment with Python 3.10 or 3.11 to prevent any problems with dependencies
+    during the installation process. Please note that hssm is only tested for python 3.10,
+    3.11. As of HSSM v0.2.0, support for Python 3.9 is dropped. Use unsupported python
+    versions with caution.
 
 ## License
 
