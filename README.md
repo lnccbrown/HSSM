@@ -69,78 +69,65 @@ For a deeper dive into HSSM, please follow [our main tutorial](https://lnccbrown
 
 ## Installation
 
-Please follow the instruction below to install HSSM onto your local workspace. We have a more detailed [installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/) for users with more special setups.
+HSSM can be directly installed into your conda environment on Linux and MacOS. Installing HSSM on windows takes only one more simple step. We have a more detailed [installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/) for users with more specific setups.
 
-**Important Update:** From HSSM 0.2.1 on, we recommend `conda` as the virtual environment manager for HSSM. We will also gradually make HSSM available directly through `conda-forge` in the near future. For now, please follow the instruction below to install HSSM:
+**Important Update:** From HSSM 0.2.2, the official recommended way to install HSSM is through conda.
 
-### Step 1: Create a conda environment
+### Install HSSM on Linux and MacOS (CPU only)
 
-If you haven't already, please follow the [Anaconda official website](https://www.anaconda.com/download) to install conda. We assume that you already have one of [Anaconda](https://www.anaconda.com/download), [Miniconda](https://docs.anaconda.com/free/miniconda/index.html), [miniforge](https://github.com/conda-forge/miniforge/releases), or [mambaforge](https://github.com/conda-forge/miniforge/releases) installed on your system and have access to either `conda` or `mamba` available on your command line.
-
-To create a conda environment, use the following command. Substitute `mamba` for `conda` if `mamba` is available:
+Use the following command to install HSSM into your virtual environment:
 
 ```bash
-conda create -n <your-env-name> python=3.11
-conda activate <your-env-name>
+conda install -c conda-forge hssm
 ```
 
-Substitute `<your-env-name>` with the name of the virtual environment that you choose. HSSM 0.2.0 and above supports Python versions 3.10 and 3.11.
+### Install HSSM on Linux and MacOS (with GPU Support)
 
-### Step 2: Install PyMC through conda-forge
-
-Installation through `conda-forge` is the official way of installing PyMC. This will also install other libraries such as `libblas` that PyMC requires to run properly.
-
-```bash
-conda install -c conda-forge pymc
-```
-
-### [Optional] Install JAX with CUDA support
-
-If you need to sample with GPU, please install JAX with GPU support after installing PyMC following one of the two commands below:
-
-#### Option 1: Install JAX with CUDA support via `conda`
-
-At the moment, there is a community supported conda build on conda-forge:
+If you need to sample with GPU, please install JAX with GPU support before installing HSSM:
 
 ```bash
 conda install jaxlib=*=*cuda* jax cuda-nvcc -c conda-forge -c nvidia
+conda install -c conda-forge hssm
 ```
 
-#### Option 2: Install JAX with CUDA support via `pip`
+### Install HSSM on Windows (CPU only)
 
-Installing `jax` via `pip` should also work:
+Because `jaxlib` is not available through `conda-forge` on Windows, you need to install JAX on Windows through `pip` before getting HSSM:
+
+```bash
+pip install jax
+conda install -c conda-forge hssm
+```
+
+### Install HSSM on Windows (with GPU support)
+
+You simply need to install JAX with GPU support before getting HSSM:
 
 ```bash
 pip install jax[cuda12]
+conda install -c conda-forge hssm
 ```
 
-#### Support for Apple Silicon, AMD, and other GPUs
+### Support for Apple Silicon, AMD, and other GPUs
 
-JAX also has support other GPUs. Please follow the [Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) to install the correct version of JAX before proceeding.
+JAX also has support other GPUs. Please follow the [Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) to install the correct version of JAX before installing HSSM.
 
-### Step 3: Install `hssm` through `pip`
-
-In the same environment, install `hssm` through `pip`.
-
-```bash
-pip install hssm
-```
 
 ## Advanced Installation
 
 ### Install HSSM directly with Pip
 
-`hssm` is also available through PyPI. You can directly install it with pip into any virtual environment via:
+HSSM is also available through PyPI. You can directly install it with pip into any virtual environment via:
 
 ```bash
 pip install hssm
 ```
 
-**Note:** While this installation is much simpler, you might need optional dependencies to use JAX-based samplers and to produce model graphs. You might also encounter this warning message `WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.` Please refer to our [advanced installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/) for more details.
+**Note:** While this installation is much simpler, you might encounter this warning message `WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.` Please refer to our [advanced installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/) for more details.
 
 ### Install the dev version of HSSM
 
-You can also install the bleeding-edge version of `hssm` directly from this repo:
+You can install the dev version of `hssm` directly from this repo:
 
 ```bash
 pip install git+https://github.com/lnccbrown/HSSM.git
@@ -148,7 +135,7 @@ pip install git+https://github.com/lnccbrown/HSSM.git
 
 ### Install HSSM on Google Colab
 
-The good news is that Google Colab comes with PyMC and JAX pre-configured. That holds true even if you are using the GPU and TPU backend, so you simply need to install HSSM via pip on Colab regardless of the backend you are using:
+Google Colab comes with PyMC and JAX pre-configured. That holds true even if you are using the GPU and TPU backend, so you simply need to install HSSM via pip on Colab regardless of the backend you are using:
 
 ```bash
 !pip install hssm
