@@ -70,5 +70,6 @@ site/
 
 # folders in the repository
 /notebooks
+/test_notebooks
 
 *.so
