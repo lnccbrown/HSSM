@@ -41,10 +41,10 @@ def test_data_sanity_check(data_ddm, cpn, caplog):
     ):
         hssm.HSSM(data=data_ddm, model="ddm", hierarchical=True)
 
-    # Case 5: raise error if there are missing fields in data
+    # Case 5: raise error if there are invalid responses in data
     with pytest.raises(
         ValueError,
-        match="The response column must contain only -1 and 1 when there are two responses.",
+        match=r"Invalid responses found in your dataset: \[0\]",
     ):
         data_ddm_miscoded = data_ddm.copy()
         data_ddm_miscoded["response"] = data_ddm_miscoded["response"].replace(
@@ -53,7 +53,27 @@ def test_data_sanity_check(data_ddm, cpn, caplog):
 
         hssm.HSSM(data=data_ddm_miscoded, model="ddm")
 
-    # Case 6: if deadline or missing_data is True, data should contain missing values
+    with pytest.raises(
+        ValueError,
+        match=r"Invalid responses found in your dataset: \[0\]",
+    ):
+        data_ddm_miscoded = data_ddm.copy()
+        data_ddm_miscoded["response"] = np.random.choice([0, 1, 2], data_ddm.shape[0])
+
+        hssm.HSSM(data=data_ddm_miscoded, model="ddm", choices=[1, 2, 3])
+
+    # Case 6: raise warning if there are missing responses in data
+    data_ddm_miscoded = data_ddm.copy()
+    data_ddm_miscoded["response"] = np.random.choice([1, 2], data_ddm.shape[0])
+
+    hssm.HSSM(data=data_ddm_miscoded, model="ddm", choices=[1, 2, 3])
+
+    assert (
+        caplog.records[-1].msg
+        == "You set choices to be [1, 2, 3], but [3] are missing from your dataset."
+    )
+
+    # Case 7: if deadline or missing_data is True, data should contain missing values
     with pytest.raises(
         ValueError,
         match="You have no missing data in your dataset, "
