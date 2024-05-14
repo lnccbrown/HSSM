@@ -204,11 +204,11 @@ def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expec
             "Intercept": {
                 "name": "Uniform",
                 "lower": 0.5,
-                "upper": 3.0,
-                "initval": 1.0,
+                "upper": 1.0,
+                "initval": 0.75,
             },
-            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50, "initval": 0.0},
-            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50, "initval": 0.0},
+            "x": {"name": "Uniform", "lower": -0.10, "upper": 0.10, "initval": 0.0},
+            "y": {"name": "Uniform", "lower": -0.10, "upper": 0.10, "initval": 0.0},
         },
         link="identity",
     )
