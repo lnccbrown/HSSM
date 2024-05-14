@@ -73,6 +73,13 @@ class HSSM:
         "ddm_seq2_no_bias". If any other string is passed, the model will be considered
         custom, in which case all `model_config`, `loglik`, and `loglik_kind` have to be
         provided by the user.
+    choices : optional
+        When an `int`, the number of choices that the participants can make. If `2`, the
+        choices are [-1, 1] by default. If anything greater than `2`, the choices are
+        [0, 1, ..., n_choices - 1] by default. If a `list` is provided, it should be the
+        list of choices that the participants can make. Defaults to `2`. If any value
+        other than the choices provided is found in the "response" column of the data,
+        an error will be raised.
     include : optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
@@ -225,6 +232,7 @@ class HSSM:
         self,
         data: pd.DataFrame,
         model: SupportedModels | str = "ddm",
+        choices: int | list[int] = 2,
         include: list[dict | Param] | None = None,
         model_config: ModelConfig | dict | None = None,
         loglik: (
@@ -282,8 +290,20 @@ class HSSM:
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
 
-        self.choices = self.data["response"].unique().astype(int)
-        self.n_choices = len(self.choices)
+        if isinstance(choices, int):
+            if choices == 2:
+                self.n_choices = 2
+                self.choices = [-1, 1]
+            elif choices > 2:
+                self.n_choices = choices
+                self.choices = list(range(choices))
+            else:
+                raise ValueError("choices must be greater than 1.")
+        elif isinstance(choices, list):
+            self.n_choices = len(choices)
+            self.choices = choices
+        else:
+            raise ValueError("choices must be an integer or a list of integers.")
 
         self._pre_check_data_sanity()
 
@@ -1393,13 +1413,6 @@ class HSSM:
                     + "`participant_id` is not found in your dataset."
                 )
 
-        if self.n_choices == 2:
-            if -1 not in self.choices or 1 not in self.choices:
-                raise ValueError(
-                    "The response column must contain only -1 and 1 when there are "
-                    + "two responses."
-                )
-
     def _post_check_data_sanity(self):
         """Check if the data is clean enough for the model."""
         if self.deadline or self.missing_data:
@@ -1423,6 +1436,24 @@ class HSSM:
             raise ValueError(
                 "You have negative response times in your dataset, "
                 + "which is not allowed."
+            )
+
+        valid_responses = self.data.loc[self.data["rt"] != -999.0, "response"]
+        unique_responses = valid_responses.unique().astype(int)
+
+        if np.any(~np.isin(unique_responses, self.choices)):
+            invalid_responses = sorted(
+                unique_responses[~np.isin(unique_responses, self.choices)]
+            )
+            raise ValueError(
+                f"Invalid responses found in your dataset: {invalid_responses}"
+            )
+
+        if len(unique_responses) != self.n_choices:
+            missing_responses = sorted(np.setdiff1d(self.choices, unique_responses))
+            _logger.warning(
+                f"You set choices to be {self.choices}, but {missing_responses} are "
+                + "missing from your dataset."
             )
 
     def _postprocess_initvals_deterministic(
