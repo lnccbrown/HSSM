@@ -205,10 +205,9 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, ex
                 "name": "Uniform",
                 "lower": 0.5,
                 "upper": 1.5,
-                "initval": 1.0,
             },
-            "x": {"name": "Uniform", "lower": 0.7, "upper": 0.9, "initval": 0.8},
-            "y": {"name": "Uniform", "lower": 0.2, "upper": 0.4, "initval": 0.3},
+            "x": {"name": "Uniform", "lower": 0.7, "upper": 0.9},
+            "y": {"name": "Uniform", "lower": 0.2, "upper": 0.4},
         },
         link="identity",
     )
