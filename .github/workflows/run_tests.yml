@@ -47,8 +47,11 @@ jobs:
       - name: Linting
         run: ruff check src/hssm
 
-      - name: Run tests
-        run: pytest -n auto -s
+      - name: Run fast tests
+        run: pytest -n auto -s --ignore=tests/slow
+
+      - name: Run slow tests
+        run: pytest -n auto -s tests/slow
 
       - name: build docs
         run: mkdocs build

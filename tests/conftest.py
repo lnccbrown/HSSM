@@ -37,8 +37,8 @@ def data_angle():
 def data_ddm_reg():
     # Generate some fake simulation data
     intercept = 1.5
-    x = np.random.uniform(-5.0, 5.0, size=1000)
-    y = np.random.uniform(-5.0, 5.0, size=1000)
+    x = np.random.uniform(-0.5, 0.5, size=1000)
+    y = np.random.uniform(-0.5, 0.5, size=1000)
 
     v = intercept + 0.8 * x + 0.3 * y
     true_values = np.column_stack(
@@ -55,6 +55,35 @@ def data_ddm_reg():
     dataset_reg_v["y"] = y
 
     return dataset_reg_v
+
+
+@pytest.fixture(scope="module")
+def data_ddm_reg_va():
+    # Generate some fake simulation data
+    intercept = 1.5
+    intercept_a = 1.0
+    x = np.random.uniform(-0.5, 0.5, size=100)
+    y = np.random.uniform(-0.5, 0.5, size=100)
+
+    m = np.random.uniform(-0.5, 0.5, size=100)
+    n = np.random.uniform(-0.5, 0.5, size=100)
+
+    v = intercept + 0.8 * x + 0.3 * y
+    a = intercept_a + 0.1 * m + 0.1 * n
+    true_values = np.column_stack([v, a, np.repeat([[0.5, 0.5]], axis=0, repeats=100)])
+
+    dataset_reg_va = hssm.simulate_data(
+        model="ddm",
+        theta=true_values,
+        size=1,  # Generate one data point for each of the 1000 set of true values
+    )
+
+    dataset_reg_va["x"] = x
+    dataset_reg_va["y"] = y
+    dataset_reg_va["m"] = m
+    dataset_reg_va["n"] = n
+
+    return dataset_reg_va
 
 
 @pytest.fixture
