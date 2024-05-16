@@ -199,15 +199,15 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, ex
         },
     )
     param_reg_a = dict(
-        formula="a ~ 1 + x + y",
+        formula="a ~ 1 + m + n",
         prior={
             "Intercept": {
-                "name": "Uniform",
-                "lower": 0.5,
-                "upper": 1.5,
+                "name": "Normal",
+                "mu": 1.0,
+                "sigma": 0.5,
             },
-            "x": {"name": "Uniform", "lower": 0.7, "upper": 0.9},
-            "y": {"name": "Uniform", "lower": 0.2, "upper": 0.4},
+            "m": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
+            "n": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
         },
         link="identity",
     )
@@ -219,6 +219,7 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, ex
         v=param_reg_v,
         a=param_reg_a,
     )
+    print(model.params["a"])
     run_sample(model, sampler, step, expected)
 
     # Only runs once

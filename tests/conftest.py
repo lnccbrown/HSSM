@@ -65,8 +65,11 @@ def data_ddm_reg_va():
     x = np.random.uniform(-0.5, 0.5, size=100)
     y = np.random.uniform(-0.5, 0.5, size=100)
 
+    m = np.random.uniform(-0.5, 0.5, size=100)
+    n = np.random.uniform(-0.5, 0.5, size=100)
+
     v = intercept + 0.8 * x + 0.3 * y
-    a = intercept_a + 0.8 * x + 0.3 * y
+    a = intercept_a + 0.1 * m + 0.1 * n
     true_values = np.column_stack([v, a, np.repeat([[0.5, 0.5]], axis=0, repeats=100)])
 
     dataset_reg_va = hssm.simulate_data(
@@ -77,6 +80,8 @@ def data_ddm_reg_va():
 
     dataset_reg_va["x"] = x
     dataset_reg_va["y"] = y
+    dataset_reg_va["m"] = m
+    dataset_reg_va["n"] = n
 
     return dataset_reg_va
 
