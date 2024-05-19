@@ -51,6 +51,7 @@ from hssm.utils import (
     _process_param_in_kwargs,
     _random_sample,
     _rearrange_data,
+    _split_array,
 )
 
 from . import plotting
@@ -384,6 +385,7 @@ class HSSM:
             self.model, self._parent_param, self.response_c, self.response_str
         )
         self.set_alias(self._aliases)
+        print(self.pymc_model.initial_point())
         self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
         self._jitter_initvals(
             jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"], vector_only=True
@@ -494,7 +496,7 @@ class HSSM:
                 pass
 
         self._inference_obj = self.model.fit(
-            inference_method=sampler, init=init, **kwargs
+            inference_method=sampler, init=init, include_mean=True, **kwargs
         )
 
         # The parent was previously not part of deterministics --> compute it via
@@ -502,7 +504,7 @@ class HSSM:
         # in the GLM as far as bambi is concerned)
         if self._inference_obj is not None:
             if self._parent not in self._inference_obj.posterior.data_vars.keys():
-                self.model.predict(self._inference_obj, kind="mean", inplace=True)
+                # self.model.predict(self._inference_obj, kind="mean", inplace=True)
                 # rename 'rt,response_mean' to 'v' so in the traces everything
                 # looks the way it should
                 self._inference_obj.rename_vars(
@@ -517,7 +519,8 @@ class HSSM:
         inplace: bool = True,
         include_group_specific: bool = True,
         kind: Literal["pps", "mean"] = "pps",
-        n_samples: int | float | None = None,
+        draws: int | float | list[int] | None = None,
+        safe_mode: bool = True,
     ) -> az.InferenceData | None:
         """Perform posterior predictive sampling from the HSSM model.
 
@@ -543,7 +546,7 @@ class HSSM:
             latter returns the draws from the posterior predictive distribution
             (i.e. the posterior probability distribution for a new observation).
             Defaults to `"pps"`.
-        n_samples: optional
+        draws: optional
             The number of samples to draw from the posterior predictive distribution
             from each chain.
             When it's an integer >= 1, the number of samples to be extracted from the
@@ -576,30 +579,94 @@ class HSSM:
         if self._check_extra_fields(data):
             self._update_extra_fields(data)
 
-        if n_samples is not None:
+        if draws is not None:
             # Make a copy of idata, set the `posterior` group to be a random sub-sample
             # of the original (draw dimension gets sub-sampled)
             idata_copy = idata.copy()
-            idata_random_sample = _random_sample(
-                idata_copy["posterior"], n_samples=n_samples
-            )
-            delattr(idata_copy, "posterior")
-            idata_copy.add_groups(posterior=idata_random_sample)
 
-            # If the user specifies an inplace operation, we need to modify the original
-            if inplace:
-                self.model.predict(idata_copy, kind, data, True, include_group_specific)
-                idata.add_groups(
-                    posterior_predictive=idata_copy["posterior_predictive"]
+            if isinstance(draws, np.ndarray | list):
+                # If n_samples is a list, we take exactly the specified draws
+                idata_sample = idata_copy.posterior.isel(draw=draws)
+            elif isinstance(draws, int):
+                # If n_samples is an integer, we take a random sample of size n_samples
+                idata_sample = _random_sample(idata_copy.posterior, n_samples=draws)
+            else:
+                raise ValueError(
+                    "draws must be an integer, "
+                    + "a list of integers, or a numpy array."
                 )
 
-                return None
+            # Reassign the posterior group to the sub-sampled posterior
+            idata_copy.posterior = idata_sample
 
+            if kind == "pps":
+                # If we run kind == 'pps' we actually run the observation RV
+                if safe_mode:
+                    # safe mode splits the draws into chunks of 10 to avoid
+                    # memory issues (TODO: Figure out the source of memory issues)
+                    split_draws = _split_array(idata_sample.draw.values, divisor=10)
+
+                    posterior_predictive_list = []
+                    for samples_tmp in split_draws:
+                        tmp_posterior = idata.posterior.sel(draw=samples_tmp)
+                        idata_copy.posterior = tmp_posterior
+                        self.model.predict(
+                            idata_copy, kind, data, True, include_group_specific
+                        )
+                        posterior_predictive_list.append(
+                            idata_copy.posterior_predictive
+                        )
+
+                    if inplace:
+                        idata.add_groups(
+                            posterior_predictive=xr.concat(
+                                posterior_predictive_list, axis="draw"
+                            )
+                        )
+                        return None
+                    else:
+                        idata_copy.add_groups(
+                            posterior_predictive=xr.concat(
+                                posterior_predictive_list, axis="draw"
+                            )
+                        )
+                        return idata_copy
+                elif inplace:
+                    # Not safe mode but inplace
+                    # We call .predict() directly without any
+                    # chunking of data.
+
+                    # .predict() is called on the copy of idata
+                    self.model.predict(
+                        idata_copy, kind, data, True, include_group_specific
+                    )
+
+                    # posterior predictive group added to idata
+                    idata.add_groups(
+                        posterior_predictive=idata_copy["posterior_predictive"]
+                    )
+                    # don't return anything if inplace
+                    return None
+                else:
+                    # Not safe mode and not inplace
+                    # Function acts as very thin wrapper around
+                    # .predict(). It just operates on the
+                    # idata_copy object
+                    return self.model.predict(
+                        idata_copy, kind, data, False, include_group_specific
+                    )
+            elif kind == "mean":
+                _logger.warning(
+                    "The kind argument is set to 'mean', but 'draws' argument "
+                    + "is not None: The draws argument will be ignored"
+                )
+                return self.model.predict(
+                    idata, kind, data, inplace, include_group_specific
+                )
+        else:
             return self.model.predict(
-                idata_copy, kind, data, False, include_group_specific
+                idata, kind, data, inplace, include_group_specific
             )
-
-        return self.model.predict(idata, kind, data, inplace, include_group_specific)
 
     def plot_posterior_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
         """Produce a posterior predictive plot.
