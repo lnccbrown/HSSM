@@ -184,7 +184,7 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
 
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
-def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expected):
+def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, expected):
     print("PYMC VERSION: ")
     print(pm.__version__)
     print("TEST INPUTS WERE: ")
@@ -199,27 +199,27 @@ def test_reg_models_v_a(data_ddm_reg, loglik_kind, backend, sampler, step, expec
         },
     )
     param_reg_a = dict(
-        formula="a ~ 1 + x + y",
+        formula="a ~ 1 + m + n",
         prior={
             "Intercept": {
-                "name": "Uniform",
-                "lower": 0.5,
-                "upper": 3.0,
-                "initval": 1.0,
+                "name": "Normal",
+                "mu": 1.0,
+                "sigma": 0.5,
             },
-            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50, "initval": 0.0},
-            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50, "initval": 0.0},
+            "m": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
+            "n": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
         },
         link="identity",
     )
 
     model = hssm.HSSM(
-        data_ddm_reg,
+        data_ddm_reg_va,
         loglik_kind=loglik_kind,
         model_config={"backend": backend},
         v=param_reg_v,
         a=param_reg_a,
     )
+    print(model.params["a"])
     run_sample(model, sampler, step, expected)
 
     # Only runs once

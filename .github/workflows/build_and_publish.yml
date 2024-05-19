@@ -49,8 +49,11 @@ jobs:
       - name: Linting
         run: ruff check src/hssm
 
-      - name: Run tests
-        run: pytest -n auto -s
+      - name: Run fast tests
+        run: pytest -n auto -s --ignore=tests/slow
+
+      - name: Run slow tests
+        run: pytest -n auto -s tests/slow
 
   publish:
     name: Build wheel and publish to test-PyPI, and then PyPI, and publish docs
