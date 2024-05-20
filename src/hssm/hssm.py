@@ -595,6 +595,11 @@ class HSSM:
                     + "Please either provide an idata object or sample the model first."
                 )
             idata = self._inference_obj
+            print("idata=None, we use the traces assigned to the HSSM object as idata.")
+
+        if "posterior_predictive" in idata.groups():
+            del idata.posterior_predictive
+            print("pre-existing posterior_predictive group deleted from idata. \n")
 
         if self._check_extra_fields(data):
             self._update_extra_fields(data)
@@ -628,7 +633,7 @@ class HSSM:
 
                     posterior_predictive_list = []
                     for samples_tmp in split_draws:
-                        tmp_posterior = idata.posterior.sel(draw=samples_tmp)
+                        tmp_posterior = idata_sample.sel(draw=samples_tmp)
                         idata_copy.posterior = tmp_posterior
                         self.model.predict(
                             idata_copy, kind, data, True, include_group_specific
@@ -640,23 +645,28 @@ class HSSM:
                     if inplace:
                         idata.add_groups(
                             posterior_predictive=xr.concat(
-                                posterior_predictive_list, axis="draw"
+                                posterior_predictive_list, dim="draw"
                             )
                         )
+                        # for inplace, we don't return anything
                         return None
                     else:
+                        # Reassign original posterior to idata_copy
+                        idata_copy.posterior = idata.posterior
+                        # Add new posterior predictive group to idata_copy
                         idata_copy.add_groups(
                             posterior_predictive=xr.concat(
-                                posterior_predictive_list, axis="draw"
+                                posterior_predictive_list, dim="draw"
                             )
                         )
                         return idata_copy
                 elif inplace:
-                    # Not safe mode but inplace
+                    # If not safe-mode
                     # We call .predict() directly without any
                     # chunking of data.
 
                     # .predict() is called on the copy of idata
+                    # since we still subsampled (or assigned) the draws
                     self.model.predict(
                         idata_copy, kind, data, True, include_group_specific
                     )
@@ -673,9 +683,13 @@ class HSSM:
                     # .predict(). It just operates on the
                     # idata_copy object
                     return self.model.predict(
-                        idata_copy, kind, data, False, include_group_specific
+                        idata_copy, kind, data, inplace, include_group_specific
                     )
             elif kind == "mean":
+                # If kind == 'mean', we don't need to run the RV directly,
+                # there shouldn't really be any significant memory issues here,
+                # we can simply ignore settings, since the computational overhead
+                # should be very small --> nudges user towards good outputs.
                 _logger.warning(
                     "The kind argument is set to 'mean', but 'draws' argument "
                     + "is not None: The draws argument will be ignored"
@@ -684,9 +698,54 @@ class HSSM:
                     idata, kind, data, inplace, include_group_specific
                 )
         else:
-            return self.model.predict(
-                idata, kind, data, inplace, include_group_specific
-            )
+            if kind == "pps":
+                if safe_mode:
+                    orig_posterior = idata.posterior.copy()
+                    split_draws = _split_array(idata.posterior.draw.values, divisor=10)
+
+                    posterior_predictive_list = []
+                    for samples_tmp in split_draws:
+                        tmp_posterior = orig_posterior.sel(draw=samples_tmp)
+                        idata.posterior = tmp_posterior
+                        self.model.predict(
+                            idata, kind, data, True, include_group_specific
+                        )
+                        posterior_predictive_list.append(idata.posterior_predictive)
+
+                    if inplace:
+                        idata.posterior = orig_posterior
+                        # posterior predictive group is already added
+                        # to idata at this point
+                        idata.posterior_predictive = xr.concat(
+                            posterior_predictive_list, dim="draw"
+                        )
+                        return None
+                    else:
+                        return idata
+                elif inplace:
+                    self.model.predict(
+                        idata, kind, data, inplace, include_group_specific
+                    )
+                    return None
+                else:
+                    return self.model.predict(
+                        idata, kind, data, inplace, include_group_specific
+                    )
+            elif kind == "mean":
+                out = self.model.predict(
+                    idata, kind, data, inplace, include_group_specific
+                )
+                if out is None:
+                    # if this was done inplace
+                    idata.posterior = idata.posterior.rename(
+                        name_dict={"rt,response_mean": self._parent}
+                    )
+                    return out
+                else:
+                    out.posterior = out.posterior.rename(
+                        name_dict={"rt,response_mean": self._parent}
+                    )
+                    return out
 
     def plot_posterior_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
         """Produce a posterior predictive plot.
@@ -745,7 +804,25 @@ class HSSM:
             ``InferenceData`` object with the groups ``prior``, ``prior_predictive`` and
             ``observed_data``.
         """
-        return self.model.prior_predictive(draws, var_names, omit_offsets, random_seed)
+        prior_predictive = self.model.prior_predictive(
+            draws, var_names, omit_offsets, random_seed
+        )
+
+        prior_predictive.add_groups(posterior=prior_predictive.prior)
+        self.model.predict(prior_predictive, kind="mean", inplace=True)
+
+        # clean
+        prior_predictive.prior = prior_predictive.posterior
+        del prior_predictive.posterior
+
+        if self._inference_obj is None:
+            self._inference_obj = prior_predictive
+        else:
+            self._inference_obj.extend(prior_predictive)
+
+        # clean up `rt,response_mean` to `v`
+        self._drop_parent_str_from_idata(self._inference_obj)
+        return self._inference_obj
 
     @property
     def pymc_model(self) -> pm.Model:
@@ -1419,6 +1496,33 @@ class HSSM:
             var_names.append(f"~{self.response_str}_mean")
 
         return var_names
+
+    def _drop_parent_str_from_idata(
+        self, idata: az.InferenceData, inplace=True
+    ) -> az.InferenceData | None:
+        """Drop the parent_str variable from an InferenceData object.
+
+        Parameters
+        ----------
+        idata
+            The InferenceData object to be modified.
+
+        Returns
+        -------
+        xr.Dataset
+            The modified InferenceData object.
+        """
+        for group in idata.groups():
+            if "rt,response_mean" in idata[group].data_vars:
+                setattr(
+                    idata,
+                    group,
+                    idata[group].rename({"rt,response_mean": self._parent}),
+                )
+        if inplace:
+            return None
+        else:
+            return idata
 
     def _handle_missing_data_and_deadline(self):
         """Handle missing data and deadline."""

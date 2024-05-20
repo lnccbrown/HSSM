@@ -22,21 +22,21 @@ def test_sample_posterior_predictive(cav_idata, cavanagh_test):
     cav_idata_copy = cav_idata.copy()
 
     posterior_predictive = model.sample_posterior_predictive(
-        idata=cav_idata_copy, n_samples=1, inplace=False
+        idata=cav_idata_copy, draws=1, inplace=False
     )
     assert posterior_predictive.posterior_predictive.draw.size == 1
     assert "posterior_predictive" not in cav_idata_copy
 
-    model.sample_posterior_predictive(idata=cav_idata_copy, n_samples=1, inplace=True)
+    model.sample_posterior_predictive(idata=cav_idata_copy, draws=1, inplace=True)
     assert cav_idata_copy.posterior_predictive.draw.size == 1
     assert cav_idata_copy.posterior.draw.size == 500
 
     model._inference_obj = cav_idata
-    posterior_predictive = model.sample_posterior_predictive(n_samples=1, inplace=False)
+    posterior_predictive = model.sample_posterior_predictive(draws=1, inplace=False)
 
     assert posterior_predictive.posterior_predictive.draw.size == 1
     assert "posterior_predictive" not in cav_idata
 
-    model.sample_posterior_predictive(n_samples=1, inplace=True)
+    model.sample_posterior_predictive(draws=1, inplace=True)
     assert cav_idata.posterior_predictive.draw.size == 1
     assert cav_idata.posterior.draw.size == 500
