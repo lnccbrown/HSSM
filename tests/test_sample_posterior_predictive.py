@@ -12,11 +12,11 @@ PARAMETER_GRID = [
     (None, True, False),
     # (50, False, False),
     (50, True, False),
-    # (np.arange(500), False, False),
+    # (np.arange(500), False, False), # very slow to test
     (np.arange(500), True, False),
     (1, False, True),
     (1, True, True),
-    # (None, False, True),
+    # (None, False, True), # very slow to test
     (None, True, True),
     (50, False, True),
     (50, True, True),
