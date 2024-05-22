@@ -10,7 +10,7 @@ import logging
 from copy import deepcopy
 from inspect import isclass
 from os import PathLike
-from typing import Any, Callable, Literal, Union
+from typing import Any, Callable, Literal
 
 import arviz as az
 import bambi as bmb
@@ -540,8 +540,8 @@ class HSSM:
                     {"rt,response_mean": self._parent}, inplace=True
                 )
             elif (
-                self._parent in self._inference_obj.posterior.data_vars.keys()
-                and "rt,response_mean" in self._inference_obj.posterior.data_vars.keys()
+                self._parent in self._inference_obj.posterior.data_vars
+                and "rt,response_mean" in self._inference_obj.posterior.data_vars
             ):
                 # drop redundant 'rt,response_mean' variable,
                 # if parent already in posterior
@@ -618,8 +618,8 @@ class HSSM:
                 "idata=None, we use the traces assigned to the HSSM object as idata."
             )
 
-        if "posterior_predictive" in idata.groups():
-            if idata is not None:
+        if idata is not None:
+            if "posterior_predictive" in idata.groups():
                 del idata["posterior_predictive"]
                 _logger.warning(
                     "pre-existing posterior_predictive group deleted from idata. \n"
@@ -692,29 +692,32 @@ class HSSM:
                         )
                     )
                     return idata_copy
-            elif inplace:
-                # If not safe-mode
-                # We call .predict() directly without any
-                # chunking of data.
-
-                # .predict() is called on the copy of idata
-                # since we still subsampled (or assigned) the draws
-                self.model.predict(idata_copy, kind, data, True, include_group_specific)
-
-                # posterior predictive group added to idata
-                idata.add_groups(
-                    posterior_predictive=idata_copy["posterior_predictive"]
-                )
-                # don't return anything if inplace
-                return None
             else:
-                # Not safe mode and not inplace
-                # Function acts as very thin wrapper around
-                # .predict(). It just operates on the
-                # idata_copy object
-                return self.model.predict(
-                    idata_copy, kind, data, inplace, include_group_specific
-                )
+                if inplace:
+                    # If not safe-mode
+                    # We call .predict() directly without any
+                    # chunking of data.
+
+                    # .predict() is called on the copy of idata
+                    # since we still subsampled (or assigned) the draws
+                    self.model.predict(
+                        idata_copy, kind, data, True, include_group_specific
+                    )
+
+                    # posterior predictive group added to idata
+                    idata.add_groups(
+                        posterior_predictive=idata_copy["posterior_predictive"]
+                    )
+                    # don't return anything if inplace
+                    return None
+                else:
+                    # Not safe mode and not inplace
+                    # Function acts as very thin wrapper around
+                    # .predict(). It just operates on the
+                    # idata_copy object
+                    return self.model.predict(
+                        idata_copy, kind, data, False, include_group_specific
+                    )
         elif kind == "mean":
             # If kind == 'mean', we don't need to run the RV directly,
             # there shouldn't really be any significant memory issues here,
@@ -1478,7 +1481,7 @@ class HSSM:
         return var_names
 
     def _drop_parent_str_from_idata(
-        self, idata: Union[az.InferenceData, None]
+        self, idata: az.InferenceData | None
     ) -> az.InferenceData:
         """Drop the parent_str variable from an InferenceData object.
 
