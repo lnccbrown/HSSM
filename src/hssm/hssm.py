@@ -539,6 +539,13 @@ class HSSM:
                 self._inference_obj.rename_vars(
                     {"rt,response_mean": self._parent}, inplace=True
                 )
+            elif (
+                self._parent in self._inference_obj.posterior.data_vars.keys()
+                and "rt,response_mean" in self._inference_obj.posterior.data_vars.keys()
+            ):
+                # drop redundant 'rt,response_mean' variable,
+                # if parent already in posterior
+                del self._inference_obj.posterior["rt,response_mean"]
         return self.traces
 
     def sample_posterior_predictive(
