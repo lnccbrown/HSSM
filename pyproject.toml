@@ -25,7 +25,7 @@ bambi = "^0.13.0"
 numpyro = "^0.15.0"
 hddm-wfpt = "^0.1.4"
 seaborn = "^0.13.2"
-jax = { version = "^0.4.23", extras = ["cuda12"], optional = true }
+jax = { version = ">=0.4.23,<0.4.28", extras = ["cuda12"], optional = true }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"
