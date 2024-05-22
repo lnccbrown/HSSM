@@ -13,15 +13,19 @@ USER root
 RUN apt-get update -y && \
   apt-get upgrade -y && \
   apt-get install -y apt-utils && \
-  apt-get install -y build-essential&& \
-  apt-get install -y gcc && \
-  apt-get install -y g++ && \
-  apt-get install -y gfortran && \
+  apt-get install -y build-essential &&\
+  apt-get install -y graphviz &&\
   rm -rf /var/lib/apt/lists/*
 
 USER $NB_UID
 
-RUN conda install -c conda-forge hssm
+RUN pip install graphviz -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install -U "jax[cpu]" -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install pymc==5.14.0 -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install hssm -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+RUN fix-permissions "/home/${NB_USER}" &&\
+    rm -rf ~/.cache/
 
 # Import matplotlib the first time to build the font cache.
 ENV XDG_CACHE_HOME="/home/${NB_USER}/.cache/"
