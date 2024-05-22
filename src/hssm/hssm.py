@@ -404,7 +404,7 @@ class HSSM:
             self.model, self._parent_param, self.response_c, self.response_str
         )
         self.set_alias(self._aliases)
-        _logger.info(self.pymc_model.initial_point())
+        # _logger.info(self.pymc_model.initial_point())
         self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
         self._jitter_initvals(
             jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"], vector_only=True
