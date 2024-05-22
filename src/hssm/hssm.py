@@ -1489,7 +1489,9 @@ class HSSM:
             raise ValueError("Please provide an InferenceData object.")
         else:
             for group in idata.groups():
-                if "rt,response_mean" in idata[group].data_vars:
+                if ("rt,response_mean" in idata[group].data_vars) and (
+                    self._parent not in idata[group].data_vars
+                ):
                     setattr(
                         idata,
                         group,
