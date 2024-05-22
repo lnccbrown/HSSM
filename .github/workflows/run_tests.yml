@@ -34,7 +34,7 @@ jobs:
 
       - name: install hssm
         run: |
-          poetry export --with dev --output=req.txt
+          poetry export --with dev --without-hashes --output=req.txt
           grep -v -E '^jax\[cuda12\]|^nvidia|^jax\-cuda12' req.txt >> requirements.txt
           pip install -r requirements.txt
           pip install -e .
