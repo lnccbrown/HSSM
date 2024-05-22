@@ -1,25 +1,38 @@
 name: dockerHSSM CI
 
 on:
-  push:
-    branches: [ "main" ]
+  release:
+    types: [published]
 
 jobs:
   buildx:
     runs-on: ubuntu-latest
-    env:
-      HSSM_VERSION: hssm:0.2.1
     steps:
+    
     - name: Checkout
       uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    - name: Read version from pyproject.toml
+      id: get_version
+      run: |
+        VERSION=$(python -c "import toml; print(toml.load('pyproject.toml')['tool']['poetry']['version'])")
+        echo "HSSM_VERSION=hssm:$VERSION" >>$GITHUB_ENV
+   
     - name: Docker login
       uses: docker/login-action@v1
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PASSWORD }} 
+    
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+    
     - name: Build the Combined Manifest
       run: docker buildx build --platform linux/amd64,linux/arm64 -t ${{ secrets.DOCKERHUB_USERNAME }}/${{env.HSSM_VERSION}} -f Dockerfile . --push
+   
     - name: Build the Newest Manifest
       run: docker buildx build --platform linux/amd64,linux/arm64 -t ${{ secrets.DOCKERHUB_USERNAME }}/hssm:latest -f Dockerfile . --push
