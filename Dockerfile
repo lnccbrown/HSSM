@@ -21,14 +21,7 @@ RUN apt-get update -y && \
 
 USER $NB_UID
 
-RUN conda config --add channels  https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
-RUN conda install 'python-graphviz' --yes
-RUN conda install 'pymc=5.14.0' --yes
-
-RUN pip install -U "jax[cpu]" -i https://pypi.tuna.tsinghua.edu.cn/simple && \
-  pip install hssm -i https://pypi.tuna.tsinghua.edu.cn/simple && \
-  fix-permissions "/home/${NB_USER}" && \
-  rm -rf ~/.cache/pip
+RUN conda install -c conda-forge hssm
 
 # Import matplotlib the first time to build the font cache.
 ENV XDG_CACHE_HOME="/home/${NB_USER}/.cache/"
