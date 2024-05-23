@@ -452,3 +452,8 @@ def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarra
     split_not_missing = data[~missing_indices, :]
 
     return np.concatenate([split_missing, split_not_missing])
+
+
+def _split_array(data: np.ndarray | list[int], divisor: int) -> list[np.ndarray]:
+    num_splits = len(data) // divisor + (1 if len(data) % divisor != 0 else 0)
+    return [tmp.astype(int) for tmp in np.array_split(data, num_splits)]

@@ -386,7 +386,7 @@ def _use_traces_or_sample(
             idata=idata,
             data=data,
             inplace=True,
-            n_samples=n_samples,
+            draws=n_samples,
         )
         idata = model.traces
         sampled = True
