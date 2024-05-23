@@ -10,7 +10,7 @@ import pymc as pm
 
 from hssm.utils import _rearrange_data
 
-hssm.set_floatX("float32", jax=True)
+hssm.set_floatX("float32", update_jax=True)
 
 # AF-TODO: Include more tests that use different link functions!
 
