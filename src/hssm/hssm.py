@@ -174,8 +174,7 @@ class HSSM:
         all parameters that do not have explicit bounds.
         - `None`: HSSM will use bambi to provide default priors for all parameters. Not
         recommended when you are using hierarchical models.
-        The default value is `None` when `hierarchical` is `False` and `"safe"` when
-        `hierarchical` is `True`.
+        The default value is `"safe"`.
     extra_namespace : optional
         Additional user supplied variables with transformations or data to include in
         the environment where the formula is evaluated. Defaults to `None`.
@@ -243,13 +242,14 @@ class HSSM:
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
         hierarchical: bool = False,
         link_settings: Literal["log_logit"] | None = None,
-        prior_settings: Literal["safe"] | None = None,
+        prior_settings: Literal["safe"] | None = "safe",
         extra_namespace: dict[str, Any] | None = None,
         missing_data: bool | float = False,
         deadline: bool | str = False,
         loglik_missing_data: (
             str | PathLike | Callable | pytensor.graph.Op | None
         ) = None,
+        process_initvals: bool = True,
         **kwargs,
     ):
         self.data = data.copy()
@@ -405,10 +405,12 @@ class HSSM:
         )
         self.set_alias(self._aliases)
         # _logger.info(self.pymc_model.initial_point())
-        self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
-        self._jitter_initvals(
-            jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"], vector_only=True
-        )
+        if process_initvals:
+            self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
+            self._jitter_initvals(
+                jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+                vector_only=True,
+            )
 
     def sample(
         self,
@@ -1628,10 +1630,14 @@ class HSSM:
         link_setting_str = str(self.link_settings)
         # Set initial values for particular parameters
         for name_, starting_value in self.pymc_model.initial_point().items():
-            name_tmp = name_
-            name_tmp = name_tmp.replace("_log__", "")
-            name_tmp = name_tmp.replace("_interval__", "")
+            # strip name of `_log__` and `_interval__` suffixes
+            name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if name_tmp in initval_settings[link_setting_str].keys():
+                # print("name_tmp:", name_tmp)
+                # print(
+                #     "setting initval to", initval_settings[link_setting_str][name_tmp]
+                # )
+
                 # Apply specific settings from initval_settings dictionary
                 self.pymc_model.set_initval(
                     self.pymc_model.named_vars[name_tmp],
@@ -1648,24 +1654,32 @@ class HSSM:
             self.__jitter_initvals_all(jitter_epsilon)
 
     def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
+        # print("names_vars:", self.pymc_model.named_vars)
         initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
+            name_tmp = name_.replace("_log__", "").replace("_interval__", "")
+            # print(f"name_: {name_}")
+            # print(f"starting_value: {starting_value}")
+            # print(f"starting_value.shape: {starting_value.shape}")
+            # print(f"starting_value.ndim: {starting_value.ndim}")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
                 starting_value_tmp = starting_value + np.random.uniform(
                     -jitter_epsilon, jitter_epsilon, starting_value.shape
                 ).astype(np.float32)
+
                 self.pymc_model.set_initval(
-                    self.pymc_model.named_vars[name_], starting_value_tmp
+                    self.pymc_model.named_vars[name_tmp], starting_value_tmp
                 )
 
     def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
         initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
+            name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             starting_value_tmp = starting_value + np.random.uniform(
                 -jitter_epsilon, jitter_epsilon, starting_value.shape
             ).astype(np.float32)
             self.pymc_model.set_initval(
-                self.pymc_model.named_vars[name_], starting_value_tmp
+                self.pymc_model.named_vars[name_tmp], starting_value_tmp
             )
 
 

@@ -328,6 +328,7 @@ default_model_config: DefaultConfigs = {
     },
 }
 
+# TODO: Initval settings could be specified directly in model config as well.
 INITVAL_SETTINGS = {
     # logit link function case
     # should never use priors with bounds,
@@ -347,6 +348,8 @@ INITVAL_SETTINGS = {
         "t": 0.025,
         "t_Intercept": 0.025,
         "a": 1.5,
+        # "v": 1.5,  # TODO: skip
+        # "v_Intercept": 0.3,
         "a_Intercept": 1.5,
         "p_outlier": 0.001,
     },
