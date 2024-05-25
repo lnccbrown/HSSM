@@ -1694,14 +1694,9 @@ class HSSM:
             self.__jitter_initvals_all(jitter_epsilon)
 
     def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
-        # print("names_vars:", self.pymc_model.named_vars)
         initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
-            # print(f"name_: {name_}")
-            # print(f"starting_value: {starting_value}")
-            # print(f"starting_value.shape: {starting_value.shape}")
-            # print(f"starting_value.ndim: {starting_value.ndim}")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
                 starting_value_tmp = starting_value + np.random.uniform(
                     -jitter_epsilon, jitter_epsilon, starting_value.shape
