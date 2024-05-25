@@ -1610,8 +1610,9 @@ class HSSM:
         if len(unique_responses) != self.n_choices:
             missing_responses = sorted(np.setdiff1d(self.choices, unique_responses))
             _logger.warning(
-                f"You set choices to be {self.choices}, but {missing_responses} are "
-                + "missing from your dataset."
+                "You set choices to be %s, but %s are missing from your dataset.",
+                self.choices,
+                missing_responses,
             )
 
     def _postprocess_initvals_deterministic(
@@ -1633,16 +1634,55 @@ class HSSM:
             # strip name of `_log__` and `_interval__` suffixes
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if name_tmp in initval_settings[link_setting_str].keys():
-                # print("name_tmp:", name_tmp)
-                # print(
-                #     "setting initval to", initval_settings[link_setting_str][name_tmp]
-                # )
+                if self._check_if_initval_user_supplied(name_tmp):
+                    _logger.info(
+                        "User supplied initial value detected for %s, \n"
+                        " skipping overwrite with default value.",
+                        name_tmp,
+                    )
+                    continue
+                else:
+                    # Apply specific settings from initval_settings dictionary
+                    self.pymc_model.set_initval(
+                        self.pymc_model.named_vars[name_tmp],
+                        initval_settings[link_setting_str][name_tmp],
+                    )
 
-                # Apply specific settings from initval_settings dictionary
-                self.pymc_model.set_initval(
-                    self.pymc_model.named_vars[name_tmp],
-                    initval_settings[link_setting_str][name_tmp],
-                )
+    def _check_if_initval_user_supplied(self, name_str: str) -> bool:
+        """Check if initial value is user-supplied."""
+        # The function assumes that the name_str is either raw parameter name
+        # or `paramname_Intercept`, because we only really provide special default
+        # initial values for those types of parameters
+
+        if "_" in name_str:
+            name_str_prefix = name_str.split("_")[0]
+            name_str_suffix = name_str.split("_")[1]
+        else:
+            name_str_prefix = name_str
+            name_str_suffix = ""
+
+        if isinstance(self.priors, dict):
+            if name_str_prefix == self._parent:
+                if self.params[name_str_prefix].is_regression:
+                    tmp_param = "c(rt, response)"
+                else:
+                    tmp_param = name_str_prefix
+            else:
+                tmp_param = name_str_prefix
+
+            if name_str_suffix == "Intercept":
+                if "initval" in self.priors[tmp_param]["Intercept"].args:
+                    return True
+                else:
+                    return False
+            else:
+                if "initval" in self.priors[tmp_param].args:
+                    return True
+                else:
+                    return False
+        else:
+            ValueError("Priors must be a dictionary at this point.")
+        return False
 
     def _jitter_initvals(
         self, jitter_epsilon: float = 0.01, vector_only: bool = False
