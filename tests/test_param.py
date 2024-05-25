@@ -111,6 +111,12 @@ def test_param_creation_non_regression():
     assert pt.is_fixed
     assert not ptheta.is_truncated
 
+    print("PASSING PARAMETERS TO MODEL: ")
+    print(v)
+    print(a)
+    print(z)
+    print(t)
+
     model_1 = hssm.HSSM(
         model="angle",
         data=hssm.simulate_data(
@@ -635,7 +641,6 @@ def test_param_override_default_priors_ddm(
     assert intercept_prior.bounds == bounds
     assert intercept_prior.dist is not None
     mu1 = mu.copy()
-    print("hello hello hello")
     print(f"{intercept_prior}=")
     print(f"{mu1}=")
 

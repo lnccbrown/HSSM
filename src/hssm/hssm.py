@@ -406,6 +406,11 @@ class HSSM:
         )
         self.set_alias(self._aliases)
         # _logger.info(self.pymc_model.initial_point())
+
+        print("PARAMS CREATED")
+        print(self.params)
+        print("PRIORS CREATED")
+        print(self.priors)
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
             self._jitter_initvals(
@@ -1679,12 +1684,30 @@ class HSSM:
             )
             return None
 
+        # Store overall link setting string
+        # Note the call to str(), turns None to `None`
         link_setting_str = str(self.link_settings)
+
         # Set initial values for particular parameters
         for name_, starting_value in self.pymc_model.initial_point().items():
             # strip name of `_log__` and `_interval__` suffixes
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
-            if name_tmp in initval_settings[link_setting_str].keys():
+            print("NEXT PARAM TO PROCESS: ", name_tmp)
+
+            # We need to check if the parameter is actually backed by
+            # a regression.
+
+            # If not, we don't actually apply a link function to it as per default.
+            # Therefore we need to apply the initial value strategy corresponding
+            # to 'None' link function.
+
+            # If the user actively supplies a link function, the user
+            # should also have supplied an initial value insofar it matters.
+            if self.params[self._get_prefix(name_tmp)].is_regression:
+                param_link_setting = link_setting_str
+            else:
+                param_link_setting = "None"
+            if name_tmp in initval_settings[param_link_setting].keys():
                 if self._check_if_initval_user_supplied(name_tmp):
                     _logger.info(
                         "User supplied initial value detected for %s, \n"
@@ -1693,11 +1716,24 @@ class HSSM:
                     )
                     continue
                 else:
+                    print("SETTING INITVAL FOR: ", name_tmp)
+                    print(
+                        "SETTING INITVAL TO VALUE: ",
+                        initval_settings[param_link_setting][name_tmp],
+                    )
                     # Apply specific settings from initval_settings dictionary
                     self.pymc_model.set_initval(
                         self.pymc_model.named_vars[name_tmp],
-                        initval_settings[link_setting_str][name_tmp],
+                        initval_settings[param_link_setting][name_tmp],
                     )
+
+    def _get_prefix(self, name_str: str) -> str:
+        """Get parameters wise link setting function from parameter prefix."""
+        if "_" in name_str:
+            name_str_prefix = name_str.split("_")[0]
+        else:
+            name_str_prefix = name_str
+        return name_str_prefix
 
     def _check_if_initval_user_supplied(self, name_str: str) -> bool:
         """Check if initial value is user-supplied."""
@@ -1712,21 +1748,39 @@ class HSSM:
             name_str_prefix = name_str
             name_str_suffix = ""
 
+        print("NAME_STR_PREFIX: ", name_str_prefix)
+        print("NAME_STR_SUFFIX: ", name_str_suffix)
+        print("NAME_STR: ", name_str)
+
         if isinstance(self.priors, dict):
+            print("PRIORS: ", self.priors)
             if name_str_prefix == self._parent:
-                if self.params[name_str_prefix].is_regression:
-                    tmp_param = "c(rt, response)"
-                else:
-                    tmp_param = name_str_prefix
+                print("RENAMING tmp_param")
+                # if self.params[name_str_prefix].is_regression:
+                tmp_param = "c(rt, response)"
+                # else:
+                #     tmp_param = name_str_prefix
+                print("Renamed param:", tmp_param)
             else:
                 tmp_param = name_str_prefix
 
-            if name_str_suffix == "Intercept":
+            print("TMP_PARAM 1: ", tmp_param)
+
+            if (name_str_suffix == "Intercept") or (name_str_prefix == self._parent):
+                # print("PASSING HERE")
+                # print("PRIORS: ", self.priors)
+                # print("TMP_PARAM: ", tmp_param)
+                # print(self.priors[tmp_param])
                 if "initval" in self.priors[tmp_param]["Intercept"].args:
+                    # print("PASSING HERE 2")
                     return True
                 else:
+                    # print("PASSING HERE 3")
                     return False
             else:
+                # print("PRIORS: ", self.priors)
+                # print("TMP_PARAM: ", tmp_param)
+                # print("INDEX ERROR: ", self.priors[tmp_param])
                 if "initval" in self.priors[tmp_param].args:
                     return True
                 else:
