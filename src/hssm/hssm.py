@@ -254,6 +254,7 @@ class HSSM:
     ):
         self.data = data.copy()
         self._inference_obj = None
+        self._map_dict = None
         self.hierarchical = hierarchical
 
         if self.hierarchical and prior_settings is None:
@@ -412,12 +413,24 @@ class HSSM:
                 vector_only=True,
             )
 
+    def find_MAP(self):
+        """Perform Maximum A Posteriori estimation.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the MAP estimates of the model parameters.
+        """
+        self._map_dict = pm.find_MAP(model=self.pymc_model)
+        return self._map_dict
+
     def sample(
         self,
         sampler: (
             Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"] | None
         ) = None,
         init: str | None = None,
+        start_at_map: bool = False,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -434,6 +447,11 @@ class HSSM:
         init: optional
             Initialization method to use for the sampler. If any of the NUTS samplers
             is used, defaults to `"adapt_diag"`. Otherwise, defaults to `"auto"`.
+        start_at_map: optional
+            If True, the sampler will start at the MAP estimate. Defaults to False.
+            Note, you can also use the kwarg, `initvals` to pass
+            in a dictionary of starting values directly.
+            If `initvals` is provided, `start_at_map` will be ignored.
         kwargs
             Other arguments passed to bmb.Model.fit(). Please see [here]
             (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
@@ -446,6 +464,20 @@ class HSSM:
             (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
             object if `"vi"`.
         """
+        if start_at_map and ("initvals" not in kwargs):
+            if self._map_dict is None:
+                _logger.info(
+                    "start_at_map = True but no map estimate precomputed. \n"
+                    "Running map estimation first..."
+                )
+                self.find_MAP()
+                kwargs["initvals"] = self._map_dict
+        elif start_at_map and ("initvals" in kwargs):
+            _logger.warning(
+                "start_at_map = True, but initvals is provided. "
+                + "The initvals argument will be used."
+            )
+
         if sampler is None:
             if (
                 self.loglik_kind == "approx_differentiable"
@@ -1086,6 +1118,25 @@ class HSSM:
             raise ValueError("Please sample the model first.")
 
         return self._inference_obj
+
+    @property
+    def map(self) -> dict:
+        """Return the MAP estimates of the model parameters.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the MAP estimates of the model parameters.
+        """
+        if not self._map_dict:
+            raise ValueError("Please compute map first.")
+
+        return self._map_dict
 
     def _check_lapse(self, lapse):
         """Determine if p_outlier and lapse is specified correctly."""

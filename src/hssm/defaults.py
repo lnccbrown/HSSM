@@ -92,7 +92,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "extra_fields": None,
@@ -104,7 +103,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "bounds": {
@@ -123,7 +121,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "extra_fields": None,
@@ -143,7 +140,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "extra_fields": None,
@@ -155,7 +151,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "bounds": {
@@ -175,7 +170,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "extra_fields": None,
@@ -195,7 +189,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "extra_fields": None,

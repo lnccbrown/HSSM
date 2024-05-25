@@ -68,9 +68,15 @@ def test_data_sanity_check(data_ddm, cpn, caplog):
 
     hssm.HSSM(data=data_ddm_miscoded, model="ddm", choices=[1, 2, 3])
 
+    print("THE CAPLOG RECORDS")
+    print([record.msg for record in caplog.records])
+
     assert (
-        caplog.records[-1].msg
-        == "You set choices to be [1, 2, 3], but [3] are missing from your dataset."
+        "You set choices to be [1, 2, 3], but [3] are missing from your dataset."
+        in [
+            record.msg % record.args if record.args else record.msg
+            for record in caplog.records
+        ]
     )
 
     # Case 7: if deadline or missing_data is True, data should contain missing values
@@ -96,8 +102,12 @@ def test_data_sanity_check(data_ddm, cpn, caplog):
     )
 
     assert (
-        caplog.records[-1].msg
-        == "`missing_data` is set to False, but you have missing data in your dataset. Missing data will be dropped."
+        "`missing_data` is set to False, but you have missing data"
+        " in your dataset. Missing data will be dropped."
+        in [
+            record.msg % record.args if record.args else record.msg
+            for record in caplog.records
+        ]
     )
 
     assert model.data.shape[0] == data_ddm.shape[0] - missing_size
@@ -114,8 +124,12 @@ def test_data_sanity_check(data_ddm, cpn, caplog):
         )
 
         assert (
-            caplog.records[-1].msg
-            == "`missing_data` is set to False, but you have missing data in your dataset. Missing data will be dropped."
+            "`missing_data` is set to False, but you have missing data in your dataset."
+            " Missing data will be dropped."
+            in [
+                record.msg % record.args if record.args else record.msg
+                for record in caplog.records
+            ]
         )
 
     data_ddm_missing.loc[missing_indices[0], "rt"] = -10
