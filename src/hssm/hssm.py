@@ -1729,8 +1729,13 @@ class HSSM:
 
     def _get_prefix(self, name_str: str) -> str:
         """Get parameters wise link setting function from parameter prefix."""
-        if "_" in name_str:
+        # `p_outlier` is the only basic parameter floating around that has
+        # an underscore in it's name.
+        # We need to handle it separately. (Renaming might be better...)
+        if "_" in name_str and "p_outlier" not in name_str:
             name_str_prefix = name_str.split("_")[0]
+        elif "_" in name_str and "p_outlier" in name_str:
+            name_str_prefix = "p_outlier"
         else:
             name_str_prefix = name_str
         return name_str_prefix
@@ -1741,9 +1746,18 @@ class HSSM:
         # or `paramname_Intercept`, because we only really provide special default
         # initial values for those types of parameters
 
-        if "_" in name_str:
+        # `p_outlier` is the only basic parameter floating around that has
+        # an underscore in it's name.
+        # We need to handle it separately. (Renaming might be better...)
+        if ("_" in name_str) and ("p_outlier" not in name_str):
             name_str_prefix = name_str.split("_")[0]
             name_str_suffix = name_str.split("_")[1]
+        elif ("_" in name_str) and ("p_outlier" in name_str):
+            name_str_prefix = "p_outlier"
+            if name_str == "p_outlier":
+                name_str_suffix = ""
+            else:
+                name_str_suffix = name_str.split("_")[2]
         else:
             name_str_prefix = name_str
             name_str_suffix = ""
