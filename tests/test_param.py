@@ -111,12 +111,6 @@ def test_param_creation_non_regression():
     assert pt.is_fixed
     assert not ptheta.is_truncated
 
-    print("PASSING PARAMETERS TO MODEL: ")
-    print(v)
-    print(a)
-    print(z)
-    print(t)
-
     model_1 = hssm.HSSM(
         model="angle",
         data=hssm.simulate_data(
@@ -559,9 +553,8 @@ def test_param_override_default_priors(cavanagh_test, caplog, param_name, bounds
     )
 
     param_no_common_intercept.override_default_priors(cavanagh_test, {})
-    print(caplog.records)
-    assert "limitation" in caplog.records[-1].msg
 
+    assert "limitation" in caplog.records[-1].msg
     assert "Intercept" not in param_no_common_intercept.prior
     group_intercept_prior = param_no_common_intercept.prior["1|participant_id"]
     group_slope_prior = param_no_common_intercept.prior["theta|participant_id"]

@@ -367,7 +367,6 @@ class HSSM:
         # Get the bambi formula, priors, and link
         self.formula, self.priors, self.link = self._parse_bambi()
 
-        # print(self.priors)
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
         # a large negative value).
@@ -407,10 +406,6 @@ class HSSM:
         self.set_alias(self._aliases)
         # _logger.info(self.pymc_model.initial_point())
 
-        print("PARAMS CREATED")
-        print(self.params)
-        print("PRIORS CREATED")
-        print(self.priors)
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
             self._jitter_initvals(
@@ -1317,8 +1312,6 @@ class HSSM:
         )
         for param in self.list_params:
             param_obj = self.params[param]
-            # print(param)
-            # print('bounds before prior settings: ', param_obj.bounds)
 
             if self.link_settings == "log_logit":
                 param_obj.override_default_link()
@@ -1678,7 +1671,7 @@ class HSSM:
         # Consider case where link functions are set to 'log_logit'
         # or 'None'
         if self.link_settings not in ["log_logit", "None", None]:
-            print(
+            _logger.info(
                 "Not preprocessing initial values, "
                 + "because none of the two standard link settings are chosen!"
             )
@@ -1692,7 +1685,6 @@ class HSSM:
         for name_, starting_value in self.pymc_model.initial_point().items():
             # strip name of `_log__` and `_interval__` suffixes
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
-            print("NEXT PARAM TO PROCESS: ", name_tmp)
 
             # We need to check if the parameter is actually backed by
             # a regression.
@@ -1716,11 +1708,6 @@ class HSSM:
                     )
                     continue
                 else:
-                    print("SETTING INITVAL FOR: ", name_tmp)
-                    print(
-                        "SETTING INITVAL TO VALUE: ",
-                        initval_settings[param_link_setting][name_tmp],
-                    )
                     # Apply specific settings from initval_settings dictionary
                     self.pymc_model.set_initval(
                         self.pymc_model.named_vars[name_tmp],
@@ -1762,39 +1749,18 @@ class HSSM:
             name_str_prefix = name_str
             name_str_suffix = ""
 
-        print("NAME_STR_PREFIX: ", name_str_prefix)
-        print("NAME_STR_SUFFIX: ", name_str_suffix)
-        print("NAME_STR: ", name_str)
-
         if isinstance(self.priors, dict):
-            print("PRIORS: ", self.priors)
             if name_str_prefix == self._parent:
-                print("RENAMING tmp_param")
-                # if self.params[name_str_prefix].is_regression:
                 tmp_param = "c(rt, response)"
-                # else:
-                #     tmp_param = name_str_prefix
-                print("Renamed param:", tmp_param)
             else:
                 tmp_param = name_str_prefix
 
-            print("TMP_PARAM 1: ", tmp_param)
-
             if (name_str_suffix == "Intercept") or (name_str_prefix == self._parent):
-                # print("PASSING HERE")
-                # print("PRIORS: ", self.priors)
-                # print("TMP_PARAM: ", tmp_param)
-                # print(self.priors[tmp_param])
                 if "initval" in self.priors[tmp_param]["Intercept"].args:
-                    # print("PASSING HERE 2")
                     return True
                 else:
-                    # print("PASSING HERE 3")
                     return False
             else:
-                # print("PRIORS: ", self.priors)
-                # print("TMP_PARAM: ", tmp_param)
-                # print("INDEX ERROR: ", self.priors[tmp_param])
                 if "initval" in self.priors[tmp_param].args:
                     return True
                 else:
