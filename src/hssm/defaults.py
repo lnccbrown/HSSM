@@ -337,7 +337,7 @@ INITVAL_SETTINGS = {
     },
     # identity link function case,
     # need to take care of_log__ and _interval__ variables
-    "None": {
+    None: {
         "t": 0.025,
         "t_Intercept": 0.025,
         "a": 1.5,

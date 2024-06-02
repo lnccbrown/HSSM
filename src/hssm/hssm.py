@@ -430,7 +430,7 @@ class HSSM:
             Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"] | None
         ) = None,
         init: str | None = None,
-        start_at_map: bool = False,
+        initvals: str | dict | None = None,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -447,11 +447,11 @@ class HSSM:
         init: optional
             Initialization method to use for the sampler. If any of the NUTS samplers
             is used, defaults to `"adapt_diag"`. Otherwise, defaults to `"auto"`.
-        start_at_map: optional
-            If True, the sampler will start at the MAP estimate. Defaults to False.
-            Note, you can also use the kwarg, `initvals` to pass
-            in a dictionary of starting values directly.
-            If `initvals` is provided, `start_at_map` will be ignored.
+        initvals: optional
+            Pass initial values to the sampler. This can be a dictionary of initial
+            values for parameters of the model, or a string "map" to use initialization
+            at the MAP estimate. If "map" is used, the MAP estimate will be computed if
+            not already attached to the base class from prior call to 'find_MAP`.
         kwargs
             Other arguments passed to bmb.Model.fit(). Please see [here]
             (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
@@ -464,19 +464,24 @@ class HSSM:
             (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
             object if `"vi"`.
         """
-        if start_at_map and ("initvals" not in kwargs):
-            if self._map_dict is None:
-                _logger.info(
-                    "start_at_map = True but no map estimate precomputed. \n"
-                    "Running map estimation first..."
+        if isinstance(initvals, dict):
+            kwargs["initvals"] = initvals
+        else:
+            if isinstance(initvals, str):
+                if initvals == "map":
+                    if self._map_dict is None:
+                        _logger.info(
+                            "initvals='map' but no map estimate precomputed. \n"
+                            "Running map estimation first..."
+                        )
+                        self.find_MAP()
+                        kwargs["initvals"] = self._map_dict
+                    else:
+                        kwargs["initvals"] = self._map_dict
+            else:
+                raise ValueError(
+                    "initvals must be a dictionary or 'map' to use the MAP estimate."
                 )
-                self.find_MAP()
-                kwargs["initvals"] = self._map_dict
-        elif start_at_map and ("initvals" in kwargs):
-            _logger.warning(
-                "start_at_map = True, but initvals is provided. "
-                + "The initvals argument will be used."
-            )
 
         if sampler is None:
             if (
@@ -1670,7 +1675,7 @@ class HSSM:
         """Set initial values for subset of parameters."""
         # Consider case where link functions are set to 'log_logit'
         # or 'None'
-        if self.link_settings not in ["log_logit", "None", None]:
+        if self.link_settings not in ["log_logit", None]:
             _logger.info(
                 "Not preprocessing initial values, "
                 + "because none of the two standard link settings are chosen!"
@@ -1698,7 +1703,7 @@ class HSSM:
             if self.params[self._get_prefix(name_tmp)].is_regression:
                 param_link_setting = link_setting_str
             else:
-                param_link_setting = "None"
+                param_link_setting = None
             if name_tmp in initval_settings[param_link_setting].keys():
                 if self._check_if_initval_user_supplied(name_tmp):
                     _logger.info(
@@ -1707,22 +1712,23 @@ class HSSM:
                         name_tmp,
                     )
                     continue
-                else:
-                    # Apply specific settings from initval_settings dictionary
-                    self.pymc_model.set_initval(
-                        self.pymc_model.named_vars[name_tmp],
-                        initval_settings[param_link_setting][name_tmp],
-                    )
+
+                # Apply specific settings from initval_settings dictionary
+                self.pymc_model.set_initval(
+                    self.pymc_model.named_vars[name_tmp],
+                    initval_settings[param_link_setting][name_tmp],
+                )
 
     def _get_prefix(self, name_str: str) -> str:
         """Get parameters wise link setting function from parameter prefix."""
         # `p_outlier` is the only basic parameter floating around that has
         # an underscore in it's name.
         # We need to handle it separately. (Renaming might be better...)
-        if "_" in name_str and "p_outlier" not in name_str:
-            name_str_prefix = name_str.split("_")[0]
-        elif "_" in name_str and "p_outlier" in name_str:
-            name_str_prefix = "p_outlier"
+        if "_" in name_str:
+            if "p_outlier" not in name_str:
+                name_str_prefix = name_str.split("_")[0]
+            else:
+                name_str_prefix = "p_outlier"
         else:
             name_str_prefix = name_str
         return name_str_prefix
@@ -1736,38 +1742,32 @@ class HSSM:
         # `p_outlier` is the only basic parameter floating around that has
         # an underscore in it's name.
         # We need to handle it separately. (Renaming might be better...)
-        if ("_" in name_str) and ("p_outlier" not in name_str):
-            name_str_prefix = name_str.split("_")[0]
-            name_str_suffix = name_str.split("_")[1]
-        elif ("_" in name_str) and ("p_outlier" in name_str):
-            name_str_prefix = "p_outlier"
-            if name_str == "p_outlier":
-                name_str_suffix = ""
+        if "_" in name_str:
+            if "p_outlier" not in name_str:
+                name_str_prefix = name_str.split("_")[0]
+                name_str_suffix = name_str.split("_")[1]
             else:
-                name_str_suffix = name_str.split("_")[2]
+                name_str_prefix = "p_outlier"
+                if name_str == "p_outlier":
+                    name_str_suffix = ""
+                else:
+                    name_str_suffix = name_str.split("_")[2]
         else:
             name_str_prefix = name_str
             name_str_suffix = ""
 
         if isinstance(self.priors, dict):
             if name_str_prefix == self._parent:
-                tmp_param = "c(rt, response)"
+                tmp_param = self.response_c
             else:
                 tmp_param = name_str_prefix
 
             if (name_str_suffix == "Intercept") or (name_str_prefix == self._parent):
-                if "initval" in self.priors[tmp_param]["Intercept"].args:
-                    return True
-                else:
-                    return False
-            else:
-                if "initval" in self.priors[tmp_param].args:
-                    return True
-                else:
-                    return False
+                return "initval" in self.priors[tmp_param]["Intercept"].args
+
+            return "initval" in self.priors[tmp_param].args
         else:
-            ValueError("Priors must be a dictionary at this point.")
-        return False
+            raise ValueError("`priors` should be a dictionary.")
 
     def _jitter_initvals(
         self, jitter_epsilon: float = 0.01, vector_only: bool = False
