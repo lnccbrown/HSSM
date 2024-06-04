@@ -452,6 +452,9 @@ def make_distribution(
                 lapse_logp = lapse_func(data[:, 0].eval())
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
+                # Ensure that non-decision time is always smaller than rt.
+                # Assuming that the non-decision time parameter is always named "t".
+                logp = ensure_positive_ndt(data, logp, list_params, dist_params)
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)
                     + p_outlier * pt.exp(lapse_logp)
@@ -459,15 +462,16 @@ def make_distribution(
                 )
             else:
                 logp = loglik(data, *dist_params, *extra_fields)
+                # Ensure that non-decision time is always smaller than rt.
+                # Assuming that the non-decision time parameter is always named "t".
+                logp = ensure_positive_ndt(data, logp, list_params, dist_params)
 
             if bounds is not None:
                 logp = apply_param_bounds_to_loglik(
                     logp, list_params, *dist_params, bounds=bounds
                 )
 
-            # Ensure that non-decision time is always smaller than rt.
-            # Assuming that the non-decision time parameter is always named "t".
-            return ensure_positive_ndt(data, logp, list_params, dist_params)
+            return logp
 
     return SSMDistribution
 
