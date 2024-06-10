@@ -1,0 +1,213 @@
+import numpy as np
+import pytest
+import hssm
+from hssm import HSSM
+from hssm.utils import download_hf
+import logging
+
+hssm.set_floatX("float32", update_jax=True)
+logger = logging.getLogger("hssm")
+
+
+def _check_initval_defaults_correctness(model) -> None:
+    """Check if initial values from default dictionary are correctly applied."""
+    # Consider case where link functions are set to 'log_logit'
+    # or 'None'
+    if model.link_settings not in ["log_logit", None]:
+        return None
+
+    # Set initial values for particular parameters
+    for name_, starting_value in model.initial_point().items():
+        # If the user actively supplies a link function, the user
+        # should also have supplied an initial value insofar it matters.
+        if model.params[model._get_prefix(name_)].is_regression:
+            param_link_setting = model.link_settings
+        else:
+            param_link_setting = None
+
+        # Go through parameters that are specified in the initial value defaults
+        # If not specified in there, we won't touch the parameter during post-processing
+        # anyways
+        if name_ in hssm.defaults.INITVAL_SETTINGS[param_link_setting].keys():
+            # Figure out if user specified a custom initial value for the parameter
+
+            # If yes, we need to check it this custom value successfully overrode our
+            # global defaults
+            # If not, we want to check if our defaults where successfully applied
+            user_initval = model._check_if_initval_user_supplied(
+                name_, return_value=True
+            )
+
+            # print("Is actually in initval default dict...")
+            print(f"testing initial value for {name_}...")
+            # print(f"{user_initval=}")
+
+            if user_initval is not None:
+                # If the user specified custom initial values for anything
+                # in our INITVAL_DEFAULTS dictionary, we need to check if
+                # the user's initial value was successfully applied
+                model_initial_point = model.initial_point()[name_]
+                assert np.allclose(
+                    model_initial_point, user_initval, atol=1e-3
+                ), f"""User supplied initial value for {name_} is {user_initval},
+                    which does not match the initial point set by model,
+                    which is {model_initial_point}"""
+            else:
+                # If the user did not specify custom initial values,
+                # we need to check that our INITVAL_DEFAULTS
+                # were successfully applied
+                model_initial_point = model.initial_point()[name_]
+                default_initial_point = hssm.defaults.INITVAL_SETTINGS[
+                    param_link_setting
+                ][name_]
+
+                assert np.allclose(
+                    model_initial_point,
+                    default_initial_point,
+                    atol=1e-3,
+                ), f"""Initial value for {name_} is supposed to be {default_initial_point},
+                       and does not match the initial point set by model,
+                       which is {model_initial_point}."""
+        else:
+            pass
+
+
+def test_basic_model(caplog):
+    """Test basic model with p_outlier distribution defined."""
+    caplog.set_level(logging.INFO)
+    logger.info("\nTesting most basic model.")
+    cav_data = hssm.load_data("cavanagh_theta")
+    model = hssm.HSSM(
+        data=cav_data,
+        model="ddm",
+        process_initvals=True,
+    )
+    _check_initval_defaults_correctness(model)
+
+
+def test_basic_model_p_outlier(caplog):
+    """Test basic model with p_outlier distribution defined."""
+    caplog.set_level(logging.INFO)
+    logger.info("\nTesting basic model with p_outlier distribution defined.")
+    cav_data = hssm.load_data("cavanagh_theta")
+    model = hssm.HSSM(
+        data=cav_data,
+        model="ddm",
+        process_initvals=True,
+        p_outlier={"name": "Uniform", "lower": 0.0001, "upper": 0.5},
+    )
+    _check_initval_defaults_correctness(model)
+
+
+def test_basic_model_p_outlier_initval(caplog):
+    """Test basic model with p_outlier distribution defined."""
+    caplog.set_level(logging.INFO)
+    logger.info(
+        """\nTesting basic model with p_outlier distribution
+                and initval defined."""
+    )
+    cav_data = hssm.load_data("cavanagh_theta")
+    model = hssm.HSSM(
+        data=cav_data,
+        model="ddm",
+        process_initvals=True,
+        p_outlier={"name": "Uniform", "lower": 0.0001, "upper": 0.5, "initval": 0.5},
+    )
+    _check_initval_defaults_correctness(model)
+
+
+def test_reg_model(caplog):
+    """Test regression model, with regression on all parameters."""
+    caplog.set_level(logging.INFO)
+    logger.info("\nTesting regression model.")
+    cav_data = hssm.load_data("cavanagh_theta")
+    model = hssm.HSSM(
+        data=cav_data,
+        model="ddm",
+        process_initvals=True,
+        include=[
+            {"name": "v", "formula": "v ~ 1 + (1|participant_id)"},
+            {"name": "a", "formula": "a ~ 1 + (1|participant_id)"},
+            {"name": "z", "formula": "z ~ 1 + (1|participant_id)"},
+            {"name": "t", "formula": "t ~ 1 + (1|participant_id)"},
+        ],
+    )
+    _check_initval_defaults_correctness(model)
+
+
+def test_reg_model_subset(caplog):
+    """Test regression model, with subset of parameters being regressions."""
+    caplog.set_level(logging.INFO)
+    logger.info(
+        "\nTesting regression model with subset of parameters being regressions."
+    )
+    cav_data = hssm.load_data("cavanagh_theta")
+    model = hssm.HSSM(
+        data=cav_data,
+        model="ddm",
+        process_initvals=True,
+        include=[
+            {"name": "v", "formula": "v ~ 1 + (1|participant_id)"},
+            {"name": "a", "formula": "a ~ 1 + (1|participant_id)"},
+        ],
+    )
+
+
+def test_angle_model_reg(caplog):
+    """Test with angle model regression."""
+    caplog.set_level(logging.INFO)
+    logger.info(
+        """\nTesting regression model with subset of parameters being regressions,
+        for angle model."""
+    )
+    cav_data = hssm.load_data("cavanagh_theta")
+    model = hssm.HSSM(
+        data=cav_data,
+        model="angle",
+        process_initvals=True,
+        include=[
+            {"name": "v", "formula": "v ~ 1 + (1|participant_id)"},
+            {"name": "a", "formula": "a ~ 1 + (1|participant_id)"},
+        ],
+    )
+    _check_initval_defaults_correctness(model)
+
+
+def test_angle_model(caplog):
+    """Test with angle model basic."""
+    caplog.set_level(logging.INFO)
+    logger.info("\nTesting basic angle model.")
+    cav_data = hssm.load_data("cavanagh_theta")
+    model = hssm.HSSM(
+        data=cav_data,
+        model="angle",
+        process_initvals=True,
+    )
+    _check_initval_defaults_correctness(model)
+
+
+def test_process_no_process(caplog):
+    """Test mismatch with and without preprocessing."""
+    caplog.set_level(logging.INFO)
+    logger.info(
+        """\nTesting that turning initval-processing off,
+                doesn't change initial values."""
+    )
+
+    cav_data = hssm.load_data("cavanagh_theta")
+    model_on = hssm.HSSM(
+        data=cav_data,
+        model="angle",
+        process_initvals=True,
+    )
+    init_on = model_on.initial_point(transformed=False)
+
+    model_off = hssm.HSSM(
+        data=cav_data,
+        model="angle",
+        process_initvals=False,
+    )
+    init_off = model_off.initial_point(transformed=False)
+
+    assert init_on != init_off, """Initial values should not be the same when
+    initval processing is turned off vs. turned on."""

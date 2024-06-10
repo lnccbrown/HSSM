@@ -10,7 +10,7 @@ import logging
 from copy import deepcopy
 from inspect import isclass
 from os import PathLike
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Union
 
 import arviz as az
 import bambi as bmb
@@ -1035,6 +1035,26 @@ class HSSM:
 
         return az.summary(data, **kwargs)
 
+    def initial_point(self, transformed: bool = False) -> dict[str, np.ndarray]:
+        """Compute the initial point of the model.
+
+        This is a slightly altered version of pm.initial_point.initial_point().
+
+        Parameters
+        ----------
+        transformed : bool, optional
+            If True, return the initial point in transformed space.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the initial point of the model parameters.
+        """
+        fn = pm.initial_point.make_initial_point_fn(
+            model=self.pymc_model, return_transformed=transformed
+        )
+        return pm.model.Point(fn(None), model=self.pymc_model)
+
     def __repr__(self) -> str:
         """Create a representation of the model."""
         output = []
@@ -1682,10 +1702,6 @@ class HSSM:
             )
             return None
 
-        # Store overall link setting string
-        # Note the call to str(), turns None to `None`
-        link_setting_str = str(self.link_settings)
-
         # Set initial values for particular parameters
         for name_, starting_value in self.pymc_model.initial_point().items():
             # strip name of `_log__` and `_interval__` suffixes
@@ -1701,7 +1717,7 @@ class HSSM:
             # If the user actively supplies a link function, the user
             # should also have supplied an initial value insofar it matters.
             if self.params[self._get_prefix(name_tmp)].is_regression:
-                param_link_setting = link_setting_str
+                param_link_setting = self.link_settings
             else:
                 param_link_setting = None
             if name_tmp in initval_settings[param_link_setting].keys():
@@ -1733,7 +1749,11 @@ class HSSM:
             name_str_prefix = name_str
         return name_str_prefix
 
-    def _check_if_initval_user_supplied(self, name_str: str) -> bool:
+    def _check_if_initval_user_supplied(
+        self,
+        name_str: str,
+        return_value: bool = False,
+    ) -> Union[bool, float, int, np.ndarray]:
         """Check if initial value is user-supplied."""
         # The function assumes that the name_str is either raw parameter name
         # or `paramname_Intercept`, because we only really provide special default
@@ -1745,13 +1765,15 @@ class HSSM:
         if "_" in name_str:
             if "p_outlier" not in name_str:
                 name_str_prefix = name_str.split("_")[0]
-                name_str_suffix = name_str.split("_")[1]
+                # name_str_suffix = "".join(name_str.split("_")[1:])
+                name_str_suffix = name_str[len(name_str_prefix + "_") :]
             else:
                 name_str_prefix = "p_outlier"
                 if name_str == "p_outlier":
                     name_str_suffix = ""
                 else:
-                    name_str_suffix = name_str.split("_")[2]
+                    # name_str_suffix = "".join(name_str.split("_")[2:])
+                    name_str_suffix = name_str[len("p_outlier_") :]
         else:
             name_str_prefix = name_str
             name_str_suffix = ""
@@ -1762,10 +1784,64 @@ class HSSM:
             else:
                 tmp_param = name_str_prefix
 
-            if (name_str_suffix == "Intercept") or (name_str_prefix == self._parent):
-                return "initval" in self.priors[tmp_param]["Intercept"].args
-
-            return "initval" in self.priors[tmp_param].args
+            if tmp_param == self.response_c:
+                # If the parameter was parent it is automatically treated as a
+                # regression.
+                if not name_str_suffix:
+                    # No suffix --> Intercept
+                    if "initval" in self.priors[tmp_param]["Intercept"].args:
+                        if return_value:
+                            return self.priors[tmp_param]["Intercept"].args["initval"]
+                        else:
+                            return True
+                    else:
+                        if return_value:
+                            return None
+                        else:
+                            return False
+                else:
+                    # If the parameter has a suffix --> use it
+                    if "initval" in self.priors[tmp_param][name_str_suffix].args:
+                        if return_value:
+                            return self.priors[tmp_param][name_str_suffix].args[
+                                "initval"
+                            ]
+                        else:
+                            return True
+                    else:
+                        if return_value:
+                            return None
+                        else:
+                            return False
+            else:
+                # If the parameter is not a parent, it is treated as a regression
+                # only when actively specified as such.
+                if not name_str_suffix:
+                    # If no suffix --> treat as basic parameter.
+                    if "initval" in self.priors[tmp_param].args:
+                        if return_value:
+                            return self.priors[tmp_param].args["initval"]
+                        else:
+                            return True
+                    else:
+                        if return_value:
+                            return None
+                        else:
+                            return False
+                else:
+                    # If suffix --> treat as regression and use suffix
+                    if "initval" in self.priors[tmp_param][name_str_suffix].args:
+                        if return_value:
+                            return self.priors[tmp_param][name_str_suffix].args[
+                                "initval"
+                            ]
+                        else:
+                            return True
+                    else:
+                        if return_value:
+                            return None
+                        else:
+                            return False
         else:
             raise ValueError("`priors` should be a dictionary.")
 
