@@ -1753,7 +1753,7 @@ class HSSM:
         self,
         name_str: str,
         return_value: bool = False,
-    ) -> Union[bool, float, int, np.ndarray]:
+    ) -> Union[bool, float, int, np.ndarray, None]:
         """Check if initial value is user-supplied."""
         # The function assumes that the name_str is either raw parameter name
         # or `paramname_Intercept`, because we only really provide special default
