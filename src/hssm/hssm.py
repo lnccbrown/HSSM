@@ -464,24 +464,29 @@ class HSSM:
             (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
             object if `"vi"`.
         """
-        if isinstance(initvals, dict):
-            kwargs["initvals"] = initvals
-        else:
-            if isinstance(initvals, str):
-                if initvals == "map":
-                    if self._map_dict is None:
-                        _logger.info(
-                            "initvals='map' but no map estimate precomputed. \n"
-                            "Running map estimation first..."
-                        )
-                        self.find_MAP()
-                        kwargs["initvals"] = self._map_dict
-                    else:
-                        kwargs["initvals"] = self._map_dict
+        # If initvals are None (default)
+        # we skip processing initvals here.
+        if initvals is not None:
+            if isinstance(initvals, dict):
+                kwargs["initvals"] = initvals
             else:
-                raise ValueError(
-                    "initvals must be a dictionary or 'map' to use the MAP estimate."
-                )
+                if isinstance(initvals, str):
+                    if initvals == "map":
+                        if self._map_dict is None:
+                            _logger.info(
+                                "initvals='map' but no map"
+                                "estimate precomputed. \n"
+                                "Running map estimation first..."
+                            )
+                            self.find_MAP()
+                            kwargs["initvals"] = self._map_dict
+                        else:
+                            kwargs["initvals"] = self._map_dict
+                else:
+                    raise ValueError(
+                        "initvals argument must be a dictionary or 'map'"
+                        " to use the MAP estimate."
+                    )
 
         if sampler is None:
             if (
