@@ -413,7 +413,7 @@ class HSSM:
                 vector_only=True,
             )
 
-    def find_MAP(self):
+    def find_MAP(self, **kwargs):
         """Perform Maximum A Posteriori estimation.
 
         Returns
@@ -421,7 +421,7 @@ class HSSM:
         dict
             A dictionary containing the MAP estimates of the model parameters.
         """
-        self._map_dict = pm.find_MAP(model=self.pymc_model)
+        self._map_dict = pm.find_MAP(model=self.pymc_model, **kwargs)
         return self._map_dict
 
     def sample(

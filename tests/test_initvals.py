@@ -1,3 +1,4 @@
+from re import T
 import numpy as np
 import pytest
 import hssm
@@ -7,6 +8,50 @@ import logging
 
 hssm.set_floatX("float32", update_jax=True)
 logger = logging.getLogger("hssm")
+
+parameter_names = "loglik_kind, model, sampler, initvals"
+parameter_grid = [
+    ("approx_differentiable", "ddm", "nuts_numpyro", "map"),
+    ("analytical", "ddm", "nuts_numpyro", "map"),
+    ("approx_differentiable", "angle", "nuts_numpyro", "map"),
+    # ("approx_differentiable", "ddm", "mcmc", "map"), # parallel sampling is an issue here
+    ("analytical", "ddm", "mcmc", "map"),
+    # ("approx_differentiable", "angle", "mcmc", "map"), # parallel sampling is an issue here
+    ("approx_differentiable", "ddm", "nuts_numpyro", "initial_point"),
+    ("analytical", "ddm", "nuts_numpyro", "initial_point"),
+    ("approx_differentiable", "angle", "nuts_numpyro", "initial_point"),
+    # ("approx_differentiable", "ddm", "mcmc", "initial_point"),
+    # ("analytical", "ddm", "mcmc", "initial_point"), # parallel sampling is an issue
+    # ("approx_differentiable", "angle", "mcmc", "initial_point"),
+]
+
+
+@pytest.mark.parametrize(parameter_names, parameter_grid)
+def test_sample_map(caplog, loglik_kind, model, sampler, initvals):
+    """Test sampling from MAP starting point."""
+    logger.info(
+        "\nTesting starting point setting at sampler level, \n"
+        "for model=%s, loglik_kind=%s, sampler=%s, initvals=%s",
+        model,
+        loglik_kind,
+        sampler,
+        initvals,
+    )
+    cav_data = hssm.load_data("cavanagh_theta")
+    caplog.set_level(logging.INFO)
+    model_on = hssm.HSSM(
+        data=cav_data,
+        model=model,
+        loglik_kind=loglik_kind,
+        process_initvals=True,
+    )
+
+    initial_point = model_on.initial_point(transformed=True)
+
+    if initvals == "initial_point":
+        model_on.sample(sampler=sampler, initvals=initial_point, draws=10, tune=10)
+    if initvals == "map":
+        model_on.sample(sampler=sampler, initvals=initvals, draws=10, tune=10)
 
 
 def _check_initval_defaults_correctness(model) -> None:
