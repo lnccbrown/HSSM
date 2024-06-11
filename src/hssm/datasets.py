@@ -5,7 +5,7 @@ Heavily influenced by Arviz's(scikit-learn's, and Bambi's) implementation.
 """
 
 import os
-from typing import NamedTuple, Optional, Union
+from typing import NamedTuple, Optional
 
 import pandas as pd
 
@@ -34,7 +34,7 @@ DATASETS = {
 }
 
 
-def load_data(dataset: Optional[str] = None) -> Union[pd.DataFrame, str]:
+def load_data(dataset: Optional[str] = None) -> pd.DataFrame | str:
     """
     Load a dataset as a pandas DataFrame.
 

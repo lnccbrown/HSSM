@@ -14,15 +14,25 @@ parameter_grid = [
     ("approx_differentiable", "ddm", "nuts_numpyro", "map"),
     ("analytical", "ddm", "nuts_numpyro", "map"),
     ("approx_differentiable", "angle", "nuts_numpyro", "map"),
-    # ("approx_differentiable", "ddm", "mcmc", "map"), # parallel sampling is an issue here
+    (
+        "approx_differentiable",
+        "ddm",
+        "mcmc",
+        "map",
+    ),
     ("analytical", "ddm", "mcmc", "map"),
-    # ("approx_differentiable", "angle", "mcmc", "map"), # parallel sampling is an issue here
+    (
+        "approx_differentiable",
+        "angle",
+        "mcmc",
+        "map",
+    ),
     ("approx_differentiable", "ddm", "nuts_numpyro", "initial_point"),
     ("analytical", "ddm", "nuts_numpyro", "initial_point"),
     ("approx_differentiable", "angle", "nuts_numpyro", "initial_point"),
-    # ("approx_differentiable", "ddm", "mcmc", "initial_point"),
-    # ("analytical", "ddm", "mcmc", "initial_point"), # parallel sampling is an issue
-    # ("approx_differentiable", "angle", "mcmc", "initial_point"),
+    ("approx_differentiable", "ddm", "mcmc", "initial_point"),
+    ("analytical", "ddm", "mcmc", "initial_point"),
+    ("approx_differentiable", "angle", "mcmc", "initial_point"),
 ]
 
 
@@ -49,9 +59,18 @@ def test_sample_map(caplog, loglik_kind, model, sampler, initvals):
     initial_point = model_on.initial_point(transformed=True)
 
     if initvals == "initial_point":
-        model_on.sample(sampler=sampler, initvals=initial_point, draws=10, tune=10)
+        model_on.sample(
+            sampler=sampler,
+            initvals=initial_point,
+            chains=1,
+            cores=1,
+            draws=10,
+            tune=10,
+        )
     if initvals == "map":
-        model_on.sample(sampler=sampler, initvals=initvals, draws=10, tune=10)
+        model_on.sample(
+            sampler=sampler, initvals=initvals, chains=1, cores=1, draws=10, tune=10
+        )
 
 
 def _check_initval_defaults_correctness(model) -> None:
@@ -73,7 +92,7 @@ def _check_initval_defaults_correctness(model) -> None:
         # Go through parameters that are specified in the initial value defaults
         # If not specified in there, we won't touch the parameter during post-processing
         # anyways
-        if name_ in hssm.defaults.INITVAL_SETTINGS[param_link_setting].keys():
+        if name_ in hssm.defaults.INITVAL_SETTINGS[param_link_setting]:
             # Figure out if user specified a custom initial value for the parameter
 
             # If yes, we need to check it this custom value successfully overrode our
