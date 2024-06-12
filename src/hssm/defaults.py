@@ -92,7 +92,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "extra_fields": None,
@@ -104,7 +103,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "bounds": {
@@ -123,7 +121,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "extra_fields": None,
@@ -143,7 +140,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "extra_fields": None,
@@ -155,7 +151,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "bounds": {
@@ -175,7 +170,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "extra_fields": None,
@@ -195,7 +189,6 @@ default_model_config: DefaultConfigs = {
                     "t": {
                         "name": "HalfNormal",
                         "sigma": 2.0,
-                        "initval": 0.05,
                     },
                 },
                 "extra_fields": None,
@@ -328,6 +321,7 @@ default_model_config: DefaultConfigs = {
     },
 }
 
+# TODO: Initval settings could be specified directly in model config as well.
 INITVAL_SETTINGS = {
     # logit link function case
     # should never use priors with bounds,
@@ -343,7 +337,7 @@ INITVAL_SETTINGS = {
     },
     # identity link function case,
     # need to take care of_log__ and _interval__ variables
-    "None": {
+    None: {
         "t": 0.025,
         "t_Intercept": 0.025,
         "a": 1.5,

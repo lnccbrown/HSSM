@@ -290,7 +290,6 @@ def get_hddm_default_prior(
         # print(param)
         # print(link)
         if link is not None:
-            print("passed")
             prior = generate_prior("Normal")
         else:
             prior = generate_prior(HDDM_MU[param], bounds=bounds)

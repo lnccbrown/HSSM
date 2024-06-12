@@ -174,8 +174,7 @@ class HSSM:
         all parameters that do not have explicit bounds.
         - `None`: HSSM will use bambi to provide default priors for all parameters. Not
         recommended when you are using hierarchical models.
-        The default value is `None` when `hierarchical` is `False` and `"safe"` when
-        `hierarchical` is `True`.
+        The default value is `"safe"`.
     extra_namespace : optional
         Additional user supplied variables with transformations or data to include in
         the environment where the formula is evaluated. Defaults to `None`.
@@ -243,17 +242,19 @@ class HSSM:
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
         hierarchical: bool = False,
         link_settings: Literal["log_logit"] | None = None,
-        prior_settings: Literal["safe"] | None = None,
+        prior_settings: Literal["safe"] | None = "safe",
         extra_namespace: dict[str, Any] | None = None,
         missing_data: bool | float = False,
         deadline: bool | str = False,
         loglik_missing_data: (
             str | PathLike | Callable | pytensor.graph.Op | None
         ) = None,
+        process_initvals: bool = True,
         **kwargs,
     ):
         self.data = data.copy()
         self._inference_obj = None
+        self._map_dict = None
         self.hierarchical = hierarchical
 
         if self.hierarchical and prior_settings is None:
@@ -366,7 +367,6 @@ class HSSM:
         # Get the bambi formula, priors, and link
         self.formula, self.priors, self.link = self._parse_bambi()
 
-        # print(self.priors)
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
         # a large negative value).
@@ -405,10 +405,24 @@ class HSSM:
         )
         self.set_alias(self._aliases)
         # _logger.info(self.pymc_model.initial_point())
-        self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
-        self._jitter_initvals(
-            jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"], vector_only=True
-        )
+
+        if process_initvals:
+            self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
+            self._jitter_initvals(
+                jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+                vector_only=True,
+            )
+
+    def find_MAP(self, **kwargs):
+        """Perform Maximum A Posteriori estimation.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the MAP estimates of the model parameters.
+        """
+        self._map_dict = pm.find_MAP(model=self.pymc_model, **kwargs)
+        return self._map_dict
 
     def sample(
         self,
@@ -416,6 +430,7 @@ class HSSM:
             Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"] | None
         ) = None,
         init: str | None = None,
+        initvals: str | dict | None = None,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -432,6 +447,11 @@ class HSSM:
         init: optional
             Initialization method to use for the sampler. If any of the NUTS samplers
             is used, defaults to `"adapt_diag"`. Otherwise, defaults to `"auto"`.
+        initvals: optional
+            Pass initial values to the sampler. This can be a dictionary of initial
+            values for parameters of the model, or a string "map" to use initialization
+            at the MAP estimate. If "map" is used, the MAP estimate will be computed if
+            not already attached to the base class from prior call to 'find_MAP`.
         kwargs
             Other arguments passed to bmb.Model.fit(). Please see [here]
             (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
@@ -444,6 +464,30 @@ class HSSM:
             (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
             object if `"vi"`.
         """
+        # If initvals are None (default)
+        # we skip processing initvals here.
+        if initvals is not None:
+            if isinstance(initvals, dict):
+                kwargs["initvals"] = initvals
+            else:
+                if isinstance(initvals, str):
+                    if initvals == "map":
+                        if self._map_dict is None:
+                            _logger.info(
+                                "initvals='map' but no map"
+                                "estimate precomputed. \n"
+                                "Running map estimation first..."
+                            )
+                            self.find_MAP()
+                            kwargs["initvals"] = self._map_dict
+                        else:
+                            kwargs["initvals"] = self._map_dict
+                else:
+                    raise ValueError(
+                        "initvals argument must be a dictionary or 'map'"
+                        " to use the MAP estimate."
+                    )
+
         if sampler is None:
             if (
                 self.loglik_kind == "approx_differentiable"
@@ -996,6 +1040,26 @@ class HSSM:
 
         return az.summary(data, **kwargs)
 
+    def initial_point(self, transformed: bool = False) -> dict[str, np.ndarray]:
+        """Compute the initial point of the model.
+
+        This is a slightly altered version of pm.initial_point.initial_point().
+
+        Parameters
+        ----------
+        transformed : bool, optional
+            If True, return the initial point in transformed space.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the initial point of the model parameters.
+        """
+        fn = pm.initial_point.make_initial_point_fn(
+            model=self.pymc_model, return_transformed=transformed
+        )
+        return pm.model.Point(fn(None), model=self.pymc_model)
+
     def __repr__(self) -> str:
         """Create a representation of the model."""
         output = []
@@ -1084,6 +1148,25 @@ class HSSM:
             raise ValueError("Please sample the model first.")
 
         return self._inference_obj
+
+    @property
+    def map(self) -> dict:
+        """Return the MAP estimates of the model parameters.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the MAP estimates of the model parameters.
+        """
+        if not self._map_dict:
+            raise ValueError("Please compute map first.")
+
+        return self._map_dict
 
     def _check_lapse(self, lapse):
         """Determine if p_outlier and lapse is specified correctly."""
@@ -1259,8 +1342,6 @@ class HSSM:
         )
         for param in self.list_params:
             param_obj = self.params[param]
-            # print(param)
-            # print('bounds before prior settings: ', param_obj.bounds)
 
             if self.link_settings == "log_logit":
                 param_obj.override_default_link()
@@ -1608,8 +1689,9 @@ class HSSM:
         if len(unique_responses) != self.n_choices:
             missing_responses = sorted(np.setdiff1d(self.choices, unique_responses))
             _logger.warning(
-                f"You set choices to be {self.choices}, but {missing_responses} are "
-                + "missing from your dataset."
+                "You set choices to be %s, but %s are missing from your dataset.",
+                self.choices,
+                missing_responses,
             )
 
     def _postprocess_initvals_deterministic(
@@ -1618,25 +1700,155 @@ class HSSM:
         """Set initial values for subset of parameters."""
         # Consider case where link functions are set to 'log_logit'
         # or 'None'
-        if self.link_settings not in ["log_logit", "None", None]:
-            print(
+        if self.link_settings not in ["log_logit", None]:
+            _logger.info(
                 "Not preprocessing initial values, "
                 + "because none of the two standard link settings are chosen!"
             )
             return None
 
-        link_setting_str = str(self.link_settings)
         # Set initial values for particular parameters
         for name_, starting_value in self.pymc_model.initial_point().items():
-            name_tmp = name_
-            name_tmp = name_tmp.replace("_log__", "")
-            name_tmp = name_tmp.replace("_interval__", "")
-            if name_tmp in initval_settings[link_setting_str].keys():
+            # strip name of `_log__` and `_interval__` suffixes
+            name_tmp = name_.replace("_log__", "").replace("_interval__", "")
+
+            # We need to check if the parameter is actually backed by
+            # a regression.
+
+            # If not, we don't actually apply a link function to it as per default.
+            # Therefore we need to apply the initial value strategy corresponding
+            # to 'None' link function.
+
+            # If the user actively supplies a link function, the user
+            # should also have supplied an initial value insofar it matters.
+            if self.params[self._get_prefix(name_tmp)].is_regression:
+                param_link_setting = self.link_settings
+            else:
+                param_link_setting = None
+            if name_tmp in initval_settings[param_link_setting].keys():
+                if self._check_if_initval_user_supplied(name_tmp):
+                    _logger.info(
+                        "User supplied initial value detected for %s, \n"
+                        " skipping overwrite with default value.",
+                        name_tmp,
+                    )
+                    continue
+
                 # Apply specific settings from initval_settings dictionary
                 self.pymc_model.set_initval(
                     self.pymc_model.named_vars[name_tmp],
-                    initval_settings[link_setting_str][name_tmp],
+                    initval_settings[param_link_setting][name_tmp],
                 )
+
+    def _get_prefix(self, name_str: str) -> str:
+        """Get parameters wise link setting function from parameter prefix."""
+        # `p_outlier` is the only basic parameter floating around that has
+        # an underscore in it's name.
+        # We need to handle it separately. (Renaming might be better...)
+        if "_" in name_str:
+            if "p_outlier" not in name_str:
+                name_str_prefix = name_str.split("_")[0]
+            else:
+                name_str_prefix = "p_outlier"
+        else:
+            name_str_prefix = name_str
+        return name_str_prefix
+
+    def _check_if_initval_user_supplied(
+        self,
+        name_str: str,
+        return_value: bool = False,
+    ) -> bool | float | int | np.ndarray | None:
+        """Check if initial value is user-supplied."""
+        # The function assumes that the name_str is either raw parameter name
+        # or `paramname_Intercept`, because we only really provide special default
+        # initial values for those types of parameters
+
+        # `p_outlier` is the only basic parameter floating around that has
+        # an underscore in it's name.
+        # We need to handle it separately. (Renaming might be better...)
+        if "_" in name_str:
+            if "p_outlier" not in name_str:
+                name_str_prefix = name_str.split("_")[0]
+                # name_str_suffix = "".join(name_str.split("_")[1:])
+                name_str_suffix = name_str[len(name_str_prefix + "_") :]
+            else:
+                name_str_prefix = "p_outlier"
+                if name_str == "p_outlier":
+                    name_str_suffix = ""
+                else:
+                    # name_str_suffix = "".join(name_str.split("_")[2:])
+                    name_str_suffix = name_str[len("p_outlier_") :]
+        else:
+            name_str_prefix = name_str
+            name_str_suffix = ""
+
+        if isinstance(self.priors, dict):
+            if name_str_prefix == self._parent:
+                tmp_param = self.response_c
+            else:
+                tmp_param = name_str_prefix
+
+            if tmp_param == self.response_c:
+                # If the parameter was parent it is automatically treated as a
+                # regression.
+                if not name_str_suffix:
+                    # No suffix --> Intercept
+                    if "initval" in self.priors[tmp_param]["Intercept"].args:
+                        if return_value:
+                            return self.priors[tmp_param]["Intercept"].args["initval"]
+                        else:
+                            return True
+                    else:
+                        if return_value:
+                            return None
+                        else:
+                            return False
+                else:
+                    # If the parameter has a suffix --> use it
+                    if "initval" in self.priors[tmp_param][name_str_suffix].args:
+                        if return_value:
+                            return self.priors[tmp_param][name_str_suffix].args[
+                                "initval"
+                            ]
+                        else:
+                            return True
+                    else:
+                        if return_value:
+                            return None
+                        else:
+                            return False
+            else:
+                # If the parameter is not a parent, it is treated as a regression
+                # only when actively specified as such.
+                if not name_str_suffix:
+                    # If no suffix --> treat as basic parameter.
+                    if "initval" in self.priors[tmp_param].args:
+                        if return_value:
+                            return self.priors[tmp_param].args["initval"]
+                        else:
+                            return True
+                    else:
+                        if return_value:
+                            return None
+                        else:
+                            return False
+                else:
+                    # If suffix --> treat as regression and use suffix
+                    if "initval" in self.priors[tmp_param][name_str_suffix].args:
+                        if return_value:
+                            return self.priors[tmp_param][name_str_suffix].args[
+                                "initval"
+                            ]
+                        else:
+                            return True
+                    else:
+                        if return_value:
+                            return None
+                        else:
+                            return False
+        else:
+            raise ValueError("`priors` should be a dictionary.")
 
     def _jitter_initvals(
         self, jitter_epsilon: float = 0.01, vector_only: bool = False
@@ -1650,22 +1862,25 @@ class HSSM:
     def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
         initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
+            name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
                 starting_value_tmp = starting_value + np.random.uniform(
                     -jitter_epsilon, jitter_epsilon, starting_value.shape
                 ).astype(np.float32)
+
                 self.pymc_model.set_initval(
-                    self.pymc_model.named_vars[name_], starting_value_tmp
+                    self.pymc_model.named_vars[name_tmp], starting_value_tmp
                 )
 
     def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
         initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
+            name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             starting_value_tmp = starting_value + np.random.uniform(
                 -jitter_epsilon, jitter_epsilon, starting_value.shape
             ).astype(np.float32)
             self.pymc_model.set_initval(
-                self.pymc_model.named_vars[name_], starting_value_tmp
+                self.pymc_model.named_vars[name_tmp], starting_value_tmp
             )
 
 
