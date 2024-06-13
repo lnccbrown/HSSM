@@ -2,6 +2,17 @@
 
 ## 0.2.x
 
+### 0.2.2
+
+HSSM is now on Conda! We now recommend installing HSSM through `conda install -c conda-forge hssm`. For advanced users, we also support installing the GPU version of JAX through `pip install hssm[cuda12]`.
+
+This version incorporates various bug fixes:
+
+1. We fixed a major bug that causes divergences for models using `approx_differentiable` and `blackbox` likelihoods. We are still looking into the issues of divergence with `analytical` likelihoods.
+2. We made the model creation process more robust, fixing errors when categorical variables are used with group identifiers.
+3. We updated the codebase according to the deprecations in higher versions of JAX.
+4. We implemented a temporary fix to an issue that might cause the kernel to die due to OOM.
+
 ### 0.2.1
 
 We added a few new features in 0.2.1:
