@@ -1,0 +1,4105 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../getting_started/hierarchical_modeling/">
+      
+      
+        <link rel="next" href="../plotting/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.26">
+    
+    
+      
+        <title>hssm - HSSM</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.6543a935.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Noto+Sans:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Noto Sans";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../styles/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="ocean" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#hssm" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+              <button class="md-banner__button md-icon" aria-label="Don't show this again">
+                
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+              </button>
+            
+            
+<span class="show-on-small right-margin">
+  <span class="twemoji right-margin show-on-small move-down">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M246.6 470.6c-12.5 12.5-32.8 12.5-45.3 0l-160-160c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L224 402.7l137.4-137.3c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3l-160 160zm160-352-160 160c-12.5 12.5-32.8 12.5-45.3 0l-160-160c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L224 210.7 361.4 73.4c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3z"/></svg>
+  </span>
+  Navigate the site here!
+</span>
+<span class="right-margin"> v0.2.2 is released! </span>
+<span>
+  <span class="twemoji">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 3C9.23 3 6.19 5.95 6 9.66l-1.92 2.53c-.24.31 0 .81.42.81H6v3c0 1.11.89 2 2 2h1v3h7v-4.69c2.37-1.12 4-3.51 4-6.31 0-3.86-3.12-7-7-7m1 11h-2v-2h2v2m1.75-5.19c-.29.4-.66.69-1.11.93-.25.16-.42.33-.51.52-.09.18-.13.43-.13.74h-2c0-.5.11-.92.31-1.18.19-.27.54-.57 1.05-.91.26-.16.47-.36.61-.59.16-.23.23-.5.23-.82 0-.3-.08-.56-.26-.75-.18-.18-.44-.28-.75-.28a1 1 0 0 0-.66.23c-.18.16-.27.39-.28.69h-1.93l-.01-.03c-.01-.79.25-1.36.77-1.77.54-.39 1.24-.59 2.11-.59.93 0 1.66.23 2.19.68.54.45.81 1.06.81 1.82 0 .5-.15.91-.44 1.31Z"/></svg>
+  </span>
+  Questions?
+  <a href="https://github.com/lnccbrown/HSSM/discussions">
+    Open a discussion here!
+  </a>
+</span>
+
+          </div>
+          
+            <script>var content,el=document.querySelector("[data-md-component=announce]");el&&(content=el.querySelector(".md-typeset"),__md_hash(content.innerHTML)===__md_get("__announce")&&(el.hidden=!0))</script>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="https://lnccbrown.github.io/HSSM/" title="HSSM" class="md-header__button md-logo" aria-label="HSSM" data-md-component="logo">
+      
+  <img src="../../images/navlogo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            HSSM
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              hssm
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="ocean" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9h-1.9M20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69m-9.15 3.96h2.3L12 9l-1.15 3.65Z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="ocean" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/lnccbrown/HSSM/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    lnccbrown/HSSM
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../.." class="md-tabs__link">
+          
+  
+  Home
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting_started/installation/" class="md-tabs__link">
+          
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  API References
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/main_tutorial/" class="md-tabs__link">
+          
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../CONTRIBUTING/" class="md-tabs__link">
+        
+  
+    
+  
+  Contributing
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="https://lnccbrown.github.io/HSSM/" title="HSSM" class="md-nav__button md-logo" aria-label="HSSM" data-md-component="logo">
+      
+  <img src="../../images/navlogo.png" alt="logo">
+
+    </a>
+    HSSM
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/lnccbrown/HSSM/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    lnccbrown/HSSM
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Home
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../credits/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Credits
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../license/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    License
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Changelog
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/installation/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Installation
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/getting_started/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/hierarchical_modeling/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Hierarchical Modeling
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    API References
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            API References
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    hssm
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    hssm
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#hssm" class="md-nav__link">
+    <span class="md-ellipsis">
+      hssm
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.HSSM" class="md-nav__link">
+    <span class="md-ellipsis">
+      HSSM
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HSSM">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.map" class="md-nav__link">
+    <span class="md-ellipsis">
+      map
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.pymc_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      pymc_model
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.response_c" class="md-nav__link">
+    <span class="md-ellipsis">
+      response_c
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.response_str" class="md-nav__link">
+    <span class="md-ellipsis">
+      response_str
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.traces" class="md-nav__link">
+    <span class="md-ellipsis">
+      traces
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.find_MAP" class="md-nav__link">
+    <span class="md-ellipsis">
+      find_MAP
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      graph
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.initial_point" class="md-nav__link">
+    <span class="md-ellipsis">
+      initial_point
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_posterior_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_posterior_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_quantile_probability" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_quantile_probability
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_trace" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_trace
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample_posterior_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample_posterior_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample_prior_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample_prior_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.set_alias" class="md-nav__link">
+    <span class="md-ellipsis">
+      set_alias
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      summary
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.Link" class="md-nav__link">
+    <span class="md-ellipsis">
+      Link
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.ModelConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      ModelConfig
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.Param" class="md-nav__link">
+    <span class="md-ellipsis">
+      Param
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Param">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.is_fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      is_fixed
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.is_parent" class="md-nav__link">
+    <span class="md-ellipsis">
+      is_parent
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.is_regression" class="md-nav__link">
+    <span class="md-ellipsis">
+      is_regression
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.is_truncated" class="md-nav__link">
+    <span class="md-ellipsis">
+      is_truncated
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.convert" class="md-nav__link">
+    <span class="md-ellipsis">
+      convert
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.do_not_truncate" class="md-nav__link">
+    <span class="md-ellipsis">
+      do_not_truncate
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.override_default_link" class="md-nav__link">
+    <span class="md-ellipsis">
+      override_default_link
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.override_default_priors" class="md-nav__link">
+    <span class="md-ellipsis">
+      override_default_priors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.override_default_priors_ddm" class="md-nav__link">
+    <span class="md-ellipsis">
+      override_default_priors_ddm
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.parse_bambi" class="md-nav__link">
+    <span class="md-ellipsis">
+      parse_bambi
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.set_parent" class="md-nav__link">
+    <span class="md-ellipsis">
+      set_parent
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.update" class="md-nav__link">
+    <span class="md-ellipsis">
+      update
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.Prior" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prior
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.load_data" class="md-nav__link">
+    <span class="md-ellipsis">
+      load_data
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.set_floatX" class="md-nav__link">
+    <span class="md-ellipsis">
+      set_floatX
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.show_defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      show_defaults
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.simulate_data" class="md-nav__link">
+    <span class="md-ellipsis">
+      simulate_data
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plotting/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    hssm.plotting
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../distribution_utils/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    hssm.distribution_utils
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../likelihoods/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    hssm.likelihoods
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../defaults/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    hssm.defaults
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tutorials
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Tutorials
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/main_tutorial/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Main Tutorial
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/likelihoods/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Likelihood functions in HSSM explained
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/plotting/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Plotting in HSSM
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/lapse_prob_and_dist/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Using lapse probabilities and distributions in HSSM
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/pymc/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Using the low-level API from HSSM directly with PyMC
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CONTRIBUTING/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Contributing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#hssm" class="md-nav__link">
+    <span class="md-ellipsis">
+      hssm
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.HSSM" class="md-nav__link">
+    <span class="md-ellipsis">
+      HSSM
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HSSM">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.map" class="md-nav__link">
+    <span class="md-ellipsis">
+      map
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.pymc_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      pymc_model
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.response_c" class="md-nav__link">
+    <span class="md-ellipsis">
+      response_c
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.response_str" class="md-nav__link">
+    <span class="md-ellipsis">
+      response_str
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.traces" class="md-nav__link">
+    <span class="md-ellipsis">
+      traces
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.find_MAP" class="md-nav__link">
+    <span class="md-ellipsis">
+      find_MAP
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      graph
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.initial_point" class="md-nav__link">
+    <span class="md-ellipsis">
+      initial_point
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_posterior_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_posterior_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_quantile_probability" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_quantile_probability
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_trace" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_trace
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample_posterior_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample_posterior_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample_prior_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample_prior_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.set_alias" class="md-nav__link">
+    <span class="md-ellipsis">
+      set_alias
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      summary
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.Link" class="md-nav__link">
+    <span class="md-ellipsis">
+      Link
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.ModelConfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      ModelConfig
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.Param" class="md-nav__link">
+    <span class="md-ellipsis">
+      Param
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Param">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.is_fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      is_fixed
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.is_parent" class="md-nav__link">
+    <span class="md-ellipsis">
+      is_parent
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.is_regression" class="md-nav__link">
+    <span class="md-ellipsis">
+      is_regression
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.is_truncated" class="md-nav__link">
+    <span class="md-ellipsis">
+      is_truncated
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.convert" class="md-nav__link">
+    <span class="md-ellipsis">
+      convert
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.do_not_truncate" class="md-nav__link">
+    <span class="md-ellipsis">
+      do_not_truncate
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.override_default_link" class="md-nav__link">
+    <span class="md-ellipsis">
+      override_default_link
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.override_default_priors" class="md-nav__link">
+    <span class="md-ellipsis">
+      override_default_priors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.override_default_priors_ddm" class="md-nav__link">
+    <span class="md-ellipsis">
+      override_default_priors_ddm
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.parse_bambi" class="md-nav__link">
+    <span class="md-ellipsis">
+      parse_bambi
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.set_parent" class="md-nav__link">
+    <span class="md-ellipsis">
+      set_parent
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.Param.update" class="md-nav__link">
+    <span class="md-ellipsis">
+      update
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.Prior" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prior
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.load_data" class="md-nav__link">
+    <span class="md-ellipsis">
+      load_data
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.set_floatX" class="md-nav__link">
+    <span class="md-ellipsis">
+      set_floatX
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.show_defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      show_defaults
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.simulate_data" class="md-nav__link">
+    <span class="md-ellipsis">
+      simulate_data
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+    <a href="https://github.com/lnccbrown/HSSM/edit/main/docs/api/hssm.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4v-2m10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1 2.1 2.1Z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/lnccbrown/HSSM/raw/main/docs/api/hssm.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 18c.56 0 1 .44 1 1s-.44 1-1 1-1-.44-1-1 .44-1 1-1m0-3c-2.73 0-5.06 1.66-6 4 .94 2.34 3.27 4 6 4s5.06-1.66 6-4c-.94-2.34-3.27-4-6-4m0 6.5a2.5 2.5 0 0 1-2.5-2.5 2.5 2.5 0 0 1 2.5-2.5 2.5 2.5 0 0 1 2.5 2.5 2.5 2.5 0 0 1-2.5 2.5M9.27 20H6V4h7v5h5v4.07c.7.08 1.36.25 2 .49V8l-6-6H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h4.5a8.15 8.15 0 0 1-1.23-2Z"/></svg>
+    </a>
+  
+
+
+  <h1>hssm</h1>
+
+<div class="doc doc-object doc-module">
+
+
+
+<a id="hssm"></a>
+    <div class="doc doc-contents first">
+
+      <p>Top-level entry to the HSSM package.</p>
+<p>The <code>hssm</code> module is the top-level entry to the HSSM package. It exports some of the
+most important classes, including the <code>HSSM</code> class that handles model creation and
+sampling. You will also find utility classes such as <code>hssm.Prior</code>, <code>hssm.ModelConfig</code>,
+and <code>hssm.Param</code>, with which users will often interface. Additionally, most frequently
+used utility functions can also be found.</p>
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hssm.HSSM" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">hssm.HSSM</span>
+
+
+<a href="#hssm.HSSM" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">HSSM</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n"><span title="pandas.DataFrame">DataFrame</span></span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n"><span title="hssm.defaults.SupportedModels">SupportedModels</span></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">=</span> <span class="s1">&#39;ddm&#39;</span><span class="p">,</span> <span class="n">choices</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">include</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-internal" title="hssm.param.Param" href="#hssm.Param">Param</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">model_config</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="hssm.config.ModelConfig" href="#hssm.ModelConfig">ModelConfig</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">loglik</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" title="os.PathLike" href="https://docs.python.org/3/library/os.html#os.PathLike">PathLike</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Callable" href="https://docs.python.org/3/library/typing.html#typing.Callable">Callable</a></span> <span class="o">|</span> <span class="n"><span title="pytensor.graph.Op">Op</span></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#type">type</a></span><span class="p">[</span><span class="n"><span title="pymc.Distribution">Distribution</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">loglik_kind</span><span class="p">:</span> <span class="n"><span title="hssm.defaults.LoglikKind">LoglikKind</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">p_outlier</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span> <span class="o">|</span> <span class="n"><span title="bambi.Prior">Prior</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span> <span class="n">lapse</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span> <span class="o">|</span> <span class="n"><span title="bambi.Prior">Prior</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">bmb</span><span class="o">.</span><span class="n">Prior</span><span class="p">(</span><span class="s1">&#39;Uniform&#39;</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">upper</span><span class="o">=</span><span class="mf">10.0</span><span class="p">),</span> <span class="n">hierarchical</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">link_settings</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a></span><span class="p">[</span><span class="s1">&#39;log_logit&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">prior_settings</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a></span><span class="p">[</span><span class="s1">&#39;safe&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s1">&#39;safe&#39;</span><span class="p">,</span> <span class="n">extra_namespace</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Any" href="https://docs.python.org/3/library/typing.html#typing.Any">Any</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">missing_data</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">deadline</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">loglik_missing_data</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" title="os.PathLike" href="https://docs.python.org/3/library/os.html#os.PathLike">PathLike</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Callable" href="https://docs.python.org/3/library/typing.html#typing.Callable">Callable</a></span> <span class="o">|</span> <span class="n"><span title="pytensor.graph.Op">Op</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">process_initvals</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+      <p>The basic Hierarchical Sequential Sampling Model (HSSM) class.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>data</code></b>
+              (<code><span title="pandas.DataFrame">DataFrame</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>A pandas DataFrame with the minimum requirements of containing the data with the
+columns "rt" and "response".</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>model</code></b>
+              (<code><span title="hssm.defaults.SupportedModels">SupportedModels</span> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></code>, default:
+                  <code>&#39;ddm&#39;</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
+"full_ddm", "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4",
+"ddm_seq2_no_bias". If any other string is passed, the model will be considered
+custom, in which case all <code>model_config</code>, <code>loglik</code>, and <code>loglik_kind</code> have to be
+provided by the user.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>choices</code></b>
+              (<code>optional</code>, default:
+                  <code>2</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>When an <code>int</code>, the number of choices that the participants can make. If <code>2</code>, the
+choices are [-1, 1] by default. If anything greater than <code>2</code>, the choices are
+[0, 1, ..., n_choices - 1] by default. If a <code>list</code> is provided, it should be the
+list of choices that the participants can make. Defaults to <code>2</code>. If any value
+other than the choices provided is found in the "response" column of the data,
+an error will be raised.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>include</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A list of dictionaries specifying parameter specifications to include in the
+model. If left unspecified, defaults will be used for all parameter
+specifications. Defaults to None.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>model_config</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A dictionary containing the model configuration information. If None is
+provided, defaults will be used if there are any. Defaults to None.
+Fields for this <code>dict</code> are usually:</p>
+<ul>
+<li><code>"list_params"</code>: a list of parameters indicating the parameters of the model.
+    The order in which the parameters are specified in this list is important.
+    Values for each parameter will be passed to the likelihood function in this
+    order.</li>
+<li><code>"backend"</code>: Only used when <code>loglik_kind</code> is <code>approx_differentiable</code> and
+    an onnx file is supplied for the likelihood approximation network (LAN).
+    Valid values are <code>"jax"</code> or <code>"pytensor"</code>. It determines whether the LAN in
+    ONNX should be converted to <code>"jax"</code> or <code>"pytensor"</code>. If not provided,
+    <code>jax</code> will be used for maximum performance.</li>
+<li><code>"default_priors"</code>: A <code>dict</code> indicating the default priors for each parameter.</li>
+<li><code>"bounds"</code>: A <code>dict</code> indicating the boundaries for each parameter. In the case
+    of LAN, these bounds are training boundaries.</li>
+<li><code>"rv"</code>: Optional. Can be a <code>RandomVariable</code> class containing the user's own
+    <code>rng_fn</code> function for sampling from the distribution that the user is
+    supplying. If not supplied, HSSM will automatically generate a
+    <code>RandomVariable</code> using the simulator identified by <code>model</code> from the
+    <code>ssm_simulators</code> package. If <code>model</code> is not supported in <code>ssm_simulators</code>,
+    a warning will be raised letting the user know that sampling from the
+    <code>RandomVariable</code> will result in errors.</li>
+<li><code>"extra_fields"</code>: Optional. A list of strings indicating the additional
+    columns in <code>data</code> that will be passed to the likelihood function for
+    calculation. This is helpful if the likelihood function depends on data
+    other than the observed data and the parameter values.</li>
+</ul>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>loglik</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A likelihood function. Defaults to None. Requirements are:</p>
+<ol>
+<li>if <code>loglik_kind</code> is <code>"analytical"</code> or <code>"blackbox"</code>, a pm.Distribution, a
+   pytensor Op, or a Python callable can be used. Signatures are:<ul>
+<li><code>pm.Distribution</code>: needs to have parameters specified exactly as listed in
+<code>list_params</code></li>
+<li><code>pytensor.graph.Op</code> and <code>Callable</code>: needs to accept the parameters
+specified exactly as listed in <code>list_params</code></li>
+</ul>
+</li>
+<li>If <code>loglik_kind</code> is <code>"approx_differentiable"</code>, then in addition to the
+    specifications above, a <code>str</code> or <code>Pathlike</code> can also be used to specify a
+    path to an <code>onnx</code> file. If a <code>str</code> is provided, HSSM will first look locally
+    for an <code>onnx</code> file. If that is not successful, HSSM will try to download
+    that <code>onnx</code> file from Hugging Face hub.</li>
+<li>It can also be <code>None</code>, in which case a default likelihood function will be
+    used</li>
+</ol>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>loglik_kind</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A string that specifies the kind of log-likelihood function specified with
+<code>loglik</code>. Defaults to <code>None</code>. Can be one of the following:</p>
+<ul>
+<li><code>"analytical"</code>: an analytical (approximation) likelihood function. It is
+    differentiable and can be used with samplers that requires differentiation.</li>
+<li><code>"approx_differentiable"</code>: a likelihood approximation network (LAN) likelihood
+    function. It is differentiable and can be used with samplers that requires
+    differentiation.</li>
+<li><code>"blackbox"</code>: a black box likelihood function. It is typically NOT
+    differentiable.</li>
+<li><code>None</code>, in which a default will be used. For <code>ddm</code> type of models, the default
+    will be <code>analytical</code>. For other models supported, it will be
+    <code>approx_differentiable</code>. If the model is a custom one, a ValueError
+    will be raised.</li>
+</ul>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>p_outlier</code></b>
+              (<code>optional</code>, default:
+                  <code>0.05</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The fixed lapse probability or the prior distribution of the lapse probability.
+Defaults to a fixed value of 0.05. When <code>None</code>, the lapse probability will not
+be included in estimation.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>lapse</code></b>
+              (<code>optional</code>, default:
+                  <code><span title="bambi.Prior">Prior</span>(&#39;Uniform&#39;, lower=0.0, upper=10.0)</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The lapse distribution. This argument is required only if <code>p_outlier</code> is not
+<code>None</code>. Defaults to Uniform(0.0, 10.0).</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>hierarchical</code></b>
+              (<code>optional</code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If True, and if there is a <code>participant_id</code> field in <code>data</code>, will by default
+turn any unspecified parameter theta into a regression with
+"theta ~ 1 + (1|participant_id)" and default priors set by <code>bambi</code>. Also changes
+default values of <code>link_settings</code> and <code>prior_settings</code>. Defaults to False.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>link_settings</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>An optional string literal that indicates the link functions to use for each
+parameter. Helpful for hierarchical models where sampling might get stuck/
+very slow. Can be one of the following:</p>
+<ul>
+<li><code>"log_logit"</code>: applies log link functions to positive parameters and
+generalized logit link functions to parameters that have explicit bounds.</li>
+<li><code>None</code>: unless otherwise specified, the <code>"identity"</code> link functions will be
+used.
+The default value is <code>None</code>.</li>
+</ul>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>prior_settings</code></b>
+              (<code>optional</code>, default:
+                  <code>&#39;safe&#39;</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>An optional string literal that indicates the prior distributions to use for
+each parameter. Helpful for hierarchical models where sampling might get stuck/
+very slow. Can be one of the following:</p>
+<ul>
+<li><code>"safe"</code>: HSSM will scan all parameters in the model and apply safe priors to
+all parameters that do not have explicit bounds.</li>
+<li><code>None</code>: HSSM will use bambi to provide default priors for all parameters. Not
+recommended when you are using hierarchical models.
+The default value is <code>"safe"</code>.</li>
+</ul>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>extra_namespace</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Additional user supplied variables with transformations or data to include in
+the environment where the formula is evaluated. Defaults to <code>None</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>missing_data</code></b>
+              (<code>optional</code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Specifies whether the model should handle missing data. Can be a <code>bool</code> or a
+<code>float</code>. If <code>False</code>, and if the <code>rt</code> column contains in the data -999.0,
+the model will drop these rows and produce a warning. If <code>True</code>, the model will
+treat code -999.0 as missing data. If a <code>float</code> is provided, the model will
+treat this value as the missing data value. Defaults to <code>False</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>deadline</code></b>
+              (<code>optional</code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Specifies whether the model should handle deadline data. Can be a <code>bool</code> or a
+<code>str</code>. If <code>False</code>, the model will not do nothing even if a deadline column is
+provided. If <code>True</code>, the model will treat the <code>deadline</code> column as deadline
+data. If a <code>str</code> is provided, the model will treat this value as the name of the
+deadline column. Defaults to <code>False</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>loglik_missing_data</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A likelihood function for missing data. Please see the <code>loglik</code> parameter to see
+how to specify the likelihood function this parameter. If nothing is provided,
+a default likelihood function will be used. This parameter is required only if
+either <code>missing_data</code> or <code>deadline</code> is not <code>False</code>. Defaults to <code>None</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>**kwargs</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Additional arguments passed to the <code>bmb.Model</code> object.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.data">data</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>A pandas DataFrame with at least two columns of "rt" and "response" indicating
+the response time and responses.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.list_params">list_params</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>The list of strs of parameter names.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.model_name">model_name</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>The name of the model.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.loglik">loglik</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>The likelihood function or a path to an onnx file.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.loglik_kind">loglik_kind</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>The kind of likelihood used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.model_config">model_config</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>A dictionary representing the model configuration.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.model_distribution">model_distribution</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>The likelihood function of the model in the form of a pm.Distribution subclass.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.family">family</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>A Bambi family object.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.priors">priors</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>A dictionary containing the prior distribution of parameters.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.formula">formula</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>A string representing the model formula.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.link">link</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>A string or a dictionary representing the link functions for all parameters.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code><span title="hssm.HSSM.params">params</span></code></b>
+          –
+          <div class="doc-md-description">
+            <p>A list of Param objects representing model parameters.</p>
+          </div>
+        </li>
+    </ul>
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.HSSM.map" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">map</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.HSSM.map" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">map</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Return the MAP estimates of the model parameters.</p>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/exceptions.html#ValueError">ValueError</a></code>
+            –
+          <div class="doc-md-description">
+            <p>If the model has not been sampled yet.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A dictionary containing the MAP estimates of the model parameters.</p>
+          </div>
+        </li>
+    </ul>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.HSSM.pymc_model" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">pymc_model</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.HSSM.pymc_model" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">pymc_model</span><span class="p">:</span> <span class="n"><span title="pymc.Model">Model</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Provide access to the PyMC model.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="pymc.Model">Model</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The PyMC model built by bambi</p>
+          </div>
+        </li>
+    </ul>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.HSSM.response_c" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">response_c</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.HSSM.response_c" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">response_c</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Return the response variable names in c() format.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.HSSM.response_str" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">response_str</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.HSSM.response_str" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">response_str</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Return the response variable names in string format.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.HSSM.traces" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">traces</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.HSSM.traces" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">traces</span><span class="p">:</span> <span class="n"><span title="arviz.InferenceData">InferenceData</span></span> <span class="o">|</span> <span class="n"><span title="pymc.Approximation">Approximation</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Return the trace of the model after sampling.</p>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/exceptions.html#ValueError">ValueError</a></code>
+            –
+          <div class="doc-md-description">
+            <p>If the model has not been sampled yet.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="arviz.InferenceData">InferenceData</span> | <span title="pymc.Approximation">Approximation</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The trace of the model after sampling.</p>
+          </div>
+        </li>
+    </ul>
+    </div>
+
+</div>
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.find_MAP" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">find_MAP</span>
+
+
+<a href="#hssm.HSSM.find_MAP" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">find_MAP</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Perform Maximum A Posteriori estimation.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A dictionary containing the MAP estimates of the model parameters.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.graph" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">graph</span>
+
+
+<a href="#hssm.HSSM.graph" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">graph</span><span class="p">(</span><span class="n">formatting</span><span class="o">=</span><span class="s1">&#39;plain&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">fmt</span><span class="o">=</span><span class="s1">&#39;png&#39;</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Produce a graphviz Digraph from a built HSSM model.</p>
+<p>Requires graphviz, which may be installed most easily with <code>conda install -c
+conda-forge python-graphviz</code>. Alternatively, you may install the <code>graphviz</code>
+binaries yourself, and then <code>pip install graphviz</code> to get the python bindings.
+See http://graphviz.readthedocs.io/en/stable/manual.html for more information.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>formatting</code></b>
+          –
+          <div class="doc-md-description">
+            <p>One of <code>"plain"</code> or <code>"plain_with_params"</code>. Defaults to <code>"plain"</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>name</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Name of the figure to save. Defaults to <code>None</code>, no figure is saved.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>figsize</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Maximum width and height of figure in inches. Defaults to <code>None</code>, the
+figure size is set automatically. If defined and the drawing is larger than
+the given size, the drawing is uniformly scaled down so that it fits within
+the given size.  Only works if <code>name</code> is not <code>None</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>dpi</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Point per inch of the figure to save.
+Defaults to 300. Only works if <code>name</code> is not <code>None</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>fmt</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Format of the figure to save.
+Defaults to <code>"png"</code>. Only works if <code>name</code> is not <code>None</code>.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="graphviz.Graph">Graph</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The graph</p>
+          </div>
+        </li>
+    </ul>
+
+
+<details class="note" open>
+  <summary>Note</summary>
+  <div class="language-text highlight"><pre><span></span><code>The code is largely copied from
+https://github.com/bambinos/bambi/blob/main/bambi/models.py
+Credit for the code goes to Bambi developers.
+</code></pre></div>
+</details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.initial_point" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">initial_point</span>
+
+
+<a href="#hssm.HSSM.initial_point" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">initial_point</span><span class="p">(</span><span class="n">transformed</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">,</span> <span class="n"><span title="numpy.ndarray">ndarray</span></span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Compute the initial point of the model.</p>
+<p>This is a slightly altered version of pm.initial_point.initial_point().</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>transformed</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If True, return the initial point in transformed space.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A dictionary containing the initial point of the model parameters.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.plot_posterior_predictive" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">plot_posterior_predictive</span>
+
+
+<a href="#hssm.HSSM.plot_posterior_predictive" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">plot_posterior_predictive</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="matplotlib.axes.Axes">Axes</span></span> <span class="o">|</span> <span class="n"><span title="seaborn.FacetGrid">FacetGrid</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Produce a posterior predictive plot.</p>
+<p>Equivalent to calling <code>hssm.plotting.plot_posterior_predictive()</code> with the
+model. Please see that function for
+<a class="autorefs autorefs-internal" href="../plotting/#hssm.plotting.plot_posterior_predictive">full documentation</a>.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="matplotlib.axes.Axes">Axes</span> | <span title="seaborn.FacetGrid">FacetGrid</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The matplotlib axis or seaborn FacetGrid object containing the plot.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.plot_quantile_probability" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">plot_quantile_probability</span>
+
+
+<a href="#hssm.HSSM.plot_quantile_probability" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">plot_quantile_probability</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="matplotlib.axes.Axes">Axes</span></span> <span class="o">|</span> <span class="n"><span title="seaborn.FacetGrid">FacetGrid</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Produce a quantile probability plot.</p>
+<p>Equivalent to calling <code>hssm.plotting.plot_quantile_probability()</code> with the
+model. Please see that function for
+<a class="autorefs autorefs-internal" href="../plotting/#hssm.plotting.plot_quantile_probability">full documentation</a>.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="matplotlib.axes.Axes">Axes</span> | <span title="seaborn.FacetGrid">FacetGrid</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The matplotlib axis or seaborn FacetGrid object containing the plot.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.plot_trace" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">plot_trace</span>
+
+
+<a href="#hssm.HSSM.plot_trace" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">plot_trace</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n"><span title="arviz.InferenceData">InferenceData</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">include_deterministic</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">tight_layout</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Generate trace plot with ArviZ but with additional convenience features.</p>
+<p>This is a simple wrapper for the az.plot_trace() function. By default, it
+filters out the deterministic values from the plot. Please see the
+[arviz documentation]
+(https://arviz-devs.github.io/arviz/api/generated/arviz.plot_trace.html)
+for additional parameters that can be specified.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>data</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>An ArviZ InferenceData object. If None, the traces stored in the model will
+be used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>include_deterministic</code></b>
+              (<code>optional</code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Whether to include deterministic variables in the plot. Defaults to False.
+Note that if include deterministic is set to False and and <code>var_names</code> is
+provided, the <code>var_names</code> provided will be modified to also exclude the
+deterministic values. If this is not desirable, set
+<code>include deterministic</code> to True.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>tight_layout</code></b>
+              (<code>optional</code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Whether to call plt.tight_layout() after plotting. Defaults to True.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.sample" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">sample</span>
+
+
+<a href="#hssm.HSSM.sample" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">sample</span><span class="p">(</span><span class="n">sampler</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a></span><span class="p">[</span><span class="s1">&#39;mcmc&#39;</span><span class="p">,</span> <span class="s1">&#39;nuts_numpyro&#39;</span><span class="p">,</span> <span class="s1">&#39;nuts_blackjax&#39;</span><span class="p">,</span> <span class="s1">&#39;laplace&#39;</span><span class="p">,</span> <span class="s1">&#39;vi&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">initvals</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="arviz.InferenceData">InferenceData</span></span> <span class="o">|</span> <span class="n"><span title="pymc.Approximation">Approximation</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Perform sampling using the <code>fit</code> method via bambi.Model.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>sampler</code></b>
+              (<code><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a>[&#39;mcmc&#39;, &#39;nuts_numpyro&#39;, &#39;nuts_blackjax&#39;, &#39;laplace&#39;, &#39;vi&#39;] | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The sampler to use. Can be one of "mcmc", "nuts_numpyro",
+"nuts_blackjax", "laplace", or "vi". If using <code>blackbox</code> likelihoods,
+this cannot be "nuts_numpyro" or "nuts_blackjax". By default it is None, and
+sampler will automatically be chosen: when the model uses the
+<code>approx_differentiable</code> likelihood, and <code>jax</code> backend, "nuts_numpyro" will
+be used. Otherwise, "mcmc" (the default PyMC NUTS sampler) will be used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>init</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Initialization method to use for the sampler. If any of the NUTS samplers
+is used, defaults to <code>"adapt_diag"</code>. Otherwise, defaults to <code>"auto"</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>initvals</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Pass initial values to the sampler. This can be a dictionary of initial
+values for parameters of the model, or a string "map" to use initialization
+at the MAP estimate. If "map" is used, the MAP estimate will be computed if
+not already attached to the base class from prior call to 'find_MAP`.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>kwargs</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Other arguments passed to bmb.Model.fit(). Please see [here]
+(https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
+for full documentation.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="arviz.InferenceData">InferenceData</span> | <span title="pymc.Approximation">Approximation</span></code>
+          –
+          <div class="doc-md-description">
+            <p>An ArviZ <code>InferenceData</code> instance if inference_method is <code>"mcmc"</code>
+(default), "nuts_numpyro", "nuts_blackjax" or "laplace". An <code>Approximation</code>
+object if <code>"vi"</code>.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.sample_posterior_predictive" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">sample_posterior_predictive</span>
+
+
+<a href="#hssm.HSSM.sample_posterior_predictive" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">sample_posterior_predictive</span><span class="p">(</span><span class="n">idata</span><span class="p">:</span> <span class="n"><span title="arviz.InferenceData">InferenceData</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n"><span title="pandas.DataFrame">DataFrame</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">inplace</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">include_group_specific</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">kind</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a></span><span class="p">[</span><span class="s1">&#39;pps&#39;</span><span class="p">,</span> <span class="s1">&#39;mean&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;pps&#39;</span><span class="p">,</span> <span class="n">draws</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></span><span class="p">]</span> <span class="o">|</span> <span class="n"><span title="numpy.ndarray">ndarray</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">safe_mode</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="arviz.InferenceData">InferenceData</span></span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Perform posterior predictive sampling from the HSSM model.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>idata</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The <code>InferenceData</code> object returned by <code>HSSM.sample()</code>. If not provided,
+the <code>InferenceData</code> from the last time <code>sample()</code> is called will be used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>data</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>An optional data frame with values for the predictors that are used to
+obtain out-of-sample predictions. If omitted, the original dataset is used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>inplace</code></b>
+              (<code>optional</code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If <code>True</code> will modify idata in-place and append a <code>posterior_predictive</code>
+group to <code>idata</code>. Otherwise, it will return a copy of idata with the
+predictions added, by default True.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>include_group_specific</code></b>
+              (<code>optional</code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If <code>True</code> will make predictions including the group specific effects.
+Otherwise, predictions are made with common effects only (i.e. group-
+specific are set to zero), by default True.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>kind</code></b>
+              (<code><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a>[&#39;pps&#39;, &#39;mean&#39;]</code>, default:
+                  <code>&#39;pps&#39;</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Indicates the type of prediction required. Can be <code>"mean"</code> or <code>"pps"</code>. The
+first returns draws from the posterior distribution of the mean, while the
+latter returns the draws from the posterior predictive distribution
+(i.e. the posterior probability distribution for a new observation).
+Defaults to <code>"pps"</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>draws</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a>[<a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a>] | <span title="numpy.ndarray">ndarray</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The number of samples to draw from the posterior predictive distribution
+from each chain.
+When it's an integer &gt;= 1, the number of samples to be extracted from the
+<code>draw</code> dimension. If this integer is larger than the number of posterior
+samples in each chain, all posterior samples will be used
+in posterior predictive sampling. When a float between 0 and 1, the
+proportion of samples from the draw dimension from each chain to be used in
+posterior predictive sampling.. If this proportion is very
+small, at least one sample will be used. When None, all posterior samples
+will be used. Defaults to None.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>safe_mode</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If True, the function will split the draws into chunks of 10 to avoid memory
+issues. Defaults to True.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/exceptions.html#ValueError">ValueError</a></code>
+            –
+          <div class="doc-md-description">
+            <p>If the model has not been sampled yet and idata is not provided.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="arviz.InferenceData">InferenceData</span> | None</code>
+          –
+          <div class="doc-md-description">
+            <p>InferenceData or None</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.sample_prior_predictive" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">sample_prior_predictive</span>
+
+
+<a href="#hssm.HSSM.sample_prior_predictive" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">sample_prior_predictive</span><span class="p">(</span><span class="n">draws</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></span> <span class="o">=</span> <span class="mi">500</span><span class="p">,</span> <span class="n">var_names</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">omit_offsets</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">random_seed</span><span class="p">:</span> <span class="n"><span title="numpy.random.Generator">Generator</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="arviz.InferenceData">InferenceData</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Generate samples from the prior predictive distribution.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>draws</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></code>, default:
+                  <code>500</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Number of draws to sample from the prior predictive distribution. Defaults
+to 500.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>var_names</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a>[<a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a>] | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A list of names of variables for which to compute the prior predictive
+distribution. Defaults to <code>None</code> which means both observed and unobserved
+RVs.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>omit_offsets</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Whether to omit offset terms. Defaults to <code>True</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>random_seed</code></b>
+              (<code><span title="numpy.random.Generator">Generator</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Seed for the random number generator.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="arviz.InferenceData">InferenceData</span></code>
+          –
+          <div class="doc-md-description">
+            <p><code>InferenceData</code> object with the groups <code>prior</code>, <code>prior_predictive</code> and
+<code>observed_data</code>.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.set_alias" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">set_alias</span>
+
+
+<a href="#hssm.HSSM.set_alias" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">set_alias</span><span class="p">(</span><span class="n">aliases</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span><span class="p">])</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Set parameter aliases.</p>
+<p>Sets the aliases according to the dictionary passed to it and rebuild the
+model.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>aliases</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>[<a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a>, <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>]</code>)
+          –
+          <div class="doc-md-description">
+            <p>A dict specifying the parameter names being aliased and the aliases.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.summary" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">summary</span>
+
+
+<a href="#hssm.HSSM.summary" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">summary</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n"><span title="arviz.InferenceData">InferenceData</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">include_deterministic</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="pandas.DataFrame">DataFrame</span></span> <span class="o">|</span> <span class="n"><span title="xarray.Dataset">Dataset</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Produce a summary table with ArviZ but with additional convenience features.</p>
+<p>This is a simple wrapper for the az.summary() function. By default, it
+filters out the deterministic values from the plot. Please see the
+[arviz documentation]
+(https://arviz-devs.github.io/arviz/api/generated/arviz.summary.html)
+for additional parameters that can be specified.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>data</code></b>
+              (<code><span title="arviz.InferenceData">InferenceData</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>An ArviZ InferenceData object. If None, the traces stored in the model will
+be used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>include_deterministic</code></b>
+              (<code>optional</code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Whether to include deterministic variables in the plot. Defaults to False.
+Note that if include_deterministic is set to False and and <code>var_names</code> is
+provided, the <code>var_names</code> provided will be modified to also exclude the
+deterministic values. If this is not desirable, set
+<code>include_deterministic</code> to True.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="pandas.DataFrame">DataFrame</span> | <span title="xarray.Dataset">Dataset</span></code>
+          –
+          <div class="doc-md-description">
+            <p>A pandas DataFrame or xarray Dataset containing the summary statistics.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hssm.Link" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">hssm.Link</span>
+
+
+<a href="#hssm.Link" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Link</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">link</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">linkinv</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">linkinv_backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#tuple">tuple</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="bambi.Link">Link</span></code></p>
+
+
+      <p>Representation of a generalized link function.</p>
+<p>This object contains two main functions. One is the link function itself, the
+function that maps values in the response scale to the linear predictor, and the
+other is the inverse of the link function, that maps values of the linear predictor
+to the response scale.</p>
+<p>The great majority of users will never interact with this class unless they want to
+create a custom <code>Family</code> with a custom <code>Link</code>. This is automatically handled for
+all the built-in families.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>name</code></b>
+          –
+          <div class="doc-md-description">
+            <p>The name of the link function. If it is a known name, it's not necessary to pass
+any other arguments because functions are already defined internally. If not
+known, all of `link<code>,</code>linkinv<code>and</code>linkinv_backend`` must be specified.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>link</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A function that maps the response to the linear predictor. Known as the
+:math:<code>g</code> function in GLM jargon. Does not need to be specified when <code>name</code>
+is a known name.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>linkinv</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A function that maps the linear predictor to the response. Known as the
+:math:<code>g^{-1}</code> function in GLM jargon. Does not need to be specified when
+<code>name</code> is a known name.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>linkinv_backend</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Same than <code>linkinv</code> but must be something that works with PyMC backend
+(i.e. it must work with PyTensor tensors). Does not need to be specified when
+<code>name</code> is a known name.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>bounds</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Bounds of the response scale. Only needed when <code>name</code> is <code>gen_logit</code>.</p>
+          </div>
+        </li>
+    </ul>
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hssm.ModelConfig" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">hssm.ModelConfig</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#hssm.ModelConfig" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">ModelConfig</span><span class="p">(</span><span class="n">response</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">list_params</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">default_priors</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">,</span> <span class="n"><span title="hssm.param.ParamSpec">ParamSpec</span></span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(),</span> <span class="n">bounds</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#tuple">tuple</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span><span class="p">]]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(),</span> <span class="n">backend</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a></span><span class="p">[</span><span class="s1">&#39;jax&#39;</span><span class="p">,</span> <span class="s1">&#39;pytensor&#39;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">rv</span><span class="p">:</span> <span class="n"><span title="pytensor.tensor.random.op.RandomVariable">RandomVariable</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">extra_fields</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+      <p>Representation for model_config provided by the user.</p>
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hssm.Param" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">hssm.Param</span>
+
+
+<a href="#hssm.Param" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Param</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">prior</span><span class="p">:</span> <span class="n"><span title="hssm.param.ParamSpec">ParamSpec</span></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">,</span> <span class="n"><span title="hssm.param.ParamSpec">ParamSpec</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">formula</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">link</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span> <span class="o">|</span> <span class="n"><span title="bambi.Link">Link</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#tuple">tuple</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+
+      <p>Represents the specifications for the main HSSM class.</p>
+<p>Also provides convenience functions that can be used by the HSSM class to parse
+arguments.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>name</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The name of the parameter.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>prior</code></b>
+              (<code><span title="hssm.param.ParamSpec">ParamSpec</span> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>[<a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a>, <span title="hssm.param.ParamSpec">ParamSpec</span>] | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If a formula is not specified (the non-regression case), this parameter
+expects a float value if the parameter is fixed or a dictionary that can be
+parsed by Bambi as a prior specification or a Bambi Prior object. If not
+specified, then a default uninformative uniform prior with <code>bound</code> as
+boundaries will be constructed. An error will be thrown if <code>bound</code> is also
+not specified.
+If a formula is specified (the regression case), this parameter expects a
+dictionary of param:prior, where param is the name of the response variable
+specified in formula, and prior is specified as above. If left unspecified,
+default priors created by Bambi will be used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>formula</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The regression formula if the parameter depends on other variables. The
+response variable can be omitted.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>link</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | <span title="bambi.Link">Link</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The link function for the regression. It is either a string that specifies
+a built-in link function in Bambi, or a Bambi Link object. If a regression
+is specified and link is not specified, "identity" will be used by default.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>bounds</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#tuple">tuple</a>[<a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a>, <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a>] | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If provided, the prior will be created with boundary checks. If this
+parameter is specified as a regression, boundary checks will be skipped at
+this point.</p>
+          </div>
+        </li>
+    </ul>
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.Param.is_fixed" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">is_fixed</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.Param.is_fixed" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">is_fixed</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Determine if a parameter is a fixed value.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A boolean that indicates if the parameter is a fixed value.</p>
+          </div>
+        </li>
+    </ul>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.Param.is_parent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">is_parent</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.Param.is_parent" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">is_parent</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Determines if a parameter is a parent parameter for Bambi.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A boolean that indicates if the parameter is a parent or not.</p>
+          </div>
+        </li>
+    </ul>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.Param.is_regression" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">is_regression</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.Param.is_regression" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">is_regression</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Determines if a regression is specified or not.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A boolean that indicates if a regression is specified.</p>
+          </div>
+        </li>
+    </ul>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.Param.is_truncated" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">is_truncated</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.Param.is_truncated" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">is_truncated</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Determines if a parameter is truncated.</p>
+<p>A parameter is truncated when it is not a regression, is not fixed and has
+bounds.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code>    A boolean that indicates if a parameter is truncated.</code>
+          –
+          <div class="doc-md-description">
+            
+          </div>
+        </li>
+    </ul>
+    </div>
+
+</div>
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.Param.convert" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">convert</span>
+
+
+<a href="#hssm.Param.convert" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">convert</span><span class="p">()</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Process the information passed to the class.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.Param.do_not_truncate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">do_not_truncate</span>
+
+
+<a href="#hssm.Param.do_not_truncate" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">do_not_truncate</span><span class="p">()</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Flag that prior should not be truncated.</p>
+<p>This is most likely because both default prior and default bounds are supplied.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.Param.override_default_link" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">override_default_link</span>
+
+
+<a href="#hssm.Param.override_default_link" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">override_default_link</span><span class="p">()</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Override the default link function.</p>
+<p>This is most likely because both default prior and default bounds are supplied.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.Param.override_default_priors" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">override_default_priors</span>
+
+
+<a href="#hssm.Param.override_default_priors" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">override_default_priors</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n"><span title="pandas.DataFrame">DataFrame</span></span><span class="p">,</span> <span class="n">eval_env</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Any" href="https://docs.python.org/3/library/typing.html#typing.Any">Any</a></span><span class="p">])</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Override the default priors - the general case.</p>
+<p>By supplying priors for all parameters in the regression, we can override the
+defaults that Bambi uses.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>data</code></b>
+              (<code><span title="pandas.DataFrame">DataFrame</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>The data used to fit the model.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>eval_env</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>[<a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a>, <a class="autorefs autorefs-external" title="typing.Any" href="https://docs.python.org/3/library/typing.html#typing.Any">Any</a>]</code>)
+          –
+          <div class="doc-md-description">
+            <p>The environment used to evaluate the formula.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.Param.override_default_priors_ddm" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">override_default_priors_ddm</span>
+
+
+<a href="#hssm.Param.override_default_priors_ddm" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">override_default_priors_ddm</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n"><span title="pandas.DataFrame">DataFrame</span></span><span class="p">,</span> <span class="n">eval_env</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Any" href="https://docs.python.org/3/library/typing.html#typing.Any">Any</a></span><span class="p">])</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Override the default priors - the ddm case.</p>
+<p>By supplying priors for all parameters in the regression, we can override the
+defaults that Bambi uses.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>data</code></b>
+              (<code><span title="pandas.DataFrame">DataFrame</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>The data used to fit the model.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>eval_env</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a>[<a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a>, <a class="autorefs autorefs-external" title="typing.Any" href="https://docs.python.org/3/library/typing.html#typing.Any">Any</a>]</code>)
+          –
+          <div class="doc-md-description">
+            <p>The environment used to evaluate the formula.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.Param.parse_bambi" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">parse_bambi</span>
+
+
+<a href="#hssm.Param.parse_bambi" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">parse_bambi</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#tuple">tuple</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Return a 3-tuple that helps with constructing the Bambi model.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#tuple">tuple</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A 3-tuple of formula, priors, and link functions that can be used to
+construct the Bambi model.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.Param.set_parent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">set_parent</span>
+
+
+<a href="#hssm.Param.set_parent" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">set_parent</span><span class="p">()</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Set the Param as parent.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.Param.update" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">update</span>
+
+
+<a href="#hssm.Param.update" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">update</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Update the initial information stored in the class.</p>
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hssm.Prior" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">hssm.Prior</span>
+
+
+<a href="#hssm.Prior" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">Prior</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">,</span> <span class="n">auto_scale</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">dist</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Callable" href="https://docs.python.org/3/library/typing.html#typing.Callable">Callable</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#tuple">tuple</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span><span class="p">,</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="bambi.Prior">Prior</span></code></p>
+
+
+      <p>Abstract specification of a prior.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>name</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></code>)
+          –
+          <div class="doc-md-description">
+            <p>Name of prior distribution. Must be the name of a PyMC distribution
+(e.g., <code>"Normal"</code>, <code>"Bernoulli"</code>, etc.)</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>auto_scale</code></b>
+              (<code>optional</code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Whether to adjust the parameters of the prior or use them as passed.
+Default to <code>True</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>kwargs</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Optional keywords specifying the parameters of the named distribution.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>dist</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A callable that returns a valid PyMC distribution. The signature must contain
+<code>name</code>, <code>dims</code>, and <code>shape</code>, as well as its own keyworded arguments.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>bounds</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A tuple of two floats indicating the lower and upper bounds of the prior.</p>
+          </div>
+        </li>
+    </ul>
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="hssm.load_data" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.load_data</span>
+
+
+<a href="#hssm.load_data" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">load_data</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Optional" href="https://docs.python.org/3/library/typing.html#typing.Optional">Optional</a></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="pandas.DataFrame">DataFrame</span></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Load a dataset as a pandas DataFrame.</p>
+<p>If a valid dataset name is provided, this function will return the
+corresponding DataFrame. Otherwise, it lists the available datasets.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>dataset</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Name of the dataset to load. If not provided, a list
+of available datasets is returned.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/exceptions.html#ValueError">ValueError</a></code>
+            –
+          <div class="doc-md-description">
+            <p>If the provided dataset name does not match any of the available datasets.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="pandas.DataFrame">DataFrame</span> or <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></code>
+          –
+          <div class="doc-md-description">
+            <p>Loaded dataset as a DataFrame if a valid dataset name was provided,
+otherwise a string listing the available datasets.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="hssm.set_floatX" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.set_floatX</span>
+
+
+<a href="#hssm.set_floatX" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">set_floatX</span><span class="p">(</span><span class="n">dtype</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a></span><span class="p">[</span><span class="s1">&#39;float32&#39;</span><span class="p">,</span> <span class="s1">&#39;float64&#39;</span><span class="p">],</span> <span class="n">update_jax</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Set float types for pytensor and Jax.</p>
+<p>Often we wish to work with a specific type of float in both PyTensor and JAX.
+This function helps set float types in both packages.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>dtype</code></b>
+              (<code><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a>[&#39;float32&#39;, &#39;float64&#39;]</code>)
+          –
+          <div class="doc-md-description">
+            <p>Either <code>float32</code> or <code>float64</code>. Float type for pytensor (and jax if <code>jax=True</code>).</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>update_jax</code></b>
+              (<code>optional</code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Whether this function also sets float type for JAX by changing the
+<code>jax_enable_x64</code> setting in JAX config. Defaults to True.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="hssm.show_defaults" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.show_defaults</span>
+
+
+<a href="#hssm.show_defaults" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">show_defaults</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n"><span title="hssm.defaults.SupportedModels">SupportedModels</span></span><span class="p">,</span> <span class="n">loglik_kind</span><span class="o">=</span><span class="n">Optional</span><span class="p">[</span><span class="n">LoglikKind</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Show the defaults for supported models.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>model</code></b>
+              (<code><span title="hssm.defaults.SupportedModels">SupportedModels</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>One of the supported model strings.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>loglik_kind</code></b>
+              (<code>optional</code>, default:
+                  <code><a class="autorefs autorefs-external" title="typing.Optional" href="https://docs.python.org/3/library/typing.html#typing.Optional">Optional</a>[<span title="hssm.defaults.LoglikKind">LoglikKind</span>]</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The kind of likelihood function, by default None, in which case the defaults for
+all likelihoods will be shown.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A nicely organized printout for the defaults of provided model.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="hssm.simulate_data" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.simulate_data</span>
+
+
+<a href="#hssm.simulate_data" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">simulate_data</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></span><span class="p">,</span> <span class="n">theta</span><span class="p">:</span> <span class="n"><span title="numpy.typing.ArrayLike">ArrayLike</span></span><span class="p">,</span> <span class="n">size</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></span><span class="p">,</span> <span class="n">random_state</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">output_df</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="numpy.ndarray">ndarray</span></span> <span class="o">|</span> <span class="n"><span title="pandas.DataFrame">DataFrame</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+      <p>Sample simulated data from specified distributions.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+          <b><code>model</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></code>)
+          –
+          <div class="doc-md-description">
+            <p>A model name that must be supported in <code>ssm_simulators</code>. For a detailed list of
+supported models, please see all fields in the <code>model_config</code> dict
+<a href="https://github.com/AlexanderFengler/ssm-simulators/blob
+/e09eb2528d885c7b3340516597849fff4d9a5bf8/ssms/config/config.py#L6">here</a></p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>theta</code></b>
+              (<code><span title="numpy.typing.ArrayLike">ArrayLike</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>An ArrayLike of floats that represent the true values of the parameters of the
+specified <code>model</code>. Please see <a href="https://github.com/AlexanderFengler/
+ssm-simulators/blob/e09eb2528d885c7b3340516597849fff4d9a5bf8/ssms/config/config.py#L6">here</a>
+for what the parameters are. True values must be supplied in the same order
+as the parameters. You can also supply a 2D ArrayLike to simulate data for
+different trials with different true values.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>size</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></code>)
+          –
+          <div class="doc-md-description">
+            <p>The size of the data to be simulated. If <code>theta</code> is a 2D ArrayLike, this
+parameter indicates the size of data to be simulated for each trial.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>random_state</code></b>
+              (<code>optional</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A random seed for reproducibility.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>output_df</code></b>
+              (<code>optional</code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If True, outputs a DataFrame with column names "rt", "response". Otherwise a
+2-column numpy array, by default True.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+          <b><code>kwargs</code></b>
+              (<code>optional</code>, default:
+                  <code>{}</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Other arguments passed to ssms.basic_simulators.simulator.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="numpy.ndarray">ndarray</span> | <span title="pandas.DataFrame">DataFrame</span></code>
+          –
+          <div class="doc-md-description">
+            <p>An array or DataFrame with simulated data.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.path", "navigation.top", "content.code.copy", "content.action.view", "content.action.edit", "header.autohide", "announce.dismiss"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.ad660dcc.min.js"></script>
+      
+    
+  </body>
+</html>
