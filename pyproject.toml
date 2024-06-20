@@ -159,6 +159,7 @@ convention = "numpy"
 
 [tool.mypy]
 ignore_missing_imports = true
+exclude = "tests/*"
 
 [build-system]
 requires = ["poetry-core"]
