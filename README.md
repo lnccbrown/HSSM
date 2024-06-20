@@ -29,6 +29,10 @@ HSSM is a Python toolbox that provides a seamless combination of state-of-the-ar
 
 ### [Official documentation](https://lnccbrown.github.io/HSSM/).
 
+## Cite HSSM
+
+Fengler, A., Xu, P., Bera, K., Omar, A., Frank, M.J. (in preparation). HSSM: A generalized toolbox for hierarchical bayesian estimation of computational models in cognitive neuroscience.
+
 ## Example
 
 Here is a simple example of how to use HSSM:
