@@ -565,7 +565,11 @@ class HSSM:
         if self._inference_obj is None:
             self._inference_obj = idata
         elif isinstance(self._inference_obj, az.InferenceData):
-            self._inference_obj.extend(idata)
+            _logger.info(
+                "Inference data already exsits. \n"
+                "Data from this run will overwrite the idata file..."
+            )
+            self._inference_obj.extend(idata, join="right")
         else:
             raise ValueError(
                 "The model has an attached inference object under"
@@ -590,7 +594,11 @@ class HSSM:
                 # drop redundant 'rt,response_mean' variable,
                 # if parent already in posterior
                 del self._inference_obj.posterior["rt,response_mean"]
-        return self.traces
+
+        # returning copy of traces here to detach from the actual _inference_obj
+        # attached to the class. Otherise resampling will
+        # overwrite the 'returned' object leading to unexpected consequences
+        return deepcopy(self.traces)
 
     def sample_posterior_predictive(
         self,
