@@ -81,7 +81,10 @@ def make_jax_logp_funcs_from_onnx(
         else:
             data = inputs[0]
             dist_params = inputs[1:]
-            input_vector = jnp.concatenate((jnp.array(dist_params), data))
+            param_vector = jnp.array(dist_params)
+            if param_vector.shape[-1] == 1:
+                param_vector = param_vector.squeeze(axis=-1)
+            input_vector = jnp.concatenate((param_vector, data))
 
         return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
 
