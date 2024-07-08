@@ -126,7 +126,9 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
 
 
 def make_ssm_rv(
-    model_name: str, list_params: list[str], lapse: bmb.Prior | None = None
+    model_name: str,
+    list_params: list[str],
+    lapse: bmb.Prior | None = None,
 ) -> Type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
@@ -163,7 +165,12 @@ def make_ssm_rv(
         """SSM random variable."""
 
         name: str = "SSM_RV"
-        # to get around the support checking in PyMC that would result in error
+        # New in PyMC 5.16+: instead of using `ndims_supp`, we use `signature` to define
+        # the signature of the random variable. The string to the left of the `->` sign
+        # describes the input signature, which is `()` for each parameter, meaning each
+        # parameter is a scalar. The string to the right of the
+        # `->` sign describes the output signature, which is `(2)`, which means the
+        # random variable is a length-2 array.
         signature: str = f"{','.join(['()']*len(list_params))}->(2)"
         dtype: str = "floatX"
         _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
@@ -639,7 +646,12 @@ def assemble_callables(
         """Compute the log-likelihoood of the model."""
         # Assuming the first column of the data is always rt
         data = pt.as_tensor_variable(data)
-        dist_params = [pt.as_tensor_variable(param) for param in dist_params]
+
+        # New in PyMC 5.16+: PyMC uses the signature of the RandomVariable to determine
+        # the dimensions of the inputs to the likelihood function. It automatically adds
+        # one additional dimension to our input variable if it is a scalar. We need to
+        # squeeze this dimension out.
+        dist_params = [pt.squeeze(param) for param in dist_params]
 
         n_missing = pt.sum(pt.eq(data[:, 0], -999.0)).astype(int)
         if n_missing == 0:
@@ -648,7 +660,7 @@ def assemble_callables(
         observed_data = data[n_missing:, :]
 
         dist_params_observed = [
-            param if param.ndim == 0 else param[n_missing:] for param in dist_params
+            param[n_missing:] if param.ndim >= 1 else param for param in dist_params
         ]
 
         if has_deadline:
@@ -657,7 +669,7 @@ def assemble_callables(
             logp_observed = callable(observed_data, *dist_params_observed)
 
         dist_params_missing = [
-            param if param.ndim == 0 else param[:n_missing] for param in dist_params
+            param[:n_missing] if param.ndim >= 1 else param for param in dist_params
         ]
 
         if params_only:
