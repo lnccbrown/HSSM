@@ -537,18 +537,16 @@ class HSSM:
         # If sampler is finally `numpyro` make sure
         # the jitter argument is set to False
         if sampler == "nuts_numpyro":
-            if "jitter" not in kwargs.keys():
-                kwargs["jitter"] = False
-            elif kwargs["jitter"]:
+            if kwargs.get("jitter", None):
                 _logger.warning(
                     "The jitter argument is set to True. "
                     + "This argument is not supported "
                     + "by the numpyro backend. "
                     + "The jitter argument will be set to False."
                 )
-                kwargs["jitter"] = False
-        elif sampler != "nuts_numpyro":
-            if "jitter" in kwargs.keys():
+            kwargs["jitter"] = False
+        else:
+            if "jitter" in kwargs:
                 _logger.warning(
                     "The jitter keyword argument is "
                     + "supported only by the nuts_numpyro sampler. \n"
@@ -560,27 +558,21 @@ class HSSM:
             # If not specified, include the mean prediction in
             # kwargs to be passed to the model.fit() method
             kwargs["include_mean"] = True
-        idata = self.model.fit(inference_method=sampler, init=init, **kwargs)
-
-        if self._inference_obj is None:
-            self._inference_obj = idata
-        elif isinstance(self._inference_obj, az.InferenceData):
-            _logger.info(
-                "Inference data already exsits. \n"
-                "Data from this run will overwrite the idata file..."
+        if self._inference_obj is not None:
+            _logger.warning(
+                "The model has already been sampled. Overwriting the previous "
+                + "inference object. Any previous reference to the inference object "
+                + "will still point to the old object."
             )
-            self._inference_obj.extend(idata, join="right")
-        else:
-            raise ValueError(
-                "The model has an attached inference object under"
-                + " self._inference_obj, but it is not an InferenceData object."
-            )
+        self._inference_obj = self.model.fit(
+            inference_method=sampler, init=init, **kwargs
+        )
 
         # The parent was previously not part of deterministics --> compute it via
         # posterior_predictive (works because it acts as the 'mu' parameter
         # in the GLM as far as bambi is concerned)
         if self._inference_obj is not None:
-            if self._parent not in self._inference_obj.posterior.data_vars.keys():
+            if self._parent not in self._inference_obj.posterior.data_vars:
                 # self.model.predict(self._inference_obj, kind="mean", inplace=True)
                 # rename 'rt,response_mean' to 'v' so in the traces everything
                 # looks the way it should
@@ -595,10 +587,7 @@ class HSSM:
                 # if parent already in posterior
                 del self._inference_obj.posterior["rt,response_mean"]
 
-        # returning copy of traces here to detach from the actual _inference_obj
-        # attached to the class. Otherise resampling will
-        # overwrite the 'returned' object leading to unexpected consequences
-        return deepcopy(self.traces)
+        return self.traces
 
     def sample_posterior_predictive(
         self,
@@ -1515,9 +1504,7 @@ class HSSM:
             bounds=self.bounds,
             lapse=self.lapse,
             extra_fields=(
-                None
-                if not self.extra_fields
-                else [deepcopy(self.data[field].values) for field in self.extra_fields]
+                None if not self.extra_fields else deepcopy(self.extra_fields)
             ),
         )
 
