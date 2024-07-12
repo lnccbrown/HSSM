@@ -460,9 +460,9 @@ class HSSM:
         Returns
         -------
         az.InferenceData | pm.Approximation
-            An ArviZ `InferenceData` instance if inference_method is `"mcmc"`
-            (default), "nuts_numpyro", "nuts_blackjax" or "laplace". An `Approximation`
-            object if `"vi"`.
+            A reference to the `model.traces` object, which is an ArviZ `InferenceData`
+            instance if inference_method is `"mcmc"` (default), `"nuts_numpyro"`,
+            `"nuts_blackjax"` or "`laplace"`, or an `Approximation` object if `"vi"`.
         """
         # If initvals are None (default)
         # we skip processing initvals here.
