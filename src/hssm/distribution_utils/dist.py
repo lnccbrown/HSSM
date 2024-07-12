@@ -126,7 +126,9 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
 
 
 def make_ssm_rv(
-    model_name: str, list_params: list[str], lapse: bmb.Prior | None = None
+    model_name: str,
+    list_params: list[str],
+    lapse: bmb.Prior | None = None,
 ) -> Type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
@@ -163,22 +165,17 @@ def make_ssm_rv(
         """SSM random variable."""
 
         name: str = "SSM_RV"
-        # to get around the support checking in PyMC that would result in error
-        ndim_supp: int = 1
-
-        ndims_params: list[int] = [0 for _ in list_params]
+        # New in PyMC 5.16+: instead of using `ndims_supp`, we use `signature` to define
+        # the signature of the random variable. The string to the left of the `->` sign
+        # describes the input signature, which is `()` for each parameter, meaning each
+        # parameter is a scalar. The string to the right of the
+        # `->` sign describes the output signature, which is `(2)`, which means the
+        # random variable is a length-2 array.
+        signature: str = f"{','.join(['()']*len(list_params))}->(2)"
         dtype: str = "floatX"
         _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
         _list_params = list_params
         _lapse = lapse
-
-        # PyTensor, as of version 2.12, enforces a check to ensure that
-        # at least one parameter has the same ndims as the support.
-        # This overrides that check and ensures that the dimension checks are correct.
-        # For more information, see this issue
-        # https://github.com/lnccbrown/HSSM/issues/36
-        def _supp_shape_from_params(*args, **kwargs):
-            return (2,)
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
         # NOTE: `rng` now is a np.random.Generator instead of RandomState
@@ -282,6 +279,8 @@ def make_ssm_rv(
                 # All parameters are scalars
 
                 theta = np.stack(arg_arrays)
+                if theta.ndim > 1:
+                    theta = theta.squeeze(axis=-1)
                 n_samples = size
             else:
                 # Preprocess all parameters, reshape them into a matrix of dimension
@@ -400,6 +399,7 @@ def make_distribution(
         A pymc.Distribution that uses the log-likelihood function.
     """
     random_variable = make_ssm_rv(rv, list_params, lapse) if isinstance(rv, str) else rv
+    extra_fields = [] if extra_fields is None else extra_fields
 
     if lapse is not None:
         if list_params[-1] != "p_outlier":
@@ -423,29 +423,18 @@ def make_distribution(
 
         # NOTE: rv_op is an INSTANCE of RandomVariable
         rv_op = random_variable()
-        params = list_params
-        _extra_fields = extra_fields
+        _params = list_params
 
         @classmethod
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
             dist_params = [
-                pt.as_tensor_variable(pm.floatX(kwargs[param])) for param in cls.params
+                pt.as_tensor_variable(pm.floatX(kwargs[param])) for param in cls._params
             ]
-            if cls._extra_fields:
-                dist_params += [pm.floatX(field) for field in cls._extra_fields]
-            other_kwargs = {k: v for k, v in kwargs.items() if k not in cls.params}
+            other_kwargs = {k: v for k, v in kwargs.items() if k not in cls._params}
             return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
             # AF-TODO: Apply clipping here
-
-            num_params = len(list_params)
-            extra_fields = []
-
-            if num_params < len(dist_params):
-                extra_fields = dist_params[num_params:]
-                dist_params = dist_params[:num_params]
-
             if list_params[-1] == "p_outlier":
                 p_outlier = dist_params[-1]
                 dist_params = dist_params[:-1]
@@ -657,7 +646,12 @@ def assemble_callables(
         """Compute the log-likelihoood of the model."""
         # Assuming the first column of the data is always rt
         data = pt.as_tensor_variable(data)
-        dist_params = [pt.as_tensor_variable(param) for param in dist_params]
+
+        # New in PyMC 5.16+: PyMC uses the signature of the RandomVariable to determine
+        # the dimensions of the inputs to the likelihood function. It automatically adds
+        # one additional dimension to our input variable if it is a scalar. We need to
+        # squeeze this dimension out.
+        dist_params = [pt.squeeze(param) for param in dist_params]
 
         n_missing = pt.sum(pt.eq(data[:, 0], -999.0)).astype(int)
         if n_missing == 0:
@@ -666,7 +660,7 @@ def assemble_callables(
         observed_data = data[n_missing:, :]
 
         dist_params_observed = [
-            param if param.ndim == 0 else param[n_missing:] for param in dist_params
+            param[n_missing:] if param.ndim >= 1 else param for param in dist_params
         ]
 
         if has_deadline:
@@ -675,7 +669,7 @@ def assemble_callables(
             logp_observed = callable(observed_data, *dist_params_observed)
 
         dist_params_missing = [
-            param if param.ndim == 0 else param[:n_missing] for param in dist_params
+            param[:n_missing] if param.ndim >= 1 else param for param in dist_params
         ]
 
         if params_only:

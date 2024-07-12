@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "HSSM"
-version = "0.2.2"
+version = "0.2.3"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     "Alexander Fengler <alexander_fengler@brown.edu>",
@@ -16,12 +16,12 @@ keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
-pymc = ">=5.14.0,<5.15.0"
+pymc = "~5.16.0"
 arviz = "^0.18.0"
 onnx = "^1.16.0"
 ssm-simulators = "^0.7.2"
 huggingface-hub = "^0.23.0"
-bambi = "^0.13.0"
+bambi = "~0.13.0"
 numpyro = "^0.15.0"
 hddm-wfpt = "^0.1.4"
 seaborn = "^0.13.2"
