@@ -1139,7 +1139,7 @@ class HSSM:
         Returns
         -------
         az.InferenceData | pm.Approximation
-            The trace of the model after sampling.
+            The trace of the model after the last call to `sample()`.
         """
         if not self._inference_obj:
             raise ValueError("Please sample the model first.")
