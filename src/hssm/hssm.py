@@ -1505,7 +1505,9 @@ class HSSM:
             bounds=self.bounds,
             lapse=self.lapse,
             extra_fields=(
-                None if not self.extra_fields else deepcopy(self.extra_fields)
+                None
+                if not self.extra_fields
+                else [deepcopy(self.data[field].values) for field in self.extra_fields]
             ),
         )
 
