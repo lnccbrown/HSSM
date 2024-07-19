@@ -507,7 +507,8 @@ class Param:
         # None regression case:
         # Output prior and bounds
         else:
-            assert isinstance(self.prior, bmb.Prior)
+            if not isinstance(self.prior, bmb.Prior):
+                raise TypeError("The prior must be an instance of bmb.Prior.")
             output.append(f"    Prior: {self.prior}")
 
         output.append(f"    Explicit bounds: {self.bounds}")
