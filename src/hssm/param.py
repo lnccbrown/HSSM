@@ -481,7 +481,9 @@ class Param:
         # Regression case:
         # Output formula, priors, and link functions
         if self.is_regression:
-            assert self.formula is not None
+            if self.formula is None:
+                raise ValueError("Formula must be specified for regression.")
+
             output.append(f"    Formula: {self.formula}")
             output.append("    Priors:")
 
