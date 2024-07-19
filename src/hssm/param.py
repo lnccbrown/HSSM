@@ -488,7 +488,8 @@ class Param:
             output.append("    Priors:")
 
             if self.prior is not None:
-                assert isinstance(self.prior, dict)
+                if not isinstance(self.prior, dict):
+                    raise TypeError("The prior for a regression must be a dict.")
 
                 for param, prior in self.prior.items():
                     output.append(f"        {param} ~ {prior}")
