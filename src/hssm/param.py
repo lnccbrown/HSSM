@@ -320,10 +320,10 @@ class Param:
             if any(not np.isscalar(bound) for bound in self.bounds):
                 raise ValueError(f"The bounds of {self.name} should both be scalar.")
             lower, upper = self.bounds
-            assert lower < upper, (
-                f"The lower bound of {self.name} should be less than "
-                + "its upper bound."
-            )
+            if not lower < upper:
+                raise ValueError(
+                    f"{self.name}: lower bound must be less than upper bound."
+                )
 
         if isinstance(self.prior, int):
             self.prior = float(self.prior)
