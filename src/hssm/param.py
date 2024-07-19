@@ -129,6 +129,87 @@ class Param:
                 upper,
             )
 
+    def _override_priors(
+    self,
+    data: pd.DataFrame,
+    eval_env: dict[str, Any],
+    prior_type: Literal["general", "ddm"],
+):
+        """Override default priors based on the specified prior type.
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            The data used to fit the model.
+        eval_env : dict[str, Any]
+            The environment used to evaluate the formula.
+        ptype : str
+            The type of priors to use ('general' or 'ddm').
+        """
+        self._ensure_not_converted(context="prior")
+
+        if not self.is_regression:
+            return
+
+        get_default_prior = {
+            "general": get_default_prior,
+            "ddm": get_hddm_default_prior,
+        }.get(prior_type)
+
+        override_priors = {}
+        dm = self._get_design_matrices(data, eval_env)
+
+        has_common_intercept = False
+        if dm.common is not None:
+            for name, term in dm.common.terms.items():
+                if term.kind == "intercept":
+                    has_common_intercept = True
+                    term_type = "common_intercept"
+                    bounds = self.bounds
+                else:
+                    term_type = "common"
+                    bounds = None
+
+                override_priors[name] = get_default_prior(
+                    term_type, self.name, bounds=bounds, link=self.link
+                )
+
+        if dm.group is not None:
+            for name, term in dm.group.terms.items():
+                if term.kind == "intercept":
+                    if has_common_intercept:
+                        override_priors[name] = get_default_prior(
+                            "group_intercept_with_common",
+                            self.name,
+                            bounds=None,
+                            link=self.link,
+                        )
+                    else:
+                        _logger.warning(
+                            "No common intercept. "
+                            "Bounds for parameter %s is not applied due to a current "
+                            "limitation of Bambi. This will change in the future.",
+                            self.name
+                        )
+                        override_priors[name] = get_default_prior(
+                            "group_intercept", self.name, bounds=None, link=self.link
+                        )
+                else:
+                    override_priors[name] = get_default_prior(
+                        "group_specific",
+                        self.name,
+                        bounds=None,
+                        link=self.link,
+                    )
+
+        if not self.prior:
+            self.prior = override_priors
+        else:
+            prior = cast(dict[str, ParamSpec], self.prior)
+            self.prior = override_priors | prior
+
+
+
     def override_default_priors(self, data: pd.DataFrame, eval_env: dict[str, Any]):
         """Override the default priors - the general case.
 
