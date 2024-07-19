@@ -213,7 +213,6 @@ class Param:
             The environment used to evaluate the formula.
         """
         self._ensure_not_converted(context="prior")
-        assert self.name is not None
 
         if not self.is_regression:
             return
@@ -454,7 +453,6 @@ class Param:
             link = {self.name: self.link}
             return formula, prior, link
 
-        assert self.name is not None
         if self.prior is not None:
             prior = {self.name: self.prior}
         if self.link is not None:
@@ -472,7 +470,6 @@ class Param:
             regression or not.
         """
         output = []
-        assert self.name is not None
         output.append(self.name + ":")
 
         # Simplest case: float
