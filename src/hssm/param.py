@@ -62,6 +62,8 @@ class Param:
         link: str | bmb.Link | None = None,
         bounds: tuple[float, float] | None = None,
     ):
+        if name is None:
+            raise ValueError("A name must be specified.")
         self.name = name
         self.prior = prior
         self.formula = formula
