@@ -20,7 +20,7 @@ import pytensor
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from huggingface_hub import hf_hub_download
-from pymc.model_graph import ModelGraph
+from pymc.model_graph import DEFAULT_NODE_FORMATTERS, ModelGraph
 from pytensor import function
 
 from .param import Param
@@ -207,7 +207,12 @@ class HSSMModelGraph(ModelGraph):
                 # must be preceded by 'cluster' to get a box around it
                 with graph.subgraph(name="cluster" + plate_label) as sub:
                     for var_name in all_var_names:
-                        self._make_node(var_name, sub, formatting=formatting)
+                        self._make_node(
+                            var_name,
+                            sub,
+                            formatting=formatting,
+                            node_formatters=DEFAULT_NODE_FORMATTERS,
+                        )
                     # plate label goes bottom right
                     sub.attr(
                         label=plate_label,
@@ -218,7 +223,12 @@ class HSSMModelGraph(ModelGraph):
 
             else:
                 for var_name in all_var_names:
-                    self._make_node(var_name, graph, formatting=formatting)
+                    self._make_node(
+                        var_name,
+                        graph,
+                        formatting=formatting,
+                        node_formatters=DEFAULT_NODE_FORMATTERS,
+                    )
 
         if self.parent.is_regression:
             # Insert the parent parameter that's not included in the graph
@@ -244,7 +254,7 @@ class HSSMModelGraph(ModelGraph):
                 if (
                     self.parent.is_regression
                     and parent.startswith(f"{self.parent.name}_")
-                    and child == self.get_parent_names
+                    and child == response_str
                 ):
                     # Modify the edges so that they point to the
                     # parent parameter
