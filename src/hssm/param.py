@@ -88,10 +88,12 @@ class Param:
         """Update the initial information stored in the class."""
         if self._is_converted:
             raise ValueError("Cannot update the object. It has already been processed.")
-        for attr, value in kwargs.items():
-            if not hasattr(attr):
-                raise ValueError(f"{attr} does not exist.")
-            setattr(self, attr, value)
+
+        extra_attrs = kwargs.keys() - self.__dict__.keys()
+        if extra_attrs:
+            raise ValueError(f"Invalid attributes: {', '.join(extra_attrs)}.")
+
+        self.__dict__.update(kwargs)
 
     def override_default_link(self):
         """Override the default link function.
