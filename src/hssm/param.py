@@ -105,11 +105,8 @@ class Param:
 
         if self.bounds is None:
             raise ValueError(
-                (
-                    "Cannot override the default link function. Bounds are not"
-                    + " specified for parameter %s."
-                )
-                % self.name,
+                "Cannot override the default link function. "
+                f"Bounds are not specified for parameter {self.name}."
             )
 
         lower, upper = self.bounds
