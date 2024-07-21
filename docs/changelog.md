@@ -2,6 +2,14 @@
 
 ## 0.2.x
 
+### 0.2.3
+
+This is a maintenance release of HSSM, mainly to add a version constraint on `bambi` in light of the many breaking changes that version `0.1.4` introduces. This version also improved compatibility with `PyMC>=5.15` and incorporated minor bug fixes:
+
+1. We incorporated a temporary fix to graphing which broke after `PyMC>=5.15`.
+2. We deprecated `ndim` and `ndim_supp` definition in `SSMRandomVariable` in `PyMC>-5.16`.
+3. We fixed a bug that prevents new traces from being returned if `model.sample()` is called again.
+
 ### 0.2.2
 
 HSSM is now on Conda! We now recommend installing HSSM through `conda install -c conda-forge hssm`. For advanced users, we also support installing the GPU version of JAX through `pip install hssm[cuda12]`.

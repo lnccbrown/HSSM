@@ -267,3 +267,14 @@ def test_override_default_link(caplog, data_ddm_reg):
 
     assert "t" in caplog.records[0].message
     assert "strange" in caplog.records[0].message
+
+
+def test_resampling(data_ddm):
+    model = HSSM(data=data_ddm)
+    sample_1 = model.sample(draws=10, chains=1, tune=0)
+    assert sample_1 is model.traces
+
+    sample_2 = model.sample(draws=10, chains=1, tune=0)
+    assert sample_2 is model.traces
+
+    assert sample_1 is not sample_2
