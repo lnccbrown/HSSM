@@ -597,7 +597,7 @@ class HSSM:
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         include_group_specific: bool = True,
-        kind: Literal["pps", "mean"] = "pps",
+        kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
     ) -> az.InferenceData | None:
@@ -620,11 +620,12 @@ class HSSM:
             Otherwise, predictions are made with common effects only (i.e. group-
             specific are set to zero), by default True.
         kind: optional
-            Indicates the type of prediction required. Can be `"mean"` or `"pps"`. The
-            first returns draws from the posterior distribution of the mean, while the
-            latter returns the draws from the posterior predictive distribution
-            (i.e. the posterior probability distribution for a new observation).
-            Defaults to `"pps"`.
+            Indicates the type of prediction required. Can be `"response_params"` or
+            `"response"`. The first returns draws from the posterior distribution of the
+            likelihood parameters, while the latter returns the draws from the posterior
+            predictive distribution (i.e. the posterior probability distribution for a
+            new observation) in addition to the posterior distribution. Defaults to
+            "response_params".
         draws: optional
             The number of samples to draw from the posterior predictive distribution
             from each chain.
@@ -698,8 +699,8 @@ class HSSM:
             # Reassign posterior to sub-sampled version
             setattr(idata_copy, "posterior", idata["posterior"].isel(draw=draws))
 
-        if kind == "pps":
-            # If we run kind == 'pps' we actually run the observation RV
+        if kind == "response":
+            # If we run kind == 'response' we actually run the observation RV
             if safe_mode:
                 # safe mode splits the draws into chunks of 10 to avoid
                 # memory issues (TODO: Figure out the source of memory issues)
@@ -761,8 +762,8 @@ class HSSM:
                     return self.model.predict(
                         idata_copy, kind, data, False, include_group_specific
                     )
-        elif kind == "mean":
-            # If kind == 'mean', we don't need to run the RV directly,
+        elif kind == "response_params":
+            # If kind == 'response_params', we don't need to run the RV directly,
             # there shouldn't really be any significant memory issues here,
             # we can simply ignore settings, since the computational overhead
             # should be very small --> nudges user towards good outputs.
@@ -773,6 +774,8 @@ class HSSM:
             return self.model.predict(
                 idata, kind, data, inplace, include_group_specific
             )
+        else:
+            raise ValueError("`kind` must be either 'response' or 'response_params'.")
 
     def plot_posterior_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
         """Produce a posterior predictive plot.
