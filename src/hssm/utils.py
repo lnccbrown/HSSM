@@ -10,7 +10,7 @@ _parse_bambi().
 """
 
 import logging
-from typing import Any, Iterable, Literal, NewType, cast
+from typing import Any, Literal, cast
 
 import bambi as bmb
 import jax
@@ -20,8 +20,6 @@ import pytensor
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from huggingface_hub import hf_hub_download
-from pymc.model_graph import DEFAULT_NODE_FORMATTERS, ModelGraph
-from pytensor import function
 
 from .param import Param
 
@@ -144,128 +142,6 @@ def _get_alias_dict(
             break
 
     return alias_dict
-
-
-def fast_eval(var):
-    """Fast evaluation of a variable.
-
-    Notes
-    -----
-    This is a helper function required for one of the functions below.
-    """
-    return function([], var, mode="FAST_COMPILE")()
-
-
-VarName = NewType("VarName", str)
-
-
-class HSSMModelGraph(ModelGraph):
-    """Customize PyMC's ModelGraph class to inject the missing parent parameter.
-
-    Notes
-    -----
-    This is really a hack. There might be better ways to get around the
-    parent parameter issue.
-    """
-
-    def __init__(self, model, parent):
-        self.parent = parent
-        super().__init__(model)
-
-    def make_graph(
-        self,
-        var_names: Iterable[VarName] | None = None,
-        formatting: str = "plain",
-        response_str: str = "rt,response",
-    ):
-        """Make graphviz Digraph of PyMC model.
-
-        Returns
-        -------
-            graphviz.Digraph
-
-        Notes
-        -----
-            This is a slightly modified version of the code in:
-            https://github.com/pymc-devs/pymc/blob/main/pymc/model_graph.py
-
-            Credit for this code goes to PyMC developers.
-        """
-        try:
-            import graphviz  # pylint: disable=C0415
-        except ImportError as e:
-            e.msg = (
-                "This function requires the python library graphviz, "
-                + "along with binaries. "
-                + "The easiest way to install all of this is by running\n\n"
-                + "\tconda install -c conda-forge python-graphviz"
-            )
-            raise e
-        graph = graphviz.Digraph(self.model.name)
-        for plate_label, all_var_names in self.get_plates(var_names).items():
-            if plate_label:
-                # must be preceded by 'cluster' to get a box around it
-                with graph.subgraph(name="cluster" + plate_label) as sub:
-                    for var_name in all_var_names:
-                        self._make_node(
-                            var_name,
-                            sub,
-                            formatting=formatting,
-                            node_formatters=DEFAULT_NODE_FORMATTERS,
-                        )
-                    # plate label goes bottom right
-                    sub.attr(
-                        label=plate_label,
-                        labeljust="r",
-                        labelloc="b",
-                        style="rounded",
-                    )
-
-            else:
-                for var_name in all_var_names:
-                    self._make_node(
-                        var_name,
-                        graph,
-                        formatting=formatting,
-                        node_formatters=DEFAULT_NODE_FORMATTERS,
-                    )
-
-        if self.parent.is_regression:
-            # Insert the parent parameter that's not included in the graph
-            with graph.subgraph(name="cluster" + self.parent.name) as sub:
-                sub.node(
-                    self.parent.name,
-                    label=f"{self.parent.name}\n~\nDeterministic",
-                    shape="box",
-                )
-                shape = fast_eval(self.model[response_str].shape)
-                plate_label = f"{response_str}_obs({shape[0]})"
-
-                sub.attr(
-                    label=plate_label,
-                    labeljust="r",
-                    labelloc="b",
-                    style="rounded",
-                )
-
-        for child, parents in self.make_compute_graph(var_names=var_names).items():
-            # parents is a set of rv names that precede child rv nodes
-            for parent in parents:
-                if (
-                    self.parent.is_regression
-                    and parent.startswith(f"{self.parent.name}_")
-                    and child == response_str
-                ):
-                    # Modify the edges so that they point to the
-                    # parent parameter
-                    graph.edge(parent.replace(":", "&"), self.parent.name)
-                else:
-                    graph.edge(parent.replace(":", "&"), child.replace(":", "&"))
-
-        if self.parent.is_regression:
-            graph.edge(self.parent.name, response_str)
-
-        return graph
 
 
 def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
