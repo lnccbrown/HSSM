@@ -567,7 +567,6 @@ class HSSM:
                 kwargs["nuts_sampler"] = (
                     "pymc" if sampler == "mcmc" else sampler.split("_")[1]
                 )
-            print(kwargs["nuts_sampler"])
 
         self._inference_obj = self.model.fit(
             inference_method="mcmc"
@@ -928,7 +927,21 @@ class HSSM:
         graphviz.Graph
             The graph
         """
-        return self.model.graph(formatting, name, figsize, dpi, fmt)
+        graph = self.model.graph(formatting, name, figsize, dpi, fmt)
+
+        parent_param = self._parent_param
+        if parent_param.is_regression:
+            return graph
+
+        # Modify the graph
+        # 1. Remove all nodes and edges related to `{parent}_mean`:
+        graph.body = [
+            item for item in graph.body if f"{parent_param.name}_mean" not in item
+        ]
+        # 2. Add a new edge from parent to response
+        graph.edge(parent_param.name, self.response_str)
+
+        return graph
 
     def plot_trace(
         self,
