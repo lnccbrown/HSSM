@@ -404,7 +404,8 @@ class HSSM:
             self.model, self._parent_param, self.response_c, self.response_str
         )
         self.set_alias(self._aliases)
-        # _logger.info(self.pymc_model.initial_point())
+        self.model.build()
+        _logger.info(self.pymc_model.initial_point())
 
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
@@ -1077,10 +1078,9 @@ class HSSM:
         for param in self.params.values():
             if param.name == "p_outlier":
                 continue
-            name = self.response_c if param.is_parent else param.name
             output.append(f"{param.name}:")
 
-            component = self.model.components[name]
+            component = self.model.components[param.name]
 
             # Regression case:
             if param.is_regression:

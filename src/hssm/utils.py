@@ -10,7 +10,7 @@ _parse_bambi().
 """
 
 import logging
-from typing import Any, Iterable, Literal, NewType
+from typing import Any, Iterable, Literal, NewType, cast
 
 import bambi as bmb
 import jax
@@ -113,35 +113,35 @@ def _get_alias_dict(
     dict[str, str | dict]
         A dict that indicates how Bambi should alias its parameters.
     """
-    parent_name = parent.name
+    parent_name = cast(str, parent.name)
+    alias_dict: dict[str, Any] = {response_c: response_str}
 
     if len(model.distributional_components) == 1:
-        alias_dict: dict[str, Any] = {response_c: response_str}
         if not parent.is_regression:
-            alias_dict |= {"Intercept": parent_name}
+            alias_dict[parent_name] = f"{parent_name}_mean"
+            alias_dict["Intercept"] = parent_name
         else:
-            for name, term in model.response_component.terms.items():
+            for name, term in model.components[parent_name].terms.items():
                 if isinstance(
                     term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
                 ):
-                    alias_dict |= {name: f"{parent_name}_{name}"}
-    else:
-        alias_dict = {response_c: {response_c: response_str}}
-        for component_name, component in model.distributional_components.items():
-            if component.response_kind == "data":
-                if not parent.is_regression:
-                    alias_dict[response_c] |= {"Intercept": parent_name}
-                else:
-                    for name, term in model.response_component.terms.items():
-                        if isinstance(
-                            term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
-                        ):
-                            alias_dict[response_c] |= {name: f"{parent_name}_{name}"}
-            else:
-                alias_dict[component_name] = {component_name: component_name}
+                    alias_dict[name] = f"{parent_name}_{name}"
 
-    for name in model.constant_components.keys():
-        alias_dict |= {name: name}
+        return alias_dict
+
+    for component_name, component in model.distributional_components.items():
+        if component_name == parent_name:
+            alias_dict[component_name] = {}
+            if not parent.is_regression:
+                # Most likely this branch will not be reached
+                alias_dict[component_name]["Intercept"] = f"{parent_name}_Intercept"
+            else:
+                for name, term in component.terms.items():
+                    if isinstance(
+                        term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
+                    ):
+                        alias_dict[component_name] |= {name: f"{parent_name}_{name}"}
+            break
 
     return alias_dict
 
