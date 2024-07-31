@@ -544,7 +544,7 @@ class HSSM:
         # If sampler is finally `numpyro` make sure
         # the jitter argument is set to False
         if sampler == "nuts_numpyro":
-            if "nuts_numpyro_kwargs" in kwargs:
+            if "nuts_sampler_kwargs" in kwargs:
                 if kwargs["nuts_sampler_kwargs"].get("jitter"):
                     _logger.warning(
                         "The jitter argument is set to True. "
