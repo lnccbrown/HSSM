@@ -569,9 +569,11 @@ class HSSM:
                 )
 
         self._inference_obj = self.model.fit(
-            inference_method="mcmc"
-            if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]
-            else sampler,
+            inference_method=(
+                "mcmc"
+                if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]
+                else sampler
+            ),
             init=init,
             include_response_params=include_response_params,
             **kwargs,
