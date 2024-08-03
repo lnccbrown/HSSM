@@ -1716,6 +1716,7 @@ class HSSM:
 
             # If the user actively supplies a link function, the user
             # should also have supplied an initial value insofar it matters.
+
             if self.params[self._get_prefix(name_tmp)].is_regression:
                 param_link_setting = self.link_settings
             else:
@@ -1855,20 +1856,25 @@ class HSSM:
             self.__jitter_initvals_all(jitter_epsilon)
 
     def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
-        initial_point_dict = self.pymc_model.initial_point()
+        # Note: Calling our initial point function here
+        # --> operate on untransformed variables
+        initial_point_dict = self.initial_point()
+        # initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
                 starting_value_tmp = starting_value + np.random.uniform(
                     -jitter_epsilon, jitter_epsilon, starting_value.shape
                 ).astype(np.float32)
-
                 self.pymc_model.set_initval(
                     self.pymc_model.named_vars[name_tmp], starting_value_tmp
                 )
 
     def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
-        initial_point_dict = self.pymc_model.initial_point()
+        # Note: Calling our initial point function here
+        # --> operate on untransformed variables
+        initial_point_dict = self.initial_point()
+        # initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             starting_value_tmp = starting_value + np.random.uniform(
