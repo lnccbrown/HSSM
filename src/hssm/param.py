@@ -497,12 +497,13 @@ class Param:
         # Regression case:
         # Output formula, priors, and link functions
         if self.is_regression and not (self.is_parent and self.formula is None):
-            
             if self.formula is None:
-                raise ValueError("Formula must be specified for regression,"
-                                 "only exception is the parent parameter for which formula"
-                                 "can be left undefined.")
-            
+                raise ValueError(
+                    "Formula must be specified for regression,"
+                    "only exception is the parent parameter for which formula"
+                    "can be left undefined."
+                )
+
             output.append(f"    Formula: {self.formula}")
             output.append("    Priors:")
 
