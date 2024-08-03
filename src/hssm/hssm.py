@@ -977,7 +977,8 @@ class HSSM:
         data = data or self.traces
 
         if not include_deterministic:
-            var_names = self._get_deterministic_var_names(data)
+            var_names = [var.name for var in self.pymc_model.free_RVs]
+            # var_names = self._get_deterministic_var_names(data)
             if var_names:
                 if "var_names" in kwargs:
                     if isinstance(kwargs["var_names"], str):
@@ -1036,7 +1037,8 @@ class HSSM:
         data = data or self.traces
 
         if not include_deterministic:
-            var_names = self._get_deterministic_var_names(data)
+            var_names = [var.name for var in self.pymc_model.free_RVs]
+            # var_names = self._get_deterministic_var_names(data)
             if var_names:
                 kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
 
@@ -1548,11 +1550,20 @@ class HSSM:
         var_names = [
             f"~{param_name}"
             for param_name, param in self.params.items()
-            if param.is_regression
+            if (param.is_regression)
         ]
 
         if f"{self._parent}_mean" in idata["posterior"].data_vars:
             var_names.append(f"~{self._parent}_mean")
+
+        # Parent parameters (always regression implicitly)
+        # which don't have a formula attached
+        # should be dropped from var_names, since the actual
+        # parent name shows up as a regression.
+        if f"{self._parent}" in idata["posterior"].data_vars:
+            if self.params[self._parent].formula is None:
+                # Drop from var_names
+                var_names = [var for var in var_names if var != f"~{self._parent}"]
 
         return var_names
 
