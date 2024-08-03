@@ -167,6 +167,10 @@ def test_lapse_distribution_cav(p_outlier, loglik_kind):
         else model.model_distribution.dist(v=v, a=a, z=z, t=t)
     )
 
+    # We could do this outside of the function,
+    # but for some reason mypy complaints with:
+    # error: Item "str" of "Any | str" has no attribute "values"
+    # while here it allows it.
     cav_data_numpy = cav_data[["rt", "response"]].values
 
     # Convert to float32 if blackbox loglik is used
