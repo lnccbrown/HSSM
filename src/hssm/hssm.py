@@ -975,28 +975,39 @@ class HSSM:
             Whether to call plt.tight_layout() after plotting. Defaults to True.
         """
         data = data or self.traces
+        assert isinstance(data, az.InferenceData)
 
-        if not include_deterministic:
-            var_names = [var.name for var in self.pymc_model.free_RVs]
-            # var_names = self._get_deterministic_var_names(data)
-            if var_names:
-                if "var_names" in kwargs:
-                    if isinstance(kwargs["var_names"], str):
-                        if kwargs["var_names"] not in var_names:
-                            var_names.append(kwargs["var_names"])
-                        kwargs["var_names"] = var_names
-                    elif isinstance(kwargs["var_names"], list):
-                        kwargs["var_names"] = list(
-                            set(var_names) | set(kwargs["var_names"])
-                        )
-                    elif kwargs["var_names"] is None:
-                        kwargs["var_names"] = var_names
+        if data is not None:
+            if not include_deterministic:
+                var_names = list(
+                    set([var.name for var in self.pymc_model.free_RVs]).intersection(
+                        set(list(data.posterior.data_vars.keys()))
+                    )
+                )
+                # var_names = self._get_deterministic_var_names(data)
+                if var_names:
+                    if "var_names" in kwargs:
+                        if isinstance(kwargs["var_names"], str):
+                            if kwargs["var_names"] not in var_names:
+                                var_names.append(kwargs["var_names"])
+                            kwargs["var_names"] = var_names
+                        elif isinstance(kwargs["var_names"], list):
+                            kwargs["var_names"] = list(
+                                set(var_names) | set(kwargs["var_names"])
+                            )
+                        elif kwargs["var_names"] is None:
+                            kwargs["var_names"] = var_names
+                        else:
+                            raise ValueError(
+                                "`var_names` must be a string, a list of strings"
+                                ", or None."
+                            )
                     else:
-                        raise ValueError(
-                            "`var_names` must be a string, a list of strings, or None."
-                        )
-                else:
-                    kwargs["var_names"] = var_names
+                        kwargs["var_names"] = var_names
+        elif (not isinstance(data, az.InferenceData)) and (data is not None):
+            raise ValueError("data must be an InferenceData object.")
+        elif data is None:
+            raise ValueError("Please sample to model first.")
 
         az.plot_trace(data, **kwargs)
 
@@ -1035,12 +1046,23 @@ class HSSM:
             A pandas DataFrame or xarray Dataset containing the summary statistics.
         """
         data = data or self.traces
-
-        if not include_deterministic:
-            var_names = [var.name for var in self.pymc_model.free_RVs]
-            # var_names = self._get_deterministic_var_names(data)
-            if var_names:
-                kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
+        assert isinstance(data, az.InferenceData)
+        if data is not None:
+            if not include_deterministic:
+                var_names = list(
+                    set([var.name for var in self.pymc_model.free_RVs]).intersection(
+                        set(list(data.posterior.data_vars.keys()))
+                    )
+                )
+                # var_names = self._get_deterministic_var_names(data)
+                if var_names:
+                    kwargs["var_names"] = list(
+                        set(var_names + kwargs.get("var_names", []))
+                    )
+        elif (not isinstance(data, az.InferenceData)) and (data is not None):
+            raise ValueError("data must be an InferenceData object.")
+        elif data is None:
+            raise ValueError("Please sample to model first.")
 
         return az.summary(data, **kwargs)
 
