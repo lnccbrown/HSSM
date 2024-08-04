@@ -981,7 +981,7 @@ class HSSM:
             if not include_deterministic:
                 var_names = list(
                     set([var.name for var in self.pymc_model.free_RVs]).intersection(
-                        set(list(data.posterior.data_vars.keys()))
+                        set(list(data["posterior"].data_vars.keys()))
                     )
                 )
                 # var_names = self._get_deterministic_var_names(data)
@@ -1051,7 +1051,7 @@ class HSSM:
             if not include_deterministic:
                 var_names = list(
                     set([var.name for var in self.pymc_model.free_RVs]).intersection(
-                        set(list(data.posterior.data_vars.keys()))
+                        set(list(data["posterior"].data_vars.keys()))
                     )
                 )
                 # var_names = self._get_deterministic_var_names(data)
