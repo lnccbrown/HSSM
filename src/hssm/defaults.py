@@ -393,8 +393,8 @@ def show_defaults(model: SupportedModels, loglik_kind=Optional[LoglikKind]) -> s
         output += _show_defaults_helper(model, loglik_kind)
 
     else:
-        for loglik_kind in model_config["likelihoods"].keys():
-            output += _show_defaults_helper(model, loglik_kind)
+        for loglik_kind_ in model_config["likelihoods"]:
+            output += _show_defaults_helper(model, loglik_kind_)
             output.append("")
 
         output = output[:-1]

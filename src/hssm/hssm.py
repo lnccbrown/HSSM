@@ -45,7 +45,6 @@ from hssm.param import (
     _make_default_prior,
 )
 from hssm.utils import (
-    HSSMModelGraph,
     _get_alias_dict,
     _print_prior,
     _process_param_in_kwargs,
@@ -568,7 +567,6 @@ class HSSM:
                 kwargs["nuts_sampler"] = (
                     "pymc" if sampler == "mcmc" else sampler.split("_")[1]
                 )
-            print(kwargs["nuts_sampler"])
 
         self._inference_obj = self.model.fit(
             inference_method="mcmc"
@@ -897,8 +895,7 @@ class HSSM:
         """Return the response variable names in string format."""
         return ",".join(self.response)
 
-    # NOTE: can't annotate return type because the graphviz dependency is
-    # optional
+    # NOTE: can't annotate return type because the graphviz dependency is optional
     def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
         """Produce a graphviz Digraph from a built HSSM model.
 
@@ -929,30 +926,22 @@ class HSSM:
         -------
         graphviz.Graph
             The graph
-
-        Note
-        ----
-            The code is largely copied from
-            https://github.com/bambinos/bambi/blob/main/bambi/models.py
-            Credit for the code goes to Bambi developers.
         """
-        self.model._check_built()
+        graph = self.model.graph(formatting, name, figsize, dpi, fmt)
 
-        graphviz = HSSMModelGraph(
-            model=self.pymc_model, parent=self._parent_param
-        ).make_graph(formatting=formatting, response_str=self.response_str)
+        parent_param = self._parent_param
+        if parent_param.is_regression:
+            return graph
 
-        width, height = (None, None) if figsize is None else figsize
+        # Modify the graph
+        # 1. Remove all nodes and edges related to `{parent}_mean`:
+        graph.body = [
+            item for item in graph.body if f"{parent_param.name}_mean" not in item
+        ]
+        # 2. Add a new edge from parent to response
+        graph.edge(parent_param.name, self.response_str)
 
-        if name is not None:
-            graphviz_ = graphviz.copy()
-            graphviz_.graph_attr.update(size=f"{width},{height}!")
-            graphviz_.graph_attr.update(dpi=str(dpi))
-            graphviz_.render(filename=name, format=fmt, cleanup=True)
-
-            return graphviz_
-
-        return graphviz
+        return graph
 
     def plot_trace(
         self,
