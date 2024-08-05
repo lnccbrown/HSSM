@@ -45,7 +45,6 @@ from hssm.param import (
     _make_default_prior,
 )
 from hssm.utils import (
-    HSSMModelGraph,
     _get_alias_dict,
     _print_prior,
     _process_param_in_kwargs,
@@ -239,7 +238,7 @@ class HSSM:
         ) = None,
         loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
-        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
+        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
         hierarchical: bool = False,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
@@ -404,7 +403,8 @@ class HSSM:
             self.model, self._parent_param, self.response_c, self.response_str
         )
         self.set_alias(self._aliases)
-        # _logger.info(self.pymc_model.initial_point())
+        self.model.build()
+        _logger.info(self.pymc_model.initial_point())
 
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
@@ -431,6 +431,7 @@ class HSSM:
         ) = None,
         init: str | None = None,
         initvals: str | dict | None = None,
+        include_response_params: bool = False,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -452,6 +453,10 @@ class HSSM:
             values for parameters of the model, or a string "map" to use initialization
             at the MAP estimate. If "map" is used, the MAP estimate will be computed if
             not already attached to the base class from prior call to 'find_MAP`.
+        include_response_params: optional
+            Include parameters of the response distribution in the output. These usually
+            take more space than other parameters as there's one of them per
+            observation. Defaults to False.
         kwargs
             Other arguments passed to bmb.Model.fit(). Please see [here]
             (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
@@ -538,35 +543,40 @@ class HSSM:
         # If sampler is finally `numpyro` make sure
         # the jitter argument is set to False
         if sampler == "nuts_numpyro":
-            if kwargs.get("jitter", None):
-                _logger.warning(
-                    "The jitter argument is set to True. "
-                    + "This argument is not supported "
-                    + "by the numpyro backend. "
-                    + "The jitter argument will be set to False."
-                )
-            kwargs["jitter"] = False
-        else:
-            if "jitter" in kwargs:
-                _logger.warning(
-                    "The jitter keyword argument is "
-                    + "supported only by the nuts_numpyro sampler. \n"
-                    + "The jitter argument will be ignored."
-                )
-                del kwargs["jitter"]
+            if "nuts_sampler_kwargs" in kwargs:
+                if kwargs["nuts_sampler_kwargs"].get("jitter"):
+                    _logger.warning(
+                        "The jitter argument is set to True. "
+                        + "This argument is not supported "
+                        + "by the numpyro backend. "
+                        + "The jitter argument will be set to False."
+                    )
+                kwargs["nuts_sampler_kwargs"]["jitter"] = False
+            else:
+                kwargs["nuts_sampler_kwargs"] = {"jitter": False}
 
-        if "include_mean" not in kwargs:
-            # If not specified, include the mean prediction in
-            # kwargs to be passed to the model.fit() method
-            kwargs["include_mean"] = True
         if self._inference_obj is not None:
             _logger.warning(
                 "The model has already been sampled. Overwriting the previous "
                 + "inference object. Any previous reference to the inference object "
                 + "will still point to the old object."
             )
+
+        if "nuts_sampler" not in kwargs:
+            if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]:
+                kwargs["nuts_sampler"] = (
+                    "pymc" if sampler == "mcmc" else sampler.split("_")[1]
+                )
+
         self._inference_obj = self.model.fit(
-            inference_method=sampler, init=init, **kwargs
+            inference_method=(
+                "mcmc"
+                if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]
+                else sampler
+            ),
+            init=init,
+            include_response_params=include_response_params,
+            **kwargs,
         )
 
         # The parent was previously not part of deterministics --> compute it via
@@ -596,7 +606,7 @@ class HSSM:
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         include_group_specific: bool = True,
-        kind: Literal["pps", "mean"] = "pps",
+        kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
     ) -> az.InferenceData | None:
@@ -619,11 +629,12 @@ class HSSM:
             Otherwise, predictions are made with common effects only (i.e. group-
             specific are set to zero), by default True.
         kind: optional
-            Indicates the type of prediction required. Can be `"mean"` or `"pps"`. The
-            first returns draws from the posterior distribution of the mean, while the
-            latter returns the draws from the posterior predictive distribution
-            (i.e. the posterior probability distribution for a new observation).
-            Defaults to `"pps"`.
+            Indicates the type of prediction required. Can be `"response_params"` or
+            `"response"`. The first returns draws from the posterior distribution of the
+            likelihood parameters, while the latter returns the draws from the posterior
+            predictive distribution (i.e. the posterior probability distribution for a
+            new observation) in addition to the posterior distribution. Defaults to
+            "response_params".
         draws: optional
             The number of samples to draw from the posterior predictive distribution
             from each chain.
@@ -697,8 +708,8 @@ class HSSM:
             # Reassign posterior to sub-sampled version
             setattr(idata_copy, "posterior", idata["posterior"].isel(draw=draws))
 
-        if kind == "pps":
-            # If we run kind == 'pps' we actually run the observation RV
+        if kind == "response":
+            # If we run kind == 'response' we actually run the observation RV
             if safe_mode:
                 # safe mode splits the draws into chunks of 10 to avoid
                 # memory issues (TODO: Figure out the source of memory issues)
@@ -760,8 +771,8 @@ class HSSM:
                     return self.model.predict(
                         idata_copy, kind, data, False, include_group_specific
                     )
-        elif kind == "mean":
-            # If kind == 'mean', we don't need to run the RV directly,
+        elif kind == "response_params":
+            # If kind == 'response_params', we don't need to run the RV directly,
             # there shouldn't really be any significant memory issues here,
             # we can simply ignore settings, since the computational overhead
             # should be very small --> nudges user towards good outputs.
@@ -772,6 +783,8 @@ class HSSM:
             return self.model.predict(
                 idata, kind, data, inplace, include_group_specific
             )
+        else:
+            raise ValueError("`kind` must be either 'response' or 'response_params'.")
 
     def plot_posterior_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
         """Produce a posterior predictive plot.
@@ -884,8 +897,7 @@ class HSSM:
         """Return the response variable names in string format."""
         return ",".join(self.response)
 
-    # NOTE: can't annotate return type because the graphviz dependency is
-    # optional
+    # NOTE: can't annotate return type because the graphviz dependency is optional
     def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
         """Produce a graphviz Digraph from a built HSSM model.
 
@@ -916,30 +928,22 @@ class HSSM:
         -------
         graphviz.Graph
             The graph
-
-        Note
-        ----
-            The code is largely copied from
-            https://github.com/bambinos/bambi/blob/main/bambi/models.py
-            Credit for the code goes to Bambi developers.
         """
-        self.model._check_built()
+        graph = self.model.graph(formatting, name, figsize, dpi, fmt)
 
-        graphviz = HSSMModelGraph(
-            model=self.pymc_model, parent=self._parent_param
-        ).make_graph(formatting=formatting, response_str=self.response_str)
+        parent_param = self._parent_param
+        if parent_param.is_regression:
+            return graph
 
-        width, height = (None, None) if figsize is None else figsize
+        # Modify the graph
+        # 1. Remove all nodes and edges related to `{parent}_mean`:
+        graph.body = [
+            item for item in graph.body if f"{parent_param.name}_mean" not in item
+        ]
+        # 2. Add a new edge from parent to response
+        graph.edge(parent_param.name, self.response_str)
 
-        if name is not None:
-            graphviz_ = graphviz.copy()
-            graphviz_.graph_attr.update(size=f"{width},{height}!")
-            graphviz_.graph_attr.update(dpi=str(dpi))
-            graphviz_.render(filename=name, format=fmt, cleanup=True)
-
-            return graphviz_
-
-        return graphviz
+        return graph
 
     def plot_trace(
         self,
@@ -971,9 +975,17 @@ class HSSM:
             Whether to call plt.tight_layout() after plotting. Defaults to True.
         """
         data = data or self.traces
+        assert isinstance(
+            data, az.InferenceData
+        ), "data must be an InferenceData object."
 
         if not include_deterministic:
-            var_names = self._get_deterministic_var_names(data)
+            var_names = list(
+                set([var.name for var in self.pymc_model.free_RVs]).intersection(
+                    set(list(data["posterior"].data_vars.keys()))
+                )
+            )
+            # var_names = self._get_deterministic_var_names(data)
             if var_names:
                 if "var_names" in kwargs:
                     if isinstance(kwargs["var_names"], str):
@@ -988,11 +1000,11 @@ class HSSM:
                         kwargs["var_names"] = var_names
                     else:
                         raise ValueError(
-                            "`var_names` must be a string, a list of strings, or None."
+                            "`var_names` must be a string, a list of strings"
+                            ", or None."
                         )
                 else:
                     kwargs["var_names"] = var_names
-
         az.plot_trace(data, **kwargs)
 
         if tight_layout:
@@ -1030,12 +1042,19 @@ class HSSM:
             A pandas DataFrame or xarray Dataset containing the summary statistics.
         """
         data = data or self.traces
+        assert isinstance(
+            data, az.InferenceData
+        ), "data must be an InferenceData object."
 
         if not include_deterministic:
-            var_names = self._get_deterministic_var_names(data)
+            var_names = list(
+                set([var.name for var in self.pymc_model.free_RVs]).intersection(
+                    set(list(data["posterior"].data_vars.keys()))
+                )
+            )
+            # var_names = self._get_deterministic_var_names(data)
             if var_names:
                 kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
-
         return az.summary(data, **kwargs)
 
     def initial_point(self, transformed: bool = False) -> dict[str, np.ndarray]:
@@ -1077,10 +1096,9 @@ class HSSM:
         for param in self.params.values():
             if param.name == "p_outlier":
                 continue
-            name = self.response_c if param.is_parent else param.name
             output.append(f"{param.name}:")
 
-            component = self.model.components[name]
+            component = self.model.components[param.name]
 
             # Regression case:
             if param.is_regression:
@@ -1545,17 +1563,20 @@ class HSSM:
         var_names = [
             f"~{param_name}"
             for param_name, param in self.params.items()
-            if param.is_regression
+            if (param.is_regression)
         ]
 
-        # Handle specific case where parent is not explictly in traces
-        if ("~" + self._parent in var_names) and (
-            self._parent not in idata.posterior.data_vars
-        ):
-            var_names.remove("~" + self._parent)
+        if f"{self._parent}_mean" in idata["posterior"].data_vars:
+            var_names.append(f"~{self._parent}_mean")
 
-        if f"{self.response_str}_mean" in idata["posterior"].data_vars:
-            var_names.append(f"~{self.response_str}_mean")
+        # Parent parameters (always regression implicitly)
+        # which don't have a formula attached
+        # should be dropped from var_names, since the actual
+        # parent name shows up as a regression.
+        if f"{self._parent}" in idata["posterior"].data_vars:
+            if self.params[self._parent].formula is None:
+                # Drop from var_names
+                var_names = [var for var in var_names if var != f"~{self._parent}"]
 
         return var_names
 

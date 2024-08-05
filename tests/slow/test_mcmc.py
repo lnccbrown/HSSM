@@ -74,17 +74,17 @@ parameter_grid = [
     ("analytical", None, "mcmc", None, True),
     ("analytical", None, "mcmc", "slice", True),
     ("analytical", None, "nuts_numpyro", None, True),
-    ("analytical", None, "nuts_numpyro", "slice", TypeError),
+    ("analytical", None, "nuts_numpyro", "slice", ValueError),
     ("approx_differentiable", "pytensor", None, None, True),  # Defaults should work
     ("approx_differentiable", "pytensor", "mcmc", None, True),
     ("approx_differentiable", "pytensor", "mcmc", "slice", True),
     ("approx_differentiable", "pytensor", "nuts_numpyro", None, True),
-    ("approx_differentiable", "pytensor", "nuts_numpyro", "slice", TypeError),
+    ("approx_differentiable", "pytensor", "nuts_numpyro", "slice", ValueError),
     ("approx_differentiable", "jax", None, None, True),  # Defaults should work
     ("approx_differentiable", "jax", "mcmc", None, True),
     ("approx_differentiable", "jax", "mcmc", "slice", True),
     ("approx_differentiable", "jax", "nuts_numpyro", None, True),
-    ("approx_differentiable", "jax", "nuts_numpyro", "slice", TypeError),
+    ("approx_differentiable", "jax", "nuts_numpyro", "slice", ValueError),
     ("blackbox", None, None, None, True),  # Defaults should work
     ("blackbox", None, "mcmc", None, True),
     ("blackbox", None, "mcmc", "slice", True),
@@ -137,7 +137,9 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
 
     # Only runs once
     if loglik_kind == "analytical" and sampler is None:
-        assert not model._get_deterministic_var_names(model.traces)
+        assert f"~{model._parent}_mean" in model._get_deterministic_var_names(
+            model.traces
+        )
         # test summary:
         summary = model.summary()
         assert summary.shape[0] == 4
