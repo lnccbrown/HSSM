@@ -144,7 +144,10 @@ class Param:
         """
         self._ensure_not_converted(context="prior")
 
-        if not self.is_regression:
+        # If no regression, or the parameter is the parent and does not have a
+        # formula attached (in which case it still gets a trial wise deterministic)
+        # do nothing
+        if not self.is_regression or (self.is_parent and self.formula is None):
             return
 
         override_priors = {}
@@ -213,7 +216,10 @@ class Param:
         self._ensure_not_converted(context="prior")
         assert self.name is not None
 
-        if not self.is_regression:
+        # If no regression, or the parameter is the parent and does not have a
+        # formula attached (in which case it still gets a trial wise deterministic)
+        # do nothing
+        if not self.is_regression or (self.is_parent and self.formula is None):
             return
 
         override_priors = {}
@@ -380,7 +386,7 @@ class Param:
         bool
             A boolean that indicates if a regression is specified.
         """
-        return self.formula is not None
+        return self.formula is not None or self._is_parent
 
     @property
     def is_parent(self) -> bool:

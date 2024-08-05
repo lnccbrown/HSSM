@@ -569,9 +569,11 @@ class HSSM:
                 )
 
         self._inference_obj = self.model.fit(
-            inference_method="mcmc"
-            if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]
-            else sampler,
+            inference_method=(
+                "mcmc"
+                if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]
+                else sampler
+            ),
             init=init,
             include_response_params=include_response_params,
             **kwargs,
@@ -1549,14 +1551,8 @@ class HSSM:
             if param.is_regression
         ]
 
-        # Handle specific case where parent is not explictly in traces
-        if ("~" + self._parent in var_names) and (
-            self._parent not in idata.posterior.data_vars
-        ):
-            var_names.remove("~" + self._parent)
-
-        if f"{self.response_str}_mean" in idata["posterior"].data_vars:
-            var_names.append(f"~{self.response_str}_mean")
+        if f"{self._parent}_mean" in idata["posterior"].data_vars:
+            var_names.append(f"~{self._parent}_mean")
 
         return var_names
 

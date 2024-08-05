@@ -57,6 +57,7 @@ def make_jax_logp_funcs_from_onnx(
     )
 
     scalars_only = all(not is_reg for is_reg in params_is_reg)
+    print("scalars only: ", scalars_only)
 
     def logp(*inputs) -> jnp.ndarray:
         """Compute the log-likelihood.
@@ -76,11 +77,14 @@ def make_jax_logp_funcs_from_onnx(
             The element-wise log-likelihoods.
         """
         # Makes a matrix to feed to the LAN model
+        print("scalars only: ", scalars_only)
+        print("params only: ", params_only)
         if params_only:
             input_vector = jnp.array(inputs)
         else:
             data = inputs[0]
             dist_params = inputs[1:]
+            print([inp.shape for inp in dist_params])
             param_vector = jnp.array([inp.squeeze() for inp in dist_params])
             if param_vector.shape[-1] == 1:
                 param_vector = param_vector.squeeze(axis=-1)
@@ -89,6 +93,7 @@ def make_jax_logp_funcs_from_onnx(
         return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
 
     if params_only and scalars_only:
+        print("passing scalars only case")
         logp_vec = lambda *inputs: logp(*inputs).reshape((1,))
         return jit(logp_vec), jit(grad(logp)), logp_vec
 
