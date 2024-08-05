@@ -115,7 +115,9 @@ def _get_alias_dict(
     alias_dict: dict[str, Any] = {response_c: response_str}
 
     if len(model.distributional_components) == 1:
-        if not parent.is_regression:
+        if not parent.is_regression or (
+            parent.is_regression and parent.formula is None
+        ):
             alias_dict[parent_name] = f"{parent_name}_mean"
             alias_dict["Intercept"] = parent_name
         else:

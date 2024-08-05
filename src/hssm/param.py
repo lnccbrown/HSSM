@@ -62,6 +62,8 @@ class Param:
         link: str | bmb.Link | None = None,
         bounds: tuple[float, float] | None = None,
     ):
+        if name is None:
+            raise ValueError("A name must be specified.")
         self.name = name
         self.prior = prior
         self.formula = formula
@@ -88,10 +90,12 @@ class Param:
         """Update the initial information stored in the class."""
         if self._is_converted:
             raise ValueError("Cannot update the object. It has already been processed.")
-        for attr, value in kwargs.items():
-            if not hasattr(attr):
-                raise ValueError(f"{attr} does not exist.")
-            setattr(self, attr, value)
+
+        extra_attrs = kwargs.keys() - self.__dict__.keys()
+        if extra_attrs:
+            raise ValueError(f"Invalid attributes: {', '.join(extra_attrs)}.")
+
+        self.__dict__.update(kwargs)
 
     def override_default_link(self):
         """Override the default link function.
@@ -105,11 +109,8 @@ class Param:
 
         if self.bounds is None:
             raise ValueError(
-                (
-                    "Cannot override the default link function. Bounds are not"
-                    + " specified for parameter %s."
-                )
-                % self.name,
+                "Cannot override the default link function. "
+                f"Bounds are not specified for parameter {self.name}."
             )
 
         lower, upper = self.bounds
@@ -214,7 +215,6 @@ class Param:
             The environment used to evaluate the formula.
         """
         self._ensure_not_converted(context="prior")
-        assert self.name is not None
 
         # If no regression, or the parameter is the parent and does not have a
         # formula attached (in which case it still gets a trial wise deterministic)
@@ -325,13 +325,22 @@ class Param:
             if any(not np.isscalar(bound) for bound in self.bounds):
                 raise ValueError(f"The bounds of {self.name} should both be scalar.")
             lower, upper = self.bounds
-            assert lower < upper, (
-                f"The lower bound of {self.name} should be less than "
-                + "its upper bound."
-            )
+            if not lower < upper:
+                raise ValueError(
+                    f"{self.name}: lower bound must be less than upper bound."
+                )
 
         if isinstance(self.prior, int):
             self.prior = float(self.prior)
+
+        # If the parameter is a parent, it will be a regression, but
+        # it may not have a formula attached to it.
+        # A pure intercept regression should be handled as if it
+        # is just the respective original parameter
+        # (boundaries inclusive), so we can simply
+        # undo the link setting.
+        if self.is_regression and self.formula is None:
+            self.link = None
 
         if self.formula is not None:
             # The regression case
@@ -370,6 +379,8 @@ class Param:
                         )
                         self._is_truncated = True
 
+            print("processing", self.name)
+            print("link", self.link)
             if self.link is not None:
                 raise ValueError("`link` should be None if no regression is specified.")
 
@@ -458,7 +469,6 @@ class Param:
             link = {self.name: self.link}
             return formula, prior, link
 
-        assert self.name is not None
         if self.prior is not None:
             prior = {self.name: self.prior}
         if self.link is not None:
@@ -476,7 +486,6 @@ class Param:
             regression or not.
         """
         output = []
-        assert self.name is not None
         output.append(self.name + ":")
 
         # Simplest case: float
@@ -487,13 +496,20 @@ class Param:
 
         # Regression case:
         # Output formula, priors, and link functions
-        if self.is_regression:
-            assert self.formula is not None
+        if self.is_regression and not (self.is_parent and self.formula is None):
+            if self.formula is None:
+                raise ValueError(
+                    "Formula must be specified for regression,"
+                    "only exception is the parent parameter for which formula"
+                    "can be left undefined."
+                )
+
             output.append(f"    Formula: {self.formula}")
             output.append("    Priors:")
 
             if self.prior is not None:
-                assert isinstance(self.prior, dict)
+                if not isinstance(self.prior, dict):
+                    raise TypeError("The prior for a regression must be a dict.")
 
                 for param, prior in self.prior.items():
                     output.append(f"        {param} ~ {prior}")
@@ -511,7 +527,8 @@ class Param:
         # None regression case:
         # Output prior and bounds
         else:
-            assert isinstance(self.prior, bmb.Prior)
+            if not isinstance(self.prior, bmb.Prior):
+                raise TypeError("The prior must be an instance of bmb.Prior.")
             output.append(f"    Prior: {self.prior}")
 
         output.append(f"    Explicit bounds: {self.bounds}")

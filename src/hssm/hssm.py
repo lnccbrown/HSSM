@@ -238,7 +238,7 @@ class HSSM:
         ) = None,
         loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
-        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
+        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
         hierarchical: bool = False,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
@@ -975,9 +975,17 @@ class HSSM:
             Whether to call plt.tight_layout() after plotting. Defaults to True.
         """
         data = data or self.traces
+        assert isinstance(
+            data, az.InferenceData
+        ), "data must be an InferenceData object."
 
         if not include_deterministic:
-            var_names = self._get_deterministic_var_names(data)
+            var_names = list(
+                set([var.name for var in self.pymc_model.free_RVs]).intersection(
+                    set(list(data["posterior"].data_vars.keys()))
+                )
+            )
+            # var_names = self._get_deterministic_var_names(data)
             if var_names:
                 if "var_names" in kwargs:
                     if isinstance(kwargs["var_names"], str):
@@ -992,11 +1000,11 @@ class HSSM:
                         kwargs["var_names"] = var_names
                     else:
                         raise ValueError(
-                            "`var_names` must be a string, a list of strings, or None."
+                            "`var_names` must be a string, a list of strings"
+                            ", or None."
                         )
                 else:
                     kwargs["var_names"] = var_names
-
         az.plot_trace(data, **kwargs)
 
         if tight_layout:
@@ -1034,12 +1042,19 @@ class HSSM:
             A pandas DataFrame or xarray Dataset containing the summary statistics.
         """
         data = data or self.traces
+        assert isinstance(
+            data, az.InferenceData
+        ), "data must be an InferenceData object."
 
         if not include_deterministic:
-            var_names = self._get_deterministic_var_names(data)
+            var_names = list(
+                set([var.name for var in self.pymc_model.free_RVs]).intersection(
+                    set(list(data["posterior"].data_vars.keys()))
+                )
+            )
+            # var_names = self._get_deterministic_var_names(data)
             if var_names:
                 kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
-
         return az.summary(data, **kwargs)
 
     def initial_point(self, transformed: bool = False) -> dict[str, np.ndarray]:
@@ -1548,11 +1563,20 @@ class HSSM:
         var_names = [
             f"~{param_name}"
             for param_name, param in self.params.items()
-            if param.is_regression
+            if (param.is_regression)
         ]
 
         if f"{self._parent}_mean" in idata["posterior"].data_vars:
             var_names.append(f"~{self._parent}_mean")
+
+        # Parent parameters (always regression implicitly)
+        # which don't have a formula attached
+        # should be dropped from var_names, since the actual
+        # parent name shows up as a regression.
+        if f"{self._parent}" in idata["posterior"].data_vars:
+            if self.params[self._parent].formula is None:
+                # Drop from var_names
+                var_names = [var for var in var_names if var != f"~{self._parent}"]
 
         return var_names
 
@@ -1716,6 +1740,7 @@ class HSSM:
 
             # If the user actively supplies a link function, the user
             # should also have supplied an initial value insofar it matters.
+
             if self.params[self._get_prefix(name_tmp)].is_regression:
                 param_link_setting = self.link_settings
             else:
@@ -1855,20 +1880,25 @@ class HSSM:
             self.__jitter_initvals_all(jitter_epsilon)
 
     def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
-        initial_point_dict = self.pymc_model.initial_point()
+        # Note: Calling our initial point function here
+        # --> operate on untransformed variables
+        initial_point_dict = self.initial_point()
+        # initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
                 starting_value_tmp = starting_value + np.random.uniform(
                     -jitter_epsilon, jitter_epsilon, starting_value.shape
                 ).astype(np.float32)
-
                 self.pymc_model.set_initval(
                     self.pymc_model.named_vars[name_tmp], starting_value_tmp
                 )
 
     def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
-        initial_point_dict = self.pymc_model.initial_point()
+        # Note: Calling our initial point function here
+        # --> operate on untransformed variables
+        initial_point_dict = self.initial_point()
+        # initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             starting_value_tmp = starting_value + np.random.uniform(

@@ -756,3 +756,23 @@ def test_hssm_override_default_prior(cavanagh_test):
     param_a = model2.params["a"]
     assert param_a.prior["Intercept"].name == a_mu["name"]
     assert "1|participant_id" in param_a.prior
+
+
+def test_param_update():
+    param = Param(name="a", prior=0.5)
+
+    assert param.name == "a"
+    assert param.prior == 0.5
+
+    param.update(name="b", prior=0.8)
+
+    assert param.name == "b"
+    assert param.prior == 0.8
+
+    with pytest.raises(ValueError, match="Invalid attributes:*"):
+        param.update(badattr=1.0)
+        param.update(badattr1=1.0, badattr2=2.0)
+
+    param.convert()
+    with pytest.raises(ValueError, match="Cannot update the object.*"):
+        param.update(name="c")

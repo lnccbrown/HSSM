@@ -342,6 +342,8 @@ INITVAL_SETTINGS = {
         "t_Intercept": 0.025,
         "a": 1.5,
         "a_Intercept": 1.5,
+        "v_Intercept": 0.0,
+        "v": 0.0,
         "p_outlier": 0.001,
     },
 }
