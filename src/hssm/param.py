@@ -379,8 +379,8 @@ class Param:
                         )
                         self._is_truncated = True
 
-            print("processing", self.name)
-            print("link", self.link)
+            # print("processing", self.name)
+            # print("link", self.link)
             if self.link is not None:
                 raise ValueError("`link` should be None if no regression is specified.")
 

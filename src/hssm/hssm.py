@@ -253,6 +253,8 @@ class HSSM:
     ):
         self.data = data.copy()
         self._inference_obj = None
+        self._inference_obj_vi = None
+        self._vi_approx = None
         self._map_dict = None
         self.hierarchical = hierarchical
 
@@ -503,9 +505,18 @@ class HSSM:
             else:
                 sampler = "mcmc"
 
-        supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
+        supported_samplers = [
+            "mcmc",
+            "nuts_numpyro",
+            "nuts_blackjax",
+            "laplace",
+        ]  # "vi"]
 
         if sampler not in supported_samplers:
+            if sampler == "vi":
+                raise ValueError(
+                    "For variational inference, please use the `vi()` method instead."
+                )
             raise ValueError(
                 f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
             )
@@ -598,7 +609,96 @@ class HSSM:
                 # if parent already in posterior
                 del self._inference_obj.posterior["rt,response_mean"]
 
+        # Subset data vars in posterior
+        if hasattr(self, "pymc_model") and self._inference_obj is not None:
+            vars_to_keep = set(
+                [var.name for var in getattr(self, "pymc_model").free_RVs]
+            ).intersection(set(list(self._inference_obj["posterior"].data_vars.keys())))
+        else:
+            raise ValueError("Model has not been initialized yet. Something is wrong!")
+
+        setattr(
+            self._inference_obj,
+            "posterior",
+            self._inference_obj["posterior"][list(vars_to_keep)],
+        )
+
         return self.traces
+
+    def vi(
+        self,
+        niter: int = 10000,
+        method: str = "advi",
+        draws=1000,
+        return_idata=True,
+        **vi_kwargs,
+    ) -> pm.Approximation | az.InferenceData:
+        """Perform Variational Inference.
+
+        Parameters
+        ----------
+        niter : int
+            The number of iterations to run the VI algorithm. Defaults to 3000.
+        method : str
+            The method to use for VI. Can be one of "advi" or "fullrank_advi", "svgd",
+            "asvgd".Defaults to "advi".
+        draws : int
+            The number of samples to draw from the posterior distribution.
+            Defaults to 1000.
+        return_idata : bool
+            If True, returns an InferenceData object. Otherwise, returns the
+            approximation object directly. Defaults to True.
+
+        Returns
+        -------
+            pm.Approximation or az.InferenceData: The mean field approximation object.
+        """
+        if self.loglik_kind == "analytical":
+            _logger.warning(
+                "VI is not recommended for the analytical likelihood,"
+                " since gradients can be brittle."
+            )
+        elif self.loglik_kind == "blackbox":
+            raise ValueError(
+                "VI is not supported for blackbox likelihoods, "
+                " since likelihood gradients are needed!"
+            )
+
+        # Run variational inference directly from pymc model
+        with self.pymc_model:
+            self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
+
+        # Get posterior samples from vi-approximation
+        if self._vi_approx is not None:
+            self._inference_obj_vi = self._vi_approx.sample(draws)
+        else:
+            raise ValueError(
+                "VI approximation object has not been initialized yet."
+                " However this check happens after VI is supposed to have run,"
+                " so something is wrong!"
+            )
+
+        # Post-processing
+        if hasattr(self, "pymc_model") and self._inference_obj is not None:
+            vars_to_keep = set(
+                [var.name for var in self.pymc_model.free_RVs]
+            ).intersection(
+                set(list(self._inference_obj_vi["posterior"].data_vars.keys()))
+            )
+        else:
+            raise ValueError("Model has not been initialized yet. Something is wrong!")
+
+        setattr(
+            self._inference_obj_vi,
+            "posterior",
+            self._inference_obj_vi["posterior"][list(vars_to_keep)],
+        )
+
+        # Return the InferenceData object if return_idata is True
+        if return_idata:
+            return self._inference_obj_vi
+        # Otherwise return the appromation object directly
+        return self.vi_approx
 
     def sample_posterior_predictive(
         self,
@@ -1164,6 +1264,50 @@ class HSSM:
             raise ValueError("Please sample the model first.")
 
         return self._inference_obj
+
+    @property
+    def vi_idata(self) -> az.InferenceData:
+        """Return the variational inference approximation object.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+        az.InferenceData
+            The variational inference approximation object.
+        """
+        if not self._inference_obj_vi:
+            raise ValueError(
+                "Please run variational inference first, "
+                "no variational posterior attached."
+            )
+
+        return self._inference_obj_vi
+
+    @property
+    def vi_approx(self) -> pm.Approximation:
+        """Return the variational inference approximation object.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+        pm.Approximation
+            The variational inference approximation object.
+        """
+        if not self._vi_approx:
+            raise ValueError(
+                "Please run variational inference first, "
+                "no variational approximation attached."
+            )
+
+        return self._vi_approx
 
     @property
     def map(self) -> dict:
