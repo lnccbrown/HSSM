@@ -107,7 +107,7 @@ def test_simple_models(data_ddm, loglik_kind, backend, method, expected):
 
 
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-def test_reg_models(data_ddm_reg, loglik_kind, method, expected):
+def test_reg_models(data_ddm_reg, loglik_kind, backend, method, expected):
     print("PYMC VERSION: ")
     print(pm.__version__)
     print("TEST INPUTS WERE: ")
@@ -132,7 +132,7 @@ def test_reg_models(data_ddm_reg, loglik_kind, method, expected):
 
 
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, method, expected):
+def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, method, expected):
     print("PYMC VERSION: ")
     print(pm.__version__)
     print("TEST INPUTS WERE: ")

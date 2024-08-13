@@ -627,8 +627,8 @@ class HSSM:
 
     def vi(
         self,
-        niter: int = 10000,
         method: str = "advi",
+        niter: int = 10000,
         draws=1000,
         return_idata=True,
         **vi_kwargs,
@@ -679,7 +679,7 @@ class HSSM:
             )
 
         # Post-processing
-        if hasattr(self, "pymc_model") and self._inference_obj is not None:
+        if hasattr(self, "pymc_model") and self._inference_obj_vi is not None:
             vars_to_keep = set(
                 [var.name for var in self.pymc_model.free_RVs]
             ).intersection(
