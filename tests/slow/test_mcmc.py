@@ -149,211 +149,211 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
         assert len(fig.axes) // 2 == 4
 
 
-# @pytest.mark.parametrize(parameter_names, parameter_grid)
-# def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected):
-#     print("PYMC VERSION: ")
-#     print(pm.__version__)
-#     print("TEST INPUTS WERE: ")
-#     print("REPORTING FROM REG MODELS TEST")
-#     print(loglik_kind, backend, sampler, step, expected)
+@pytest.mark.parametrize(parameter_names, parameter_grid)
+def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM REG MODELS TEST")
+    print(loglik_kind, backend, sampler, step, expected)
 
-#     param_reg = dict(
-#         formula="v ~ 1 + x + y",
-#         prior={
-#             "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-#             "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-#             "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-#         },
-#     )
-#     model = hssm.HSSM(
-#         data_ddm_reg,
-#         loglik_kind=loglik_kind,
-#         model_config={"backend": backend},
-#         v=param_reg,
-#     )
-#     run_sample(model, sampler, step, expected)
+    param_reg = dict(
+        formula="v ~ 1 + x + y",
+        prior={
+            "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
+            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+        },
+    )
+    model = hssm.HSSM(
+        data_ddm_reg,
+        loglik_kind=loglik_kind,
+        model_config={"backend": backend},
+        v=param_reg,
+    )
+    run_sample(model, sampler, step, expected)
 
-#     # Only runs once
-#     if loglik_kind == "analytical" and sampler is None:
-#         assert model._get_deterministic_var_names(model.traces) == ["~v"]
-#         # test summary:
-#         summary = model.summary()
-#         assert summary.shape[0] == 6
+    # Only runs once
+    if loglik_kind == "analytical" and sampler is None:
+        assert model._get_deterministic_var_names(model.traces) == ["~v"]
+        # test summary:
+        summary = model.summary()
+        assert summary.shape[0] == 6
 
-#         model.plot_trace(show=False)
-#         fig = plt.gcf()
-#         assert len(fig.axes) // 2 == 6
-
-
-# @pytest.mark.parametrize(parameter_names, parameter_grid)
-# def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, expected):
-#     print("PYMC VERSION: ")
-#     print(pm.__version__)
-#     print("TEST INPUTS WERE: ")
-#     print("REPORTING FROM REG MODELS V_A TEST")
-#     print(loglik_kind, backend, sampler, step, expected)
-#     param_reg_v = dict(
-#         formula="v ~ 1 + x + y",
-#         prior={
-#             "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-#             "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-#             "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-#         },
-#     )
-#     param_reg_a = dict(
-#         formula="a ~ 1 + m + n",
-#         prior={
-#             "Intercept": {
-#                 "name": "Normal",
-#                 "mu": 1.0,
-#                 "sigma": 0.5,
-#             },
-#             "m": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
-#             "n": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
-#         },
-#         link="identity",
-#     )
-
-#     model = hssm.HSSM(
-#         data_ddm_reg_va,
-#         loglik_kind=loglik_kind,
-#         model_config={"backend": backend},
-#         v=param_reg_v,
-#         a=param_reg_a,
-#     )
-#     print(model.params["a"])
-#     run_sample(model, sampler, step, expected)
-
-#     # Only runs once
-#     if loglik_kind == "analytical" and sampler is None:
-#         assert len(model._get_deterministic_var_names(model.traces)) == len(
-#             ["~a", "~v"]
-#         )
-#         assert set(model._get_deterministic_var_names(model.traces)) == set(
-#             ["~a", "~v"]
-#         )
-#         # test summary:
-#         summary = model.summary()
-#         assert summary.shape[0] == 8
-
-#         summary = model.summary(var_names=["~a"])
-#         assert summary.shape[0] == 8
-
-#         summary = model.summary(var_names=["~t"])
-#         assert summary.shape[0] == 7
-
-#         summary = model.summary(var_names=["~a", "~t"])
-#         assert summary.shape[0] == 7
-
-#         model.plot_trace(show=False)
-#         fig = plt.gcf()
-#         assert len(fig.axes) // 2 == 8
-
-#         model.plot_trace(show=False, var_names=["~a"])
-#         fig = plt.gcf()
-#         assert len(fig.axes) // 2 == 8
-
-#         model.plot_trace(show=False, var_names=["~t"])
-#         fig = plt.gcf()
-#         assert len(fig.axes) // 2 == 7
-
-#         model.plot_trace(show=False, var_names=["~a", "~t"])
-#         fig = plt.gcf()
-#         assert len(fig.axes) // 2 == 7
+        model.plot_trace(show=False)
+        fig = plt.gcf()
+        assert len(fig.axes) // 2 == 6
 
 
-# @pytest.mark.parametrize(parameter_names, parameter_grid)
-# def test_simple_models_missing_data(
-#     data_ddm_missing, loglik_kind, backend, sampler, step, expected, cpn
-# ):
-#     print("PYMC VERSION: ")
-#     print(pm.__version__)
-#     print("TEST INPUTS WERE: ")
-#     print("REPORTING FROM SIMPLE MODELS MISSING DATA TEST")
-#     print(loglik_kind, backend, sampler, step, expected)
+@pytest.mark.parametrize(parameter_names, parameter_grid)
+def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, expected):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM REG MODELS V_A TEST")
+    print(loglik_kind, backend, sampler, step, expected)
+    param_reg_v = dict(
+        formula="v ~ 1 + x + y",
+        prior={
+            "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
+            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+        },
+    )
+    param_reg_a = dict(
+        formula="a ~ 1 + m + n",
+        prior={
+            "Intercept": {
+                "name": "Normal",
+                "mu": 1.0,
+                "sigma": 0.5,
+            },
+            "m": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
+            "n": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
+        },
+        link="identity",
+    )
 
-#     model = hssm.HSSM(
-#         data_ddm_missing,
-#         loglik_kind=loglik_kind,
-#         model_config={"backend": backend},
-#         missing_data=True,
-#         loglik_missing_data=cpn,
-#     )
-#     run_sample(model, sampler, step, expected)
+    model = hssm.HSSM(
+        data_ddm_reg_va,
+        loglik_kind=loglik_kind,
+        model_config={"backend": backend},
+        v=param_reg_v,
+        a=param_reg_a,
+    )
+    print(model.params["a"])
+    run_sample(model, sampler, step, expected)
+
+    # Only runs once
+    if loglik_kind == "analytical" and sampler is None:
+        assert len(model._get_deterministic_var_names(model.traces)) == len(
+            ["~a", "~v"]
+        )
+        assert set(model._get_deterministic_var_names(model.traces)) == set(
+            ["~a", "~v"]
+        )
+        # test summary:
+        summary = model.summary()
+        assert summary.shape[0] == 8
+
+        summary = model.summary(var_names=["~a"])
+        assert summary.shape[0] == 8
+
+        summary = model.summary(var_names=["~t"])
+        assert summary.shape[0] == 7
+
+        summary = model.summary(var_names=["~a", "~t"])
+        assert summary.shape[0] == 7
+
+        model.plot_trace(show=False)
+        fig = plt.gcf()
+        assert len(fig.axes) // 2 == 8
+
+        model.plot_trace(show=False, var_names=["~a"])
+        fig = plt.gcf()
+        assert len(fig.axes) // 2 == 8
+
+        model.plot_trace(show=False, var_names=["~t"])
+        fig = plt.gcf()
+        assert len(fig.axes) // 2 == 7
+
+        model.plot_trace(show=False, var_names=["~a", "~t"])
+        fig = plt.gcf()
+        assert len(fig.axes) // 2 == 7
 
 
-# @pytest.mark.parametrize(parameter_names, parameter_grid)
-# def test_reg_models_missing_data(
-#     data_ddm_reg_missing, loglik_kind, backend, sampler, step, expected, cpn
-# ):
-#     print("PYMC VERSION: ")
-#     print(pm.__version__)
-#     print("TEST INPUTS WERE: ")
-#     print("REPORTING FROM REG MODELS MISSING DATA TEST")
-#     print(loglik_kind, backend, sampler, step, expected)
+@pytest.mark.parametrize(parameter_names, parameter_grid)
+def test_simple_models_missing_data(
+    data_ddm_missing, loglik_kind, backend, sampler, step, expected, cpn
+):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM SIMPLE MODELS MISSING DATA TEST")
+    print(loglik_kind, backend, sampler, step, expected)
 
-#     param_reg = dict(
-#         formula="v ~ 1 + x + y",
-#         prior={
-#             "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-#             "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-#             "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-#         },
-#     )
-#     model = hssm.HSSM(
-#         data_ddm_reg_missing,
-#         loglik_kind=loglik_kind,
-#         model_config={"backend": backend},
-#         v=param_reg,
-#         missing_data=True,
-#         loglik_missing_data=cpn,
-#     )
-#     run_sample(model, sampler, step, expected)
+    model = hssm.HSSM(
+        data_ddm_missing,
+        loglik_kind=loglik_kind,
+        model_config={"backend": backend},
+        missing_data=True,
+        loglik_missing_data=cpn,
+    )
+    run_sample(model, sampler, step, expected)
 
 
-# @pytest.mark.parametrize(parameter_names, parameter_grid)
-# def test_simple_models_deadline(
-#     data_ddm_deadline, loglik_kind, backend, sampler, step, expected, opn
-# ):
-#     print("PYMC VERSION: ")
-#     print(pm.__version__)
-#     print("TEST INPUTS WERE: ")
-#     print("REPORTING FROM SIMPLE MODELS DEADLINE TEST")
-#     print(loglik_kind, backend, sampler, step, expected)
-#     model = hssm.HSSM(
-#         data_ddm_deadline,
-#         loglik_kind=loglik_kind,
-#         model_config={"backend": backend},
-#         deadline=True,
-#         loglik_missing_data=opn,
-#     )
-#     run_sample(model, sampler, step, expected)
+@pytest.mark.parametrize(parameter_names, parameter_grid)
+def test_reg_models_missing_data(
+    data_ddm_reg_missing, loglik_kind, backend, sampler, step, expected, cpn
+):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM REG MODELS MISSING DATA TEST")
+    print(loglik_kind, backend, sampler, step, expected)
+
+    param_reg = dict(
+        formula="v ~ 1 + x + y",
+        prior={
+            "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
+            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+        },
+    )
+    model = hssm.HSSM(
+        data_ddm_reg_missing,
+        loglik_kind=loglik_kind,
+        model_config={"backend": backend},
+        v=param_reg,
+        missing_data=True,
+        loglik_missing_data=cpn,
+    )
+    run_sample(model, sampler, step, expected)
 
 
-# @pytest.mark.parametrize(parameter_names, parameter_grid)
-# def test_reg_models_deadline(
-#     data_ddm_reg_deadline, loglik_kind, backend, sampler, step, expected, opn
-# ):
-#     print("PYMC VERSION: ")
-#     print(pm.__version__)
-#     print("TEST INPUTS WERE: ")
-#     print("REPORTING FROM REG MODELS DEADLINE TEST")
-#     print(loglik_kind, backend, sampler, step, expected)
+@pytest.mark.parametrize(parameter_names, parameter_grid)
+def test_simple_models_deadline(
+    data_ddm_deadline, loglik_kind, backend, sampler, step, expected, opn
+):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM SIMPLE MODELS DEADLINE TEST")
+    print(loglik_kind, backend, sampler, step, expected)
+    model = hssm.HSSM(
+        data_ddm_deadline,
+        loglik_kind=loglik_kind,
+        model_config={"backend": backend},
+        deadline=True,
+        loglik_missing_data=opn,
+    )
+    run_sample(model, sampler, step, expected)
 
-#     param_reg = dict(
-#         formula="v ~ 1 + x + y",
-#         prior={
-#             "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-#             "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-#             "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-#         },
-#     )
-#     model = hssm.HSSM(
-#         data_ddm_reg_deadline,
-#         loglik_kind=loglik_kind,
-#         model_config={"backend": backend},
-#         v=param_reg,
-#         deadline=True,
-#         loglik_missing_data=opn,
-#     )
-#     run_sample(model, sampler, step, expected)
+
+@pytest.mark.parametrize(parameter_names, parameter_grid)
+def test_reg_models_deadline(
+    data_ddm_reg_deadline, loglik_kind, backend, sampler, step, expected, opn
+):
+    print("PYMC VERSION: ")
+    print(pm.__version__)
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM REG MODELS DEADLINE TEST")
+    print(loglik_kind, backend, sampler, step, expected)
+
+    param_reg = dict(
+        formula="v ~ 1 + x + y",
+        prior={
+            "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
+            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+        },
+    )
+    model = hssm.HSSM(
+        data_ddm_reg_deadline,
+        loglik_kind=loglik_kind,
+        model_config={"backend": backend},
+        v=param_reg,
+        deadline=True,
+        loglik_missing_data=opn,
+    )
+    run_sample(model, sampler, step, expected)

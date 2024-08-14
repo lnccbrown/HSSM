@@ -253,6 +253,7 @@ class HSSM:
     ):
         self.data = data.copy()
         self._inference_obj = None
+        self._initvals: dict[str, Any] = {}
         self._map_dict = None
         self.hierarchical = hierarchical
 
@@ -493,6 +494,9 @@ class HSSM:
                         "initvals argument must be a dictionary or 'map'"
                         " to use the MAP estimate."
                     )
+        else:
+            kwargs["initvals"] = self._initvals
+            _logger.info("Using default initvals. \n")
 
         if sampler is None:
             if (
@@ -1184,6 +1188,21 @@ class HSSM:
 
         return self._map_dict
 
+    @property
+    def initvals(self) -> dict:
+        """Return the initial values of the model parameters for sampling.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the initial values of the model parameters.
+            This dict serves as the default for initial values, and can be passed
+            directly to the `.sample()` function.
+        """
+        if self._initvals == {}:
+            self._initvals = self.initial_point()
+        return self._initvals
+
     def _check_lapse(self, lapse):
         """Determine if p_outlier and lapse is specified correctly."""
         # Basically, avoid situations where only one of them is specified.
@@ -1717,6 +1736,7 @@ class HSSM:
         self, initval_settings: dict = INITVAL_SETTINGS
     ) -> None:
         """Set initial values for subset of parameters."""
+        self._initvals = self.initial_point()
         # Consider case where link functions are set to 'log_logit'
         # or 'None'
         if self.link_settings not in ["log_logit", None]:
@@ -1755,10 +1775,13 @@ class HSSM:
                     continue
 
                 # Apply specific settings from initval_settings dictionary
-                self.pymc_model.set_initval(
-                    self.pymc_model.named_vars[name_tmp],
-                    initval_settings[param_link_setting][name_tmp],
-                )
+                if not isinstance(self._initvals, dict):
+                    raise ValueError("self._initvals should be a dictionary.")
+                else:
+                    dtype = self._initvals[name_tmp].dtype
+                    self._initvals[name_tmp] = np.array(
+                        initval_settings[param_link_setting][name_tmp]
+                    ).astype(dtype)
 
     def _get_prefix(self, name_str: str) -> str:
         """Get parameters wise link setting function from parameter prefix."""
@@ -1889,9 +1912,15 @@ class HSSM:
                 starting_value_tmp = starting_value + np.random.uniform(
                     -jitter_epsilon, jitter_epsilon, starting_value.shape
                 ).astype(np.float32)
-                self.pymc_model.set_initval(
-                    self.pymc_model.named_vars[name_tmp], starting_value_tmp
-                )
+
+                # Note: self._initvals shouldn't be None when this is called
+                if not isinstance(self._initvals, dict):
+                    raise ValueError("self._initvals should not be a dictionary.")
+                else:
+                    dtype = self._initvals[name_tmp].dtype
+                    self._initvals[name_tmp] = np.array(starting_value_tmp).astype(
+                        dtype
+                    )
 
     def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
         # Note: Calling our initial point function here
@@ -1903,9 +1932,12 @@ class HSSM:
             starting_value_tmp = starting_value + np.random.uniform(
                 -jitter_epsilon, jitter_epsilon, starting_value.shape
             ).astype(np.float32)
-            self.pymc_model.set_initval(
-                self.pymc_model.named_vars[name_tmp], starting_value_tmp
-            )
+
+            if not isinstance(self._initvals, dict):
+                raise ValueError("self._initvals should not be a dictionary.")
+            else:
+                dtype = self.initvals[name_tmp].dtype
+                self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
 
 
 def _set_missing_data_and_deadline(
