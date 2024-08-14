@@ -137,8 +137,11 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
 
     # Only runs once
     if loglik_kind == "analytical" and sampler is None:
-        assert f"~{model._parent}_mean" in model._get_deterministic_var_names(
-            model.traces
+        # Traces should be post-processed to NOT include
+        # the trial wise parameters if they are not
+        # associated with an actual regression
+        assert not (
+            f"~{model._parent}_mean" in model._get_deterministic_var_names(model.traces)
         )
         # test summary:
         summary = model.summary()
