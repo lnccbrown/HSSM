@@ -1883,7 +1883,6 @@ class HSSM:
         # Note: Calling our initial point function here
         # --> operate on untransformed variables
         initial_point_dict = self.initial_point()
-        # initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
