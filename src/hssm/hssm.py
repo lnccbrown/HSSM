@@ -633,8 +633,8 @@ class HSSM:
         self,
         method: str = "advi",
         niter: int = 10000,
-        draws=1000,
-        return_idata=True,
+        draws: int = 1000,
+        return_idata: bool = True,
         ignore_mcmc_start_point_defaults=False,
         **vi_kwargs,
     ) -> pm.Approximation | az.InferenceData:
@@ -680,12 +680,6 @@ class HSSM:
         # Get posterior samples from vi-approximation
         if self._vi_approx is not None:
             self._inference_obj_vi = self._vi_approx.sample(draws)
-        else:
-            raise ValueError(
-                "VI approximation object has not been initialized yet."
-                " However this check happens after VI is supposed to have run,"
-                " so something is wrong!"
-            )
 
         # Post-processing
         if hasattr(self, "pymc_model") and self._inference_obj_vi is not None:
@@ -695,7 +689,7 @@ class HSSM:
                 set(list(self._inference_obj_vi["posterior"].data_vars.keys()))
             )
         else:
-            raise ValueError("Model has not been initialized yet. Something is wrong!")
+            raise ValueError("Model has not been initialized yet.")
 
         setattr(
             self._inference_obj_vi,
