@@ -635,6 +635,7 @@ class HSSM:
         niter: int = 10000,
         draws=1000,
         return_idata=True,
+        ignore_mcmc_start_point_defaults=False,
         **vi_kwargs,
     ) -> pm.Approximation | az.InferenceData:
         """Perform Variational Inference.
@@ -667,6 +668,10 @@ class HSSM:
                 "VI is not supported for blackbox likelihoods, "
                 " since likelihood gradients are needed!"
             )
+
+        if ("start" not in vi_kwargs) and not ignore_mcmc_start_point_defaults:
+            _logger.info("Using MCMC starting point defaults.")
+            vi_kwargs["start"] = self._initvals
 
         # Run variational inference directly from pymc model
         with self.pymc_model:
