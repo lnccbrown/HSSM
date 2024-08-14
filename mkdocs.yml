@@ -24,6 +24,7 @@ nav:
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
       - Plotting in HSSM: tutorials/plotting.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
+      - Variational Inference: tutorials/variational_inference.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
   - Contributing: CONTRIBUTING.md
 
@@ -37,6 +38,7 @@ plugins:
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
         - tutorials/likelihoods.ipynb
+        - tutorials/variational_inference.ipynb
         - tutorials/pymc.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
