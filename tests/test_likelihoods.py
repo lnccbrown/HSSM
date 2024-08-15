@@ -107,11 +107,7 @@ param_matrix = product(
 
 
 def test_analytical_gradient():
-    v = pt.dvector()
-    a = pt.dvector()
-    z = pt.dvector()
-    t = pt.dvector()
-    sv = pt.dvector()
+    v, a, z, t, sv = [pt.dvector() for _ in range(5)]
     size = cav_data_numpy.shape[0]
     logp = logp_ddm(cav_data_numpy, v, a, z, t).sum()
     grad = pt.grad(logp, wrt=[v, a, z, t])
