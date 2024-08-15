@@ -78,7 +78,7 @@ def test_no_inf_values(data_ddm, shared_params, param_name, param_values):
 
 def test_bbox(data_ddm):
     true_values = (0.5, 1.5, 0.5, 0.5)
-    true_values_sdv = (0.5, 1.5, 0.5, 0.5, 0)
+    true_values_sdv = true_values + (0,)
     data = data_ddm.values
 
     np.testing.assert_almost_equal(
