@@ -97,20 +97,21 @@ def test_no_inf_values(data_ddm, shared_params, param_name, param_values):
             np.isfinite(logp.eval())
         ), f"log_pdf_sv() returned non-finite values for {param_name} = {value}."
 
-def test_bbox(data_ddm):
-    true_values = (0.5, 1.5, 0.5, 0.5)
-    true_values_sdv = (0.5, 1.5, 0.5, 0.5, 0)
+
+true_values = (0.5, 1.5, 0.5, 0.5)
+true_values_sdv = true_values + (0,)
+standard = (logp_ddm, logp_ddm_bbox, true_values)
+svd = (logp_ddm_sdv, logp_ddm_sdv_bbox, true_values_sdv)
+parameters = [standard, svd]
+
+
+@pytest.mark.parametrize("logp_func, logp_bbox_func, true_values", parameters)
+def test_bbox(data_ddm, logp_func, logp_bbox_func, true_values):
     data = data_ddm.values
 
     np.testing.assert_almost_equal(
-        logp_ddm(data, *true_values).eval(),
-        logp_ddm_bbox(data, *true_values),
-        decimal=4,
-    )
-
-    np.testing.assert_almost_equal(
-        logp_ddm_sdv(data, *true_values_sdv).eval(),
-        logp_ddm_sdv_bbox(data, *true_values_sdv),
+        logp_func(data, *true_values).eval(),
+        logp_bbox_func(data, *true_values),
         decimal=4,
     )
 
