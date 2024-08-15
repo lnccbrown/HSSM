@@ -111,40 +111,43 @@ param_matrix = product(
 )
 
 
-def test_analytical_gradient():
-    v = pt.dvector()
-    a = pt.dvector()
-    z = pt.dvector()
-    t = pt.dvector()
-    sv = pt.dvector()
-    size = cav_data_numpy.shape[0]
-    logp = logp_ddm(cav_data_numpy, v, a, z, t).sum()
-    grad = pt.grad(logp, wrt=[v, a, z, t])
-    grad_func = pytensor.function(
-        [v, a, z, t],
-        grad,
-        mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False),
-    )
+def generate_test_data(size):
     v_test = np.random.normal(size=size)
     a_test = np.random.uniform(0.0001, 2, size=size)
     z_test = np.random.uniform(0.1, 1.0, size=size)
     t_test = np.random.uniform(0, 2, size=size)
     sv_test = np.random.uniform(0.001, 1.0, size=size)
-    grad = np.array(grad_func(v_test, a_test, z_test, t_test))
+    return v_test, a_test, z_test, t_test, sv_test
 
-    assert np.all(np.isfinite(grad), axis=None), "Gradient contains non-finite values."
 
-    grad_func_sdv = pytensor.function(
-        [v, a, z, t, sv],
-        pt.grad(logp_ddm_sdv(cav_data_numpy, v, a, z, t, sv).sum(), wrt=[v, a, z, t]),
-        mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False),
-    )
+def compute_gradient(logp_func, inputs, test_data, mode):
+    grad = pt.grad(logp_func.sum(), wrt=inputs)
+    grad_func = pytensor.function(inputs, grad, mode=mode)
+    return np.array(grad_func(*test_data))
 
-    grad_sdv = np.array(grad_func_sdv(v_test, a_test, z_test, t_test, sv_test))
 
-    assert np.all(
-        np.isfinite(grad_sdv), axis=None
-    ), "Gradient contains non-finite values."
+def generate_dvectors(k):
+    return [pt.dvector() for _ in range(k)]
+
+
+@pytest.mark.parametrize(
+    "logp_func, num_inputs, test_data_func",
+    [
+        (logp_ddm, 4, lambda size: generate_test_data(size)[:4]),
+        (logp_ddm_sdv, 5, generate_test_data),
+    ],
+)
+def test_analytical_gradient(logp_func, num_inputs, test_data_func):
+    size = cav_data_numpy.shape[0]
+    test_data = test_data_func(size)
+
+    mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False)
+
+    inputs = generate_dvectors(num_inputs)
+    logp = logp_func(cav_data_numpy, *inputs)
+    grad = compute_gradient(logp, inputs, test_data, mode)
+
+    assert np.all(np.isfinite(grad)), "Gradient contains non-finite values."
 
 
 @pytest.mark.parametrize("p_outlier, loglik_kind", param_matrix)
