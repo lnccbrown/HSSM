@@ -352,7 +352,7 @@ ddm_sdv_params = ddm_params + ["sv"]
 DDM: Type[pm.Distribution] = make_distribution(
     "ddm",
     logp_ddm,
-    list_params=["v", "a", "z", "t"],
+    list_params=ddm_params,
     bounds=ddm_bounds,
 )
 
