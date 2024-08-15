@@ -83,32 +83,19 @@ def shared_params():
     }
 
 
-def test_no_inf_values_a(data_ddm, shared_params):
-    for a in np.arange(2.5, 5.1, 0.5):
-        params = {**shared_params, "a": a}
+names = ["a", "t", "v"]
+values = [2.5, 3.0, 3.0]
+parameters = [(name, np.arange(value, 5.1, 0.5)) for name, value in zip(names, values)]
+
+
+@pytest.mark.parametrize("param_name, param_values", parameters)
+def test_no_inf_values(data_ddm, shared_params, param_name, param_values):
+    for value in param_values:
+        params = shared_params | {param_name: value}
         logp = logp_ddm_sdv(data_ddm, **params)
         assert np.all(
             np.isfinite(logp.eval())
-        ), f"log_pdf_sv() returned non-finite values for a = {a}."
-
-
-def test_no_inf_values_t(data_ddm, shared_params):
-    for t in np.arange(3.0, 5.1, 0.5):
-        params = {**shared_params, "t": t}
-        logp = logp_ddm_sdv(data_ddm, **params)
-        assert np.all(
-            np.isfinite(logp.eval())
-        ), f"log_pdf_sv() returned non-finite values for t = {t}."
-
-
-def test_no_inf_values_v(data_ddm, shared_params):
-    for v in np.arange(3.0, 5.1, 0.5):
-        params = {**shared_params, "v": v}
-        logp = logp_ddm_sdv(data_ddm, **params)
-        assert np.all(
-            np.isfinite(logp.eval())
-        ), f"log_pdf_sv() returned non-finite values for v = {v}."
-
+        ), f"log_pdf_sv() returned non-finite values for {param_name} = {value}."
 
 def test_bbox(data_ddm):
     true_values = (0.5, 1.5, 0.5, 0.5)
