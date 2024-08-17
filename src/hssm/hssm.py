@@ -194,6 +194,10 @@ class HSSM:
         how to specify the likelihood function this parameter. If nothing is provided,
         a default likelihood function will be used. This parameter is required only if
         either `missing_data` or `deadline` is not `False`. Defaults to `None`.
+    process_initvals : optional
+        If `True`, the model will process the initial values. Defaults to `True`.
+    initval_jitter : optional
+        The jitter value for the initial values. Defaults to `0.01`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -224,6 +228,8 @@ class HSSM:
         A string or a dictionary representing the link functions for all parameters.
     params
         A list of Param objects representing model parameters.
+    initval_jitter
+        The jitter value for the initial values.
     """
 
     def __init__(
@@ -249,11 +255,13 @@ class HSSM:
             str | PathLike | Callable | pytensor.graph.Op | None
         ) = None,
         process_initvals: bool = True,
+        initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
         self.data = data.copy()
         self._inference_obj = None
         self._initvals: dict[str, Any] = {}
+        self.initval_jitter = initval_jitter
         self._inference_obj_vi = None
         self._vi_approx = None
         self._map_dict = None
@@ -411,8 +419,9 @@ class HSSM:
 
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
+        if self.initval_jitter > 0:
             self._jitter_initvals(
-                jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+                jitter_epsilon=self.initval_jitter,
                 vector_only=True,
             )
 
@@ -2048,7 +2057,7 @@ class HSSM:
     def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
         # Note: Calling our initial point function here
         # --> operate on untransformed variables
-        initial_point_dict = self.initial_point()
+        initial_point_dict = self.initvals
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
@@ -2068,7 +2077,7 @@ class HSSM:
     def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
         # Note: Calling our initial point function here
         # --> operate on untransformed variables
-        initial_point_dict = self.initial_point()
+        initial_point_dict = self.initvals
         # initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")

@@ -39,6 +39,7 @@ plugins:
         - tutorials/main_tutorial.ipynb
         - tutorials/likelihoods.ipynb
         - tutorials/variational_inference.ipynb
+        - tutorials/initial_values.ipynb
         - tutorials/pymc.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
