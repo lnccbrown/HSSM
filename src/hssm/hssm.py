@@ -1927,13 +1927,10 @@ class HSSM:
                     continue
 
                 # Apply specific settings from initval_settings dictionary
-                if not isinstance(self._initvals, dict):
-                    raise ValueError("self._initvals should be a dictionary.")
-                else:
-                    dtype = self._initvals[name_tmp].dtype
-                    self._initvals[name_tmp] = np.array(
-                        initval_settings[param_link_setting][name_tmp]
-                    ).astype(dtype)
+                dtype = self._initvals[name_tmp].dtype
+                self._initvals[name_tmp] = np.array(
+                    initval_settings[param_link_setting][name_tmp]
+                ).astype(dtype)
 
     def _get_prefix(self, name_str: str) -> str:
         """Get parameters wise link setting function from parameter prefix."""
@@ -2066,13 +2063,8 @@ class HSSM:
                 ).astype(np.float32)
 
                 # Note: self._initvals shouldn't be None when this is called
-                if not isinstance(self._initvals, dict):
-                    raise ValueError("self._initvals should not be a dictionary.")
-                else:
-                    dtype = self._initvals[name_tmp].dtype
-                    self._initvals[name_tmp] = np.array(starting_value_tmp).astype(
-                        dtype
-                    )
+                dtype = self._initvals[name_tmp].dtype
+                self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
 
     def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
         # Note: Calling our initial point function here
@@ -2085,11 +2077,8 @@ class HSSM:
                 -jitter_epsilon, jitter_epsilon, starting_value.shape
             ).astype(np.float32)
 
-            if not isinstance(self._initvals, dict):
-                raise ValueError("self._initvals should not be a dictionary.")
-            else:
-                dtype = self.initvals[name_tmp].dtype
-                self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
+            dtype = self.initvals[name_tmp].dtype
+            self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
 
 
 def _set_missing_data_and_deadline(
