@@ -59,7 +59,8 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     """
     _a = np.pi * rt * err < 1
     _b = 1.0 / (np.pi * pt.sqrt(rt))
-    _c = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
+    _log = pt.log(np.pi * err) + pt.log(rt) # will require all members to be negative for the below operation to work
+    _c = pt.sqrt(-2 * _log) / (np.pi * sqrt_rt) # reusing sqrt_rt
     _d = pt.maximum(_b, _c)
     kl = _a * _b + (1 - _a) * _b
 
