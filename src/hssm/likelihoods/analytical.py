@@ -36,7 +36,7 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     _a = 2 * pt.sqrt(2 * np.pi * rt) * err < 1
     _b = 2 + pt.sqrt(-2 * rt * pt.log(2 * pt.sqrt(2 * np.pi * rt) * err))
     _c = pt.sqrt(rt) + 1
-    _d = pt.max(pt.stack([_b, _c]), axis=0)
+    _d = pt.maximum(_b, _c)
     ks = _a * _d + (1 - _a) * 2
 
     return ks
