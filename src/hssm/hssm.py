@@ -194,6 +194,10 @@ class HSSM:
         how to specify the likelihood function this parameter. If nothing is provided,
         a default likelihood function will be used. This parameter is required only if
         either `missing_data` or `deadline` is not `False`. Defaults to `None`.
+    process_initvals : optional
+        If `True`, the model will process the initial values. Defaults to `True`.
+    initval_jitter : optional
+        The jitter value for the initial values. Defaults to `0.01`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -224,6 +228,8 @@ class HSSM:
         A string or a dictionary representing the link functions for all parameters.
     params
         A list of Param objects representing model parameters.
+    initval_jitter
+        The jitter value for the initial values.
     """
 
     def __init__(
@@ -249,10 +255,13 @@ class HSSM:
             str | PathLike | Callable | pytensor.graph.Op | None
         ) = None,
         process_initvals: bool = True,
+        initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
         self.data = data.copy()
         self._inference_obj = None
+        self._initvals: dict[str, Any] = {}
+        self.initval_jitter = initval_jitter
         self._inference_obj_vi = None
         self._vi_approx = None
         self._map_dict = None
@@ -410,8 +419,9 @@ class HSSM:
 
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
+        if self.initval_jitter > 0:
             self._jitter_initvals(
-                jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+                jitter_epsilon=self.initval_jitter,
                 vector_only=True,
             )
 
@@ -495,6 +505,9 @@ class HSSM:
                         "initvals argument must be a dictionary or 'map'"
                         " to use the MAP estimate."
                     )
+        else:
+            kwargs["initvals"] = self._initvals
+            _logger.info("Using default initvals. \n")
 
         if sampler is None:
             if (
@@ -579,6 +592,12 @@ class HSSM:
                     "pymc" if sampler == "mcmc" else sampler.split("_")[1]
                 )
 
+        # Don't compute likelihood directly through pymc sampler
+        compute_likelihood = True
+        if "idata_kwargs" in kwargs:
+            if "log_likelihood" in kwargs["idata_kwargs"]:
+                compute_likelihood = kwargs["idata_kwargs"].pop("log_likelihood", True)
+
         self._inference_obj = self.model.fit(
             inference_method=(
                 "mcmc"
@@ -590,38 +609,21 @@ class HSSM:
             **kwargs,
         )
 
-        # The parent was previously not part of deterministics --> compute it via
-        # posterior_predictive (works because it acts as the 'mu' parameter
-        # in the GLM as far as bambi is concerned)
-        if self._inference_obj is not None:
-            if self._parent not in self._inference_obj.posterior.data_vars:
-                # self.model.predict(self._inference_obj, kind="mean", inplace=True)
-                # rename 'rt,response_mean' to 'v' so in the traces everything
-                # looks the way it should
-                self._inference_obj.rename_vars(
-                    {"rt,response_mean": self._parent}, inplace=True
-                )
-            elif (
-                self._parent in self._inference_obj.posterior.data_vars
-                and "rt,response_mean" in self._inference_obj.posterior.data_vars
-            ):
-                # drop redundant 'rt,response_mean' variable,
-                # if parent already in posterior
-                del self._inference_obj.posterior["rt,response_mean"]
+        if compute_likelihood:
+            with self.pymc_model:
+                pm.compute_log_likelihood(self._inference_obj)
 
         # Subset data vars in posterior
-        if hasattr(self, "pymc_model") and self._inference_obj is not None:
+        if self._inference_obj is not None:
             vars_to_keep = set(
                 [var.name for var in getattr(self, "pymc_model").free_RVs]
             ).intersection(set(list(self._inference_obj["posterior"].data_vars.keys())))
-        else:
-            raise ValueError("Model has not been initialized yet. Something is wrong!")
 
-        setattr(
-            self._inference_obj,
-            "posterior",
-            self._inference_obj["posterior"][list(vars_to_keep)],
-        )
+            setattr(
+                self._inference_obj,
+                "posterior",
+                self._inference_obj["posterior"][list(vars_to_keep)],
+            )
 
         return self.traces
 
@@ -629,8 +631,9 @@ class HSSM:
         self,
         method: str = "advi",
         niter: int = 10000,
-        draws=1000,
-        return_idata=True,
+        draws: int = 1000,
+        return_idata: bool = True,
+        ignore_mcmc_start_point_defaults=False,
         **vi_kwargs,
     ) -> pm.Approximation | az.InferenceData:
         """Perform Variational Inference.
@@ -664,35 +667,31 @@ class HSSM:
                 " since likelihood gradients are needed!"
             )
 
+        if ("start" not in vi_kwargs) and not ignore_mcmc_start_point_defaults:
+            _logger.info("Using MCMC starting point defaults.")
+            vi_kwargs["start"] = self._initvals
+
         # Run variational inference directly from pymc model
         with self.pymc_model:
             self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
 
-        # Get posterior samples from vi-approximation
+        # Sample from the approximate posterior
         if self._vi_approx is not None:
             self._inference_obj_vi = self._vi_approx.sample(draws)
-        else:
-            raise ValueError(
-                "VI approximation object has not been initialized yet."
-                " However this check happens after VI is supposed to have run,"
-                " so something is wrong!"
-            )
 
         # Post-processing
-        if hasattr(self, "pymc_model") and self._inference_obj_vi is not None:
+        if self._inference_obj_vi is not None:
             vars_to_keep = set(
                 [var.name for var in self.pymc_model.free_RVs]
             ).intersection(
                 set(list(self._inference_obj_vi["posterior"].data_vars.keys()))
             )
-        else:
-            raise ValueError("Model has not been initialized yet. Something is wrong!")
 
-        setattr(
-            self._inference_obj_vi,
-            "posterior",
-            self._inference_obj_vi["posterior"][list(vars_to_keep)],
-        )
+            setattr(
+                self._inference_obj_vi,
+                "posterior",
+                self._inference_obj_vi["posterior"][list(vars_to_keep)],
+            )
 
         # Return the InferenceData object if return_idata is True
         if return_idata:
@@ -1328,6 +1327,21 @@ class HSSM:
 
         return self._map_dict
 
+    @property
+    def initvals(self) -> dict:
+        """Return the initial values of the model parameters for sampling.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the initial values of the model parameters.
+            This dict serves as the default for initial values, and can be passed
+            directly to the `.sample()` function.
+        """
+        if self._initvals == {}:
+            self._initvals = self.initial_point()
+        return self._initvals
+
     def _check_lapse(self, lapse):
         """Determine if p_outlier and lapse is specified correctly."""
         # Basically, avoid situations where only one of them is specified.
@@ -1861,6 +1875,7 @@ class HSSM:
         self, initval_settings: dict = INITVAL_SETTINGS
     ) -> None:
         """Set initial values for subset of parameters."""
+        self._initvals = self.initial_point()
         # Consider case where link functions are set to 'log_logit'
         # or 'None'
         if self.link_settings not in ["log_logit", None]:
@@ -1899,10 +1914,10 @@ class HSSM:
                     continue
 
                 # Apply specific settings from initval_settings dictionary
-                self.pymc_model.set_initval(
-                    self.pymc_model.named_vars[name_tmp],
-                    initval_settings[param_link_setting][name_tmp],
-                )
+                dtype = self._initvals[name_tmp].dtype
+                self._initvals[name_tmp] = np.array(
+                    initval_settings[param_link_setting][name_tmp]
+                ).astype(dtype)
 
     def _get_prefix(self, name_str: str) -> str:
         """Get parameters wise link setting function from parameter prefix."""
@@ -2026,31 +2041,31 @@ class HSSM:
     def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
         # Note: Calling our initial point function here
         # --> operate on untransformed variables
-        initial_point_dict = self.initial_point()
-        # initial_point_dict = self.pymc_model.initial_point()
+        initial_point_dict = self.initvals
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
                 starting_value_tmp = starting_value + np.random.uniform(
                     -jitter_epsilon, jitter_epsilon, starting_value.shape
                 ).astype(np.float32)
-                self.pymc_model.set_initval(
-                    self.pymc_model.named_vars[name_tmp], starting_value_tmp
-                )
+
+                # Note: self._initvals shouldn't be None when this is called
+                dtype = self._initvals[name_tmp].dtype
+                self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
 
     def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
         # Note: Calling our initial point function here
         # --> operate on untransformed variables
-        initial_point_dict = self.initial_point()
+        initial_point_dict = self.initvals
         # initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             starting_value_tmp = starting_value + np.random.uniform(
                 -jitter_epsilon, jitter_epsilon, starting_value.shape
             ).astype(np.float32)
-            self.pymc_model.set_initval(
-                self.pymc_model.named_vars[name_tmp], starting_value_tmp
-            )
+
+            dtype = self.initvals[name_tmp].dtype
+            self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
 
 
 def _set_missing_data_and_deadline(

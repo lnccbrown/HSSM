@@ -81,7 +81,7 @@ def _check_initval_defaults_correctness(model) -> None:
         return None
 
     # Set initial values for particular parameters
-    for name_, starting_value in model.initial_point().items():
+    for name_, starting_value in model._initvals.items():
         # If the user actively supplies a link function, the user
         # should also have supplied an initial value insofar it matters.
         if model.params[model._get_prefix(name_)].is_regression:
@@ -110,7 +110,7 @@ def _check_initval_defaults_correctness(model) -> None:
                 # If the user specified custom initial values for anything
                 # in our INITVAL_DEFAULTS dictionary, we need to check if
                 # the user's initial value was successfully applied
-                model_initial_point = model.initial_point()[name_]
+                model_initial_point = model._initvals[name_]
                 assert np.allclose(
                     model_initial_point, user_initval, atol=1e-3
                 ), f"""User supplied initial value for {name_} is {user_initval},
@@ -120,7 +120,7 @@ def _check_initval_defaults_correctness(model) -> None:
                 # If the user did not specify custom initial values,
                 # we need to check that our INITVAL_DEFAULTS
                 # were successfully applied
-                model_initial_point = model.initial_point()[name_]
+                model_initial_point = model._initvals[name_]
                 default_initial_point = hssm.defaults.INITVAL_SETTINGS[
                     param_link_setting
                 ][name_]
@@ -264,14 +264,14 @@ def test_process_no_process(caplog):
         model="angle",
         process_initvals=True,
     )
-    init_on = model_on.initial_point(transformed=False)
 
     model_off = hssm.HSSM(
         data=cav_data,
         model="angle",
         process_initvals=False,
     )
-    init_off = model_off.initial_point(transformed=False)
 
-    assert init_on != init_off, """Initial values should not be the same when
+    assert (
+        model_on.initvals != model_off.initvals
+    ), """Initial values should not be the same when
     initval processing is turned off vs. turned on."""
