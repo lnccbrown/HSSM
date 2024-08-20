@@ -241,7 +241,7 @@ def logp_ddm(
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
 
-    negative_rt = rt <= epsilon
+    negative_rt = pt.lt(rt, epsilon)
 
     tt = negative_rt * epsilon + (1 - negative_rt) * rt
 
