@@ -60,7 +60,7 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     _a = np.pi * rt * err < 1
     _b = 1.0 / (np.pi * pt.sqrt(rt))
     _c = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
-    _d = pt.max(pt.stack([_b, _c]), axis=0)
+    _d = pt.maximum(_b, _c)
     kl = _a * _b + (1 - _a) * _b
 
     return kl
