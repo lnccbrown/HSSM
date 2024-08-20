@@ -224,7 +224,7 @@ def test_extra_fields(data_ddm):
     ddm_model_p_logp_lapse = pt.log(
         0.95 * pt.exp(ddm_model_p_logp_without_lapse)
         + 0.05
-        * pt.exp(pm.logp(pm.Uniform.dist(lower=0.0, upper=10.0), data_ddm["rt"].values))
+        * pt.exp(pm.logp(pm.Uniform.dist(lower=0.0, upper=20.0), data_ddm["rt"].values))
     )
     np.testing.assert_almost_equal(
         pm.logp(

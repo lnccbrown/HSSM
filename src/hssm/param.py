@@ -145,7 +145,10 @@ class Param:
         """
         self._ensure_not_converted(context="prior")
 
-        if not self.is_regression:
+        # If no regression, or the parameter is the parent and does not have a
+        # formula attached (in which case it still gets a trial wise deterministic)
+        # do nothing
+        if not self.is_regression or (self.is_parent and self.formula is None):
             return
 
         override_priors = {}
@@ -213,7 +216,10 @@ class Param:
         """
         self._ensure_not_converted(context="prior")
 
-        if not self.is_regression:
+        # If no regression, or the parameter is the parent and does not have a
+        # formula attached (in which case it still gets a trial wise deterministic)
+        # do nothing
+        if not self.is_regression or (self.is_parent and self.formula is None):
             return
 
         override_priors = {}
@@ -327,6 +333,15 @@ class Param:
         if isinstance(self.prior, int):
             self.prior = float(self.prior)
 
+        # If the parameter is a parent, it will be a regression, but
+        # it may not have a formula attached to it.
+        # A pure intercept regression should be handled as if it
+        # is just the respective original parameter
+        # (boundaries inclusive), so we can simply
+        # undo the link setting.
+        if self.is_regression and self.formula is None:
+            self.link = None
+
         if self.formula is not None:
             # The regression case
             if isinstance(self.prior, (float, bmb.Prior)):
@@ -364,6 +379,8 @@ class Param:
                         )
                         self._is_truncated = True
 
+            # print("processing", self.name)
+            # print("link", self.link)
             if self.link is not None:
                 raise ValueError("`link` should be None if no regression is specified.")
 
@@ -380,7 +397,7 @@ class Param:
         bool
             A boolean that indicates if a regression is specified.
         """
-        return self.formula is not None
+        return self.formula is not None or self._is_parent
 
     @property
     def is_parent(self) -> bool:
@@ -479,9 +496,13 @@ class Param:
 
         # Regression case:
         # Output formula, priors, and link functions
-        if self.is_regression:
+        if self.is_regression and not (self.is_parent and self.formula is None):
             if self.formula is None:
-                raise ValueError("Formula must be specified for regression.")
+                raise ValueError(
+                    "Formula must be specified for regression,"
+                    "only exception is the parent parameter for which formula"
+                    "can be left undefined."
+                )
 
             output.append(f"    Formula: {self.formula}")
             output.append("    Priors:")
