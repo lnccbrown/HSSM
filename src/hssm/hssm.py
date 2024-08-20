@@ -614,18 +614,16 @@ class HSSM:
                 pm.compute_log_likelihood(self._inference_obj)
 
         # Subset data vars in posterior
-        if hasattr(self, "pymc_model") and self._inference_obj is not None:
+        if self._inference_obj is not None:
             vars_to_keep = set(
                 [var.name for var in getattr(self, "pymc_model").free_RVs]
             ).intersection(set(list(self._inference_obj["posterior"].data_vars.keys())))
-        else:
-            raise ValueError("Model has not been initialized yet. Something is wrong!")
 
-        setattr(
-            self._inference_obj,
-            "posterior",
-            self._inference_obj["posterior"][list(vars_to_keep)],
-        )
+            setattr(
+                self._inference_obj,
+                "posterior",
+                self._inference_obj["posterior"][list(vars_to_keep)],
+            )
 
         return self.traces
 
@@ -677,25 +675,23 @@ class HSSM:
         with self.pymc_model:
             self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
 
-        # Get posterior samples from vi-approximation
+        # Sample from the approximate posterior
         if self._vi_approx is not None:
             self._inference_obj_vi = self._vi_approx.sample(draws)
 
         # Post-processing
-        if hasattr(self, "pymc_model") and self._inference_obj_vi is not None:
+        if self._inference_obj_vi is not None:
             vars_to_keep = set(
                 [var.name for var in self.pymc_model.free_RVs]
             ).intersection(
                 set(list(self._inference_obj_vi["posterior"].data_vars.keys()))
             )
-        else:
-            raise ValueError("Model has not been initialized yet.")
 
-        setattr(
-            self._inference_obj_vi,
-            "posterior",
-            self._inference_obj_vi["posterior"][list(vars_to_keep)],
-        )
+            setattr(
+                self._inference_obj_vi,
+                "posterior",
+                self._inference_obj_vi["posterior"][list(vars_to_keep)],
+            )
 
         # Return the InferenceData object if return_idata is True
         if return_idata:
