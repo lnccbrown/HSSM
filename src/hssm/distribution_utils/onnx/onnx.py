@@ -76,6 +76,8 @@ def make_jax_logp_funcs_from_onnx(
             The element-wise log-likelihoods.
         """
         # Makes a matrix to feed to the LAN model
+        # print("scalars only: ", scalars_only)
+        # print("params only: ", params_only)
         if params_only:
             input_vector = jnp.array(inputs)
         else:

@@ -45,7 +45,6 @@ from hssm.param import (
     _make_default_prior,
 )
 from hssm.utils import (
-    HSSMModelGraph,
     _get_alias_dict,
     _print_prior,
     _process_param_in_kwargs,
@@ -195,6 +194,10 @@ class HSSM:
         how to specify the likelihood function this parameter. If nothing is provided,
         a default likelihood function will be used. This parameter is required only if
         either `missing_data` or `deadline` is not `False`. Defaults to `None`.
+    process_initvals : optional
+        If `True`, the model will process the initial values. Defaults to `True`.
+    initval_jitter : optional
+        The jitter value for the initial values. Defaults to `0.01`.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -225,6 +228,8 @@ class HSSM:
         A string or a dictionary representing the link functions for all parameters.
     params
         A list of Param objects representing model parameters.
+    initval_jitter
+        The jitter value for the initial values.
     """
 
     def __init__(
@@ -239,7 +244,7 @@ class HSSM:
         ) = None,
         loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
-        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=10.0),
+        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
         hierarchical: bool = False,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
@@ -250,10 +255,15 @@ class HSSM:
             str | PathLike | Callable | pytensor.graph.Op | None
         ) = None,
         process_initvals: bool = True,
+        initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
         self.data = data.copy()
         self._inference_obj = None
+        self._initvals: dict[str, Any] = {}
+        self.initval_jitter = initval_jitter
+        self._inference_obj_vi = None
+        self._vi_approx = None
         self._map_dict = None
         self.hierarchical = hierarchical
 
@@ -404,12 +414,14 @@ class HSSM:
             self.model, self._parent_param, self.response_c, self.response_str
         )
         self.set_alias(self._aliases)
-        # _logger.info(self.pymc_model.initial_point())
+        self.model.build()
+        _logger.info(self.pymc_model.initial_point())
 
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
+        if self.initval_jitter > 0:
             self._jitter_initvals(
-                jitter_epsilon=INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+                jitter_epsilon=self.initval_jitter,
                 vector_only=True,
             )
 
@@ -431,6 +443,7 @@ class HSSM:
         ) = None,
         init: str | None = None,
         initvals: str | dict | None = None,
+        include_response_params: bool = False,
         **kwargs,
     ) -> az.InferenceData | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
@@ -452,6 +465,10 @@ class HSSM:
             values for parameters of the model, or a string "map" to use initialization
             at the MAP estimate. If "map" is used, the MAP estimate will be computed if
             not already attached to the base class from prior call to 'find_MAP`.
+        include_response_params: optional
+            Include parameters of the response distribution in the output. These usually
+            take more space than other parameters as there's one of them per
+            observation. Defaults to False.
         kwargs
             Other arguments passed to bmb.Model.fit(). Please see [here]
             (https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
@@ -488,6 +505,9 @@ class HSSM:
                         "initvals argument must be a dictionary or 'map'"
                         " to use the MAP estimate."
                     )
+        else:
+            kwargs["initvals"] = self._initvals
+            _logger.info("Using default initvals. \n")
 
         if sampler is None:
             if (
@@ -498,9 +518,18 @@ class HSSM:
             else:
                 sampler = "mcmc"
 
-        supported_samplers = ["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"]
+        supported_samplers = [
+            "mcmc",
+            "nuts_numpyro",
+            "nuts_blackjax",
+            "laplace",
+        ]  # "vi"]
 
         if sampler not in supported_samplers:
+            if sampler == "vi":
+                raise ValueError(
+                    "For variational inference, please use the `vi()` method instead."
+                )
             raise ValueError(
                 f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
             )
@@ -538,57 +567,137 @@ class HSSM:
         # If sampler is finally `numpyro` make sure
         # the jitter argument is set to False
         if sampler == "nuts_numpyro":
-            if kwargs.get("jitter", None):
-                _logger.warning(
-                    "The jitter argument is set to True. "
-                    + "This argument is not supported "
-                    + "by the numpyro backend. "
-                    + "The jitter argument will be set to False."
-                )
-            kwargs["jitter"] = False
-        else:
-            if "jitter" in kwargs:
-                _logger.warning(
-                    "The jitter keyword argument is "
-                    + "supported only by the nuts_numpyro sampler. \n"
-                    + "The jitter argument will be ignored."
-                )
-                del kwargs["jitter"]
+            if "nuts_sampler_kwargs" in kwargs:
+                if kwargs["nuts_sampler_kwargs"].get("jitter"):
+                    _logger.warning(
+                        "The jitter argument is set to True. "
+                        + "This argument is not supported "
+                        + "by the numpyro backend. "
+                        + "The jitter argument will be set to False."
+                    )
+                kwargs["nuts_sampler_kwargs"]["jitter"] = False
+            else:
+                kwargs["nuts_sampler_kwargs"] = {"jitter": False}
 
-        if "include_mean" not in kwargs:
-            # If not specified, include the mean prediction in
-            # kwargs to be passed to the model.fit() method
-            kwargs["include_mean"] = True
         if self._inference_obj is not None:
             _logger.warning(
                 "The model has already been sampled. Overwriting the previous "
                 + "inference object. Any previous reference to the inference object "
                 + "will still point to the old object."
             )
+
+        if "nuts_sampler" not in kwargs:
+            if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]:
+                kwargs["nuts_sampler"] = (
+                    "pymc" if sampler == "mcmc" else sampler.split("_")[1]
+                )
+
+        # Don't compute likelihood directly through pymc sampler
+        compute_likelihood = True
+        if "idata_kwargs" in kwargs:
+            if "log_likelihood" in kwargs["idata_kwargs"]:
+                compute_likelihood = kwargs["idata_kwargs"].pop("log_likelihood", True)
+
         self._inference_obj = self.model.fit(
-            inference_method=sampler, init=init, **kwargs
+            inference_method=(
+                "mcmc"
+                if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]
+                else sampler
+            ),
+            init=init,
+            include_response_params=include_response_params,
+            **kwargs,
         )
 
-        # The parent was previously not part of deterministics --> compute it via
-        # posterior_predictive (works because it acts as the 'mu' parameter
-        # in the GLM as far as bambi is concerned)
+        if compute_likelihood:
+            with self.pymc_model:
+                pm.compute_log_likelihood(self._inference_obj)
+
+        # Subset data vars in posterior
         if self._inference_obj is not None:
-            if self._parent not in self._inference_obj.posterior.data_vars:
-                # self.model.predict(self._inference_obj, kind="mean", inplace=True)
-                # rename 'rt,response_mean' to 'v' so in the traces everything
-                # looks the way it should
-                self._inference_obj.rename_vars(
-                    {"rt,response_mean": self._parent}, inplace=True
-                )
-            elif (
-                self._parent in self._inference_obj.posterior.data_vars
-                and "rt,response_mean" in self._inference_obj.posterior.data_vars
-            ):
-                # drop redundant 'rt,response_mean' variable,
-                # if parent already in posterior
-                del self._inference_obj.posterior["rt,response_mean"]
+            vars_to_keep = set(
+                [var.name for var in getattr(self, "pymc_model").free_RVs]
+            ).intersection(set(list(self._inference_obj["posterior"].data_vars.keys())))
+
+            setattr(
+                self._inference_obj,
+                "posterior",
+                self._inference_obj["posterior"][list(vars_to_keep)],
+            )
 
         return self.traces
+
+    def vi(
+        self,
+        method: str = "advi",
+        niter: int = 10000,
+        draws: int = 1000,
+        return_idata: bool = True,
+        ignore_mcmc_start_point_defaults=False,
+        **vi_kwargs,
+    ) -> pm.Approximation | az.InferenceData:
+        """Perform Variational Inference.
+
+        Parameters
+        ----------
+        niter : int
+            The number of iterations to run the VI algorithm. Defaults to 3000.
+        method : str
+            The method to use for VI. Can be one of "advi" or "fullrank_advi", "svgd",
+            "asvgd".Defaults to "advi".
+        draws : int
+            The number of samples to draw from the posterior distribution.
+            Defaults to 1000.
+        return_idata : bool
+            If True, returns an InferenceData object. Otherwise, returns the
+            approximation object directly. Defaults to True.
+
+        Returns
+        -------
+            pm.Approximation or az.InferenceData: The mean field approximation object.
+        """
+        if self.loglik_kind == "analytical":
+            _logger.warning(
+                "VI is not recommended for the analytical likelihood,"
+                " since gradients can be brittle."
+            )
+        elif self.loglik_kind == "blackbox":
+            raise ValueError(
+                "VI is not supported for blackbox likelihoods, "
+                " since likelihood gradients are needed!"
+            )
+
+        if ("start" not in vi_kwargs) and not ignore_mcmc_start_point_defaults:
+            _logger.info("Using MCMC starting point defaults.")
+            vi_kwargs["start"] = self._initvals
+
+        # Run variational inference directly from pymc model
+        with self.pymc_model:
+            self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
+
+        # Sample from the approximate posterior
+        if self._vi_approx is not None:
+            self._inference_obj_vi = self._vi_approx.sample(draws)
+
+        # Post-processing
+        if self._inference_obj_vi is not None:
+            vars_to_keep = set(
+                [var.name for var in self.pymc_model.free_RVs]
+            ).intersection(
+                set(list(self._inference_obj_vi["posterior"].data_vars.keys()))
+            )
+
+            setattr(
+                self._inference_obj_vi,
+                "posterior",
+                self._inference_obj_vi["posterior"][list(vars_to_keep)],
+            )
+
+        # Return the InferenceData object if return_idata is True
+        if return_idata:
+            return self._inference_obj_vi
+        # Otherwise return the appromation object directly
+        return self.vi_approx
 
     def sample_posterior_predictive(
         self,
@@ -596,7 +705,7 @@ class HSSM:
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         include_group_specific: bool = True,
-        kind: Literal["pps", "mean"] = "pps",
+        kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
     ) -> az.InferenceData | None:
@@ -619,11 +728,12 @@ class HSSM:
             Otherwise, predictions are made with common effects only (i.e. group-
             specific are set to zero), by default True.
         kind: optional
-            Indicates the type of prediction required. Can be `"mean"` or `"pps"`. The
-            first returns draws from the posterior distribution of the mean, while the
-            latter returns the draws from the posterior predictive distribution
-            (i.e. the posterior probability distribution for a new observation).
-            Defaults to `"pps"`.
+            Indicates the type of prediction required. Can be `"response_params"` or
+            `"response"`. The first returns draws from the posterior distribution of the
+            likelihood parameters, while the latter returns the draws from the posterior
+            predictive distribution (i.e. the posterior probability distribution for a
+            new observation) in addition to the posterior distribution. Defaults to
+            "response_params".
         draws: optional
             The number of samples to draw from the posterior predictive distribution
             from each chain.
@@ -697,8 +807,8 @@ class HSSM:
             # Reassign posterior to sub-sampled version
             setattr(idata_copy, "posterior", idata["posterior"].isel(draw=draws))
 
-        if kind == "pps":
-            # If we run kind == 'pps' we actually run the observation RV
+        if kind == "response":
+            # If we run kind == 'response' we actually run the observation RV
             if safe_mode:
                 # safe mode splits the draws into chunks of 10 to avoid
                 # memory issues (TODO: Figure out the source of memory issues)
@@ -760,8 +870,8 @@ class HSSM:
                     return self.model.predict(
                         idata_copy, kind, data, False, include_group_specific
                     )
-        elif kind == "mean":
-            # If kind == 'mean', we don't need to run the RV directly,
+        elif kind == "response_params":
+            # If kind == 'response_params', we don't need to run the RV directly,
             # there shouldn't really be any significant memory issues here,
             # we can simply ignore settings, since the computational overhead
             # should be very small --> nudges user towards good outputs.
@@ -772,6 +882,8 @@ class HSSM:
             return self.model.predict(
                 idata, kind, data, inplace, include_group_specific
             )
+        else:
+            raise ValueError("`kind` must be either 'response' or 'response_params'.")
 
     def plot_posterior_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
         """Produce a posterior predictive plot.
@@ -884,8 +996,7 @@ class HSSM:
         """Return the response variable names in string format."""
         return ",".join(self.response)
 
-    # NOTE: can't annotate return type because the graphviz dependency is
-    # optional
+    # NOTE: can't annotate return type because the graphviz dependency is optional
     def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
         """Produce a graphviz Digraph from a built HSSM model.
 
@@ -916,30 +1027,22 @@ class HSSM:
         -------
         graphviz.Graph
             The graph
-
-        Note
-        ----
-            The code is largely copied from
-            https://github.com/bambinos/bambi/blob/main/bambi/models.py
-            Credit for the code goes to Bambi developers.
         """
-        self.model._check_built()
+        graph = self.model.graph(formatting, name, figsize, dpi, fmt)
 
-        graphviz = HSSMModelGraph(
-            model=self.pymc_model, parent=self._parent_param
-        ).make_graph(formatting=formatting, response_str=self.response_str)
+        parent_param = self._parent_param
+        if parent_param.is_regression:
+            return graph
 
-        width, height = (None, None) if figsize is None else figsize
+        # Modify the graph
+        # 1. Remove all nodes and edges related to `{parent}_mean`:
+        graph.body = [
+            item for item in graph.body if f"{parent_param.name}_mean" not in item
+        ]
+        # 2. Add a new edge from parent to response
+        graph.edge(parent_param.name, self.response_str)
 
-        if name is not None:
-            graphviz_ = graphviz.copy()
-            graphviz_.graph_attr.update(size=f"{width},{height}!")
-            graphviz_.graph_attr.update(dpi=str(dpi))
-            graphviz_.render(filename=name, format=fmt, cleanup=True)
-
-            return graphviz_
-
-        return graphviz
+        return graph
 
     def plot_trace(
         self,
@@ -971,9 +1074,17 @@ class HSSM:
             Whether to call plt.tight_layout() after plotting. Defaults to True.
         """
         data = data or self.traces
+        assert isinstance(
+            data, az.InferenceData
+        ), "data must be an InferenceData object."
 
         if not include_deterministic:
-            var_names = self._get_deterministic_var_names(data)
+            var_names = list(
+                set([var.name for var in self.pymc_model.free_RVs]).intersection(
+                    set(list(data["posterior"].data_vars.keys()))
+                )
+            )
+            # var_names = self._get_deterministic_var_names(data)
             if var_names:
                 if "var_names" in kwargs:
                     if isinstance(kwargs["var_names"], str):
@@ -988,11 +1099,11 @@ class HSSM:
                         kwargs["var_names"] = var_names
                     else:
                         raise ValueError(
-                            "`var_names` must be a string, a list of strings, or None."
+                            "`var_names` must be a string, a list of strings"
+                            ", or None."
                         )
                 else:
                     kwargs["var_names"] = var_names
-
         az.plot_trace(data, **kwargs)
 
         if tight_layout:
@@ -1030,12 +1141,19 @@ class HSSM:
             A pandas DataFrame or xarray Dataset containing the summary statistics.
         """
         data = data or self.traces
+        assert isinstance(
+            data, az.InferenceData
+        ), "data must be an InferenceData object."
 
         if not include_deterministic:
-            var_names = self._get_deterministic_var_names(data)
+            var_names = list(
+                set([var.name for var in self.pymc_model.free_RVs]).intersection(
+                    set(list(data["posterior"].data_vars.keys()))
+                )
+            )
+            # var_names = self._get_deterministic_var_names(data)
             if var_names:
                 kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
-
         return az.summary(data, **kwargs)
 
     def initial_point(self, transformed: bool = False) -> dict[str, np.ndarray]:
@@ -1077,10 +1195,9 @@ class HSSM:
         for param in self.params.values():
             if param.name == "p_outlier":
                 continue
-            name = self.response_c if param.is_parent else param.name
             output.append(f"{param.name}:")
 
-            component = self.model.components[name]
+            component = self.model.components[param.name]
 
             # Regression case:
             if param.is_regression:
@@ -1148,6 +1265,50 @@ class HSSM:
         return self._inference_obj
 
     @property
+    def vi_idata(self) -> az.InferenceData:
+        """Return the variational inference approximation object.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+        az.InferenceData
+            The variational inference approximation object.
+        """
+        if not self._inference_obj_vi:
+            raise ValueError(
+                "Please run variational inference first, "
+                "no variational posterior attached."
+            )
+
+        return self._inference_obj_vi
+
+    @property
+    def vi_approx(self) -> pm.Approximation:
+        """Return the variational inference approximation object.
+
+        Raises
+        ------
+        ValueError
+            If the model has not been sampled yet.
+
+        Returns
+        -------
+        pm.Approximation
+            The variational inference approximation object.
+        """
+        if not self._vi_approx:
+            raise ValueError(
+                "Please run variational inference first, "
+                "no variational approximation attached."
+            )
+
+        return self._vi_approx
+
+    @property
     def map(self) -> dict:
         """Return the MAP estimates of the model parameters.
 
@@ -1165,6 +1326,21 @@ class HSSM:
             raise ValueError("Please compute map first.")
 
         return self._map_dict
+
+    @property
+    def initvals(self) -> dict:
+        """Return the initial values of the model parameters for sampling.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the initial values of the model parameters.
+            This dict serves as the default for initial values, and can be passed
+            directly to the `.sample()` function.
+        """
+        if self._initvals == {}:
+            self._initvals = self.initial_point()
+        return self._initvals
 
     def _check_lapse(self, lapse):
         """Determine if p_outlier and lapse is specified correctly."""
@@ -1545,17 +1721,20 @@ class HSSM:
         var_names = [
             f"~{param_name}"
             for param_name, param in self.params.items()
-            if param.is_regression
+            if (param.is_regression)
         ]
 
-        # Handle specific case where parent is not explictly in traces
-        if ("~" + self._parent in var_names) and (
-            self._parent not in idata.posterior.data_vars
-        ):
-            var_names.remove("~" + self._parent)
+        if f"{self._parent}_mean" in idata["posterior"].data_vars:
+            var_names.append(f"~{self._parent}_mean")
 
-        if f"{self.response_str}_mean" in idata["posterior"].data_vars:
-            var_names.append(f"~{self.response_str}_mean")
+        # Parent parameters (always regression implicitly)
+        # which don't have a formula attached
+        # should be dropped from var_names, since the actual
+        # parent name shows up as a regression.
+        if f"{self._parent}" in idata["posterior"].data_vars:
+            if self.params[self._parent].formula is None:
+                # Drop from var_names
+                var_names = [var for var in var_names if var != f"~{self._parent}"]
 
         return var_names
 
@@ -1696,6 +1875,7 @@ class HSSM:
         self, initval_settings: dict = INITVAL_SETTINGS
     ) -> None:
         """Set initial values for subset of parameters."""
+        self._initvals = self.initial_point()
         # Consider case where link functions are set to 'log_logit'
         # or 'None'
         if self.link_settings not in ["log_logit", None]:
@@ -1719,6 +1899,7 @@ class HSSM:
 
             # If the user actively supplies a link function, the user
             # should also have supplied an initial value insofar it matters.
+
             if self.params[self._get_prefix(name_tmp)].is_regression:
                 param_link_setting = self.link_settings
             else:
@@ -1733,10 +1914,10 @@ class HSSM:
                     continue
 
                 # Apply specific settings from initval_settings dictionary
-                self.pymc_model.set_initval(
-                    self.pymc_model.named_vars[name_tmp],
-                    initval_settings[param_link_setting][name_tmp],
-                )
+                dtype = self._initvals[name_tmp].dtype
+                self._initvals[name_tmp] = np.array(
+                    initval_settings[param_link_setting][name_tmp]
+                ).astype(dtype)
 
     def _get_prefix(self, name_str: str) -> str:
         """Get parameters wise link setting function from parameter prefix."""
@@ -1858,7 +2039,9 @@ class HSSM:
             self.__jitter_initvals_all(jitter_epsilon)
 
     def __jitter_initvals_vector_only(self, jitter_epsilon: float) -> None:
-        initial_point_dict = self.pymc_model.initial_point()
+        # Note: Calling our initial point function here
+        # --> operate on untransformed variables
+        initial_point_dict = self.initvals
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
@@ -1866,20 +2049,23 @@ class HSSM:
                     -jitter_epsilon, jitter_epsilon, starting_value.shape
                 ).astype(np.float32)
 
-                self.pymc_model.set_initval(
-                    self.pymc_model.named_vars[name_tmp], starting_value_tmp
-                )
+                # Note: self._initvals shouldn't be None when this is called
+                dtype = self._initvals[name_tmp].dtype
+                self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
 
     def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
-        initial_point_dict = self.pymc_model.initial_point()
+        # Note: Calling our initial point function here
+        # --> operate on untransformed variables
+        initial_point_dict = self.initvals
+        # initial_point_dict = self.pymc_model.initial_point()
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             starting_value_tmp = starting_value + np.random.uniform(
                 -jitter_epsilon, jitter_epsilon, starting_value.shape
             ).astype(np.float32)
-            self.pymc_model.set_initval(
-                self.pymc_model.named_vars[name_tmp], starting_value_tmp
-            )
+
+            dtype = self.initvals[name_tmp].dtype
+            self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
 
 
 def _set_missing_data_and_deadline(

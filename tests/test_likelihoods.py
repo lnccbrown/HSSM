@@ -117,7 +117,6 @@ def test_bbox(data_ddm, logp_func, logp_bbox_func, true_values):
 
 
 cav_data = hssm.load_data("cavanagh_theta")
-cav_data_numpy = cav_data[["rt", "response"]].values
 param_matrix = product(
     (0.0, 0.01, 0.05, 0.5), ("analytical", "approx_differentiable", "blackbox")
 )
@@ -125,28 +124,41 @@ param_matrix = product(
 
 @pytest.mark.parametrize("p_outlier, loglik_kind", param_matrix)
 def test_lapse_distribution_cav(p_outlier, loglik_kind):
-    true_values = (0.5, 1.5, 0.5, 0.5)
-    v, a, z, t = true_values
+    true_values = (1.5, 0.5, 0.5)
+    a, z, t = true_values
+    # v is set to vector, because
+    # as parent it will be a regression by default
+    # 'approx_differentiable' likelihoods need to take
+    # into account.
+    v = 0.5 * np.ones(cav_data.shape[0])
 
     model = hssm.HSSM(
         model="ddm",
         data=cav_data,
         p_outlier=p_outlier,
         loglik_kind=loglik_kind,
-        loglik=Path(__file__).parent / "fixtures" / "ddm.onnx"
-        if loglik_kind == "approx_differentiable"
-        else None,
+        loglik=(
+            Path(__file__).parent / "fixtures" / "ddm.onnx"
+            if loglik_kind == "approx_differentiable"
+            else None
+        ),
         prior_settings=None,  # Avoid unnecessary computation
-        lapse=None
-        if p_outlier == 0.0
-        else hssm.Prior("Uniform", lower=0.0, upper=10.0),
+        lapse=(
+            None if p_outlier == 0.0 else hssm.Prior("Uniform", lower=0.0, upper=10.0)
+        ),
     )
+
+    #
     distribution = (
         model.model_distribution.dist(v=v, a=a, z=z, t=t, p_outlier=p_outlier)
         if p_outlier > 0
         else model.model_distribution.dist(v=v, a=a, z=z, t=t)
     )
 
+    # We could do this outside of the function,
+    # but for some reason mypy complaints with:
+    # error: Item "str" of "Any | str" has no attribute "values"
+    # while here it allows it.
     cav_data_numpy = cav_data[["rt", "response"]].values
 
     # Convert to float32 if blackbox loglik is used
@@ -156,13 +168,13 @@ def test_lapse_distribution_cav(p_outlier, loglik_kind):
 
     # This step is not necessary for HSSM as a whole because the likelihood function
     # will be part of a PyTensor graph so the floatX setting will be respected
-    cav_data_numpy = (
+    cav_data_inp = (
         cav_data_numpy.astype("float32")
         if loglik_kind == "blackbox"
         else cav_data_numpy
     )
 
-    model_logp = pm.logp(distribution, cav_data_numpy).eval()
+    model_logp = pm.logp(distribution, cav_data_inp).eval()
 
     if loglik_kind == "analytical":
         logp_func = logp_ddm
@@ -176,23 +188,23 @@ def test_lapse_distribution_cav(p_outlier, loglik_kind):
     else:
         logp_func = logp_ddm_bbox
 
-    manual_logp = logp_func(cav_data_numpy, *true_values)
+    manual_logp = logp_func(cav_data_inp, *(v, a, z, t))
     if p_outlier == 0.0:
         manual_logp = pt.where(
-            pt.sub(cav_data_numpy[:, 0], t) <= 1e-15, -66.1, manual_logp
+            pt.sub(cav_data_inp[:, 0], t) <= 1e-15, -66.1, manual_logp
         ).eval()
         np.testing.assert_almost_equal(model_logp, manual_logp, decimal=4)
         return
 
     manual_logp = pt.where(
-        pt.sub(cav_data_numpy[:, 0], t) <= 1e-15,
+        pt.sub(cav_data_inp[:, 0], t) <= 1e-15,
         -66.1,
         manual_logp,
     )
     manual_logp = pt.log(
         (1 - p_outlier) * pt.exp(manual_logp)
         + p_outlier
-        * pt.exp(pm.logp(pm.Uniform.dist(lower=0.0, upper=10.0), cav_data_numpy[:, 0]))
+        * pt.exp(pm.logp(pm.Uniform.dist(lower=0.0, upper=10.0), cav_data_inp[:, 0]))
     ).eval()
 
     np.testing.assert_almost_equal(model_logp, manual_logp, decimal=4)

@@ -64,7 +64,8 @@ def test_get_alias_dict():
 
     assert alias_default["c(rt, response)"] == "rt,response"
     assert alias_default["Intercept"] == "v"
-    assert alias_default["a"] == "a"
+    assert alias_default["v"] == "v_mean"
+    assert "a" not in alias_default
 
     assert alias_regression["c(rt, response)"] == "rt,response"
     assert alias_regression["Intercept"] == "v_Intercept"
