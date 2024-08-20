@@ -598,6 +598,7 @@ class HSSM:
             if "log_likelihood" in kwargs["idata_kwargs"]:
                 compute_likelihood = kwargs["idata_kwargs"].pop("log_likelihood", True)
 
+        omit_offsets = kwargs.pop("omit_offsets", False)
         self._inference_obj = self.model.fit(
             inference_method=(
                 "mcmc"
@@ -606,6 +607,7 @@ class HSSM:
             ),
             init=init,
             include_response_params=include_response_params,
+            omit_offsets=omit_offsets,
             **kwargs,
         )
 
