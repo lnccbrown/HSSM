@@ -4,7 +4,6 @@ import pytest
 
 import hssm
 from hssm import HSSM
-from hssm.utils import download_hf
 from hssm.likelihoods import DDM, logp_ddm
 
 hssm.set_floatX("float32", update_jax=True)
@@ -278,3 +277,31 @@ def test_resampling(data_ddm):
     assert sample_2 is model.traces
 
     assert sample_1 is not sample_2
+
+
+# Setting any parameter to a fixed value should work:
+def test_model_creation_constant_parameter(data_ddm):
+    for param_name in ["v", "a", "z", "t"]:
+        model = HSSM(data=data_ddm, **{param_name: 1.0})
+        assert model._parent != param_name
+        assert model.params[param_name].prior == 1.0
+
+
+# Setting any single parameter to a regression should respect the default bounds:
+@pytest.mark.parametrize(
+    "param_name, dist_name",
+    [("v", "Normal"), ("a", "Gamma"), ("z", "Beta"), ("t", "Gamma")],
+)
+def test_model_creation_single_regression(data_ddm_reg, param_name, dist_name):
+    model = HSSM(
+        data=data_ddm_reg,
+        include=[{"name": param_name, "formula": f"{param_name} ~ 1 + x"}],
+    )
+    assert model.params[param_name].prior["Intercept"].name == dist_name
+    assert model.params[param_name].prior["x"].name == "Normal"
+
+
+# Setting all parameters to fixed values should throw an error:
+def test_model_creation_all_parameters_constant(data_ddm):
+    with pytest.raises(ValueError):
+        HSSM(data=data_ddm, v=1.0, a=1.0, z=1.0, t=1.0)
