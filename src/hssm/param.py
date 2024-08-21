@@ -148,7 +148,7 @@ class Param:
         # If no regression, or the parameter is the parent and does not have a
         # formula attached (in which case it still gets a trial wise deterministic)
         # do nothing
-        if not self.is_regression or (self.is_parent and self.formula is None):
+        if not self.is_regression:
             return
 
         override_priors = {}
@@ -219,7 +219,7 @@ class Param:
         # If no regression, or the parameter is the parent and does not have a
         # formula attached (in which case it still gets a trial wise deterministic)
         # do nothing
-        if not self.is_regression or (self.is_parent and self.formula is None):
+        if not self.is_regression:
             return
 
         override_priors = {}
@@ -397,7 +397,7 @@ class Param:
         bool
             A boolean that indicates if a regression is specified.
         """
-        return self.formula is not None or self._is_parent
+        return self.formula is not None
 
     @property
     def is_parent(self) -> bool:
