@@ -434,6 +434,23 @@ class Param:
         """
         return self._is_truncated
 
+    @property
+    def is_vector(self) -> bool:
+        """Determines if a parameter is a vector.
+
+        A parameter is a vector if it is a regression or if the prior is a parent.
+
+        Returns
+        -------
+            A boolean that indicates if a parameter is a vector.
+        """
+        if self.is_parent:
+            if self.is_fixed:
+                raise ValueError("Parent parameters cannot be fixed.")
+            return True
+
+        return self.is_regression
+
     def parse_bambi(
         self,
     ) -> tuple:

@@ -1612,7 +1612,7 @@ class HSSM:
             return self.loglik
 
         params_is_reg = [
-            param.is_regression
+            param.is_vector
             for param_name, param in self.params.items()
             if param_name != "p_outlier"
         ]
