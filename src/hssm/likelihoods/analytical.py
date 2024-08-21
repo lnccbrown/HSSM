@@ -25,7 +25,7 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     Parameters
     ----------
     rt
-        A 1D numpy array of flipped R.... T.....s. (0, inf).
+        A 1D numpy array of flipped RTs. (0, inf).
     err
         Error bound.
 
@@ -34,9 +34,11 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     np.ndarray
         A 1D at array of k_small.
     """
-    ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
-    ks = pt.max(pt.stack([ks, pt.sqrt(rt) + 1]), axis=0)
-    ks = pt.switch(2 * pt.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
+    _a = 2 * pt.sqrt(2 * np.pi * rt) * err < 1
+    _b = 2 + pt.sqrt(-2 * rt * pt.log(2 * pt.sqrt(2 * np.pi * rt) * err))
+    _c = pt.sqrt(rt) + 1
+    _d = pt.maximum(_b, _c)
+    ks = _a * _d + (1 - _a) * 2
 
     return ks
 
@@ -56,9 +58,11 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     np.ndarray
         A 1D at array of k_large.
     """
-    kl = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
-    kl = pt.max(pt.stack([kl, 1.0 / (np.pi * pt.sqrt(rt))]), axis=0)
-    kl = pt.switch(np.pi * rt * err < 1, kl, 1.0 / (np.pi * pt.sqrt(rt)))
+    _a = np.pi * rt * err < 1
+    _b = 1.0 / (np.pi * pt.sqrt(rt))
+    _c = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
+    _d = pt.maximum(_b, _c)
+    kl = _a * _d + (1 - _a) * _b
 
     return kl
 
@@ -81,34 +85,7 @@ def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
     ks = k_small(rt, err)
     kl = k_large(rt, err)
 
-    return ks < kl
-
-
-def get_ks(k_terms: int, fast: bool) -> np.ndarray:
-    """Return an array of ks.
-
-    Returns an array of ks given the number of terms needed to approximate the sum of
-    the infinite series.
-
-    Parameters
-    ----------
-    k_terms
-        number of terms needed
-    fast
-        whether the function is used in the fast of slow expansion.
-
-    Returns
-    -------
-    np.ndarray
-        An array of ks.
-    """
-    ks = (
-        pt.arange(-pt.floor((k_terms - 1) / 2), pt.ceil((k_terms - 1) / 2) + 1)
-        if fast
-        else pt.arange(1, k_terms + 1).reshape((-1, 1))
-    )
-
-    return ks.astype(pytensor.config.floatX)
+    return pt.lt(ks, kl)
 
 
 def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
@@ -133,7 +110,9 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """
     # Slightly changed the original code to mimic the paper and
     # ensure correctness
-    k = get_ks(k_terms, fast=True)
+    k = pt.arange(-pt.floor((k_terms - 1) / 2), pt.ceil((k_terms - 1) / 2) + 1).astype(
+        pytensor.config.floatX
+    )
 
     # A log-sum-exp trick is used here
     y = w + 2 * k.reshape((-1, 1))
@@ -166,7 +145,7 @@ def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     np.ndarray
         The approximated function f(tt|0, 1, w).
     """
-    k = get_ks(k_terms, fast=False)
+    k = pt.arange(1, k_terms + 1).reshape((-1, 1)).astype(pytensor.config.floatX)
     y = k * pt.sin(k * np.pi * w)
     r = -pt.power(k, 2) * pt.power(np.pi, 2) * tt / 2
     p = pt.sum(y * pt.exp(r), axis=0) * np.pi
@@ -208,7 +187,7 @@ def ftt01w(
     p_fast = ftt01w_fast(tt, w, k_terms)
     p_slow = ftt01w_slow(tt, w, k_terms)
 
-    p = pt.switch(lambda_rt, p_fast, p_slow)
+    p = lambda_rt * p_fast + (1.0 - lambda_rt) * p_slow
 
     return p
 
@@ -256,22 +235,29 @@ def logp_ddm(
     data = pt.reshape(data, (-1, 2))
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
-    flip = response > 0
+    flip = pt.gt(response, 0).astype(pytensor.config.floatX)
     a = a * 2.0
-    v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
-    z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
+    # transform v if x is upper-bound response
+    v_flipped = flip * (-v) + (1 - flip) * v
+    # transform z if x is upper-bound response
+    z_flipped = flip * (1 - z) + (1 - flip) * z
     rt = rt - t
 
-    p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
+    negative_rt = pt.less_equal(rt, epsilon)
+    tt = negative_rt * epsilon + (1 - negative_rt) * rt
 
-    logp = pt.where(
-        rt <= epsilon,
-        LOGP_LB,
-        pt.log(p)
-        - v_flipped * a * z_flipped
-        - (v_flipped**2 * rt / 2.0)
-        - 2.0 * pt.log(a),
-    )
+    p = pt.maximum(ftt01w(tt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB)).squeeze()
+
+    logp = (
+        negative_rt * LOGP_LB
+        + (1 - negative_rt)
+        * (
+            pt.log(p)
+            - v_flipped * a * z_flipped
+            - (v_flipped**2 * tt / 2.0)
+            - 2.0 * pt.log(a),
+        )
+    ).squeeze()
 
     checked_logp = check_parameters(logp, a >= 0, msg="a >= 0")
     checked_logp = check_parameters(checked_logp, z >= 0, msg="z >= 0")
@@ -327,27 +313,34 @@ def logp_ddm_sdv(
     data = pt.reshape(data, (-1, 2))
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
-    flip = response > 0
+    flip = pt.gt(response, 0).astype(pytensor.config.floatX)
     a = a * 2.0
-    v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
-    z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
+    # transform v if x is upper-bound response
+    v_flipped = flip * (-v) + (1 - flip) * v
+    # transform z if x is upper-bound response
+    z_flipped = flip * (1 - z) + (1 - flip) * z
     rt = rt - t
 
-    p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
+    negative_rt = rt <= epsilon
+    tt = negative_rt * epsilon + (1 - negative_rt) * rt
 
-    logp = pt.switch(
-        rt <= epsilon,
-        LOGP_LB,
-        pt.log(p)
-        + (
-            (a * z_flipped * sv) ** 2
-            - 2 * a * v_flipped * z_flipped
-            - (v_flipped**2) * rt
+    p = pt.maximum(ftt01w(tt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
+
+    logp = (
+        negative_rt * LOGP_LB
+        + (1 - negative_rt)
+        * (
+            pt.log(p)
+            + (
+                (a * z_flipped * sv) ** 2
+                - 2 * a * v_flipped * z_flipped
+                - (v_flipped**2) * tt
+            )
+            / (2 * (sv**2) * tt + 2)
+            - 0.5 * pt.log(sv**2 * tt + 1)
+            - 2 * pt.log(a),
         )
-        / (2 * (sv**2) * rt + 2)
-        - 0.5 * pt.log(sv**2 * rt + 1)
-        - 2 * pt.log(a),
-    )
+    ).squeeze()
 
     checked_logp = check_parameters(logp, a >= 0, msg="a >= 0")
     checked_logp = check_parameters(checked_logp, z >= 0, msg="z >= 0")
