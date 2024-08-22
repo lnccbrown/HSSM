@@ -4,51 +4,26 @@ This code compares WFPT likelihood function with
 old implementation of WFPT from (https://github.com/hddm-devs/hddm)
 """
 
-import math
 from pathlib import Path
 from itertools import product
 
 import numpy as np
+import pandas as pd
 import pymc as pm
+import pytensor
 import pytensor.tensor as pt
 import pytest
-from numpy.random import rand
+
+from pytensor.compile.nanguardmode import NanGuardMode
 
 import hssm
 
 # pylint: disable=C0413
-from hssm.likelihoods.analytical import compare_k, logp_ddm, logp_ddm_sdv
+from hssm.likelihoods.analytical import logp_ddm, logp_ddm_sdv
 from hssm.likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox
 from hssm.distribution_utils import make_likelihood_callable
 
 hssm.set_floatX("float32")
-
-
-def test_kterm(data_ddm):
-    """This function defines a range of kterms and tests results to
-    makes sure they are not equal to infinity or unknown values.
-    """
-    for k_term in range(7, 12):
-        v = (rand() - 0.5) * 1.5
-        sv = 0
-        a = (1.5 + rand()) / 2
-        z = 0.5 * rand()
-        t = rand() * 0.5
-        err = 1e-7
-        logp = logp_ddm_sdv(data_ddm, v, a, z, t, sv, err, k_terms=k_term)
-        logp = sum(logp.eval())
-        assert not math.isinf(logp)
-        assert not math.isnan(logp)
-
-
-def test_compare_k(data_ddm):
-    """This function tests output of decision function."""
-    err = 1e-7
-    data = data_ddm["rt"] * data_ddm["response"]
-    lambda_rt = compare_k(np.abs(data.values), err)
-    assert all(not v for v in lambda_rt.eval())
-    assert data_ddm.shape[0] == lambda_rt.eval().shape[0]
-
 
 # def test_logp(data_fixture):
 #     """
@@ -92,9 +67,10 @@ parameters = [(name, np.arange(value, 5.1, 0.5)) for name, value in zip(names, v
 def test_no_inf_values(data_ddm, shared_params, param_name, param_values):
     for value in param_values:
         params = shared_params | {param_name: value}
-        logp = logp_ddm_sdv(data_ddm, **params)
+        logp = logp_ddm_sdv(data_ddm, **params).eval()
+        assert logp.ndim == 1, "logp_ddm_sdv() returned wrong number of dimensions."
         assert np.all(
-            np.isfinite(logp.eval())
+            np.isfinite(logp)
         ), f"log_pdf_sv() returned non-finite values for {param_name} = {value}."
 
 
@@ -102,7 +78,7 @@ true_values = (0.5, 1.5, 0.5, 0.5)
 true_values_sdv = true_values + (0,)
 standard = (logp_ddm, logp_ddm_bbox, true_values)
 svd = (logp_ddm_sdv, logp_ddm_sdv_bbox, true_values_sdv)
-parameters = [standard, svd]
+parameters = [standard, svd]  # type: ignore
 
 
 @pytest.mark.parametrize("logp_func, logp_bbox_func, true_values", parameters)
@@ -116,10 +92,50 @@ def test_bbox(data_ddm, logp_func, logp_bbox_func, true_values):
     )
 
 
-cav_data = hssm.load_data("cavanagh_theta")
+cav_data: pd.DataFrame = hssm.load_data("cavanagh_theta")
+cav_data_numpy = cav_data[["rt", "response"]].values
 param_matrix = product(
     (0.0, 0.01, 0.05, 0.5), ("analytical", "approx_differentiable", "blackbox")
 )
+nan_guard_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False)
+
+
+def test_analytical_gradient():
+    v = pt.dvector()
+    a = pt.dvector()
+    z = pt.dvector()
+    t = pt.dvector()
+    sv = pt.dvector()
+    size = cav_data_numpy.shape[0]
+    logp = logp_ddm(cav_data_numpy, v, a, z, t).sum()
+    grad = pt.grad(logp, wrt=[v, a, z, t])
+    grad_func = pytensor.function(
+        [v, a, z, t],
+        grad,
+        mode=nan_guard_mode,
+    )
+    v_test = np.random.normal(size=size)
+    a_test = np.random.uniform(0.0001, 2, size=size)
+    z_test = np.random.uniform(0.1, 1.0, size=size)
+    t_test = np.random.uniform(0, 2, size=size)
+    sv_test = np.random.uniform(0.001, 1.0, size=size)
+    grad = np.array(grad_func(v_test, a_test, z_test, t_test))
+
+    assert np.all(np.isfinite(grad), axis=None), "Gradient contains non-finite values."
+
+    grad_func_sdv = pytensor.function(
+        [v, a, z, t, sv],
+        pt.grad(
+            logp_ddm_sdv(cav_data_numpy, v, a, z, t, sv).sum(), wrt=[v, a, z, t, sv]
+        ),
+        mode=nan_guard_mode,
+    )
+
+    grad_sdv = np.array(grad_func_sdv(v_test, a_test, z_test, t_test, sv_test))
+
+    assert np.all(
+        np.isfinite(grad_sdv), axis=None
+    ), "Gradient contains non-finite values."
 
 
 @pytest.mark.parametrize("p_outlier, loglik_kind", param_matrix)
