@@ -148,7 +148,7 @@ class Param:
         # If no regression, or the parameter is the parent and does not have a
         # formula attached (in which case it still gets a trial wise deterministic)
         # do nothing
-        if not self.is_regression or (self.is_parent and self.formula is None):
+        if not self.is_regression:
             return
 
         override_priors = {}
@@ -219,7 +219,7 @@ class Param:
         # If no regression, or the parameter is the parent and does not have a
         # formula attached (in which case it still gets a trial wise deterministic)
         # do nothing
-        if not self.is_regression or (self.is_parent and self.formula is None):
+        if not self.is_regression:
             return
 
         override_priors = {}
@@ -397,7 +397,7 @@ class Param:
         bool
             A boolean that indicates if a regression is specified.
         """
-        return self.formula is not None or self._is_parent
+        return self.formula is not None
 
     @property
     def is_parent(self) -> bool:
@@ -433,6 +433,23 @@ class Param:
             A boolean that indicates if a parameter is truncated.
         """
         return self._is_truncated
+
+    @property
+    def is_vector(self) -> bool:
+        """Determines if a parameter is a vector.
+
+        A parameter is a vector if it is a regression or if the prior is a parent.
+
+        Returns
+        -------
+            A boolean that indicates if a parameter is a vector.
+        """
+        if self.is_parent:
+            if self.is_fixed:
+                raise ValueError("Parent parameters cannot be fixed.")
+            return True
+
+        return self.is_regression
 
     def parse_bambi(
         self,

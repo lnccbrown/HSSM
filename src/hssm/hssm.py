@@ -1505,10 +1505,13 @@ class HSSM:
                 param.set_parent()
                 return param_str, param
 
-        param_str = self.list_params[0]
-        param = self.params[param_str]
-        param.set_parent()
-        return param_str, param
+        for param_str in self.list_params:
+            param = self.params[param_str]
+            if not param.is_fixed:
+                param.set_parent()
+                return param_str, param
+
+        raise ValueError("No valid parent parameter found to be parent.")
 
     def _override_defaults(self):
         """Override the default priors or links."""
@@ -1612,7 +1615,7 @@ class HSSM:
             return self.loglik
 
         params_is_reg = [
-            param.is_regression
+            param.is_vector
             for param_name, param in self.params.items()
             if param_name != "p_outlier"
         ]
