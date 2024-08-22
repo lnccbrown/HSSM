@@ -78,7 +78,7 @@ true_values = (0.5, 1.5, 0.5, 0.5)
 true_values_sdv = true_values + (0,)
 standard = (logp_ddm, logp_ddm_bbox, true_values)
 svd = (logp_ddm_sdv, logp_ddm_sdv_bbox, true_values_sdv)
-parameters = [standard, svd]
+parameters = [standard, svd]  # type: ignore
 
 
 @pytest.mark.parametrize("logp_func, logp_bbox_func, true_values", parameters)
@@ -97,6 +97,7 @@ cav_data_numpy = cav_data[["rt", "response"]].values
 param_matrix = product(
     (0.0, 0.01, 0.05, 0.5), ("analytical", "approx_differentiable", "blackbox")
 )
+nan_guard_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False)
 
 
 def test_analytical_gradient():
@@ -111,7 +112,7 @@ def test_analytical_gradient():
     grad_func = pytensor.function(
         [v, a, z, t],
         grad,
-        mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False),
+        mode=nan_guard_mode,
     )
     v_test = np.random.normal(size=size)
     a_test = np.random.uniform(0.0001, 2, size=size)
@@ -127,7 +128,7 @@ def test_analytical_gradient():
         pt.grad(
             logp_ddm_sdv(cav_data_numpy, v, a, z, t, sv).sum(), wrt=[v, a, z, t, sv]
         ),
-        mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False),
+        mode=nan_guard_mode,
     )
 
     grad_sdv = np.array(grad_func_sdv(v_test, a_test, z_test, t_test, sv_test))

@@ -19,8 +19,8 @@ from ..distribution_utils.dist import make_distribution
 LOGP_LB = pm.floatX(-66.1)
 
 
-def k_small(rt: np.ndarray, err: float) -> np.ndarray:
-    """Determine number of terms needed for small-t expansion.
+def compute_k(rt: np.ndarray, err: float) -> np.ndarray:
+    """Determine number of terms needed for small-t and large-t expansions.
 
     Parameters
     ----------
@@ -34,56 +34,20 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     np.ndarray
         A 1D at array of k_small.
     """
-    _a = 2 * pt.sqrt(2 * np.pi * rt) * err < 1
-    _b = 2 + pt.sqrt(-2 * rt * pt.log(2 * pt.sqrt(2 * np.pi * rt) * err))
+    pi_rt_err = np.pi * rt * err
+
+    _a = 2 * pt.sqrt(pi_rt_err) * err
+    _b = 2 + pt.sqrt(-2 * rt * pt.log(_a))
     _c = pt.sqrt(rt) + 1
     _d = pt.maximum(_b, _c)
-    ks = _a * _d + (1 - _a) * 2
+    _e = pt.lt(_a, 1)
+    ks = _e * _d + (1 - _e) * 2
 
-    return ks
-
-
-def k_large(rt: np.ndarray, err: float) -> np.ndarray:
-    """Determine number of terms needed for large-t expansion.
-
-    Parameters
-    ----------
-    rt
-        An 1D numpy array of flipped RTs. (0, inf).
-    err
-        Error bound
-
-    Returns
-    -------
-    np.ndarray
-        A 1D at array of k_large.
-    """
-    _a = np.pi * rt * err < 1
-    _b = 1.0 / (np.pi * pt.sqrt(rt))
-    _c = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
-    _d = pt.maximum(_b, _c)
-    kl = _a * _d + (1 - _a) * _b
-
-    return kl
-
-
-def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
-    """Compute and compare k_small with k_large.
-
-    Parameters
-    ----------
-    rt
-        An 1D numpy of flipped RTs. (0, inf).
-    err
-        Error bound.
-
-    Returns
-    -------
-    np.ndarray
-        A 1D boolean at array of which implementation should be used.
-    """
-    ks = k_small(rt, err)
-    kl = k_large(rt, err)
+    __b = 1.0 / (np.pi * pt.sqrt(rt))
+    __c = pt.sqrt(-2 * pt.log(pi_rt_err) / (np.pi**2 * rt))
+    __d = pt.maximum(__b, __c)
+    __e = pt.lt(pi_rt_err, 1)
+    kl = __e * __d + (1 - __e) * __b
 
     return pt.lt(ks, kl)
 
@@ -182,7 +146,7 @@ def ftt01w(
     """
     tt = rt / a**2.0
 
-    lambda_rt = compare_k(tt, err)
+    lambda_rt = compute_k(rt, err)
 
     p_fast = ftt01w_fast(tt, w, k_terms)
     p_slow = ftt01w_slow(tt, w, k_terms)
