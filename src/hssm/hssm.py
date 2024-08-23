@@ -1572,14 +1572,14 @@ class HSSM:
                 if formula is None:
                     parent_formula = f"{self.response_c} ~ 1"
                     if prior is not None:
-                        priors |= {self.response_c: {"Intercept": prior[param.name]}}
+                        priors |= {param.name: {"Intercept": prior[param.name]}}
                     links |= {param.name: "identity"}
                 # parent is a regression
                 else:
                     right_side = formula.split(" ~ ")[1]
                     parent_formula = f"{self.response_c} ~ {right_side}"
                     if prior is not None:
-                        priors |= {self.response_c: prior[param.name]}
+                        priors |= {param.name: prior[param.name]}
                     if link is not None:
                         links |= link
             else:
