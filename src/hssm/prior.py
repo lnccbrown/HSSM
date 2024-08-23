@@ -54,6 +54,7 @@ class Prior(bmb.Prior):
         bmb.Prior.__init__(self, name, auto_scale, dist, **kwargs)
         self.is_truncated = False
         self.bounds = bounds
+        self.serializable = dist is None
 
         if self.bounds is not None:
             assert self.dist is None, (
@@ -68,6 +69,64 @@ class Prior(bmb.Prior):
             self.dist = _make_truncated_dist(self.name, lower, upper, **self.args)
             self._args = self.args.copy()
             self.args: dict = {}
+
+    def to_json(self) -> dict[str, Any]:
+        """Serialize the object to JSON.
+
+        Returns
+        -------
+        dict[str, Any]
+            A dictionary with the serialized json object.
+        """
+        if not self.serializable:
+            raise ValueError(
+                "Cannot serialize a Prior object with a custom distribution."
+            )
+
+        result_json = self._args.copy() if self.is_truncated else self.args.copy()
+        result_json["name"] = self.name
+        result_json["bounds"] = self.bounds
+        result_json["auto_scale"] = self.auto_scale
+
+        return result_json
+
+    @staticmethod
+    def from_json(json: dict) -> "Prior":
+        """Create a Prior object from a JSON dictionary.
+
+        Parameters
+        ----------
+        json
+            A dictionary with the serialized JSON object.
+
+        Returns
+        -------
+        Prior
+            A hssm.Prior object with the specified parameters.
+        """
+        return Prior(**json)
+
+    @staticmethod
+    def from_bambi(bambi_prior: bmb.Prior) -> "Prior":
+        """Create a Prior object from a Bambi Prior object.
+
+        Parameters
+        ----------
+        bambi_prior
+            A Bambi Prior object.
+
+        Returns
+        -------
+        Prior
+            A hssm.Prior object with the same parameters as the Bambi Prior object.
+        """
+        return Prior(
+            bambi_prior.name,
+            bambi_prior.auto_scale,
+            bambi_prior.dist,
+            bounds=None,
+            **bambi_prior.args,
+        )
 
     def __str__(self) -> str:
         """Create the printout of the object."""
