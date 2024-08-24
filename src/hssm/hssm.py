@@ -415,7 +415,7 @@ class HSSM:
         )
         self.set_alias(self._aliases)
         self.model.build()
-        _logger.info(self.pymc_model.initial_point())
+        # _logger.info(self.pymc_model.initial_point())
 
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
@@ -424,6 +424,8 @@ class HSSM:
                 jitter_epsilon=self.initval_jitter,
                 vector_only=True,
             )
+
+        _logger.info("Model initialized successfully.")
 
     def find_MAP(self, **kwargs):
         """Perform Maximum A Posteriori estimation.
@@ -1968,12 +1970,8 @@ class HSSM:
             name_str_suffix = ""
 
         if isinstance(self.priors, dict):
-            if name_str_prefix == self._parent:
-                tmp_param = self.response_c
-            else:
-                tmp_param = name_str_prefix
-
-            if tmp_param == self.response_c:
+            tmp_param = name_str_prefix
+            if tmp_param == self._parent:
                 # If the parameter was parent it is automatically treated as a
                 # regression.
                 if not name_str_suffix:
