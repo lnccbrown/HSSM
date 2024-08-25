@@ -19,7 +19,7 @@ from .link import Link
 from .param import Param
 from .prior import Prior
 from .simulator import simulate_data
-from .utils import set_floatX
+from .utils import _compute_log_likelihood, set_floatX
 
 _logger = logging.getLogger("hssm")
 _logger.setLevel(logging.INFO)
@@ -38,4 +38,5 @@ __all__ = [
     "simulate_data",
     "set_floatX",
     "show_defaults",
+    "_compute_log_likelihood",
 ]

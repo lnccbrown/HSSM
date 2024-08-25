@@ -25,6 +25,7 @@ bambi = ">=0.14.0,<0.15.0"
 numpyro = "^0.15.0"
 hddm-wfpt = "^0.1.4"
 seaborn = "^0.13.2"
+tqdm= "^4.66.0"
 jax = { version = "^0.4.25", extras = ["cuda12"], optional = true }
 
 [tool.poetry.group.dev.dependencies]

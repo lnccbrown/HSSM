@@ -45,6 +45,7 @@ from hssm.param import (
     _make_default_prior,
 )
 from hssm.utils import (
+    _compute_log_likelihood,
     _get_alias_dict,
     _print_prior,
     _process_param_in_kwargs,
@@ -425,6 +426,12 @@ class HSSM:
                 vector_only=True,
             )
 
+        # Make sure we reset rvs_to_initial_values --> Only None's
+        # Otherwise PyMC barks at us when asking to compute likelihoods
+        self.pymc_model.rvs_to_initial_values.update(
+            {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
+        )
+
     def find_MAP(self, **kwargs):
         """Perform Maximum A Posteriori estimation.
 
@@ -592,7 +599,7 @@ class HSSM:
                     "pymc" if sampler == "mcmc" else sampler.split("_")[1]
                 )
 
-        # Don't compute likelihood directly through pymc sampler
+        # Define whether likelihood should be computed
         compute_likelihood = True
         if "idata_kwargs" in kwargs:
             if "log_likelihood" in kwargs["idata_kwargs"]:
@@ -611,10 +618,6 @@ class HSSM:
             **kwargs,
         )
 
-        if compute_likelihood:
-            with self.pymc_model:
-                pm.compute_log_likelihood(self._inference_obj)
-
         # Subset data vars in posterior
         if self._inference_obj is not None:
             vars_to_keep = set(
@@ -626,6 +629,10 @@ class HSSM:
                 "posterior",
                 self._inference_obj["posterior"][list(vars_to_keep)],
             )
+
+        # Separate out log likelihood computation
+        if compute_likelihood:
+            self.log_likelihood(self._inference_obj, inplace=True)
 
         return self.traces
 
@@ -700,6 +707,41 @@ class HSSM:
             return self._inference_obj_vi
         # Otherwise return the appromation object directly
         return self.vi_approx
+
+    def log_likelihood(
+        self,
+        idata: az.InferenceData | None = None,
+        data: pd.DataFrame | None = None,
+        inplace: bool = True,
+    ) -> az.InferenceData | None:
+        """Compute the log likelihood of the model.
+
+        Parameters
+        ----------
+        idata : optional
+            The `InferenceData` object returned by `HSSM.sample()`. If not provided,
+        data : optional
+            A pandas DataFrame with values for the predictors that are used to obtain
+            out-of-sample predictions. If omitted, the original dataset is used.
+        inplace : optional
+            If `True` will modify idata in-place and append a `log_likelihood` group to
+            `idata`. Otherwise, it will return a copy of idata with the predictions
+            added, by default True.
+
+        Returns
+        -------
+        az.InferenceData | None
+            InferenceData or None
+        """
+        if self._inference_obj is None and idata is None:
+            raise ValueError(
+                "Neither has the model been sampled yet nor"
+                + " an idata object has been provided."
+            )
+
+        if idata is None:
+            idata = self._inference_obj
+        return _compute_log_likelihood(self.model, idata, data, inplace)
 
     def sample_posterior_predictive(
         self,

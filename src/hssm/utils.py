@@ -9,17 +9,23 @@ these representations in Bambi-compatible formats through convenience function
 _parse_bambi().
 """
 
+import itertools
 import logging
+from copy import deepcopy
 from typing import Any, Literal, cast
 
+import arviz as az
 import bambi as bmb
 import jax
 import numpy as np
 import pandas as pd
+import pymc as pm
 import pytensor
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
+from bambi.utils import get_aliased_name, response_evaluate_new_data
 from huggingface_hub import hf_hub_download
+from tqdm import tqdm
 
 from .param import Param
 
@@ -144,6 +150,177 @@ def _get_alias_dict(
             break
 
     return alias_dict
+
+
+def _compute_log_likelihood(
+    model: bmb.Model,
+    idata: az.InferenceData,
+    data: pd.DataFrame | None,
+    inplace: bool = True,
+) -> az.InferenceData | None:
+    """Compute the model's log-likelihood.
+
+    Parameters
+    ----------
+    idata : InferenceData
+        The `InferenceData` instance returned by `.fit()`.
+    data : pandas.DataFrame or None
+        An optional data frame with values for the predictors and the response on which
+        the model's log-likelihood function is evaluated.
+        If omitted, the original dataset is used.
+    inplace : bool
+        If True` it will modify `idata` in-place. Otherwise, it will return a copy of
+        `idata` with the `log_likelihood` group added.
+
+    Returns
+    -------
+    InferenceData or None
+    """
+    # These are not formal parameters because it does not make sense to...
+    #   1. compute the log-likelihood omitting
+    #      the group-specific components of the model.
+    #   2. compute the log-likelihood on unseen groups.
+    include_group_specific = True
+    sample_new_groups = False
+
+    # Get the aliased response name
+    response_aliased_name = get_aliased_name(model.response_component.term)
+
+    if not inplace:
+        idata = deepcopy(idata)
+
+    # Populate the posterior in the InferenceData object with the likelihood parameters
+    idata = model._compute_likelihood_params(
+        idata, data, include_group_specific, sample_new_groups
+    )
+
+    required_kwargs = {"model": model, "posterior": idata.posterior, "data": data}
+    log_likelihood_out = log_likelihood(model.family, **required_kwargs).to_dataset(
+        name=response_aliased_name
+    )
+
+    if "log_likelihood" in idata:
+        del idata.log_likelihood
+
+    idata.add_groups({"log_likelihood": log_likelihood_out})
+    idata.log_likelihood = idata.log_likelihood.assign_attrs(
+        modeling_interface="bambi", modeling_interface_version=bmb.__version__
+    )
+
+    if inplace:
+        return None
+    else:
+        return idata
+
+
+def log_likelihood(
+    family: bmb.Family,
+    model: bmb.Model,
+    posterior: xr.DataArray,
+    data: pd.DataFrame | None = None,
+    **kwargs,
+) -> xr.DataArray:
+    """Evaluate the model log-likelihood.
+
+    This method uses `pm.logp()`.
+
+    Parameters
+    ----------
+    model : bambi.Model
+        The model
+    posterior : xr.Dataset
+        The xarray dataset that contains the draws for
+        all the parameters in the posterior.
+        It must contain the parameters that are needed
+        in the distribution of the response, or
+        the parameters that allow to derive them.
+    kwargs :
+        Parameters that are used to get draws but do
+        not appear in the posterior object or
+        other configuration parameters.
+        For instance, the 'n' in binomial models and multinomial models.
+
+    Returns
+    -------
+    xr.DataArray
+        A data array with the value of the log-likelihood
+        for each chain, draw, and value of the response variable.
+    """
+    # Child classes pass "y_values" through the "y" kwarg
+    y_values = kwargs.pop("y", None)
+
+    # Get the values of the outcome variable
+    if y_values is None:  # when it's not handled by the specific family
+        if data is None:
+            y_values = np.squeeze(model.response_component.term.data)
+        else:
+            y_values = response_evaluate_new_data(model, data)
+
+    response_dist = get_response_dist(model.family)
+    response_term = model.response_component.term
+    kwargs, coords = family._make_dist_kwargs_and_coords(model, posterior, **kwargs)
+
+    # If it's multivariate, it's going to have a fourth coord,
+    # but we actually don't need it. We just need "chain", "draw", "__obs__"
+    coords = dict(list(coords.items())[:3])
+
+    output_array = np.zeros((len(coords["chain"]), len(coords["draw"]), len(y_values)))
+
+    y_values_size = len(y_values)
+    # Handle constrained responses
+    for ids in tqdm(
+        list(itertools.product(coords["chain"].values, coords["draw"].values))
+    ):
+        # Subect kwargs
+        kwargs_new = {
+            key_: (val_[*ids, ...] if val_.size >= y_values_size else val_[0, 0, ...])
+            for key_, val_ in kwargs.items()
+        }
+
+        if response_term.is_constrained:
+            # Bounds are scalars, we can safely pick them from the first row
+            lower, upper = response_term.data[0, 1:]
+            lower = lower if lower != -np.inf else None
+            upper = upper if upper != np.inf else None
+            # Finally evaluate logp
+            output_array[*ids, :] = pm.logp(
+                pm.Truncated.dist(
+                    response_dist.dist(**kwargs_new), lower=lower, upper=upper
+                ),
+                y_values,
+            ).eval()
+        else:
+            # Finally evaluate logp
+            output_array[*ids, :] = pm.logp(
+                response_dist.dist(**kwargs_new), y_values
+            ).eval()
+
+    # output_array
+    return xr.DataArray(output_array, coords=coords)
+
+
+def get_response_dist(family: bmb.Family) -> pm.Distribution:
+    """Get the PyMC distribution for the response.
+
+    Parameters
+    ----------
+    family : bambi.Family
+        The family for which the response distribution is wanted
+
+    Returns
+    -------
+    pm.Distribution
+        The response distribution
+    """
+    mapping = {"Cumulative": pm.Categorical, "StoppingRatio": pm.Categorical}
+
+    if family.likelihood.dist:
+        dist = family.likelihood.dist
+    elif family.likelihood.name in mapping:
+        dist = mapping[family.likelihood.name]
+    else:
+        dist = getattr(pm, family.likelihood.name)
+    return dist
 
 
 def set_floatX(dtype: Literal["float32", "float64"], update_jax: bool = True):
