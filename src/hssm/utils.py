@@ -265,7 +265,6 @@ def log_likelihood(
     coords = dict(list(coords.items())[:3])
 
     output_array = np.zeros((len(coords["chain"]), len(coords["draw"]), len(y_values)))
-
     y_values_size = len(y_values)
     # Handle constrained responses
     for ids in tqdm(
