@@ -272,7 +272,11 @@ def log_likelihood(
     ):
         # Subect kwargs
         kwargs_new = {
-            key_: (val_[*ids, ...] if val_.size >= y_values_size else val_[0, 0, ...])
+            key_: (
+                val_[*(ids[0], ids[1]), ...]
+                if val_.size >= y_values_size
+                else val_[*(0, 0), ...]
+            )
             for key_, val_ in kwargs.items()
         }
 
