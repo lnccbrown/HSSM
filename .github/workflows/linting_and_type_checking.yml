@@ -1,0 +1,34 @@
+name: Linting and type checking
+
+on:
+  pull_request:
+
+jobs:
+  run_tests:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+
+      - name: install hssm
+        run: poetry install
+
+      - name: Run mypy
+        run: poetry run mypy src/hssm
+
+      - name: Check formatting
+        run: poetry run ruff format --check .
+
+      - name: Linting
+        run: poetry run ruff check src/hssm

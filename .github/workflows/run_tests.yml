@@ -39,15 +39,6 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
-      - name: Run mypy
-        run: mypy src/hssm
-
-      - name: Check formatting
-        run: ruff format --check .
-
-      - name: Linting
-        run: ruff check src/hssm
-
       - name: Run fast tests
         run: pytest -n auto -s --ignore=tests/slow
 
