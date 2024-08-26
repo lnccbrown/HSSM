@@ -13,6 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: install poetry
         uses: snok/install-poetry@v1
         with:
