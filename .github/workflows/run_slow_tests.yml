@@ -1,4 +1,4 @@
-name: Run tests
+name: Run slow tests
 
 on:
   pull_request:
@@ -39,11 +39,5 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
-      - name: Run fast tests
-        run: pytest -n auto -s --ignore=tests/slow
-
       - name: Run slow tests
         run: pytest -s tests/slow
-
-      - name: build docs
-        run: mkdocs build
