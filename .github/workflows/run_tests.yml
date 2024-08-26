@@ -52,7 +52,7 @@ jobs:
         run: pytest -n auto -s --ignore=tests/slow
 
       - name: Run slow tests
-        run: pytest -n auto -s tests/slow
+        run: pytest -s tests/slow
 
       - name: build docs
         run: mkdocs build
