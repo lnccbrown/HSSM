@@ -40,3 +40,5 @@ jobs:
 
       - name: Run slow tests
         run: poetry run pytest -s tests/slow
+        env:
+          PYTENSOR_FLAGS: "blas__ldflags=/usr/lib/x86_64-linux-gnu -lblas -llapack"

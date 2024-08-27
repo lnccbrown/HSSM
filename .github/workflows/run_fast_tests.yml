@@ -40,6 +40,10 @@ jobs:
 
       - name: Run fast tests
         run: poetry run pytest -n auto -s --ignore=tests/slow
+        env:
+          PYTENSOR_FLAGS: "blas__ldflags=/usr/lib/x86_64-linux-gnu -lblas -llapack"
 
       - name: Run jupyter notebooks in docs
         run: mkdocs build
+        env:
+          PYTENSOR_FLAGS: "blas__ldflags=/usr/lib/x86_64-linux-gnu -lblas -llapack"
