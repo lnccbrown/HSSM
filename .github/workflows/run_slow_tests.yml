@@ -6,10 +6,7 @@ on:
 jobs:
   run_tests:
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, 'skip slow tests')"
-    defaults:
-      run:
-        shell: bash -el {0}
+    if: "!contains(github.event.head_commit.message, '[skip slow tests]')"
 
     strategy:
       fail-fast: true
@@ -42,4 +39,4 @@ jobs:
         run: poetry install
 
       - name: Run slow tests
-        run: pytest -s tests/slow
+        run: poetry run pytest -s tests/slow
