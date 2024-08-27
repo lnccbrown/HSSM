@@ -9,25 +9,14 @@ jobs:
 
     strategy:
       fail-fast: true
+      matrix:
+        python-version: ["3.11"]
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Poetry environment
+        uses: ./.github/actions/setup-poetry-env
         with:
-          python-version: "3.11"
-
-      - name: install poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-
-      - name: install hssm
-        run: poetry install
+          python-version: ${{ matrix.python-version }}
 
       - name: Run mypy
         run: poetry run mypy src/hssm

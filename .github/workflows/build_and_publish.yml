@@ -3,93 +3,31 @@ name: Publish tagged releases to PyPI
 on:
   release:
     types:
-      - created
+      - published
+  workflow_run:
+    workflows:
+      - "Linting and type checking"
+      - "Run fast tests"
+      - "Run slow tests"
+    types:
+      - completed
 
 jobs:
-  run_tests:
+  publish:
+    name: Build wheel and publish to test-PyPI, and then PyPI, and publish docs
+    if: github.event_name == 'release' && github.event.action == 'published'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -el {0}
 
     strategy:
       fail-fast: true
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.11"]
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup miniconda
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Setup Poetry environment
+        uses: ./.github/actions/setup-poetry-env
         with:
           python-version: ${{ matrix.python-version }}
-          miniforge-variant: Mambaforge
-          mamba-version: "*"
-          channels: conda-forge,defaults
-          channel-priority: true
-
-      - name: install pymc and poetry
-        run: |
-          mamba info
-          mamba install -c conda-forge pymc=5.10 poetry
-
-      - name: install hssm
-        run: |
-          poetry export --with dev --without-hashes --output=req.txt
-          grep -v -E '^jax\[cuda12\]|^nvidia|^jax\-cuda12' req.txt >> requirements.txt
-          pip install -r requirements.txt
-          pip install -e .
-
-      - name: Run mypy
-        run: mypy src/hssm
-
-      - name: Check formatting
-        run: ruff format --check .
-
-      - name: Linting
-        run: ruff check src/hssm
-
-      - name: Run fast tests
-        run: pytest -n auto -s --ignore=tests/slow
-
-      - name: Run slow tests
-        run: pytest -n auto -s tests/slow
-
-  publish:
-    name: Build wheel and publish to test-PyPI, and then PyPI, and publish docs
-    needs: [run_tests]
-    runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.11
-
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-
-      - name: Load cache
-        uses: actions/cache@v4
-        id: cache
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-3.11-${{ hashFiles('**/pyproject.toml') }}
-
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction
 
       - name: Setup test-PyPI credentials
         run: |

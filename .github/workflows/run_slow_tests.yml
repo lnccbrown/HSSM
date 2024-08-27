@@ -6,7 +6,9 @@ on:
 jobs:
   run_tests:
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip slow tests]')"
+    if: ${{ ! contains(github.event.head_commit.message, '[skip slow tests]') }}
+    env:
+      PYTENSOR_FLAGS: "blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
 
     strategy:
       fail-fast: true
@@ -14,31 +16,16 @@ jobs:
         python-version: ["3.10", "3.11"]
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install blas and lapack
-        run: |
-          sudo apt update
-          sudo apt install libblas-dev liblapack-dev
-
-      - name: Install Python
-        uses: actions/setup-python@v2
+      - name: Setup Poetry environment
+        uses: ./.github/actions/setup-poetry-env
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
-
       - name: Install hssm
-        run: poetry install
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction
 
       - name: Run slow tests
         run: poetry run pytest -s tests/slow
         env:
-          PYTENSOR_FLAGS: "blas__ldflags=/usr/lib/x86_64-linux-gnu -lblas -llapack"
+          PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
