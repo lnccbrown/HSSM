@@ -30,6 +30,6 @@ jobs:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
 
       - name: Run jupyter notebooks in docs
-        run: mkdocs build
+        run: poetry run mkdocs build
         env:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
