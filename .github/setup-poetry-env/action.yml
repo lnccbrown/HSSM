@@ -21,7 +21,6 @@ runs:
         virtualenvs-in-project: true
         virtualenvs-path: .venv
         installer-parallel: true
-      shell: bash
 
     - name: Load cache
       uses: actions/cache@v4
@@ -29,7 +28,6 @@ runs:
       with:
         path: .venv
         key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ hashFiles('**/pyproject.toml') }}
-      shell: bash
 
     - name: Install hssm
       if: steps.cache.outputs.cache-hit != 'true'
