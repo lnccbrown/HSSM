@@ -19,8 +19,8 @@ jobs:
 
       - name: Install lapack
         run: |
-          apt-get update
-          apt-get install liblapack-dev
+          sudo apt update
+          sudo apt install liblapack-dev
 
       - name: Install Python
         uses: actions/setup-python@v2
