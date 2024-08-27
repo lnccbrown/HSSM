@@ -40,10 +40,6 @@ Here is a simple example of how to use HSSM:
 ```python
 import hssm
 
-# Set float type to float32 to avoid a current bug in PyMC
-# This will not be necessary in the future
-hssm.set_floatX("float32")
-
 # Load a package-supplied dataset
 cav_data = hssm.load_data('cavanagh_theta')
 

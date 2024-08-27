@@ -2,6 +2,19 @@
 
 ## 0.2.x
 
+### 0.2.4
+
+This version of HSSM incorporated the following changes:
+
+1. We updated HSSM to be compatible with the major API changes in `bambi` v0.14.0.
+2. We fixed various graphing issues in `pymc` 5.16.0+, thanks to the API changes in `bambi`.
+3. We added variational inference via native `pymc`.
+4. We can now use `float64` inference.
+5. We fixed some minor bugs in providing initial values.
+6. We added a model.dic() convenience function.
+7. We added a model.restore_traces() convenience function.
+8. Other minor bug fixes.
+
 ### 0.2.3
 
 This is a maintenance release of HSSM, mainly to add a version constraint on `bambi` in light of the many breaking changes that version `0.1.4` introduces. This version also improved compatibility with `PyMC>=5.15` and incorporated minor bug fixes:
