@@ -24,6 +24,9 @@ jobs:
         python-version: ["3.11"]
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Poetry environment
         uses: ./.github/actions/setup-poetry-env
         with:
