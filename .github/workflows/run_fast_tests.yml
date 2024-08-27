@@ -17,10 +17,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install lapack
+      - name: Install blas and lapack
         run: |
           sudo apt update
-          sudo apt install liblapack-dev
+          sudo apt install libblas-dev liblapack-dev
 
       - name: Install Python
         uses: actions/setup-python@v2
@@ -39,7 +39,7 @@ jobs:
         run: poetry install
 
       - name: Run fast tests
-        run: pytest -n auto -s --ignore=tests/slow
+        run: poetry run pytest -n auto -s --ignore=tests/slow
 
       - name: Run jupyter notebooks in docs
         run: mkdocs build

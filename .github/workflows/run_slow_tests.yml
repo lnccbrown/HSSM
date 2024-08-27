@@ -17,10 +17,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install lapack
+      - name: Install blas and lapack
         run: |
           sudo apt update
-          sudo apt install liblapack-dev
+          sudo apt install libblas-dev liblapack-dev
 
       - name: Install Python
         uses: actions/setup-python@v2
