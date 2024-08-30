@@ -277,7 +277,7 @@ def log_likelihood(
     n_chains = len(coords["chain"])
     n_draws = len(coords["draw"])
     output_array = np.zeros((n_chains, n_draws, len(y_values)))
-    kwargs_prep = {key_: val_[*(0, 0), ...] for key_, val_ in kwargs.items()}
+    kwargs_prep = {key_: val_[0][0] for key_, val_ in kwargs.items()}
     shape_dict = {key_: val_.shape for key_, val_ in kwargs_prep.items()}
     pt_dict = {
         key_: (pt.vector(key_, shape=((1,) if val_[0] == 1 else (None,))))
