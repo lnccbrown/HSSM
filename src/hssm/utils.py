@@ -207,8 +207,12 @@ def _compute_log_likelihood(
 
     # Assign the log-likelihood group to the InferenceData object
     idata.add_groups({"log_likelihood": log_likelihood_out})
-    idata["log_likelihood"] = idata.log_likelihood.assign_attrs(
-        modeling_interface="bambi", modeling_interface_version=bmb.__version__
+    setattr(
+        idata,
+        "log_likelihood",
+        idata.log_likelihood.assign_attrs(
+            modeling_interface="bambi", modeling_interface_version=bmb.__version__
+        ),
     )
 
     if inplace:
