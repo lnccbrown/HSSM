@@ -741,7 +741,13 @@ class HSSM:
             )
 
         if idata is None:
-            idata = self._inference_obj
+            if self._inference_obj is None:
+                raise ValueError(
+                    "The model has not been sampled yet. "
+                    + "Please provide an idata object."
+                )
+            else:
+                idata = self._inference_obj
         return _compute_log_likelihood(self.model, idata, data, inplace)
 
     def sample_posterior_predictive(

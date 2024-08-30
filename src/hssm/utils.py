@@ -195,7 +195,7 @@ def _compute_log_likelihood(
         idata, data, include_group_specific, sample_new_groups
     )
 
-    required_kwargs = {"model": model, "posterior": idata.posterior, "data": data}
+    required_kwargs = {"model": model, "posterior": idata["posterior"], "data": data}
     log_likelihood_out = log_likelihood(model.family, **required_kwargs).to_dataset(
         name=response_aliased_name
     )
@@ -203,11 +203,11 @@ def _compute_log_likelihood(
     # Drop the existing log_likelihood group if it exists
     if "log_likelihood" in idata:
         _logger.info("Replacing existing log_likelihood group in idata.")
-        del idata.log_likelihood
+        del idata["log_likelihood"]
 
     # Assign the log-likelihood group to the InferenceData object
     idata.add_groups({"log_likelihood": log_likelihood_out})
-    idata.log_likelihood = idata.log_likelihood.assign_attrs(
+    idata["log_likelihood"] = idata.log_likelihood.assign_attrs(
         modeling_interface="bambi", modeling_interface_version=bmb.__version__
     )
 
