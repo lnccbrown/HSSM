@@ -10,7 +10,7 @@ import logging
 from copy import deepcopy
 from inspect import isclass
 from os import PathLike
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, cast
 
 import arviz as az
 import bambi as bmb
@@ -260,10 +260,10 @@ class HSSM:
         **kwargs,
     ):
         self.data = data.copy()
-        self._inference_obj = None
+        self._inference_obj: az.InferenceData | None = None
         self._initvals: dict[str, Any] = {}
         self.initval_jitter = initval_jitter
-        self._inference_obj_vi = None
+        self._inference_obj_vi: pm.Approximation | None = None
         self._vi_approx = None
         self._map_dict = None
         self.hierarchical = hierarchical
@@ -416,7 +416,7 @@ class HSSM:
         )
         self.set_alias(self._aliases)
         self.model.build()
-        _logger.info(self.pymc_model.initial_point())
+        # _logger.info(self.pymc_model.initial_point())
 
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
@@ -431,6 +431,7 @@ class HSSM:
         self.pymc_model.rvs_to_initial_values.update(
             {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
         )
+        _logger.info("Model initialized successfully.")
 
     def find_MAP(self, **kwargs):
         """Perform Maximum A Posteriori estimation.
@@ -1220,6 +1221,24 @@ class HSSM:
         )
         return pm.model.Point(fn(None), model=self.pymc_model)
 
+    def restore_traces(
+        self, traces: az.InferenceData | pm.Approximation | str | PathLike
+    ) -> None:
+        """Restore traces from an InferenceData object or a .netcdf file.
+
+        Parameters
+        ----------
+        traces
+            An InferenceData object or a path to a file containing the traces.
+        """
+        if isinstance(traces, pm.Approximation):
+            self._inference_obj_vi = traces
+            return
+
+        if isinstance(traces, (str, PathLike)):
+            traces = az.from_netcdf(traces)
+        self._inference_obj = cast(az.InferenceData, traces)
+
     def __repr__(self) -> str:
         """Create a representation of the model."""
         output = []
@@ -1614,14 +1633,14 @@ class HSSM:
                 if formula is None:
                     parent_formula = f"{self.response_c} ~ 1"
                     if prior is not None:
-                        priors |= {self.response_c: {"Intercept": prior[param.name]}}
+                        priors |= {param.name: {"Intercept": prior[param.name]}}
                     links |= {param.name: "identity"}
                 # parent is a regression
                 else:
                     right_side = formula.split(" ~ ")[1]
                     parent_formula = f"{self.response_c} ~ {right_side}"
                     if prior is not None:
-                        priors |= {self.response_c: prior[param.name]}
+                        priors |= {param.name: prior[param.name]}
                     if link is not None:
                         links |= link
             else:
@@ -2010,12 +2029,8 @@ class HSSM:
             name_str_suffix = ""
 
         if isinstance(self.priors, dict):
-            if name_str_prefix == self._parent:
-                tmp_param = self.response_c
-            else:
-                tmp_param = name_str_prefix
-
-            if tmp_param == self.response_c:
+            tmp_param = name_str_prefix
+            if tmp_param == self._parent:
                 # If the parameter was parent it is automatically treated as a
                 # regression.
                 if not name_str_suffix:
