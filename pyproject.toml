@@ -26,6 +26,7 @@ numpyro = "^0.15.2"
 hddm-wfpt = "^0.1.4"
 seaborn = "^0.13.2"
 jax = { version = "^0.4.25", extras = ["cuda12"], optional = true }
+numpy = ">=1.26.4,<2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.1"

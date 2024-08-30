@@ -10,7 +10,7 @@ import logging
 from copy import deepcopy
 from inspect import isclass
 from os import PathLike
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, cast
 
 import arviz as az
 import bambi as bmb
@@ -259,10 +259,10 @@ class HSSM:
         **kwargs,
     ):
         self.data = data.copy()
-        self._inference_obj = None
+        self._inference_obj: az.InferenceData | None = None
         self._initvals: dict[str, Any] = {}
         self.initval_jitter = initval_jitter
-        self._inference_obj_vi = None
+        self._inference_obj_vi: pm.Approximation | None = None
         self._vi_approx = None
         self._map_dict = None
         self.hierarchical = hierarchical
@@ -1177,6 +1177,24 @@ class HSSM:
             model=self.pymc_model, return_transformed=transformed
         )
         return pm.model.Point(fn(None), model=self.pymc_model)
+
+    def restore_traces(
+        self, traces: az.InferenceData | pm.Approximation | str | PathLike
+    ) -> None:
+        """Restore traces from an InferenceData object or a .netcdf file.
+
+        Parameters
+        ----------
+        traces
+            An InferenceData object or a path to a file containing the traces.
+        """
+        if isinstance(traces, pm.Approximation):
+            self._inference_obj_vi = traces
+            return
+
+        if isinstance(traces, (str, PathLike)):
+            traces = az.from_netcdf(traces)
+        self._inference_obj = cast(az.InferenceData, traces)
 
     def __repr__(self) -> str:
         """Create a representation of the model."""
