@@ -9,6 +9,16 @@ from hssm import Prior
 hssm.set_floatX("float32")
 
 
+@pytest.fixture
+def prior():
+    name = "Normal"
+    auto_scale = True
+    dist = None
+    bounds = (-1.0, 1.0)
+    args = {"mu": 0, "sigma": 1}
+    return Prior(name, auto_scale, dist, bounds, **args)
+
+
 def test_truncation():
     hssm_prior = Prior("Uniform", lower=0.0, upper=1.0)
     bmb_prior = bmb.Prior("Uniform", lower=0.0, upper=1.0)
@@ -24,7 +34,7 @@ def test_truncation():
     assert not prior2.is_truncated
     assert prior2.dist is None
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         bounded_prior_err = Prior(
             "Uniform", lower=0.0, upper=1.0, bounds=(0.2, 0.8), dist=lambda x: x
         )
@@ -60,3 +70,57 @@ def test_eq():
     assert hssm_prior == bounded_prior2
 
     assert dist_hssm_prior == dist_bmb_prior
+
+
+def test_to_dict(prior):
+    expected_dict = {
+        "name": prior.name,
+        "bounds": prior.bounds,
+        "auto_scale": prior.auto_scale,
+        "mu": 0,
+        "sigma": 1,
+    }
+    assert prior.to_dict() == expected_dict
+
+
+def test_from_dict():
+    prior_dict = {
+        "name": "Normal",
+        "bounds": (-1.0, 1.0),
+        "auto_scale": True,
+        "mu": 0,
+        "sigma": 1,
+    }
+    prior_from_dict = Prior.from_dict(prior_dict)
+    assert prior_from_dict.name == "Normal"
+    assert prior_from_dict.bounds == (-1.0, 1.0)
+    assert prior_from_dict.auto_scale == True
+    assert prior_from_dict.dist is not None
+    assert prior_from_dict.args == {}
+    assert prior_from_dict._args == {"mu": 0, "sigma": 1}
+    assert prior_from_dict.is_truncated
+
+
+def test_from_bambi():
+    bambi_prior = bmb.Prior("Normal", auto_scale=True, dist=None, mu=0, sigma=1)
+    prior_from_bambi_unbounded = Prior.from_bambi(bambi_prior)
+
+    assert prior_from_bambi_unbounded.name == "Normal"
+    assert prior_from_bambi_unbounded.bounds is None
+    assert prior_from_bambi_unbounded.auto_scale == True
+    assert prior_from_bambi_unbounded.dist is None
+    assert prior_from_bambi_unbounded.args["mu"] == 0
+    assert prior_from_bambi_unbounded.args["sigma"] == 1
+    assert prior_from_bambi_unbounded._args["mu"] == 0
+    assert prior_from_bambi_unbounded._args["sigma"] == 1
+    assert not prior_from_bambi_unbounded.is_truncated
+
+    prior_from_bambi_bounded = Prior.from_bambi(bambi_prior, bounds=(-1.0, 1.0))
+    assert prior_from_bambi_bounded.name == "Normal"
+    assert prior_from_bambi_bounded.bounds == (-1.0, 1.0)
+    assert prior_from_bambi_bounded.auto_scale == True
+    assert prior_from_bambi_bounded.dist is not None
+    assert prior_from_bambi_bounded.args == {}
+    assert prior_from_bambi_bounded._args["mu"] == 0
+    assert prior_from_bambi_bounded._args["sigma"] == 1
+    assert prior_from_bambi_bounded.is_truncated
