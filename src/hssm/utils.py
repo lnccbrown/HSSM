@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 import pytensor
+import pytensor.tensor as pt
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from bambi.utils import get_aliased_name, response_evaluate_new_data
@@ -199,9 +200,12 @@ def _compute_log_likelihood(
         name=response_aliased_name
     )
 
+    # Drop the existing log_likelihood group if it exists
     if "log_likelihood" in idata:
+        _logger.info("Replacing existing log_likelihood group in idata.")
         del idata.log_likelihood
 
+    # Assign the log-likelihood group to the InferenceData object
     idata.add_groups({"log_likelihood": log_likelihood_out})
     idata.log_likelihood = idata.log_likelihood.assign_attrs(
         modeling_interface="bambi", modeling_interface_version=bmb.__version__
@@ -222,7 +226,9 @@ def log_likelihood(
 ) -> xr.DataArray:
     """Evaluate the model log-likelihood.
 
-    This method uses `pm.logp()`.
+    This is a variation on the `bambi.utils.log_likelihood` function that
+    loops over the chains and draws to evaluate the log-likelihood for each
+    instead of attempting to batch the computation as is done in the orignal.
 
     Parameters
     ----------
@@ -264,39 +270,53 @@ def log_likelihood(
     # but we actually don't need it. We just need "chain", "draw", "__obs__"
     coords = dict(list(coords.items())[:3])
 
-    output_array = np.zeros((len(coords["chain"]), len(coords["draw"]), len(y_values)))
-    y_values_size = len(y_values)
-    # Handle constrained responses
+    n_chains = len(coords["chain"])
+    n_draws = len(coords["draw"])
+    output_array = np.zeros((n_chains, n_draws, len(y_values)))
+    kwargs_prep = {key_: val_[*(0, 0), ...] for key_, val_ in kwargs.items()}
+    shape_dict = {key_: val_.shape for key_, val_ in kwargs_prep.items()}
+    pt_dict = {
+        key_: (pt.vector(key_, shape=((1,) if val_[0] == 1 else (None,))))
+        for key_, val_ in shape_dict.items()
+    }
+
+    # Compile likelihood function
+    if not response_term.is_constrained:
+        rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
+        logp_compiled = pm.compile_pymc(
+            [val_ for key_, val_ in pt_dict.items()], rv_logp
+        )
+    else:
+        # Bounds are scalars, we can safely pick them from the first row
+        lower, upper = response_term.data[0, 1:]
+        lower = lower if lower != -np.inf else None
+        upper = upper if upper != np.inf else None
+
+        # Finally evaluate logp
+        rv_logp = pm.logp(
+            pm.Truncated.dist(
+                response_dist.dist(**kwargs_prep), lower=lower, upper=upper
+            ),
+            y_values,
+        )
+        logp_compiled = pm.compile_pymc(
+            [val_ for key_, val_ in pt_dict.items()], rv_logp
+        )
+
+    # Loop through chain and draws
     for ids in tqdm(
         list(itertools.product(coords["chain"].values, coords["draw"].values))
     ):
-        # Subect kwargs
-        kwargs_new = {
+        kwargs_tmp = {
             key_: (
                 val_[*(ids[0], ids[1]), ...]
-                if val_.size >= y_values_size
+                if (val_.shape[0] == n_chains and val_.shape[1] == n_draws)
                 else val_[*(0, 0), ...]
             )
             for key_, val_ in kwargs.items()
         }
 
-        if response_term.is_constrained:
-            # Bounds are scalars, we can safely pick them from the first row
-            lower, upper = response_term.data[0, 1:]
-            lower = lower if lower != -np.inf else None
-            upper = upper if upper != np.inf else None
-            # Finally evaluate logp
-            output_array[*ids, :] = pm.logp(
-                pm.Truncated.dist(
-                    response_dist.dist(**kwargs_new), lower=lower, upper=upper
-                ),
-                y_values,
-            ).eval()
-        else:
-            # Finally evaluate logp
-            output_array[*ids, :] = pm.logp(
-                response_dist.dist(**kwargs_new), y_values
-            ).eval()
+        output_array[*ids, :] = logp_compiled(**kwargs_tmp)
 
     # output_array
     return xr.DataArray(output_array, coords=coords)
