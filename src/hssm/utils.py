@@ -210,7 +210,7 @@ def _compute_log_likelihood(
     setattr(
         idata,
         "log_likelihood",
-        idata.log_likelihood.assign_attrs(
+        idata["log_likelihood"].assign_attrs(
             modeling_interface="bambi", modeling_interface_version=bmb.__version__
         ),
     )
