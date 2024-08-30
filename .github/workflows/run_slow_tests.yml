@@ -24,10 +24,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install hssm
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction
-
       - name: Run slow tests
         run: poetry run pytest -s tests/slow
         env:
