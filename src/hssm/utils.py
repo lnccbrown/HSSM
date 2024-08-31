@@ -317,7 +317,7 @@ def log_likelihood(
             key_: (
                 val[ids[0], ids[1], ...]
                 if (val.shape[0] == n_chains and val.shape[1] == n_draws)
-                else val[*(0, 0), ...]
+                else val[0, 0, ...]
             )
             for key_, val in kwargs.items()
         }
