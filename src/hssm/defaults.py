@@ -14,8 +14,14 @@ from .likelihoods.analytical import (
     ddm_params,
     ddm_sdv_bounds,
     ddm_sdv_params,
+    lba2_bounds,
+    lba2_params,
+    lba3_bounds,
+    lba3_params,
     logp_ddm,
     logp_ddm_sdv,
+    logp_lba2,
+    logp_lba3,
 )
 from .likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox, logp_full_ddm
 from .param import ParamSpec, _make_default_prior
@@ -32,6 +38,8 @@ SupportedModels = Literal[
     "weibull",
     "race_no_bias_angle_4",
     "ddm_seq2_no_bias",
+    "lba3",
+    "lba2",
 ]
 
 LoglikKind = Literal["analytical", "approx_differentiable", "blackbox"]
@@ -191,6 +199,34 @@ default_model_config: DefaultConfigs = {
                         "sigma": 2.0,
                     },
                 },
+                "extra_fields": None,
+            }
+        },
+    },
+    "lba2": {
+        "response": ["rt", "response"],
+        "list_params": lba2_params,
+        "description": "Linear Ballistic Accumulator 2 Choices (LBA2)",
+        "likelihoods": {
+            "analytical": {
+                "loglik": logp_lba2,
+                "backend": None,
+                "default_priors": {},
+                "bounds": lba2_bounds,
+                "extra_fields": None,
+            }
+        },
+    },
+    "lba3": {
+        "response": ["rt", "response"],
+        "list_params": lba3_params,
+        "description": "Linear Ballistic Accumulator 3 Choices (LBA3)",
+        "likelihoods": {
+            "analytical": {
+                "loglik": logp_lba3,
+                "backend": None,
+                "default_priors": {},
+                "bounds": lba3_bounds,
                 "extra_fields": None,
             }
         },

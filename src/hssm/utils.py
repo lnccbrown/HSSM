@@ -315,7 +315,7 @@ def log_likelihood(
     ):
         kwargs_tmp = {
             key_: (
-                val[*(ids[0], ids[1]), ...]
+                val[ids[0], ids[1], ...]
                 if (val.shape[0] == n_chains and val.shape[1] == n_draws)
                 else val[*(0, 0), ...]
             )
