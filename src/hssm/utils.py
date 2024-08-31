@@ -11,7 +11,7 @@ _parse_bambi().
 
 import itertools
 import logging
-from copy import deepcopy
+from copy import copy
 from typing import Any, Literal, cast
 
 import arviz as az
@@ -188,7 +188,7 @@ def _compute_log_likelihood(
     response_aliased_name = get_aliased_name(model.response_component.term)
 
     if not inplace:
-        idata = deepcopy(idata)
+        idata = copy(idata)
 
     # Populate the posterior in the InferenceData object with the likelihood parameters
     idata = model._compute_likelihood_params(
@@ -277,18 +277,20 @@ def log_likelihood(
     n_chains = len(coords["chain"])
     n_draws = len(coords["draw"])
     output_array = np.zeros((n_chains, n_draws, len(y_values)))
-    kwargs_prep = {key_: val_[0][0] for key_, val_ in kwargs.items()}
-    shape_dict = {key_: val_.shape for key_, val_ in kwargs_prep.items()}
+    kwargs_prep = {key_: val[0][0] for key_, val in kwargs.items()}
+    shape_dict = {key_: val.shape for key_, val in kwargs_prep.items()}
     pt_dict = {
-        key_: (pt.vector(key_, shape=((1,) if val_[0] == 1 else (None,))))
-        for key_, val_ in shape_dict.items()
+        key_: (pt.vector(key_, shape=((1,) if val[0] == 1 else (None,))))
+        for key_, val in shape_dict.items()
     }
 
     # Compile likelihood function
     if not response_term.is_constrained:
         rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
         logp_compiled = pm.compile_pymc(
-            [val_ for key_, val_ in pt_dict.items()], rv_logp
+            [val for key_, val in pt_dict.items()],
+            rv_logp,
+            allow_input_downcast=True,
         )
     else:
         # Bounds are scalars, we can safely pick them from the first row
@@ -304,7 +306,7 @@ def log_likelihood(
             y_values,
         )
         logp_compiled = pm.compile_pymc(
-            [val_ for key_, val_ in pt_dict.items()], rv_logp
+            [val for key_, val in pt_dict.items()], rv_logp, allow_input_downcast=True
         )
 
     # Loop through chain and draws
@@ -313,11 +315,11 @@ def log_likelihood(
     ):
         kwargs_tmp = {
             key_: (
-                val_[*(ids[0], ids[1]), ...]
-                if (val_.shape[0] == n_chains and val_.shape[1] == n_draws)
-                else val_[*(0, 0), ...]
+                val[*(ids[0], ids[1]), ...]
+                if (val.shape[0] == n_chains and val.shape[1] == n_draws)
+                else val[*(0, 0), ...]
             )
-            for key_, val_ in kwargs.items()
+            for key_, val in kwargs.items()
         }
 
         output_array[*ids, :] = logp_compiled(**kwargs_tmp)
