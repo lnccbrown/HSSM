@@ -322,7 +322,7 @@ def log_likelihood(
             for key_, val in kwargs.items()
         }
 
-        output_array[*ids, :] = logp_compiled(**kwargs_tmp)
+        output_array[ids[0], ids[1], :] = logp_compiled(**kwargs_tmp)
 
     # output_array
     return xr.DataArray(output_array, coords=coords)

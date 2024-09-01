@@ -407,6 +407,8 @@ class HSSM:
             data=self.data,
             family=self.family,
             priors=self.priors,
+            auto_scale=False,  # Don't scale priors automatically for us
+            center_predictors=False,  # Don't to center predictors automatically for us
             extra_namespace=self.additional_namespace,
             **other_kwargs,
         )

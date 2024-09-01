@@ -46,7 +46,7 @@ class Prior(bmb.Prior):
     def __init__(
         self,
         name: str,
-        auto_scale: bool = True,
+        auto_scale: bool = False,
         dist: Callable | None = None,
         bounds: tuple[float, float] | None = None,
         **kwargs,
