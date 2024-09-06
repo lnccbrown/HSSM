@@ -253,7 +253,7 @@ def logp_ddm(
     np.ndarray
         The analytical likelihoods for DDM.
     """
-    data = pt.reshape(data, (-1, 2))
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
     flip = response > 0
@@ -261,6 +261,8 @@ def logp_ddm(
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
+    negative_rt = rt < 0
+    rt = pt.switch(negative_rt, epsilon, rt)
 
     p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
 
@@ -324,7 +326,7 @@ def logp_ddm_sdv(
     if sv == 0:
         return logp_ddm(data, v, a, z, t, err, k_terms, epsilon)
 
-    data = pt.reshape(data, (-1, 2))
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
     flip = response > 0
@@ -332,6 +334,8 @@ def logp_ddm_sdv(
     v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
     z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
+    negative_rt = rt < 0
+    rt = pt.switch(negative_rt, epsilon, rt)
 
     p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
 
