@@ -190,8 +190,11 @@ def _compute_log_likelihood(
     if not inplace:
         idata = copy(idata)
 
-    # Populate the posterior in the InferenceData object with the likelihood parameters
-    idata = model._compute_likelihood_params(
+    # return idata
+
+    # # Populate the posterior in the InferenceData object
+    # with the likelihood parameters
+    idata = model._compute_likelihood_params(  # pylint: disable=protected-access
         idata, data, include_group_specific, sample_new_groups
     )
 

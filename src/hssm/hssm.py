@@ -621,22 +621,23 @@ class HSSM:
             **kwargs,
         )
 
+        # Separate out log likelihood computation
+        if compute_likelihood:
+            self.log_likelihood(self._inference_obj, inplace=True)
+
         # Subset data vars in posterior
         if self._inference_obj is not None:
             vars_to_keep = set(
-                [var.name for var in getattr(self, "pymc_model").free_RVs]
-            ).intersection(set(list(self._inference_obj["posterior"].data_vars.keys())))
+                self._inference_obj["posterior"].data_vars.keys()
+            ).difference(set(self.model.distributional_components.keys()))
+
+            # intersection(set(list(self._inference_obj["posterior"].data_vars.keys())))
 
             setattr(
                 self._inference_obj,
                 "posterior",
                 self._inference_obj["posterior"][list(vars_to_keep)],
             )
-
-        # Separate out log likelihood computation
-        if compute_likelihood:
-            self.log_likelihood(self._inference_obj, inplace=True)
-
         return self.traces
 
     def vi(
@@ -694,10 +695,8 @@ class HSSM:
         # Post-processing
         if self._inference_obj_vi is not None:
             vars_to_keep = set(
-                [var.name for var in self.pymc_model.free_RVs]
-            ).intersection(
-                set(list(self._inference_obj_vi["posterior"].data_vars.keys()))
-            )
+                self._inference_obj_vi["posterior"].data_vars.keys()
+            ).difference(set(self.model.distributional_components.keys()))
 
             setattr(
                 self._inference_obj_vi,
@@ -751,6 +750,39 @@ class HSSM:
             else:
                 idata = self._inference_obj
         return _compute_log_likelihood(self.model, idata, data, inplace)
+
+    def add_likelihood_parameters_to_idata(
+        self,
+        idata: az.InferenceData | None = None,
+        inplace: bool = False,
+    ) -> az.InferenceData | None:
+        """Add likelihood parameters to the InferenceData object.
+
+        Parameters
+        ----------
+        idata : az.InferenceData
+            The InferenceData object returned by HSSM.sample().
+        inplace : bool
+            If True, the likelihood parameters are added to idata in-place. Otherwise,
+            a copy of idata with the likelihood parameters added is returned.
+            Defaults to False.
+
+        Returns
+        -------
+        az.InferenceData | None
+            InferenceData or None
+        """
+        if idata is None and self._inference_obj is not None:
+            idata = self.model._compute_likelihood_params(  # pylint: disable=protected-access
+                deepcopy(self._inference_obj) if not inplace else self._inference_obj
+            )
+        elif idata is None and self._inference_obj is None:
+            raise ValueError("No idata provided and model not yet sampled!")
+        elif idata is not None:
+            idata = self.model._compute_likelihood_params(  # pylint: disable=protected-access
+                deepcopy(idata) if not inplace else idata
+            )
+        return idata
 
     def sample_posterior_predictive(
         self,
