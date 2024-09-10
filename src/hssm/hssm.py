@@ -627,16 +627,37 @@ class HSSM:
 
         # Subset data vars in posterior
         if self._inference_obj is not None:
+            # Logic behind which variables to keep:
+            # We essentially want to get rid of
+            # all the trial-wise variables.
+
+            # We drop all distributional components, IF they are deterministics
+            # (in which case they will be trial wise systematically)
+            # and we keep distributional components, IF they are
+            # basic random-variabels (in which case they should never
+            # appear trial-wise).
+
+            # Because of this,
             vars_to_keep = set(
                 self._inference_obj["posterior"].data_vars.keys()
-            ).difference(set(self.model.distributional_components.keys()))
+            ).difference(
+                set(
+                    [
+                        key_
+                        for key_ in self.model.distributional_components.keys()
+                        if key_
+                        in [var_.name for var_ in self.pymc_model.deterministics]
+                    ]
+                )
+            )
+            vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
 
             # intersection(set(list(self._inference_obj["posterior"].data_vars.keys())))
 
             setattr(
                 self._inference_obj,
                 "posterior",
-                self._inference_obj["posterior"][list(vars_to_keep)],
+                self._inference_obj["posterior"][vars_to_keep_clean],
             )
         return self.traces
 
@@ -694,14 +715,35 @@ class HSSM:
 
         # Post-processing
         if self._inference_obj_vi is not None:
+            # Logic behind which variables to keep:
+            # We essentially want to get rid of
+            # all the trial-wise variables.
+
+            # We drop all distributional components, IF they are deterministics
+            # (in which case they will be trial wise systematically)
+            # and we keep distributional components, IF they are
+            # basic random-variabels (in which case they should never
+            # appear trial-wise).
+
+            # Because of this,
             vars_to_keep = set(
                 self._inference_obj_vi["posterior"].data_vars.keys()
-            ).difference(set(self.model.distributional_components.keys()))
+            ).difference(
+                set(
+                    [
+                        key_
+                        for key_ in self.model.distributional_components.keys()
+                        if key_
+                        in [var_.name for var_ in self.pymc_model.deterministics]
+                    ]
+                )
+            )
+            vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
 
             setattr(
                 self._inference_obj_vi,
                 "posterior",
-                self._inference_obj_vi["posterior"][list(vars_to_keep)],
+                self._inference_obj_vi["posterior"][list(vars_to_keep_clean)],
             )
 
         # Return the InferenceData object if return_idata is True
