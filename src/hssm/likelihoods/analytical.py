@@ -478,7 +478,7 @@ def logp_lba2(
     v1: float,
 ) -> np.ndarray:
     """Compute the log-likelihood of the LBA model with 2 drift rates."""
-    data = pt.reshape(data, (-1, 2))
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
     response = pt.cast(response, "int32")
@@ -496,7 +496,7 @@ def logp_lba3(
     v2: float,
 ) -> np.ndarray:
     """Compute the log-likelihood of the LBA model with 3 drift rates."""
-    data = pt.reshape(data, (-1, 2))
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
     response = pt.cast(response, "int32")
