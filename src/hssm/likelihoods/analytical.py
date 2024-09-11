@@ -481,8 +481,8 @@ def logp_lba2(
     data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
-    response = pt.cast(response, "int32")
-    logp = _pt_lba2_ll(rt, response, A, b, v0, v1).squeeze()
+    response_int = pt.cast(response, "int32")
+    logp = _pt_lba2_ll(rt, response_int, A, b, v0, v1).squeeze()
     checked_logp = check_parameters(logp, b > A, msg="b > A")
     return checked_logp
 
@@ -499,8 +499,8 @@ def logp_lba3(
     data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
-    response = pt.cast(response, "int32")
-    logp = _pt_lba3_ll(rt, response, A, b, v0, v1, v2).squeeze()
+    response_int = pt.cast(response, "int32")
+    logp = _pt_lba3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
     checked_logp = check_parameters(logp, b > A, msg="b > A")
     return checked_logp
 
