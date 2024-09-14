@@ -11,7 +11,7 @@ _parse_bambi().
 
 import itertools
 import logging
-from copy import copy
+from copy import deepcopy
 from typing import Any, Literal, cast
 
 import arviz as az
@@ -188,9 +188,7 @@ def _compute_log_likelihood(
     response_aliased_name = get_aliased_name(model.response_component.term)
 
     if not inplace:
-        idata = copy(idata)
-
-    # return idata
+        idata = deepcopy(idata)
 
     # # Populate the posterior in the InferenceData object
     # with the likelihood parameters
@@ -217,11 +215,7 @@ def _compute_log_likelihood(
             modeling_interface="bambi", modeling_interface_version=bmb.__version__
         ),
     )
-
-    if inplace:
-        return None
-    else:
-        return idata
+    return idata
 
 
 def log_likelihood(

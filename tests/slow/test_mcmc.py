@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import hssm
 import numpy as np
 import pymc as pm
+from copy import deepcopy
+import xarray as xr
 
 from hssm.utils import _rearrange_data
 
@@ -114,9 +116,22 @@ def sample(model, sampler, step):
 
 
 def run_sample(model, sampler, step, expected):
-    if expected == True:
+    """Run the sample function and check if the expected error is raised."""
+    if expected is True:
         sample(model, sampler, step)
         assert isinstance(model.traces, az.InferenceData)
+
+        # make sure log_likelihood computations check out
+        traces_copy = deepcopy(model.traces)
+        del traces_copy["log_likelihood"]
+
+        # recomputing log-likelihood yields same results?
+        model.log_likelihood(traces_copy, inplace=True)
+        assert isinstance(traces_copy, az.InferenceData)
+        assert "log_likelihood" in traces_copy.groups()
+        for group_ in traces_copy.groups():
+            xr.testing.assert_equal(traces_copy[group_], model.traces[group_])
+
     else:
         with pytest.raises(expected):
             sample(model, sampler, step)
@@ -124,6 +139,7 @@ def run_sample(model, sampler, step, expected):
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
+    """Test simple models."""
     print("PYMC VERSION: ")
     print(pm.__version__)
     print("TEST INPUTS WERE: ")
@@ -132,6 +148,9 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
 
     model = hssm.HSSM(
         data_ddm, loglik_kind=loglik_kind, model_config={"backend": backend}
+    )
+    assert np.all(
+        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
     )
     run_sample(model, sampler, step, expected)
 
@@ -154,6 +173,7 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected):
+    """Test regression models."""
     print("PYMC VERSION: ")
     print(pm.__version__)
     print("TEST INPUTS WERE: ")
@@ -174,6 +194,9 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
         model_config={"backend": backend},
         v=param_reg,
     )
+    assert np.all(
+        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
+    )
     run_sample(model, sampler, step, expected)
 
     # Only runs once
@@ -190,6 +213,7 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, expected):
+    """Test regression models with multiple parameters (v, a)."""
     print("PYMC VERSION: ")
     print(pm.__version__)
     print("TEST INPUTS WERE: ")
@@ -223,6 +247,9 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, ex
         model_config={"backend": backend},
         v=param_reg_v,
         a=param_reg_a,
+    )
+    assert np.all(
+        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
     )
     print(model.params["a"])
     run_sample(model, sampler, step, expected)
@@ -269,6 +296,7 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, ex
 def test_simple_models_missing_data(
     data_ddm_missing, loglik_kind, backend, sampler, step, expected, cpn
 ):
+    """Test simple model with missing data (deadline e.g.)"""
     print("PYMC VERSION: ")
     print(pm.__version__)
     print("TEST INPUTS WERE: ")
@@ -282,6 +310,9 @@ def test_simple_models_missing_data(
         missing_data=True,
         loglik_missing_data=cpn,
     )
+    assert np.all(
+        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
+    )
     run_sample(model, sampler, step, expected)
 
 
@@ -289,6 +320,7 @@ def test_simple_models_missing_data(
 def test_reg_models_missing_data(
     data_ddm_reg_missing, loglik_kind, backend, sampler, step, expected, cpn
 ):
+    """Test regression model with missing data (deadline e.g.)"""
     print("PYMC VERSION: ")
     print(pm.__version__)
     print("TEST INPUTS WERE: ")
@@ -311,6 +343,9 @@ def test_reg_models_missing_data(
         missing_data=True,
         loglik_missing_data=cpn,
     )
+    assert np.all(
+        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
+    )
     run_sample(model, sampler, step, expected)
 
 
@@ -318,6 +353,7 @@ def test_reg_models_missing_data(
 def test_simple_models_deadline(
     data_ddm_deadline, loglik_kind, backend, sampler, step, expected, opn
 ):
+    """Test simple model with deadline."""
     print("PYMC VERSION: ")
     print(pm.__version__)
     print("TEST INPUTS WERE: ")
@@ -330,6 +366,9 @@ def test_simple_models_deadline(
         deadline=True,
         loglik_missing_data=opn,
     )
+    assert np.all(
+        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
+    )
     run_sample(model, sampler, step, expected)
 
 
@@ -337,6 +376,7 @@ def test_simple_models_deadline(
 def test_reg_models_deadline(
     data_ddm_reg_deadline, loglik_kind, backend, sampler, step, expected, opn
 ):
+    """Test regression model with deadline."""
     print("PYMC VERSION: ")
     print(pm.__version__)
     print("TEST INPUTS WERE: ")
@@ -358,5 +398,8 @@ def test_reg_models_deadline(
         v=param_reg,
         deadline=True,
         loglik_missing_data=opn,
+    )
+    assert np.all(
+        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
     )
     run_sample(model, sampler, step, expected)

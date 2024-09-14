@@ -237,7 +237,7 @@ class HSSM:
         self,
         data: pd.DataFrame,
         model: SupportedModels | str = "ddm",
-        choices: int | list[int] = 2,
+        choices: list[int] | None = None,
         include: list[dict | Param] | None = None,
         model_config: ModelConfig | dict | None = None,
         loglik: (
@@ -288,6 +288,8 @@ class HSSM:
                 if isinstance(model_config, ModelConfig)
                 else ModelConfig(**model_config)  # also serves as dict validation
             )
+            if choices is not None:
+                self.model_config.update_choices(choices)
 
         # Update loglik with user-provided value
         self.model_config.update_loglik(loglik)
@@ -297,25 +299,38 @@ class HSSM:
         # Set up shortcuts so old code will work
         self.response = self.model_config.response
         self.list_params = self.model_config.list_params
+        self.choices = self.model_config.choices
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
 
-        if isinstance(choices, int):
-            if choices == 2:
-                self.n_choices = 2
-                self.choices = [-1, 1]
-            elif choices > 2:
-                self.n_choices = choices
-                self.choices = list(range(choices))
-            else:
-                raise ValueError("choices must be greater than 1.")
-        elif isinstance(choices, list):
-            self.n_choices = len(choices)
-            self.choices = choices
-        else:
-            raise ValueError("choices must be an integer or a list of integers.")
+        assert (
+            self.choices is not None
+        ), "choices must be provides either in model_config or as an argument."
+
+        self.n_choices = len(self.choices)
+
+        # if model in typing.get_args(SupportedModels):
+        #     self.choices = self.model_config.choices
+        # else:
+        #     if isinstance(choices, int):
+        #         if choices == 2:
+        #             self.n_choices = 2
+        #             self.choices = [-1, 1]
+        #         elif choices > 2:
+        #             self.n_choices = choices
+        #             self.choices = list(range(choices))
+        #         else:
+        #             raise ValueError("choices must be greater than 1.")
+        #     elif isinstance(choices, list):
+        #         self.n_choices = len(choices)
+        #         self.choices = choices
+        #     else:
+        #         raise ValueError(
+        #             "choices must be an integer or a list of integers, \n"
+        #             "if not working with a supported model."
+        #         )
 
         self._pre_check_data_sanity()
 
@@ -642,12 +657,9 @@ class HSSM:
                 self._inference_obj["posterior"].data_vars.keys()
             ).difference(
                 set(
-                    [
-                        key_
-                        for key_ in self.model.distributional_components.keys()
-                        if key_
-                        in [var_.name for var_ in self.pymc_model.deterministics]
-                    ]
+                    key_
+                    for key_ in self.model.distributional_components.keys()
+                    if key_ in [var_.name for var_ in self.pymc_model.deterministics]
                 )
             )
             vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
@@ -730,12 +742,9 @@ class HSSM:
                 self._inference_obj_vi["posterior"].data_vars.keys()
             ).difference(
                 set(
-                    [
-                        key_
-                        for key_ in self.model.distributional_components.keys()
-                        if key_
-                        in [var_.name for var_ in self.pymc_model.deterministics]
-                    ]
+                    key_
+                    for key_ in self.model.distributional_components.keys()
+                    if key_ in [var_.name for var_ in self.pymc_model.deterministics]
                 )
             )
             vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
@@ -757,6 +766,7 @@ class HSSM:
         idata: az.InferenceData | None = None,
         data: pd.DataFrame | None = None,
         inplace: bool = True,
+        keep_likelihood_params: bool = False,
     ) -> az.InferenceData | None:
         """Compute the log likelihood of the model.
 
@@ -771,6 +781,10 @@ class HSSM:
             If `True` will modify idata in-place and append a `log_likelihood` group to
             `idata`. Otherwise, it will return a copy of idata with the predictions
             added, by default True.
+        keep_likelihood_params : optional
+            If `True`, the trial wise likelihood parameters that are computed
+            on route to getting the log likelihood are kept in the `idata` object.
+            Defaults to False. See also the method `add_likelihood_parameters_to_idata`.
 
         Returns
         -------
@@ -791,7 +805,32 @@ class HSSM:
                 )
             else:
                 idata = self._inference_obj
-        return _compute_log_likelihood(self.model, idata, data, inplace)
+
+        # Actual likelihood computation
+        idata = _compute_log_likelihood(self.model, idata, data, inplace)
+
+        # clean up posterior:
+        if not keep_likelihood_params:
+            assert idata is not None, "idata is None"
+            vars_to_keep = set(idata["posterior"].data_vars.keys()).difference(
+                set(
+                    key_
+                    for key_ in self.model.distributional_components.keys()
+                    if key_ in [var_.name for var_ in self.pymc_model.deterministics]
+                )
+            )
+            vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
+            print(vars_to_keep_clean)
+            setattr(
+                idata,
+                "posterior",
+                idata["posterior"][vars_to_keep_clean],
+            )
+
+        if inplace:
+            return None
+        else:
+            return idata
 
     def add_likelihood_parameters_to_idata(
         self,
