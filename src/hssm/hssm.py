@@ -7,6 +7,7 @@ This file defines the entry class HSSM.
 """
 
 import logging
+import typing
 from copy import deepcopy
 from inspect import isclass
 from os import PathLike
@@ -283,13 +284,44 @@ class HSSM:
         self.model_config = Config.from_defaults(model, loglik_kind)
         # Update defaults with user-provided config, if any
         if model_config is not None:
+            if isinstance(model_config, dict):
+                if "choices" not in model_config:
+                    if choices is not None:
+                        model_config["choices"] = choices
+                else:
+                    if choices is not None:
+                        _logger.info(
+                            "choices list provided in both model_config and "
+                            "as an argument directly."
+                            " Using the one provided in model_config."
+                        )
+            elif isinstance(model_config, ModelConfig):
+                if model_config.choices is None:
+                    if choices is not None:
+                        model_config.choices = choices
+                else:
+                    if choices is not None:
+                        _logger.info(
+                            "choices list provided in both model_config and "
+                            "as an argument directly."
+                            " Using the one provided in model_config."
+                        )
+
             self.model_config.update_config(
                 model_config
                 if isinstance(model_config, ModelConfig)
                 else ModelConfig(**model_config)  # also serves as dict validation
             )
-            if choices is not None:
-                self.model_config.update_choices(choices)
+        else:
+            if model not in typing.get_args(SupportedModels):
+                if choices is not None:
+                    self.model_config.update_choices(choices)
+            else:
+                if choices is not None:
+                    _logger.info(
+                        "Model string is in SupportedModels."
+                        " Ignoring choices arguments."
+                    )
 
         # Update loglik with user-provided value
         self.model_config.update_loglik(loglik)
@@ -310,28 +342,6 @@ class HSSM:
         ), "choices must be provides either in model_config or as an argument."
 
         self.n_choices = len(self.choices)
-
-        # if model in typing.get_args(SupportedModels):
-        #     self.choices = self.model_config.choices
-        # else:
-        #     if isinstance(choices, int):
-        #         if choices == 2:
-        #             self.n_choices = 2
-        #             self.choices = [-1, 1]
-        #         elif choices > 2:
-        #             self.n_choices = choices
-        #             self.choices = list(range(choices))
-        #         else:
-        #             raise ValueError("choices must be greater than 1.")
-        #     elif isinstance(choices, list):
-        #         self.n_choices = len(choices)
-        #         self.choices = choices
-        #     else:
-        #         raise ValueError(
-        #             "choices must be an integer or a list of integers, \n"
-        #             "if not working with a supported model."
-        #         )
-
         self._pre_check_data_sanity()
 
         # Go-NoGo
@@ -642,35 +652,7 @@ class HSSM:
 
         # Subset data vars in posterior
         if self._inference_obj is not None:
-            # Logic behind which variables to keep:
-            # We essentially want to get rid of
-            # all the trial-wise variables.
-
-            # We drop all distributional components, IF they are deterministics
-            # (in which case they will be trial wise systematically)
-            # and we keep distributional components, IF they are
-            # basic random-variabels (in which case they should never
-            # appear trial-wise).
-
-            # Because of this,
-            vars_to_keep = set(
-                self._inference_obj["posterior"].data_vars.keys()
-            ).difference(
-                set(
-                    key_
-                    for key_ in self.model.distributional_components.keys()
-                    if key_ in [var_.name for var_ in self.pymc_model.deterministics]
-                )
-            )
-            vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
-
-            # intersection(set(list(self._inference_obj["posterior"].data_vars.keys())))
-
-            setattr(
-                self._inference_obj,
-                "posterior",
-                self._inference_obj["posterior"][vars_to_keep_clean],
-            )
+            self._clean_posterior_group(idata=self._inference_obj)
         return self.traces
 
     def vi(
@@ -727,39 +709,56 @@ class HSSM:
 
         # Post-processing
         if self._inference_obj_vi is not None:
-            # Logic behind which variables to keep:
-            # We essentially want to get rid of
-            # all the trial-wise variables.
-
-            # We drop all distributional components, IF they are deterministics
-            # (in which case they will be trial wise systematically)
-            # and we keep distributional components, IF they are
-            # basic random-variabels (in which case they should never
-            # appear trial-wise).
-
-            # Because of this,
-            vars_to_keep = set(
-                self._inference_obj_vi["posterior"].data_vars.keys()
-            ).difference(
-                set(
-                    key_
-                    for key_ in self.model.distributional_components.keys()
-                    if key_ in [var_.name for var_ in self.pymc_model.deterministics]
-                )
-            )
-            vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
-
-            setattr(
-                self._inference_obj_vi,
-                "posterior",
-                self._inference_obj_vi["posterior"][list(vars_to_keep_clean)],
-            )
+            self._clean_posterior_group(idata=self._inference_obj_vi)
 
         # Return the InferenceData object if return_idata is True
         if return_idata:
             return self._inference_obj_vi
         # Otherwise return the appromation object directly
         return self.vi_approx
+
+    def _clean_posterior_group(self, idata: az.InferenceData):
+        """Clean up the posterior group of the InferenceData object.
+
+        Parameters
+        ----------
+        idata : az.InferenceData
+            The InferenceData object to clean up. If None, the last InferenceData object
+            will be used.
+        """
+        # # Logic behind which variables to keep:
+        # # We essentially want to get rid of
+        # # all the trial-wise variables.
+
+        # # We drop all distributional components, IF they are deterministics
+        # # (in which case they will be trial wise systematically)
+        # # and we keep distributional components, IF they are
+        # # basic random-variabels (in which case they should never
+        # # appear trial-wise).
+        if idata is None:
+            raise ValueError(
+                "The InferenceData object is None. Cannot clean up the posterior group."
+            )
+        elif not hasattr(idata, "posterior"):
+            raise ValueError(
+                "The InferenceData object does not have a posterior group. "
+                + "Cannot clean up the posterior group."
+            )
+
+        vars_to_keep = set(idata["posterior"].data_vars.keys()).difference(
+            set(
+                key_
+                for key_ in self.model.distributional_components.keys()
+                if key_ in [var_.name for var_ in self.pymc_model.deterministics]
+            )
+        )
+        vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
+
+        setattr(
+            idata,
+            "posterior",
+            idata["posterior"][vars_to_keep_clean],
+        )
 
     def log_likelihood(
         self,
@@ -811,21 +810,7 @@ class HSSM:
 
         # clean up posterior:
         if not keep_likelihood_params:
-            assert idata is not None, "idata is None"
-            vars_to_keep = set(idata["posterior"].data_vars.keys()).difference(
-                set(
-                    key_
-                    for key_ in self.model.distributional_components.keys()
-                    if key_ in [var_.name for var_ in self.pymc_model.deterministics]
-                )
-            )
-            vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
-            print(vars_to_keep_clean)
-            setattr(
-                idata,
-                "posterior",
-                idata["posterior"][vars_to_keep_clean],
-            )
+            self._clean_posterior_group(idata=idata)
 
         if inplace:
             return None
@@ -2280,5 +2265,4 @@ def _set_missing_data_and_deadline(
                 "`missing_data` and `deadline` are both set to True, but you have no "
                 + "missing data and/or no rts exceeding the deadline."
             )
-
     return network
