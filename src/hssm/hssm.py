@@ -717,7 +717,7 @@ class HSSM:
         # Otherwise return the appromation object directly
         return self.vi_approx
 
-    def _clean_posterior_group(self, idata: az.InferenceData):
+    def _clean_posterior_group(self, idata: az.InferenceData | None = None):
         """Clean up the posterior group of the InferenceData object.
 
         Parameters
