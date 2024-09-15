@@ -15,11 +15,11 @@ repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
+python = ">=3.10,<=3.12"
 pymc = ">=5.16.2,<5.17.0"
 arviz = "^0.19.0"
 onnx = "^1.16.0"
-ssm-simulators = "^0.7.2"
+ssm-simulators = "^0.7.5"
 huggingface-hub = "^0.24.6"
 bambi = ">=0.14.0,<0.15.0"
 numpyro = "^0.15.2"

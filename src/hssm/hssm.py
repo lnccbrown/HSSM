@@ -651,8 +651,7 @@ class HSSM:
             self.log_likelihood(self._inference_obj, inplace=True)
 
         # Subset data vars in posterior
-        if self._inference_obj is not None:
-            self._clean_posterior_group(idata=self._inference_obj)
+        self._clean_posterior_group(idata=self._inference_obj)
         return self.traces
 
     def vi(
@@ -708,8 +707,7 @@ class HSSM:
             self._inference_obj_vi = self._vi_approx.sample(draws)
 
         # Post-processing
-        if self._inference_obj_vi is not None:
-            self._clean_posterior_group(idata=self._inference_obj_vi)
+        self._clean_posterior_group(idata=self._inference_obj_vi)
 
         # Return the InferenceData object if return_idata is True
         if return_idata:
