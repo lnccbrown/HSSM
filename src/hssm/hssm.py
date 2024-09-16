@@ -293,7 +293,8 @@ class HSSM:
                         _logger.info(
                             "choices list provided in both model_config and "
                             "as an argument directly."
-                            " Using the one provided in model_config."
+                            " Using the one provided in model_config. \n"
+                            "We recommend providing choices in model_config."
                         )
             elif isinstance(model_config, ModelConfig):
                 if model_config.choices is None:
@@ -304,7 +305,8 @@ class HSSM:
                         _logger.info(
                             "choices list provided in both model_config and "
                             "as an argument directly."
-                            " Using the one provided in model_config."
+                            " Using the one provided in model_config. \n"
+                            "We recommend providing choices in model_config."
                         )
 
             self.model_config.update_config(
@@ -836,13 +838,16 @@ class HSSM:
         az.InferenceData | None
             InferenceData or None
         """
-        if idata is None and self._inference_obj is not None:
-            idata = self.model._compute_likelihood_params(  # pylint: disable=protected-access
-                deepcopy(self._inference_obj) if not inplace else self._inference_obj
-            )
-        elif idata is None and self._inference_obj is None:
-            raise ValueError("No idata provided and model not yet sampled!")
-        elif idata is not None:
+        if idata is None:
+            if self._inference_obj is None:
+                raise ValueError("No idata provided and model not yet sampled!")
+            else:
+                idata = self.model._compute_likelihood_params(  # pylint: disable=protected-access
+                    deepcopy(self._inference_obj)
+                    if not inplace
+                    else self._inference_obj
+                )
+        else:
             idata = self.model._compute_likelihood_params(  # pylint: disable=protected-access
                 deepcopy(idata) if not inplace else idata
             )
