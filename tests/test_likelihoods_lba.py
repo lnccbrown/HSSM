@@ -141,6 +141,3 @@ def test_lba3_basic():
             v1=1.0,
             v2=1.0,
         ).eval()
-
-
-test_lba3_basic()

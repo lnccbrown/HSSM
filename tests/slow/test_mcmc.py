@@ -117,7 +117,7 @@ def sample(model, sampler, step):
 
 def run_sample(model, sampler, step, expected):
     """Run the sample function and check if the expected error is raised."""
-    if expected:
+    if expected is True:
         sample(model, sampler, step)
         assert isinstance(model.traces, az.InferenceData)
 
@@ -135,6 +135,28 @@ def run_sample(model, sampler, step, expected):
     else:
         with pytest.raises(expected):
             sample(model, sampler, step)
+
+
+# Basic tests for LBA likelihood
+def test_lba_sampling():
+    """Test if sampling works for available lba models."""
+    lba2_data_out = hssm.simulate_data(
+        model="lba2", theta=dict(A=0.2, b=0.5, v0=1.0, v1=1.0), size=500
+    )
+
+    lba3_data_out = hssm.simulate_data(
+        model="lba3", theta=dict(A=0.2, b=0.5, v0=1.0, v1=1.0, v2=1.0), size=500
+    )
+
+    lba2_model = hssm.HSSM(model="lba2", data=lba2_data_out)
+
+    lba3_model = hssm.HSSM(model="lba3", data=lba3_data_out)
+
+    traces_2 = lba2_model.sample(sampler="nuts_numpyro", draws=100, tune=100, chains=1)
+    traces_3 = lba3_model.sample(sampler="nuts_numpyro", draws=100, tune=100, chains=1)
+
+    assert isinstance(traces_2, az.InferenceData)
+    assert isinstance(traces_3, az.InferenceData)
 
 
 @pytest.mark.parametrize(parameter_names, parameter_grid)
@@ -403,24 +425,3 @@ def test_reg_models_deadline(
         [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
     )
     run_sample(model, sampler, step, expected)
-
-
-def test_lba_sampling():
-    """Test if sampling works for available lba models."""
-    lba2_data_out = hssm.simulate_data(
-        model="lba2", theta=dict(A=0.2, b=0.5, v0=1.0, v1=1.0), size=500
-    )
-
-    lba3_data_out = hssm.simulate_data(
-        model="lba3", theta=dict(A=0.2, b=0.5, v0=1.0, v1=1.0, v2=1.0), size=500
-    )
-
-    lba2_model = hssm.HSSM(model="lba2", data=lba2_data_out)
-
-    lba3_model = hssm.HSSM(model="lba3", data=lba3_data_out)
-
-    traces_2 = lba2_model.sample(sampler="nuts_numpyro", draws=100, tune=100, chains=1)
-    traces_3 = lba3_model.sample(sampler="nuts_numpyro", draws=100, tune=100, chains=1)
-
-    assert isinstance(traces_2, az.InferenceData)
-    assert isinstance(traces_3, az.InferenceData)
