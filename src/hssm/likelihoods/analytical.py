@@ -374,7 +374,7 @@ ddm_sdv_params = ddm_params + ["sv"]
 DDM: Type[pm.Distribution] = make_distribution(
     "ddm",
     logp_ddm,
-    list_params=["v", "a", "z", "t"],
+    list_params=ddm_params,
     bounds=ddm_bounds,
 )
 
@@ -383,4 +383,156 @@ DDM_SDV: Type[pm.Distribution] = make_distribution(
     logp_ddm_sdv,
     list_params=ddm_sdv_params,
     bounds=ddm_sdv_bounds,
+)
+
+# LBA
+
+
+def _pt_normpdf(t):
+    return (1 / pt.sqrt(2 * pt.pi)) * pt.exp(-(t**2) / 2)
+
+
+def _pt_normcdf(t):
+    return (1 / 2) * (1 + pt.erf(t / pt.sqrt(2)))
+
+
+def _pt_tpdf(t, A, b, v, s):
+    g = (b - A - t * v) / (t * s)
+    h = (b - t * v) / (t * s)
+    f = (
+        -v * _pt_normcdf(g)
+        + s * _pt_normpdf(g)
+        + v * _pt_normcdf(h)
+        - s * _pt_normpdf(h)
+    ) / A
+    return f
+
+
+def _pt_tcdf(t, A, b, v, s):
+    e1 = ((b - A - t * v) / A) * _pt_normcdf((b - A - t * v) / (t * s))
+    e2 = ((b - t * v) / A) * _pt_normcdf((b - t * v) / (t * s))
+    e3 = ((t * s) / A) * _pt_normpdf((b - A - t * v) / (t * s))
+    e4 = ((t * s) / A) * _pt_normpdf((b - t * v) / (t * s))
+    F = 1 + e1 - e2 + e3 - e4
+    return F
+
+
+def _pt_lba3_ll(t, ch, A, b, v0, v1, v2):
+    s = 0.1
+    __min = pt.exp(LOGP_LB)
+    __max = pt.exp(-LOGP_LB)
+    k = len([0, 1, 2])
+    like = pt.zeros((*t.shape, k))
+    running_idx = pt.arange(t.shape[0])
+
+    like_1 = (
+        _pt_tpdf(t, A, b, v0, s)
+        * (1 - _pt_tcdf(t, A, b, v1, s))
+        * (1 - _pt_tcdf(t, A, b, v2, s))
+    )
+    like_2 = (
+        (1 - _pt_tcdf(t, A, b, v0, s))
+        * _pt_tpdf(t, A, b, v1, s)
+        * (1 - _pt_tcdf(t, A, b, v2, s))
+    )
+    like_3 = (
+        (1 - _pt_tcdf(t, A, b, v0, s))
+        * (1 - _pt_tcdf(t, A, b, v1, s))
+        * _pt_tpdf(t, A, b, v2, s)
+    )
+
+    like = pt.stack([like_1, like_2, like_3], axis=-1)
+
+    # One should RETURN this because otherwise it will be pruned from graph
+    # like_printed = pytensor.printing.Print('like')(like)
+
+    prob_neg = _pt_normcdf(-v0 / s) * _pt_normcdf(-v1 / s) * _pt_normcdf(-v2 / s)
+    return pt.log(pt.clip(like[running_idx, ch] / (1 - prob_neg), __min, __max))
+
+
+def _pt_lba2_ll(t, ch, A, b, v0, v1):
+    s = 0.1
+    __min = pt.exp(LOGP_LB)
+    __max = pt.exp(-LOGP_LB)
+    k = len([0, 1])
+    like = pt.zeros((*t.shape, k))
+    running_idx = pt.arange(t.shape[0])
+
+    like_1 = _pt_tpdf(t, A, b, v0, s) * (1 - _pt_tcdf(t, A, b, v1, s))
+    like_2 = (1 - _pt_tcdf(t, A, b, v0, s)) * _pt_tpdf(t, A, b, v1, s)
+
+    like = pt.stack([like_1, like_2], axis=-1)
+
+    # One should RETURN this because otherwise it will be pruned from graph
+    # like_printed = pytensor.printing.Print('like')(like)
+
+    prob_neg = _pt_normcdf(-v0 / s) * _pt_normcdf(-v1 / s)
+    return pt.log(pt.clip(like[running_idx, ch] / (1 - prob_neg), __min, __max))
+
+
+def logp_lba2(
+    data: np.ndarray,
+    A: float,
+    b: float,
+    v0: float,
+    v1: float,
+) -> np.ndarray:
+    """Compute the log-likelihood of the LBA model with 2 drift rates."""
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+    rt = pt.abs(data[:, 0])
+    response = data[:, 1]
+    response_int = pt.cast(response, "int32")
+    logp = _pt_lba2_ll(rt, response_int, A, b, v0, v1).squeeze()
+    checked_logp = check_parameters(logp, b > A, msg="b > A")
+    return checked_logp
+
+
+def logp_lba3(
+    data: np.ndarray,
+    A: float,
+    b: float,
+    v0: float,
+    v1: float,
+    v2: float,
+) -> np.ndarray:
+    """Compute the log-likelihood of the LBA model with 3 drift rates."""
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+    rt = pt.abs(data[:, 0])
+    response = data[:, 1]
+    response_int = pt.cast(response, "int32")
+    logp = _pt_lba3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
+    checked_logp = check_parameters(logp, b > A, msg="b > A")
+    return checked_logp
+
+
+lba2_params = ["A", "b", "v0", "v1"]
+lba3_params = ["A", "b", "v0", "v1", "v2"]
+
+lba2_bounds = {
+    "A": (0.0, inf),
+    "b": (0.2, inf),
+    "v0": (0.0, inf),
+    "v1": (0.0, inf),
+}
+
+lba3_bounds = {
+    "A": (0.0, inf),
+    "b": (0.2, inf),
+    "v0": (0.0, inf),
+    "v1": (0.0, inf),
+    "v2": (0.0, inf),
+}
+
+LBA2: Type[pm.Distribution] = make_distribution(
+    "lba2",
+    logp_lba2,
+    list_params=lba2_params,
+    bounds=lba2_bounds,
+)
+
+LBA3: Type[pm.Distribution] = make_distribution(
+    "lba3",
+    logp_lba3,
+    list_params=lba3_params,
+    bounds=lba3_bounds,
 )

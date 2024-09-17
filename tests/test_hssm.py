@@ -5,6 +5,7 @@ import pytest
 import hssm
 from hssm import HSSM
 from hssm.likelihoods import DDM, logp_ddm
+from copy import deepcopy
 
 hssm.set_floatX("float32", update_jax=True)
 
@@ -114,6 +115,7 @@ def test_custom_model(data_ddm):
         model="custom",
         model_config={
             "list_params": ["v", "a", "z", "t"],
+            "choices": [-1, 1],
             "bounds": {
                 "v": (-3.0, 3.0),
                 "a": (0.3, 2.5),
@@ -277,6 +279,40 @@ def test_resampling(data_ddm):
     assert sample_2 is model.traces
 
     assert sample_1 is not sample_2
+
+
+def test_add_likelihood_parameters_to_data(data_ddm):
+    """Test if the likelihood parameters are added to the InferenceData object."""
+    model = HSSM(data=data_ddm)
+    sample_1 = model.sample(draws=10, chains=1, tune=10)
+    sample_1_copy = deepcopy(sample_1)
+    model.add_likelihood_parameters_to_idata(inplace=True)
+
+    # Get distributional components (make sure to take the right aliases)
+    distributional_component_names = [
+        key_ if key_ not in model._aliases else model._aliases[key_]
+        for key_ in model.model.distributional_components.keys()
+    ]
+
+    # Check that after computing the likelihood parameters
+    # all respective parameters appear in the InferenceData object
+    assert np.all(
+        [
+            component_ in model.traces.posterior.data_vars
+            for component_ in distributional_component_names
+        ]
+    )
+
+    # Check that before computing the likelihood parameters
+    # at least one parameter is missing (in the simplest case
+    # this is the {parent}_mean parameter if nothing received a regression)
+
+    assert not np.all(
+        [
+            component_ in sample_1_copy.posterior.data_vars
+            for component_ in distributional_component_names
+        ]
+    )
 
 
 # Setting any parameter to a fixed value should work:

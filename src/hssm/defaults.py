@@ -14,8 +14,14 @@ from .likelihoods.analytical import (
     ddm_params,
     ddm_sdv_bounds,
     ddm_sdv_params,
+    lba2_bounds,
+    lba2_params,
+    lba3_bounds,
+    lba3_params,
     logp_ddm,
     logp_ddm_sdv,
+    logp_lba2,
+    logp_lba3,
 )
 from .likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox, logp_full_ddm
 from .param import ParamSpec, _make_default_prior
@@ -32,6 +38,8 @@ SupportedModels = Literal[
     "weibull",
     "race_no_bias_angle_4",
     "ddm_seq2_no_bias",
+    "lba3",
+    "lba2",
 ]
 
 LoglikKind = Literal["analytical", "approx_differentiable", "blackbox"]
@@ -72,6 +80,7 @@ class DefaultConfig(TypedDict):
 
     response: list[str]
     list_params: list[str]
+    choices: list[int]
     description: Optional[str]
     likelihoods: LoglikConfigs
 
@@ -82,6 +91,7 @@ default_model_config: DefaultConfigs = {
     "ddm": {
         "response": ["rt", "response"],
         "list_params": ddm_params,
+        "choices": [-1, 1],
         "description": "The Drift Diffusion Model (DDM)",
         "likelihoods": {
             "analytical": {
@@ -130,6 +140,7 @@ default_model_config: DefaultConfigs = {
     "ddm_sdv": {
         "response": ["rt", "response"],
         "list_params": ddm_sdv_params,
+        "choices": [-1, 1],
         "description": "The Drift Diffusion Model (DDM) with standard deviation for v",
         "likelihoods": {
             "analytical": {
@@ -179,6 +190,7 @@ default_model_config: DefaultConfigs = {
     "full_ddm": {
         "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "t", "sz", "sv", "st"],
+        "choices": [-1, 1],
         "description": "The full Drift Diffusion Model (DDM)",
         "likelihoods": {
             "blackbox": {
@@ -195,9 +207,40 @@ default_model_config: DefaultConfigs = {
             }
         },
     },
+    "lba2": {
+        "response": ["rt", "response"],
+        "list_params": lba2_params,
+        "choices": [0, 1],
+        "description": "Linear Ballistic Accumulator 2 Choices (LBA2)",
+        "likelihoods": {
+            "analytical": {
+                "loglik": logp_lba2,
+                "backend": None,
+                "default_priors": {},
+                "bounds": lba2_bounds,
+                "extra_fields": None,
+            }
+        },
+    },
+    "lba3": {
+        "response": ["rt", "response"],
+        "list_params": lba3_params,
+        "choices": [0, 1, 2],
+        "description": "Linear Ballistic Accumulator 3 Choices (LBA3)",
+        "likelihoods": {
+            "analytical": {
+                "loglik": logp_lba3,
+                "backend": None,
+                "default_priors": {},
+                "bounds": lba3_bounds,
+                "extra_fields": None,
+            }
+        },
+    },
     "angle": {
         "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "t", "theta"],
+        "choices": [-1, 1],
         "description": None,
         "likelihoods": {
             "approx_differentiable": {
@@ -218,6 +261,7 @@ default_model_config: DefaultConfigs = {
     "levy": {
         "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "alpha", "t"],
+        "choices": [-1, 1],
         "description": None,
         "likelihoods": {
             "approx_differentiable": {
@@ -238,6 +282,7 @@ default_model_config: DefaultConfigs = {
     "ornstein": {
         "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "g", "t"],
+        "choices": [-1, 1],
         "description": None,
         "likelihoods": {
             "approx_differentiable": {
@@ -258,6 +303,7 @@ default_model_config: DefaultConfigs = {
     "weibull": {
         "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "t", "alpha", "beta"],
+        "choices": [-1, 1],
         "description": None,
         "likelihoods": {
             "approx_differentiable": {
@@ -279,6 +325,7 @@ default_model_config: DefaultConfigs = {
     "race_no_bias_angle_4": {
         "response": ["rt", "response"],
         "list_params": ["v0", "v1", "v2", "v3", "a", "z", "t", "theta"],
+        "choices": [0, 1, 2, 3],
         "description": None,
         "likelihoods": {
             "approx_differentiable": {
@@ -302,6 +349,7 @@ default_model_config: DefaultConfigs = {
     "ddm_seq2_no_bias": {
         "response": ["rt", "response"],
         "list_params": ["vh", "vl1", "vl2", "a", "t"],
+        "choices": [0, 1, 2, 3],
         "description": None,
         "likelihoods": {
             "approx_differentiable": {

@@ -22,6 +22,7 @@ class Config:
     model_name: SupportedModels | str
     loglik_kind: LoglikKind
     response: list[str] | None = None
+    choices: list[int] | None = None
     list_params: list[str] | None = None
     description: str | None = None
     loglik: LogLik | None = None
@@ -63,6 +64,7 @@ class Config:
                         model_name,
                         loglik_kind=kind,
                         response=default_config["response"],
+                        choices=default_config["choices"],
                         list_params=default_config["list_params"],
                         description=default_config["description"],
                         **loglik_config,
@@ -90,6 +92,7 @@ class Config:
                         model_name,
                         loglik_kind=loglik_kind,
                         response=default_config["response"],
+                        choices=default_config["choices"],
                         list_params=default_config["list_params"],
                         description=default_config["description"],
                         **loglik_config,
@@ -98,6 +101,7 @@ class Config:
                     model_name,
                     loglik_kind=loglik_kind,
                     response=default_config["response"],
+                    choices=default_config["choices"],
                     list_params=default_config["list_params"],
                     description=default_config["description"],
                 )
@@ -117,18 +121,33 @@ class Config:
 
         self.loglik = loglik
 
+    def update_choices(self, choices: list[int] | None) -> None:
+        """Update the choices from user input.
+
+        Parameters
+        ----------
+        choices : list[int]
+            A list of choices.
+        """
+        if choices is None:
+            return
+
+        self.choices = choices
+
     def update_config(self, user_config: ModelConfig) -> None:
         """Update the object from a ModelConfig object.
 
         Parameters
         ----------
-        loglik : optional
-            A user-defined log-likelihood function.
+        user_config: ModelConfig
+            User specified ModelConfig used update self.
         """
         if user_config.response is not None:
             self.response = user_config.response
         if user_config.list_params is not None:
             self.list_params = user_config.list_params
+        if user_config.choices is not None:
+            self.choices = user_config.choices
 
         if (
             self.loglik_kind == "approx_differentiable"
@@ -146,6 +165,8 @@ class Config:
             raise ValueError("Please provide `response` via `model_config`.")
         if self.list_params is None:
             raise ValueError("Please provide `list_params` via `model_config`.")
+        if self.choices is None:
+            raise ValueError("Please provide `choices` via `model_config`.")
         if self.loglik is None:
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
@@ -170,6 +191,7 @@ class ModelConfig:
 
     response: list[str] | None = None
     list_params: list[str] | None = None
+    choices: list[int] | None = None
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     backend: Literal["jax", "pytensor"] | None = None

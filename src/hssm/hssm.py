@@ -7,6 +7,7 @@ This file defines the entry class HSSM.
 """
 
 import logging
+import typing
 from copy import deepcopy
 from inspect import isclass
 from os import PathLike
@@ -45,6 +46,7 @@ from hssm.param import (
     _make_default_prior,
 )
 from hssm.utils import (
+    _compute_log_likelihood,
     _get_alias_dict,
     _print_prior,
     _process_param_in_kwargs,
@@ -236,7 +238,7 @@ class HSSM:
         self,
         data: pd.DataFrame,
         model: SupportedModels | str = "ddm",
-        choices: int | list[int] = 2,
+        choices: list[int] | None = None,
         include: list[dict | Param] | None = None,
         model_config: ModelConfig | dict | None = None,
         loglik: (
@@ -282,11 +284,46 @@ class HSSM:
         self.model_config = Config.from_defaults(model, loglik_kind)
         # Update defaults with user-provided config, if any
         if model_config is not None:
+            if isinstance(model_config, dict):
+                if "choices" not in model_config:
+                    if choices is not None:
+                        model_config["choices"] = choices
+                else:
+                    if choices is not None:
+                        _logger.info(
+                            "choices list provided in both model_config and "
+                            "as an argument directly."
+                            " Using the one provided in model_config. \n"
+                            "We recommend providing choices in model_config."
+                        )
+            elif isinstance(model_config, ModelConfig):
+                if model_config.choices is None:
+                    if choices is not None:
+                        model_config.choices = choices
+                else:
+                    if choices is not None:
+                        _logger.info(
+                            "choices list provided in both model_config and "
+                            "as an argument directly."
+                            " Using the one provided in model_config. \n"
+                            "We recommend providing choices in model_config."
+                        )
+
             self.model_config.update_config(
                 model_config
                 if isinstance(model_config, ModelConfig)
                 else ModelConfig(**model_config)  # also serves as dict validation
             )
+        else:
+            if model not in typing.get_args(SupportedModels):
+                if choices is not None:
+                    self.model_config.update_choices(choices)
+            else:
+                if choices is not None:
+                    _logger.info(
+                        "Model string is in SupportedModels."
+                        " Ignoring choices arguments."
+                    )
 
         # Update loglik with user-provided value
         self.model_config.update_loglik(loglik)
@@ -296,26 +333,17 @@ class HSSM:
         # Set up shortcuts so old code will work
         self.response = self.model_config.response
         self.list_params = self.model_config.list_params
+        self.choices = self.model_config.choices
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
 
-        if isinstance(choices, int):
-            if choices == 2:
-                self.n_choices = 2
-                self.choices = [-1, 1]
-            elif choices > 2:
-                self.n_choices = choices
-                self.choices = list(range(choices))
-            else:
-                raise ValueError("choices must be greater than 1.")
-        elif isinstance(choices, list):
-            self.n_choices = len(choices)
-            self.choices = choices
-        else:
-            raise ValueError("choices must be an integer or a list of integers.")
+        assert (
+            self.choices is not None
+        ), "choices must be provides either in model_config or as an argument."
 
+        self.n_choices = len(self.choices)
         self._pre_check_data_sanity()
 
         # Go-NoGo
@@ -405,7 +433,7 @@ class HSSM:
             self.formula,
             data=self.data,
             family=self.family,
-            priors=self.priors,
+            priors=self.priors,  # center_predictors=False
             extra_namespace=self.additional_namespace,
             **other_kwargs,
         )
@@ -425,6 +453,11 @@ class HSSM:
                 vector_only=True,
             )
 
+        # Make sure we reset rvs_to_initial_values --> Only None's
+        # Otherwise PyMC barks at us when asking to compute likelihoods
+        self.pymc_model.rvs_to_initial_values.update(
+            {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
+        )
         _logger.info("Model initialized successfully.")
 
     def find_MAP(self, **kwargs):
@@ -594,7 +627,7 @@ class HSSM:
                     "pymc" if sampler == "mcmc" else sampler.split("_")[1]
                 )
 
-        # Don't compute likelihood directly through pymc sampler
+        # Define whether likelihood should be computed
         compute_likelihood = True
         if "idata_kwargs" in kwargs:
             if "log_likelihood" in kwargs["idata_kwargs"]:
@@ -613,22 +646,12 @@ class HSSM:
             **kwargs,
         )
 
+        # Separate out log likelihood computation
         if compute_likelihood:
-            with self.pymc_model:
-                pm.compute_log_likelihood(self._inference_obj)
+            self.log_likelihood(self._inference_obj, inplace=True)
 
         # Subset data vars in posterior
-        if self._inference_obj is not None:
-            vars_to_keep = set(
-                [var.name for var in getattr(self, "pymc_model").free_RVs]
-            ).intersection(set(list(self._inference_obj["posterior"].data_vars.keys())))
-
-            setattr(
-                self._inference_obj,
-                "posterior",
-                self._inference_obj["posterior"][list(vars_to_keep)],
-            )
-
+        self._clean_posterior_group(idata=self._inference_obj)
         return self.traces
 
     def vi(
@@ -684,24 +707,149 @@ class HSSM:
             self._inference_obj_vi = self._vi_approx.sample(draws)
 
         # Post-processing
-        if self._inference_obj_vi is not None:
-            vars_to_keep = set(
-                [var.name for var in self.pymc_model.free_RVs]
-            ).intersection(
-                set(list(self._inference_obj_vi["posterior"].data_vars.keys()))
-            )
-
-            setattr(
-                self._inference_obj_vi,
-                "posterior",
-                self._inference_obj_vi["posterior"][list(vars_to_keep)],
-            )
+        self._clean_posterior_group(idata=self._inference_obj_vi)
 
         # Return the InferenceData object if return_idata is True
         if return_idata:
             return self._inference_obj_vi
         # Otherwise return the appromation object directly
         return self.vi_approx
+
+    def _clean_posterior_group(self, idata: az.InferenceData | None = None):
+        """Clean up the posterior group of the InferenceData object.
+
+        Parameters
+        ----------
+        idata : az.InferenceData
+            The InferenceData object to clean up. If None, the last InferenceData object
+            will be used.
+        """
+        # # Logic behind which variables to keep:
+        # # We essentially want to get rid of
+        # # all the trial-wise variables.
+
+        # # We drop all distributional components, IF they are deterministics
+        # # (in which case they will be trial wise systematically)
+        # # and we keep distributional components, IF they are
+        # # basic random-variabels (in which case they should never
+        # # appear trial-wise).
+        if idata is None:
+            raise ValueError(
+                "The InferenceData object is None. Cannot clean up the posterior group."
+            )
+        elif not hasattr(idata, "posterior"):
+            raise ValueError(
+                "The InferenceData object does not have a posterior group. "
+                + "Cannot clean up the posterior group."
+            )
+
+        vars_to_keep = set(idata["posterior"].data_vars.keys()).difference(
+            set(
+                key_
+                for key_ in self.model.distributional_components.keys()
+                if key_ in [var_.name for var_ in self.pymc_model.deterministics]
+            )
+        )
+        vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
+
+        setattr(
+            idata,
+            "posterior",
+            idata["posterior"][vars_to_keep_clean],
+        )
+
+    def log_likelihood(
+        self,
+        idata: az.InferenceData | None = None,
+        data: pd.DataFrame | None = None,
+        inplace: bool = True,
+        keep_likelihood_params: bool = False,
+    ) -> az.InferenceData | None:
+        """Compute the log likelihood of the model.
+
+        Parameters
+        ----------
+        idata : optional
+            The `InferenceData` object returned by `HSSM.sample()`. If not provided,
+        data : optional
+            A pandas DataFrame with values for the predictors that are used to obtain
+            out-of-sample predictions. If omitted, the original dataset is used.
+        inplace : optional
+            If `True` will modify idata in-place and append a `log_likelihood` group to
+            `idata`. Otherwise, it will return a copy of idata with the predictions
+            added, by default True.
+        keep_likelihood_params : optional
+            If `True`, the trial wise likelihood parameters that are computed
+            on route to getting the log likelihood are kept in the `idata` object.
+            Defaults to False. See also the method `add_likelihood_parameters_to_idata`.
+
+        Returns
+        -------
+        az.InferenceData | None
+            InferenceData or None
+        """
+        if self._inference_obj is None and idata is None:
+            raise ValueError(
+                "Neither has the model been sampled yet nor"
+                + " an idata object has been provided."
+            )
+
+        if idata is None:
+            if self._inference_obj is None:
+                raise ValueError(
+                    "The model has not been sampled yet. "
+                    + "Please provide an idata object."
+                )
+            else:
+                idata = self._inference_obj
+
+        # Actual likelihood computation
+        idata = _compute_log_likelihood(self.model, idata, data, inplace)
+
+        # clean up posterior:
+        if not keep_likelihood_params:
+            self._clean_posterior_group(idata=idata)
+
+        if inplace:
+            return None
+        else:
+            return idata
+
+    def add_likelihood_parameters_to_idata(
+        self,
+        idata: az.InferenceData | None = None,
+        inplace: bool = False,
+    ) -> az.InferenceData | None:
+        """Add likelihood parameters to the InferenceData object.
+
+        Parameters
+        ----------
+        idata : az.InferenceData
+            The InferenceData object returned by HSSM.sample().
+        inplace : bool
+            If True, the likelihood parameters are added to idata in-place. Otherwise,
+            a copy of idata with the likelihood parameters added is returned.
+            Defaults to False.
+
+        Returns
+        -------
+        az.InferenceData | None
+            InferenceData or None
+        """
+        if idata is None:
+            if self._inference_obj is None:
+                raise ValueError("No idata provided and model not yet sampled!")
+            else:
+                idata = self.model._compute_likelihood_params(  # pylint: disable=protected-access
+                    deepcopy(self._inference_obj)
+                    if not inplace
+                    else self._inference_obj
+                )
+        else:
+            idata = self.model._compute_likelihood_params(  # pylint: disable=protected-access
+                deepcopy(idata) if not inplace else idata
+            )
+        return idata
 
     def sample_posterior_predictive(
         self,
@@ -2118,5 +2266,4 @@ def _set_missing_data_and_deadline(
                 "`missing_data` and `deadline` are both set to True, but you have no "
                 + "missing data and/or no rts exceeding the deadline."
             )
-
     return network
