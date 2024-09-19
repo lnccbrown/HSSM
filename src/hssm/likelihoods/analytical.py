@@ -5,6 +5,7 @@ of the WFPT distribution here:
 https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b.
 """
 
+from enum import Enum
 from typing import Type
 
 import numpy as np
@@ -17,6 +18,63 @@ from pymc.distributions.dist_math import check_parameters
 from ..distribution_utils.dist import make_distribution
 
 LOGP_LB = pm.floatX(-66.1)
+
+
+# define enum large and small
+class _Size(Enum):
+    LARGE = 1
+    SMALL = 0
+
+
+def _log_bound_error_msg(bound: float, size: _Size) -> str:
+    bound_formula = "1 / (π * err)" if size.LARGE == 1 else "1 / (8 * err^2 * π)"
+    msg = (
+        f"RTs must be less than {bound} = {bound_formula} "
+        f"for the {size.name.lower()} expansion."
+    )
+    return msg
+
+
+def get_bound(err: float, size: _Size) -> float:
+    """Get the bound for kl/ks log operations.
+
+    Parameters
+    ----------
+    err
+        Error bound.
+    size
+        Option for type of k terms, large (1) or small (0).
+
+    Returns
+    -------
+    float
+        The bound for the log operations.
+    """
+    return 1 / (np.pi * err) if size == _Size.LARGE else 1 / (8 * err**2 * np.pi)
+
+
+def check_rt_log_domain(
+    rt: np.ndarray, err: float, size: _Size, clip_values=True
+) -> np.ndarray:
+    """Check if the RTs are within correct domain for log operations for kl/ks.
+
+    Parameters
+    ----------
+    rt
+        Flipped RTs.
+    err
+        Error bound.
+    size
+        Option for type of k terms, large (1) or small (0).
+    """
+    bound = 1 / (np.pi * err) if size == _Size.LARGE else 1 / (8 * err**2 * np.pi)
+    epsilon = np.finfo(float).eps
+
+    if clip_values:
+        return np.clip(rt, epsilon, bound * (1 - epsilon))
+
+    if not np.all(rt < bound):
+        raise ValueError(_log_bound_error_msg(bound, size))
 
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
