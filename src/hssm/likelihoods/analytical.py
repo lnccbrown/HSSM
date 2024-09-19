@@ -76,6 +76,8 @@ def check_rt_log_domain(
     if not np.all(rt < bound):
         raise ValueError(_log_bound_error_msg(bound, size))
 
+    return np.array([])
+
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     """Determine number of terms needed for small-t expansion.
