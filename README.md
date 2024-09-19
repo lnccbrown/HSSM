@@ -11,9 +11,9 @@
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/HSSM?link=https%3A%2F%2Fpypi.org%2Fproject%2Fhssm%2F)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/hssm)
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/lnccbrown/HSSM)
-![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/lnccbrown/HSSM/run_tests.yml)
+![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/lnccbrown/HSSM/run_slow_tests.yml)
 ![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 ### Overview
 
@@ -71,8 +71,6 @@ For a deeper dive into HSSM, please follow [our main tutorial](https://lnccbrown
 
 HSSM can be directly installed into your conda environment on Linux and MacOS. Installing HSSM on windows takes only one more simple step. We have a more detailed [installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/) for users with more specific setups.
 
-**Important Update:** From HSSM 0.2.2, the official recommended way to install HSSM is through conda.
-
 ### Install HSSM on Linux and MacOS (CPU only)
 
 Use the following command to install HSSM into your virtual environment:
@@ -92,20 +90,20 @@ conda install -c conda-forge hssm
 
 ### Install HSSM on Windows (CPU only)
 
-Because `jaxlib` is not available through `conda-forge` on Windows, you need to install JAX on Windows through `pip` before getting HSSM:
+Because dependencies such as `jaxlib` and `numpyro` are not up-to-date on Conda, the easiest way to install HSSM on Windows is to install PyMC first and install HSSM via `pip`:
 
 ```bash
-pip install jax
-conda install -c conda-forge hssm
+conda install -c conda-forge pymc
+pip install hssm
 ```
 
 ### Install HSSM on Windows (with GPU support)
 
-You simply need to install JAX with GPU support before getting HSSM:
+You simply need to install JAX with GPU support after installing PyMC:
 
 ```bash
-pip install jax[cuda12]
-conda install -c conda-forge hssm
+conda install -c conda-forge pymc
+pip install hssm[cuda12]
 ```
 
 ### Support for Apple Silicon, AMD, and other GPUs
