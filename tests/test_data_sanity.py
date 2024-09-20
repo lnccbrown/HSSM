@@ -55,7 +55,7 @@ def test_data_sanity_check(data_ddm, cpn, caplog):
 
     with pytest.raises(
         ValueError,
-        match=r"Invalid responses found in your dataset: \[0\]",
+        match=r"Invalid responses found in your dataset: \[0, 2\]",
     ):
         data_ddm_miscoded = data_ddm.copy()
         data_ddm_miscoded["response"] = np.random.choice([0, 1, 2], data_ddm.shape[0])
@@ -64,20 +64,17 @@ def test_data_sanity_check(data_ddm, cpn, caplog):
 
     # Case 6: raise warning if there are missing responses in data
     data_ddm_miscoded = data_ddm.copy()
-    data_ddm_miscoded["response"] = np.random.choice([1, 2], data_ddm.shape[0])
+    data_ddm_miscoded["response"] = np.random.choice([1], data_ddm.shape[0])
 
-    hssm.HSSM(data=data_ddm_miscoded, model="ddm", choices=[1, 2, 3])
+    hssm.HSSM(data=data_ddm_miscoded, model="ddm")
 
     print("THE CAPLOG RECORDS")
     print([record.msg for record in caplog.records])
 
-    assert (
-        "You set choices to be [1, 2, 3], but [3] are missing from your dataset."
-        in [
-            record.msg % record.args if record.args else record.msg
-            for record in caplog.records
-        ]
-    )
+    assert "You set choices to be [-1, 1], but [-1] are missing from your dataset." in [
+        record.msg % record.args if record.args else record.msg
+        for record in caplog.records
+    ]
 
     # Case 7: if deadline or missing_data is True, data should contain missing values
     with pytest.raises(

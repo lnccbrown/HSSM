@@ -343,16 +343,12 @@ def get_hddm_default_prior(
     bounds: tuple[float, float] | None,
     link: str | bmb.Link | None,
 ):
-    # print(link)
-    # print(term_type)
     """Generate a Prior based on the default settings - the HDDM case."""
     if term_type == "common":
         prior = generate_prior("Normal", bounds=None)
     elif term_type == "common_intercept":
         # TODO: This is a temporary solution, this can prob benefit form a bit of a
         # refactoring, to define settings in a more general way.
-        # print(param)
-        # print(link)
         if link is not None:
             prior = generate_prior("Normal")
         else:

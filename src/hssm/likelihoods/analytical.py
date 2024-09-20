@@ -19,8 +19,8 @@ from ..distribution_utils.dist import make_distribution
 LOGP_LB = pm.floatX(-66.1)
 
 
-def compute_k(rt: np.ndarray, err: float) -> np.ndarray:
-    """Determine number of terms needed for small-t and large-t expansions.
+def k_small(rt: np.ndarray, err: float) -> np.ndarray:
+    """Determine number of terms needed for small-t expansion.
 
     Parameters
     ----------
@@ -34,22 +34,81 @@ def compute_k(rt: np.ndarray, err: float) -> np.ndarray:
     np.ndarray
         A 1D at array of k_small.
     """
-    pi_rt_err = np.pi * rt * err
+    ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
+    ks = pt.max(pt.stack([ks, pt.sqrt(rt) + 1]), axis=0)
+    ks = pt.switch(2 * pt.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
 
-    _a = 2 * pt.sqrt(pi_rt_err) * err
-    _b = 2 + pt.sqrt(-2 * rt * pt.log(_a))
-    _c = pt.sqrt(rt) + 1
-    _d = pt.maximum(_b, _c)
-    _e = pt.lt(_a, 1)
-    ks = _e * _d + (1 - _e) * 2
+    return ks
 
-    __b = 1.0 / (np.pi * pt.sqrt(rt))
-    __c = pt.sqrt(-2 * pt.log(pi_rt_err) / (np.pi**2 * rt))
-    __d = pt.maximum(__b, __c)
-    __e = pt.lt(pi_rt_err, 1)
-    kl = __e * __d + (1 - __e) * __b
 
-    return pt.lt(ks, kl)
+def k_large(rt: np.ndarray, err: float) -> np.ndarray:
+    """Determine number of terms needed for large-t expansion.
+
+    Parameters
+    ----------
+    rt
+        An 1D numpy array of flipped RTs. (0, inf).
+    err
+        Error bound
+
+    Returns
+    -------
+    np.ndarray
+        A 1D at array of k_large.
+    """
+    kl = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
+    kl = pt.max(pt.stack([kl, 1.0 / (np.pi * pt.sqrt(rt))]), axis=0)
+    kl = pt.switch(np.pi * rt * err < 1, kl, 1.0 / (np.pi * pt.sqrt(rt)))
+
+    return kl
+
+
+def compare_k(rt: np.ndarray, err: float) -> np.ndarray:
+    """Compute and compare k_small with k_large.
+
+    Parameters
+    ----------
+    rt
+        An 1D numpy of flipped RTs. (0, inf).
+    err
+        Error bound.
+
+    Returns
+    -------
+    np.ndarray
+        A 1D boolean at array of which implementation should be used.
+    """
+    ks = k_small(rt, err)
+    kl = k_large(rt, err)
+
+    return ks < kl
+
+
+def get_ks(k_terms: int, fast: bool) -> np.ndarray:
+    """Return an array of ks.
+
+    Returns an array of ks given the number of terms needed to approximate the sum of
+    the infinite series.
+
+    Parameters
+    ----------
+    k_terms
+        number of terms needed
+    fast
+        whether the function is used in the fast of slow expansion.
+
+    Returns
+    -------
+    np.ndarray
+        An array of ks.
+    """
+    ks = (
+        pt.arange(-pt.floor((k_terms - 1) / 2), pt.ceil((k_terms - 1) / 2) + 1)
+        if fast
+        else pt.arange(1, k_terms + 1).reshape((-1, 1))
+    )
+
+    return ks.astype(pytensor.config.floatX)
 
 
 def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
@@ -74,9 +133,7 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     """
     # Slightly changed the original code to mimic the paper and
     # ensure correctness
-    k = pt.arange(-pt.floor((k_terms - 1) / 2), pt.ceil((k_terms - 1) / 2) + 1).astype(
-        pytensor.config.floatX
-    )
+    k = get_ks(k_terms, fast=True)
 
     # A log-sum-exp trick is used here
     y = w + 2 * k.reshape((-1, 1))
@@ -109,7 +166,7 @@ def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     np.ndarray
         The approximated function f(tt|0, 1, w).
     """
-    k = pt.arange(1, k_terms + 1).reshape((-1, 1)).astype(pytensor.config.floatX)
+    k = get_ks(k_terms, fast=False)
     y = k * pt.sin(k * np.pi * w)
     r = -pt.power(k, 2) * pt.power(np.pi, 2) * tt / 2
     p = pt.sum(y * pt.exp(r), axis=0) * np.pi
@@ -146,12 +203,12 @@ def ftt01w(
     """
     tt = rt / a**2.0
 
-    lambda_rt = compute_k(rt, err)
+    lambda_rt = compare_k(tt, err)
 
     p_fast = ftt01w_fast(tt, w, k_terms)
     p_slow = ftt01w_slow(tt, w, k_terms)
 
-    p = lambda_rt * p_fast + (1.0 - lambda_rt) * p_slow
+    p = pt.switch(lambda_rt, p_fast, p_slow)
 
     return p
 
@@ -196,32 +253,27 @@ def logp_ddm(
     np.ndarray
         The analytical likelihoods for DDM.
     """
-    data = pt.reshape(data, (-1, 2))
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
-    flip = pt.gt(response, 0).astype(pytensor.config.floatX)
+    flip = response > 0
     a = a * 2.0
-    # transform v if x is upper-bound response
-    v_flipped = flip * (-v) + (1 - flip) * v
-    # transform z if x is upper-bound response
-    z_flipped = flip * (1 - z) + (1 - flip) * z
+    v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
+    z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
+    negative_rt = rt < 0
+    rt = pt.switch(negative_rt, epsilon, rt)
 
-    negative_rt = pt.less_equal(rt, epsilon)
-    tt = negative_rt * epsilon + (1 - negative_rt) * rt
+    p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
 
-    p = pt.maximum(ftt01w(tt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB)).squeeze()
-
-    logp = (
-        negative_rt * LOGP_LB
-        + (1 - negative_rt)
-        * (
-            pt.log(p)
-            - v_flipped * a * z_flipped
-            - (v_flipped**2 * tt / 2.0)
-            - 2.0 * pt.log(a),
-        )
-    ).squeeze()
+    logp = pt.where(
+        rt <= epsilon,
+        LOGP_LB,
+        pt.log(p)
+        - v_flipped * a * z_flipped
+        - (v_flipped**2 * rt / 2.0)
+        - 2.0 * pt.log(a),
+    )
 
     checked_logp = check_parameters(logp, a >= 0, msg="a >= 0")
     checked_logp = check_parameters(checked_logp, z >= 0, msg="z >= 0")
@@ -274,37 +326,32 @@ def logp_ddm_sdv(
     if sv == 0:
         return logp_ddm(data, v, a, z, t, err, k_terms, epsilon)
 
-    data = pt.reshape(data, (-1, 2))
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = pt.abs(data[:, 0])
     response = data[:, 1]
-    flip = pt.gt(response, 0).astype(pytensor.config.floatX)
+    flip = response > 0
     a = a * 2.0
-    # transform v if x is upper-bound response
-    v_flipped = flip * (-v) + (1 - flip) * v
-    # transform z if x is upper-bound response
-    z_flipped = flip * (1 - z) + (1 - flip) * z
+    v_flipped = pt.switch(flip, -v, v)  # transform v if x is upper-bound response
+    z_flipped = pt.switch(flip, 1 - z, z)  # transform z if x is upper-bound response
     rt = rt - t
+    negative_rt = rt < 0
+    rt = pt.switch(negative_rt, epsilon, rt)
 
-    negative_rt = rt <= epsilon
-    tt = negative_rt * epsilon + (1 - negative_rt) * rt
+    p = pt.maximum(ftt01w(rt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
 
-    p = pt.maximum(ftt01w(tt, a, z_flipped, err, k_terms), pt.exp(LOGP_LB))
-
-    logp = (
-        negative_rt * LOGP_LB
-        + (1 - negative_rt)
-        * (
-            pt.log(p)
-            + (
-                (a * z_flipped * sv) ** 2
-                - 2 * a * v_flipped * z_flipped
-                - (v_flipped**2) * tt
-            )
-            / (2 * (sv**2) * tt + 2)
-            - 0.5 * pt.log(sv**2 * tt + 1)
-            - 2 * pt.log(a),
+    logp = pt.switch(
+        rt <= epsilon,
+        LOGP_LB,
+        pt.log(p)
+        + (
+            (a * z_flipped * sv) ** 2
+            - 2 * a * v_flipped * z_flipped
+            - (v_flipped**2) * rt
         )
-    ).squeeze()
+        / (2 * (sv**2) * rt + 2)
+        - 0.5 * pt.log(sv**2 * rt + 1)
+        - 2 * pt.log(a),
+    )
 
     checked_logp = check_parameters(logp, a >= 0, msg="a >= 0")
     checked_logp = check_parameters(checked_logp, z >= 0, msg="z >= 0")
@@ -327,7 +374,7 @@ ddm_sdv_params = ddm_params + ["sv"]
 DDM: Type[pm.Distribution] = make_distribution(
     "ddm",
     logp_ddm,
-    list_params=["v", "a", "z", "t"],
+    list_params=ddm_params,
     bounds=ddm_bounds,
 )
 
@@ -336,4 +383,156 @@ DDM_SDV: Type[pm.Distribution] = make_distribution(
     logp_ddm_sdv,
     list_params=ddm_sdv_params,
     bounds=ddm_sdv_bounds,
+)
+
+# LBA
+
+
+def _pt_normpdf(t):
+    return (1 / pt.sqrt(2 * pt.pi)) * pt.exp(-(t**2) / 2)
+
+
+def _pt_normcdf(t):
+    return (1 / 2) * (1 + pt.erf(t / pt.sqrt(2)))
+
+
+def _pt_tpdf(t, A, b, v, s):
+    g = (b - A - t * v) / (t * s)
+    h = (b - t * v) / (t * s)
+    f = (
+        -v * _pt_normcdf(g)
+        + s * _pt_normpdf(g)
+        + v * _pt_normcdf(h)
+        - s * _pt_normpdf(h)
+    ) / A
+    return f
+
+
+def _pt_tcdf(t, A, b, v, s):
+    e1 = ((b - A - t * v) / A) * _pt_normcdf((b - A - t * v) / (t * s))
+    e2 = ((b - t * v) / A) * _pt_normcdf((b - t * v) / (t * s))
+    e3 = ((t * s) / A) * _pt_normpdf((b - A - t * v) / (t * s))
+    e4 = ((t * s) / A) * _pt_normpdf((b - t * v) / (t * s))
+    F = 1 + e1 - e2 + e3 - e4
+    return F
+
+
+def _pt_lba3_ll(t, ch, A, b, v0, v1, v2):
+    s = 0.1
+    __min = pt.exp(LOGP_LB)
+    __max = pt.exp(-LOGP_LB)
+    k = len([0, 1, 2])
+    like = pt.zeros((*t.shape, k))
+    running_idx = pt.arange(t.shape[0])
+
+    like_1 = (
+        _pt_tpdf(t, A, b, v0, s)
+        * (1 - _pt_tcdf(t, A, b, v1, s))
+        * (1 - _pt_tcdf(t, A, b, v2, s))
+    )
+    like_2 = (
+        (1 - _pt_tcdf(t, A, b, v0, s))
+        * _pt_tpdf(t, A, b, v1, s)
+        * (1 - _pt_tcdf(t, A, b, v2, s))
+    )
+    like_3 = (
+        (1 - _pt_tcdf(t, A, b, v0, s))
+        * (1 - _pt_tcdf(t, A, b, v1, s))
+        * _pt_tpdf(t, A, b, v2, s)
+    )
+
+    like = pt.stack([like_1, like_2, like_3], axis=-1)
+
+    # One should RETURN this because otherwise it will be pruned from graph
+    # like_printed = pytensor.printing.Print('like')(like)
+
+    prob_neg = _pt_normcdf(-v0 / s) * _pt_normcdf(-v1 / s) * _pt_normcdf(-v2 / s)
+    return pt.log(pt.clip(like[running_idx, ch] / (1 - prob_neg), __min, __max))
+
+
+def _pt_lba2_ll(t, ch, A, b, v0, v1):
+    s = 0.1
+    __min = pt.exp(LOGP_LB)
+    __max = pt.exp(-LOGP_LB)
+    k = len([0, 1])
+    like = pt.zeros((*t.shape, k))
+    running_idx = pt.arange(t.shape[0])
+
+    like_1 = _pt_tpdf(t, A, b, v0, s) * (1 - _pt_tcdf(t, A, b, v1, s))
+    like_2 = (1 - _pt_tcdf(t, A, b, v0, s)) * _pt_tpdf(t, A, b, v1, s)
+
+    like = pt.stack([like_1, like_2], axis=-1)
+
+    # One should RETURN this because otherwise it will be pruned from graph
+    # like_printed = pytensor.printing.Print('like')(like)
+
+    prob_neg = _pt_normcdf(-v0 / s) * _pt_normcdf(-v1 / s)
+    return pt.log(pt.clip(like[running_idx, ch] / (1 - prob_neg), __min, __max))
+
+
+def logp_lba2(
+    data: np.ndarray,
+    A: float,
+    b: float,
+    v0: float,
+    v1: float,
+) -> np.ndarray:
+    """Compute the log-likelihood of the LBA model with 2 drift rates."""
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+    rt = pt.abs(data[:, 0])
+    response = data[:, 1]
+    response_int = pt.cast(response, "int32")
+    logp = _pt_lba2_ll(rt, response_int, A, b, v0, v1).squeeze()
+    checked_logp = check_parameters(logp, b > A, msg="b > A")
+    return checked_logp
+
+
+def logp_lba3(
+    data: np.ndarray,
+    A: float,
+    b: float,
+    v0: float,
+    v1: float,
+    v2: float,
+) -> np.ndarray:
+    """Compute the log-likelihood of the LBA model with 3 drift rates."""
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+    rt = pt.abs(data[:, 0])
+    response = data[:, 1]
+    response_int = pt.cast(response, "int32")
+    logp = _pt_lba3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
+    checked_logp = check_parameters(logp, b > A, msg="b > A")
+    return checked_logp
+
+
+lba2_params = ["A", "b", "v0", "v1"]
+lba3_params = ["A", "b", "v0", "v1", "v2"]
+
+lba2_bounds = {
+    "A": (0.0, inf),
+    "b": (0.2, inf),
+    "v0": (0.0, inf),
+    "v1": (0.0, inf),
+}
+
+lba3_bounds = {
+    "A": (0.0, inf),
+    "b": (0.2, inf),
+    "v0": (0.0, inf),
+    "v1": (0.0, inf),
+    "v2": (0.0, inf),
+}
+
+LBA2: Type[pm.Distribution] = make_distribution(
+    "lba2",
+    logp_lba2,
+    list_params=lba2_params,
+    bounds=lba2_bounds,
+)
+
+LBA3: Type[pm.Distribution] = make_distribution(
+    "lba3",
+    logp_lba3,
+    list_params=lba3_params,
+    bounds=lba3_bounds,
 )
