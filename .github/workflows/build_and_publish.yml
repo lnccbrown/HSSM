@@ -4,18 +4,22 @@ on:
   release:
     types:
       - published
-  workflow_run:
-    workflows:
-      - "Linting and type checking"
-      - "Run fast tests"
-      - "Run slow tests"
-    types:
-      - completed
 
 jobs:
+  lint_and_typecheck:
+    name: Lint and type-check
+    uses: ./.github/workflows/linting_and_type_checking.yml
+
+  run_fast_tests:
+    name: Run fast tests
+    uses: ./.github/workflows/run_fast_tests.yml
+
+  run_slow_tests:
+    name: Run slow tests
+    uses: ./.github/workflows/run_slow_tests.yml
+
   publish:
     name: Build wheel and publish to test-PyPI, and then PyPI, and publish docs
-    if: github.event_name == 'release' && github.event.action == 'published'
     runs-on: ubuntu-latest
 
     strategy:
