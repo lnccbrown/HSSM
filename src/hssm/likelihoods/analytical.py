@@ -21,72 +21,13 @@ LOGP_LB = pm.floatX(-66.1)
 
 π = np.pi
 τ = 2 * π
+log_π = pt.log(π)
 log_τ = pt.log(τ)
 log_4 = pt.log(4)
 
 
 def _max(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return pt.max(pt.stack([a, b]), axis=0)
-
-
-# define enum large and small
-class _Size(Enum):
-    LARGE = 1
-    SMALL = 0
-
-
-def _log_bound_error_msg(bound: float, size: _Size) -> str:
-    bound_formula = "1 / (π * err)" if size.LARGE == 1 else "1 / (8 * err^2 * π)"
-    msg = (
-        f"RTs must be less than {bound} = {bound_formula} "
-        f"for the {size.name.lower()} expansion."
-    )
-    return msg
-
-
-def get_bound(err: float, size: _Size) -> float:
-    """Get the bound for kl/ks log operations.
-
-    Parameters
-    ----------
-    err
-        Error bound.
-    size
-        Option for type of k terms, large (1) or small (0).
-
-    Returns
-    -------
-    float
-        The bound for the log operations.
-    """
-    return 1 / (π * err) if size == _Size.LARGE else 1 / (8 * err**2 * π)
-
-
-def check_rt_log_domain(
-    rt: np.ndarray, err: float, size: _Size, clip_values=True
-) -> np.ndarray:
-    """Check if the RTs are within correct domain for log operations for kl/ks.
-
-    Parameters
-    ----------
-    rt
-        Flipped RTs.
-    err
-        Error bound.
-    size
-        Option for type of k terms, large (1) or small (0).
-    """
-    bound = 1 / (π * err) if size == _Size.LARGE else 1 / (8 * err**2 * π)
-    epsilon = np.finfo(float).eps
-
-    if clip_values:
-        return np.clip(rt, epsilon, bound * (1 - epsilon))
-
-    if not np.all(rt < bound):
-        raise ValueError(_log_bound_error_msg(bound, size))
-
-    return np.array([])
-
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     """Determine number of terms needed for small-t expansion.
@@ -131,16 +72,16 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     np.ndarray
         A 1D at array of k_large.
     """
-    log_arg = π * rt * err
-    # log_arg = check_rt_log_domain(log_arg, err, _Size.LARGE)
-    divisor = π**2 * rt
-    alternate = 1.0 / (π * pt.sqrt(rt))
+    log_rt = pt.log(rt)
+    sqrt_rt = pt.sqrt(rt)
+    log_err = pt.log(err)
 
-    kl = pt.sqrt(-2 * pt.log(log_arg) / divisor)
-    kl = pt.max(pt.stack([kl, alternate]), axis=0)
+    π_rt_err = π * rt * err
+    π_sqrt_rt = π * sqrt_rt
 
-    condition = π * rt * err < 1
-    kl = pt.switch(condition, kl, alternate)
+    kl = pt.sqrt(-2 * (log_π + log_err + log_rt)) / π_sqrt_rt
+    kl = _max(kl, 1.0 / pt.sqrt(π_sqrt_rt))
+    kl = pt.switch(π_rt_err < 1, kl, 1.0 / π_sqrt_rt)
 
     return kl
 
