@@ -59,7 +59,7 @@ def get_bound(err: float, size: _Size) -> float:
     float
         The bound for the log operations.
     """
-    return 1 / (np.pi * err) if size == _Size.LARGE else 1 / (8 * err**2 * np.pi)
+    return 1 / (π * err) if size == _Size.LARGE else 1 / (8 * err**2 * π)
 
 
 def check_rt_log_domain(
@@ -76,7 +76,7 @@ def check_rt_log_domain(
     size
         Option for type of k terms, large (1) or small (0).
     """
-    bound = 1 / (np.pi * err) if size == _Size.LARGE else 1 / (8 * err**2 * np.pi)
+    bound = 1 / (π * err) if size == _Size.LARGE else 1 / (8 * err**2 * π)
     epsilon = np.finfo(float).eps
 
     if clip_values:
@@ -131,15 +131,15 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     np.ndarray
         A 1D at array of k_large.
     """
-    log_arg = np.pi * rt * err
-    log_arg = check_rt_log_domain(log_arg, err, _Size.LARGE)
-    divisor = np.pi**2 * rt
-    alternate = 1.0 / (np.pi * pt.sqrt(rt))
+    log_arg = π * rt * err
+    # log_arg = check_rt_log_domain(log_arg, err, _Size.LARGE)
+    divisor = π**2 * rt
+    alternate = 1.0 / (π * pt.sqrt(rt))
 
     kl = pt.sqrt(-2 * pt.log(log_arg) / divisor)
     kl = pt.max(pt.stack([kl, alternate]), axis=0)
 
-    condition = np.pi * rt * err < 1
+    condition = π * rt * err < 1
     kl = pt.switch(condition, kl, alternate)
 
     return kl
@@ -223,7 +223,7 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     c = pt.max(r, axis=0)
     p = pt.exp(c) * pt.sum(y * pt.exp(r - c), axis=0)
     # Normalize p
-    p = p / pt.sqrt(2 * np.pi * pt.power(tt, 3))
+    p = p / pt.sqrt(2 * π * pt.power(tt, 3))
 
     return p
 
@@ -249,9 +249,9 @@ def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
         The approximated function f(tt|0, 1, w).
     """
     k = get_ks(k_terms, fast=False)
-    y = k * pt.sin(k * np.pi * w)
-    r = -pt.power(k, 2) * pt.power(np.pi, 2) * tt / 2
-    p = pt.sum(y * pt.exp(r), axis=0) * np.pi
+    y = k * pt.sin(k * π * w)
+    r = -pt.power(k, 2) * pt.power(π, 2) * tt / 2
+    p = pt.sum(y * pt.exp(r), axis=0) * π
 
     return p
 
