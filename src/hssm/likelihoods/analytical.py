@@ -19,6 +19,15 @@ from ..distribution_utils.dist import make_distribution
 
 LOGP_LB = pm.floatX(-66.1)
 
+π = np.pi
+τ = 2 * π
+log_τ = pt.log(τ)
+log_4 = pt.log(4)
+
+
+def _max(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    return pt.max(pt.stack([a, b]), axis=0)
+
 
 # define enum large and small
 class _Size(Enum):
