@@ -103,14 +103,14 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     np.ndarray
         A 1D at array of k_small.
     """
-    log_arg = 2 * np.sqrt(2 * np.pi * rt)
-    log_arg = check_rt_log_domain(log_arg, err, _Size.SMALL)
-    sqrt_arg = -2 * rt * pt.log(log_arg) * err
+    sqrt_τ_rt = pt.sqrt(τ * rt)
+    log_rt = pt.log(rt)
+    rt_log_2_sqrt_τ_rt_times_2 = rt * (log_4 + log_τ + log_rt)
 
-    ks = 2 + pt.sqrt(sqrt_arg)
-    ks = pt.max(pt.stack([ks, pt.sqrt(rt) + 1]), axis=0)
+    ks = 2 + pt.sqrt(-err * rt_log_2_sqrt_τ_rt_times_2)
+    ks = _max(ks, pt.sqrt(rt) + 1)
 
-    condition = 2 * pt.sqrt(2 * np.pi * rt) * err < 1
+    condition = 2 * sqrt_τ_rt * err < 1
     ks = pt.switch(condition, ks, 2)
 
     return ks
