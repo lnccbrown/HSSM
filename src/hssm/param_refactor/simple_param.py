@@ -1,6 +1,6 @@
 """Class for simple (non-regression) parameterization of HSSM models."""
 
-from typing import Any, cast
+from typing import Any
 
 import bambi as bmb
 import numpy as np
@@ -115,23 +115,6 @@ class SimpleParam(Param):
             if self.bounds is not None:
                 self.prior = Prior(bounds=self.bounds, **self.prior)
             self.prior = bmb.Prior(**self.prior)
-
-    def parse_bambi(
-        self,
-    ) -> tuple[None, dict[str, bmb.Prior], None]:
-        """Parse the parameter for Bambi.
-
-        Returns
-        -------
-        tuple
-            A tuple containing the following:
-            - None (no formula for simple parameters)
-            - A bmb.Prior object representing the prior for the parameter.
-            - None (no link function for simple parameters)
-        """
-        name = self.name
-        prior = cast(bmb.Prior, self.prior)
-        return None, {name: prior}, None
 
 
 class DefaultParam(SimpleParam):

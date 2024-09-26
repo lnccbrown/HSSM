@@ -156,12 +156,19 @@ class Param:
         """Process the prior specification."""
         raise NotImplementedError("This method is to be implemented in subclasses.")
 
-    def parse_bambi(self) -> tuple[str | None, bmb.Prior, str | bmb.Link | None]:
+    def parse_bambi(
+        self,
+    ) -> tuple[str | None, dict[str, Any] | bmb.Prior | None, str | bmb.Link | None]:
         """Parse the parameter for Bambi.
 
-        Raises
-        ------
-        NotImplementedError
-            This method is to be implemented in subclasses.
+        Returns
+        -------
+        tuple
+            1. A bmb.Formula object, or None if the parameter is simple.
+            2. A bmb.Prior object, in the simple case, or a dictionary of priors in
+            the regression case, if any is specified, or None if the priors
+            should be determined by Bambi.
+            3. A string or bmb.Link object representing the link function, or None
+            in the simple case.
         """
-        raise NotImplementedError("This method is to be implemented in subclasses.")
+        return self.formula, self.prior, self.link

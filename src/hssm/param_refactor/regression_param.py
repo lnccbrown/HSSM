@@ -301,23 +301,6 @@ class RegressionParam(Param):
             rhs = self.formula
         self.formula = f"{self.name} ~ {rhs}"
 
-    def parse_bambi(self) -> tuple[str, dict[str, bmb.Prior] | None, str | bmb.Link]:
-        """Parse the parameter for Bambi.
-
-        Returns
-        -------
-        tuple
-            A tuple containing the following:
-            - The formula for the parameter.
-            - A dictionary of the priors for the parameter or None if the prior is not
-                specified.
-            - The link function for the parameter.
-        """
-        name = self.name
-        prior = {self.name: self.prior} if self.prior is not None else None
-        link = {self.name: self.link}
-        return name, prior, link
-
 
 def _make_prior_dict(
     prior: dict[str, float | dict[dict, Any] | bmb.Prior],
