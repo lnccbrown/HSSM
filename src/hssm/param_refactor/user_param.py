@@ -121,6 +121,8 @@ class UserParam:
 
         return cls(name=name, prior=param)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(
+        self,
+    ) -> dict:
         """Convert the UserParam object to a dictionary with shallow copy."""
         return {f.name: getattr(self, f.name) for f in fields(self)}
