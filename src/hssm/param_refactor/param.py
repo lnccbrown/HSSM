@@ -58,6 +58,13 @@ class Param:
         Parse the parameter for Bambi.
     """
 
+    name: str
+    prior: float | np.ndarray | dict[str, Any] | bmb.Prior | None
+    formula: str | None
+    link: str | bmb.Link | None
+    bounds: tuple[float, float] | None
+    user_param: UserParam | None
+
     def __init__(
         self,
         name: str,
