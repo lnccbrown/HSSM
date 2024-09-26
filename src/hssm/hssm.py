@@ -151,11 +151,10 @@ class HSSM:
     lapse : optional
         The lapse distribution. This argument is required only if `p_outlier` is not
         `None`. Defaults to Uniform(0.0, 10.0).
-    hierarchical : optional
-        If True, and if there is a `participant_id` field in `data`, will by default
-        turn any unspecified parameter theta into a regression with
-        "theta ~ 1 + (1|participant_id)" and default priors set by `bambi`. Also changes
-        default values of `link_settings` and `prior_settings`. Defaults to False.
+    global_formula : optional
+        A string representing the global formula for the model applied to every
+        parameter. Specifying a different formula for a parameter will override this
+        global formula. Defaults to `None`.
     link_settings : optional
         An optional string literal that indicates the link functions to use for each
         parameter. Helpful for hierarchical models where sampling might get stuck/
@@ -247,7 +246,7 @@ class HSSM:
         loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
-        hierarchical: bool = False,
+        global_formula: str | None = None,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
         extra_namespace: dict[str, Any] | None = None,
@@ -267,10 +266,7 @@ class HSSM:
         self._inference_obj_vi: pm.Approximation | None = None
         self._vi_approx = None
         self._map_dict = None
-        self.hierarchical = hierarchical
-
-        if self.hierarchical and prior_settings is None:
-            prior_settings = "safe"
+        self.global_formula = global_formula
 
         self.link_settings = link_settings
         self.prior_settings = prior_settings
@@ -1633,17 +1629,9 @@ class HSSM:
 
         for param_str in self.list_params:
             if param_str not in processed:
-                if self.hierarchical:
-                    bounds = self.model_config.bounds.get(param_str)
-                    param = Param(
-                        param_str,
-                        formula=f"{param_str} ~ 1 + (1|participant_id)",
-                        bounds=bounds,
-                    )
-                else:
-                    prior, bounds = self.model_config.get_defaults(param_str)
-                    param = Param(param_str, prior=prior, bounds=bounds)
-                    param.do_not_truncate()
+                prior, bounds = self.model_config.get_defaults(param_str)
+                param = Param(param_str, prior=prior, bounds=bounds)
+                param.do_not_truncate()
                 not_in_include[param_str] = param
 
         processed |= not_in_include
@@ -1992,13 +1980,6 @@ class HSSM:
                 raise ValueError(f"Field {field} not found in data.")
 
         self._check_extra_fields()
-
-        if self.hierarchical:
-            if "participant_id" not in self.data.columns:
-                raise ValueError(
-                    "You have specified that your model is hierarchical, but "
-                    + "`participant_id` is not found in your dataset."
-                )
 
     def _post_check_data_sanity(self):
         """Check if the data is clean enough for the model."""
