@@ -11,7 +11,7 @@ bmb.Prior but adds the following:
 
 from copy import deepcopy
 from statistics import mean
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 import bambi as bmb
 import numpy as np
@@ -22,7 +22,6 @@ from bambi.priors.prior import format_arg
 pymc_dist_args = ["rng", "initval", "dims", "observed", "total_size", "transform"]
 
 
-# mypy: disable-error-code="has-type"
 class Prior(bmb.Prior):
     """Abstract specification of a prior.
 
@@ -38,7 +37,7 @@ class Prior(bmb.Prior):
         Optional keywords specifying the parameters of the named distribution.
     dist : optional
         A callable that returns a valid PyMC distribution. The signature must contain
-        ``name``, ``dims``, and ``shape``, as well as its own keyworded arguments.
+        ``name``, ``dims``, and ``shape``, as well as its own keyword arguments.
     bounds : optional
         A tuple of two floats indicating the lower and upper bounds of the prior.
     """
@@ -52,22 +51,87 @@ class Prior(bmb.Prior):
         **kwargs,
     ):
         bmb.Prior.__init__(self, name, auto_scale, dist, **kwargs)
+        self.dist = cast(Callable | None, dist)
         self.is_truncated = False
         self.bounds = bounds
+        self.serializable = dist is None
+        # Create a copy of `args` for representation purposes.
+        self._args = self.args.copy()
 
         if self.bounds is not None:
-            assert self.dist is None, (
-                "We cannot bound a prior defined with the `dist` argument. The "
-                + "`dist` and `bounds` arguments cannot both be supplied."
-            )
+            if self.dist is not None:
+                raise ValueError(
+                    "We cannot bound a prior defined with the `dist` argument. The "
+                    + "`dist` and `bounds` arguments cannot both be supplied."
+                )
             lower, upper = self.bounds
             if np.isinf(lower) and np.isinf(upper):
                 return
 
             self.is_truncated = True
             self.dist = _make_truncated_dist(self.name, lower, upper, **self.args)
-            self._args = self.args.copy()
+            # For compatibility with Bambi, we set args to empty.
             self.args: dict = {}
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert the object to JSON.
+
+        Returns
+        -------
+        dict[str, Any]
+            A dictionary with the serialized json object.
+        """
+        if not self.serializable:
+            raise ValueError(
+                "Cannot serialize a Prior object with a custom distribution."
+            )
+
+        result = self._args.copy() if self.is_truncated else self.args.copy()
+        result["name"] = self.name
+        result["bounds"] = self.bounds
+        result["auto_scale"] = self.auto_scale
+
+        return result
+
+    @staticmethod
+    def from_dict(d: dict) -> "Prior":
+        """Create a Prior object from a JSON dictionary.
+
+        Parameters
+        ----------
+        d
+            A dictionary with the serialized JSON object.
+
+        Returns
+        -------
+        Prior
+            A hssm.Prior object with the specified parameters.
+        """
+        return Prior(**d)
+
+    @staticmethod
+    def from_bambi(
+        bambi_prior: bmb.Prior, bounds: tuple[float, float] | None = None
+    ) -> "Prior":
+        """Create a Prior object from a Bambi Prior object.
+
+        Parameters
+        ----------
+        bambi_prior
+            A Bambi Prior object.
+
+        Returns
+        -------
+        Prior
+            A hssm.Prior object with the same parameters as the Bambi Prior object.
+        """
+        return Prior(
+            bambi_prior.name,
+            bambi_prior.auto_scale,
+            bambi_prior.dist,
+            bounds=bounds,
+            **bambi_prior.args,
+        )
 
     def __str__(self) -> str:
         """Create the printout of the object."""
