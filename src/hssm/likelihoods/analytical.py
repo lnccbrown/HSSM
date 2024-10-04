@@ -18,6 +18,17 @@ from ..distribution_utils.dist import make_distribution
 
 LOGP_LB = pm.floatX(-66.1)
 
+π = np.pi
+τ = 2 * π
+sqrt_τ = pt.sqrt(τ)
+log_π = pt.log(π)
+log_τ = pt.log(τ)
+log_4 = pt.log(4)
+
+
+def _max(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    return pt.max(pt.stack([a, b]), axis=0)
+
 
 def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     """Determine number of terms needed for small-t expansion.
@@ -34,9 +45,15 @@ def k_small(rt: np.ndarray, err: float) -> np.ndarray:
     np.ndarray
         A 1D at array of k_small.
     """
-    ks = 2 + pt.sqrt(-2 * rt * pt.log(2 * np.sqrt(2 * np.pi * rt) * err))
-    ks = pt.max(pt.stack([ks, pt.sqrt(rt) + 1]), axis=0)
-    ks = pt.switch(2 * pt.sqrt(2 * np.pi * rt) * err < 1, ks, 2)
+    sqrt_rt = pt.sqrt(rt)
+    log_rt = pt.log(rt)
+    rt_log_2_sqrt_τ_rt_times_2 = rt * (log_4 + log_τ + log_rt)
+
+    ks = 2 + pt.sqrt(-err * rt_log_2_sqrt_τ_rt_times_2)
+    ks = _max(ks, sqrt_rt + 1)
+
+    condition = 2 * sqrt_τ * sqrt_rt * err < 1
+    ks = pt.switch(condition, ks, 2)
 
     return ks
 
@@ -56,9 +73,16 @@ def k_large(rt: np.ndarray, err: float) -> np.ndarray:
     np.ndarray
         A 1D at array of k_large.
     """
-    kl = pt.sqrt(-2 * pt.log(np.pi * rt * err) / (np.pi**2 * rt))
-    kl = pt.max(pt.stack([kl, 1.0 / (np.pi * pt.sqrt(rt))]), axis=0)
-    kl = pt.switch(np.pi * rt * err < 1, kl, 1.0 / (np.pi * pt.sqrt(rt)))
+    log_rt = pt.log(rt)
+    sqrt_rt = pt.sqrt(rt)
+    log_err = pt.log(err)
+
+    π_rt_err = π * rt * err
+    π_sqrt_rt = π * sqrt_rt
+
+    kl = pt.sqrt(-2 * (log_π + log_err + log_rt)) / π_sqrt_rt
+    kl = _max(kl, 1.0 / pt.sqrt(π_sqrt_rt))
+    kl = pt.switch(π_rt_err < 1, kl, 1.0 / π_sqrt_rt)
 
     return kl
 
@@ -141,7 +165,7 @@ def ftt01w_fast(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
     c = pt.max(r, axis=0)
     p = pt.exp(c) * pt.sum(y * pt.exp(r - c), axis=0)
     # Normalize p
-    p = p / pt.sqrt(2 * np.pi * pt.power(tt, 3))
+    p = p / pt.sqrt(2 * π * pt.power(tt, 3))
 
     return p
 
@@ -167,9 +191,9 @@ def ftt01w_slow(tt: np.ndarray, w: float, k_terms: int) -> np.ndarray:
         The approximated function f(tt|0, 1, w).
     """
     k = get_ks(k_terms, fast=False)
-    y = k * pt.sin(k * np.pi * w)
-    r = -pt.power(k, 2) * pt.power(np.pi, 2) * tt / 2
-    p = pt.sum(y * pt.exp(r), axis=0) * np.pi
+    y = k * pt.sin(k * π * w)
+    r = -pt.power(k, 2) * pt.power(π, 2) * tt / 2
+    p = pt.sum(y * pt.exp(r), axis=0) * π
 
     return p
 
