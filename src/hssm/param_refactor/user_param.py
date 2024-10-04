@@ -76,6 +76,15 @@ class UserParam:
         """Check if the parameter is a regression parameter."""
         return self.formula is not None
 
+    @property
+    def is_simple(self) -> bool:
+        """Check if the parameter is a simple parameter."""
+        if self.is_regression:
+            return False
+        if isinstance(self.prior, (int, float, np.ndarray, bmb.Prior)):
+            return True
+        return isinstance(self.prior, dict) and "name" in self.prior
+
     @classmethod
     def from_dict(cls, param_dict: dict[str, Any]) -> "UserParam":
         """Create a Param object from a dictionary.
@@ -125,4 +134,8 @@ class UserParam:
         self,
     ) -> dict:
         """Convert the UserParam object to a dictionary with shallow copy."""
-        return {f.name: getattr(self, f.name) for f in fields(self)}
+        return {
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if getattr(self, f.name) is not None
+        }
