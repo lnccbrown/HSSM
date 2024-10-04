@@ -6,8 +6,9 @@ import bambi as bmb
 import numpy as np
 
 from ..prior import Prior
-from . import UserParam
 from .param import Param
+from .user_param import UserParam
+from .utils import _make_default_prior
 
 
 class SimpleParam(Param):
@@ -83,14 +84,46 @@ class SimpleParam(Param):
         We need to handle the case where the user has not specified a prior for the
         parameter. This is equivalent to simply using the default prior.
         """
+        if user_param.name is None:
+            raise ValueError("Name not specified for parameter")
+        if user_param.is_regression:
+            raise ValueError(
+                f"Regression specified for simple parameter {user_param.name}"
+            )
+        if user_param.link is not None:
+            raise ValueError(f"Link specified for simple parameter {user_param.name}")
         if user_param.prior is None:
-            return DefaultParam(**user_param.to_dict())
-        return cls(**user_param.to_dict(), user_param=user_param)
+            if user_param.bounds is None:
+                raise ValueError(
+                    f"Bounds not specified for parameter {user_param.name}"
+                )
+            return DefaultParam(
+                name=user_param.name,
+                prior=None,
+                bounds=user_param.bounds,
+            )
+        return cls(
+            name=user_param.name,
+            prior=user_param.prior,
+            bounds=user_param.bounds,
+            user_param=user_param,
+        )
+
+    def fill_defaults(
+        self,
+        prior: dict[str, Any] | None = None,
+        bounds: tuple[float, float] | None = None,
+        **kwargs,
+    ) -> None:
+        """Fill in the default values for the parameter."""
+        if "formula" in kwargs:
+            raise ValueError(f"Formula specified for simple parameter {self.name}")
+        if "link" in kwargs:
+            raise ValueError(f"Link specified for simple parameter {self.name}")
+        return super().fill_defaults(prior, bounds, **kwargs)
 
     def validate(self) -> None:
         """Validate the parameter."""
-        if self.formula is not None:
-            raise ValueError(f"Formula specified for simple parameter {self.name}")
         if self.prior is None:
             raise ValueError(f"Prior not specified for parameter {self.name}")
         if self.bounds is not None and self.is_fixed:
@@ -114,7 +147,33 @@ class SimpleParam(Param):
         if isinstance(self.prior, dict):
             if self.bounds is not None:
                 self.prior = Prior(bounds=self.bounds, **self.prior)
-            self.prior = bmb.Prior(**self.prior)
+            else:
+                self.prior = bmb.Prior(**self.prior)
+
+    def __repr__(self) -> str:
+        """Return the representation of the class.
+
+        Returns
+        -------
+        str
+            A string representing the class.
+        """
+        if isinstance(self.prior, (int, float)):
+            prior = f"Value: {self.prior}"
+        elif isinstance(self.prior, np.ndarray):
+            n_elements = len(self.prior)
+            if n_elements > 5:
+                prior = f"Value: {self.prior[:5]}..."
+            else:
+                prior = f"Value: {self.prior}"
+        elif isinstance(self.prior, (dict, bmb.Prior)):
+            prior = f"Prior: {self.prior}"
+        else:
+            raise ValueError(f"Invalid prior type {type(self.prior)}")
+
+        if self.bounds is None:
+            return f"{self.name}:\n" f"    {prior}"
+        return f"{self.name}:\n" f"    {prior}\n" f"    Explicit bounds: {self.bounds}"
 
 
 class DefaultParam(SimpleParam):
@@ -221,19 +280,4 @@ class DefaultParam(SimpleParam):
         -------
             A bmb.Prior object representing the default prior for the provided bounds.
         """
-        if self.bounds is None:
-            raise ValueError(f"Parameter {self.name} unspecified.")
-        lower, upper = self.bounds
-        if np.isinf(lower) and np.isinf(upper):
-            prior = bmb.Prior("Normal", mu=0.0, sigma=2.0)
-        elif np.isinf(lower) and not np.isinf(upper):
-            prior = bmb.Prior("TruncatedNormal", mu=upper, upper=upper, sigma=2.0)
-        elif not np.isinf(lower) and np.isinf(upper):
-            if lower == 0:
-                prior = bmb.Prior("HalfNormal", sigma=2.0)
-            else:
-                prior = bmb.Prior("TruncatedNormal", mu=lower, lower=lower, sigma=2.0)
-        else:
-            prior = bmb.Prior(name="Uniform", lower=lower, upper=upper)
-
-        self.prior = prior
+        self.prior = _make_default_prior(self.bounds)
