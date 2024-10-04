@@ -11,8 +11,8 @@ from formulae import design_matrices
 
 from ..link import Link
 from ..prior import get_default_prior, get_hddm_default_prior
-from . import UserParam
 from .param import Param
+from .user_param import UserParam
 
 _logger = logging.getLogger("hssm")
 
@@ -72,10 +72,12 @@ class RegressionParam(Param):
         Reformat the formula.
     """
 
+    terms: list[str]
+
     def __init__(
         self,
         name: str,
-        formula: str,
+        formula: str | None = None,
         prior: dict[str, Any] | None = None,
         link: str | Link | None = None,
         bounds: tuple[float, float] | None = None,
@@ -84,6 +86,7 @@ class RegressionParam(Param):
         super().__init__(
             name, prior, formula, link, bounds=bounds, user_param=user_param
         )
+        self.terms = []
 
     @classmethod
     def from_defaults(
@@ -96,7 +99,7 @@ class RegressionParam(Param):
         """Create a RegressionParam object with default values."""
         param = cls(
             name,
-            formula,
+            formula=formula,
             prior=None,
             link=None,
             bounds=bounds,
@@ -133,7 +136,7 @@ class RegressionParam(Param):
         super().fill_defaults(prior=None, bounds=bounds)
         if self.formula is None:
             if "formula" not in kwargs:
-                raise ValueError(f"Formula not specified for parameter {self.name}")
+                raise ValueError(f"Formula not specified for parameter {self.name}.")
             self.formula = kwargs["formula"]
         if kwargs.get("link_settings") == "log_logit":
             self.set_loglogit_link()
@@ -141,7 +144,7 @@ class RegressionParam(Param):
     def validate(self) -> None:
         """Validate the parameter."""
         if self.formula is None:
-            raise ValueError(f"Formula not specified for parameter {self.name}")
+            raise ValueError(f"Formula not specified for parameter {self.name}.")
         self.reformat_formula()
         if isinstance(self.prior, bmb.Prior):
             raise ValueError(
@@ -157,6 +160,8 @@ class RegressionParam(Param):
     def process_prior(self) -> None:
         """Process the prior specification."""
         self.validate()
+        if self.prior is None:
+            return
         self.prior = cast(dict[str, Any], self.prior)
         self.prior = _make_prior_dict(self.prior)
 
@@ -177,14 +182,14 @@ class RegressionParam(Param):
         lower, upper = self.bounds
 
         if np.isneginf(lower) and np.isposinf(upper):
-            return
+            self.link = "identity"
         elif lower == 0.0 and np.isposinf(upper):
             self.link = "log"
         elif not np.isneginf(lower) and not np.isposinf(upper):
             self.link = Link("gen_logit", bounds=self.bounds)
         else:
             _logger.warning(
-                "The bounds for parameter %s (%f, %f) seems strange. Nothing is done to"
+                "The bounds for parameter %s (%f, %f) seem strange. Nothing is done to"
                 + " the link function. Please check if they are correct.",
                 self.name,
                 lower,
@@ -212,44 +217,54 @@ class RegressionParam(Param):
         dm = self._get_design_matrices(data, eval_env)
 
         get_prior = get_hddm_default_prior if is_ddm else get_default_prior
+        specified_priors = (
+            set(self.prior.keys()) if isinstance(self.prior, dict) else set()
+        )
 
         has_common_intercept = False
         if dm.common is not None:
             for name, term in dm.common.terms.items():
-                if term.kind == "intercept":
-                    has_common_intercept = True
-                    safe_priors[name] = get_prior(
-                        "common_intercept", self.name, self.bounds, self.link
-                    )
-                else:
-                    safe_priors[name] = get_prior(
-                        "common", self.name, bounds=None, link=self.link
-                    )
+                self.terms.append(name)
+                if name not in specified_priors:
+                    if term.kind == "intercept":
+                        has_common_intercept = True
+                        safe_priors[name] = get_prior(
+                            "common_intercept", self.name, self.bounds, self.link
+                        )
+                    else:
+                        safe_priors[name] = get_prior(
+                            "common", self.name, bounds=None, link=self.link
+                        )
 
         if dm.group is not None:
             for name, term in dm.group.terms.items():
-                if term.kind == "intercept":
-                    if has_common_intercept:
-                        safe_priors[name] = get_prior(
-                            "group_intercept_with_common",
-                            self.name,
-                            bounds=None,
-                            link=self.link,
-                        )
+                if name not in specified_priors:
+                    if term.kind == "intercept":
+                        self.terms.append(name)
+                        if has_common_intercept:
+                            safe_priors[name] = get_prior(
+                                "group_intercept_with_common",
+                                self.name,
+                                bounds=None,
+                                link=self.link,
+                            )
+                        else:
+                            # treat the term as any other group-specific term
+                            _logger.warning(
+                                f"No common intercept. Bounds for parameter {self.name}"
+                                " is not applied due to a current limitation of Bambi."
+                                " This will change in the future."
+                            )
+                            safe_priors[name] = get_prior(
+                                "group_intercept",
+                                self.name,
+                                bounds=None,
+                                link=self.link,
+                            )
                     else:
-                        # treat the term as any other group-specific term
-                        _logger.warning(
-                            f"No common intercept. Bounds for parameter {self.name} is"
-                            + " not applied due to a current limitation of Bambi."
-                            + " This will change in the future."
-                        )
                         safe_priors[name] = get_prior(
-                            "group_intercept", self.name, bounds=None, link=self.link
+                            "group_specific", self.name, bounds=None, link=self.link
                         )
-                else:
-                    safe_priors[name] = get_prior(
-                        "group_specific", self.name, bounds=None, link=self.link
-                    )
         if self.prior is not None:
             self.prior = cast(dict[str, Any], self.prior)
             safe_priors.update(self.prior)
@@ -291,15 +306,46 @@ class RegressionParam(Param):
                 raise ValueError(
                     "The formula {formula} should contain at most one '~' character."
                 )
-            lhs, rhs = formula_splits
-            if lhs != self.name:
-                raise ValueError(
-                    f"The parameter name {self.name} does not match the response "
-                    + f"variable in the formula: {formula}."
-                )
+            _, rhs = formula_splits
         else:
             rhs = self.formula
         self.formula = f"{self.name} ~ {rhs}"
+
+    def __repr__(self) -> str:
+        """Return the representation of the class.
+
+        Returns
+        -------
+        str
+            A string representation of the class.
+        """
+        if self.formula is None:
+            raise ValueError(
+                "Formula must be specified for regression,"
+                "only exception is the parent parameter for which formula"
+                "can be left undefined."
+            )
+
+        if self.prior is not None:
+            if not isinstance(self.prior, dict):
+                raise TypeError("The prior for a regression must be a dict.")
+
+            priors_list: list[str] = []
+            for param, prior in self.prior.items():
+                between = " ~ " if isinstance(prior, (bmb.Prior, dict)) else ": "
+                priors_list.append(f"        {param}{between}{prior}")
+            priors = "\n".join(priors_list)
+        else:
+            priors = "        Unspecified. Using defaults"
+
+        link = "identity" if self.link is None else self.link
+
+        return (
+            f"{self.name}:\n"
+            f"    Formula: {self.formula}\n"
+            f"    Priors:\n{priors}\n"
+            f"    Link: {link}"
+        )
 
 
 def _make_prior_dict(
