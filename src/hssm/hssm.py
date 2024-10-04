@@ -51,8 +51,8 @@ from hssm.utils import (
 
 from . import plotting
 from .config import Config, ModelConfig
-from .param_refactor import Params
-from .param_refactor import UserParam as Param
+from .param import Params
+from .param import UserParam as Param
 
 _logger = logging.getLogger("hssm")
 

@@ -1,6 +1,6 @@
 import pytest
 
-from hssm.param_refactor import UserParam
+from hssm.param import UserParam
 
 
 def test_bounds_validation():

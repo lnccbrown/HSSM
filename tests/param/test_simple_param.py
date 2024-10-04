@@ -4,8 +4,8 @@ import pytest
 import re
 
 from hssm import Prior
-from hssm.param_refactor import UserParam
-from hssm.param_refactor.simple_param import SimpleParam, DefaultParam
+from hssm.param import UserParam
+from hssm.param.simple_param import SimpleParam, DefaultParam
 
 
 def test_from_user_param():

@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from hssm import Prior
-from hssm.param_refactor.simple_param import DefaultParam
+from hssm.param.simple_param import DefaultParam
 
 
 def test_from_defaults():

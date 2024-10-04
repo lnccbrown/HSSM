@@ -5,28 +5,28 @@ import pytest
 
 from hssm import HSSM, Link, Prior
 from hssm.config import Config
-from hssm.defaults import default_model_config
-from hssm.param_refactor.param import Param
-from hssm.param_refactor.params import (
+from hssm.defaults import SupportedModels, default_model_config
+from hssm.param.param import Param
+from hssm.param.params import (
     Params,
     collect_user_params,
     make_params,
     make_param_from_user_param,
     make_param_from_defaults,
 )
-from hssm.param_refactor.regression_param import RegressionParam
-from hssm.param_refactor.simple_param import DefaultParam, SimpleParam
-from hssm.param_refactor.user_param import UserParam
+from hssm.param.regression_param import RegressionParam
+from hssm.param.simple_param import DefaultParam, SimpleParam
+from hssm.param.user_param import UserParam
 
 
 def create_mock_model(
-    model_name="ddm",
+    model_name: SupportedModels = "ddm",
     loglik_kind="analytical",
     global_formula=None,
     link_settings=None,
     prior_settings=None,
 ):
-    def mock_config(model: str, loglik_kind="analytical"):
+    def mock_config(model: SupportedModels, loglik_kind="analytical"):
         if model not in default_model_config:
             return lambda param: (None, None)
 

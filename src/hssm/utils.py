@@ -28,7 +28,7 @@ from bambi.utils import get_aliased_name, response_evaluate_new_data
 from huggingface_hub import hf_hub_download
 from tqdm import tqdm
 
-from .param_refactor.param import Param
+from .param.param import Param
 
 _logger = logging.getLogger("hssm")
 
