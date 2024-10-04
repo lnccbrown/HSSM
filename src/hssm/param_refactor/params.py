@@ -55,8 +55,15 @@ class Params(UserDict[str, Param]):
                 break
 
         if self.parent == "":
-            self.parent = list(self.keys())[0]
-            self[self.parent].is_parent = True
+            for name, param in self.items():
+                if not param.is_fixed:
+                    self.parent = name
+                    param.is_parent = True
+                    break
+
+        if self.parent == "":
+            raise ValueError("No parent parameter found.")
+
         self.parent_param = self[self.parent]
 
     @classmethod
