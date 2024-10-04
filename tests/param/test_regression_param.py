@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import hssm
 from hssm import Prior
 from hssm.defaults import default_model_config
 from hssm.link import Link
@@ -210,6 +211,8 @@ param_and_bounds_ddm = list(zip(ddm_params, ddm_bounds, [True] * len(ddm_params)
     param_and_bounds_angle,
 )
 def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
+    # Necessary for verifying the values of certain parameters of the priors
+    hssm.set_floatX("float64")
     # The basic regression case, no group-specific terms
     param = RegressionParam(
         name=param_name,
@@ -295,6 +298,9 @@ def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
     _check_group_prior(group_intercept_prior)
     _check_group_prior(group_slope_prior)
 
+    # Change back after testing
+    hssm.set_floatX("float32")
+
 
 def _check_group_prior(group_prior):
     assert isinstance(group_prior, bmb.Prior)
@@ -365,6 +371,9 @@ t_prior = {"name": "Gamma", "mu": t_mu, "sigma": t_sigma}
     ],
 )
 def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
+    # Necessary for verifying the values of certain parameters of the priors
+    hssm.set_floatX("float64")
+
     bounds = (-10, 10)
 
     # The basic regression case, no group-specific terms
@@ -462,6 +471,9 @@ def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
 
     _check_group_prior_intercept_ddm(group_intercept_prior, prior)
     _check_group_prior(group_slope_prior)
+
+    # Change back after testing
+    hssm.set_floatX("float32")
 
 
 def test__make_priors_recursive():
