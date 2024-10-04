@@ -1392,7 +1392,6 @@ class HSSM:
         if self.p_outlier is not None:
             # TODO: Allow regression for self.p_outlier
             # Need to determine what the output should look like
-            # and whether p should be hierarchical when self.hierarchical is True.
             assert not self.p_outlier.is_regression
             output.append("")
             output.append(f"Lapse probability: {self.p_outlier.prior}")
