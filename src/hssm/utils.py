@@ -28,7 +28,7 @@ from bambi.utils import get_aliased_name, response_evaluate_new_data
 from huggingface_hub import hf_hub_download
 from tqdm import tqdm
 
-from .param import Param
+from .param_refactor.param import Param
 
 _logger = logging.getLogger("hssm")
 
@@ -401,45 +401,6 @@ def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:
         return f"        {term_name}: {prior}"
 
     return f"        {term_name} ~ {prior}"
-
-
-def _process_param_in_kwargs(
-    name, prior: float | dict | bmb.Prior | Param
-) -> dict | Param:
-    """Process parameters specified in kwargs.
-
-    Parameters
-    ----------
-    name
-        The name of the parameters.
-    prior
-        The prior specified.
-
-    Returns
-    -------
-    dict
-        A `dict` that complies with ways to specify parameters in `include`.
-
-    Raises
-    ------
-    ValueError
-        When `prior` is not a `float`, a `dict`, or a `bmb.Prior` object.
-    """
-    if isinstance(prior, (int, float, bmb.Prior)):
-        return {"name": name, "prior": prior}
-    elif isinstance(prior, dict):
-        if ("prior" in prior) or ("bounds" in prior):
-            return prior | {"name": name}
-        else:
-            return {"name": name, "prior": prior}
-    elif isinstance(prior, Param):
-        prior["name"] = name
-        return prior
-    else:
-        raise ValueError(
-            f"Parameter {name} must be a float, a dict, a bmb.Prior, "
-            + "or a hssm.Param object."
-        )
 
 
 def _generate_random_indices(

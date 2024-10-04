@@ -41,21 +41,18 @@ from hssm.distribution_utils import (
     make_likelihood_callable,
     make_missing_data_callable,
 )
-from hssm.param import (
-    Param,
-    _make_default_prior,
-)
 from hssm.utils import (
     _compute_log_likelihood,
     _get_alias_dict,
     _print_prior,
-    _process_param_in_kwargs,
     _rearrange_data,
     _split_array,
 )
 
 from . import plotting
 from .config import Config, ModelConfig
+from .param_refactor import Params
+from .param_refactor import UserParam as Param
 
 _logger = logging.getLogger("hssm")
 
@@ -238,7 +235,7 @@ class HSSM:
         data: pd.DataFrame,
         model: SupportedModels | str = "ddm",
         choices: list[int] | None = None,
-        include: list[dict | Param] | None = None,
+        include: list[dict[str, Any] | Param] | None = None,
         model_config: ModelConfig | dict | None = None,
         loglik: (
             str | PathLike | Callable | pytensor.graph.Op | type[pm.Distribution] | None
@@ -335,9 +332,10 @@ class HSSM:
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
 
-        assert (
-            self.choices is not None
-        ), "choices must be provides either in model_config or as an argument."
+        if self.choices is None:
+            raise ValueError(
+                "choices must be provides either in model_config or as an argument."
+            )
 
         self.n_choices = len(self.choices)
         self._pre_check_data_sanity()
@@ -382,24 +380,19 @@ class HSSM:
         if self.has_lapse and self.list_params[-1] != "p_outlier":
             self.list_params.append("p_outlier")
 
-        # Process kwargs and p_outlier and add them to include
-        include, other_kwargs = self._add_kwargs_and_p_outlier_to_include(
-            include, kwargs, p_outlier
+        # Process all parameters
+        self.params = Params.from_user_specs(
+            model=self,
+            include=[] if include is None else include,
+            kwargs=kwargs,
+            p_outlier=p_outlier,
         )
 
-        # Process parameter specifications include
-        processed = self._preprocess_include(include)
-        # Process parameter specifications not in include
-        self.params = self._preprocess_rest(processed)
-        # Find the parent parameter
-        self._parent, self._parent_param = self._find_parent()
-        assert self._parent_param is not None
-
-        self._override_defaults()
-        self._process_all()
+        self._parent = self.params.parent
+        self._parent_param = self.params.parent_param
 
         # Get the bambi formula, priors, and link
-        self.formula, self.priors, self.link = self._parse_bambi()
+        self.formula, self.priors, self.link = self.params.parse_bambi(model=self)
 
         # For parameters that are regression, apply bounds at the likelihood level to
         # ensure that the samples that are out of bounds are discarded (replaced with
@@ -431,7 +424,7 @@ class HSSM:
             family=self.family,
             priors=self.priors,  # center_predictors=False
             extra_namespace=self.additional_namespace,
-            **other_kwargs,
+            **kwargs,
         )
 
         self._aliases = _get_alias_dict(
@@ -1527,232 +1520,6 @@ class HSSM:
                 + "We automatically append it to `list_params` when `p_outlier` "
                 + "parameter is not None"
             )
-
-    def _fill_default(self, p: dict | Param, param_name: str) -> dict | Param:
-        """Fill parameter specification in include with defaults from config."""
-        default_prior, default_bounds = self.model_config.get_defaults(param_name)
-        filled_default_bounds = False
-        if isinstance(p, dict):
-            if p.get("bounds") is None:
-                p["bounds"] = default_bounds
-                filled_default_bounds = True
-
-            if "formula" not in p and p.get("prior") is None:
-                if default_prior is not None:
-                    p["prior"] = default_prior
-                    if filled_default_bounds:
-                        p_param = Param(**p)
-                        p_param.do_not_truncate()
-                        return p_param
-                else:
-                    if p["bounds"] is not None:
-                        p["prior"] = _make_default_prior(p["bounds"])
-
-        else:
-            if not p.bounds:
-                p.bounds = default_bounds
-                filled_default_bounds = True
-
-            if not p.formula and not p.prior:
-                if default_prior is not None:
-                    p.prior = default_prior
-                    if filled_default_bounds:
-                        p.do_not_truncate()
-                else:
-                    if p.bounds is not None:
-                        p.prior = _make_default_prior(p.bounds)
-
-        return p
-
-    def _add_kwargs_and_p_outlier_to_include(
-        self, include, kwargs, p_outlier
-    ) -> tuple[list, dict]:
-        """Process kwargs and p_outlier and add them to include."""
-        if include is None:
-            include = []
-        else:
-            include = include.copy()
-        params_in_include = [param["name"] for param in include]
-
-        # Process kwargs
-        # If any of the keys is found in `list_params` it is a parameter specification
-        # We add the parameter specification to `include`, which will be processed later
-        # together with other parameter specifications in `include`.
-        # Otherwise we create another dict and pass it to `bmb.Model`.
-        other_kwargs: dict[Any, Any] = {}
-        for k, v in kwargs.items():
-            if k in self.list_params:
-                if k in params_in_include:
-                    raise ValueError(
-                        f'Parameter "{k}" is already specified in `include`.'
-                    )
-                include.append(_process_param_in_kwargs(k, v))
-            else:
-                other_kwargs |= {k: v}
-
-        # Process p_outliers the same way.
-        if self.has_lapse:
-            if "p_outlier" in params_in_include:
-                raise ValueError(
-                    "Please do not specify `p_outlier` in `include`. "
-                    + "Please specify it with `p_outlier` instead."
-                )
-            include.append(_process_param_in_kwargs("p_outlier", p_outlier))
-
-        return include, other_kwargs
-
-    def _preprocess_include(self, include: list[dict | Param]) -> dict[str, Param]:
-        """Turn parameter specs in include into Params."""
-        result: dict[str, Param] = {}
-
-        for param in include:
-            name = param["name"]
-            if name is None:
-                raise ValueError(
-                    "One or more parameters do not have a name. "
-                    + "Please ensure that names are specified to all of them."
-                )
-            if name not in self.list_params:
-                raise ValueError(f"{name} is not included in the list of parameters.")
-            param_with_default = self._fill_default(param, name)
-            result[name] = (
-                Param(**param_with_default)
-                if isinstance(param_with_default, dict)
-                else param_with_default
-            )
-
-        return result
-
-    def _preprocess_rest(self, processed: dict[str, Param]) -> dict[str, Param]:
-        """Turn parameter specs not in include into Params."""
-        not_in_include = {}
-
-        for param_str in self.list_params:
-            if param_str not in processed:
-                prior, bounds = self.model_config.get_defaults(param_str)
-                param = Param(param_str, prior=prior, bounds=bounds)
-                param.do_not_truncate()
-                not_in_include[param_str] = param
-
-        processed |= not_in_include
-        sorted_params = {}
-
-        for param_name in self.list_params:
-            sorted_params[param_name] = processed[param_name]
-
-        return sorted_params
-
-    def _find_parent(self) -> tuple[str, Param]:
-        """Find the parent param for the model.
-
-        The first param that has a regression will be set as parent. If none of the
-        params is a regression, then the first param will be set as parent.
-
-        Returns
-        -------
-        str
-            The name of the param as string
-        Param
-            The parent Param object
-        """
-        for param_str in self.list_params:
-            param = self.params[param_str]
-            if param.is_regression:
-                param.set_parent()
-                return param_str, param
-
-        for param_str in self.list_params:
-            param = self.params[param_str]
-            if not param.is_fixed:
-                param.set_parent()
-                return param_str, param
-
-        raise ValueError("No valid parent parameter found to be parent.")
-
-    def _override_defaults(self):
-        """Override the default priors or links."""
-        is_ddm = (
-            self.model_name in ["ddm", "ddm_sdv", "ddm_full"]
-            and self.loglik_kind != "approx_differentiable"
-        )
-        for param in self.list_params:
-            param_obj = self.params[param]
-
-            if self.link_settings == "log_logit":
-                param_obj.override_default_link()
-            if self.prior_settings == "safe":
-                if is_ddm:
-                    param_obj.override_default_priors_ddm(
-                        self.data, self.additional_namespace
-                    )
-                else:
-                    param_obj.override_default_priors(
-                        self.data, self.additional_namespace
-                    )
-
-    def _process_all(self):
-        """Process all params."""
-        assert self.list_params is not None
-        for param in self.list_params:
-            self.params[param].convert()
-
-    def _parse_bambi(
-        self,
-    ) -> tuple[bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
-        """Retrieve three items that helps with bambi model building.
-
-        Returns
-        -------
-        tuple
-            A tuple containing:
-                1. A bmb.Formula object.
-                2. A dictionary of priors, if any is specified.
-                3. A dictionary of link functions, if any is specified.
-        """
-        # Handle the edge case where list_params is empty:
-        if not self.params:
-            return bmb.Formula(f"{self.response_c} ~ 1"), None, "identity"
-
-        parent_formula = None
-        other_formulas = []
-        priors: dict[str, Any] = {}
-        links: dict[str, str | bmb.Link] = {}
-
-        for _, param in self.params.items():
-            formula, prior, link = param.parse_bambi()
-
-            assert param.name is not None
-
-            if param.is_parent:
-                # parent is not a regression
-                if formula is None:
-                    parent_formula = f"{self.response_c} ~ 1"
-                    if prior is not None:
-                        priors |= {param.name: {"Intercept": prior[param.name]}}
-                    links |= {param.name: "identity"}
-                # parent is a regression
-                else:
-                    right_side = formula.split(" ~ ")[1]
-                    parent_formula = f"{self.response_c} ~ {right_side}"
-                    if prior is not None:
-                        priors |= {param.name: prior[param.name]}
-                    if link is not None:
-                        links |= link
-            else:
-                # non-regression case
-                if formula is not None:
-                    other_formulas.append(formula)
-                if prior is not None:
-                    priors |= prior
-                if link is not None:
-                    links |= link
-
-        assert parent_formula is not None
-        result_formula: bmb.Formula = bmb.Formula(parent_formula, *other_formulas)
-        result_priors = None if not priors else priors
-        result_links: dict | str = "identity" if not links else links
-
-        return result_formula, result_priors, result_links
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""

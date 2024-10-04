@@ -2,7 +2,7 @@
 
 from enum import Enum
 from os import PathLike
-from typing import Callable, Literal, Optional, TypedDict, Union
+from typing import Any, Callable, Literal, Optional, TypedDict, Union
 
 import bambi as bmb
 import numpy as np
@@ -24,9 +24,10 @@ from .likelihoods.analytical import (
     logp_lba3,
 )
 from .likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox, logp_full_ddm
-from .param import ParamSpec, _make_default_prior
+from .param_refactor.utils import _make_default_prior
 
 LogLik = Union[str, PathLike, Callable, Op, type[Distribution]]
+ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
 
 SupportedModels = Literal[
     "ddm",
