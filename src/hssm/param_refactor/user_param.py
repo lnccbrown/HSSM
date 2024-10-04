@@ -123,6 +123,10 @@ class UserParam:
             A Param object with the specified parameters.
         """
         if isinstance(param, dict):
+            if "name" in param:
+                if param["name"] == name:
+                    return cls(**param)
+                return cls(name=name, prior=param)
             return cls(name=name, **param)
         elif isinstance(param, UserParam):
             param.name = name
