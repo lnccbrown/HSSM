@@ -5,16 +5,20 @@ behavior and stores the parameters in its `params` attribute. It is also respons
 processing the parameters and applying user specifications.
 """
 
+from __future__ import annotations
+
 from collections import UserDict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import bambi as bmb
 
-from .. import HSSM
-from . import UserParam
 from .param import Param
 from .regression_param import RegressionParam
 from .simple_param import DefaultParam, SimpleParam
+from .user_param import UserParam
+
+if TYPE_CHECKING:
+    from ..hssm import HSSM
 
 
 class Params(UserDict[str, Param]):
@@ -52,6 +56,7 @@ class Params(UserDict[str, Param]):
 
         if self.parent == "":
             self.parent = list(self.keys())[0]
+            self[self.parent].is_parent = True
         self.parent_param = self[self.parent]
 
     @classmethod
@@ -115,7 +120,7 @@ class Params(UserDict[str, Param]):
                 if formula is None:
                     parent_formula = f"{model.response_c} ~ 1"
                     if prior is not None:
-                        priors |= {param.name: {"Intercept": prior[param_name]}}
+                        priors |= {param.name: {"Intercept": prior}}
                     links[param_name] = "identity"
                 # parent is a regression
                 else:
@@ -141,6 +146,27 @@ class Params(UserDict[str, Param]):
         result_links: dict | str = "identity" if not links else links
 
         return result_formula, result_priors, result_links
+
+    def __str__(self) -> str:
+        """Return the representation of the class.
+
+        Returns
+        -------
+        str
+            A string representation of the class.
+        """
+        return self.__repr__()
+
+    def __repr__(self):
+        """Return the representation of the class.
+
+        Returns
+        -------
+        str
+            A string representation of the class.
+        """
+        params = "\n".join(repr(param) for _, param in self.items())
+        return "Parameters:\n" f"{params}"
 
 
 def collect_user_params(
@@ -179,7 +205,7 @@ def collect_user_params(
         if user_param.name == "p_outlier":
             raise ValueError(
                 "Please do not specify `p_outlier` in `include`. "
-                + "Please specify it with `p_outlier` instead."
+                "Please specify it with `p_outlier` instead."
             )
         user_params[user_param.name] = user_param
 
@@ -191,8 +217,7 @@ def collect_user_params(
         if param_name in kwargs:
             if param_name in user_params:
                 raise ValueError(
-                    f"Parameter {param_name} specified in both `include` and "
-                    + "`kwargs`."
+                    f"Parameter {param_name} specified in both `include` and `kwargs`."
                 )
             user_params[param_name] = UserParam.from_kwargs(
                 param_name,
@@ -224,34 +249,15 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
     """
     params = {}
     is_ddm = (
-        model.model_name in ["ddm", "ddm_sdv", "ddm_full"]
+        model.model_name in ["ddm", "ddm_sdv", "full_ddm"]
         and model.loglik_kind != "approx_differentiable"
     )
-    for name in model.list_params:
-        default_prior, default_bounds = model.model_config.get_defaults(name)
-        if name in user_params:
-            user_param = user_params[name]
-            if user_param.is_regression or model.global_formula is not None:
-                param = RegressionParam.from_user_param(user_param)
-            else:
-                param = SimpleParam.from_user_param(user_param)
 
-            # Fill in the defaults
-            if isinstance(param, RegressionParam):
-                param.fill_defaults(
-                    formula=model.global_formula,
-                    bounds=default_bounds,
-                    link_settings=model.link_settings,
-                )
-            else:
-                param.fill_defaults(prior=default_prior, bounds=default_bounds)  # type: ignore
+    for name in model.list_params:
+        if name in user_params:
+            param: Param = make_param_from_user_param(model, name, user_params[name])
         else:
-            if model.global_formula is not None:
-                param = RegressionParam.from_defaults(
-                    name, model.global_formula, default_bounds
-                )
-            else:
-                param = DefaultParam.from_defaults(name, default_prior, default_bounds)
+            param = make_param_from_defaults(model, name)
 
         if model.prior_settings == "safe":
             if isinstance(param, RegressionParam):
@@ -261,3 +267,80 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
         params[name] = param
 
     return params
+
+
+def make_param_from_user_param(model: HSSM, name: str, user_param: UserParam) -> Param:
+    """Create a Param object from a UserParam object.
+
+    Parameters
+    ----------
+    model
+        The HSSM model.
+    name
+        The name of the parameter.
+    user_param
+        A UserParam object.
+
+    Returns
+    -------
+    Param
+        A Param object with the specified parameters.
+    """
+    default_prior, default_bounds = model.model_config.get_defaults(name)
+
+    # Use information in the UserParam object to determine if the parameter is a
+    # regression parameter or a simple parameter
+    if user_param.is_regression:
+        param: Param = RegressionParam.from_user_param(user_param)
+    elif user_param.is_simple:
+        param = SimpleParam.from_user_param(user_param)
+    else:
+        # If we cannot tell definitively that the parameter is a regression parameter
+        # or a simple parameter from the UserParam object,
+        # we need to determine the type based on whether the model has a global formula
+        if model.global_formula is not None:
+            param = RegressionParam.from_user_param(user_param)
+        else:
+            param = SimpleParam.from_user_param(user_param)
+
+    # Fill in the defaults
+    if isinstance(param, RegressionParam):
+        param.fill_defaults(
+            formula=model.global_formula,
+            bounds=default_bounds,
+            link_settings=model.link_settings,
+        )
+    else:
+        param.fill_defaults(prior=default_prior, bounds=default_bounds)
+
+    return param
+
+
+def make_param_from_defaults(model: HSSM, name: str) -> Param:
+    """Create a Param object from the default values.
+
+    Parameters
+    ----------
+    model
+        The HSSM model.
+    name
+        The name of the parameter.
+
+    Returns
+    -------
+    Param
+        A Param object with the specified parameters.
+    """
+    default_prior, default_bounds = model.model_config.get_defaults(name)
+
+    if model.global_formula is not None:
+        param: Param = RegressionParam.from_defaults(
+            name,
+            formula=model.global_formula,
+            bounds=default_bounds,
+            link_settings=model.link_settings,
+        )
+    else:
+        param = DefaultParam.from_defaults(name, default_prior, default_bounds)
+
+    return param
