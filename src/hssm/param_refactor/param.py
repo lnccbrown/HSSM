@@ -5,7 +5,7 @@ from typing import Any
 import bambi as bmb
 import numpy as np
 
-from . import UserParam
+from .user_param import UserParam
 from .utils import validate_bounds
 
 
@@ -126,7 +126,9 @@ class Param:
     @property
     def is_vector(self) -> bool:
         """Whether the parameter is a vector parameter."""
-        return self.is_parent or self.is_regression
+        return (
+            self.is_parent or self.is_regression or isinstance(self.prior, np.ndarray)
+        )
 
     def fill_defaults(
         self,
@@ -147,6 +149,9 @@ class Param:
             self.bounds = bounds
         if self.prior is None:
             self.prior = prior
+        for key, value in kwargs.items():
+            if getattr(self, key) is None:
+                setattr(self, key, value)
 
     def validate(self) -> None:
         """Validate the parameter."""
