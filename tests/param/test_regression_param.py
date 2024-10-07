@@ -45,10 +45,11 @@ def test_from_user_param():
     assert v.prior["Intercept"]["name"] == "Uniform"
     assert v.prior["Intercept"]["lower"] == 0.0
     assert v.prior["Intercept"]["upper"] == 0.5
-    assert isinstance(v.prior["x"], dict)
-    assert v.prior["x"]["name"] == "Uniform"
-    assert v.prior["x"]["lower"] == 0.0
-    assert v.prior["x"]["upper"] == 1.0
+    x = v.prior["x"]
+    assert isinstance(x, dict)
+    assert x["name"] == "Uniform"
+    assert x["lower"] == 0.0
+    assert x["upper"] == 1.0
     assert isinstance(v.prior["y"], bmb.Prior)
     assert isinstance(v.prior["z"], float)
 
@@ -69,7 +70,10 @@ def test_from_defaults(caplog):
     assert param.link is None
 
     param = RegressionParam.from_defaults(
-        name="v", formula="v ~ 1 + x + y", bounds=(0.0, 1.0), link_settings="log_logit"
+        name="v",
+        formula="v ~ 1 + x + y",
+        bounds=(0.0, 1.0),
+        link_settings="log_logit",
     )
     assert param.name == "v"
     assert param.formula == "v ~ 1 + x + y"

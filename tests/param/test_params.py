@@ -400,9 +400,7 @@ def test_parse_bambi(data_ddm_reg):
     assert priors["a"] == bmb.Prior("HalfNormal", sigma=1)
     assert priors["z"] == bmb.Prior("Normal", mu=0, sigma=1)
     assert priors["p_outlier"] == 0.5
-    assert "t" in priors
-    assert isinstance(priors["t"]["Intercept"], bmb.Prior)
-    assert isinstance(priors["t"]["x"], bmb.Prior)
-    assert isinstance(priors["t"]["y"], bmb.Prior)
+    for key in ["Intercept", "x", "y"]:
+        assert isinstance(priors["t"][key], bmb.Prior)
 
     assert links == {"t": "identity"}
