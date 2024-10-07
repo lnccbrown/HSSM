@@ -5,14 +5,17 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, Union, cast
+
+import bambi as bmb
 
 from .defaults import LogLik, LoglikKind, SupportedModels, default_model_config
 
 if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
 
-    from .param import ParamSpec
+
+ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
 
 
 @dataclass
