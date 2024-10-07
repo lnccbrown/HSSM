@@ -146,7 +146,7 @@ def test_model_definition_outside_include(data_ddm):
     assert model_with_one_param.priors["a"].name == "Normal"
 
     with pytest.raises(
-        ValueError, match="Parameter a specified in both `include` and `kwargs`."
+        ValueError, match="Parameter `a` specified in both `include` and `kwargs`."
     ):
         HSSM(data_ddm, include=[{"name": "a", "prior": 0.5}], a=0.5)
 

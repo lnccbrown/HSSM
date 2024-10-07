@@ -37,6 +37,12 @@ def create_mock_model(
 
         return lambda param: (priors.get(param), bounds.get(param))
 
+    # The Mock objects here are used to create the HSSM model object without
+    # actually having to create the object itself. This is because when the tested
+    # functions are called, they are called within the constructor of the HSSM object.
+    # At this point, the model object is only partially constructed.
+    # It is not possible to create the HSSM object before the tested functions are
+    # called.
     config = Mock(
         spec=Config,
         get_defaults=mock_config(model_name, loglik_kind),

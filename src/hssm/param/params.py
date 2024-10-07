@@ -224,7 +224,8 @@ def collect_user_params(
         if param_name in kwargs:
             if param_name in user_params:
                 raise ValueError(
-                    f"Parameter {param_name} specified in both `include` and `kwargs`."
+                    f"Parameter `{param_name}` specified in both"
+                    " `include` and `kwargs`."
                 )
             user_params[param_name] = UserParam.from_kwargs(
                 param_name,
