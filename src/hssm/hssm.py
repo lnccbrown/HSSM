@@ -334,7 +334,7 @@ class HSSM:
 
         if self.choices is None:
             raise ValueError(
-                "choices must be provides either in model_config or as an argument."
+                "`choices` must be provided either in `model_config` or as an argument."
             )
 
         self.n_choices = len(self.choices)
@@ -391,7 +391,6 @@ class HSSM:
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
-        # Get the bambi formula, priors, and link
         self.formula, self.priors, self.link = self.params.parse_bambi(model=self)
 
         # For parameters that are regression, apply bounds at the likelihood level to
