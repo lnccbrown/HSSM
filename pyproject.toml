@@ -25,7 +25,7 @@ bambi = ">=0.14.0,<0.15.0"
 numpyro = "^0.15.2"
 hddm-wfpt = "^0.1.4"
 seaborn = "^0.13.2"
-tqdm= "^4.66.0"
+tqdm = "^4.66.0"
 jax = { version = "^0.4.25", extras = ["cuda12"], optional = true }
 numpy = ">=1.26.4,<2.0.0"
 
@@ -161,6 +161,9 @@ convention = "numpy"
 
 [tool.mypy]
 ignore_missing_imports = true
+
+[tool.pytest]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["poetry-core"]
