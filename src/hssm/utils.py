@@ -553,18 +553,28 @@ def _split_array(data: np.ndarray | list[int], divisor: int) -> list[np.ndarray]
 
 
 class SuppressOutput:
-    """Context manager for output suppressing.
+    """Context manager for suppressing output.
 
-    Example
+    This context manager redirects both stdout and stderr to `os.devnull`,
+    effectively silencing all output during the execution of the block.
+    It also disables logging by setting the logging level to `CRITICAL`.
 
-    ```python
-    with SuppressOutput():
-        grad_func = pytensor.function(
-            [v, a, z, t],
-            grad,
-            mode=nan_guard_mode,
-        )
-    ```
+    Examples
+    --------
+    >>> with SuppressOutput():
+    ...     grad_func = pytensor.function(
+    ...         [v, a, z, t],
+    ...         grad,
+    ...         mode=nan_guard_mode,
+    ...     )
+
+    Methods
+    -------
+    __enter__()
+        Redirects stdout and stderr, and disables logging.
+
+    __exit__(exc_type, exc_value, traceback)
+        Restores stdout, stderr, and logging upon exit.
     """
 
     def __enter__(self):  # noqa: D105
