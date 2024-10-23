@@ -2,7 +2,7 @@
 
 import logging
 from itertools import product
-from typing import Iterable
+from typing import Dict, Iterable
 
 import arviz as az
 import matplotlib as mpl
@@ -10,12 +10,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.axes import Axes
 
 from .utils import (
     _check_groups_and_groups_order,
     _check_sample_size,
     _get_plotting_df,
     _get_title,
+    _hdi_to_interval,
     _subset_df,
     _use_traces_or_sample,
 )
@@ -189,19 +191,96 @@ def _plot_posterior_predictive_2D(
 
     if plot_data:
         g.add_legend(
-            dict(zip(["predicted", "observed"], g.fig.axes[0].get_lines())),
+            dict(zip(["predicted", "observed"], g.figure.axes[0].get_lines())),
             title="",
             label_order=["observed", "predicted"],
         )
 
     if title:
-        g.fig.subplots_adjust(top=0.9)
-        g.fig.suptitle(title)
+        g.figure.subplots_adjust(top=0.9)
+        g.figure.suptitle(title)
 
     g.set_xlabels(xlabel)
     g.set_ylabels(ylabel)
 
     return g
+
+
+def _process_linestyles_pp(linestyles):
+    if isinstance(linestyles, str):
+        return [linestyles, linestyles]
+
+    if isinstance(linestyles, list) or isinstance(linestyles, tuple):
+        if all(isinstance(ls, str) for ls in linestyles):
+            if len(linestyles) == 1:
+                return [linestyles[0], linestyles[0]]
+            elif len(linestyles) == 2:
+                return linestyles
+            else:
+                raise ValueError(
+                    "The `linestyles` argument must be a string or a list of length 1 "
+                    "or 2."
+                )
+        else:
+            raise ValueError(
+                "The `linestyles` argument must be a string or a list of strings."
+            )
+
+    if isinstance(linestyles, dict):
+        if not set(linestyles.keys()).issubset({"predicted", "observed"}):
+            raise ValueError(
+                "The keys of the `linestyles` dictionary must be 'predicted' and/or "
+                "'observed'."
+            )
+        linestyles = [linestyles.get("predicted", "-"), linestyles.get("observed", "-")]
+    else:
+        raise ValueError(
+            "The `linestyles` argument must be a string, a list of strings,"
+            " or a dictionary."
+        )
+    return linestyles
+
+
+def _process_linewidths_pp(linewidths):
+    if isinstance(linewidths, float):
+        return [linewidths, linewidths]
+
+    if isinstance(linewidths, list) or isinstance(linewidths, tuple):
+        if all(isinstance(lw, float) for lw in linewidths):
+            if len(linewidths) == 1:
+                return [linewidths[0], linewidths[0]]
+            elif len(linewidths) == 2:
+                return linewidths
+            else:
+                raise ValueError(
+                    "The `linewidths` argument must be a float or a list of length 1 or"
+                    " 2."
+                )
+        else:
+            raise ValueError(
+                "The `linewidths` argument must be a float or a list of floats."
+            )
+
+    if isinstance(linewidths, dict):
+        if not set(linewidths.keys()).issubset({"predicted", "observed"}):
+            raise ValueError(
+                "The keys of the `linewidths` dictionary must be 'predicted' and/or"
+                " 'observed'."
+            )
+        linewidths = [
+            linewidths.get("predicted", 1.25),
+            linewidths.get("observed", 1.25),
+        ]
+    else:
+        raise ValueError(
+            "The `linewidths` argument must be a float, a list of floats,"
+            "or a dictionary."
+        )
+    return linewidths
+
+
+# AF-TODO: Implement process_colors_pp
+# def process_colors_pp(colors):
 
 
 def plot_posterior_predictive(
@@ -215,19 +294,19 @@ def plot_posterior_predictive(
     col_wrap: int | None = None,
     groups: str | Iterable[str] | None = None,
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
-    bins: int | np.ndarray | str | None = 100,
+    bins: int | np.ndarray | str | None = 50,
     range: tuple[float, float] | None = None,
     step: bool = False,
-    interval: tuple[float, float] | None = None,
+    hdi: float | str | tuple[float, float] | None = None,
     colors: str | list[str] | None = None,
-    linestyles: str | list[str] = "-",
-    linewidths: float | list[float] = 1.25,
+    linestyles: str | list[str] | tuple[str] | Dict[str, str] = "-",
+    linewidths: float | list[float] | tuple[float] | Dict[str, float] = 1.25,
     title: str | None = "Posterior Predictive Distribution",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "Density",
     grid_kwargs: dict | None = None,
     **kwargs,
-) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
+) -> Axes | sns.FacetGrid | list[sns.FacetGrid]:
     """Plot the posterior predictive distribution against the observed data.
 
     Parameters
@@ -293,19 +372,22 @@ def plot_posterior_predictive(
         - A list-like defining the bin edges.
         - An integer defining the number of bins to be used.
     range : optional
-        The lower and upper range of the bins. Lower and upper outliers are ignored. If
-        not provided, range is simply the minimum and the maximum of the data, by
-        default None.
+            The lower and upper range of the bins. Lower and upper outliers are ignored.
+            If not provided, range is simply the minimum and the maximum of the data, by
+            default None.
     step : optional
         Whether to plot the distributions as a step function or a smooth density plot,
         by default False.
-    interval : optional
-        A two-tuple of floats indicating the interval of uncertainty, by default None.
+    hdi : optional
+        A two-tuple of floats indicating the hdi to plot, by default None.
         The values in the tuple should be between 0 and 1, indicating the percentiles
         used to compute the interval. For example, (0.05, 0.95) will compute the 90%
         interval. There should be at least 50 posterior predictive samples for each
         chain for this to work properly. A warning message will be displayed if there
         are fewer than 50 posterior samples. If None, no interval is plotted.
+        If a float, the interval the computed interval will be
+        ((1 - hdi) / 2, 1 - (1 - hdi) / 2). If a string, the format needs
+        to be e.g. '10%'.
     colors : optional
         Colors to use for the different levels of the hue variable. When a `str`, the
         color of posterior predictives, in which case an error will be thrown if
@@ -318,6 +400,8 @@ def plot_posterior_predictive(
         the linestyle of both distributions. When a length-2 iterable, indicates the
         linestyles in the order of posterior predictives and observed data. The values
         must be interpretable by matplotlib. When None, use solid lines, by default "-".
+        When dictionary, the keys must be 'predicted' and/or 'observed', and the values
+        must be interpretable by matplotlib.
     linewidths : optional
         Linewidths to use for the different levels of the hue variable. When a `float`,
         the linewidth of both distributions. When a length-2 iterable, indicates the
@@ -343,6 +427,17 @@ def plot_posterior_predictive(
     mpl.axes.Axes | sns.FacetGrid
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
+    # Process hdi
+    if hdi is not None:
+        interval = _hdi_to_interval(hdi=hdi)
+    else:
+        interval = None
+
+    # Process linestyles
+    linestyles_ = _process_linestyles_pp(linestyles)
+    # Process linewidths
+    linewidths_ = _process_linewidths_pp(linewidths)
+
     groups, groups_order = _check_groups_and_groups_order(
         groups, groups_order, row, col
     )
@@ -383,8 +478,8 @@ def plot_posterior_predictive(
     if model.n_choices == 2:
         plotting_df["rt"] = plotting_df["rt"] * plotting_df["response"]
 
-    # Then, plot the posterior predictive distribution against the observed data
-    # Determine whether we are producing a single plot or a grid of plots
+        # Then, plot the posterior predictive distribution against the observed data
+        # Determine whether we are producing a single plot or a grid of plots
 
     if not extra_dims:
         ax = _plot_posterior_predictive_1D(
@@ -395,8 +490,8 @@ def plot_posterior_predictive(
             step=step,
             interval=interval,
             colors=colors,
-            linestyles=linestyles,
-            linewidths=linewidths,
+            linestyles=linestyles_,
+            linewidths=linewidths_,
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
@@ -420,8 +515,8 @@ def plot_posterior_predictive(
             step=step,
             interval=interval,
             colors=colors,
-            linestyles=linestyles,
-            linewidths=linewidths,
+            linestyles=linestyles_,
+            linewidths=linewidths_,
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
@@ -459,8 +554,8 @@ def plot_posterior_predictive(
             step=step,
             interval=interval,
             colors=colors,
-            linestyles=linestyles,
-            linewidths=linewidths,
+            linestyles=linestyles_,
+            linewidths=linewidths_,
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,

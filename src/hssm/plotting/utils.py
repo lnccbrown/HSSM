@@ -85,6 +85,35 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
     return data
 
 
+def _hdi_to_interval(hdi: str | float | tuple[float, float]) -> tuple[float, float]:
+    """Convert HDI to range."""
+    if isinstance(hdi, tuple):
+        if len(hdi) != 2:
+            raise ValueError("The HDI must be a tuple with two elements.")
+        elif not all(isinstance(i, float) for i in hdi):
+            raise ValueError("The HDI must be a tuple of floats.")
+        elif not all(0 <= i <= 1 for i in hdi):
+            raise ValueError("The HDI must be between 0 and 1.")
+        elif hdi[0] > hdi[1]:
+            raise ValueError(
+                "The lower bound of the HDI must be less than the upper bound."
+            )
+        else:
+            return hdi
+    elif isinstance(hdi, str):
+        # check format of string (ends with %)
+        assert hdi.endswith("%"), "HDI must be a percentage"
+        # check format of string (begins with two floats)
+        assert hdi[0].isdigit() and hdi[1].isdigit(), "HDI must begin with two floats"
+        # process
+        hdi = float(hdi.strip("%")) / 100
+    elif isinstance(hdi, float):
+        assert 0 <= hdi <= 1, "HDI must be between 0 and 1"
+    else:
+        raise ValueError("HDI must be a float, a string, or a tuple of two floats")
+    return ((1 - hdi) / 2, 1 - ((1 - hdi) / 2))
+
+
 def _get_plotting_df(
     idata: az.InferenceData | None = None,
     data: pd.DataFrame | None = None,
