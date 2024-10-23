@@ -9,8 +9,10 @@ these representations in Bambi-compatible formats through convenience function
 _parse_bambi().
 """
 
+import contextlib
 import itertools
 import logging
+import os
 from copy import deepcopy
 from typing import Any, Literal, cast
 
@@ -548,3 +550,43 @@ def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarra
 def _split_array(data: np.ndarray | list[int], divisor: int) -> list[np.ndarray]:
     num_splits = len(data) // divisor + (1 if len(data) % divisor != 0 else 0)
     return [tmp.astype(int) for tmp in np.array_split(data, num_splits)]
+
+
+class SuppressOutput:
+    """Context manager for suppressing output.
+
+    This context manager redirects both stdout and stderr to `os.devnull`,
+    effectively silencing all output during the execution of the block.
+    It also disables logging by setting the logging level to `CRITICAL`.
+
+    Examples
+    --------
+    >>> with SuppressOutput():
+    ...     grad_func = pytensor.function(
+    ...         [v, a, z, t],
+    ...         grad,
+    ...         mode=nan_guard_mode,
+    ...     )
+
+    Methods
+    -------
+    __enter__()
+        Redirects stdout and stderr, and disables logging.
+
+    __exit__(exc_type, exc_value, traceback)
+        Restores stdout, stderr, and logging upon exit.
+    """
+
+    def __enter__(self):  # noqa: D105
+        self._null_file = open(os.devnull, "w")
+        self._stdout_context = contextlib.redirect_stdout(self._null_file)
+        self._stderr_context = contextlib.redirect_stderr(self._null_file)
+        self._stdout_context.__enter__()
+        self._stderr_context.__enter__()
+        logging.disable(logging.CRITICAL)  # Disable logging
+
+    def __exit__(self, exc_type, exc_value, traceback):  # noqa: D105
+        self._stdout_context.__exit__(exc_type, exc_value, traceback)
+        self._stderr_context.__exit__(exc_type, exc_value, traceback)
+        self._null_file.close()
+        logging.disable(logging.NOTSET)  # Re-enable logging
