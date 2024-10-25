@@ -22,7 +22,6 @@ from bambi.priors.prior import format_arg
 pymc_dist_args = ["rng", "initval", "dims", "observed", "total_size", "transform"]
 
 
-# mypy: disable-error-code="has-type"
 class Prior(bmb.Prior):
     """Abstract specification of a prior.
 
@@ -38,10 +37,15 @@ class Prior(bmb.Prior):
         Optional keywords specifying the parameters of the named distribution.
     dist : optional
         A callable that returns a valid PyMC distribution. The signature must contain
-        ``name``, ``dims``, and ``shape``, as well as its own keyworded arguments.
+        ``name``, ``dims``, and ``shape``, as well as its own keyword arguments.
     bounds : optional
         A tuple of two floats indicating the lower and upper bounds of the prior.
     """
+
+    name: str
+    auto_scale: bool
+    dist: Callable | None
+    bounds: tuple[float, float] | None
 
     def __init__(
         self,
@@ -51,23 +55,76 @@ class Prior(bmb.Prior):
         bounds: tuple[float, float] | None = None,
         **kwargs,
     ):
-        bmb.Prior.__init__(self, name, auto_scale, dist, **kwargs)
+        super().__init__(name, auto_scale=auto_scale, dist=dist, **kwargs)
         self.is_truncated = False
         self.bounds = bounds
+        # Create a copy of `args` for representation purposes.
+        self._args = self.args.copy()
 
         if self.bounds is not None:
-            assert self.dist is None, (
-                "We cannot bound a prior defined with the `dist` argument. The "
-                + "`dist` and `bounds` arguments cannot both be supplied."
-            )
+            if self.dist is not None:
+                raise ValueError(
+                    "We cannot bound a prior defined with the `dist` argument. The "
+                    + "`dist` and `bounds` arguments cannot both be supplied."
+                )
             lower, upper = self.bounds
             if np.isinf(lower) and np.isinf(upper):
                 return
 
             self.is_truncated = True
             self.dist = _make_truncated_dist(self.name, lower, upper, **self.args)
-            self._args = self.args.copy()
+            # For compatibility with Bambi, we set args to empty.
             self.args: dict = {}
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert the object to a dict.
+
+        Returns
+        -------
+        dict[str, Any]
+            A dictionary with the serialized json object.
+        """
+        return serialize_prior_obj(self)
+
+    @staticmethod
+    def from_dict(d: dict) -> "Prior":
+        """Create a Prior object from a JSON dictionary.
+
+        Parameters
+        ----------
+        d
+            A dictionary with the serialized JSON object.
+
+        Returns
+        -------
+        Prior
+            A hssm.Prior object with the specified parameters.
+        """
+        return Prior(**d)
+
+    @staticmethod
+    def from_bambi(
+        bambi_prior: bmb.Prior, bounds: tuple[float, float] | None = None
+    ) -> "Prior":
+        """Create a Prior object from a Bambi Prior object.
+
+        Parameters
+        ----------
+        bambi_prior
+            A Bambi Prior object.
+
+        Returns
+        -------
+        Prior
+            A hssm.Prior object with the same parameters as the Bambi Prior object.
+        """
+        return Prior(
+            bambi_prior.name,
+            bambi_prior.auto_scale,
+            bambi_prior.dist,
+            bounds=bounds,
+            **bambi_prior.args,
+        )
 
     def __str__(self) -> str:
         """Create the printout of the object."""
@@ -146,6 +203,88 @@ def _make_truncated_dist(
         )
 
     return TruncatedDist
+
+
+def serialize_prior_obj(prior: bmb.Prior) -> dict[str, Any]:
+    """Convert a Prior object to a JSON-compatible dictionary.
+
+    Parameters
+    ----------
+    prior
+        A Prior object.
+
+    Returns
+    -------
+    dict[str, Any]
+        A JSON-compatible dictionary with all information about the Prior object.
+
+    Raises
+    ------
+    ValueError
+        If the Prior object is not serializable i.e. it has a custom distribution.
+    """
+    if not isinstance(prior, Prior) and prior.dist is not None:
+        raise ValueError("Cannot serialize a Prior object with a custom distribution.")
+
+    if isinstance(prior, Prior):
+        args = prior._args if prior.is_truncated else prior.args
+    else:
+        args = prior.args
+
+    result = args.copy()
+
+    for key, value in result.items():
+        if isinstance(value, bmb.Prior):
+            result[key] = serialize_prior_obj(value)
+        elif isinstance(value, np.ndarray) and value.ndim == 0:
+            result[key] = value.item()
+
+    result["name"] = prior.name
+    result["auto_scale"] = prior.auto_scale
+
+    if isinstance(prior, Prior) and prior.bounds is not None:
+        result["bounds"] = prior.bounds
+
+    return result
+
+
+def deserialize_prior_obj(prior: dict[str, Any]) -> bmb.Prior:
+    """Convert a JSON-compatible dictionary to a Prior object.
+
+    Parameters
+    ----------
+    prior
+        A JSON-compatible dictionary with all information about the Prior object.
+
+    Returns
+    -------
+    bmb.Prior
+        A Prior object with the same parameters as the dictionary.
+
+    Raises
+    ------
+    ValueError
+        If the Prior object is not deserializable i.e. it has a custom distribution.
+    """
+    prior = prior.copy()
+    if "dist" in prior:
+        raise ValueError(
+            "Cannot deserialize a Prior object with a custom distribution."
+        )
+
+    name = prior.pop("name")
+    auto_scale = prior.pop("auto_scale")
+    bounds = prior.pop("bounds", None)
+
+    for key, value in prior.items():
+        if isinstance(value, dict):
+            prior[key] = deserialize_prior_obj(value)
+
+    if bounds is None:
+        return Prior(name, auto_scale, **prior)
+
+    bounds = tuple(bounds)
+    return Prior(name, auto_scale, bounds=bounds, **prior)
 
 
 def generate_prior(
