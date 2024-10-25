@@ -149,7 +149,7 @@ class RegressionParam(Param):
         if isinstance(self.prior, bmb.Prior):
             raise ValueError(
                 "Please specify priors for each individual parameter in the "
-                + f"regression for {self.name}."
+                f"regression for {self.name}."
             )
         if self.link is None:
             self.link = "identity"
