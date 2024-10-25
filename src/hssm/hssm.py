@@ -149,9 +149,9 @@ class HSSM:
         The lapse distribution. This argument is required only if `p_outlier` is not
         `None`. Defaults to Uniform(0.0, 10.0).
     global_formula : optional
-        A string representing the global formula for the model applied to every
-        parameter. Specifying a different formula for a parameter will override this
-        global formula. Defaults to `None`.
+        A string that specifies a regressions formula which will be used for all model
+        parameters. If you specify parameter-wise regressions in addition, these will
+        override the global regression for the respective parameter.
     link_settings : optional
         An optional string literal that indicates the link functions to use for each
         parameter. Helpful for hierarchical models where sampling might get stuck/
@@ -1336,19 +1336,14 @@ class HSSM:
 
     def __repr__(self) -> str:
         """Create a representation of the model."""
-        output = []
-
-        output.append("Hierarchical Sequential Sampling Model")
-        output.append(f"Model: {self.model_name}")
-        output.append("")
-
-        output.append(f"Response variable: {self.response_str}")
-        output.append(f"Likelihood: {self.loglik_kind}")
-        output.append(f"Observations: {len(self.data)}")
-        output.append("")
-
-        output.append("Parameters:")
-        output.append("")
+        output = [
+            "Hierarchical Sequential Sampling Model",
+            f"Model: {self.model_name}\n",
+            f"Response variable: {self.response_str}",
+            f"Likelihood: {self.loglik_kind}",
+            f"Observations: {len(self.data)}\n",
+            "Parameters:\n",
+        ]
 
         for param in self.params.values():
             if param.name == "p_outlier":
@@ -1391,12 +1386,15 @@ class HSSM:
         if self.p_outlier is not None:
             # TODO: Allow regression for self.p_outlier
             # Need to determine what the output should look like
-            assert not self.p_outlier.is_regression
+            if self.p_outlier.is_regression:
+                raise NotImplementedError(
+                    "Regression for `p_outlier` is not implemented yet."
+                )
             output.append("")
             output.append(f"Lapse probability: {self.p_outlier.prior}")
             output.append(f"Lapse distribution: {self.lapse}")
 
-        return "\r\n".join(output)
+        return "\n".join(output)
 
     def __str__(self) -> str:
         """Create a string representation of the model."""
