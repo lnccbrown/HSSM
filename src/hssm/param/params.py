@@ -174,6 +174,17 @@ class Params(UserDict[str, Param]):
         params = "\n".join(repr(param) for _, param in self.items())
         return "Parameters:\n" f"{params}"
 
+    def serialize_user_params(self) -> dict[str, Any]:
+        """Serialize the Params object to a dictionary.
+
+        Returns
+        -------
+        dict[str, dict[str, Any]]
+            A dictionary with the parameter names as keys and dictionaries with the
+            parameter attributes as values.
+        """
+        return save_user_params(self)
+
 
 def collect_user_params(
     model: HSSM,
@@ -351,3 +362,25 @@ def make_param_from_defaults(model: HSSM, name: str) -> Param:
         param = DefaultParam.from_defaults(name, default_prior, default_bounds)
 
     return param
+
+
+def save_user_params(params: Params) -> dict[str, dict[str, Any]]:
+    """Serialize the Params object to a dictionary.
+
+    Parameters
+    ----------
+    params
+        The Params object.
+
+    Returns
+    -------
+    dict[str, dict[str, Any]]
+        A dictionary with the parameter names as keys and dictionaries with the
+        parameter attributes as values.
+    """
+    result: dict[str, Any] = {}
+    for param_name, param in params.items():
+        if (user_param := param.user_param) is not None:
+            result[param_name] = user_param.serialize()
+
+    return result
