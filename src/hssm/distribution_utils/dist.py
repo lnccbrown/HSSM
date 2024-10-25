@@ -22,13 +22,13 @@ from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
 
-from ..utils import download_hf
 from .blackbox import make_blackbox_op
 from .onnx import (
     make_jax_logp_funcs_from_onnx,
     make_jax_logp_ops,
     make_pytensor_logp,
 )
+from .utils import download_hf
 
 LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]

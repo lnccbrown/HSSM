@@ -1,6 +1,5 @@
 """Utility functions for dynamically building pm.Distributions."""
 
-from ..utils import download_hf
 from .dist import (
     assemble_callables,
     make_blackbox_op,
@@ -10,6 +9,7 @@ from .dist import (
     make_missing_data_callable,
     make_ssm_rv,
 )
+from .utils import download_hf
 
 __all__ = [
     "assemble_callables",

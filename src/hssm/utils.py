@@ -9,14 +9,15 @@ these representations in Bambi-compatible formats through convenience function
 _parse_bambi().
 """
 
+from __future__ import annotations
+
 import contextlib
 import itertools
 import logging
 import os
 from copy import deepcopy
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
-import arviz as az
 import bambi as bmb
 import jax
 import numpy as np
@@ -27,38 +28,25 @@ import pytensor.tensor as pt
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from bambi.utils import get_aliased_name, response_evaluate_new_data
-from huggingface_hub import hf_hub_download
 from tqdm import tqdm
 
-from .param.param import Param
+if TYPE_CHECKING:
+    import arviz as az
+
+    from .param.param import Param
 
 _logger = logging.getLogger("hssm")
 
-REPO_ID = "franklab/HSSM"
-
-
-def download_hf(path: str):
-    """
-    Download a file from a HuggingFace repository.
-
-    Parameters
-    ----------
-    path : str
-        The path of the file to download in the repository.
-
-    Returns
-    -------
-    str
-        The local path where the file is downloaded.
-
-    Notes
-    -----
-    The repository is specified by the REPO_ID constant,
-    which should be a valid HuggingFace.co repository ID.
-    The file is downloaded using the HuggingFace Hub's
-     hf_hub_download function.
-    """
-    return hf_hub_download(repo_id=REPO_ID, filename=path)
+SERIALIZABLE_ATTRS = [
+    "model_name",
+    "choices",
+    "loglik_kind",
+    "global_formula",
+    "link_settings",
+    "prior_settings",
+    "missing_data",
+    "deadline",
+]
 
 
 def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
