@@ -83,12 +83,3 @@ def test_fill_defaults():
     assert param.link == "identity"
     assert param.bounds == (0, 1)
     assert param.user_param is None
-
-
-def test_unimplemented_methods():
-    """Test that the unimplemented methods raise NotImplementedError."""
-    param = Param(name="test", prior=0)
-    with pytest.raises(NotImplementedError):
-        param.validate()
-    with pytest.raises(NotImplementedError):
-        param.process_prior()

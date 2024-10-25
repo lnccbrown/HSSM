@@ -1,15 +1,23 @@
 """The Param class is a container for user-specified parameters of the HSSM model."""
 
 from dataclasses import dataclass, fields
-from typing import Any, Union
+from typing import Any, ClassVar, Protocol, Union
 
 import bambi as bmb
 import numpy as np
 
-from .utils import validate_bounds
+from .utils import deserialize_prior, serialize_prior, validate_bounds
 
 
-@dataclass
+class IsDataclass(Protocol):
+    """Type annotation for a non-specific dataclass."""
+
+    # as already noted in comments, checking for this attribute is currently
+    # the most reliable way to ascertain that something is a dataclass
+    __dataclass_fields__: ClassVar[dict[str, Any]]
+
+
+@dataclass(slots=True)
 class UserParam:
     """Represent the user-provided specifications for the main HSSM class.
 
@@ -136,10 +144,61 @@ class UserParam:
 
     def to_dict(
         self,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Convert the UserParam object to a dictionary with shallow copy."""
-        return {
-            f.name: getattr(self, f.name)
-            for f in fields(self)
-            if getattr(self, f.name) is not None
-        }
+        return to_dict_shallow(self)
+
+    def serialize(self) -> dict[str, Any]:
+        """Serialize the UserParam object to a dictionary."""
+        if self.link is not None and isinstance(self.link, bmb.Link):
+            raise ValueError(f"Cannot serialize link object for parameter {self.name}")
+
+        d = self.to_dict()
+        if "prior" in d:
+            d["prior"] = serialize_prior(d["prior"])
+        if "bounds" in d and d["bounds"] is not None:
+            d["bounds"] = tuple(d["bounds"])
+
+        return d
+
+    @classmethod
+    def deserialize(cls, d: dict[str, Any]) -> "UserParam":
+        """Deserialize a serialized prior.
+
+        Parameters
+        ----------
+        serialized_prior
+            A dictionary of serialized priors.
+
+        Returns
+        -------
+        UserParam
+            The deserialized prior.
+        """
+        d = d.copy()
+        if "prior" in d:
+            d["prior"] = deserialize_prior(d["prior"])
+        if "bounds" in d and d["bounds"] is not None:
+            d["bounds"] = tuple(d["bounds"])
+
+        return cls(**d)
+
+
+def to_dict_shallow(obj: IsDataclass) -> dict:
+    """Convert a dataclass to a dictionary with shallow copy.
+
+    Parameters
+    ----------
+    cls
+        The dataclass object to convert.
+
+    Returns
+    -------
+    dict
+        The dictionary representation of the dataclass.
+    """
+    return {
+        f.name: value
+        for f in fields(obj)
+        if (value := getattr(obj, f.name)) is not None
+    }
