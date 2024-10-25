@@ -3,22 +3,33 @@
 # This is necessary to enable forward looking
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, Union, cast
+from typing import TYPE_CHECKING, Any, Literal, Type, Union, cast
 
 import bambi as bmb
 
 from .defaults import LogLik, LoglikKind, SupportedModels, default_model_config
+from .param.user_param import (
+    to_dict_shallow,
+)
+from .param.utils import SerializedPrior, deserialize_prior, serialize_prior
 
 if TYPE_CHECKING:
+    from os import PathLike
+
+    import pymc as pm
+    import pytensor
     from pytensor.tensor.random.op import RandomVariable
 
 
 ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
 
+_logger = logging.getLogger("hssm")
 
-@dataclass
+
+@dataclass(slots=True)
 class Config:
     """Config class that stores the configurations for models."""
 
@@ -35,6 +46,8 @@ class Config:
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+
+    user_config: ModelConfig | None = field(init=False, default=None)
 
     @classmethod
     def from_defaults(
@@ -111,56 +124,70 @@ class Config:
 
             return Config(model_name, loglik_kind, response=["rt", "response"])
 
-    def update_loglik(self, loglik: Any | None) -> None:
-        """Update the log-likelihood function from user input.
-
-        Parameters
-        ----------
-        loglik : optional
-            A user-defined log-likelihood function.
-        """
-        if loglik is None:
-            return
-
-        self.loglik = loglik
-
-    def update_choices(self, choices: list[int] | None) -> None:
-        """Update the choices from user input.
-
-        Parameters
-        ----------
-        choices : list[int]
-            A list of choices.
-        """
-        if choices is None:
-            return
-
-        self.choices = choices
-
-    def update_config(self, user_config: ModelConfig) -> None:
+    def update_config(
+        self,
+        user_config: ModelConfig | None = None,
+        choices: list[int] | None = None,
+        loglik: str
+        | PathLike
+        | pytensor.graph.Op
+        | Type[pm.Distribution]
+        | None = None,
+    ) -> None:
         """Update the object from a ModelConfig object.
 
         Parameters
         ----------
-        user_config: ModelConfig
+        user_config
             User specified ModelConfig used update self.
+        choices
+            The choices list for the model.
+        loglik
+            The log-likelihood function.
         """
-        if user_config.response is not None:
-            self.response = user_config.response
-        if user_config.list_params is not None:
-            self.list_params = user_config.list_params
-        if user_config.choices is not None:
-            self.choices = user_config.choices
+        if user_config is not None:
+            user_config = (
+                ModelConfig(**user_config)
+                if isinstance(user_config, dict)
+                else user_config
+            )
+            if choices is not None:
+                if hasattr(user_config, "choices"):
+                    _logger.warning(
+                        "choices list provided in both model_config and "
+                        "as an argument directly."
+                        " Using the one provided in model_config. \n"
+                        "We recommend providing choices in model_config."
+                    )
+                else:
+                    self.choices = choices
 
-        if (
-            self.loglik_kind == "approx_differentiable"
-            and user_config.backend is not None
-        ):
-            self.backend = user_config.backend
+            if user_config.response is not None:
+                self.response = user_config.response
+            if user_config.list_params is not None:
+                self.list_params = user_config.list_params
+            if user_config.choices is not None:
+                self.choices = user_config.choices
 
-        self.default_priors |= user_config.default_priors
-        self.bounds |= user_config.bounds
-        self.extra_fields = user_config.extra_fields
+            if (
+                self.loglik_kind == "approx_differentiable"
+                and user_config.backend is not None
+            ):
+                self.backend = user_config.backend
+
+            self.default_priors |= user_config.default_priors
+            self.bounds |= user_config.bounds
+            self.extra_fields = user_config.extra_fields
+        else:
+            # This is to allow users to override default choices.
+            # For some models, such as `ddm` and custom likelihoods,
+            # This can be useful.
+            if choices is not None:
+                self.choices = choices
+
+        if loglik is not None:
+            self.loglik = loglik
+        self.validate()
 
     def validate(self) -> None:
         """Ensure that mandatory fields are not None."""
@@ -188,7 +215,7 @@ class Config:
         return self.default_priors.get(param), self.bounds.get(param)
 
 
-@dataclass
+@dataclass(slots=True)
 class ModelConfig:
     """Representation for model_config provided by the user."""
 
@@ -200,3 +227,41 @@ class ModelConfig:
     backend: Literal["jax", "pytensor"] | None = None
     rv: RandomVariable | None = None
     extra_fields: list[str] | None = None
+
+    def serialize(self) -> dict[str, SerializedPrior]:
+        """Serialize the object to a dictionary."""
+        result = to_dict_shallow(self)
+
+        if self.rv is not None:
+            raise ValueError("Cannot serialize RandomVariable object.")
+
+        if "default_priors" in result:
+            result["default_priors"] = {
+                key: serialize_prior(value)
+                for key, value in self.default_priors.items()
+            }
+
+        return result
+
+    @classmethod
+    def deserialize(cls, d: dict[str, Any]) -> ModelConfig:
+        """Deserialize a serialized model_config.
+
+        Parameters
+        ----------
+        d
+            A dictionary of serialized model_config.
+
+        Returns
+        -------
+        ModelConfig
+            The deserialized model_config.
+        """
+        if "default_priors" in d:
+            d = d.copy()
+            d["default_priors"] = {
+                key: deserialize_prior(value)
+                for key, value in d["default_priors"].items()
+            }
+
+        return cls(**d)

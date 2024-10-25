@@ -7,7 +7,6 @@ This file defines the entry class HSSM.
 """
 
 import logging
-import typing
 from copy import deepcopy
 from inspect import isclass
 from os import PathLike
@@ -26,7 +25,9 @@ import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 
-from hssm.defaults import (
+from . import plotting
+from .config import Config, ModelConfig
+from .defaults import (
     INITVAL_JITTER_SETTINGS,
     INITVAL_SETTINGS,
     LoglikKind,
@@ -34,25 +35,23 @@ from hssm.defaults import (
     SupportedModels,
     missing_data_networks_suffix,
 )
-from hssm.distribution_utils import (
+from .distribution_utils import (
     assemble_callables,
     make_distribution,
     make_family,
     make_likelihood_callable,
     make_missing_data_callable,
 )
-from hssm.utils import (
+from .io import _save_model
+from .param import Params
+from .param import UserParam as Param
+from .utils import (
     _compute_log_likelihood,
     _get_alias_dict,
     _print_prior,
     _rearrange_data,
     _split_array,
 )
-
-from . import plotting
-from .config import Config, ModelConfig
-from .param import Params
-from .param import UserParam as Param
 
 _logger = logging.getLogger("hssm")
 
@@ -268,60 +267,26 @@ class HSSM:
         self.link_settings = link_settings
         self.prior_settings = prior_settings
 
+        self.user_spec: dict[str, Any] = {}
+        self.user_spec["extra_namespace"] = extra_namespace
+
         additional_namespace = transformations_namespace.copy()
         if extra_namespace is not None:
             additional_namespace.update(extra_namespace)
         self.additional_namespace = additional_namespace
 
+        if loglik is not None:
+            self.user_spec["loglik"] = loglik
+        if loglik_missing_data is not None:
+            self.user_spec["loglik_missing_data"] = loglik_missing_data
+
         # Construct a model_config from defaults
         self.model_config = Config.from_defaults(model, loglik_kind)
         # Update defaults with user-provided config, if any
+        self.model_config.update_config(model_config, choices, loglik)
+
         if model_config is not None:
-            if isinstance(model_config, dict):
-                if "choices" not in model_config:
-                    if choices is not None:
-                        model_config["choices"] = choices
-                else:
-                    if choices is not None:
-                        _logger.info(
-                            "choices list provided in both model_config and "
-                            "as an argument directly."
-                            " Using the one provided in model_config. \n"
-                            "We recommend providing choices in model_config."
-                        )
-            elif isinstance(model_config, ModelConfig):
-                if model_config.choices is None:
-                    if choices is not None:
-                        model_config.choices = choices
-                else:
-                    if choices is not None:
-                        _logger.info(
-                            "choices list provided in both model_config and "
-                            "as an argument directly."
-                            " Using the one provided in model_config. \n"
-                            "We recommend providing choices in model_config."
-                        )
-
-            self.model_config.update_config(
-                model_config
-                if isinstance(model_config, ModelConfig)
-                else ModelConfig(**model_config)  # also serves as dict validation
-            )
-        else:
-            if model not in typing.get_args(SupportedModels):
-                if choices is not None:
-                    self.model_config.update_choices(choices)
-            else:
-                if choices is not None:
-                    _logger.info(
-                        "Model string is in SupportedModels."
-                        " Ignoring choices arguments."
-                    )
-
-        # Update loglik with user-provided value
-        self.model_config.update_loglik(loglik)
-        # Ensure that all required fields are valid
-        self.model_config.validate()
+            self.user_spec["model_config"] = model_config
 
         # Set up shortcuts so old code will work
         self.response = self.model_config.response
@@ -331,11 +296,6 @@ class HSSM:
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
-
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )
 
         self.n_choices = len(self.choices)
         self._pre_check_data_sanity()
@@ -417,6 +377,8 @@ class HSSM:
             self._parent,
         )
 
+        self.user_spec["kwargs"] = kwargs
+
         self.model = bmb.Model(
             self.formula,
             data=self.data,
@@ -435,11 +397,13 @@ class HSSM:
 
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
+        self.user_spec["process_initvals"] = process_initvals
         if self.initval_jitter > 0:
             self._jitter_initvals(
                 jitter_epsilon=self.initval_jitter,
                 vector_only=True,
             )
+        self.user_spec["initval_jitter"] = initval_jitter
 
         # Make sure we reset rvs_to_initial_values --> Only None's
         # Otherwise PyMC barks at us when asking to compute likelihoods
@@ -1333,6 +1297,16 @@ class HSSM:
         if isinstance(traces, (str, PathLike)):
             traces = az.from_netcdf(traces)
         self._inference_obj = cast(az.InferenceData, traces)
+
+    def save_model(self, path: str | PathLike) -> None:
+        """Save the model to a file.
+
+        Parameters
+        ----------
+        path
+            The path to save the model to.
+        """
+        _save_model(self.model, path)
 
     def __repr__(self) -> str:
         """Create a representation of the model."""

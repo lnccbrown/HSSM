@@ -1,5 +1,8 @@
+from unittest.mock import Mock
+
 import numpy as np
 import pytest
+from pytensor.tensor.random.op import RandomVariable
 
 import hssm
 from hssm.config import Config, ModelConfig
@@ -79,3 +82,38 @@ def test_update_config():
 
     assert v_prior.name == "Normal"
     assert v_bounds == (-np.inf, np.inf)
+
+
+def test_serialize_deserialize():
+    config = ModelConfig(
+        response=["rt", "response"],
+        list_params=["a", "b", "c"],
+        backend="jax",
+        default_priors={
+            "b": hssm.Prior("Uniform", lower=-5, upper=5),
+        },
+        bounds={
+            "a": (-1, 1),
+        },
+    )
+
+    serialized_config = config.serialize()
+    deserialized_config = ModelConfig.deserialize(serialized_config)
+
+    assert config == deserialized_config
+
+    config = ModelConfig(
+        response=["rt", "response"],
+        list_params=["a", "b", "c"],
+        backend="jax",
+        default_priors={
+            "b": hssm.Prior("Uniform", lower=-5, upper=5),
+        },
+        bounds={
+            "a": (-1, 1),
+        },
+        rv=Mock(spec=RandomVariable),
+    )
+
+    with pytest.raises(ValueError, match="Cannot serialize RandomVariable object."):
+        config.serialize()

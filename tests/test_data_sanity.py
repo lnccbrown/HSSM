@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -46,7 +47,7 @@ def test_data_sanity_check(data_ddm, cpn, caplog):
 
     with pytest.raises(
         ValueError,
-        match=r"Invalid responses found in your dataset: \[0, 2\]",
+        match=re.escape("Invalid responses found in your dataset: [0]"),
     ):
         data_ddm_miscoded = data_ddm.copy()
         data_ddm_miscoded["response"] = np.random.choice([0, 1, 2], data_ddm.shape[0])
