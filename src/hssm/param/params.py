@@ -138,7 +138,6 @@ class Params(UserDict[str, Param]):
                     if link is not None:
                         links[param_name] = link
             else:
-                # non-regression case
                 if formula is not None:
                     other_formulas.append(formula)
                 if prior is not None:
