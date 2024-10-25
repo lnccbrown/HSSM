@@ -1,6 +1,5 @@
 import bambi as bmb
 import numpy as np
-import pandas as pd
 import pytest
 
 import hssm
@@ -8,9 +7,8 @@ from hssm import Prior
 from hssm.defaults import default_model_config
 from hssm.link import Link
 from hssm.param import UserParam
-from hssm.param.regression_param import RegressionParam, _make_priors_recursive
-from hssm.prior import HSSM_SETTINGS_DISTRIBUTIONS, HDDM_SETTINGS_GROUP
-
+from hssm.param.regression_param import RegressionParam
+from hssm.param.utils import _make_priors_recursive
 
 v_reg = UserParam(
     name="v",

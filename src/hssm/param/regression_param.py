@@ -13,6 +13,7 @@ from ..link import Link
 from ..prior import get_default_prior, get_hddm_default_prior
 from .param import Param
 from .user_param import UserParam
+from .utils import _make_prior_dict
 
 _logger = logging.getLogger("hssm")
 
@@ -350,57 +351,3 @@ class RegressionParam(Param):
             f"    Priors:\n{priors}\n"
             f"    Link: {link}"
         )
-
-
-def _make_prior_dict(
-    prior: dict[str, float | dict[dict, Any] | bmb.Prior],
-) -> dict[str, float | bmb.Prior]:
-    """Make bambi priors from a ``dict`` of priors for the regression case.
-
-    Parameters
-    ----------
-    prior
-        A dictionary where each key is the name of a parameter in a regression
-        and each value is the prior specification for that parameter.
-
-    Returns
-    -------
-    dict[str, float | bmb.Prior]
-        A dictionary where each key is the name of a parameter in a regression and each
-        value is either a float or a bmb.Prior object.
-    """
-    priors = {
-        # Convert dict to bmb.Prior if a dict is passed
-        param: _make_priors_recursive(cast(dict[str, Any], prior))
-        if isinstance(prior, dict)
-        else prior
-        for param, prior in prior.items()
-    }
-
-    return priors
-
-
-def _make_priors_recursive(
-    prior: dict[str, float | dict[str, Any] | bmb.Prior],
-) -> bmb.Prior:
-    """Make `bmb.Prior` objects from ``dict``s.
-
-    Helper function that recursively converts a dict that might have some fields that
-    have a parameter definitions as dicts to bmb.Prior objects.
-
-    Parameters
-    ----------
-    prior
-        A dictionary that contains parameter specifications.
-
-    Returns
-    -------
-    bmb.Prior
-        A bmb.Prior object with fields that can be converted to bmb.Prior objects also
-        converted.
-    """
-    for k, v in prior.items():
-        if isinstance(v, dict) and "name" in v:
-            prior[k] = _make_priors_recursive(v)
-
-    return bmb.Prior(**prior)

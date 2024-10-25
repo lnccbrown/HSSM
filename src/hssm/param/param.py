@@ -1,5 +1,6 @@
 """The parent class for all parameters in the model."""
 
+from abc import abstractmethod
 from typing import Any
 
 import bambi as bmb
@@ -153,13 +154,15 @@ class Param:
             if getattr(self, key) is None:
                 setattr(self, key, value)
 
+    @abstractmethod
     def validate(self) -> None:
         """Validate the parameter."""
-        raise NotImplementedError("This method is to be implemented in subclasses.")
+        ...
 
+    @abstractmethod
     def process_prior(self) -> None:
         """Process the prior specification."""
-        raise NotImplementedError("This method is to be implemented in subclasses.")
+        ...
 
     def parse_bambi(
         self,
