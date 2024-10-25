@@ -44,6 +44,7 @@ mkdocs = "^1.6.0"
 mkdocs-material = "^9.5.21"
 mkdocstrings-python = "^1.10.0"
 mkdocs-jupyter = "^0.24.8"
+pyarrow = "^17.0.0"
 
 [tool.poetry.extras]
 cuda12 = ["jax"]
