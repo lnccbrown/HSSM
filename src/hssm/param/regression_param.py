@@ -221,6 +221,10 @@ class RegressionParam(Param):
             set(self.prior.keys()) if isinstance(self.prior, dict) else set()
         )
 
+        # For each term in the design matrix, if the prior is not already specified,
+        # add the default prior for that term.
+        # We do this separately for common and group terms.
+        # We also handle intercept and non-intercept terms separately.
         has_common_intercept = False
         if dm.common is not None:
             for name, term in dm.common.terms.items():
