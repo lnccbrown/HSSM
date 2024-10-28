@@ -222,7 +222,7 @@ def collect_user_params(
     for param_name in model.list_params:
         if param_name in user_params and param_name in kwargs:
             raise ValueError(
-                f"Parameter {param_name} specified in both include and kwargs."
+                f"Parameter `{param_name}` specified in both `include` and `kwargs`."
             )
 
         # Update user_params only if param_name is in kwargs
