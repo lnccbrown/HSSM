@@ -100,7 +100,7 @@ class Params(UserDict[str, Param]):
         self,
         model: HSSM,
     ) -> tuple[bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
-        """Retrieve three items that helps with bambi model building.
+        """Retrieve formulas, priors, and links for bambi model building.
 
         Returns
         -------
