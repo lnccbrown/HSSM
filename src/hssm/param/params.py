@@ -220,15 +220,16 @@ def collect_user_params(
     # We add the parameter specification to `user_params` and remove it from
     # `kwargs`
     for param_name in model.list_params:
+        if param_name in user_params and param_name in kwargs:
+            raise ValueError(
+                f"Parameter {param_name} specified in both "
+                "include and kwargs."
+            )
+
+        # Update user_params only if param_name is in kwargs
         if param_name in kwargs:
-            if param_name in user_params:
-                raise ValueError(
-                    f"Parameter `{param_name}` specified in both"
-                    " `include` and `kwargs`."
-                )
             user_params[param_name] = UserParam.from_kwargs(
                 param_name,
-                # Use pop to remove the key from kwargs
                 kwargs.pop(param_name),
             )
 
