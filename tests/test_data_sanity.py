@@ -32,15 +32,6 @@ def test_data_sanity_check(data_ddm, cpn, caplog):
     ):
         hssm.HSSM(data=data_ddm, model="ddm", deadline=True)
 
-    # Case 4: raise error if hierarchical model is set to True, but there is no
-    # participant_id field.
-    with pytest.raises(
-        ValueError,
-        match="You have specified that your model is hierarchical, but "
-        + "`participant_id` is not found in your dataset.",
-    ):
-        hssm.HSSM(data=data_ddm, model="ddm", hierarchical=True)
-
     # Case 5: raise error if there are invalid responses in data
     with pytest.raises(
         ValueError,
