@@ -37,17 +37,6 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger("hssm")
 
-SERIALIZABLE_ATTRS = [
-    "model_name",
-    "choices",
-    "loglik_kind",
-    "global_formula",
-    "link_settings",
-    "prior_settings",
-    "missing_data",
-    "deadline",
-]
-
 
 def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
     """Make aliases from the parent parameter.
