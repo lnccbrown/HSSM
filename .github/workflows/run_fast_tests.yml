@@ -26,7 +26,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Run fast tests
-        run: poetry run pytest -n auto -s --ignore=tests/slow
+        run: poetry run pytest --cov=. -n auto -s --ignore=tests/slow
         env:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
 
@@ -34,3 +34,9 @@ jobs:
         run: poetry run mkdocs build
         env:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
+
+      - name: Combine coverage reports
+        run: coverage combine
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3

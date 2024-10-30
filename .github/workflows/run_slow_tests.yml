@@ -30,6 +30,12 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Run slow tests
-        run: poetry run pytest -s tests/slow
+        run: poetry run pytest --cov=. -s tests/slow
         env:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
+
+      - name: Combine coverage reports
+        run: coverage combine
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
