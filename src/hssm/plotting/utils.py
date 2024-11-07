@@ -74,6 +74,8 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
     pd.DataFrame
         The processed dataframe.
     """
+    print("data", data)
+    print("data-index", data.index)
     # reset the index of the data to ensure proper merging
     data = data.reset_index(drop=True).loc[:, ["rt", "response"] + extra_dims]
 
@@ -81,6 +83,10 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
     data.index = pd.MultiIndex.from_product(
         [[-1], [-1], data.index], names=["chain", "draw", "obs_n"]
     )
+
+    print("after reset")
+    print("data", data)
+    print("data-index", data.index)
 
     return data
 
@@ -157,8 +163,10 @@ def _get_plotting_df(
         return data
 
     # get the posterior samples
-    idata_posterior = idata["posterior_predictive"][response_str]
-    posterior = _xarray_to_df(idata_posterior, n_samples=n_samples)
+    idata_posterior_predictive = idata["posterior_predictive"][response_str]
+    posterior_predictive = _xarray_to_df(
+        idata_posterior_predictive, n_samples=n_samples
+    )
 
     if data is None:
         if extra_dims:
@@ -167,10 +175,10 @@ def _get_plotting_df(
                 + " HSSM requires a dataset to determine the values of the covariates"
                 + " to plot these additional dimensions."
             )
-        posterior.insert(0, "observed", "predicted")
-        return posterior
+        posterior_predictive.insert(0, "observed", "predicted")
+        return posterior_predictive
 
-    if extra_dims and idata_posterior["__obs__"].size != data.shape[0]:
+    if extra_dims and idata_posterior_predictive["__obs__"].size != data.shape[0]:
         raise ValueError(
             "The number of observations in the data and the number of posterior "
             + "samples are not equal."
@@ -180,19 +188,19 @@ def _get_plotting_df(
 
     # merge the posterior samples with the data
     if extra_dims:
-        posterior_merged = posterior.merge(
-            data.loc[:, extra_dims],
-            left_on="obs_n",
-            right_on="obs_n",
-            how="left",
-            sort=True,
+        posterior_predictive = (
+            posterior_predictive.reset_index()
+            .merge(
+                data.loc[:, extra_dims],
+                on="obs_n",
+                how="left",
+            )
+            .set_index(["chain", "draw", "obs_n"])
         )
-        posterior_merged.index = posterior.sort_index().index
-        posterior = posterior_merged
 
     # concatenate the posterior samples with the data
     plotting_df = pd.concat(
-        {"predicted": posterior, "observed": data},
+        {"predicted": posterior_predictive, "observed": data},
         names=["observed", "chain", "draw", "obs_n"],
     ).reset_index("observed")
 
@@ -417,7 +425,7 @@ def _use_traces_or_sample(
             inplace=True,
             draws=n_samples,
         )
-        idata = model.traces
+        # idata = model.traces
         sampled = True
 
     return cast(az.InferenceData, idata), sampled
