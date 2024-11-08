@@ -15,13 +15,13 @@ import seaborn as sns
 import xarray as xr
 from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
-from posterior_predictive import _process_linestyles_pp, _process_linewidths_pp
 from ssms.basic_simulators.simulator import simulator
 
 # Original model cartoon plot from gui
 from ssms.config import model_config
 
 from ..defaults import SupportedModels, default_model_config
+from .posterior_predictive import _process_linestyles_pp, _process_linewidths_pp
 from .utils import (
     _check_groups_and_groups_order,
     _check_sample_size,
@@ -628,7 +628,7 @@ def plot_func_model(
     keep_ndt: bool = True,
     keep_starting_point: bool = True,
     markersize_starting_point: float | int = 50,
-    markertype_starting_point: int | str = 0,
+    markertype_starting_point: int = 0,
     markershift_starting_point: float | int = 0,
     linewidth_histogram: float | int = 0.5,
     linewidth_model: float | int = 0.5,
@@ -835,6 +835,13 @@ def plot_func_model(
     axis_twin_down.set_yticks([])
     axis_twin_down.set_axis_off()
     axis_twin_up.set_axis_off()
+    # axis_twin_up.set_facecolor("none")
+    # axis_twin_down.set_facecolor("none")
+
+    axis.set_zorder(1)
+    axis.set_facecolor("none")
+    axis_twin_up.set_zorder(0)
+    axis_twin_down.set_zorder(0)
 
     # Add histograms for posterior mean simulation
     axis_twin_up.hist(
@@ -893,7 +900,7 @@ def plot_func_model(
             color=color_pp,
             edgecolor=color_pp,
             linewidth=linewidth_histogram,
-            zorder=k,
+            zorder=(-k - 1),
         )
 
         axis_twin_down.hist(
@@ -910,7 +917,7 @@ def plot_func_model(
             color=color_pp,
             edgecolor=color_pp,
             linewidth=linewidth_histogram,
-            zorder=k,
+            zorder=(-k - 1),
         )
 
     # Add histograms for real data
@@ -1101,7 +1108,6 @@ def _add_trajectories(
             linewidth=linewidth_trajectories,
             zorder=2000 + i,
         )
-
         if highlight_trajectory_rt_choice:
             axis.scatter(
                 t_s[maxid] + sample[i]["metadata"]["t"][0],  # sample.t.values[0],
@@ -1117,24 +1123,24 @@ def _add_trajectories(
 
 # AF-TODO: Add documentation to this function
 def _add_model_cartoon_to_ax(
-    sample=None,
-    axis=None,
-    keep_slope=True,
-    keep_boundary=True,
-    keep_ndt=True,
-    keep_starting_point=True,
-    markersize_starting_point=80,
-    markertype_starting_point=1,
-    markershift_starting_point=-0.05,
-    delta_t_graph=None,
-    alpha=None,
-    lw_m=None,
-    tmp_label=None,
-    ylim_low=None,
-    ylim_high=None,
-    t_s=None,
-    zorder_cnt=1,
-    color="black",
+    sample: dict | np.ndarray | None = None,
+    axis: Axes | None = None,
+    keep_slope: bool = True,
+    keep_boundary: bool = True,
+    keep_ndt: bool = True,
+    keep_starting_point: bool = True,
+    markersize_starting_point: float | int = 80,
+    markertype_starting_point: float | int = 1,
+    markershift_starting_point: float | int = -0.05,
+    delta_t_graph: float | None = None,
+    alpha: float | None = None,
+    lw_m: float | None = None,
+    tmp_label: str | None = None,
+    ylim_low: float | int | None = None,
+    ylim_high: float | int | None = None,
+    t_s: np.ndarray | None = None,
+    zorder_cnt: int = 1,
+    color: str = "black",
 ):
     # Make bounds
     (b_high, b_low) = (

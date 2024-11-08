@@ -74,8 +74,6 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
     pd.DataFrame
         The processed dataframe.
     """
-    print("data", data)
-    print("data-index", data.index)
     # reset the index of the data to ensure proper merging
     data = data.reset_index(drop=True).loc[:, ["rt", "response"] + extra_dims]
 
@@ -83,10 +81,6 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
     data.index = pd.MultiIndex.from_product(
         [[-1], [-1], data.index], names=["chain", "draw", "obs_n"]
     )
-
-    print("after reset")
-    print("data", data)
-    print("data-index", data.index)
 
     return data
 
