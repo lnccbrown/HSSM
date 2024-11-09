@@ -3,7 +3,7 @@
 import logging
 from copy import deepcopy
 from itertools import product
-from typing import Dict, Iterable, List, Tuple, cast
+from typing import Dict, Iterable, cast
 
 import arviz as az
 import matplotlib as mpl
@@ -18,8 +18,6 @@ from matplotlib.lines import Line2D
 from ssms.basic_simulators.simulator import simulator
 
 # Original model cartoon plot from gui
-from ssms.config import model_config
-
 from ..defaults import SupportedModels, default_model_config
 from .posterior_predictive import _process_linestyles_pp, _process_linewidths_pp
 from .utils import (
@@ -33,14 +31,6 @@ from .utils import (
 )
 
 _logger = logging.getLogger("hssm")
-
-
-def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 100) -> np.ndarray:
-    return pd.Series(
-        np.histogram(a, bins=bins, density=True)[0],  # type: ignore
-        name="bin_n",
-        copy=False,
-    )
 
 
 def _plot_model_cartoon_1D(
@@ -79,6 +69,8 @@ def _plot_model_cartoon_1D(
         "list_params"
     ]
 
+    n_choices = len(default_model_config[cast(SupportedModels, model_name)]["choices"])
+
     data_posterior_predictive_mean = data.loc[
         (data.source == "posterior_predictive_mean") & (data.observed == "predicted"), :
     ]
@@ -90,18 +82,35 @@ def _plot_model_cartoon_1D(
         (data.source == "posterior_predictive") & (data.observed == "predicted"), :
     ]
 
+    # return data_posterior_predictive, data_posterior_predictive_mean, data_observed
+
     if plot_mean:
-        ax = plot_func_model(
-            model_name=model_name,
-            theta_mean=data_posterior_predictive_mean.reset_index()[model_params],
-            theta_posterior=data_posterior_predictive[model_params],
-            data=(data_observed.reset_index() if plot_data else None),
-            axis=ax,
-            value_range=kwargs.get("value_range", (-0.5, 5)),
-            linewidth_histogram=kwargs.get("linewidth_histogram", 1.5),
-            linewidth_model=kwargs.get("linewidth_model", 1.5),
-            **kwargs,
-        )
+        if n_choices == 2:
+            ax = plot_func_model(
+                model_name=model_name,
+                theta_mean=data_posterior_predictive_mean.reset_index()[model_params],
+                theta_posterior=data_posterior_predictive[model_params],
+                data=(data_observed.reset_index() if plot_data else None),
+                axis=ax,
+                linewidth_histogram=kwargs.get("linewidth_histogram", 1.5),
+                linewidth_model=kwargs.get("linewidth_model", 1.5),
+                **kwargs,
+            )
+        elif n_choices > 2:
+            ax = plot_func_model_n(
+                model_name=model_name,
+                theta_mean=data_posterior_predictive_mean.reset_index()[model_params],
+                theta_posterior=data_posterior_predictive[model_params],
+                data=(data_observed.reset_index() if plot_data else None),
+                axis=ax,
+                linewidth_histogram=kwargs.get("linewidth_histogram", 0.5),
+                linewidth_model=kwargs.get("linewidth_model", 0.5),
+                **kwargs,
+            )
+        else:
+            raise ValueError(
+                "The model plot works only for >2 choice models at the moment"
+            )
 
     if title:
         ax.set_title(title)
@@ -198,7 +207,6 @@ def compute_merge_necessary_deterministics(model, idata, inplace=True):
     """Compute the necessary deterministic variables for the model."""
     # Get the list of deterministic variables
     necessary_params = default_model_config[model.model_name]["list_params"]
-
     deterministics_list = []
     # Compute the deterministic variables
     for param in necessary_params:
@@ -208,7 +216,7 @@ def compute_merge_necessary_deterministics(model, idata, inplace=True):
             ]:
                 deterministics_list.append(
                     pm.compute_deterministics(
-                        idata.posterior, model=model.pymc_model, var_names=param
+                        idata.posterior, model=model.pymc_model, var_names=[param]
                     )
                 )
 
@@ -563,7 +571,8 @@ def plot_model_cartoon(
             grid_kwargs=grid_kwargs,
             **kwargs,
         )
-        return g
+        # return g
+        return g, plotting_df
 
     # The group dimension case
     plots = []
@@ -584,6 +593,7 @@ def plot_model_cartoon(
             continue
         g = _plot_model_cartoon_2D(
             data=df,
+            model_name=model.model_name,
             plot_data=plot_data,
             plot_mean=True,
             row=row,
@@ -613,11 +623,10 @@ def plot_model_cartoon(
 
 def plot_func_model(
     model_name: str,
-    theta_mean: pd.DataFrame,
-    theta_posterior: pd.DataFrame,
-    axis: Axes | None = None,
+    theta_mean: pd.DataFrame | None = None,
+    theta_posterior: pd.DataFrame | None = None,
     data: pd.DataFrame | None = None,
-    value_range: Tuple[float, float] | np.array | List[float] = None,
+    axis: Axes | None = None,
     n_samples=10,
     bin_size: float = 0.05,
     n_trajectories: int = 0,
@@ -647,9 +656,6 @@ def plot_func_model(
 
         axis: matplotlib.axis
             Axis to plot into.
-
-        value_range: numpy.ndarray
-            Range over which to evaluate the likelihood.
 
     Optional:
         samples: int <default=10>
@@ -698,18 +704,18 @@ def plot_func_model(
         delta_t_model:
             specifies plotting intervals for model cartoon elements of the graphs.
     """
-    if value_range is None:
-        # Infer from data by finding the min and max from the nodes
-        raise NotImplementedError("value_range keyword argument must be supplied.")
+    ylim_low, ylim_high = kwargs.get("ylims", (-3, 3))
+    xlim_low, xlim_high = kwargs.get("xlims", (-0.05, 5))
 
-    if len(value_range) > 2:
-        value_range = (value_range[0], value_range[-1])
+    # if value_range is None:
+    #     # Infer from data by finding the min and max from the nodes
+    #     raise NotImplementedError("value_range keyword argument must be supplied.")
+
+    # if len(value_range) > 2:
+    #     value_range = (value_range[0], value_range[-1])
 
     # Extract some parameters from kwargs
-    bins = np.arange(value_range[0], value_range[-1], bin_size)
-
-    if model_config[model_name]["nchoices"] > 2:
-        raise ValueError("The model plot works only for 2 choice models at the moment")
+    bins = np.arange(xlim_low, xlim_high, bin_size)
 
     # RUN SIMULATIONS
     # -------------------------------
@@ -717,67 +723,12 @@ def plot_func_model(
     # Simulator Data from posterior mean
     if random_state is not None:
         np.random.seed(random_state)
+
     rand_int = np.random.choice(400000000)
-    sim_out = simulator(
-        model=model_name,
-        theta=theta_mean.values,
-        n_samples=n_samples,
-        no_noise=False,
-        delta_t=delta_t_model,
-        bin_dim=None,
-        random_state=rand_int,
-    )
-
-    # Simulate Trajectories
-    sim_out_traj = {}
-    for i in range(n_trajectories):
-        rand_int = np.random.choice(400000000)
-        sim_out_traj[i] = simulator(
+    if theta_mean is not None:
+        sim_out = simulator(
             model=model_name,
-            theta=theta_mean.loc[np.random.choice(theta_mean.shape[0], 1), :].values,
-            n_samples=1,
-            no_noise=False,
-            delta_t=delta_t_model,
-            bin_dim=None,
-            random_state=rand_int,
-            smooth_unif=False,
-        )
-
-    # Simulate model without noise: posterior mean
-    # (this allows to extract the time-dynamics of the drift e.g.)
-    sim_out_no_noise = simulator(
-        model=model_name,
-        theta=theta_mean.loc[np.random.choice(theta_mean.shape[0], 1), :].values,
-        n_samples=1,
-        no_noise=True,
-        delta_t=delta_t_model,
-        bin_dim=None,
-        smooth_unif=False,
-    )
-
-    # Simulate model without noise: posterior samples
-    posterior_pred_no_noise = {}
-    for i, (chain, draw) in enumerate(
-        list(theta_posterior.index.droplevel("obs_n").unique())
-    ):
-        posterior_pred_no_noise[i] = simulator(
-            model=model_name,
-            theta=theta_posterior.loc[(chain, draw), :].values,
-            n_samples=1,
-            no_noise=True,
-            delta_t=delta_t_model,
-            bin_dim=None,
-            smooth_unif=False,
-        )
-
-    # Simulate model: posterior samples
-    posterior_pred_sims = {}
-    for i, (chain, draw) in enumerate(
-        list(theta_posterior.index.droplevel("obs_n").unique())
-    ):
-        posterior_pred_sims[i] = simulator(
-            model=model_name,
-            theta=theta_posterior.loc[(chain, draw), :].values,
+            theta=theta_mean.values,
             n_samples=n_samples,
             no_noise=False,
             delta_t=delta_t_model,
@@ -785,7 +736,106 @@ def plot_func_model(
             random_state=rand_int,
         )
 
+        # Simulate model without noise: posterior mean
+        # (this allows to extract the time-dynamics of the drift e.g.)
+        sim_out_no_noise = simulator(
+            model=model_name,
+            theta=theta_mean.loc[np.random.choice(theta_mean.shape[0], 1), :].values,
+            n_samples=1,
+            no_noise=True,
+            delta_t=delta_t_model,
+            bin_dim=None,
+            smooth_unif=False,
+        )
+
+    # Simulate model without noise: posterior samples
+    if theta_posterior is not None:
+        posterior_pred_no_noise = {}
+        for i, (chain, draw) in enumerate(
+            list(theta_posterior.index.droplevel("obs_n").unique())
+        ):
+            posterior_pred_no_noise[i] = simulator(
+                model=model_name,
+                theta=theta_posterior.loc[(chain, draw), :].values,
+                n_samples=1,
+                no_noise=True,
+                delta_t=delta_t_model,
+                bin_dim=None,
+                smooth_unif=False,
+            )
+
+        # Simulate model: posterior samples
+        posterior_pred_sims = {}
+        for i, (chain, draw) in enumerate(
+            list(theta_posterior.index.droplevel("obs_n").unique())
+        ):
+            posterior_pred_sims[i] = simulator(
+                model=model_name,
+                theta=theta_posterior.loc[(chain, draw), :].values,
+                n_samples=n_samples,
+                no_noise=False,
+                delta_t=delta_t_model,
+                bin_dim=None,
+                random_state=rand_int,
+            )
+
+    # Simulate trajectories
+    sim_out_traj = {}
+    if n_trajectories > 0:
+        for i in range(n_trajectories):
+            if theta_mean is not None:
+                tmp_theta = theta_mean.loc[
+                    (np.random.choice(theta_mean.shape[0], 1)), :
+                ].values
+            elif theta_posterior is not None:
+                # wrap in max statement here
+                # because negative value are possible,
+                # however refer to data instead of posterior samples
+                chain_tmp = max(
+                    0, np.random.choice(theta_posterior.index.get_level_values("chain"))
+                )
+                draw_tmp = max(
+                    0, np.random.choice(theta_posterior.index.get_level_values("draw"))
+                )
+                obs_tmp = np.random.choice(
+                    theta_posterior.index.get_level_values("draw")
+                )
+                tmp_theta = theta_posterior.loc[
+                    (chain_tmp, draw_tmp, obs_tmp), :
+                ].values
+            else:
+                raise ValueError("No theta values provided but n_trajectories is > 0")
+
+            rand_int = np.random.choice(400000000)
+            sim_out_traj[i] = simulator(
+                model=model_name,
+                theta=tmp_theta,
+                n_samples=1,
+                no_noise=False,
+                delta_t=delta_t_model,
+                bin_dim=None,
+                random_state=rand_int,
+                smooth_unif=False,
+            )
+
     # ADD DATA HISTOGRAMS
+    if theta_mean is not None:
+        (b_high, b_low) = (
+            np.maximum(sim_out["metadata"]["boundary"], 0),
+            np.minimum((-1) * sim_out["metadata"]["boundary"], 0),
+        )
+        hist_bottom_high = kwargs.get("hist_bottom_high", b_high[0])
+        hist_bottom_low = kwargs.get("hist_bottom_low", -b_low[0])
+    else:
+        _logger.warning(
+            'No "theta_mean" provided. Using default values for histogram'
+            " location. Likely highly suboptimal choice!"
+        )
+        hist_bottom_high = 3
+        hist_bottom_low = 3
+
+    hist_histtype = kwargs.get("hist_histtype", "step")
+
     weights_up = np.tile(
         (1 / bin_size) / sim_out["rts"][(sim_out["rts"] != -999)].shape[0],
         reps=sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] == 1)].shape[
@@ -799,33 +849,24 @@ def plot_func_model(
         ],
     )
 
-    (b_high, b_low) = (
-        np.maximum(sim_out["metadata"]["boundary"], 0),
-        np.minimum((-1) * sim_out["metadata"]["boundary"], 0),
-    )
-
     # ADD HISTOGRAMS
     # -------------------------------
 
-    ylim = kwargs.pop("ylim", 3)
-    # hist_bottom = kwargs.pop("hist_bottom", 2)
-    hist_histtype = kwargs.pop("hist_histtype", "step")
+    # if ("ylim_high" in kwargs) and ("ylim_low" in kwargs):
+    #     ylim_high = kwargs["ylim_high"]
+    #     ylim_low = kwargs["ylim_low"]
+    # else:
+    #     ylim_high = ylim
+    #     ylim_low = -ylim
 
-    if ("ylim_high" in kwargs) and ("ylim_low" in kwargs):
-        ylim_high = kwargs["ylim_high"]
-        ylim_low = kwargs["ylim_low"]
-    else:
-        ylim_high = ylim
-        ylim_low = -ylim
+    # if ("hist_bottom_high" in kwargs) and ("hist_bottom_low" in kwargs):
+    #     hist_bottom_high = kwargs["hist_bottom_high"]
+    #     hist_bottom_low = kwargs["hist_bottom_low"]
+    # else:
+    #     hist_bottom_high = b_high[0]  # hist_bottom
+    #     hist_bottom_low = -b_low[0]  # hist_bottom
 
-    if ("hist_bottom_high" in kwargs) and ("hist_bottom_low" in kwargs):
-        hist_bottom_high = kwargs["hist_bottom_high"]
-        hist_bottom_low = kwargs["hist_bottom_low"]
-    else:
-        hist_bottom_high = b_high[0]  # hist_bottom
-        hist_bottom_low = -b_low[0]  # hist_bottom
-
-    axis.set_xlim(value_range[0], value_range[-1])
+    axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
     axis_twin_up = axis.twinx()
     axis_twin_down = axis.twinx()
@@ -835,9 +876,9 @@ def plot_func_model(
     axis_twin_down.set_yticks([])
     axis_twin_down.set_axis_off()
     axis_twin_up.set_axis_off()
-    # axis_twin_up.set_facecolor("none")
-    # axis_twin_down.set_facecolor("none")
 
+    # This ensures zorder across axis elements is correct
+    # for the sequence in which they are invoked.
     axis.set_zorder(1)
     axis.set_facecolor("none")
     axis_twin_up.set_zorder(0)
@@ -1007,7 +1048,7 @@ def plot_func_model(
         ylim_high=ylim_high,
         t_s=t_s,
         color=color_pp,
-        zorder_cnt=z_cnt,
+        zorder_cnt=z_cnt + 1,
     )
 
     # Add in trajectories
@@ -1026,20 +1067,18 @@ def plot_func_model(
 
 # AF-TODO: Add documentation for this function
 def _add_trajectories(
-    axis=None,
-    sample=None,
-    t_s=None,
-    delta_t_graph=0.01,
-    n_trajectories=10,
-    supplied_trajectory=None,
-    maxid_supplied_trajectory=1,  # useful for gifs
-    highlight_trajectory_rt_choice=True,
-    markersize_trajectory_rt_choice=50,
-    markertype_trajectory_rt_choice="*",
-    markercolor_trajectory_rt_choice="red",
-    linewidth_trajectories=1,
-    alpha_trajectories=0.5,
-    color_trajectories="black",
+    axis: Axes,
+    sample: dict,
+    t_s: np.ndarray,
+    delta_t_graph: float = 0.01,
+    n_trajectories: int = 10,
+    highlight_trajectory_rt_choice: bool = True,
+    markersize_trajectory_rt_choice: float | int = 50,
+    markertype_trajectory_rt_choice: str = "*",
+    markercolor_trajectory_rt_choice: str | int = "red",
+    linewidth_trajectories: float | int = 1,
+    alpha_trajectories: float | int = 0.5,
+    color_trajectories: str = "black",
     **kwargs,
 ):
     """Add trajectories to a given axis."""
@@ -1121,10 +1160,9 @@ def _add_trajectories(
             )
 
 
-# AF-TODO: Add documentation to this function
 def _add_model_cartoon_to_ax(
-    sample: dict | np.ndarray | None = None,
-    axis: Axes | None = None,
+    sample: dict,
+    axis: Axes,
     keep_slope: bool = True,
     keep_boundary: bool = True,
     keep_ndt: bool = True,
@@ -1148,8 +1186,12 @@ def _add_model_cartoon_to_ax(
         np.minimum((-1) * sample["metadata"]["boundary"], 0),
     )
 
+    # Set initial boundary value
     b_h_init = b_high[0]
     b_l_init = b_low[0]
+
+    # Push boundary forward to accomodate non-decision time
+    # Initial boundary value applied from t = 0 to t = t_ndt
     n_roll = int((sample["metadata"]["t"][0] / delta_t_graph) + 1)
     b_high = np.roll(b_high, n_roll)
     b_high[:n_roll] = b_h_init
@@ -1162,7 +1204,7 @@ def _add_model_cartoon_to_ax(
     if keep_boundary:
         # Upper bound
         axis.plot(
-            t_s,  # + sample.t.values[0],
+            t_s,
             b_high[: t_s.shape[0]],
             color=color,
             alpha=alpha,
@@ -1173,7 +1215,7 @@ def _add_model_cartoon_to_ax(
 
         # Lower bound
         axis.plot(
-            t_s,  # + sample.t.values[0],
+            t_s,
             b_low[: t_s.shape[0]],
             color=color,
             alpha=alpha,
@@ -1218,23 +1260,26 @@ def _add_model_cartoon_to_ax(
 
 
 def plot_func_model_n(
-    model_name,
-    theta,
-    axis,
-    n_trajectories=10,
-    value_range=None,
-    bin_size=0.05,
-    n_samples=10,
-    linewidth_histogram=0.5,
-    linewidth_model=0.5,
-    legend_fontsize=7,
-    legend_shadow=True,
-    legend_location="upper right",
-    delta_t_model=0.001,
-    add_legend=True,
-    alpha=1.0,
-    keep_frame=False,
-    random_state=None,
+    model_name: str,
+    axis: Axes,
+    theta_mean: pd.DataFrame | None = None,
+    theta_posterior: pd.DataFrame | None = None,
+    data: pd.DataFrame | None = None,
+    n_trajectories: int = 10,
+    bin_size: float = 0.05,
+    n_samples: int = 10,
+    linewidth_histogram: float | int = 0.5,
+    linewidth_model: float | int = 0.5,
+    legend_fontsize: int = 7,
+    legend_shadow: bool = True,
+    legend_location: str = "upper right",
+    delta_t_model: float = 0.01,
+    add_legend: bool = True,
+    alpha: float = 1.0,
+    alpha_pp: float = 0.05,
+    alpha_trajectories: float = 0.5,
+    keep_frame: bool = False,
+    random_state: int | None = None,
     **kwargs,
 ):
     """Calculate posterior predictive for a certain bottom node.
@@ -1246,9 +1291,6 @@ def plot_func_model_n(
         axis: matplotlib.axis
             Axis to plot into.
 
-        value_range: numpy.ndarray
-            Range over which to evaluate the likelihood.
-
     Optional:
         samples: int <default=10>
             Number of posterior samples to use.
@@ -1258,6 +1300,9 @@ def plot_func_model_n(
 
         alpha: float <default=0.05>
             alpha (transparency) level for the sample-wise elements of the plot
+
+        alpha_trajectories: float <default=0.5>
+            alpha (transparency) level for the trajectories
 
         add_posterior_uncertainty_rts: bool <default=True>
             Add sample by sample histograms?
@@ -1308,21 +1353,27 @@ def plot_func_model_n(
         6: "brown",
     }
 
-    # AF-TODO: Add a mean version of this !
-    if value_range is None:
-        # Infer from data by finding the min and max from the nodes
-        raise NotImplementedError("value_range keyword argument must be supplied.")
+    ylim_low, ylim_high = kwargs.get("ylims", (0, 5))
+    xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
-    if len(value_range) > 2:
-        value_range = (value_range[0], value_range[-1])
+    # # AF-TODO: Add a mean version of this !
+    # if value_range is None:
+    #     # Infer from data by finding the min and max from the nodes
+    #     raise NotImplementedError("value_range keyword argument must be supplied.")
 
-    # Extract some parameters from kwargs
-    bins = np.arange(value_range[0], value_range[-1], bin_size)
-    # ------------
-    ylim = kwargs.pop("ylim", 4)
+    # if len(value_range) > 2:
+    #     value_range = (value_range[0], value_range[-1])
 
-    axis.set_xlim(value_range[0], value_range[-1])
-    axis.set_ylim(0, ylim)
+    # # ------------
+    # ylim = kwargs.pop("ylim", 4)
+
+    # # Extract some parameters from kwargs
+    axis.set_xlim(xlim_low, xlim_high)
+    axis.set_ylim(ylim_low, ylim_high)
+    bins = np.arange(xlim_low, xlim_high, bin_size)
+
+    # axis.set_xlim(value_range[0], value_range[-1])
+    # axis.set_ylim(0, ylim)
 
     # ADD MODEL:
 
@@ -1334,109 +1385,261 @@ def plot_func_model_n(
         np.random.seed(random_state)
 
     rand_int = np.random.choice(400000000)
-    sim_out = simulator(
-        model=model_name,
-        theta=theta,
-        n_samples=n_samples,
-        no_noise=False,
-        delta_t=0.001,
-        bin_dim=None,
-        random_state=rand_int,
-    )
-    choices = sim_out["metadata"]["possible_choices"]
-    sim_out_traj = {}
-    for i in range(n_trajectories):
-        rand_int = np.random.choice(400000000)
-        sim_out_traj[i] = simulator(
+    if theta_mean is not None:
+        sim_out = simulator(
             model=model_name,
-            theta=theta,
-            n_samples=1,
+            theta=theta_mean.values,
+            n_samples=n_samples,
             no_noise=False,
-            delta_t=0.001,
+            delta_t=delta_t_model,
             bin_dim=None,
             random_state=rand_int,
+        )
+
+        sim_out_no_noise = simulator(
+            model=model_name,
+            theta=theta_mean.loc[np.random.choice(theta_mean.shape[0], 1), :].values,
+            n_samples=1,
+            no_noise=True,
+            delta_t=delta_t_model,
+            bin_dim=None,
             smooth_unif=False,
         )
 
-    sim_out_no_noise = simulator(
-        model=model_name,
-        theta=theta,
-        n_samples=1,
-        no_noise=True,
-        delta_t=0.001,
-        bin_dim=None,
-        smooth_unif=False,
-    )
+    # Simulate model without noise: posterior samples
+    if theta_posterior is not None:
+        posterior_pred_no_noise = {}
+        for i, (chain, draw) in enumerate(
+            list(theta_posterior.index.droplevel("obs_n").unique())
+        ):
+            posterior_pred_no_noise[i] = simulator(
+                model=model_name,
+                theta=theta_posterior.loc[(chain, draw), :].values,
+                n_samples=1,
+                no_noise=True,
+                delta_t=delta_t_model,
+                bin_dim=None,
+                smooth_unif=False,
+            )
+
+        # Simulate model: posterior samples
+        posterior_pred_sims = {}
+        for i, (chain, draw) in enumerate(
+            list(theta_posterior.index.droplevel("obs_n").unique())
+        ):
+            posterior_pred_sims[i] = simulator(
+                model=model_name,
+                theta=theta_posterior.loc[(chain, draw), :].values,
+                n_samples=1,
+                no_noise=False,
+                delta_t=delta_t_model,
+                bin_dim=None,
+                random_state=rand_int,
+            )
+
+    # Simulate trajectories
+    sim_out_traj = {}
+    if n_trajectories > 0:
+        for i in range(n_trajectories):
+            if theta_mean is not None:
+                tmp_theta = theta_mean.loc[
+                    (np.random.choice(theta_mean.shape[0], 1)), :
+                ].values
+            elif theta_posterior is not None:
+                # wrap in max statement here
+                # because negative value are possible,
+                # however refer to data instead of posterior samples
+                chain_tmp = max(
+                    0, np.random.choice(theta_posterior.index.get_level_values("chain"))
+                )
+                draw_tmp = max(
+                    0, np.random.choice(theta_posterior.index.get_level_values("draw"))
+                )
+                obs_tmp = np.random.choice(
+                    theta_posterior.index.get_level_values("draw")
+                )
+                tmp_theta = theta_posterior.loc[
+                    (chain_tmp, draw_tmp, obs_tmp), :
+                ].values
+            else:
+                raise ValueError("No theta values provided but n_trajectories is > 0")
+
+            rand_int = np.random.choice(400000000)
+            sim_out_traj[i] = simulator(
+                model=model_name,
+                theta=tmp_theta,
+                n_samples=1,
+                no_noise=False,
+                delta_t=delta_t_model,
+                bin_dim=None,
+                random_state=rand_int,
+                smooth_unif=False,
+            )
 
     # ADD HISTOGRAMS
     # -------------------------------
+    choices = default_model_config[cast(SupportedModels, model_name)]["choices"]
 
-    # POSTERIOR BASED HISTOGRAM
-    j = 0
-    b = np.maximum(sim_out["metadata"]["boundary"], 0)
-    bottom = b[0]
-    for choice in choices:
-        tmp_label = None
+    # POSTERIOR MEAN BASED HISTOGRAM
+    if theta_mean is not None:
+        b = np.maximum(sim_out["metadata"]["boundary"], 0)
+        bottom = b[0]
+        cnt_cumul = 0
 
-        if add_legend and j == 0:
-            tmp_label = "PostPred"
+        for i, choice in enumerate(choices):
+            tmp_label = None
 
-        weights = np.tile(
-            (1 / bin_size) / sim_out["rts"].shape[0],
-            reps=sim_out["rts"][
-                (sim_out["choices"] == choice) & (sim_out["rts"] != -999)
-            ].shape[0],
-        )
+            if add_legend and i == 0:
+                tmp_label = "PostPred"
 
-        axis.hist(
-            np.abs(
-                sim_out["rts"][
+            weights = np.tile(
+                (1 / bin_size)
+                / sim_out["rts"][sim_out["rts"] != -999].flatten().shape[0],
+                reps=sim_out["rts"][
                     (sim_out["choices"] == choice) & (sim_out["rts"] != -999)
                 ]
-            ),
-            bins=bins,
-            bottom=bottom,
-            weights=weights,
-            histtype="step",
-            alpha=alpha,
-            color=color_dict[choice],
-            zorder=-1,
-            label=tmp_label,
-            linewidth=linewidth_histogram,
-        )
-        j += 1
+                .flatten()
+                .shape[0],
+            )
 
-    # ADD MODEL:
+            axis.hist(
+                np.abs(
+                    sim_out["rts"][
+                        (sim_out["choices"] == choice) & (sim_out["rts"] != -999)
+                    ]
+                ),
+                bins=bins,
+                bottom=bottom,
+                weights=weights,
+                histtype="step",
+                alpha=alpha,
+                color=color_dict[choice],
+                zorder=cnt_cumul,
+                label=tmp_label,
+                linewidth=linewidth_histogram,
+                linestyle="-.",
+            )
+            cnt_cumul += 1
+
+    # POSTERIOR SAMPLE BASED HISTOGRAM
+    if theta_posterior is not None:
+        for k, sim_out_tmp in posterior_pred_sims.items():
+            for i, choice in enumerate(choices):
+                tmp_label = None
+
+                if add_legend and i == 0:
+                    tmp_label = "PostPred"
+
+                weights = np.tile(
+                    (1 / bin_size)
+                    / sim_out_tmp["rts"][sim_out_tmp["rts"] != -999].shape[0],
+                    reps=sim_out_tmp["rts"][
+                        (sim_out_tmp["choices"] == choice)
+                        & (sim_out_tmp["rts"] != -999)
+                    ].shape[0],
+                )
+
+                axis.hist(
+                    np.abs(
+                        sim_out_tmp["rts"][
+                            (sim_out_tmp["choices"] == choice)
+                            & (sim_out_tmp["rts"] != -999)
+                        ]
+                    ),
+                    bins=bins,
+                    bottom=bottom,
+                    weights=weights,
+                    histtype="step",
+                    alpha=alpha_pp,
+                    color=color_dict[choice],
+                    zorder=cnt_cumul,
+                    label=tmp_label,
+                    linewidth=linewidth_histogram,
+                    linestyle="-.",
+                )
+                cnt_cumul += 1
+
+    # DATA BASED HISTOGRAM
+    if data is not None:
+        for i, choice in enumerate(choices):
+            tmp_label = None
+
+            if add_legend and (i == 0):
+                tmp_label = "Data"
+
+            data_tmp = data.query(f"rt != {-999} and response == {choice}")["rt"].values
+            weights = np.tile(
+                (1 / bin_size) / data.shape[0],
+                reps=data_tmp.shape[0],
+            )
+
+            axis.hist(
+                np.abs(data_tmp),
+                bins=bins,
+                bottom=bottom,
+                weights=weights,
+                histtype="step",
+                alpha=1,
+                color=color_dict[choice],
+                zorder=cnt_cumul,
+                label="Data",
+                linewidth=linewidth_histogram,
+                linestyle="-",
+            )
+            cnt_cumul += 1
+
+    # ADD MODEL CARTOONS:
+
     tmp_label = None
-    j = 0
-    t_s = np.arange(0, sim_out["metadata"]["max_t"], delta_t_model)
+    z_cnt = 0
+    if theta_posterior is not None:
+        for k, sim_out_tmp in posterior_pred_no_noise.items():
+            t_s = np.arange(0, sim_out_tmp["metadata"]["max_t"], delta_t_model)
+            _add_model_n_cartoon_to_ax(
+                sample=sim_out_tmp,
+                axis=axis,
+                delta_t_graph=delta_t_model,
+                sample_hist_alpha=alpha_pp,
+                lw_m=linewidth_model,
+                tmp_label=tmp_label,
+                linestyle="-",
+                ylim=ylim_high,
+                t_s=t_s,
+                color_dict=color_dict,
+                zorder_cnt=z_cnt,
+            )
+            z_cnt += 1
 
-    if add_legend and (j == 0):
-        tmp_label = "PostPred"
+    if theta_mean is not None:
+        t_s = np.arange(0, sim_out_no_noise["metadata"]["max_t"], delta_t_model)
+        _add_model_n_cartoon_to_ax(
+            sample=sim_out_no_noise,
+            axis=axis,
+            delta_t_graph=delta_t_model,
+            sample_hist_alpha=alpha,
+            lw_m=linewidth_model,
+            tmp_label=tmp_label,
+            linestyle="-",
+            ylim=ylim_high,
+            t_s=t_s,
+            color_dict=color_dict,
+            zorder_cnt=z_cnt + 1,
+        )
 
-    _add_model_n_cartoon_to_ax(
-        sample=sim_out_no_noise,
-        axis=axis,
-        delta_t_graph=delta_t_model,
-        sample_hist_alpha=alpha,
-        lw_m=linewidth_model,
-        tmp_label=tmp_label,
-        linestyle="-",
-        ylim=ylim,
-        t_s=t_s,
-        color_dict=color_dict,
-        zorder_cnt=j,
-    )
-
-    if n_trajectories > 0:
+    if (n_trajectories > 0) and (
+        (theta_mean is not None) or (theta_posterior is not None)
+    ):
         _add_trajectories_n(
             axis=axis,
             sample=sim_out_traj,
             t_s=t_s,
             delta_t_graph=delta_t_model,
             n_trajectories=n_trajectories,
+            alpha_trajectories=alpha_trajectories,
             **kwargs,
         )
+    elif n_trajectories > 0:
+        raise ValueError("Trajectories are requested but no theta values are provided.")
 
     if add_legend:
         custom_elems = [
@@ -1467,10 +1670,9 @@ def _add_trajectories_n(
     t_s=None,
     delta_t_graph=0.01,
     n_trajectories=10,
-    highlight_trajectory_rt_choice=True,
-    markersize_trajectory_rt_choice=50,
-    markertype_trajectory_rt_choice="*",
-    markercolor_trajectory_rt_choice="black",
+    highlight_rt_choice=True,
+    marker_size_rt_choice=50,
+    marker_type_rt_choice="*",
     linewidth_trajectories=1,
     alpha_trajectories=0.5,
     color_trajectories="black",
@@ -1532,21 +1734,21 @@ def _add_trajectories_n(
                 zorder=2000 + i,
             )
 
-            if highlight_trajectory_rt_choice and tmp_traj_choice == j:
+            if highlight_rt_choice and tmp_traj_choice == j:
                 axis.scatter(
                     t_s[tmp_maxid] + sample[i]["metadata"]["t"][0],
                     b_tmp,
-                    markersize_trajectory_rt_choice,
+                    marker_size_rt_choice,
                     color=color_dict[tmp_traj_choice],
                     alpha=1,
-                    marker=markertype_trajectory_rt_choice,
+                    marker=marker_type_rt_choice,
                     zorder=2000 + i,
                 )
-            elif highlight_trajectory_rt_choice and tmp_traj_choice != j:
+            elif highlight_rt_choice and tmp_traj_choice != j:
                 axis.scatter(
                     t_s[tmp_maxid] + sample[i]["metadata"]["t"][0] + 0.05,
                     tmp_traj[tmp_maxid, j],
-                    markersize_trajectory_rt_choice,
+                    marker_size_rt_choice,
                     color=color_dict[j],
                     alpha=1,
                     marker=5,
@@ -1622,5 +1824,3 @@ def _add_model_n_cartoon_to_ax(
                 zorder=1000 + zorder_cnt,
                 linewidth=lw_m,
             )
-
-    return b[0]
