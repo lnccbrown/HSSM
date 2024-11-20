@@ -265,15 +265,10 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
         and model.loglik_kind != "approx_differentiable"
     )
 
-    print("user_params", user_params)
-    print("model.list_params", model.list_params)
     for name in model.list_params:
-        print("name", name)
         if name in user_params:
-            print("making param from user_param")
             param = make_param_from_user_param(model, name, user_params[name])
         else:
-            print("making param from defaults")
             param = make_param_from_defaults(model, name)
 
         if model.prior_settings == "safe":
@@ -282,7 +277,6 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
 
         param.process_prior()
         params[name] = param
-    print("params", params)
     return params
 
 

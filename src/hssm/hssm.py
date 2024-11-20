@@ -1822,7 +1822,6 @@ class HSSM:
             else:
                 param_link_setting = None
             if name_tmp in initval_settings[param_link_setting].keys():
-                print("name_tmp in initval_settings", name_tmp)
                 if self._check_if_initval_user_supplied(name_tmp):
                     _logger.info(
                         "User supplied initial value detected for %s, \n"
@@ -1864,8 +1863,6 @@ class HSSM:
         # `p_outlier` is the only basic parameter floating around that has
         # an underscore in it's name.
         # We need to handle it separately. (Renaming might be better...)
-        print("check if user supplied:", name_str)
-        print(self.params)
         if "_" in name_str:
             if "p_outlier" not in name_str:
                 name_str_prefix = name_str.split("_")[0]
