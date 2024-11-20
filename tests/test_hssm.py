@@ -296,3 +296,26 @@ def test_model_creation_single_regression(data_ddm_reg, param_name, dist_name):
 def test_model_creation_all_parameters_constant(data_ddm):
     with pytest.raises(ValueError):
         HSSM(data=data_ddm, v=1.0, a=1.0, z=1.0, t=1.0)
+
+
+# Prior settings
+def test_prior_settings_basic(cavanagh_test):
+    model_1 = HSSM(
+        data=cavanagh_test,
+        global_formula="y ~ 1 + (1|participant_id)",
+        prior_settings=None,
+    )
+
+    assert (
+        model_1.params["v"].prior is None
+    ), "Default prior doesn't yield Nonetype for 'v'!"
+
+    model_2 = HSSM(
+        data=cavanagh_test,
+        global_formula="y ~ 1 + (1|participant_id)",
+        prior_settings="safe",
+    )
+
+    assert isinstance(
+        model_2.params[model_2._parent].prior
+    ), "Prior assigned to parent is not a dict!"
