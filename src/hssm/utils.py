@@ -9,8 +9,10 @@ these representations in Bambi-compatible formats through convenience function
 _parse_bambi().
 """
 
+import contextlib
 import itertools
 import logging
+import os
 from copy import deepcopy
 from typing import Any, Literal, cast
 
@@ -28,7 +30,7 @@ from bambi.utils import get_aliased_name, response_evaluate_new_data
 from huggingface_hub import hf_hub_download
 from tqdm import tqdm
 
-from .param import Param
+from .param.param import Param
 
 _logger = logging.getLogger("hssm")
 
@@ -403,45 +405,6 @@ def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:
     return f"        {term_name} ~ {prior}"
 
 
-def _process_param_in_kwargs(
-    name, prior: float | dict | bmb.Prior | Param
-) -> dict | Param:
-    """Process parameters specified in kwargs.
-
-    Parameters
-    ----------
-    name
-        The name of the parameters.
-    prior
-        The prior specified.
-
-    Returns
-    -------
-    dict
-        A `dict` that complies with ways to specify parameters in `include`.
-
-    Raises
-    ------
-    ValueError
-        When `prior` is not a `float`, a `dict`, or a `bmb.Prior` object.
-    """
-    if isinstance(prior, (int, float, bmb.Prior)):
-        return {"name": name, "prior": prior}
-    elif isinstance(prior, dict):
-        if ("prior" in prior) or ("bounds" in prior):
-            return prior | {"name": name}
-        else:
-            return {"name": name, "prior": prior}
-    elif isinstance(prior, Param):
-        prior["name"] = name
-        return prior
-    else:
-        raise ValueError(
-            f"Parameter {name} must be a float, a dict, a bmb.Prior, "
-            + "or a hssm.Param object."
-        )
-
-
 def _generate_random_indices(
     n_samples: int | float | None, n_draws: int
 ) -> np.ndarray | None:
@@ -548,3 +511,43 @@ def _rearrange_data(data: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarra
 def _split_array(data: np.ndarray | list[int], divisor: int) -> list[np.ndarray]:
     num_splits = len(data) // divisor + (1 if len(data) % divisor != 0 else 0)
     return [tmp.astype(int) for tmp in np.array_split(data, num_splits)]
+
+
+class SuppressOutput:
+    """Context manager for suppressing output.
+
+    This context manager redirects both stdout and stderr to `os.devnull`,
+    effectively silencing all output during the execution of the block.
+    It also disables logging by setting the logging level to `CRITICAL`.
+
+    Examples
+    --------
+    >>> with SuppressOutput():
+    ...     grad_func = pytensor.function(
+    ...         [v, a, z, t],
+    ...         grad,
+    ...         mode=nan_guard_mode,
+    ...     )
+
+    Methods
+    -------
+    __enter__()
+        Redirects stdout and stderr, and disables logging.
+
+    __exit__(exc_type, exc_value, traceback)
+        Restores stdout, stderr, and logging upon exit.
+    """
+
+    def __enter__(self):  # noqa: D105
+        self._null_file = open(os.devnull, "w")
+        self._stdout_context = contextlib.redirect_stdout(self._null_file)
+        self._stderr_context = contextlib.redirect_stderr(self._null_file)
+        self._stdout_context.__enter__()
+        self._stderr_context.__enter__()
+        logging.disable(logging.CRITICAL)  # Disable logging
+
+    def __exit__(self, exc_type, exc_value, traceback):  # noqa: D105
+        self._stdout_context.__exit__(exc_type, exc_value, traceback)
+        self._stderr_context.__exit__(exc_type, exc_value, traceback)
+        self._null_file.close()
+        logging.disable(logging.NOTSET)  # Re-enable logging

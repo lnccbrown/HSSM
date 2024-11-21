@@ -4,11 +4,9 @@ This code compares WFPT likelihood function with
 old implementation of WFPT from (https://github.com/hddm-devs/hddm)
 """
 
-import contextlib
-import logging
-import os
 from pathlib import Path
 from itertools import product
+from hssm.utils import SuppressOutput
 
 import numpy as np
 import pandas as pd
@@ -27,25 +25,6 @@ from hssm.likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox
 from hssm.distribution_utils import make_likelihood_callable
 
 hssm.set_floatX("float32")
-
-
-# Temporary measure to suppress output from pytensor.function
-# See issues #594 in hssm and #1037 in pymc-devs/pytensor repos
-class SuppressOutput:
-    def __enter__(self):
-        self._null_file = open(os.devnull, "w")
-        self._stdout_context = contextlib.redirect_stdout(self._null_file)
-        self._stderr_context = contextlib.redirect_stderr(self._null_file)
-        self._stdout_context.__enter__()
-        self._stderr_context.__enter__()
-        logging.disable(logging.CRITICAL)  # Disable logging
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self._stdout_context.__exit__(exc_type, exc_value, traceback)
-        self._stderr_context.__exit__(exc_type, exc_value, traceback)
-        self._null_file.close()
-        logging.disable(logging.NOTSET)  # Re-enable logging
-
 
 # def test_logp(data_fixture):
 #     """
@@ -132,6 +111,8 @@ def test_analytical_gradient():
     logp = logp_ddm(cav_data_numpy, v, a, z, t).sum()
     grad = pt.grad(logp, wrt=[v, a, z, t])
 
+    # Temporary measure to suppress output from pytensor.function
+    # See issues #594 in hssm and #1037 in pymc-devs/pytensor repos
     with SuppressOutput():
         grad_func = pytensor.function(
             [v, a, z, t],
@@ -147,6 +128,7 @@ def test_analytical_gradient():
 
     assert np.all(np.isfinite(grad), axis=None), "Gradient contains non-finite values."
 
+    # Also temporary
     with SuppressOutput():
         grad_func_sdv = pytensor.function(
             [v, a, z, t, sv],
