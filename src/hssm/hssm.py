@@ -24,7 +24,6 @@ import pytensor
 import seaborn as sns
 import xarray as xr
 from bambi.model_components import DistributionalComponent
-from bambi.priors.prior import Prior
 from bambi.transformations import transformations_namespace
 
 from hssm.defaults import (
@@ -392,7 +391,7 @@ class HSSM:
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
-        self.formula, priors, self.link = self.params.parse_bambi(model=self)
+        self.formula, self.priors, self.link = self.params.parse_bambi(model=self)
 
         # For parameters that have a regression backend, apply bounds at the likelihood
         # level to ensure that the samples that are out of bounds
@@ -422,7 +421,7 @@ class HSSM:
             self.formula,
             data=self.data,
             family=self.family,
-            priors=priors,  # center_predictors=False
+            priors=self.priors,  # center_predictors=False
             extra_namespace=self.additional_namespace,
             **kwargs,
         )
@@ -1885,26 +1884,24 @@ class HSSM:
             # regression.
             if not name_str_suffix:
                 # No suffix --> Intercept
-                if isinstance(self.params[tmp_param].prior, dict):
-                    prior_tmp = getattr(self.params[tmp_param], "prior")
+                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
                     args_tmp = getattr(prior_tmp["Intercept"], "args")
                     if return_value:
-                        return args_tmp["initval"] if "initval" in args_tmp else None
+                        return args_tmp.get("initval", None)
                     else:
-                        return True if "initval" in args_tmp else False
+                        return "initval" in args_tmp
                 else:
                     if return_value:
                         return None
                     return False
             else:
                 # If the parameter has a suffix --> use it
-                if isinstance(self.params[tmp_param].prior, dict):
-                    prior_tmp = getattr(self.params[tmp_param], "prior")
+                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
                     args_tmp = getattr(prior_tmp[name_str_suffix], "args")
                     if return_value:
-                        return args_tmp["initval"] if "initval" in args_tmp else None
+                        return args_tmp.get("initval", None)
                     else:
-                        return True if "initval" in args_tmp else False
+                        return "initval" in args_tmp
                 else:
                     if return_value:
                         return None
@@ -1922,7 +1919,7 @@ class HSSM:
                         return self.params[tmp_param].prior
                     else:
                         return True
-                elif isinstance(self.params[tmp_param].prior, Prior):
+                elif isinstance(self.params[tmp_param].prior, bmb.Prior):
                     args_tmp = getattr(self.params[tmp_param].prior, "args")
                     if "initval" in args_tmp:
                         if return_value:
@@ -1941,17 +1938,12 @@ class HSSM:
                         return False
             else:
                 # If suffix --> treat as regression and use suffix
-                if isinstance(self.params[tmp_param].prior, dict):
-                    tmp_prior = getattr(self.params[tmp_param], "prior")
-                    tmp_prior_args = getattr(tmp_prior[name_str_suffix], "args")
+                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
+                    args_tmp = getattr(prior_tmp[name_str_suffix], "args")
                     if return_value:
-                        return (
-                            tmp_prior_args["initval"]
-                            if "initval" in tmp_prior_args
-                            else None
-                        )
+                        return args_tmp.get("initval", None)
                     else:
-                        return True if "initval" in tmp_prior_args else False
+                        return "initval" in args_tmp
                 else:
                     if return_value:
                         return None
