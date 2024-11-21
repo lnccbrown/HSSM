@@ -169,7 +169,7 @@ class HSSM:
 
         - `"safe"`: HSSM will scan all parameters in the model and apply safe priors to
         all parameters that do not have explicit bounds.
-        - `None`: HSSM will use bambi to provide default priors for all parameters. Not
+        - None: HSSM will use bambi to provide default priors for all parameters. Not
         recommended when you are using hierarchical models.
         The default value is `"safe"`.
     extra_namespace : optional
@@ -393,9 +393,9 @@ class HSSM:
 
         self.formula, self.priors, self.link = self.params.parse_bambi(model=self)
 
-        # For parameters that are regression, apply bounds at the likelihood level to
-        # ensure that the samples that are out of bounds are discarded (replaced with
-        # a large negative value).
+        # For parameters that have a regression backend, apply bounds at the likelihood
+        # level to ensure that the samples that are out of bounds
+        # are discarded (replaced with a large negative value).
         self.bounds = {
             name: param.bounds
             for name, param in self.params.items()
@@ -431,7 +431,6 @@ class HSSM:
         )
         self.set_alias(self._aliases)
         self.model.build()
-        # _logger.info(self.pymc_model.initial_point())
 
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
@@ -1854,7 +1853,7 @@ class HSSM:
         self,
         name_str: str,
         return_value: bool = False,
-    ) -> bool | float | int | np.ndarray | None:
+    ) -> bool | float | int | np.ndarray | dict[str, Any] | None:
         """Check if initial value is user-supplied."""
         # The function assumes that the name_str is either raw parameter name
         # or `paramname_Intercept`, because we only really provide special default
@@ -1879,45 +1878,52 @@ class HSSM:
             name_str_prefix = name_str
             name_str_suffix = ""
 
-        if isinstance(self.priors, dict):
-            tmp_param = name_str_prefix
-            if tmp_param == self._parent:
-                # If the parameter was parent it is automatically treated as a
-                # regression.
-                if not name_str_suffix:
-                    # No suffix --> Intercept
-                    if "initval" in self.priors[tmp_param]["Intercept"].args:
-                        if return_value:
-                            return self.priors[tmp_param]["Intercept"].args["initval"]
-                        else:
-                            return True
+        tmp_param = name_str_prefix
+        if tmp_param == self._parent:
+            # If the parameter was parent it is automatically treated as a
+            # regression.
+            if not name_str_suffix:
+                # No suffix --> Intercept
+                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
+                    args_tmp = getattr(prior_tmp["Intercept"], "args")
+                    if return_value:
+                        return args_tmp.get("initval", None)
                     else:
-                        if return_value:
-                            return None
-                        else:
-                            return False
+                        return "initval" in args_tmp
                 else:
-                    # If the parameter has a suffix --> use it
-                    if "initval" in self.priors[tmp_param][name_str_suffix].args:
-                        if return_value:
-                            return self.priors[tmp_param][name_str_suffix].args[
-                                "initval"
-                            ]
-                        else:
-                            return True
-                    else:
-                        if return_value:
-                            return None
-                        else:
-                            return False
+                    if return_value:
+                        return None
+                    return False
             else:
-                # If the parameter is not a parent, it is treated as a regression
-                # only when actively specified as such.
-                if not name_str_suffix:
-                    # If no suffix --> treat as basic parameter.
-                    if "initval" in self.priors[tmp_param].args:
+                # If the parameter has a suffix --> use it
+                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
+                    args_tmp = getattr(prior_tmp[name_str_suffix], "args")
+                    if return_value:
+                        return args_tmp.get("initval", None)
+                    else:
+                        return "initval" in args_tmp
+                else:
+                    if return_value:
+                        return None
+                    else:
+                        return False
+        else:
+            # If the parameter is not a parent, it is treated as a regression
+            # only when actively specified as such.
+            if not name_str_suffix:
+                # If no suffix --> treat as basic parameter.
+                if isinstance(self.params[tmp_param].prior, float) or isinstance(
+                    self.params[tmp_param].prior, np.ndarray
+                ):
+                    if return_value:
+                        return self.params[tmp_param].prior
+                    else:
+                        return True
+                elif isinstance(self.params[tmp_param].prior, bmb.Prior):
+                    args_tmp = getattr(self.params[tmp_param].prior, "args")
+                    if "initval" in args_tmp:
                         if return_value:
-                            return self.priors[tmp_param].args["initval"]
+                            return args_tmp["initval"]
                         else:
                             return True
                     else:
@@ -1926,21 +1932,23 @@ class HSSM:
                         else:
                             return False
                 else:
-                    # If suffix --> treat as regression and use suffix
-                    if "initval" in self.priors[tmp_param][name_str_suffix].args:
-                        if return_value:
-                            return self.priors[tmp_param][name_str_suffix].args[
-                                "initval"
-                            ]
-                        else:
-                            return True
+                    if return_value:
+                        return None
                     else:
-                        if return_value:
-                            return None
-                        else:
-                            return False
-        else:
-            raise ValueError("`priors` should be a dictionary.")
+                        return False
+            else:
+                # If suffix --> treat as regression and use suffix
+                if isinstance(prior_tmp := self.params[tmp_param].prior, dict):
+                    args_tmp = getattr(prior_tmp[name_str_suffix], "args")
+                    if return_value:
+                        return args_tmp.get("initval", None)
+                    else:
+                        return "initval" in args_tmp
+                else:
+                    if return_value:
+                        return None
+                    else:
+                        return False
 
     def _jitter_initvals(
         self, jitter_epsilon: float = 0.01, vector_only: bool = False

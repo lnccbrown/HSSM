@@ -201,36 +201,41 @@ def collect_user_params(
     """
     user_params: dict[str, UserParam] = {}
 
-    # Process include
+    # Process parameters that appear as part of the `include` kwarg in HSSM class
     for param in include:
         user_param = UserParam.from_dict(param) if isinstance(param, dict) else param
         if user_param.name is None:
             raise ValueError("Parameter name must be specified.")
         if user_param.name not in model.list_params:
-            raise ValueError(f"Parameter {user_param.name} not found in list_params.")
+            raise ValueError(
+                f"Parameter {user_param.name} not found in list_params."
+                " This implies that the parameter is not valid for the chosen model."
+            )
         if user_param.name == "p_outlier":
             raise ValueError(
                 "Please do not specify `p_outlier` in `include`. "
-                "Please specify it with `p_outlier` instead."
+                "Please specify it via the `p_outlier` kwarg instead."
             )
         user_params[user_param.name] = user_param
 
-    # Process kwargs
-    # If any of the keys is found in `list_params` it is a parameter specification
+    # Process parameters that are passed directly as kwargs to the HSSM class
+    # If any of the keys is found in `list_params` it is a parameter specification.
     # We add the parameter specification to `user_params` and remove it from
     # `kwargs`
     for param_name in model.list_params:
-        if param_name in user_params and param_name in kwargs:
-            raise ValueError(
-                f"Parameter `{param_name}` specified in both `include` and `kwargs`."
-            )
-
         # Update user_params only if param_name is in kwargs
+        # and not already in user_params
         if param_name in kwargs:
-            user_params[param_name] = UserParam.from_kwargs(
-                param_name,
-                kwargs.pop(param_name),
-            )
+            if param_name in user_params:
+                raise ValueError(
+                    f"Parameter `{param_name}` specified in both "
+                    "`include` and `kwargs`."
+                )
+            else:
+                user_params[param_name] = UserParam.from_kwargs(
+                    param_name,
+                    kwargs.pop(param_name),
+                )
 
     # Process p_outliers the same way.
     if model.has_lapse:
@@ -262,7 +267,7 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
 
     for name in model.list_params:
         if name in user_params:
-            param: Param = make_param_from_user_param(model, name, user_params[name])
+            param = make_param_from_user_param(model, name, user_params[name])
         else:
             param = make_param_from_defaults(model, name)
 
@@ -272,7 +277,6 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
 
         param.process_prior()
         params[name] = param
-
     return params
 
 
