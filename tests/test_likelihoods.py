@@ -6,6 +6,7 @@ old implementation of WFPT from (https://github.com/hddm-devs/hddm)
 
 from pathlib import Path
 from itertools import product
+from hssm.utils import SuppressOutput
 
 import numpy as np
 import pandas as pd
@@ -109,11 +110,15 @@ def test_analytical_gradient():
     size = cav_data_numpy.shape[0]
     logp = logp_ddm(cav_data_numpy, v, a, z, t).sum()
     grad = pt.grad(logp, wrt=[v, a, z, t])
-    grad_func = pytensor.function(
-        [v, a, z, t],
-        grad,
-        mode=nan_guard_mode,
-    )
+
+    # Temporary measure to suppress output from pytensor.function
+    # See issues #594 in hssm and #1037 in pymc-devs/pytensor repos
+    with SuppressOutput():
+        grad_func = pytensor.function(
+            [v, a, z, t],
+            grad,
+            mode=nan_guard_mode,
+        )
     v_test = np.random.normal(size=size)
     a_test = np.random.uniform(0.0001, 2, size=size)
     z_test = np.random.uniform(0.1, 1.0, size=size)
@@ -123,13 +128,15 @@ def test_analytical_gradient():
 
     assert np.all(np.isfinite(grad), axis=None), "Gradient contains non-finite values."
 
-    grad_func_sdv = pytensor.function(
-        [v, a, z, t, sv],
-        pt.grad(
-            logp_ddm_sdv(cav_data_numpy, v, a, z, t, sv).sum(), wrt=[v, a, z, t, sv]
-        ),
-        mode=nan_guard_mode,
-    )
+    # Also temporary
+    with SuppressOutput():
+        grad_func_sdv = pytensor.function(
+            [v, a, z, t, sv],
+            pt.grad(
+                logp_ddm_sdv(cav_data_numpy, v, a, z, t, sv).sum(), wrt=[v, a, z, t, sv]
+            ),
+            mode=nan_guard_mode,
+        )
 
     grad_sdv = np.array(grad_func_sdv(v_test, a_test, z_test, t_test, sv_test))
 

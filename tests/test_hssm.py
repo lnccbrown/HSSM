@@ -135,18 +135,18 @@ def test_custom_model(data_ddm):
 def test_model_definition_outside_include(data_ddm):
     model_with_one_param_fixed = HSSM(data_ddm, a=0.5)
 
-    assert "a" in model_with_one_param_fixed.priors
-    assert model_with_one_param_fixed.priors["a"] == 0.5
+    assert "a" in model_with_one_param_fixed.params
+    assert model_with_one_param_fixed.params["a"].prior == 0.5
 
     model_with_one_param = HSSM(
         data_ddm, a={"prior": {"name": "Normal", "mu": 0.5, "sigma": 0.1}}
     )
 
-    assert "a" in model_with_one_param.priors
-    assert model_with_one_param.priors["a"].name == "Normal"
+    assert "a" in model_with_one_param.params
+    assert model_with_one_param.params["a"].prior.name == "Normal"
 
     with pytest.raises(
-        ValueError, match='Parameter "a" is already specified in `include`'
+        ValueError, match="Parameter `a` specified in both `include` and `kwargs`."
     ):
         HSSM(data_ddm, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
@@ -192,51 +192,6 @@ def test_sample_prior_predictive(data_ddm_reg):
     )
     prior_predictive_6 = model_regression_random_effect.sample_prior_predictive(
         draws=10
-    )
-
-
-def test_hierarchical(data_ddm):
-    data_ddm = data_ddm.iloc[:10, :].copy()
-    data_ddm["participant_id"] = np.arange(10)
-
-    model = HSSM(data=data_ddm, hierarchical=True)
-    assert all(
-        param.is_regression
-        for name, param in model.params.items()
-        if name != "p_outlier"
-    )
-    assert model.prior_settings == "safe"
-
-    model = HSSM(
-        data=data_ddm,
-        v=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
-        hierarchical=True,
-    )
-    assert all(
-        param.is_regression
-        for name, param in model.params.items()
-        if name not in ["v", "p_outlier"]
-    )
-
-    model = HSSM(
-        data=data_ddm, a=bmb.Prior("Uniform", lower=0.0, upper=10.0), hierarchical=True
-    )
-    assert all(
-        param.is_regression
-        for name, param in model.params.items()
-        if name not in ["a", "p_outlier"]
-    )
-
-    model = HSSM(
-        data=data_ddm,
-        v=bmb.Prior("Uniform", lower=-10.0, upper=10.0),
-        a=bmb.Prior("Uniform", lower=0.0, upper=10.0),
-        hierarchical=True,
-    )
-    assert all(
-        param.is_regression
-        for name, param in model.params.items()
-        if name not in ["v", "a", "p_outlier"]
     )
 
 
@@ -341,3 +296,26 @@ def test_model_creation_single_regression(data_ddm_reg, param_name, dist_name):
 def test_model_creation_all_parameters_constant(data_ddm):
     with pytest.raises(ValueError):
         HSSM(data=data_ddm, v=1.0, a=1.0, z=1.0, t=1.0)
+
+
+# Prior settings
+def test_prior_settings_basic(cavanagh_test):
+    model_1 = HSSM(
+        data=cavanagh_test,
+        global_formula="y ~ 1 + (1|participant_id)",
+        prior_settings=None,
+    )
+
+    assert (
+        model_1.params["v"].prior is None
+    ), "Default prior doesn't yield Nonetype for 'v'!"
+
+    model_2 = HSSM(
+        data=cavanagh_test,
+        global_formula="y ~ 1 + (1|participant_id)",
+        prior_settings="safe",
+    )
+
+    assert isinstance(
+        model_2.params[model_2._parent].prior, dict
+    ), "Prior assigned to parent is not a dict!"
