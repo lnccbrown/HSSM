@@ -40,7 +40,7 @@ jobs:
           pip install -e .
 
       - name: Run tests and collect coverage
-        run: pytest -n auto -s --cov=src --cov-report=xml tests/
+        run: pytest -n auto --cov=. --cov-report xml --cov-report term-missing tests/
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
