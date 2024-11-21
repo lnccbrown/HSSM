@@ -138,8 +138,8 @@ def test__plot_posterior_predictive_2D(cav_idata, cavanagh_test):
         row="participant_id",
         col="conf",
     )
-    assert len(g1.fig.axes) == 5 * 2
-    assert len(g1.fig.axes[0].get_lines()) == 2
+    assert len(g1.figure.axes) == 5 * 2
+    assert len(g1.figure.axes[0].get_lines()) == 2
 
     g2 = _plot_posterior_predictive_2D(
         df,
@@ -147,8 +147,8 @@ def test__plot_posterior_predictive_2D(cav_idata, cavanagh_test):
         row="participant_id",
         col="conf",
     )
-    assert len(g2.fig.axes) == 5 * 2
-    assert len(g2.fig.axes[0].get_lines()) == 1
+    assert len(g2.figure.axes) == 5 * 2
+    assert len(g2.figure.axes[0].get_lines()) == 1
 
 
 def test_plot_posterior_predictive(cav_idata, cavanagh_test):
@@ -194,8 +194,8 @@ def test_plot_posterior_predictive(cav_idata, cavanagh_test):
     )
     assert len(plots) == 2
     # Lengths might defer because of subsetting the data frame
-    assert len(plots[0].fig.axes) == 5
-    assert len(plots[1].fig.axes) == 5 * 2
+    assert len(plots[0].figure.axes) == 5
+    assert len(plots[1].figure.axes) == 5 * 2
 
     plots = plot_posterior_predictive(
         model,
@@ -206,8 +206,8 @@ def test_plot_posterior_predictive(cav_idata, cavanagh_test):
         groups_order=["LC"],
     )
     assert len(plots) == 1
-    assert len(plots[0].fig.axes) == 5
-    assert len(plots[0].fig.axes[0].get_lines()) == 1
+    assert len(plots[0].figure.axes) == 5
+    assert len(plots[0].figure.axes[0].get_lines()) == 1
 
     with pytest.raises(ValueError):
         plot_posterior_predictive(
@@ -279,14 +279,14 @@ def test__plot_quantile_probability_2D(cav_idata, cavanagh_test):
     )
     g = _plot_quantile_probability_2D(df, cond="stim", col="participant_id", col_wrap=3)
 
-    assert len(g.fig.axes) == 10
+    assert len(g.figure.axes) == 10
 
     df = _get_plotting_df(
         cav_idata, cavanagh_test, extra_dims=["participant_id", "stim", "conf"]
     )
     g = _plot_quantile_probability_2D(df, cond="stim", col="participant_id", row="conf")
 
-    assert len(g.fig.axes) == 5 * 4
+    assert len(g.figure.axes) == 5 * 4
 
 
 def test_plot_quantile_probability(cav_idata, cavanagh_test):

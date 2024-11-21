@@ -99,3 +99,69 @@ def posterior():
 @pytest.fixture
 def cavanagh_test():
     return pd.read_csv("tests/fixtures/cavanagh_theta_test.csv", index_col=None)
+
+
+# Cartoon plot fixtures
+@pytest.fixture
+def cav_model_cartoon():
+    my_cav_data = pd.read_csv("tests/fixtures/cavanagh_theta_test.csv", index_col=None)
+    cav_model = hssm.HSSM(
+        model="ddm",
+        data=my_cav_data,
+        include=[
+            {
+                "name": "v",
+                "prior": {
+                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.5},
+                },
+                "formula": "v ~ 1 + stim",
+                "link": "identity",
+            },
+            {
+                "name": "a",
+                "prior": {
+                    "Intercept": {"name": "Normal", "mu": 1.5, "sigma": 0.5},
+                },
+                "formula": "a ~ 1 + (1|participant_id)",
+                "link": "identity",
+            },
+        ],
+        p_outlier=0.00,
+    )
+
+    # Attach trace
+    idata_cav = az.from_netcdf("tests/fixtures/idata_cavanagh_cartoon.nc")
+    cav_model._inference_obj = idata_cav
+    return cav_model
+
+
+@pytest.fixture
+def race_model_cartoon():
+    my_race_data = pd.read_csv("tests/fixtures/data_race.csv")
+    race_model = hssm.HSSM(
+        model="race_no_bias_angle_4",
+        data=my_race_data,
+        include=[
+            {
+                "name": "v0",
+                "prior": {
+                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.5},
+                },
+                "formula": "v0 ~ 1 + stim",
+                "link": "identity",
+            },
+            {
+                "name": "a",
+                "prior": {
+                    "Intercept": {"name": "Normal", "mu": 1.5, "sigma": 0.5},
+                },
+                "formula": "a ~ 1 + (1|participant_id)",
+                "link": "identity",
+            },
+        ],
+        p_outlier=0.00,
+    )
+    # Attach trace
+    idata_race = az.from_netcdf("tests/fixtures/idata_race_cartoon.nc")
+    race_model._inference_obj = idata_race
+    return race_model

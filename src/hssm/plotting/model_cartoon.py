@@ -22,10 +22,9 @@ from ..defaults import SupportedModels, default_model_config
 from .posterior_predictive import _process_linestyles_pp, _process_linewidths_pp
 from .utils import (
     _check_groups_and_groups_order,
-    _check_sample_size,
     _get_plotting_df,
     _get_title,
-    _hdi_to_interval,
+    # _hdi_to_interval, # TODO: We eventually want to add HDI plotting back in here
     _subset_df,
     _use_traces_or_sample,
 )
@@ -38,6 +37,7 @@ def _plot_model_cartoon_1D(
     model_name: str,
     plot_data: bool = True,
     plot_mean: bool = True,
+    plot_samples: bool = False,
     colors: str | list[str] | None = None,
     title: str | None = "Model Plots",
     xlabel: str | None = "Response Time",
@@ -53,6 +53,10 @@ def _plot_model_cartoon_1D(
     mpl.Axes
         A matplotlib Axes object containing the plot.
     """
+    assert (
+        plot_mean or plot_samples
+    ), "At least one of plot_mean or plot_samples must be True"
+
     if "color" in kwargs:
         del kwargs["color"]
     colors = colors or ["#ec205b", "#338fb8"]
@@ -74,43 +78,60 @@ def _plot_model_cartoon_1D(
     data_posterior_predictive_mean = data.loc[
         (data.source == "posterior_predictive_mean") & (data.observed == "predicted"), :
     ]
-    data_observed = data.loc[
-        (data.source == "posterior_predictive_mean") & (data.observed == "observed"), :
-    ]
+
+    if plot_mean:
+        data_observed = data.loc[
+            (data.source == "posterior_predictive_mean")
+            & (data.observed == "observed"),
+            :,
+        ]
+
+    if plot_samples and (not plot_mean):
+        data_observed = data.loc[
+            (data.source == "posterior_predictive") & (data.observed == "observed"),
+            :,
+        ]
 
     data_posterior_predictive = data.loc[
         (data.source == "posterior_predictive") & (data.observed == "predicted"), :
     ]
 
-    # return data_posterior_predictive, data_posterior_predictive_mean, data_observed
-
-    if plot_mean:
-        if n_choices == 2:
-            ax = plot_func_model(
-                model_name=model_name,
-                theta_mean=data_posterior_predictive_mean.reset_index()[model_params],
-                theta_posterior=data_posterior_predictive[model_params],
-                data=(data_observed.reset_index() if plot_data else None),
-                axis=ax,
-                linewidth_histogram=kwargs.get("linewidth_histogram", 1.5),
-                linewidth_model=kwargs.get("linewidth_model", 1.5),
-                **kwargs,
-            )
-        elif n_choices > 2:
-            ax = plot_func_model_n(
-                model_name=model_name,
-                theta_mean=data_posterior_predictive_mean.reset_index()[model_params],
-                theta_posterior=data_posterior_predictive[model_params],
-                data=(data_observed.reset_index() if plot_data else None),
-                axis=ax,
-                linewidth_histogram=kwargs.get("linewidth_histogram", 0.5),
-                linewidth_model=kwargs.get("linewidth_model", 0.5),
-                **kwargs,
-            )
-        else:
-            raise ValueError(
-                "The model plot works only for >2 choice models at the moment"
-            )
+    if n_choices == 2:
+        ax = plot_func_model(
+            model_name=model_name,
+            axis=ax,
+            theta_mean=(
+                data_posterior_predictive_mean.reset_index()[model_params]
+                if plot_mean
+                else None
+            ),
+            theta_posterior=(
+                data_posterior_predictive[model_params] if plot_samples else None
+            ),
+            data=(data_observed.reset_index() if plot_data else None),
+            linewidth_histogram=kwargs.get("linewidth_histogram", 1.5),
+            linewidth_model=kwargs.get("linewidth_model", 1.5),
+            **kwargs,
+        )
+    elif n_choices > 2:
+        ax = plot_func_model_n(
+            model_name=model_name,
+            axis=ax,
+            theta_mean=(
+                data_posterior_predictive_mean.reset_index()[model_params]
+                if plot_mean
+                else None
+            ),
+            theta_posterior=(
+                data_posterior_predictive[model_params] if plot_samples else None
+            ),
+            data=(data_observed.reset_index() if plot_data else None),
+            linewidth_histogram=kwargs.get("linewidth_histogram", 0.5),
+            linewidth_model=kwargs.get("linewidth_model", 0.5),
+            **kwargs,
+        )
+    else:
+        raise ValueError("The model plot works only for >2 choice models at the moment")
 
     if title:
         ax.set_title(title)
@@ -127,11 +148,11 @@ def _plot_model_cartoon_2D(
     model_name: str,
     plot_data: bool = True,
     plot_mean: bool = True,
+    plot_samples: bool = False,
     row: str | None = None,
     col: str | None = None,
     col_wrap: int | None = None,
     bins: int | np.ndarray | str | None = 100,
-    range: tuple[float, float] | None = None,
     step: bool = False,
     interval: tuple[float, float] | None = None,
     colors: str | list[str] | None = None,
@@ -166,8 +187,8 @@ def _plot_model_cartoon_2D(
         model_name=model_name,
         plot_data=plot_data,
         plot_mean=plot_mean,
+        plot_samples=plot_samples,
         bins=bins,
-        range=range,
         step=step,
         interval=interval,
         colors=colors,
@@ -269,11 +290,9 @@ def plot_model_cartoon(
     groups: str | Iterable[str] | None = None,
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
     bins: int | np.ndarray | str | None = 50,
-    range: tuple[float, float] | None = None,
     step: bool = False,
-    hdi: float | str | tuple[float, float] | None = None,
-    show_mean: bool = True,
-    show_samples: bool = False,
+    plot_pp_mean: bool = True,
+    plot_pp_samples: bool = False,
     colors: str | list[str] | None = None,
     linestyles: str | list[str] | tuple[str] | Dict[str, str] = "-",
     linewidths: float | list[float] | tuple[float] | Dict[str, float] = 1.25,
@@ -347,23 +366,9 @@ def plot_model_cartoon(
         - A string describing the binning strategy (passed to `np.histogram_bin_edges`).
         - A list-like defining the bin edges.
         - An integer defining the number of bins to be used.
-    range : optional
-            The lower and upper range of the bins. Lower and upper outliers are ignored.
-            If not provided, range is simply the minimum and the maximum of the data, by
-            default None.
     step : optional
         Whether to plot the distributions as a step function or a smooth density plot,
         by default False.
-    hdi : optional
-        A two-tuple of floats indicating the hdi to plot, by default None.
-        The values in the tuple should be between 0 and 1, indicating the percentiles
-        used to compute the interval. For example, (0.05, 0.95) will compute the 90%
-        interval. There should be at least 50 posterior predictive samples for each
-        chain for this to work properly. A warning message will be displayed if there
-        are fewer than 50 posterior samples. If None, no interval is plotted.
-        If a float, the interval the computed interval will be
-        ((1 - hdi) / 2, 1 - (1 - hdi) / 2). If a string, the format needs
-        to be e.g. '10%'.
     colors : optional
         Colors to use for the different levels of the hue variable. When a `str`, the
         color of posterior predictives, in which case an error will be thrown if
@@ -403,11 +408,16 @@ def plot_model_cartoon(
     mpl.axes.Axes | sns.FacetGrid
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
+    assert (
+        plot_pp_mean or plot_pp_samples
+    ), "At least one of plot_pp_mean or plot_pp_samples must be True"
+
     # Process hdi
-    if hdi is not None:
-        interval = _hdi_to_interval(hdi=hdi)
-    else:
-        interval = None
+    # TODO: We eventually want to add HDI plotting back in here
+    # if hdi is not None:
+    #     interval = _hdi_to_interval(hdi=hdi)
+    # else:
+    #     interval = None
 
     # Process linestyles
     linestyles_ = _process_linestyles_pp(linestyles)
@@ -436,7 +446,8 @@ def plot_model_cartoon(
             data = model.data
 
     # Mean version of plot
-    if show_mean:
+    plotting_df_mean = None
+    if plot_pp_mean:
         if idata is None:
             idata_mean = _make_idata_mean_posterior(deepcopy(model.traces))
         else:
@@ -472,10 +483,8 @@ def plot_model_cartoon(
             )
 
         plotting_df_mean["source"] = "posterior_predictive_mean"
-    else:
-        plotting_df_mean = None
 
-    if show_samples:
+    if plot_pp_samples:
         idata, sampled = _use_traces_or_sample(model, data, idata, n_samples=n_samples)
 
         # Get the plotting dataframe by chain and sample
@@ -504,30 +513,27 @@ def plot_model_cartoon(
     else:
         plotting_df = None
 
-    # return plotting_df, plotting_df_mean
-
-    # # return plotting_df, plotting_df_mean
-    if interval is not None:
-        _check_sample_size(plotting_df)
-
     if (plotting_df is not None) and (plotting_df_mean is not None):
         plotting_df = pd.concat([plotting_df, plotting_df_mean])
     elif plotting_df_mean is not None:
         plotting_df = plotting_df_mean
 
-        # Then, plot the posterior predictive distribution against the observed data
-        # Determine whether we are producing a single plot or a grid of plots
+    # if interval is not None:
+    #     _check_sample_size(plotting_df)
+
+    # Then, plot the posterior predictive distribution against the observed data
+    # Determine whether we are producing a single plot or a grid of plots
 
     if not extra_dims:
         ax = _plot_model_cartoon_1D(
             data=plotting_df,
             model_name=model.model_name,
             plot_data=plot_data,
-            plot_mean=True,
+            plot_mean=plot_pp_mean,
+            plot_samples=plot_pp_samples,
             bins=bins,
-            range=range,
             step=step,
-            interval=interval,
+            # interval=interval,
             colors=colors,
             linestyles=linestyles_,
             linewidths=linewidths_,
@@ -554,14 +560,14 @@ def plot_model_cartoon(
             data=plotting_df,
             model_name=model.model_name,
             plot_data=plot_data,
-            plot_mean=True,
+            plot_mean=plot_pp_mean,
+            plot_samples=plot_pp_samples,
             row=row,
             col=col,
             col_wrap=col_wrap,
             bins=bins,
-            range=range,
             step=step,
-            interval=interval,
+            # interval=interval,
             colors=colors,
             linestyles=linestyles_,
             linewidths=linewidths_,
@@ -595,14 +601,14 @@ def plot_model_cartoon(
             data=df,
             model_name=model.model_name,
             plot_data=plot_data,
-            plot_mean=True,
+            plot_mean=plot_pp_mean,
+            plot_samples=plot_pp_samples,
             row=row,
             col=col,
             col_wrap=col_wrap,
             bins=bins,
-            range=range,
             step=step,
-            interval=interval,
+            # interval=interval,
             colors=colors,
             linestyles=linestyles_,
             linewidths=linewidths_,
@@ -623,10 +629,10 @@ def plot_model_cartoon(
 
 def plot_func_model(
     model_name: str,
+    axis: Axes,
     theta_mean: pd.DataFrame | None = None,
     theta_posterior: pd.DataFrame | None = None,
     data: pd.DataFrame | None = None,
-    axis: Axes | None = None,
     n_samples=10,
     bin_size: float = 0.05,
     n_trajectories: int = 0,
@@ -648,71 +654,68 @@ def plot_func_model(
     alpha_trajectories: float = 0.5,
     **kwargs,
 ):
-    """Calculate posterior predictive for a certain bottom node.
+    """Plot model cartoon with posterior predictive samples.
 
-    Arguments:
-        bottom_node: pymc.stochastic
-            Bottom node to compute posterior over.
+    Parameters
+    ----------
+    model_name : str
+        Name of the model to plot.
+    axis : matplotlib.axes.Axes
+        Axis to plot into.
+    theta_mean : pd.DataFrame, optional
+        DataFrame containing posterior mean parameter values.
+    theta_posterior : pd.DataFrame, optional
+        DataFrame containing posterior samples of parameters.
+    data : pd.DataFrame, optional
+        DataFrame containing observed data to overlay.
+    n_samples : int, optional
+        Number of posterior samples to use. Defaults to 10.
+    bin_size : float, optional
+        Size of bins used for histograms. Defaults to 0.05.
+    n_trajectories : int, optional
+        Number of trajectories to plot. Defaults to 0.
+    delta_t_model : float, optional
+        Time step for model simulation. Defaults to 0.01.
+    random_state : int, optional
+        Random seed for reproducibility.
+    keep_slope : bool, optional
+        Whether to plot drift slopes. Defaults to True.
+    keep_boundary : bool, optional
+        Whether to plot decision boundaries. Defaults to True.
+    keep_ndt : bool, optional
+        Whether to plot non-decision time. Defaults to True.
+    keep_starting_point : bool, optional
+        Whether to plot starting point. Defaults to True.
+    markersize_starting_point : float or int, optional
+        Size of starting point marker. Defaults to 50.
+    markertype_starting_point : int, optional
+        Type of starting point marker. Defaults to 0.
+    markershift_starting_point : float or int, optional
+        Shift of starting point marker. Defaults to 0.
+    linewidth_histogram : float or int, optional
+        Width of histogram lines. Defaults to 0.5.
+    linewidth_model : float or int, optional
+        Width of model lines. Defaults to 0.5.
+    color_data : str, optional
+        Color for data histogram. Defaults to "blue".
+    color_pp_mean : str, optional
+        Color for posterior mean. Defaults to "black".
+    color_pp : str, optional
+        Color for posterior samples. Defaults to "black".
+    alpha_pp : float, optional
+        Transparency of posterior samples. Defaults to 0.05.
+    alpha_trajectories : float, optional
+        Transparency of trajectories. Defaults to 0.5.
+    **kwargs
+        Additional arguments passed to plotting functions.
 
-        axis: matplotlib.axis
-            Axis to plot into.
-
-    Optional:
-        samples: int <default=10>
-            Number of posterior samples to use.
-
-        bin_size: float <default=0.05>
-            Size of bins used for histograms
-
-        alpha: float <default=0.05>
-            alpha (transparency) level for the sample-wise elements of the plot
-
-        add_posterior_uncertainty_rts: bool <default=True>
-            Add sample by sample histograms?
-
-        add_posterior_mean_rts: bool <default=True>
-            Add a mean posterior?
-
-        add_model: bool <default=True>
-            Whether to add model cartoons to the plot.
-
-        linewidth_histogram: float <default=0.5>
-            linewdith of histrogram plot elements.
-
-        linewidth_model: float <default=0.5>
-            linewidth of plot elements concerning the model cartoons.
-
-        legend_location: str <default='upper right'>
-            string defining legend position. Find the rest of the options in the
-            matplotlib documentation.
-
-        legend_shadow: bool <default=True>
-            Add shadow to legend box?
-
-        legend_fontsize: float <default=12>
-            Fontsize of legend.
-
-        color_data : str <default="blue">
-            Color for the data part of the plot.
-
-        posterior_mean_color : str <default="red">
-            Color for the posterior mean part of the plot.
-
-        color_pp : str <default="black">
-            Color for the posterior uncertainty part of the plot.
-
-        delta_t_model:
-            specifies plotting intervals for model cartoon elements of the graphs.
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axis with the model cartoon plot.
     """
     ylim_low, ylim_high = kwargs.get("ylims", (-3, 3))
     xlim_low, xlim_high = kwargs.get("xlims", (-0.05, 5))
-
-    # if value_range is None:
-    #     # Infer from data by finding the min and max from the nodes
-    #     raise NotImplementedError("value_range keyword argument must be supplied.")
-
-    # if len(value_range) > 2:
-    #     value_range = (value_range[0], value_range[-1])
 
     # Extract some parameters from kwargs
     bins = np.arange(xlim_low, xlim_high, bin_size)
@@ -791,14 +794,14 @@ def plot_func_model(
                 # wrap in max statement here
                 # because negative value are possible,
                 # however refer to data instead of posterior samples
-                chain_tmp = max(
-                    0, np.random.choice(theta_posterior.index.get_level_values("chain"))
+                chain_tmp = np.random.choice(
+                    theta_posterior.index.get_level_values("chain")
                 )
-                draw_tmp = max(
-                    0, np.random.choice(theta_posterior.index.get_level_values("draw"))
+                draw_tmp = np.random.choice(
+                    theta_posterior.index.get_level_values("draw")
                 )
                 obs_tmp = np.random.choice(
-                    theta_posterior.index.get_level_values("draw")
+                    theta_posterior.index.get_level_values("obs_n")
                 )
                 tmp_theta = theta_posterior.loc[
                     (chain_tmp, draw_tmp, obs_tmp), :
@@ -821,11 +824,32 @@ def plot_func_model(
     # ADD DATA HISTOGRAMS
     if theta_mean is not None:
         (b_high, b_low) = (
-            np.maximum(sim_out["metadata"]["boundary"], 0),
-            np.minimum((-1) * sim_out["metadata"]["boundary"], 0),
+            np.maximum(sim_out["metadata"]["boundary"], 0)[0],
+            np.minimum((-1) * sim_out["metadata"]["boundary"], 0)[0],
         )
-        hist_bottom_high = kwargs.get("hist_bottom_high", b_high[0])
-        hist_bottom_low = kwargs.get("hist_bottom_low", -b_low[0])
+        hist_bottom_high = kwargs.get("hist_bottom_high", b_high)
+        hist_bottom_low = kwargs.get("hist_bottom_low", -b_low)
+    elif theta_posterior is not None:
+        (b_high, b_low) = (
+            np.max(
+                [
+                    np.maximum(
+                        posterior_pred_no_noise[key_]["metadata"]["boundary"], 0
+                    )[0]
+                    for key_, _ in posterior_pred_no_noise.items()
+                ]
+            ),
+            np.min(
+                [
+                    np.minimum(
+                        (-1) * posterior_pred_no_noise[key_]["metadata"]["boundary"], 0
+                    )[0]
+                    for key_, _ in posterior_pred_no_noise.items()
+                ]
+            ),
+        )
+        hist_bottom_high = kwargs.get("hist_bottom_high", b_high)
+        hist_bottom_low = kwargs.get("hist_bottom_low", -b_low)
     else:
         _logger.warning(
             'No "theta_mean" provided. Using default values for histogram'
@@ -835,36 +859,6 @@ def plot_func_model(
         hist_bottom_low = 3
 
     hist_histtype = kwargs.get("hist_histtype", "step")
-
-    weights_up = np.tile(
-        (1 / bin_size) / sim_out["rts"][(sim_out["rts"] != -999)].shape[0],
-        reps=sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] == 1)].shape[
-            0
-        ],
-    )
-    weights_down = np.tile(
-        (1 / bin_size) / sim_out["rts"][(sim_out["rts"] != -999)].shape[0],
-        reps=sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] != 1)].shape[
-            0
-        ],
-    )
-
-    # ADD HISTOGRAMS
-    # -------------------------------
-
-    # if ("ylim_high" in kwargs) and ("ylim_low" in kwargs):
-    #     ylim_high = kwargs["ylim_high"]
-    #     ylim_low = kwargs["ylim_low"]
-    # else:
-    #     ylim_high = ylim
-    #     ylim_low = -ylim
-
-    # if ("hist_bottom_high" in kwargs) and ("hist_bottom_low" in kwargs):
-    #     hist_bottom_high = kwargs["hist_bottom_high"]
-    #     hist_bottom_low = kwargs["hist_bottom_low"]
-    # else:
-    #     hist_bottom_high = b_high[0]  # hist_bottom
-    #     hist_bottom_low = -b_low[0]  # hist_bottom
 
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
@@ -884,82 +878,103 @@ def plot_func_model(
     axis_twin_up.set_zorder(0)
     axis_twin_down.set_zorder(0)
 
-    # Add histograms for posterior mean simulation
-    axis_twin_up.hist(
-        np.abs(sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] == 1)]),
-        bins=bins,
-        weights=weights_up,
-        histtype=hist_histtype,
-        bottom=hist_bottom_high,
-        alpha=1,
-        color=color_pp_mean,
-        edgecolor=color_pp_mean,
-        linewidth=linewidth_histogram,
-        zorder=-1,
-    )
-
-    axis_twin_down.hist(
-        np.abs(sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] != 1)]),
-        bins=bins,
-        weights=weights_down,
-        histtype=hist_histtype,
-        bottom=hist_bottom_low,
-        alpha=1,
-        color=color_pp_mean,
-        edgecolor=color_pp_mean,
-        linewidth=linewidth_histogram,
-        zorder=-1,
-    )
-
-    # Add histograms for posterior samples:
-    for k, sim_out_tmp in posterior_pred_sims.items():
+    if theta_mean is not None:
         weights_up = np.tile(
-            (1 / bin_size) / sim_out_tmp["rts"][(sim_out_tmp["rts"] != -999)].shape[0],
-            reps=sim_out_tmp["rts"][
-                (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] == 1)
+            (1 / bin_size) / sim_out["rts"][(sim_out["rts"] != -999)].shape[0],
+            reps=sim_out["rts"][
+                (sim_out["rts"] != -999) & (sim_out["choices"] == 1)
             ].shape[0],
         )
         weights_down = np.tile(
-            (1 / bin_size) / sim_out_tmp["rts"][(sim_out_tmp["rts"] != -999)].shape[0],
-            reps=sim_out_tmp["rts"][
-                (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] != 1)
+            (1 / bin_size) / sim_out["rts"][(sim_out["rts"] != -999)].shape[0],
+            reps=sim_out["rts"][
+                (sim_out["rts"] != -999) & (sim_out["choices"] != 1)
             ].shape[0],
         )
 
-        # Add histograms for posterior samples
+        # Add histograms for posterior mean simulation
         axis_twin_up.hist(
             np.abs(
-                sim_out_tmp["rts"][
-                    (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] == 1)
-                ]
+                sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] == 1)]
             ),
             bins=bins,
             weights=weights_up,
             histtype=hist_histtype,
             bottom=hist_bottom_high,
-            alpha=alpha_pp,
-            color=color_pp,
-            edgecolor=color_pp,
+            alpha=1,
+            color=color_pp_mean,
+            edgecolor=color_pp_mean,
             linewidth=linewidth_histogram,
-            zorder=(-k - 1),
+            zorder=-1,
         )
 
         axis_twin_down.hist(
             np.abs(
-                sim_out_tmp["rts"][
-                    (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] != 1)
-                ]
+                sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] != 1)]
             ),
             bins=bins,
             weights=weights_down,
             histtype=hist_histtype,
             bottom=hist_bottom_low,
-            alpha=alpha_pp,
-            color=color_pp,
-            edgecolor=color_pp,
+            alpha=1,
+            color=color_pp_mean,
+            edgecolor=color_pp_mean,
             linewidth=linewidth_histogram,
-            zorder=(-k - 1),
+            zorder=-1,
         )
+
+    if theta_posterior is not None:
+        # Add histograms for posterior samples:
+        for k, sim_out_tmp in posterior_pred_sims.items():
+            weights_up = np.tile(
+                (1 / bin_size)
+                / sim_out_tmp["rts"][(sim_out_tmp["rts"] != -999)].shape[0],
+                reps=sim_out_tmp["rts"][
+                    (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] == 1)
+                ].shape[0],
+            )
+            weights_down = np.tile(
+                (1 / bin_size)
+                / sim_out_tmp["rts"][(sim_out_tmp["rts"] != -999)].shape[0],
+                reps=sim_out_tmp["rts"][
+                    (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] != 1)
+                ].shape[0],
+            )
+
+            # Add histograms for posterior samples
+            axis_twin_up.hist(
+                np.abs(
+                    sim_out_tmp["rts"][
+                        (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] == 1)
+                    ]
+                ),
+                bins=bins,
+                weights=weights_up,
+                histtype=hist_histtype,
+                bottom=hist_bottom_high,
+                alpha=alpha_pp,
+                color=color_pp,
+                edgecolor=color_pp,
+                linewidth=linewidth_histogram,
+                zorder=(-k - 1),
+            )
+
+            axis_twin_down.hist(
+                np.abs(
+                    sim_out_tmp["rts"][
+                        (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] != 1)
+                    ]
+                ),
+                bins=bins,
+                weights=weights_down,
+                histtype=hist_histtype,
+                bottom=hist_bottom_low,
+                alpha=alpha_pp,
+                color=color_pp,
+                edgecolor=color_pp,
+                linewidth=linewidth_histogram,
+                zorder=(-k - 1),
+            )
 
     # Add histograms for real data
     if data is not None:
@@ -1002,14 +1017,43 @@ def plot_func_model(
             zorder=-1,
         )
 
-    # ADD MODEL CARTOONS:
-    t_s = np.arange(0, sim_out["metadata"]["max_t"], delta_t_model)
     z_cnt = 0  # controlling the order of elements in plot
 
-    # Model cartoon for posterior samples
-    for j, sim_out_tmp in posterior_pred_no_noise.items():
+    if theta_posterior is not None:
+        # ADD MODEL CARTOONS:
+        t_s = np.arange(
+            0, posterior_pred_no_noise[0]["metadata"]["max_t"], delta_t_model
+        )
+
+        # Model cartoon for posterior samples
+        for j, sim_out_tmp in posterior_pred_no_noise.items():
+            _add_model_cartoon_to_ax(
+                sample=sim_out_tmp,
+                axis=axis,
+                keep_slope=keep_slope,
+                keep_boundary=keep_boundary,
+                keep_ndt=keep_ndt,
+                keep_starting_point=keep_starting_point,
+                markersize_starting_point=markersize_starting_point,
+                markertype_starting_point=markertype_starting_point,
+                markershift_starting_point=markershift_starting_point,
+                delta_t_graph=delta_t_model,
+                alpha=alpha_pp,
+                lw_m=linewidth_model,
+                ylim_low=ylim_low,
+                ylim_high=ylim_high,
+                t_s=t_s,
+                color=color_pp,
+                zorder_cnt=z_cnt,
+            )
+
+            z_cnt += 1
+
+    if theta_mean is not None:
+        t_s = np.arange(0, sim_out_no_noise["metadata"]["max_t"], delta_t_model)
+        # Model cartoon for posterior mean
         _add_model_cartoon_to_ax(
-            sample=sim_out_tmp,
+            sample=sim_out_no_noise,
             axis=axis,
             keep_slope=keep_slope,
             keep_boundary=keep_boundary,
@@ -1019,37 +1063,14 @@ def plot_func_model(
             markertype_starting_point=markertype_starting_point,
             markershift_starting_point=markershift_starting_point,
             delta_t_graph=delta_t_model,
-            alpha=alpha_pp,
+            alpha=1,
             lw_m=linewidth_model,
             ylim_low=ylim_low,
             ylim_high=ylim_high,
             t_s=t_s,
             color=color_pp,
-            zorder_cnt=z_cnt,
+            zorder_cnt=z_cnt + 1,
         )
-
-        z_cnt += 1
-
-    # Model cartoon for posterior mean
-    _add_model_cartoon_to_ax(
-        sample=sim_out_no_noise,
-        axis=axis,
-        keep_slope=keep_slope,
-        keep_boundary=keep_boundary,
-        keep_ndt=keep_ndt,
-        keep_starting_point=keep_starting_point,
-        markersize_starting_point=markersize_starting_point,
-        markertype_starting_point=markertype_starting_point,
-        markershift_starting_point=markershift_starting_point,
-        delta_t_graph=delta_t_model,
-        alpha=1,
-        lw_m=linewidth_model,
-        ylim_low=ylim_low,
-        ylim_high=ylim_high,
-        t_s=t_s,
-        color=color_pp,
-        zorder_cnt=z_cnt + 1,
-    )
 
     # Add in trajectories
     if n_trajectories > 0:
@@ -1081,7 +1102,40 @@ def _add_trajectories(
     color_trajectories: str = "black",
     **kwargs,
 ):
-    """Add trajectories to a given axis."""
+    """Add simulated decision trajectories to a given matplotlib axis.
+
+    Parameters
+    ----------
+    axis : matplotlib.axes.Axes
+        The axis to add the trajectories to.
+    sample : dict
+        Dictionary containing simulation data including trajectories and metadata.
+    t_s : numpy.ndarray
+        Array of timepoints for plotting.
+    delta_t_graph : float, optional
+        Time step size for plotting, by default 0.01.
+    n_trajectories : int, optional
+        Number of trajectories to plot, by default 10.
+    highlight_trajectory_rt_choice : bool, optional
+        Whether to highlight the response time and choice with a marker, by default
+        True.
+    markersize_trajectory_rt_choice : float or int, optional
+        Size of marker for response time/choice, by default 50.
+    markertype_trajectory_rt_choice : str, optional
+        Marker style for response time/choice, by default "*".
+    markercolor_trajectory_rt_choice : str, int, list or dict, optional
+        Color(s) for response time/choice markers. Can be a single color,
+        list of colors, or dict mapping choices to colors. By default "red".
+    linewidth_trajectories : float or int, optional
+        Line width for trajectories, by default 1.
+    alpha_trajectories : float or int, optional
+        Opacity of trajectories, by default 0.5.
+    color_trajectories : str, list or dict, optional
+        Color(s) for trajectories. Can be a single color, list of colors,
+        or dict mapping choices to colors. By default "black".
+    **kwargs
+        Additional keyword arguments passed to plotting functions.
+    """
     # Check markercolor type
     if isinstance(markercolor_trajectory_rt_choice, str):
         markercolor_trajectory_rt_choice_dict = {}
@@ -1180,6 +1234,48 @@ def _add_model_cartoon_to_ax(
     zorder_cnt: int = 1,
     color: str = "black",
 ):
+    """Add a model cartoon visualization to a matplotlib axis.
+
+    Parameters
+    ----------
+    sample : dict
+        Dictionary containing model metadata including boundary,
+        trajectory, time points, etc.
+    axis : Axes
+        Matplotlib axis to plot on.
+    keep_slope : bool, default=True
+        Whether to plot the trajectory slope.
+    keep_boundary : bool, default=True
+        Whether to plot decision boundaries.
+    keep_ndt : bool, default=True
+        Whether to plot non-decision time marker.
+    keep_starting_point : bool, default=True
+        Whether to plot starting point marker.
+    markersize_starting_point : float or int, default=80
+        Size of starting point marker.
+    markertype_starting_point : float or int, default=1
+        Marker type for starting point.
+    markershift_starting_point : float or int, default=-0.05
+        Horizontal shift of starting point marker.
+    delta_t_graph : float, optional
+        Time step size for plotting.
+    alpha : float, optional
+        Opacity of plot elements.
+    lw_m : float, optional
+        Line width for plot elements.
+    tmp_label : str, optional
+        Label for plot legend.
+    ylim_low : float or int, optional
+        Lower y-axis limit.
+    ylim_high : float or int, optional
+        Upper y-axis limit.
+    t_s : numpy.ndarray, optional
+        Time points array.
+    zorder_cnt : int, default=1
+        Base z-order for plot elements.
+    color : str, default="black"
+        Color for plot elements.
+    """
     # Make bounds
     (b_high, b_low) = (
         np.maximum(sample["metadata"]["boundary"], 0),
@@ -1282,65 +1378,58 @@ def plot_func_model_n(
     random_state: int | None = None,
     **kwargs,
 ):
-    """Calculate posterior predictive for a certain bottom node.
+    """Calculate and plot posterior predictive for a model.
 
-    Arguments:
-        bottom_node: pymc.stochastic
-            Bottom node to compute posterior over.
+    Parameters
+    ----------
+    model_name : str
+        Name of the model to simulate.
+    axis : matplotlib.axes.Axes
+        The axis to plot on.
+    theta_mean : pandas.DataFrame, optional
+        Mean parameter values for simulation.
+    theta_posterior : pandas.DataFrame, optional
+        Posterior samples of parameters.
+    data : pandas.DataFrame, optional
+        Observed data to plot.
+    n_trajectories : int, default=10
+        Number of trajectories to plot.
+    bin_size : float, default=0.05
+        Size of bins for histograms.
+    n_samples : int, default=10
+        Number of posterior samples to use.
+    linewidth_histogram : float or int, default=0.5
+        Line width for histogram elements.
+    linewidth_model : float or int, default=0.5
+        Line width for model cartoon elements.
+    legend_fontsize : int, default=7
+        Font size for legend.
+    legend_shadow : bool, default=True
+        Whether to add shadow to legend box.
+    legend_location : str, default="upper right"
+        Location of legend.
+    delta_t_model : float, default=0.01
+        Time step size for model cartoon plotting.
+    add_legend : bool, default=True
+        Whether to add legend to plot.
+    alpha : float, default=1.0
+        Transparency for main plot elements.
+    alpha_pp : float, default=0.05
+        Transparency for posterior predictive samples.
+    alpha_trajectories : float, default=0.5
+        Transparency for trajectory paths.
+    keep_frame : bool, default=False
+        Whether to keep the frame around the plot.
+    random_state : int, optional
+        Random seed for reproducibility.
+    **kwargs
+        Additional keyword arguments passed to plotting functions.
 
-        axis: matplotlib.axis
-            Axis to plot into.
-
-    Optional:
-        samples: int <default=10>
-            Number of posterior samples to use.
-
-        bin_size: float <default=0.05>
-            Size of bins used for histograms
-
-        alpha: float <default=0.05>
-            alpha (transparency) level for the sample-wise elements of the plot
-
-        alpha_trajectories: float <default=0.5>
-            alpha (transparency) level for the trajectories
-
-        add_posterior_uncertainty_rts: bool <default=True>
-            Add sample by sample histograms?
-
-        add_posterior_mean_rts: bool <default=True>
-            Add a mean posterior?
-
-        add_model: bool <default=True>
-            Whether to add model cartoons to the plot.
-
-        linewidth_histogram: float <default=0.5>
-            linewdith of histrogram plot elements.
-
-        linewidth_model: float <default=0.5>
-            linewidth of plot elements concerning the model cartoons.
-
-        legend_loc: str <default='upper right'>
-            string defining legend position. Find the rest of the options
-            in the matplotlib documentation.
-
-        legend_shadow: bool <default=True>
-            Add shadow to legend box?
-
-        legend_fontsize: float <default=12>
-            Fontsize of legend.
-
-        color_data : str <default="blue">
-            Color for the data part of the plot.
-
-        posterior_mean_color : str <default="red">
-            Color for the posterior mean part of the plot.
-
-        color_pp : str <default="black">
-            Color for the posterior uncertainty part of the plot.
-
-
-        delta_t_model:
-            specifies plotting intervals for model cartoon elements of the graphs.
+    Notes
+    -----
+    This function visualizes model predictions by plotting simulated trajectories,
+    histograms of response times, and model cartoons. It can show both the mean
+    prediction and uncertainty from posterior samples.
     """
     color_dict = {
         -1: "black",
@@ -1356,24 +1445,10 @@ def plot_func_model_n(
     ylim_low, ylim_high = kwargs.get("ylims", (0, 5))
     xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
-    # # AF-TODO: Add a mean version of this !
-    # if value_range is None:
-    #     # Infer from data by finding the min and max from the nodes
-    #     raise NotImplementedError("value_range keyword argument must be supplied.")
-
-    # if len(value_range) > 2:
-    #     value_range = (value_range[0], value_range[-1])
-
-    # # ------------
-    # ylim = kwargs.pop("ylim", 4)
-
     # # Extract some parameters from kwargs
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
     bins = np.arange(xlim_low, xlim_high, bin_size)
-
-    # axis.set_xlim(value_range[0], value_range[-1])
-    # axis.set_ylim(0, ylim)
 
     # ADD MODEL:
 
@@ -1449,15 +1524,16 @@ def plot_func_model_n(
                 # wrap in max statement here
                 # because negative value are possible,
                 # however refer to data instead of posterior samples
-                chain_tmp = max(
-                    0, np.random.choice(theta_posterior.index.get_level_values("chain"))
+                chain_tmp = np.random.choice(
+                    theta_posterior.index.get_level_values("chain")
                 )
-                draw_tmp = max(
-                    0, np.random.choice(theta_posterior.index.get_level_values("draw"))
-                )
-                obs_tmp = np.random.choice(
+                draw_tmp = np.random.choice(
                     theta_posterior.index.get_level_values("draw")
                 )
+                obs_tmp = np.random.choice(
+                    theta_posterior.index.get_level_values("obs_n")
+                )
+
                 tmp_theta = theta_posterior.loc[
                     (chain_tmp, draw_tmp, obs_tmp), :
                 ].values
@@ -1479,12 +1555,12 @@ def plot_func_model_n(
     # ADD HISTOGRAMS
     # -------------------------------
     choices = default_model_config[cast(SupportedModels, model_name)]["choices"]
+    cnt_cumul = 0
 
     # POSTERIOR MEAN BASED HISTOGRAM
     if theta_mean is not None:
         b = np.maximum(sim_out["metadata"]["boundary"], 0)
         bottom = b[0]
-        cnt_cumul = 0
 
         for i, choice in enumerate(choices):
             tmp_label = None
@@ -1523,6 +1599,16 @@ def plot_func_model_n(
 
     # POSTERIOR SAMPLE BASED HISTOGRAM
     if theta_posterior is not None:
+        if theta_mean is None:
+            bottom = np.max(
+                [
+                    np.maximum(
+                        posterior_pred_no_noise[key_]["metadata"]["boundary"], 0
+                    )[0]
+                    for key_, _ in posterior_pred_no_noise.items()
+                ]
+            )
+
         for k, sim_out_tmp in posterior_pred_sims.items():
             for i, choice in enumerate(choices):
                 tmp_label = None
@@ -1599,7 +1685,7 @@ def plot_func_model_n(
                 sample=sim_out_tmp,
                 axis=axis,
                 delta_t_graph=delta_t_model,
-                sample_hist_alpha=alpha_pp,
+                alpha=alpha_pp,
                 lw_m=linewidth_model,
                 tmp_label=tmp_label,
                 linestyle="-",
@@ -1616,7 +1702,7 @@ def plot_func_model_n(
             sample=sim_out_no_noise,
             axis=axis,
             delta_t_graph=delta_t_model,
-            sample_hist_alpha=alpha,
+            alpha=alpha,
             lw_m=linewidth_model,
             tmp_label=tmp_label,
             linestyle="-",
@@ -1678,7 +1764,44 @@ def _add_trajectories_n(
     color_trajectories="black",
     **kwargs,
 ):
-    """Add trajectories to a given axis."""
+    """Add simulated decision trajectories to a given matplotlib axis.
+
+    Parameters
+    ----------
+    axis : matplotlib.axes.Axes, optional
+        The axis to plot on
+    sample : list of dict, optional
+        List of dictionaries containing simulated trajectories and metadata
+    t_s : numpy.ndarray, optional
+        Array of time points for plotting
+    delta_t_graph : float, default=0.01
+        Time step size for plotting
+    n_trajectories : int, default=10
+        Number of trajectories to plot
+    highlight_rt_choice : bool, default=True
+        Whether to highlight response time and choice with markers
+    marker_size_rt_choice : float, default=50
+        Size of markers for response time/choice
+    marker_type_rt_choice : str, default="*"
+        Marker style for chosen response
+    linewidth_trajectories : float, default=1
+        Line width for trajectory paths
+    alpha_trajectories : float, default=0.5
+        Transparency of trajectory paths
+    color_trajectories : str or list or dict, default="black"
+        Color(s) for trajectories. Can be:
+        - str: Single color for all trajectories
+        - list: List of colors mapped to possible choices
+        - dict: Mapping of choices to colors
+    **kwargs
+        Additional keyword arguments passed to plotting functions
+
+    Notes
+    -----
+    This function visualizes multiple simulated decision paths, optionally highlighting
+    the response times and choices. Each trajectory shows the evidence accumulation
+    process leading to a decision.
+    """
     color_dict = {
         -1: "black",
         0: "black",
@@ -1757,23 +1880,59 @@ def _add_trajectories_n(
 
 
 def _add_model_n_cartoon_to_ax(
-    sample=None,
-    axis=None,
-    delta_t_graph=None,
-    sample_hist_alpha=None,
-    keep_boundary=True,
-    keep_ndt=True,
-    keep_slope=True,
-    keep_starting_point=True,
-    lw_m=None,
-    linestyle="-",
-    tmp_label=None,
-    ylim=None,
-    t_s=None,
-    zorder_cnt=1,
-    color_dict=None,
-):
-    """Add model cartoon to axis."""
+    sample: dict,
+    axis: Axes,
+    delta_t_graph: float,
+    lw_m: float,
+    tmp_label: str | None,
+    linestyle: str,
+    ylim: float,
+    t_s: np.ndarray,
+    color_dict: dict,
+    zorder_cnt: int,
+    alpha: float | None = None,
+    keep_boundary: bool = True,
+    keep_slope: bool = True,
+    keep_starting_point: bool = True,
+) -> None:
+    """Add model cartoon visualization to a matplotlib axis.
+
+    Parameters
+    ----------
+    sample : dict
+        Dictionary containing model metadata and trajectories
+    axis : matplotlib.axes.Axes
+        The axis to plot on
+    delta_t_graph : float
+        Time step size for plotting
+    lw_m : float
+        Line width for plotting model elements
+    tmp_label : str | None
+        Label for the plot legend
+    linestyle : str
+        Style of lines in plot
+    ylim : float
+        Y-axis limit value
+    t_s : np.ndarray
+        Array of time points
+    color_dict : dict
+        Dictionary mapping choice indices to colors
+    zorder_cnt : int
+        Base z-order for plot elements
+    alpha : float | None, optional
+        Transparency value, by default None
+    keep_boundary : bool, optional
+        Whether to plot decision boundaries, by default True
+    keep_slope : bool, optional
+        Whether to plot drift slopes, by default True
+    keep_starting_point : bool, optional
+        Whether to plot starting point marker, by default True
+
+    Returns
+    -------
+    None
+        Modifies the provided axis in place
+    """
     b = np.maximum(sample["metadata"]["boundary"], 0)
     b_init = b[0]
     n_roll = int((sample["metadata"]["t"][0] / delta_t_graph) + 1)
@@ -1786,7 +1945,7 @@ def _add_model_n_cartoon_to_ax(
             t_s,
             b[: t_s.shape[0]],
             color="black",
-            alpha=sample_hist_alpha,
+            alpha=alpha,
             zorder=1000 + zorder_cnt,
             linewidth=lw_m,
             linestyle=linestyle,
@@ -1802,10 +1961,10 @@ def _add_model_n_cartoon_to_ax(
             color="black",
             linestyle=linestyle,
             linewidth=lw_m,
-            alpha=sample_hist_alpha,
+            alpha=alpha,
         )
 
-    # # MAKE SLOPES (VIA TRAJECTORIES HERE --> RUN NOISE FREE SIMULATIONS)!
+    # Slopes
     if keep_slope:
         tmp_traj = sample["metadata"]["trajectory"]
 
@@ -1820,7 +1979,7 @@ def _add_model_n_cartoon_to_ax(
                 tmp_traj[:tmp_maxid, i],
                 color=color_dict[i],
                 linestyle=linestyle,
-                alpha=sample_hist_alpha,
+                alpha=alpha,
                 zorder=1000 + zorder_cnt,
                 linewidth=lw_m,
             )

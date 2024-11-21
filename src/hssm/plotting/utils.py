@@ -347,7 +347,7 @@ def _check_groups_and_groups_order(
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None,
     row: str | None,
     col: str | None,
-) -> tuple[Iterable[str], dict[str, Iterable[str]]]:
+) -> tuple[Iterable[str] | None, dict[str, Iterable[str]]]:
     """Check the validity of `groups` and `groups_order`."""
     if groups is None:
         if groups_order is not None:
