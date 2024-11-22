@@ -91,6 +91,7 @@ def run_vi(model, method, expected):
             model.vi(method, niter=1000)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_simple_models(data_ddm, loglik_kind, backend, method, expected):
     print("PYMC VERSION: ")
@@ -106,6 +107,7 @@ def test_simple_models(data_ddm, loglik_kind, backend, method, expected):
     run_vi(model, method, expected)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_reg_models(data_ddm_reg, loglik_kind, backend, method, expected):
     print("PYMC VERSION: ")
@@ -131,6 +133,7 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, method, expected):
     run_vi(model, method, expected)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, method, expected):
     print("PYMC VERSION: ")
@@ -170,6 +173,7 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, method, expected)
     run_vi(model, method, expected)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_simple_models_missing_data(
     data_ddm_missing, loglik_kind, backend, method, expected, cpn
@@ -190,6 +194,7 @@ def test_simple_models_missing_data(
     run_vi(model, method, expected)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_reg_models_missing_data(
     data_ddm_reg_missing, loglik_kind, backend, method, expected, cpn
@@ -219,6 +224,7 @@ def test_reg_models_missing_data(
     run_vi(model, method, expected)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_simple_models_deadline(
     data_ddm_deadline, loglik_kind, backend, method, expected, opn
@@ -238,6 +244,7 @@ def test_simple_models_deadline(
     run_vi(model, method, expected)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_reg_models_deadline(
     data_ddm_reg_deadline, loglik_kind, backend, method, expected, opn
