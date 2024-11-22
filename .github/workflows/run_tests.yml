@@ -30,7 +30,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Run tests and collect coverage
-        run: poetry run pytest -n auto --cov=. --cov-report xml --cov-report term-missing tests/
+        run: poetry run pytest -n auto --cov=. --cov-report xml --cov-report term-missing --exitfirst tests/
         env:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
 
