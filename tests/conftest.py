@@ -162,6 +162,6 @@ def race_model_cartoon():
         p_outlier=0.00,
     )
     # Attach trace
-    idata_race = az.from_netcdf("tests/fixtures/idata_race_cartoon.nc")
+    idata_race = az.from_netcdf("tests/fixtures/test_idata_race.nc")
     race_model._inference_obj = idata_race
     return race_model
