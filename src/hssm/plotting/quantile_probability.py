@@ -369,7 +369,7 @@ def plot_quantile_probability(
             **kwargs,
         )
 
-        return ax, plotting_df
+        return ax
 
     # If group is not provided, we are producing a grid of plots
     if groups is None:
