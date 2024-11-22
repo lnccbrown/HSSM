@@ -235,7 +235,6 @@ def compute_merge_necessary_deterministics(model, idata, inplace=True):
             if param in [
                 deterministic.name for deterministic in model.pymc_model.deterministics
             ]:
-                print(f"Computing deterministic {param}")
                 deterministics_list.append(
                     pm.compute_deterministics(
                         idata.posterior, model=model.pymc_model, var_names=[param]
