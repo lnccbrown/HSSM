@@ -235,6 +235,7 @@ def compute_merge_necessary_deterministics(model, idata, inplace=True):
             if param in [
                 deterministic.name for deterministic in model.pymc_model.deterministics
             ]:
+                print(f"Computing deterministic {param}")
                 deterministics_list.append(
                     pm.compute_deterministics(
                         idata.posterior, model=model.pymc_model, var_names=[param]
@@ -643,7 +644,7 @@ def plot_func_model(
     keep_ndt: bool = True,
     keep_starting_point: bool = True,
     markersize_starting_point: float | int = 50,
-    markertype_starting_point: int = 0,
+    markertype_starting_point: str = ">",
     markershift_starting_point: float | int = 0,
     linewidth_histogram: float | int = 0.5,
     linewidth_model: float | int = 0.5,
@@ -718,7 +719,7 @@ def plot_func_model(
     xlim_low, xlim_high = kwargs.get("xlims", (-0.05, 5))
 
     # Extract some parameters from kwargs
-    bins = np.arange(xlim_low, xlim_high, bin_size)
+    bins = list(np.arange(xlim_low, xlim_high, bin_size))
 
     # RUN SIMULATIONS
     # -------------------------------
@@ -862,8 +863,8 @@ def plot_func_model(
 
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
-    axis_twin_up = axis.twinx()
-    axis_twin_down = axis.twinx()
+    axis_twin_up: Axes = cast(Axes, axis.twinx())
+    axis_twin_down: Axes = cast(Axes, axis.twinx())
     axis_twin_up.set_ylim(ylim_low, ylim_high)
     axis_twin_up.set_yticks([])
     axis_twin_down.set_ylim(ylim_high, ylim_low)
@@ -1217,20 +1218,20 @@ def _add_trajectories(
 def _add_model_cartoon_to_ax(
     sample: dict,
     axis: Axes,
+    t_s: np.ndarray,
+    ylim_low: float,
+    ylim_high: float,
     keep_slope: bool = True,
     keep_boundary: bool = True,
     keep_ndt: bool = True,
     keep_starting_point: bool = True,
     markersize_starting_point: float | int = 80,
-    markertype_starting_point: float | int = 1,
+    markertype_starting_point: str = ">",
     markershift_starting_point: float | int = -0.05,
     delta_t_graph: float | None = None,
     alpha: float | None = None,
     lw_m: float | None = None,
     tmp_label: str | None = None,
-    ylim_low: float | int | None = None,
-    ylim_high: float | int | None = None,
-    t_s: np.ndarray | None = None,
     zorder_cnt: int = 1,
     color: str = "black",
 ):
@@ -1448,7 +1449,7 @@ def plot_func_model_n(
     # # Extract some parameters from kwargs
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
-    bins = np.arange(xlim_low, xlim_high, bin_size)
+    bins = list(np.arange(xlim_low, xlim_high, bin_size))
 
     # ADD MODEL:
 
