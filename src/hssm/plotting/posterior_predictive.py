@@ -2,7 +2,7 @@
 
 import logging
 from itertools import product
-from typing import Any, Dict, Iterable, Literal, overload
+from typing import Dict, Iterable, Literal, cast, overload
 
 import arviz as az
 import matplotlib as mpl
@@ -232,19 +232,27 @@ def _process_lines(
         | dict[str, float]
     ),
     mode: Literal["linestyles", "linewidths"],
-) -> list[str] | list[float] | list[Any]:
+) -> list[str] | list[float]:
+    check_type: type[str | float]
     if mode == "linestyles":
         dict_defaults_ls: dict[str, str] = {"predicted": "-", "observed": "-"}
+        check_type = str
     elif mode == "linewidths":
         dict_defaults_lw: dict[str, float] = {"predicted": 1.25, "observed": 1.25}
+        check_type = float
     else:
         raise ValueError(f"Invalid mode: {mode}")
 
-    if isinstance(line_attrs, str):
-        return [line_attrs] * 2
+    if isinstance(line_attrs, check_type):
+        if check_type is str:
+            return [cast(str, line_attrs)] * 2
+        elif check_type is float:
+            return [cast(float, line_attrs)] * 2
+        else:
+            raise ValueError(f"Invalid type: {check_type}")
     elif isinstance(line_attrs, (list, tuple)):
         line_attrs = list(line_attrs)
-        if not all(isinstance(la, str) for la in line_attrs):
+        if not all(isinstance(la, check_type) for la in line_attrs):
             raise ValueError(
                 f"The `{mode}` argument must be a string or a list of strings." "or 2."
             )
@@ -263,15 +271,26 @@ def _process_lines(
         else:
             if mode == "linestyles":
                 return [
-                    line_attrs.get("predicted", dict_defaults_ls["predicted"]),
-                    line_attrs.get("observed", dict_defaults_ls["observed"]),
+                    cast(
+                        str,
+                        line_attrs.get("predicted", dict_defaults_ls["predicted"]),
+                    ),
+                    cast(
+                        str,
+                        line_attrs.get("observed", dict_defaults_ls["observed"]),
+                    ),
                 ]
             elif mode == "linewidths":
                 return [
-                    line_attrs.get("predicted", dict_defaults_lw["predicted"]),
-                    line_attrs.get("observed", dict_defaults_lw["observed"]),
+                    cast(
+                        float,
+                        line_attrs.get("predicted", dict_defaults_lw["predicted"]),
+                    ),
+                    cast(
+                        float,
+                        line_attrs.get("observed", dict_defaults_lw["observed"]),
+                    ),
                 ]
-
     else:
         raise ValueError(
             f"The `{mode}` argument must be a string, a list of strings,"
