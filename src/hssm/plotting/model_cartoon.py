@@ -3,7 +3,7 @@
 import logging
 from copy import deepcopy
 from itertools import product
-from typing import Any, Dict, Iterable, Literal, cast
+from typing import Any, Iterable, Literal, cast
 
 import arviz as az
 import matplotlib as mpl
@@ -19,7 +19,7 @@ from ssms.basic_simulators.simulator import simulator
 
 # Original model cartoon plot from gui
 from ..defaults import SupportedModels, default_model_config
-from .posterior_predictive import _process_linestyles_pp, _process_linewidths_pp
+from .posterior_predictive import _process_lines
 from .utils import (
     _check_groups_and_groups_order,
     _get_plotting_df,
@@ -303,8 +303,8 @@ def plot_model_cartoon(
     plot_pp_mean: bool = True,
     plot_pp_samples: bool = False,
     colors: str | list[str] | None = None,
-    linestyles: str | list[str] | tuple[str] | Dict[str, str] = "-",
-    linewidths: float | list[float] | tuple[float] | Dict[str, float] = 1.25,
+    linestyles: str | list[str] | tuple[str] | dict[str, str] = "-",
+    linewidths: float | list[float] | tuple[float] | dict[str, float] = 1.25,
     title: str | None = "Posterior Predictive Distribution",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
@@ -421,9 +421,9 @@ def plot_model_cartoon(
         raise ValueError("At least one of plot_pp_mean or plot_pp_samples must be True")
 
     # Process linestyles
-    linestyles_ = _process_linestyles_pp(linestyles)
+    linestyles_ = _process_lines(linestyles, mode="linestyles")
     # Process linewidths
-    linewidths_ = _process_linewidths_pp(linewidths)
+    linewidths_ = _process_lines(linewidths, mode="linewidths")
 
     groups, groups_order = _check_groups_and_groups_order(
         groups, groups_order, row, col

@@ -2,7 +2,7 @@
 
 import logging
 from itertools import product
-from typing import Dict, Iterable
+from typing import Any, Dict, Iterable, Literal, overload
 
 import arviz as az
 import matplotlib as mpl
@@ -206,79 +206,77 @@ def _plot_posterior_predictive_2D(
     return g
 
 
-def _process_linestyles_pp(
-    linestyles: str | Iterable[str] | tuple[str] | dict[str, str],
-) -> list[str]:
-    if isinstance(linestyles, str):
-        return [linestyles] * 2
-    elif isinstance(linestyles, (list, tuple)):
-        linestyles = list(linestyles)
-        if not all(isinstance(ls, str) for ls in linestyles):
+@overload
+def _process_lines(
+    line_attrs: str | Iterable[str] | tuple[str] | dict[str, str],
+    mode: Literal["linestyles"],
+) -> list[str]: ...
+
+
+@overload
+def _process_lines(
+    line_attrs: float | Iterable[float] | tuple[float] | dict[str, float],
+    mode: Literal["linewidths"],
+) -> list[float]: ...
+
+
+def _process_lines(
+    line_attrs: (
+        str
+        | Iterable[str]
+        | Iterable[float]
+        | float
+        | tuple[str]
+        | tuple[float]
+        | dict[str, str]
+        | dict[str, float]
+    ),
+    mode: Literal["linestyles", "linewidths"],
+) -> list[str] | list[float] | list[Any]:
+    if mode == "linestyles":
+        dict_defaults_ls: dict[str, str] = {"predicted": "-", "observed": "-"}
+    elif mode == "linewidths":
+        dict_defaults_lw: dict[str, float] = {"predicted": 1.25, "observed": 1.25}
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
+
+    if isinstance(line_attrs, str):
+        return [line_attrs] * 2
+    elif isinstance(line_attrs, (list, tuple)):
+        line_attrs = list(line_attrs)
+        if not all(isinstance(la, str) for la in line_attrs):
             raise ValueError(
-                "The `linestyles` argument must be a string or a list of strings."
-                "or 2."
+                f"The `{mode}` argument must be a string or a list of strings." "or 2."
             )
-        elif len(linestyles) in {1, 2}:
-            return linestyles * 2 if len(linestyles) == 1 else linestyles
+        elif len(line_attrs) in {1, 2}:
+            return line_attrs * 2 if len(line_attrs) == 1 else line_attrs
         else:
             raise ValueError(
-                "The `linestyles` argument must be a string or a list of strings."
+                f"The `{mode}` argument must be a string or a list of strings."
             )
-    elif isinstance(linestyles, dict):
-        if not set(linestyles.keys()).issubset({"predicted", "observed"}):
+    elif isinstance(line_attrs, dict):
+        if not set(line_attrs.keys()).issubset({"predicted", "observed"}):
             raise ValueError(
-                "The keys of the `linestyles` dictionary must be 'predicted' and/or "
+                f"The keys of the `{mode}` dictionary must be 'predicted' and/or "
                 "'observed'."
             )
         else:
-            return [linestyles.get("predicted", "-"), linestyles.get("observed", "-")]
+            if mode == "linestyles":
+                return [
+                    line_attrs.get("predicted", dict_defaults_ls["predicted"]),
+                    line_attrs.get("observed", dict_defaults_ls["observed"]),
+                ]
+            elif mode == "linewidths":
+                return [
+                    line_attrs.get("predicted", dict_defaults_lw["predicted"]),
+                    line_attrs.get("observed", dict_defaults_lw["observed"]),
+                ]
+
     else:
         raise ValueError(
-            "The `linestyles` argument must be a string, a list of strings,"
+            f"The `{mode}` argument must be a string, a list of strings,"
             " or a dictionary."
         )
-
-
-def _process_linewidths_pp(linewidths):
-    if isinstance(linewidths, float):
-        return [linewidths, linewidths]
-
-    if isinstance(linewidths, list) or isinstance(linewidths, tuple):
-        if all(isinstance(lw, float) for lw in linewidths):
-            if len(linewidths) == 1:
-                return [linewidths[0], linewidths[0]]
-            elif len(linewidths) == 2:
-                return linewidths
-            else:
-                raise ValueError(
-                    "The `linewidths` argument must be a float or a list of length 1 or"
-                    " 2."
-                )
-        else:
-            raise ValueError(
-                "The `linewidths` argument must be a float or a list of floats."
-            )
-
-    if isinstance(linewidths, dict):
-        if not set(linewidths.keys()).issubset({"predicted", "observed"}):
-            raise ValueError(
-                "The keys of the `linewidths` dictionary must be 'predicted' and/or"
-                " 'observed'."
-            )
-        linewidths = [
-            linewidths.get("predicted", 1.25),
-            linewidths.get("observed", 1.25),
-        ]
-    else:
-        raise ValueError(
-            "The `linewidths` argument must be a float, a list of floats,"
-            "or a dictionary."
-        )
-    return linewidths
-
-
-# AF-TODO: Implement process_colors_pp
-# def process_colors_pp(colors):
 
 
 def plot_posterior_predictive(
@@ -429,9 +427,9 @@ def plot_posterior_predictive(
     interval = _hdi_to_interval(hdi=hdi) if hdi is not None else None
 
     # Process linestyles
-    linestyles_ = _process_linestyles_pp(linestyles)
+    linestyles_ = _process_lines(linestyles, mode="linestyles")
     # Process linewidths
-    linewidths_ = _process_linewidths_pp(linewidths)
+    linewidths_ = _process_lines(linewidths, mode="linewidths")
 
     groups, groups_order = _check_groups_and_groups_order(
         groups, groups_order, row, col
