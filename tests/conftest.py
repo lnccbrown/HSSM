@@ -103,11 +103,10 @@ def cavanagh_test():
 
 # Cartoon plot fixtures
 @pytest.fixture
-def cav_model_cartoon():
-    my_cav_data = pd.read_csv("tests/fixtures/cavanagh_theta_test.csv", index_col=None)
+def cav_model_cartoon(cavanagh_test):
     cav_model = hssm.HSSM(
         model="ddm",
-        data=my_cav_data,
+        data=cavanagh_test,
         include=[
             {
                 "name": "v",

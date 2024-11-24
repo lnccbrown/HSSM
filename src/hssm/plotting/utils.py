@@ -88,9 +88,7 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
 def _hdi_to_interval(hdi: str | float | tuple[float, float]) -> tuple[float, float]:
     """Convert HDI to range."""
     if isinstance(hdi, tuple):
-        if len(hdi) != 2:
-            raise ValueError("The HDI must be a tuple with two elements.")
-        elif not all(isinstance(i, float) for i in hdi):
+        if not all(isinstance(i, float) for i in hdi):
             raise ValueError("The HDI must be a tuple of floats.")
         elif not all(0 <= i <= 1 for i in hdi):
             raise ValueError("The HDI must be between 0 and 1.")
@@ -102,13 +100,16 @@ def _hdi_to_interval(hdi: str | float | tuple[float, float]) -> tuple[float, flo
             return hdi
     elif isinstance(hdi, str):
         # check format of string (ends with %)
-        assert hdi.endswith("%"), "HDI must be a percentage"
+        if not hdi.endswith("%"):
+            raise ValueError("HDI must be a percentage")
         # check format of string (begins with two floats)
-        assert hdi[0].isdigit() and hdi[1].isdigit(), "HDI must begin with two floats"
+        if not (hdi[0].isdigit() or hdi[1].isdigit()):
+            raise ValueError("HDI must begin with two floats")
         # process
         hdi = float(hdi.strip("%")) / 100
     elif isinstance(hdi, float):
-        assert 0 <= hdi <= 1, "HDI must be between 0 and 1"
+        if not 0 <= hdi <= 1:
+            raise ValueError("HDI must be between 0 and 1")
     else:
         raise ValueError("HDI must be a float, a string, or a tuple of two floats")
     return ((1 - hdi) / 2, 1 - ((1 - hdi) / 2))
@@ -419,7 +420,6 @@ def _use_traces_or_sample(
             inplace=True,
             draws=n_samples,
         )
-        # idata = model.traces
         sampled = True
 
     return cast(az.InferenceData, idata), sampled

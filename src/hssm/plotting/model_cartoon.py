@@ -3,7 +3,7 @@
 import logging
 from copy import deepcopy
 from itertools import product
-from typing import Dict, Iterable, cast
+from typing import Any, Dict, Iterable, Literal, cast
 
 import arviz as az
 import matplotlib as mpl
@@ -31,6 +31,17 @@ from .utils import (
 
 _logger = logging.getLogger("hssm")
 
+TRAJ_COLOR_DEFAULT_DICT = {
+    -1: "black",
+    0: "black",
+    1: "green",
+    2: "blue",
+    3: "red",
+    4: "orange",
+    5: "purple",
+    6: "brown",
+}
+
 
 def _plot_model_cartoon_1D(
     data: pd.DataFrame,
@@ -53,9 +64,8 @@ def _plot_model_cartoon_1D(
     mpl.Axes
         A matplotlib Axes object containing the plot.
     """
-    assert (
-        plot_mean or plot_samples
-    ), "At least one of plot_mean or plot_samples must be True"
+    if not (plot_mean or plot_samples):
+        raise ValueError("At least one of plot_mean or plot_samples must be True")
 
     if "color" in kwargs:
         del kwargs["color"]
@@ -249,8 +259,7 @@ def compute_merge_necessary_deterministics(model, idata, inplace=True):
 def attach_trialwise_params_to_df(model, df, idata):
     """Attach the trial-wise parameters to the dataframe."""
     necessary_params = default_model_config[model.model_name]["list_params"]
-    for param in necessary_params:
-        df[param] = 0.0
+    df[necessary_params] = 0.0
 
     for chain_tmp, draw_tmp in {(x[0], x[1]) for x in list(df.index) if x[0] != -1}:
         for param in necessary_params:
@@ -408,16 +417,8 @@ def plot_model_cartoon(
     mpl.axes.Axes | sns.FacetGrid
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
-    assert (
-        plot_pp_mean or plot_pp_samples
-    ), "At least one of plot_pp_mean or plot_pp_samples must be True"
-
-    # Process hdi
-    # TODO: We eventually want to add HDI plotting back in here
-    # if hdi is not None:
-    #     interval = _hdi_to_interval(hdi=hdi)
-    # else:
-    #     interval = None
+    if not (plot_pp_mean or plot_pp_samples):
+        raise ValueError("At least one of plot_pp_mean or plot_pp_samples must be True")
 
     # Process linestyles
     linestyles_ = _process_linestyles_pp(linestyles)
@@ -448,11 +449,9 @@ def plot_model_cartoon(
     # Mean version of plot
     plotting_df_mean = None
     if plot_pp_mean:
-        if idata is None:
-            idata_mean = _make_idata_mean_posterior(deepcopy(model.traces))
-        else:
-            idata_mean = _make_idata_mean_posterior(deepcopy(idata))
-
+        idata_mean = _make_idata_mean_posterior(
+            deepcopy(model.traces if idata is None else idata)
+        )
         idata_mean, _ = _use_traces_or_sample(model, data, idata_mean, n_samples=None)
 
         # Get the plotting dataframe by chain and sample
@@ -465,7 +464,6 @@ def plot_model_cartoon(
         )
 
         # Get plotting dataframe for posterior mean
-
         # df by chain and sample
         idata_mean = compute_merge_necessary_deterministics(model, idata_mean)
         plotting_df_mean = attach_trialwise_params_to_df(
@@ -497,7 +495,6 @@ def plot_model_cartoon(
         )
 
         # Get plotting dataframe for posterior mean
-
         # df by chain and sample
         idata = compute_merge_necessary_deterministics(model, idata)
         plotting_df = attach_trialwise_params_to_df(model, plotting_df, idata)
@@ -509,7 +506,6 @@ def plot_model_cartoon(
             plotting_df["rt"] = plotting_df["rt"] * plotting_df["response"]
 
         plotting_df["source"] = "posterior_predictive"
-
     else:
         plotting_df = None
 
@@ -517,9 +513,6 @@ def plot_model_cartoon(
         plotting_df = pd.concat([plotting_df, plotting_df_mean])
     elif plotting_df_mean is not None:
         plotting_df = plotting_df_mean
-
-    # if interval is not None:
-    #     _check_sample_size(plotting_df)
 
     # Then, plot the posterior predictive distribution against the observed data
     # Determine whether we are producing a single plot or a grid of plots
@@ -553,7 +546,6 @@ def plot_model_cartoon(
         return ax
 
     # The multiple dimensions case
-
     # If group is not provided, we are producing a grid of plots
     if groups is None:
         g = _plot_model_cartoon_2D(
@@ -577,8 +569,7 @@ def plot_model_cartoon(
             grid_kwargs=grid_kwargs,
             **kwargs,
         )
-        # return g
-        return g, plotting_df
+        return g
 
     # The group dimension case
     plots = []
@@ -608,7 +599,6 @@ def plot_model_cartoon(
             col_wrap=col_wrap,
             bins=bins,
             step=step,
-            # interval=interval,
             colors=colors,
             linestyles=linestyles_,
             linewidths=linewidths_,
@@ -625,8 +615,6 @@ def plot_model_cartoon(
 
 
 # Original model cartoon plot from gui
-
-
 def plot_func_model(
     model_name: str,
     axis: Axes,
@@ -728,6 +716,7 @@ def plot_func_model(
         np.random.seed(random_state)
 
     rand_int = np.random.choice(400000000)
+
     if theta_mean is not None:
         sim_out = simulator(
             model=model_name,
@@ -794,22 +783,16 @@ def plot_func_model(
                 # wrap in max statement here
                 # because negative value are possible,
                 # however refer to data instead of posterior samples
-                chain_tmp = np.random.choice(
-                    theta_posterior.index.get_level_values("chain")
+                random_index = tuple(
+                    [
+                        np.random.choice(theta_posterior.index.get_level_values(name_))
+                        for name_ in ("chain", "draw", "obs_n")
+                    ]
                 )
-                draw_tmp = np.random.choice(
-                    theta_posterior.index.get_level_values("draw")
-                )
-                obs_tmp = np.random.choice(
-                    theta_posterior.index.get_level_values("obs_n")
-                )
-                tmp_theta = theta_posterior.loc[
-                    (chain_tmp, draw_tmp, obs_tmp), :
-                ].values
+                tmp_theta = theta_posterior.loc[random_index, :].values
             else:
                 raise ValueError("No theta values provided but n_trajectories is > 0")
 
-            rand_int = np.random.choice(400000000)
             sim_out_traj[i] = simulator(
                 model=model_name,
                 theta=tmp_theta,
@@ -879,142 +862,163 @@ def plot_func_model(
     axis_twin_down.set_zorder(0)
 
     if theta_mean is not None:
-        weights_up = np.tile(
-            (1 / bin_size) / sim_out["rts"][(sim_out["rts"] != -999)].shape[0],
-            reps=sim_out["rts"][
-                (sim_out["rts"] != -999) & (sim_out["choices"] == 1)
-            ].shape[0],
+        data_up = np.abs(
+            sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] == 1)]
         )
-        weights_down = np.tile(
-            (1 / bin_size) / sim_out["rts"][(sim_out["rts"] != -999)].shape[0],
-            reps=sim_out["rts"][
-                (sim_out["rts"] != -999) & (sim_out["choices"] != 1)
-            ].shape[0],
+        data_down = np.abs(
+            sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] != 1)]
         )
 
-        # Add histograms for posterior mean simulation
-        axis_twin_up.hist(
-            np.abs(
-                sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] == 1)]
-            ),
+        add_histograms_to_twin_axes(
+            data_up=data_up,
+            data_down=data_down,
+            hist_bottom_high=hist_bottom_high,
+            hist_bottom_low=hist_bottom_low,
+            color_data=color_pp_mean,
+            linewidth_histogram=linewidth_histogram,
             bins=bins,
-            weights=weights_up,
-            histtype=hist_histtype,
-            bottom=hist_bottom_high,
-            alpha=1,
-            color=color_pp_mean,
-            edgecolor=color_pp_mean,
-            linewidth=linewidth_histogram,
+            axis_twin_up=axis_twin_up,
+            axis_twin_down=axis_twin_down,
+            hist_histtype=hist_histtype,
+            bin_size=bin_size,
             zorder=-1,
         )
+        # weights_up = np.tile(
+        #     (1 / bin_size) / (data_up.shape[0] + data_down.shape[0]),
+        #     reps=data_up.shape[0],
+        # )
+        # weights_down = np.tile(
+        #     (1 / bin_size) / (data_up.shape[0] + data_down.shape[0]),
+        #     reps=data_down.shape[0],
+        # )
+        # )
 
-        axis_twin_down.hist(
-            np.abs(
-                sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] != 1)]
-            ),
-            bins=bins,
-            weights=weights_down,
-            histtype=hist_histtype,
-            bottom=hist_bottom_low,
-            alpha=1,
-            color=color_pp_mean,
-            edgecolor=color_pp_mean,
-            linewidth=linewidth_histogram,
-            zorder=-1,
-        )
+        # # Add histograms for posterior mean simulation
+        # axis_twin_up.hist(
+        #     np.abs(
+        #         sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] == 1)]
+        #     ),
+        #     bins=bins,
+        #     weights=weights_up,
+        #     histtype=hist_histtype,
+        #     bottom=hist_bottom_high,
+        #     alpha=1,
+        #     color=color_pp_mean,
+        #     edgecolor=color_pp_mean,
+        #     linewidth=linewidth_histogram,
+        #     zorder=-1,
+        # )
+
+        # axis_twin_down.hist(
+        #     np.abs(
+        #         sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] != 1)]
+        #     ),
+        #     bins=bins,
+        #     weights=weights_down,
+        #     histtype=hist_histtype,
+        #     bottom=hist_bottom_low,
+        #     alpha=1,
+        #     color=color_pp_mean,
+        #     edgecolor=color_pp_mean,
+        #     linewidth=linewidth_histogram,
+        #     zorder=-1,
+        # )
 
     if theta_posterior is not None:
         # Add histograms for posterior samples:
         for k, sim_out_tmp in posterior_pred_sims.items():
-            weights_up = np.tile(
-                (1 / bin_size)
-                / sim_out_tmp["rts"][(sim_out_tmp["rts"] != -999)].shape[0],
-                reps=sim_out_tmp["rts"][
+            data_up = np.abs(
+                sim_out_tmp["rts"][
                     (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] == 1)
-                ].shape[0],
+                ]
             )
-            weights_down = np.tile(
-                (1 / bin_size)
-                / sim_out_tmp["rts"][(sim_out_tmp["rts"] != -999)].shape[0],
-                reps=sim_out_tmp["rts"][
+            data_down = np.abs(
+                sim_out_tmp["rts"][
                     (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] != 1)
-                ].shape[0],
+                ]
             )
 
-            # Add histograms for posterior samples
-            axis_twin_up.hist(
-                np.abs(
-                    sim_out_tmp["rts"][
-                        (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] == 1)
-                    ]
-                ),
+            add_histograms_to_twin_axes(
+                data_up=data_up,
+                data_down=data_down,
+                hist_bottom_high=hist_bottom_high,
+                hist_bottom_low=hist_bottom_low,
+                color_data=color_pp,
+                linewidth_histogram=linewidth_histogram,
                 bins=bins,
-                weights=weights_up,
-                histtype=hist_histtype,
-                bottom=hist_bottom_high,
-                alpha=alpha_pp,
-                color=color_pp,
-                edgecolor=color_pp,
-                linewidth=linewidth_histogram,
-                zorder=(-k - 1),
+                axis_twin_up=axis_twin_up,
+                axis_twin_down=axis_twin_down,
+                hist_histtype=hist_histtype,
+                bin_size=bin_size,
+                zorder=-k - 1,
             )
 
-            axis_twin_down.hist(
-                np.abs(
-                    sim_out_tmp["rts"][
-                        (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] != 1)
-                    ]
-                ),
-                bins=bins,
-                weights=weights_down,
-                histtype=hist_histtype,
-                bottom=hist_bottom_low,
-                alpha=alpha_pp,
-                color=color_pp,
-                edgecolor=color_pp,
-                linewidth=linewidth_histogram,
-                zorder=(-k - 1),
-            )
+            # weights_up = np.tile(
+            #     (1 / bin_size)
+            #     / sim_out_tmp["rts"][(sim_out_tmp["rts"] != -999)].shape[0],
+            #     reps=sim_out_tmp["rts"][
+            #         (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] == 1)
+            #     ].shape[0],
+            # )
+            # weights_down = np.tile(
+            #     (1 / bin_size)
+            #     / sim_out_tmp["rts"][(sim_out_tmp["rts"] != -999)].shape[0],
+            #     reps=sim_out_tmp["rts"][
+            #         (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] != 1)
+            #     ].shape[0],
+            # )
+
+            # # Add histograms for posterior samples
+            # axis_twin_up.hist(
+            #     np.abs(
+            #         sim_out_tmp["rts"][
+            #             (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] == 1)
+            #         ]
+            #     ),
+            #     bins=bins,
+            #     weights=weights_up,
+            #     histtype=hist_histtype,
+            #     bottom=hist_bottom_high,
+            #     alpha=alpha_pp,
+            #     color=color_pp,
+            #     edgecolor=color_pp,
+            #     linewidth=linewidth_histogram,
+            #     zorder=(-k - 1),
+            # )
+
+            # axis_twin_down.hist(
+            #     np.abs(
+            #         sim_out_tmp["rts"][
+            #             (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] != 1)
+            #         ]
+            #     ),
+            #     bins=bins,
+            #     weights=weights_down,
+            #     histtype=hist_histtype,
+            #     bottom=hist_bottom_low,
+            #     alpha=alpha_pp,
+            #     color=color_pp,
+            #     edgecolor=color_pp,
+            #     linewidth=linewidth_histogram,
+            #     zorder=(-k - 1),
+            # )
 
     # Add histograms for real data
     if data is not None:
         data_up = data.query(f"rt != {-999} and response == {1}")["rt"].values
         data_down = data.query(f"rt != {-999} and response != {1}")["rt"].values
-        # Compute weights
-        weights_up_data = np.tile(
-            (1 / bin_size) / (data_up.shape[0] + data_down.shape[0]),
-            reps=data_up.shape[0],
-        )
-        weights_down_data = np.tile(
-            (1 / bin_size) / (data_up.shape[0] + data_down.shape[0]),
-            reps=data_down.shape[0],
-        )
-
-        # Add histograms for simulated data
-        axis_twin_up.hist(
-            np.abs(data.query(f"rt != {-999} and response == {1}")["rt"].values),
+        add_histograms_to_twin_axes(
+            data_up=data_up,
+            data_down=data_down,
+            hist_bottom_high=hist_bottom_high,
+            hist_bottom_low=hist_bottom_low,
+            color_data=color_data,
+            linewidth_histogram=linewidth_histogram,
             bins=bins,
-            weights=weights_up_data,
-            histtype=hist_histtype,
-            bottom=hist_bottom_high,
-            alpha=1,
-            color=color_data,
-            edgecolor=color_data,
-            linewidth=linewidth_histogram,
-            zorder=-1,
-        )
-
-        axis_twin_down.hist(
-            np.abs(data.query(f"rt != {-999} and response != {1}")["rt"].values),
-            bins=bins,
-            weights=weights_down_data,
-            histtype=hist_histtype,
-            bottom=hist_bottom_low,
-            alpha=1,
-            color=color_data,
-            edgecolor=color_data,
-            linewidth=linewidth_histogram,
-            zorder=-1,
+            axis_twin_up=axis_twin_up,
+            axis_twin_down=axis_twin_down,
+            hist_histtype=hist_histtype,
+            bin_size=bin_size,
         )
 
     z_cnt = 0  # controlling the order of elements in plot
@@ -1089,17 +1093,17 @@ def plot_func_model(
 # AF-TODO: Add documentation for this function
 def _add_trajectories(
     axis: Axes,
-    sample: dict,
+    sample: dict[int, Any],
     t_s: np.ndarray,
     delta_t_graph: float = 0.01,
     n_trajectories: int = 10,
     highlight_trajectory_rt_choice: bool = True,
     markersize_trajectory_rt_choice: float | int = 50,
     markertype_trajectory_rt_choice: str = "*",
-    markercolor_trajectory_rt_choice: str | int = "red",
+    markercolor_trajectory_rt_choice: str | list[str] | dict[str, str] = "red",
     linewidth_trajectories: float | int = 1,
     alpha_trajectories: float | int = 0.5,
-    color_trajectories: str = "black",
+    color_trajectories: str | list[str] | dict[str, str] = "black",
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1138,22 +1142,22 @@ def _add_trajectories(
     """
     # Check markercolor type
     if isinstance(markercolor_trajectory_rt_choice, str):
-        markercolor_trajectory_rt_choice_dict = {}
-        for value_ in sample[0]["metadata"]["possible_choices"]:
-            markercolor_trajectory_rt_choice_dict[value_] = (
-                markercolor_trajectory_rt_choice
-            )
+        markercolor_trajectory_rt_choice_dict = {
+            value_: markercolor_trajectory_rt_choice
+            for value_ in sample[0]["metadata"]["possible_choices"]
+        }
     elif isinstance(markercolor_trajectory_rt_choice, list):
-        cnt = 0
-        for value_ in sample[0]["metadata"]["possible_choices"]:
-            markercolor_trajectory_rt_choice_dict[value_] = (
-                markercolor_trajectory_rt_choice[cnt]
-            )
-            cnt += 1
+        markercolor_trajectory_rt_choice_dict = {
+            value_: markercolor_trajectory_rt_choice[cnt]
+            for cnt, value_ in enumerate(sample[0]["metadata"]["possible_choices"])
+        }
     elif isinstance(markercolor_trajectory_rt_choice, dict):
         markercolor_trajectory_rt_choice_dict = markercolor_trajectory_rt_choice
     else:
-        pass
+        raise ValueError(
+            "The `markercolor_trajectory_rt_choice`"
+            " argument must be a string, list, or dict."
+        )
 
     # Check trajectory color type
     if isinstance(color_trajectories, str):
@@ -1168,7 +1172,9 @@ def _add_trajectories(
     elif isinstance(color_trajectories, dict):
         color_trajectories_dict = color_trajectories
     else:
-        pass
+        raise ValueError(
+            "The `color_trajectories` argument must be a string, list, or dict."
+        )
 
     # Make bounds
     (b_high, b_low) = (
@@ -1186,7 +1192,8 @@ def _add_trajectories(
 
     # Trajectories
     for i in range(n_trajectories):
-        tmp_traj = sample[i]["metadata"]["trajectory"]
+        metadata = sample[i]["metadata"]
+        tmp_traj = metadata["trajectory"]
         tmp_traj_choice = float(sample[i]["choices"].flatten())
         maxid = np.minimum(np.argmax(np.where(tmp_traj > -999)), t_s.shape[0])
 
@@ -1194,7 +1201,7 @@ def _add_trajectories(
         b_tmp = b_high[maxid + n_roll] if tmp_traj_choice > 0 else b_low[maxid + n_roll]
 
         axis.plot(
-            t_s[:maxid] + sample[i]["metadata"]["t"][0],  # sample.t.values[0],
+            t_s[:maxid] + metadata["t"][0],  # sample.t.values[0],
             tmp_traj[:maxid],
             color=color_trajectories_dict[tmp_traj_choice],
             alpha=alpha_trajectories,
@@ -1203,15 +1210,67 @@ def _add_trajectories(
         )
         if highlight_trajectory_rt_choice:
             axis.scatter(
-                t_s[maxid] + sample[i]["metadata"]["t"][0],  # sample.t.values[0],
+                t_s[maxid] + metadata["t"][0],
                 b_tmp,
-                # tmp_traj[maxid],
                 markersize_trajectory_rt_choice,
                 color=markercolor_trajectory_rt_choice_dict[tmp_traj_choice],
                 alpha=1,
                 marker=markertype_trajectory_rt_choice,
                 zorder=2000 + i,
             )
+
+
+def add_histograms_to_twin_axes(
+    data_up: np.ndarray,
+    data_down: np.ndarray,
+    hist_bottom_high: float,
+    hist_bottom_low: float,
+    color_data: str,
+    linewidth_histogram: float,
+    bins: list[float],
+    axis_twin_up: Axes,
+    axis_twin_down: Axes,
+    hist_histtype: Literal["bar", "barstacked", "step", "stepfilled"],
+    bin_size: float,
+    zorder: int = -1,
+):
+    """Add histograms to a given matplotlib axis."""
+    # Compute weights
+    weights_up_data = np.tile(
+        (1 / bin_size) / (data_up.shape[0] + data_down.shape[0]),
+        reps=data_up.shape[0],
+    )
+    weights_down_data = np.tile(
+        (1 / bin_size) / (data_up.shape[0] + data_down.shape[0]),
+        reps=data_down.shape[0],
+    )
+
+    # Add histograms for simulated data
+    axis_twin_up.hist(
+        np.abs(data_up),
+        bins=bins,
+        weights=weights_up_data,
+        histtype=hist_histtype,
+        bottom=hist_bottom_high,
+        alpha=1,
+        color=color_data,
+        edgecolor=color_data,
+        linewidth=linewidth_histogram,
+        zorder=zorder,
+    )
+
+    axis_twin_down.hist(
+        np.abs(data_down),
+        bins=bins,
+        weights=weights_down_data,
+        histtype=hist_histtype,
+        bottom=hist_bottom_low,
+        alpha=1,
+        color=color_data,
+        edgecolor=color_data,
+        linewidth=linewidth_histogram,
+        zorder=zorder,
+    )
 
 
 def _add_model_cartoon_to_ax(
@@ -1524,23 +1583,17 @@ def plot_func_model_n(
                 # wrap in max statement here
                 # because negative value are possible,
                 # however refer to data instead of posterior samples
-                chain_tmp = np.random.choice(
-                    theta_posterior.index.get_level_values("chain")
-                )
-                draw_tmp = np.random.choice(
-                    theta_posterior.index.get_level_values("draw")
-                )
-                obs_tmp = np.random.choice(
-                    theta_posterior.index.get_level_values("obs_n")
+                random_index = tuple(
+                    [
+                        np.random.choice(theta_posterior.index.get_level_values(name_))
+                        for name_ in ("chain", "draw", "obs_n")
+                    ]
                 )
 
-                tmp_theta = theta_posterior.loc[
-                    (chain_tmp, draw_tmp, obs_tmp), :
-                ].values
+                tmp_theta = theta_posterior.loc[random_index, :].values
             else:
                 raise ValueError("No theta values provided but n_trajectories is > 0")
 
-            rand_int = np.random.choice(400000000)
             sim_out_traj[i] = simulator(
                 model=model_name,
                 theta=tmp_theta,
@@ -1751,17 +1804,19 @@ def plot_func_model_n(
 
 
 def _add_trajectories_n(
-    axis=None,
-    sample=None,
-    t_s=None,
-    delta_t_graph=0.01,
-    n_trajectories=10,
-    highlight_rt_choice=True,
-    marker_size_rt_choice=50,
-    marker_type_rt_choice="*",
-    linewidth_trajectories=1,
-    alpha_trajectories=0.5,
-    color_trajectories="black",
+    axis: Axes,
+    sample: dict[Any, Any],
+    t_s: np.ndarray,
+    delta_t_graph: float = 0.01,
+    n_trajectories: int = 10,
+    highlight_rt_choice: bool = True,
+    marker_size_rt_choice: float = 50,
+    marker_type_rt_choice: str = "*",
+    linewidth_trajectories: float = 1,
+    alpha_trajectories: float = 0.5,
+    color_trajectories: (
+        str | list[str] | dict[str, str] | dict[int, str]
+    ) = TRAJ_COLOR_DEFAULT_DICT,
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1802,31 +1857,23 @@ def _add_trajectories_n(
     the response times and choices. Each trajectory shows the evidence accumulation
     process leading to a decision.
     """
-    color_dict = {
-        -1: "black",
-        0: "black",
-        1: "green",
-        2: "blue",
-        3: "red",
-        4: "orange",
-        5: "purple",
-        6: "brown",
-    }
-
     # Check trajectory color type
     if isinstance(color_trajectories, str):
-        color_trajectories_dict = {}
-        for value_ in sample[0]["metadata"]["possible_choices"]:
-            color_trajectories_dict[value_] = color_trajectories
+        color_trajectories_dict = {
+            value_: color_trajectories
+            for value_ in sample[0]["metadata"]["possible_choices"]
+        }
     elif isinstance(color_trajectories, list):
-        cnt = 0
-        for value_ in sample[0]["metadata"]["possible_choices"]:
-            color_trajectories_dict[value_] = color_trajectories[cnt]
-            cnt += 1
+        color_trajectories_dict = {
+            value_: color_trajectories[i]
+            for i, value_ in enumerate(sample[0]["metadata"]["possible_choices"])
+        }
     elif isinstance(color_trajectories, dict):
         color_trajectories_dict = color_trajectories
     else:
-        pass
+        raise ValueError(
+            "The `color_trajectories` argument must be a string, list, or dict."
+        )
 
     # Make bounds
     b = np.maximum(sample[0]["metadata"]["boundary"], 0)
@@ -1837,10 +1884,11 @@ def _add_trajectories_n(
 
     # Trajectories
     for i in range(n_trajectories):
-        tmp_traj = sample[i]["metadata"]["trajectory"]
+        metadata = sample[i]["metadata"]
+        tmp_traj = metadata["trajectory"]
         tmp_traj_choice = float(sample[i]["choices"].flatten())
 
-        for j in range(len(sample[i]["metadata"]["possible_choices"])):
+        for j in range(len(metadata["possible_choices"])):
             tmp_maxid = np.minimum(
                 np.argmax(np.where(tmp_traj[:, j] > -999)), t_s.shape[0]
             )
@@ -1849,9 +1897,9 @@ def _add_trajectories_n(
             b_tmp = b[tmp_maxid + n_roll]
 
             axis.plot(
-                t_s[:tmp_maxid] + sample[i]["metadata"]["t"][0],
+                t_s[:tmp_maxid] + metadata["t"][0],
                 tmp_traj[:tmp_maxid, j],
-                color=color_dict[j],
+                color=color_trajectories_dict[j],
                 alpha=alpha_trajectories,
                 linewidth=linewidth_trajectories,
                 zorder=2000 + i,
@@ -1859,22 +1907,22 @@ def _add_trajectories_n(
 
             if highlight_rt_choice and tmp_traj_choice == j:
                 axis.scatter(
-                    t_s[tmp_maxid] + sample[i]["metadata"]["t"][0],
+                    t_s[tmp_maxid] + metadata["t"][0],
                     b_tmp,
                     marker_size_rt_choice,
-                    color=color_dict[tmp_traj_choice],
+                    color=color_trajectories_dict[tmp_traj_choice],
                     alpha=1,
                     marker=marker_type_rt_choice,
                     zorder=2000 + i,
                 )
             elif highlight_rt_choice and tmp_traj_choice != j:
                 axis.scatter(
-                    t_s[tmp_maxid] + sample[i]["metadata"]["t"][0] + 0.05,
+                    t_s[tmp_maxid] + metadata["t"][0] + 0.05,
                     tmp_traj[tmp_maxid, j],
                     marker_size_rt_choice,
-                    color=color_dict[j],
+                    color=color_trajectories_dict[j],
                     alpha=1,
-                    marker=5,
+                    marker=marker_type_rt_choice,
                     zorder=2000 + i,
                 )
 

@@ -206,39 +206,37 @@ def _plot_posterior_predictive_2D(
     return g
 
 
-def _process_linestyles_pp(linestyles):
+def _process_linestyles_pp(
+    linestyles: str | Iterable[str] | tuple[str] | dict[str, str],
+) -> list[str]:
     if isinstance(linestyles, str):
-        return [linestyles, linestyles]
-
-    if isinstance(linestyles, list) or isinstance(linestyles, tuple):
-        if all(isinstance(ls, str) for ls in linestyles):
-            if len(linestyles) == 1:
-                return [linestyles[0], linestyles[0]]
-            elif len(linestyles) == 2:
-                return linestyles
-            else:
-                raise ValueError(
-                    "The `linestyles` argument must be a string or a list of length 1 "
-                    "or 2."
-                )
+        return [linestyles] * 2
+    elif isinstance(linestyles, (list, tuple)):
+        linestyles = list(linestyles)
+        if not all(isinstance(ls, str) for ls in linestyles):
+            raise ValueError(
+                "The `linestyles` argument must be a string or a list of strings."
+                "or 2."
+            )
+        elif len(linestyles) in {1, 2}:
+            return linestyles * 2 if len(linestyles) == 1 else linestyles
         else:
             raise ValueError(
                 "The `linestyles` argument must be a string or a list of strings."
             )
-
-    if isinstance(linestyles, dict):
+    elif isinstance(linestyles, dict):
         if not set(linestyles.keys()).issubset({"predicted", "observed"}):
             raise ValueError(
                 "The keys of the `linestyles` dictionary must be 'predicted' and/or "
                 "'observed'."
             )
-        linestyles = [linestyles.get("predicted", "-"), linestyles.get("observed", "-")]
+        else:
+            return [linestyles.get("predicted", "-"), linestyles.get("observed", "-")]
     else:
         raise ValueError(
             "The `linestyles` argument must be a string, a list of strings,"
             " or a dictionary."
         )
-    return linestyles
 
 
 def _process_linewidths_pp(linewidths):
@@ -428,10 +426,7 @@ def plot_posterior_predictive(
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
     # Process hdi
-    if hdi is not None:
-        interval = _hdi_to_interval(hdi=hdi)
-    else:
-        interval = None
+    interval = _hdi_to_interval(hdi=hdi) if hdi is not None else None
 
     # Process linestyles
     linestyles_ = _process_linestyles_pp(linestyles)
