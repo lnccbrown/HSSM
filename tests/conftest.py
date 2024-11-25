@@ -99,3 +99,12 @@ def posterior():
 @pytest.fixture
 def cavanagh_test():
     return pd.read_csv("tests/fixtures/cavanagh_theta_test.csv", index_col=None)
+
+
+# Only useful if running tests serially
+def pytest_collection_modifyitems(config, items):
+    slow_tests = [item for item in items if "slow" in item.keywords]
+    fast_tests = [item for item in items if "slow" not in item.keywords]
+
+    # Reorder items so fast tests run first, then slow tests
+    items[:] = fast_tests + slow_tests
