@@ -2,7 +2,7 @@
 
 import logging
 from itertools import product
-from typing import Dict, Iterable, Literal, cast, overload
+from typing import Iterable, Literal, cast, overload
 
 import arviz as az
 import matplotlib as mpl
@@ -314,8 +314,8 @@ def plot_posterior_predictive(
     step: bool = False,
     hdi: float | str | tuple[float, float] | None = None,
     colors: str | list[str] | None = None,
-    linestyles: str | list[str] | tuple[str] | Dict[str, str] = "-",
-    linewidths: float | list[float] | tuple[float] | Dict[str, float] = 1.25,
+    linestyles: str | list[str] | tuple[str] | dict[str, str] = "-",
+    linewidths: float | list[float] | tuple[float] | dict[str, float] = 1.25,
     title: str | None = "Posterior Predictive Distribution",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "Density",
