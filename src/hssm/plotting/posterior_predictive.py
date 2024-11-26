@@ -387,9 +387,9 @@ def plot_posterior_predictive(
         - A list-like defining the bin edges.
         - An integer defining the number of bins to be used.
     range : optional
-            The lower and upper range of the bins. Lower and upper outliers are ignored.
-            If not provided, range is simply the minimum and the maximum of the data, by
-            default None.
+        The lower and upper range of the bins. Lower and upper outliers are ignored.
+        If not provided, range is simply the minimum and the maximum of the data, by
+        default None.
     step : optional
         Whether to plot the distributions as a step function or a smooth density plot,
         by default False.
@@ -490,9 +490,8 @@ def plot_posterior_predictive(
     if model.n_choices == 2:
         plotting_df["rt"] = plotting_df["rt"] * plotting_df["response"]
 
-        # Then, plot the posterior predictive distribution against the observed data
-        # Determine whether we are producing a single plot or a grid of plots
-
+    # Then, plot the posterior predictive distribution against the observed data
+    # Determine whether we are producing a single plot or a grid of plots
     if not extra_dims:
         ax = _plot_posterior_predictive_1D(
             data=plotting_df,
@@ -513,7 +512,6 @@ def plot_posterior_predictive(
         return ax
 
     # The multiple dimensions case
-
     # If group is not provided, we are producing a grid of plots
     if groups is None:
         g = _plot_posterior_predictive_2D(
