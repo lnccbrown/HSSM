@@ -138,6 +138,7 @@ def run_sample(model, sampler, step, expected):
 
 
 # Basic tests for LBA likelihood
+@pytest.mark.slow
 def test_lba_sampling():
     """Test if sampling works for available lba models."""
     lba2_data_out = hssm.simulate_data(
@@ -159,6 +160,7 @@ def test_lba_sampling():
     assert isinstance(traces_3, az.InferenceData)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
     """Test simple models."""
@@ -193,6 +195,7 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
         assert len(fig.axes) // 2 == 4
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected):
     """Test regression models."""
@@ -233,6 +236,7 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
         assert len(fig.axes) // 2 == 6
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, expected):
     """Test regression models with multiple parameters (v, a)."""
@@ -314,6 +318,7 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, ex
         assert len(fig.axes) // 2 == 7
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_simple_models_missing_data(
     data_ddm_missing, loglik_kind, backend, sampler, step, expected, cpn
@@ -338,6 +343,7 @@ def test_simple_models_missing_data(
     run_sample(model, sampler, step, expected)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_reg_models_missing_data(
     data_ddm_reg_missing, loglik_kind, backend, sampler, step, expected, cpn
@@ -371,6 +377,7 @@ def test_reg_models_missing_data(
     run_sample(model, sampler, step, expected)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_simple_models_deadline(
     data_ddm_deadline, loglik_kind, backend, sampler, step, expected, opn
@@ -394,6 +401,7 @@ def test_simple_models_deadline(
     run_sample(model, sampler, step, expected)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_reg_models_deadline(
     data_ddm_reg_deadline, loglik_kind, backend, sampler, step, expected, opn

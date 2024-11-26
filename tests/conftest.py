@@ -164,3 +164,12 @@ def race_model_cartoon():
     idata_race = az.from_netcdf("tests/fixtures/test_idata_race.nc")
     race_model._inference_obj = idata_race
     return race_model
+
+
+# Only useful if running tests serially
+def pytest_collection_modifyitems(config, items):
+    slow_tests = [item for item in items if "slow" in item.keywords]
+    fast_tests = [item for item in items if "slow" not in item.keywords]
+
+    # Reorder items so fast tests run first, then slow tests
+    items[:] = fast_tests + slow_tests

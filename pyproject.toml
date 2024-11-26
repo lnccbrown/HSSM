@@ -44,6 +44,8 @@ mkdocs = "^1.6.0"
 mkdocs-material = "^9.5.21"
 mkdocstrings-python = "^1.10.0"
 mkdocs-jupyter = "^0.24.8"
+pytest-cov = "^6.0.0"
+coverage = "^7.6.4"
 
 [tool.poetry.extras]
 cuda12 = ["jax"]
