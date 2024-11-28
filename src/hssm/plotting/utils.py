@@ -85,6 +85,36 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
     return data
 
 
+def _hdi_to_interval(hdi: str | float | tuple[float, float]) -> tuple[float, float]:
+    """Convert HDI to range."""
+    if isinstance(hdi, tuple):
+        if not all(isinstance(i, float) for i in hdi):
+            raise ValueError("The HDI must be a tuple of floats.")
+        elif not all(0 <= i <= 1 for i in hdi):
+            raise ValueError("The HDI must be between 0 and 1.")
+        elif hdi[0] > hdi[1]:
+            raise ValueError(
+                "The lower bound of the HDI must be less than the upper bound."
+            )
+        else:
+            return hdi
+    elif isinstance(hdi, str):
+        # check format of string (ends with %)
+        if not hdi.endswith("%"):
+            raise ValueError("HDI must be a percentage")
+        # check format of string (begins with two floats)
+        if not (hdi[0].isdigit() or hdi[1].isdigit()):
+            raise ValueError("HDI must begin with two floats")
+        # process
+        hdi = float(hdi.strip("%")) / 100
+    elif isinstance(hdi, float):
+        if not 0 <= hdi <= 1:
+            raise ValueError("HDI must be between 0 and 1")
+    else:
+        raise ValueError("HDI must be a float, a string, or a tuple of two floats")
+    return ((1 - hdi) / 2, 1 - ((1 - hdi) / 2))
+
+
 def _get_plotting_df(
     idata: az.InferenceData | None = None,
     data: pd.DataFrame | None = None,
@@ -128,8 +158,10 @@ def _get_plotting_df(
         return data
 
     # get the posterior samples
-    idata_posterior = idata["posterior_predictive"][response_str]
-    posterior = _xarray_to_df(idata_posterior, n_samples=n_samples)
+    idata_posterior_predictive = idata["posterior_predictive"][response_str]
+    posterior_predictive = _xarray_to_df(
+        idata_posterior_predictive, n_samples=n_samples
+    )
 
     if data is None:
         if extra_dims:
@@ -138,10 +170,10 @@ def _get_plotting_df(
                 + " HSSM requires a dataset to determine the values of the covariates"
                 + " to plot these additional dimensions."
             )
-        posterior.insert(0, "observed", "predicted")
-        return posterior
+        posterior_predictive.insert(0, "observed", "predicted")
+        return posterior_predictive
 
-    if extra_dims and idata_posterior["__obs__"].size != data.shape[0]:
+    if extra_dims and idata_posterior_predictive["__obs__"].size != data.shape[0]:
         raise ValueError(
             "The number of observations in the data and the number of posterior "
             + "samples are not equal."
@@ -151,19 +183,19 @@ def _get_plotting_df(
 
     # merge the posterior samples with the data
     if extra_dims:
-        posterior_merged = posterior.merge(
-            data.loc[:, extra_dims],
-            left_on="obs_n",
-            right_on="obs_n",
-            how="left",
-            sort=True,
+        posterior_predictive = (
+            posterior_predictive.reset_index()
+            .merge(
+                data.loc[:, extra_dims],
+                on="obs_n",
+                how="left",
+            )
+            .set_index(["chain", "draw", "obs_n"])
         )
-        posterior_merged.index = posterior.sort_index().index
-        posterior = posterior_merged
 
     # concatenate the posterior samples with the data
     plotting_df = pd.concat(
-        {"predicted": posterior, "observed": data},
+        {"predicted": posterior_predictive, "observed": data},
         names=["observed", "chain", "draw", "obs_n"],
     ).reset_index("observed")
 
@@ -316,7 +348,7 @@ def _check_groups_and_groups_order(
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None,
     row: str | None,
     col: str | None,
-) -> tuple[Iterable[str], dict[str, Iterable[str]]]:
+) -> tuple[Iterable[str] | None, dict[str, Iterable[str]]]:
     """Check the validity of `groups` and `groups_order`."""
     if groups is None:
         if groups_order is not None:
@@ -388,7 +420,6 @@ def _use_traces_or_sample(
             inplace=True,
             draws=n_samples,
         )
-        idata = model.traces
         sampled = True
 
     return cast(az.InferenceData, idata), sampled

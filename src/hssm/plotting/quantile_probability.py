@@ -344,7 +344,7 @@ def plot_quantile_probability(
         )
 
     # Flip the rt values if necessary
-    if np.any(plotting_df["response"] == 0):
+    if np.any(plotting_df["response"] == 0) and model.n_choices == 2:
         plotting_df["response"] = np.where(plotting_df["response"] == 0, -1, 1)
     if model.n_choices == 2:
         plotting_df["rt"] = plotting_df["rt"] * plotting_df["response"]
