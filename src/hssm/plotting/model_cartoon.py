@@ -279,15 +279,15 @@ def _make_idata_mean_posterior(idata: az.InferenceData) -> az.InferenceData:
     arviz.InferenceData
         A new InferenceData object containing only the posterior mean
     """
-    setattr(idata, "posterior", idata.posterior.mean(dim=["chain", "draw"]))
-    setattr(idata, "posterior", idata.posterior.assign_coords(chain=[0], draw=[0]))
-    for data_var in list(idata.posterior.data_vars):
-        idata.posterior[data_var] = idata.posterior[data_var].expand_dims(
+    setattr(idata, "posterior", idata["posterior"].mean(dim=["chain", "draw"]))
+    setattr(idata, "posterior", idata["posterior"].assign_coords(chain=[0], draw=[0]))
+    for data_var in list(idata["posterior"].data_vars):
+        idata["posterior"][data_var] = idata["posterior"][data_var].expand_dims(
             dim=["chain", "draw"], axis=[0, 1]
         )
 
     if "posterior_predictive" in idata:
-        del idata.posterior_predictive
+        del idata["posterior_predictive"]
     return idata
 
 
@@ -1019,16 +1019,24 @@ def calculate_histogram_bounds(
         return b_high, b_low
 
     if not theta_mean_is_none:
-        boundary_data = sim_out["metadata"]["boundary"]
-        b_high = np.maximum(boundary_data, 0)[0]
-        b_low = np.minimum(-boundary_data, 0)[0]
+        if sim_out is None:
+            raise ValueError("No sim_out provided but theta_mean is not None")
+        else:
+            boundary_data = sim_out["metadata"]["boundary"]
+            b_high = np.maximum(boundary_data, 0)[0]
+            b_low = np.minimum(-boundary_data, 0)[0]
     elif not theta_posterior_is_none:
-        all_boundaries = [
-            posterior_pred_no_noise[key_]["metadata"]["boundary"]
-            for key_ in posterior_pred_no_noise
-        ]
-        b_high = np.max([np.maximum(boundary, 0)[0] for boundary in all_boundaries])
-        b_low = np.min([np.minimum(-boundary, 0)[0] for boundary in all_boundaries])
+        if posterior_pred_no_noise is None:
+            raise ValueError(
+                "No posterior_pred_no_noise provided but theta_posterior is not None"
+            )
+        else:
+            all_boundaries = [
+                posterior_pred_no_noise[key_]["metadata"]["boundary"]
+                for key_ in posterior_pred_no_noise
+            ]
+            b_high = np.max([np.maximum(boundary, 0)[0] for boundary in all_boundaries])
+            b_low = np.min([np.minimum(-boundary, 0)[0] for boundary in all_boundaries])
     hist_bottom_high = kwargs.get("hist_bottom_high", b_high)
     hist_bottom_low = kwargs.get("hist_bottom_low", -b_low)
     return hist_bottom_high, hist_bottom_low
