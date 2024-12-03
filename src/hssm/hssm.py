@@ -1183,6 +1183,44 @@ class HSSM:
 
         return graph
 
+    def compile_logp(self, keep_transformed: bool = False, **kwargs):
+        """Compile the log probability function for the model.
+
+        Parameters
+        ----------
+        keep_transformed : bool, optional
+            If True, keeps the transformed variables in the compiled function.
+            If False, removes value transforms before compilation.
+            Defaults to False.
+        **kwargs
+            Additional keyword arguments passed to PyMC's compile_logp:
+            - vars: List of variables. Defaults to None (all variables).
+            - jacobian: Whether to include log(|det(dP/dQ)|) term for
+            transformed variables. Defaults to True.
+            - sum: Whether to sum all terms instead of returning a vector.
+            Defaults to True.
+
+        Returns
+        -------
+        callable
+            A compiled function that computes the model log probability.
+        """
+        if keep_transformed:
+            return self.pymc_model.compile_logp(
+                vars=kwargs.get("vars", None),
+                jacobian=kwargs.get("jacobian", True),
+                sum=kwargs.get("sum", True),
+            )
+        else:
+            new_model = pm.model.transform.conditioning.remove_value_transforms(
+                self.pymc_model
+            )
+            return new_model.compile_logp(
+                vars=kwargs.get("vars", None),
+                jacobian=kwargs.get("jacobian", True),
+                sum=kwargs.get("sum", True),
+            )
+
     def plot_trace(
         self,
         data: az.InferenceData | None = None,
