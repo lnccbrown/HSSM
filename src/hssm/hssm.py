@@ -256,6 +256,7 @@ class HSSM:
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
+        print("hello")
         self.data = data.copy()
         self._inference_obj: az.InferenceData | None = None
         self._initvals: dict[str, Any] = {}
