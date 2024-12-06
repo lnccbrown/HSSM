@@ -396,22 +396,21 @@ ddm_params = ["v", "a", "z", "t"]
 ddm_sdv_params = ddm_params + ["sv"]
 
 DDM: Type[pm.Distribution] = make_distribution(
-    "ddm",
-    logp_ddm,
+    rv="ddm",
+    loglik=logp_ddm,
     list_params=ddm_params,
     bounds=ddm_bounds,
 )
 
 DDM_SDV: Type[pm.Distribution] = make_distribution(
-    "ddm_sdv",
-    logp_ddm_sdv,
+    rv="ddm_sdv",
+    loglik=logp_ddm_sdv,
     list_params=ddm_sdv_params,
     bounds=ddm_sdv_bounds,
 )
 
+
 # LBA
-
-
 def _pt_normpdf(t):
     return (1 / pt.sqrt(2 * pt.pi)) * pt.exp(-(t**2) / 2)
 
@@ -548,15 +547,15 @@ lba3_bounds = {
 }
 
 LBA2: Type[pm.Distribution] = make_distribution(
-    "lba2",
-    logp_lba2,
+    rv="lba2",
+    loglik=logp_lba2,
     list_params=lba2_params,
     bounds=lba2_bounds,
 )
 
 LBA3: Type[pm.Distribution] = make_distribution(
-    "lba3",
-    logp_lba3,
+    rv="lba3",
+    loglik=logp_lba3,
     list_params=lba3_params,
     bounds=lba3_bounds,
 )

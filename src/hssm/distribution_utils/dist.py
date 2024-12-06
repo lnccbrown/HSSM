@@ -25,6 +25,7 @@ from ssms.config import model_config as ssms_model_config
 from ..utils import download_hf
 from .blackbox import make_blackbox_op
 from .onnx import (
+    make_jax_logp_funcs_from_jax_callable,
     make_jax_logp_funcs_from_onnx,
     make_jax_logp_ops,
     make_pytensor_logp,
@@ -356,8 +357,210 @@ def make_ssm_rv(
     return SSMRandomVariable
 
 
+def make_custom_rv(
+    simulator_fun: Callable,
+    list_params: list[str],
+    lapse: bmb.Prior | None = None,
+) -> Type[RandomVariable]:
+    """Build a RandomVariable Op according to the list of parameters.
+
+    Parameters
+    ----------
+    simulator_fun
+        A simulator function with the `model_name` and `choices` attributes.
+    list_params
+        A list of str of all parameters for this `RandomVariable`.
+    lapse : optional
+        A bmb.Prior object representing the lapse distribution.
+
+    Returns
+    -------
+    Type[RandomVariable]
+        A class of RandomVariable that are to be used in a `pm.Distribution`.
+    """
+    if lapse is not None and list_params[-1] != "p_outlier":
+        list_params.append("p_outlier")
+
+    if hasattr(simulator_fun, "model_name"):
+        model_name = simulator_fun.model_name
+    else:
+        raise ValueError("The simulator function must have a `model_name` attribute.")
+    if hasattr(simulator_fun, "choices"):
+        choices = simulator_fun.choices
+    else:
+        raise ValueError("The simulator function must have a `choices` attribute.")
+
+    # pylint: disable=W0511, R0903
+    class CustomRV(RandomVariable):
+        """CustomRV random variable."""
+
+        name: str = model_name + "_RV"
+        # New in PyMC 5.16+: instead of using `ndims_supp`, we use `signature` to define
+        # the signature of the random variable. The string to the left of the `->` sign
+        # describes the input signature, which is `()` for each parameter, meaning each
+        # parameter is a scalar. The string to the right of the
+        # `->` sign describes the output signature, which is `(2)`, which means the
+        # random variable is a length-2 array.
+        signature: str = f"{','.join(['()']*len(list_params))}->(2)"
+        dtype: str = "floatX"
+        _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
+        _list_params = list_params
+        _lapse = lapse
+
+        # pylint: disable=arguments-renamed,bad-option-value,W0221
+        # NOTE: `rng` now is a np.random.Generator instead of RandomState
+        # since the latter is now deprecated from numpy
+        @classmethod
+        def rng_fn(
+            cls,
+            rng: np.random.Generator,
+            *args,
+            **kwargs,
+        ) -> np.ndarray:
+            """Generate random variables from this distribution.
+
+            Parameters
+            ----------
+            rng
+                A `np.random.Generator` object for random state.
+            args
+                Unnamed arguments of parameters, in the order of `_list_params`, plus
+                the last one as size.
+            kwargs
+                Other keyword arguments passed to the ssms simulator.
+
+            Returns
+            -------
+            np.ndarray
+                An array of `(rt, response)` generated from the distribution.
+
+            Note
+            ----
+            How size is handled in this method:
+
+            We apply multiple tricks to get this method to work with ssm_simulators.
+
+            First, size could be an array with one element. We squeeze the array and
+            use that element as size.
+
+            Then, size could depend on whether the parameters passed to this method.
+            If all parameters passed are scalar, that is the easy case. We just
+            assemble all parameters into a 1D array and pass it to the `theta`
+            argument. In this case, size is number of observations.
+
+            If one of the parameters is a vector, which happens one or more parameters
+            is the target of a regression. In this case, we take the size of the
+            parameter with the largest size. If size is None, we will set size to be
+            this largest size. If size is not None, we check if size is a multiple of
+            the largest size. If not, an error is thrown. Otherwise, we assemble the
+            parameter as a matrix and pass it as the `theta` argument. The multiple then
+            becomes how many samples we draw from each trial.
+            """
+            # First figure out what the size specified here is
+            # Since the number of unnamed arguments is undetermined,
+            # we are going to use this hack.
+            if "size" in kwargs:
+                size = kwargs.pop("size")
+            else:
+                size = args[-1]
+                args = args[:-1]
+
+            if size is None:
+                size = 1
+
+            # Although we got around the ndims_supp issue, the size parameter passed
+            # here is still an array with one element. We need to take it out.
+            if not np.isscalar(size):
+                size = np.squeeze(size)
+
+            num_params = len(cls._list_params)
+
+            # TODO: We need to figure out what to do with extra_fields when
+            # doing posterior predictive sampling. Right now nothing is done.
+            if num_params < len(args):
+                arg_arrays = [np.asarray(arg) for arg in args[:num_params]]
+            else:
+                arg_arrays = [np.asarray(arg) for arg in args]
+
+            p_outlier = None
+
+            if cls._list_params[-1] == "p_outlier":
+                p_outlier = arg_arrays.pop(-1)
+
+            iinfo32 = np.iinfo(np.uint32)
+            seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
+
+            is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
+
+            if is_all_args_scalar:
+                # All parameters are scalars
+
+                theta = np.stack(arg_arrays)
+                if theta.ndim > 1:
+                    theta = theta.squeeze(axis=-1)
+
+                theta = np.tile(theta, (size, 1))
+            else:
+                # Preprocess all parameters, reshape them into a matrix of dimension
+                # (size, n_params) where size is the number of elements in the largest
+                # of all parameters passed to *arg
+
+                elem_max_size = np.argmax([arg.size for arg in arg_arrays])
+                max_shape = arg_arrays[elem_max_size].shape
+
+                theta = np.column_stack(
+                    [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
+                )
+
+            sims_out = simulator_fun(
+                theta=theta,
+                random_state=seed,
+                **kwargs,
+            )
+
+            if p_outlier is not None:
+                assert cls._lapse is not None, (
+                    "You have specified `p_outlier`, the probability of the lapse "
+                    + "distribution but did not specify the distribution."
+                )
+                out_shape = sims_out.shape[:-1]
+                if not np.isscalar(p_outlier) and len(p_outlier.shape) > 0:
+                    if p_outlier.shape[-1] == 1:
+                        p_outlier = np.broadcast_to(p_outlier, out_shape)
+                    else:
+                        p_outlier = p_outlier.reshape(out_shape)
+
+                replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
+                replace_n = int(np.sum(replace, axis=None))
+                if replace_n == 0:
+                    return sims_out
+
+                replace_shape = (*out_shape[:-1], replace_n)
+                replace_mask = np.stack([replace, replace], axis=-1)
+                n_draws = np.prod(replace_shape)
+                lapse_rt = pm.draw(
+                    get_distribution_from_prior(cls._lapse).dist(**cls._lapse.args),
+                    n_draws,
+                    random_seed=rng,
+                ).reshape(replace_shape)
+
+                lapse_response = rng.choice(
+                    choices,
+                    p=1 / len(choices) * np.ones(len(choices)),
+                    size=replace_shape,
+                )
+                lapse_output = np.stack(
+                    [lapse_rt, lapse_response],
+                    axis=-1,
+                )
+                np.putmask(sims_out, replace_mask, lapse_output)
+            return sims_out
+
+    return CustomRV
+
+
 def make_distribution(
-    rv: str | Type[RandomVariable],
+    rv: str | Type[RandomVariable] | Callable,
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     bounds: dict | None = None,
@@ -371,6 +574,10 @@ def make_distribution(
 
     Parameters
     ----------
+    model_name
+        The name of the model.
+    choices
+        A list of integers indicating the choices.
     rv
         A RandomVariable Op (a class, not an instance) or a string indicating the model.
         If a string, a RandomVariable class will be created automatically with its
@@ -398,7 +605,23 @@ def make_distribution(
     Type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
     """
-    random_variable = make_ssm_rv(rv, list_params, lapse) if isinstance(rv, str) else rv
+    if isinstance(rv, str):
+        random_variable = make_ssm_rv(rv, list_params, lapse)
+    elif isinstance(rv, type) and issubclass(rv, RandomVariable):
+        random_variable = rv
+    elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
+        random_variable = rv
+    elif callable(rv):
+        random_variable = make_custom_rv(
+            simulator_fun=rv,
+            list_params=list_params,
+            lapse=lapse,
+        )
+    else:
+        raise ValueError(f"rv is {rv}, which is not a valid type.")
+
+    # random_variable = make_ssm_rv(rv, list_params, lapse)
+    # if isinstance(rv, str) else rv
     extra_fields = [] if extra_fields is None else extra_fields
 
     if lapse is not None:
@@ -422,7 +645,9 @@ def make_distribution(
         # Might be updated in the future once
 
         # NOTE: rv_op is an INSTANCE of RandomVariable
-        rv_op = random_variable()
+        rv_op = (
+            random_variable() if isinstance(random_variable, type) else random_variable
+        )
         _params = list_params
 
         @classmethod
@@ -551,14 +776,36 @@ def make_likelihood_callable(
             if backend is None or backend == "pytensor":
                 return loglik
             return make_blackbox_op(loglik)
-
-        # In the approx_differentiable case or the blackbox case, unless the backend
-        # is `pytensor`, we wrap the callable in a BlackBoxOp.
-        if backend == "pytensor":
-            return loglik
-            # In all other cases, we assume that the callable cannot be directly
-            # used in the backend and thus we wrap it in a BlackBoxOp
-        return make_blackbox_op(loglik)
+        elif loglik_kind == "blackbox":
+            return make_blackbox_op(loglik)
+        elif loglik_kind == "approx_differentiable":
+            if backend is None or backend == "jax":
+                if params_is_reg is None:
+                    raise ValueError(
+                        "You set `loglik_kind` to `approx_differentiable` "
+                        + "and `backend` to `jax` and supplied a jax callable, "
+                        + "but did not set `params_is_reg`."
+                    )
+                logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_jax_callable(
+                    loglik,
+                    params_is_reg,
+                    params_only=False if params_only is None else params_only,
+                )
+                lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+                return lan_logp_jax
+            if backend == "pytensor":
+                raise ValueError(
+                    "You set `backend` to `pytensor`, `loglik_kind` to"
+                    + "`approx_differentiable` and provided a callable."
+                    + "Currently we support only jax callables in this case."
+                )
+            # In the approx_differentiable case or the blackbox case, unless the backend
+            # is `pytensor`, we wrap the callable in a BlackBoxOp.
+        # if backend == "pytensor":
+        #     return loglik
+        #     # In all other cases, we assume that the callable cannot be directly
+        #     # used in the backend and thus we wrap it in a BlackBoxOp
+        # return make_blackbox_op(loglik)
 
     # Other cases, when `loglik` is a string or a PathLike.
     if loglik_kind != "approx_differentiable":

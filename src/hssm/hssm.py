@@ -256,7 +256,6 @@ class HSSM:
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
-        print("hello")
         self.data = data.copy()
         self._inference_obj: az.InferenceData | None = None
         self._initvals: dict[str, Any] = {}
@@ -1635,7 +1634,6 @@ class HSSM:
             )
 
         self.data = _rearrange_data(self.data)
-
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
             loglik=self.loglik,

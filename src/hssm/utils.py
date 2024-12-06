@@ -513,6 +513,25 @@ def _split_array(data: np.ndarray | list[int], divisor: int) -> list[np.ndarray]
     return [tmp.astype(int) for tmp in np.array_split(data, num_splits)]
 
 
+def decorate_atomic_simulator(model_name: str, choices: list):
+    """Decorate to add attributes to simulator functions.
+
+    Parameters
+    ----------
+    model_name : str
+        Name of the model
+    choices : list
+        List of possible choices/responses
+    """
+
+    def decorator(func):
+        func.model_name = model_name
+        func.choices = choices
+        return func
+
+    return decorator
+
+
 class SuppressOutput:
     """Context manager for suppressing output.
 
