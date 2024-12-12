@@ -40,11 +40,10 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
    git remote add upstream https://github.com/lnccbrown/hssm.git
    ```
 
-4. Create a feature branch to hold your development changes:
-
-```
-git checkout -b my-feature
-```
+4. **Create a [feature branch](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-branches) to hold your changes**:
+   ```
+   git checkout -b my-feature
+   ```
 
 
 > Warning: Always create a new feature branch before making any changes. Make your changes in the feature branch. It’s good practice to never routinely work on the main branch of any repository.
