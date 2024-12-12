@@ -2,6 +2,13 @@
 
 We invite contributions to the HSSM project from interested individuals or groups. To ensure that your contributions align with the conventions of the HSSM project and can be integrated as efficiently as possible, we provide the following guidelines.
 
+## Table of Contents
+1. [Ways to Contribute](#ways-to-contribute)
+2. [Opening Issues](#opening-issues)
+3. [Pull Request Step-by-Step](#pull-request-step-by-step)
+
+## Ways to Contribute
+
 There are three main ways you can contribute to [HSSM](https://github.com/lnccbrown/HSSM) (listed in decreasing order of scope):
 
 1. Expanding the existing codebase with new features or improvements to existing ones. Use the "Feature Request" label. 
