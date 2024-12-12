@@ -45,17 +45,14 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
    git checkout -b my-feature
    ```
 
+> [!WARNING]
+> Routinely making changes in the main branch of a repository should be avoided. Always create a new _feature_ branch before making any changes and make your changes in the feature branch.
 
-> Warning: Always create a new feature branch before making any changes. Make your changes in the feature branch. It’s good practice to never routinely work on the main branch of any repository.
-
-5. The project uses `poetry` for dependency management. Poetry needs to be installed in its own environment. Visit the official poetry documentation at https://python-poetry.org/docs/. Follow the installation instructions provided on the documentation page to install poetry on your system. This typically involves running a specific command based on your operating system.
-
-6. Develop the feature on your feature branch. Add your changes using git commands, git add and then git commit, like:
-
-```
-git add modified_files
-git commit -m "commit message here"
-```
+5. **Add the new feature/changes on your feature branch**. When finished, [_commit_](https://github.com/git-guides/git-commit) your changes:
+   ```
+   git add modified_files
+   git commit -m "commit message here"
+   ```
 
 To record your changes locally. After committing, it is a good idea to sync with the base repository in case there have been any changes:
 
