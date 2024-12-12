@@ -21,7 +21,7 @@ If you find a bug or encounter any type of problem while using HSSM, please let 
 
 Please make sure your issue isn't already being addressed by other issues or pull requests. You can use the [GitHub search tool](https://github.com/lnccbrown/HSSM/issues) to search for keywords in the project issue tracker. Please use appropriate labels for an issue.
 
-# Pull Request Step-by-Step
+## [Pull Request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests) Step-by-Step
 
 The preferred workflow for contributing to HSSM is to fork the GitHub repository, clone it to your local machine, and develop on a feature branch.
 
