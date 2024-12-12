@@ -15,11 +15,11 @@ There are three main ways you can contribute to [HSSM](https://github.com/lnccbr
 2. **Contributing to or improving the project's documentation and examples** (located in `hssm/examples`). Use the "Documentation" label.
 3. **Rectifying issues with the existing codebase**. These can range from minor software bugs to more significant design problems. Use the "Bug" label.
 
-## Opening Issues:
+## Opening Issues
 
-If you find a bug or encounter any type of problem while using HSSM, please let us know by filing an issue on the [Github Issue Tracker](https://github.com/lnccbrown/HSSM/issues) rather than via social media or direct emails to the developers.
+If you find a bug or encounter any type of problem while using HSSM, please let us know by filing an issue on the [GitHub Issue Tracker](https://github.com/lnccbrown/HSSM/issues) rather than via social media or direct emails to the developers.
 
-Please make sure your issue isn't already being addressed by other issues or pull requests. You can use the GitHub search tool to search for keywords in the project issue tracker. Please use appropriate labels for an issue.
+Please make sure your issue isn't already being addressed by other issues or pull requests. You can use the [GitHub search tool](https://github.com/lnccbrown/HSSM/issues) to search for keywords in the project issue tracker. Please use appropriate labels for an issue.
 
 # Pull Request Step-by-Step
 
