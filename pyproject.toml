@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "HSSM"
-version = "0.2.4"
+version = "0.2.5"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     "Alexander Fengler <alexander_fengler@brown.edu>",

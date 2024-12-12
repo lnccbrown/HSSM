@@ -2,6 +2,16 @@
 
 ## 0.2.x
 
+### 0.2.5
+
+This version of HSSM incorporated the following changes:
+
+1. We added a new tutorial on how to use custom likelihood functions with HSSM.
+2. Added convenience function `compile_logp()` to return a compiled log-likelihood function to be used freely downstream.
+3. Some improvements to internals to allow for (1.)
+4. Major improvments to plotting with `model_cartoon_plots()`
+5. Refactoring and minor improvements to pre-existing plots
+
 ### 0.2.4
 
 This version of HSSM incorporated the following changes:

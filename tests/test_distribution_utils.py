@@ -134,8 +134,6 @@ def test_make_distribution():
     bounds = {"param1": [-1.0, 1.0], "param2": [-1.0, 1.0]}
 
     Dist = make_distribution(
-        model_name="fake",
-        choices=[0, 1],
         rv="fake",
         loglik=fake_logp_function,
         list_params=["param1", "param2"],
@@ -179,8 +177,6 @@ def test_extra_fields(data_ddm):
         return logp_ddm(data, v, a, z, t) * x * y
 
     DDM_WITH_XY = make_distribution(
-        model_name="ddm",
-        choices=[-1, 1],
         rv="ddm",
         loglik=logp_ddm_extra_fields,
         list_params=["v", "a", "z", "t"],

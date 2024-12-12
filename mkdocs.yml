@@ -26,6 +26,9 @@ nav:
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
       - Variational Inference: tutorials/variational_inference.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
+      - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
+      - Custom models from onnx files: tutorials/blackbox_contribution_onnx_example.ipynb
+      - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
   - Contributing: CONTRIBUTING.md
 
 plugins:
@@ -41,6 +44,9 @@ plugins:
         - tutorials/variational_inference.ipynb
         - tutorials/initial_values.ipynb
         - tutorials/pymc.ipynb
+        - tutorials/jax_callable_contribution_onnx_example.ipynb
+        - tutorials/blackbox_contribution_onnx_example.ipynb
+        - tutorials/compile_logp.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:
