@@ -54,17 +54,31 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
    git commit -m "commit message here"
    ```
 
-To record your changes locally. After committing, it is a good idea to sync with the base repository in case there have been any changes:
+   After committing, it is a good idea to sync with the base repository in case there have been any changes:
+   ```
+   git fetch upstream
+   git rebase upstream/main
+   ```
 
-```
-git fetch upstream
-git rebase upstream/main
-```
-7. Then push the changes to your GitHub account with:
+> [!Note]
+> If your changes require libraries not included in `hssm`, you'll need to use Poetry to update the dependency files. Please visit the [official Poetry documentation](https://python-poetry.org/docs/) and follow the installation instructions to install Poetry on your system.
+>
+> After installing Poetry, you can add the new libraries (dependencies) to [`pyproject.toml`](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#writing-your-pyproject-toml) by running:
+> ```
+> poetry add <package-name>
+> ```
+> Replace `<package-name>` with the name of the library you need to add. This command will update the `pyproject.toml` file and install the new dependency. It will also add changes to the [`poetry.lock`](https://python-poetry.org/docs/basic-usage/#committing-your-poetrylock-file-to-version-control) file.
+>
+> Remember to commit the newly changed files.
+> ```
+> git add pyproject.toml poetry.lock
+> git commit -m "Add <package-name> dependency"
+> ```
 
-```
-git push -u origin my-feature
-```
+6. **[Push](https://github.com/git-guides/git-push) the changes to your GitHub account** with:
+   ```
+   git push -u origin my-feature
+   ```
 
 8. Go to the GitHub web page of your fork of the HSSM repo. Click the ‘Pull request’ button to send your changes to the project’s maintainers for review. This will send an email to the committers.
 
