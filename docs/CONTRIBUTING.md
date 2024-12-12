@@ -25,39 +25,20 @@ Please make sure your issue isn't already being addressed by other issues or pul
 
 The preferred workflow for contributing to HSSM is to fork the GitHub repository, clone it to your local machine, and develop on a feature branch.
 
-## Steps
+### Steps
 
-1. Fork the project repository by clicking on the ‘Fork’ button near the top right of the main repository page. This creates a copy of the code under your GitHub user account.
+1. [**Fork the project repository**](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo) by clicking on the ‘Fork’ button near the top right of the main repository page. This creates a copy of the code under your GitHub user account.
 
-2. Clone your fork of the HSSM repo from your GitHub account to your local disk.
+2. [**Clone your fork**](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) of the HSSM repo** from your GitHub account to your local disk.
+   ```
+   git clone https://github.com/<your GitHub handle>/lnccbrown/hssm.git
+   ```
 
-`SSH`
-   
- ```
- git clone git@github.com:<your GitHub handle>/lnccbrown/hssm.git
- ```
-
-`HTTPS`
-   
- ```
- git clone https://github.com/<your GitHub handle>/lnccbrown/hssm.git
- ```
-
-3. Navigate to your hssm directory and add the base repository as a remote:
-
-`SSH`
-
- ```
- cd hssm
- git remote add upstream git@github.com:lnccbrown/hssm.git
- ```
-
-`HTTPS`
-   
- ```
- cd hssm
- git remote add upstream https://github.com/lnccbrown/hssm.git
- ```
+3. **Navigate to your `hssm` directory and add the base repository as a remote**. This sets up a directive to propose your local changes to the `hssm` repository.
+   ```
+   cd hssm
+   git remote add upstream https://github.com/lnccbrown/hssm.git
+   ```
 
 4. Create a feature branch to hold your development changes:
 
