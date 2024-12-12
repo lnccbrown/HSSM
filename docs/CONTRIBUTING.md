@@ -11,9 +11,9 @@ We invite contributions to the HSSM project from interested individuals or group
 
 There are three main ways you can contribute to [HSSM](https://github.com/lnccbrown/HSSM) (listed in decreasing order of scope):
 
-1. Expanding the existing codebase with new features or improvements to existing ones. Use the "Feature Request" label. 
-2. Contributing to or improving the project's documentation and examples (located in `hssm/examples`). Use the "Documentation" label.
-3. Rectifying issues with the existing codebase. These can range from minor software bugs to more significant design problems. Use the "Bug" label. 
+1. **Expanding the existing codebase** with new features or improvements to existing ones. Use the "Feature Request" label.
+2. **Contributing to or improving the project's documentation and examples** (located in `hssm/examples`). Use the "Documentation" label.
+3. **Rectifying issues with the existing codebase**. These can range from minor software bugs to more significant design problems. Use the "Bug" label.
 
 ## Opening Issues:
 
