@@ -82,7 +82,7 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
 
 7. **Create a Pull Request**:
    - Go to the GitHub web page of your fork of the HSSM repo.
-   - Click the ‘Pull request’ button to send your changes to the project’s maintainers for review. This will send an email to the committers.
+   - Click the ‘Pull request’ button to send your changes to the project’s maintainers for review.
 
 **This guide is adapted from the [ArviZ contribution guide](https://github.com/arviz-devs/arviz/blob/main/CONTRIBUTING.md)**
 
