@@ -560,7 +560,7 @@ def make_custom_rv(
 
 
 def make_distribution(
-    rv: str | Type[RandomVariable] | Callable,
+    rv: str | Type[RandomVariable] | RandomVariable | Callable,
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     bounds: dict | None = None,
@@ -607,16 +607,18 @@ def make_distribution(
     """
     if isinstance(rv, str):
         random_variable = make_ssm_rv(rv, list_params, lapse)
+        rv_instance = random_variable()
     elif isinstance(rv, type) and issubclass(rv, RandomVariable):
-        random_variable = rv
+        rv_instance = rv()
     elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
-        random_variable = rv
+        rv_instance = rv
     elif callable(rv):
         random_variable = make_custom_rv(
             simulator_fun=rv,
             list_params=list_params,
             lapse=lapse,
         )
+        rv_instance = random_variable()
     else:
         raise ValueError(f"rv is {rv}, which is not a valid type.")
 
@@ -645,9 +647,7 @@ def make_distribution(
         # Might be updated in the future once
 
         # NOTE: rv_op is an INSTANCE of RandomVariable
-        rv_op = (
-            random_variable() if isinstance(random_variable, type) else random_variable
-        )
+        rv_op = rv_instance
         _params = list_params
 
         @classmethod
