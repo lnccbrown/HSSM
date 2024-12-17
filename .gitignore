@@ -37,6 +37,7 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 tests/__pycache__
+coverage.xml
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -52,8 +53,9 @@ env/
 venv/
 ENV/
 
-# Also ignore poetry.lock
+# Also ignore lock files
 poetry.lock
+uv.lock
 
 # Editor cruft
 .idea/
