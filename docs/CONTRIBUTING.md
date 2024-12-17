@@ -61,17 +61,17 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
    ```
 
 > [!Note]
-> If your changes require libraries not included in `hssm`, you'll need to use Poetry to update the dependency files. Please visit the [official Poetry documentation](https://python-poetry.org/docs/) and follow the installation instructions to install Poetry on your system.
+> If your changes require libraries not included in `hssm`, you'll need to use `uv` to update the dependency files. Please visit the [official `uv` documentation](https://docs.astral.sh/uv/) and follow the installation instructions.
 >
-> After installing Poetry, you can add the new libraries (dependencies) to [`pyproject.toml`](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#writing-your-pyproject-toml) by running:
+> After installing `uv`, you can add the new libraries (dependencies) to [`pyproject.toml`](https://docs.astral.sh/uv/guides/projects/#managing-dependencies) by running:
 > ```
-> poetry add <package-name>
+> uv add <package-name>
 > ```
-> Replace `<package-name>` with the name of the library you need to add. This command will update the `pyproject.toml` file and install the new dependency. It will also add changes to the [`poetry.lock`](https://python-poetry.org/docs/basic-usage/#committing-your-poetrylock-file-to-version-control) file.
+> Replace `<package-name>` with the name of the library you need to add. This command will update the `pyproject.toml` file and install the new dependency. It will also add changes to the [`uv.lock`](https://docs.astral.sh/uv/guides/projects/#uvlock) file.
 >
 > Remember to commit the newly changed files.
 > ```
-> git add pyproject.toml poetry.lock
+> git add pyproject.toml uv.lock
 > git commit -m "Add <package-name> dependency"
 > ```
 
@@ -85,4 +85,3 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
    - Click the ‘Pull request’ button to send your changes to the project’s maintainers for review.
 
 **This guide is adapted from the [ArviZ contribution guide](https://github.com/arviz-devs/arviz/blob/main/CONTRIBUTING.md)**
-
