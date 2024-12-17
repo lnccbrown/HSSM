@@ -1,54 +1,54 @@
-[tool.poetry]
+[project]
 name = "HSSM"
 version = "0.2.4"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
-    "Alexander Fengler <alexander_fengler@brown.edu>",
-    "Paul Xu <yang_xu@brown.edu>",
-    "Aisulu Omar <aisulu_omar@brown.edu>",
-    "Michael Frank <michael_frank@brown.edu>",
+    {name = "Alexander Fengler", email = "alexander_fengler@brown.edu"},
+    {name = "Paul Xu", email = "yang_xu@brown.edu"},
+    {name = "Aisulu Omar", email = "aisulu_omar@brown.edu"},
+    {name = "Michael Frank", email = "michael_frank@brown.edu"}
 ]
 readme = "README.md"
-license = "Copyright 2023, Brown University, Providence, RI."
-packages = [{ include = "hssm", from = "src" }]
+license = "LicenseRef-Proprietary" # TODO: Update license
 repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
-[tool.poetry.dependencies]
-python = ">=3.10,<=3.12"
-pymc = ">=5.16.2,<5.17.0"
-arviz = "^0.19.0"
-onnx = "^1.16.0"
-ssm-simulators = "^0.7.5"
-huggingface-hub = "^0.24.6"
-bambi = ">=0.14.0,<0.15.0"
-numpyro = "^0.15.2"
-hddm-wfpt = "^0.1.4"
-seaborn = "^0.13.2"
-tqdm = "^4.66.0"
-jax = { version = "^0.4.25", extras = ["cuda12"], optional = true }
-numpy = ">=1.26.4,<2.0.0"
+requires-python = ">=3.10,<3.13"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.1"
-mypy = "^1.11.1"
-pre-commit = "^2.20.0"
-jupyterlab = "^4.2.4"
-ipykernel = "^6.29.5"
-ipywidgets = "^8.1.2"
-ruff = "^0.6.2"
-graphviz = "^0.20.3"
-pytest-xdist = "^3.6.1"
-onnxruntime = "^1.17.1"
-mkdocs = "^1.6.0"
-mkdocs-material = "^9.5.21"
-mkdocstrings-python = "^1.10.0"
-mkdocs-jupyter = "^0.24.8"
-pytest-cov = "^6.0.0"
-coverage = "^7.6.4"
+dependencies = [
+    "pymc>=5.16.2,<5.17.0",
+    "arviz>=0.19.0",
+    "onnx>=1.16.0",
+    "ssm-simulators>=0.7.5",
+    "huggingface-hub>=0.24.6",
+    "bambi>=0.14.0,<0.15.0",
+    "numpyro>=0.15.2",
+    "hddm-wfpt>=0.1.4",
+    "seaborn>=0.13.2",
+    "tqdm>=4.66.0",
+    "numpy>=1.26.4,<2.0.0"
+]
 
-[tool.poetry.extras]
-cuda12 = ["jax"]
+[project.optional-dependencies]
+cuda12 = ["jax[cuda12]"]
+dev = [
+"pytest>=8.3.1",
+"mypy>=1.11.1",
+"pre-commit>=2.20.0",
+"jupyterlab>=4.2.4",
+"ipykernel>=6.29.5",
+"ipywidgets>=8.1.2",
+"ruff>=0.6.2",
+"graphviz>=0.20.3",
+"pytest-xdist>=3.6.1",
+"onnxruntime>=1.17.1",
+"mkdocs>=1.6.0",
+"mkdocs-material>=9.5.21",
+"mkdocstrings-python>=1.10.0",
+"mkdocs-jupyter>=0.24.8",
+"pytest-cov>=6.0.0",
+"coverage>=7.6.4"
+]
 
 [tool.ruff]
 line-length = 88
@@ -168,5 +168,5 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
