@@ -32,7 +32,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dev dependencies
-        run: uv pip install -e ".[dev]"
+        run: uv pip install --system -e ".[dev]"
 
       - name: Run mypy
         run: mypy src/hssm
