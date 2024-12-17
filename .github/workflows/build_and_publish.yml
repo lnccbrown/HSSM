@@ -10,13 +10,9 @@ jobs:
     name: Lint and type-check
     uses: ./.github/workflows/linting_and_type_checking.yml
 
-  run_fast_tests:
-    name: Run fast tests
-    uses: ./.github/workflows/run_fast_tests.yml
-
-  run_slow_tests:
-    name: Run slow tests
-    uses: ./.github/workflows/run_slow_tests.yml
+  run_tests:
+    name: Run tests
+    uses: ./.github/workflows/run_tests.yml
 
   publish:
     name: Build wheel and publish to test-PyPI, and then PyPI, and publish docs
@@ -31,26 +27,43 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Poetry environment
-        uses: ./.github/setup-poetry-env
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Setup test-PyPI credentials
-        run: |
-          poetry config repositories.testpypi https://test.pypi.org/legacy/
-          poetry config pypi-token.testpypi ${{ secrets.TEST_PYPI_TOKEN }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          # Install a specific version of uv.
+          version: "0.5.9"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dev dependencies
+        run: uv pip install --system -e ".[dev]"
 
       - name: Build the wheel
-        run: poetry build
+        run: python -m build
 
       - name: Publish to test-PyPI
-        run: poetry publish -r testpypi
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
+        run: |
+          python -m twine upload --repository testpypi dist/*
 
       - name: Publish to PyPI
         env:
-          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
-        run: poetry publish
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          python -m twine upload dist/*
+
+      - name: Install doc dependencies
+        run: |
+          $HOME/.cargo/bin/uv pip install -e '.[dev]'
 
       - name: Build and publish docs
-        run: poetry run mkdocs gh-deploy --force
+        run: mkdocs gh-deploy --force
