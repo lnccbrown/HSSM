@@ -25,8 +25,8 @@ runs:
     - name: Set up Python ${{ inputs.python-version }}
       run: uv python install ${{ inputs.python-version }}
       shell: bash
-      
+
     - name: Install hssm
       if: steps.cache.outputs.cache-hit != 'true'
-      run: uv sync --all-extras --dev
+      run: uv pip install --system ".[dev]"
       shell: bash
