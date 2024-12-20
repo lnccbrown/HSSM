@@ -5,7 +5,7 @@
   </span>
   Navigate the site here!
 </span>
-<span class="right-margin"> v0.2.4 is released! </span>
+<span class="right-margin"> v0.2.5 is released! </span>
 <span>
   <span class="twemoji">
     {% include ".icons/material/head-question.svg" %}
@@ -15,4 +15,31 @@
     Open a discussion here!
   </a>
 </span>
-{% endblock %}
+{% endblock %} {% block content %} {{ super() }}
+
+<style>
+  pre {
+    font-size: 0.7rem;
+  }
+
+  .jp-OutputArea-executeResult pre {
+    font-size: 0.7rem;
+  }
+
+  .jp-xr-text-repr-fallback pre {
+    font-size: 0.7rem;
+  }
+
+  .xr-sections {
+    font-size: 0.7rem;
+  }
+
+  div .jp-RenderedText {
+    font-size: 0.7rem !important;
+  }
+
+  .jupyter-wrapper .jp-RenderedText pre {
+    font-size: 0.7rem !important;
+  }
+</style>
+{% endblock content %}
