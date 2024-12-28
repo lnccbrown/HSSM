@@ -564,21 +564,21 @@ class HSSM:
             else:
                 sampler = "mcmc"
 
-        supported_samplers = [
-            "mcmc",
-            "nuts_numpyro",
-            "nuts_blackjax",
-            "laplace",
-        ]  # "vi"]
+        # supported_samplers = [
+        #     "mcmc",
+        #     "nuts_numpyro",
+        #     "nuts_blackjax",
+        #     "laplace",
+        # ]  # "vi"]
 
-        if sampler not in supported_samplers:
-            if sampler == "vi":
-                raise ValueError(
-                    "For variational inference, please use the `vi()` method instead."
-                )
-            raise ValueError(
-                f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
-            )
+        # if sampler not in supported_samplers:
+        # if sampler == "vi":
+        #     raise ValueError(
+        #         "For variational inference, please use the `vi()` method instead."
+        #     )
+        # raise ValueError(
+        #     f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
+        # )
 
         if self.loglik_kind == "blackbox":
             if sampler in ["nuts_blackjax", "nuts_numpyro"]:

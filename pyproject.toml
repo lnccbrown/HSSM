@@ -16,13 +16,13 @@ keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<=3.12"
-pymc = ">=5.16.2,<5.17.0"
+pymc = ">=5.19.0" #">=5.16.2,<5.17.0"
 arviz = "^0.19.0"
 onnx = "^1.16.0"
 ssm-simulators = "^0.8.3"
 huggingface-hub = "^0.24.6"
-bambi = ">=0.14.0,<0.15.0"
-numpyro = "^0.15.2"
+bambi = ">=0.15.0, <0.16.0" #"">=0.14.0,<0.15.0"
+numpyro = "^0.16.0" # "^0.15.2"
 hddm-wfpt = "^0.1.4"
 seaborn = "^0.13.2"
 tqdm = "^4.66.0"
@@ -166,6 +166,11 @@ ignore_missing_imports = true
 
 [tool.pytest]
 testpaths = ["tests"]
+
+[tool.pytest.ini_options]
+markers = [
+  "slow: marks tests as slow (add --runslow option to run these tests)"
+]
 
 [build-system]
 requires = ["poetry-core"]
