@@ -6,6 +6,7 @@ generation ops.
 """
 
 import logging
+from functools import partial
 from os import PathLike
 from pathlib import Path
 from typing import Any, Callable, Literal, Type
@@ -22,9 +23,10 @@ from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
 
-from ..utils import download_hf
+from ..utils import decorate_atomic_simulator, download_hf, ssms_sim_wrapper
 from .blackbox import make_blackbox_op
 from .onnx import (
+    make_jax_logp_funcs_from_jax_callable,
     make_jax_logp_funcs_from_onnx,
     make_jax_logp_ops,
     make_pytensor_logp,
@@ -125,8 +127,8 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
     )
 
 
-def make_ssm_rv(
-    model_name: str,
+def make_hssm_rv(
+    simulator_fun: Callable | str,
     list_params: list[str],
     lapse: bmb.Prior | None = None,
 ) -> Type[RandomVariable]:
@@ -134,10 +136,8 @@ def make_ssm_rv(
 
     Parameters
     ----------
-    model_name
-        The name of the model. If the `model_name` is not one of the supported
-        models in the `ssm_simulators` package, a warning will be raised, and any
-        attempt to sample from the RandomVariable will result in an error.
+    simulator_fun
+        A simulator function with the `model_name` and `choices` attributes.
     list_params
         A list of str of all parameters for this `RandomVariable`.
     lapse : optional
@@ -148,30 +148,81 @@ def make_ssm_rv(
     Type[RandomVariable]
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
-    if model_name not in ssms_model_config:
-        _logger.warning(
-            "You supplied a model '%s', which is currently not supported in "
-            + "the ssm_simulators package. An error will be thrown when sampling from "
-            + "the random variable or when using any "
-            + "posterior or prior predictive sampling methods.",
-            model_name,
+    if isinstance(simulator_fun, str):
+        # If simulator_fun is passed as a string,
+        # we assume it is a valid model in the
+        # ssm-simulators package.
+        simulator_fun_str = simulator_fun
+        if simulator_fun_str not in ssms_model_config:
+            _logger.warning(
+                "You supplied a model '%s', which is currently not supported in "
+                + "the ssm_simulators package. An error will be thrown when sampling "
+                + "from the random variable or when using any "
+                + "posterior or prior predictive sampling methods.",
+                simulator_fun_str,
+            )
+            # We still build a bogus simulator function here
+            # that will raise an error when finally called.
+            simulator_fun_internal = decorate_atomic_simulator(
+                model_name=simulator_fun_str, choices=[0, 1, 2], obs_dim=2
+            )(
+                partial(
+                    ssms_sim_wrapper,
+                    simulator_fun=simulator,
+                    model=simulator_fun_str,  # will raise error due to unkown string
+                )
+            )
+        else:
+            simulator_fun_internal = decorate_atomic_simulator(
+                model_name=simulator_fun_str,
+                choices=ssms_model_config[simulator_fun_str]["choices"],
+                obs_dim=2,  # At least for now ssms models all fall under 2 obs dims
+            )(
+                partial(
+                    ssms_sim_wrapper,
+                    simulator_fun=simulator,  # Passing simulator from ssm-simulators
+                    model=simulator_fun_str,
+                )
+            )
+    elif callable(simulator_fun):
+        simulator_fun_internal = simulator_fun
+    else:
+        raise ValueError(
+            "The simulator argument must be a string or a callable, "
+            f"but you passed {simulator_fun}."
         )
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
 
-    # pylint: disable=W0511, R0903
-    class SSMRandomVariable(RandomVariable):
-        """SSM random variable."""
+    if hasattr(simulator_fun_internal, "model_name"):
+        model_name = simulator_fun_internal.model_name
+    else:
+        raise ValueError("The simulator function must have a `model_name` attribute.")
+    if hasattr(simulator_fun_internal, "choices"):
+        choices = simulator_fun_internal.choices
+    else:
+        raise ValueError("The simulator function must have a `choices` attribute.")
+    if hasattr(simulator_fun_internal, "obs_dim"):
+        if isinstance(simulator_fun_internal.obs_dim, int):
+            obs_dim_int = simulator_fun_internal.obs_dim
+        else:
+            raise ValueError("The obs_dim attribute must be an integer")
+    else:
+        raise ValueError("The simulator function must have a `obs_dim` attribute.")
 
-        name: str = "SSM_RV"
+    # pylint: disable=W0511, R0903
+    class HSSMRV(RandomVariable):
+        """HSSMRV random variable."""
+
+        name: str = model_name + "_RV"
         # New in PyMC 5.16+: instead of using `ndims_supp`, we use `signature` to define
         # the signature of the random variable. The string to the left of the `->` sign
         # describes the input signature, which is `()` for each parameter, meaning each
         # parameter is a scalar. The string to the right of the
         # `->` sign describes the output signature, which is `(2)`, which means the
         # random variable is a length-2 array.
-        signature: str = f"{','.join(['()']*len(list_params))}->(2)"
+        signature: str = f"{','.join(['()']*len(list_params))}->({obs_dim_int})"
         dtype: str = "floatX"
         _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
         _list_params = list_params
@@ -229,6 +280,7 @@ def make_ssm_rv(
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
+
             if "size" in kwargs:
                 size = kwargs.pop("size")
             else:
@@ -260,33 +312,21 @@ def make_ssm_rv(
             iinfo32 = np.iinfo(np.uint32)
             seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
 
-            params = (
-                cls._list_params[:-1]
-                if cls._list_params[-1] == "p_outlier"
-                else cls._list_params
-            )
+            is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
 
-            if params != ssms_model_config[model_name]["params"]:
-                raise ValueError(
-                    f"The list of parameters in `list_params` {params} "
-                    + "is different from the model config in SSM Simulators "
-                    + f"({ssms_model_config[model_name]['params']})."
-                )
-
-            is_all_scalar = all(arg.size == 1 for arg in arg_arrays)
-
-            if is_all_scalar:
+            if is_all_args_scalar:
                 # All parameters are scalars
 
                 theta = np.stack(arg_arrays)
                 if theta.ndim > 1:
                     theta = theta.squeeze(axis=-1)
-                n_samples = size
+
+                theta = np.tile(theta, (size, 1))
+                n_replicas = 1
             else:
                 # Preprocess all parameters, reshape them into a matrix of dimension
                 # (size, n_params) where size is the number of elements in the largest
                 # of all parameters passed to *arg
-
                 elem_max_size = np.argmax([arg.size for arg in arg_arrays])
                 max_shape = arg_arrays[elem_max_size].shape
 
@@ -296,29 +336,39 @@ def make_ssm_rv(
                     [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
                 )
 
+                # We eventually want to get rid of this part, and
+                # simply make the simulators behave as would be expected
+                # by pymc directly.
                 if size is None or size == 1:
-                    n_samples = 1
+                    n_replicas = 1
                 elif size % new_data_size != 0:
                     raise ValueError(
                         "`size` needs to be a multiple of the size of data"
                     )
                 else:
-                    n_samples = size // new_data_size
+                    n_replicas = size // new_data_size
 
-            sim_out = simulator(
+            sims_out = simulator_fun_internal(
                 theta=theta,
-                model=model_name,
-                n_samples=n_samples,
                 random_state=seed,
+                n_replicas=n_replicas,
                 **kwargs,
             )
 
-            sims_out = np.column_stack([sim_out["rts"], sim_out["choices"]])
+            # return sims_out, max_shape, size
 
-            if not is_all_scalar:
-                sims_out = sims_out.reshape(
-                    (*max_shape[:-1], max_shape[-1] * n_samples, 2)
-                )
+            if not is_all_args_scalar:
+                if n_replicas == 1:
+                    sims_out = sims_out.reshape(
+                        (*max_shape[:-1], max_shape[-1], obs_dim_int)
+                    )
+                else:
+                    # sims_out = sims_out.reshape(
+                    #     (*max_shape[:-1], max_shape[-1] * size, obs_dim_int)
+                    # )
+                    sims_out = sims_out.reshape(
+                        (*max_shape[:-1], max_shape[-1], n_replicas, obs_dim_int)
+                    )
 
             if p_outlier is not None:
                 assert cls._lapse is not None, (
@@ -331,10 +381,12 @@ def make_ssm_rv(
                         p_outlier = np.broadcast_to(p_outlier, out_shape)
                     else:
                         p_outlier = p_outlier.reshape(out_shape)
+
                 replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
                 replace_n = int(np.sum(replace, axis=None))
                 if replace_n == 0:
                     return sims_out
+
                 replace_shape = (*out_shape[:-1], replace_n)
                 replace_mask = np.stack([replace, replace], axis=-1)
                 n_draws = np.prod(replace_shape)
@@ -343,21 +395,24 @@ def make_ssm_rv(
                     n_draws,
                     random_seed=rng,
                 ).reshape(replace_shape)
-                lapse_response = rng.binomial(n=1, p=0.5, size=replace_shape)
-                lapse_response = np.where(lapse_response == 1, 1, -1)
+
+                lapse_response = rng.choice(
+                    choices,
+                    p=1 / len(choices) * np.ones(len(choices)),
+                    size=replace_shape,
+                )
                 lapse_output = np.stack(
                     [lapse_rt, lapse_response],
                     axis=-1,
                 )
                 np.putmask(sims_out, replace_mask, lapse_output)
-
             return sims_out
 
-    return SSMRandomVariable
+    return HSSMRV
 
 
 def make_distribution(
-    rv: str | Type[RandomVariable],
+    rv: str | Type[RandomVariable] | RandomVariable | Callable,
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     bounds: dict | None = None,
@@ -371,6 +426,10 @@ def make_distribution(
 
     Parameters
     ----------
+    model_name
+        The name of the model.
+    choices
+        A list of integers indicating the choices.
     rv
         A RandomVariable Op (a class, not an instance) or a string indicating the model.
         If a string, a RandomVariable class will be created automatically with its
@@ -398,7 +457,22 @@ def make_distribution(
     Type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
     """
-    random_variable = make_ssm_rv(rv, list_params, lapse) if isinstance(rv, str) else rv
+    if isinstance(rv, type) and issubclass(rv, RandomVariable):
+        rv_instance = rv()
+    elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
+        rv_instance = rv
+    elif callable(rv) or isinstance(rv, str):
+        random_variable = make_hssm_rv(
+            simulator_fun=rv,
+            list_params=list_params,
+            lapse=lapse,
+        )
+        rv_instance = random_variable()
+    else:
+        raise ValueError(f"rv is {rv}, which is not a valid type.")
+
+    # random_variable = make_ssm_rv(rv, list_params, lapse)
+    # if isinstance(rv, str) else rv
     extra_fields = [] if extra_fields is None else extra_fields
 
     if lapse is not None:
@@ -414,15 +488,17 @@ def make_distribution(
             [data_vector],
             lapse_logp,
         )
+    else:
+        lapse_func = None
 
-    class SSMDistribution(pm.Distribution):
+    class HSSMDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""
 
         # This is just a placeholder because pm.Distribution requires an rv_op
         # Might be updated in the future once
 
         # NOTE: rv_op is an INSTANCE of RandomVariable
-        rv_op = random_variable()
+        rv_op = rv_instance
         _params = list_params
 
         @classmethod
@@ -434,10 +510,30 @@ def make_distribution(
             return super().dist(dist_params, **other_kwargs)
 
         def logp(data, *dist_params):  # pylint: disable=E0213
+            """Calculate log probability of the data given the parameters.
+
+            Parameters
+            ----------
+            data : array-like
+                The observed data
+            dist_params : tuple
+                Distribution parameters
+
+            Returns
+            -------
+            tensor
+                Log probability
+            """
             # AF-TODO: Apply clipping here
             if list_params[-1] == "p_outlier":
                 p_outlier = dist_params[-1]
                 dist_params = dist_params[:-1]
+
+                if not callable(lapse_func):
+                    raise ValueError(
+                        "lapse_func is not defined. "
+                        "Make sure lapse is properly initialized."
+                    )
                 lapse_logp = lapse_func(data[:, 0].eval())
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
@@ -462,7 +558,7 @@ def make_distribution(
 
             return logp
 
-    return SSMDistribution
+    return HSSMDistribution
 
 
 def make_family(
@@ -551,14 +647,36 @@ def make_likelihood_callable(
             if backend is None or backend == "pytensor":
                 return loglik
             return make_blackbox_op(loglik)
-
-        # In the approx_differentiable case or the blackbox case, unless the backend
-        # is `pytensor`, we wrap the callable in a BlackBoxOp.
-        if backend == "pytensor":
-            return loglik
-            # In all other cases, we assume that the callable cannot be directly
-            # used in the backend and thus we wrap it in a BlackBoxOp
-        return make_blackbox_op(loglik)
+        elif loglik_kind == "blackbox":
+            return make_blackbox_op(loglik)
+        elif loglik_kind == "approx_differentiable":
+            if backend is None or backend == "jax":
+                if params_is_reg is None:
+                    raise ValueError(
+                        "You set `loglik_kind` to `approx_differentiable` "
+                        + "and `backend` to `jax` and supplied a jax callable, "
+                        + "but did not set `params_is_reg`."
+                    )
+                logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_jax_callable(
+                    loglik,
+                    params_is_reg,
+                    params_only=False if params_only is None else params_only,
+                )
+                lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+                return lan_logp_jax
+            if backend == "pytensor":
+                raise ValueError(
+                    "You set `backend` to `pytensor`, `loglik_kind` to"
+                    + "`approx_differentiable` and provided a callable."
+                    + "Currently we support only jax callables in this case."
+                )
+            # In the approx_differentiable case or the blackbox case, unless the backend
+            # is `pytensor`, we wrap the callable in a BlackBoxOp.
+        # if backend == "pytensor":
+        #     return loglik
+        #     # In all other cases, we assume that the callable cannot be directly
+        #     # used in the backend and thus we wrap it in a BlackBoxOp
+        # return make_blackbox_op(loglik)
 
     # Other cases, when `loglik` is a string or a PathLike.
     if loglik_kind != "approx_differentiable":

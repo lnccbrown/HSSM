@@ -25,6 +25,7 @@ import seaborn as sns
 import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
+from ssms.config import model_config as ssms_model_config
 
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
@@ -308,10 +309,33 @@ class HSSM:
                 else ModelConfig(**model_config)  # also serves as dict validation
             )
         else:
+            # Model config is not provided, but at this point was constructed from
+            # defaults.
             if model not in typing.get_args(SupportedModels):
                 if choices is not None:
                     self.model_config.update_choices(choices)
+                elif model in ssms_model_config:
+                    self.model_config.update_choices(
+                        ssms_model_config[model]["choices"]
+                    )
+                    _logger.info(
+                        "choices argument passed as None, "
+                        "but found %s in ssms-simulators. "
+                        "Using choices, from ssm-simulators configs: %s",
+                        model,
+                        ssms_model_config[model]["choices"],
+                    )
+                # else:
+                #     raise ValueError(
+                #         f"Model {model} is not supported in ssm_simulators. "
+                #         " and no model config is provided."
+                #         "Please provide model data via the model_config."
+                #         " argument"
+                #     )
             else:
+                # Model config already constructed from defaults, and model string is
+                # in SupportedModels. So we are guaranteed that choices are in
+                # self.model_config already.
                 if choices is not None:
                     _logger.info(
                         "Model string is in SupportedModels."
@@ -540,21 +564,21 @@ class HSSM:
             else:
                 sampler = "mcmc"
 
-        supported_samplers = [
-            "mcmc",
-            "nuts_numpyro",
-            "nuts_blackjax",
-            "laplace",
-        ]  # "vi"]
+        # supported_samplers = [
+        #     "mcmc",
+        #     "nuts_numpyro",
+        #     "nuts_blackjax",
+        #     "laplace",
+        # ]  # "vi"]
 
-        if sampler not in supported_samplers:
-            if sampler == "vi":
-                raise ValueError(
-                    "For variational inference, please use the `vi()` method instead."
-                )
-            raise ValueError(
-                f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
-            )
+        # if sampler not in supported_samplers:
+        # if sampler == "vi":
+        #     raise ValueError(
+        #         "For variational inference, please use the `vi()` method instead."
+        #     )
+        # raise ValueError(
+        #     f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
+        # )
 
         if self.loglik_kind == "blackbox":
             if sampler in ["nuts_blackjax", "nuts_numpyro"]:
@@ -1085,6 +1109,9 @@ class HSSM:
             draws, var_names, omit_offsets, random_seed
         )
 
+        # AF-COMMENT: Not sure if necessary to include the
+        # mean prior here (which adds deterministics that
+        # could be recomputed elsewhere)
         prior_predictive.add_groups(posterior=prior_predictive.prior)
         self.model.predict(prior_predictive, kind="mean", inplace=True)
 
@@ -1098,7 +1125,26 @@ class HSSM:
             self._inference_obj.extend(prior_predictive)
 
         # clean up `rt,response_mean` to `v`
-        return self._drop_parent_str_from_idata(idata=self._inference_obj)
+        idata = self._drop_parent_str_from_idata(idata=self._inference_obj)
+
+        # rename otherwise inconsistentdims and coords
+        if "rt,response_extra_dim_0" in idata["prior_predictive"].dims:
+            setattr(
+                idata,
+                "prior_predictive",
+                idata["prior_predictive"].rename_dims(
+                    {"rt,response_extra_dim_0": "rt,response_dim"}
+                ),
+            )
+        if "rt,response_extra_dim_0" in idata["prior_predictive"].coords:
+            setattr(
+                idata,
+                "prior_predictive",
+                idata["prior_predictive"].rename_vars(
+                    name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
+                ),
+            )
+        return idata
 
     @property
     def pymc_model(self) -> pm.Model:
@@ -1182,6 +1228,44 @@ class HSSM:
         graph.edge(parent_param.name, self.response_str)
 
         return graph
+
+    def compile_logp(self, keep_transformed: bool = False, **kwargs):
+        """Compile the log probability function for the model.
+
+        Parameters
+        ----------
+        keep_transformed : bool, optional
+            If True, keeps the transformed variables in the compiled function.
+            If False, removes value transforms before compilation.
+            Defaults to False.
+        **kwargs
+            Additional keyword arguments passed to PyMC's compile_logp:
+            - vars: List of variables. Defaults to None (all variables).
+            - jacobian: Whether to include log(|det(dP/dQ)|) term for
+            transformed variables. Defaults to True.
+            - sum: Whether to sum all terms instead of returning a vector.
+            Defaults to True.
+
+        Returns
+        -------
+        callable
+            A compiled function that computes the model log probability.
+        """
+        if keep_transformed:
+            return self.pymc_model.compile_logp(
+                vars=kwargs.get("vars", None),
+                jacobian=kwargs.get("jacobian", True),
+                sum=kwargs.get("sum", True),
+            )
+        else:
+            new_model = pm.model.transform.conditioning.remove_value_transforms(
+                self.pymc_model
+            )
+            return new_model.compile_logp(
+                vars=kwargs.get("vars", None),
+                jacobian=kwargs.get("jacobian", True),
+                sum=kwargs.get("sum", True),
+            )
 
     def plot_trace(
         self,
@@ -1596,7 +1680,6 @@ class HSSM:
             )
 
         self.data = _rearrange_data(self.data)
-
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
             loglik=self.loglik,

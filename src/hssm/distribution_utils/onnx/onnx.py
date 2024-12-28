@@ -24,8 +24,38 @@ LogLikeFunc = Callable[..., ArrayLike]
 LogLikeGrad = Callable[..., ArrayLike]
 
 
+def make_jax_logp_funcs_from_jax_callable(
+    model: Callable,
+    params_is_reg: list[bool],
+    params_only: bool = False,
+) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]:
+    """Make a jax function and its Vector-Jacobian Product from a jax callable.
+
+    Parameters
+    ----------
+    model:
+        A jax callable function that computes log-likelihoods.
+    params_is_reg:
+        A list of booleans indicating whether the parameters are regressions.
+        Parameters that are regressions will not be vectorized in likelihood
+        calculations.
+    params_only:
+        If True, the log-likelihood function will only take parameters as input.
+
+    Returns
+    -------
+    tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]
+        A triple of jax functions. The first calculates the
+        forward pass, the second calculates the VJP, and the third is
+        the forward-pass that's not jitted. When `params_only` is True, and all
+        parameters are scalars, only a scalar function, its gradient, and the non-jitted
+        version of the function are returned.
+    """
+    return make_jax_logp_funcs_from_onnx(model, params_is_reg, params_only)
+
+
 def make_jax_logp_funcs_from_onnx(
-    model: str | PathLike | onnx.ModelProto,
+    model: str | PathLike | onnx.ModelProto | Callable,
     params_is_reg: list[bool],
     params_only: bool = False,
 ) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]:
@@ -52,9 +82,12 @@ def make_jax_logp_funcs_from_onnx(
         parameters are scalars, only a scalar function, its gradient, and the non-jitted
         version of the function are returned.
     """
-    loaded_model = (
-        onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
-    )
+    if isinstance(model, (str, PathLike, onnx.ModelProto)):
+        loaded_model = (
+            onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
+        )
+    else:
+        model_callable = model
 
     scalars_only = all(not is_reg for is_reg in params_is_reg)
 
@@ -87,8 +120,10 @@ def make_jax_logp_funcs_from_onnx(
             if param_vector.shape[-1] == 1:
                 param_vector = param_vector.squeeze(axis=-1)
             input_vector = jnp.concatenate((param_vector, data))
-
-        return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
+        if isinstance(model, (str, PathLike, onnx.ModelProto)):
+            return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
+        else:
+            return model_callable(input_vector).squeeze()
 
     if params_only and scalars_only:
         logp_vec = lambda *inputs: logp(*inputs).reshape((1,))

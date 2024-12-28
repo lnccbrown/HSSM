@@ -6,9 +6,9 @@ from .dist import (
     make_blackbox_op,
     make_distribution,
     make_family,
+    make_hssm_rv,
     make_likelihood_callable,
     make_missing_data_callable,
-    make_ssm_rv,
 )
 
 __all__ = [
@@ -19,5 +19,5 @@ __all__ = [
     "make_likelihood_callable",
     "make_missing_data_callable",
     "make_family",
-    "make_ssm_rv",
+    "make_hssm_rv",
 ]
