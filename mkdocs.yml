@@ -29,6 +29,7 @@ nav:
       - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
       - Custom models from onnx files: tutorials/blackbox_contribution_onnx_example.ipynb
       - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
+      - Saving and loading models: tutorials/save_load_tutorial.ipynb
   - Contributing: CONTRIBUTING.md
 
 plugins:
@@ -47,6 +48,7 @@ plugins:
         - tutorials/jax_callable_contribution_onnx_example.ipynb
         - tutorials/blackbox_contribution_onnx_example.ipynb
         - tutorials/compile_logp.ipynb
+        - tutorials/save_load_tutorial.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:
