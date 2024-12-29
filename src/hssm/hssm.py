@@ -356,17 +356,11 @@ class HSSM:
                         model,
                         ssms_model_config[model]["choices"],
                     )
-                # else:
-                #     raise ValueError(
-                #         f"Model {model} is not supported in ssm_simulators. "
-                #         " and no model config is provided."
-                #         "Please provide model data via the model_config."
-                #         " argument"
-                #     )
             else:
                 # Model config already constructed from defaults, and model string is
                 # in SupportedModels. So we are guaranteed that choices are in
                 # self.model_config already.
+
                 if choices is not None:
                     _logger.info(
                         "Model string is in SupportedModels."
