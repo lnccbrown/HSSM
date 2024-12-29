@@ -1495,7 +1495,7 @@ class HSSM:
         base_path : str | Path
             Base directory to save model files in.
             Must be relative path if allow_absolute_base_path=False
-        save_class : bool
+        save_idata_only: bool = False,
             Whether to save the model class instance itself
 
         Raises
