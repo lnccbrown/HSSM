@@ -56,7 +56,7 @@ def test_save_load_vi_mcmc(basic_hssm_model):
 
     # 2
     # Save whole model after running vi as well
-    print("Saving model and vi traces")
+    basic_hssm_model.vi(method="advi", niter=1000)
     basic_hssm_model.vi(method="advi", niter=1000)
     basic_hssm_model.save_model(model_name=tmp_model_name, base_path=tmp_folder_name)
 
