@@ -10,15 +10,29 @@ nav:
       - License: license.md
       - Changelog: changelog.md
   - Getting Started:
-      - Installation: getting_started/installation.md
-      - Getting started: getting_started/getting_started.ipynb
-      - Hierarchical modeling: getting_started/hierarchical_modeling.ipynb
+      - Getting HSSM:
+          - Installation: getting_started/installation.md
+      - Using HSSM:
+          - Quickstart Guide: getting_started/getting_started.ipynb
+          - Hierarchical modeling: getting_started/hierarchical_modeling.ipynb
   - API References:
-      - hssm: api/hssm.md
-      - hssm.plotting: api/plotting.md
-      - hssm.distribution_utils: api/distribution_utils.md
-      - hssm.likelihoods: api/likelihoods.md
-      - hssm.defaults: api/defaults.md
+      - HSSM core classes:
+          - hssm.HSSM: api/hssm.md
+          - hssm.Param: api/param.md
+          - hssm.ModelConfig: api/model_config.md
+          - hssm.Prior: api/prior.md
+          - hssm.Link: api/link.md
+      - Useful functions:
+          - hssm.load_data: api/load_data.md
+          - hssm.simulate_data: api/simulate_data.md
+          - hssm.set_floatX: api/set_floatx.md
+          - hssm.show_defaults: api/show_defaults.md
+      - Likelihoods:
+          - hssm.likelihoods: api/likelihoods.md
+      - Working with distributions:
+          - hssm.distribution_utils: api/distribution_utils.md
+      - Plotting:
+          - hssm.plotting: api/plotting.md
   - Tutorials:
       - Main tutorial: tutorials/main_tutorial.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
@@ -64,23 +78,25 @@ plugins:
             merge_init_into_class: true
             docstring_options:
               ignore_init_summary: true
-            docstring_style: "numpy"
-            docstring_section_style: "list"
+            docstring_style: numpy
+            docstring_section_style: list
             show_root_members_full_path: true
             show_object_full_path: false
             show_category_heading: false
             show_signature_annotations: true
+            show_docstring_attributes: false
             show_source: false
+            show_root_heading: true
             group_by_category: true
-            signature_crossrefs: true
+            signature_crossrefs: false
             summary: true
+            line_length: 80
+            unwrap_annotated: false
+            modernize_annotations: true
             filters:
               - "!^_"
 theme:
   logo: images/navlogo.png
-  font:
-    text: Noto Sans
-    code: Roboto Mono
   name: material
   custom_dir: docs/overrides
   features:
