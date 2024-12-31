@@ -11,6 +11,7 @@ This version of HSSM incorporated the following changes:
 3. Some improvements to internals to allow for (1.)
 4. Major improvments to plotting with `model_cartoon_plots()`
 5. Refactoring and minor improvements to pre-existing plots
+6. Added functionality to save and load models with `save_model()` and `load_model()`.
 
 ### 0.2.4
 

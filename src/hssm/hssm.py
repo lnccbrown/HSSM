@@ -6,15 +6,18 @@ sequential sampling models.
 This file defines the entry class HSSM.
 """
 
+import datetime
 import logging
 import typing
 from copy import deepcopy
-from inspect import isclass
+from inspect import isclass, signature
 from os import PathLike
-from typing import Any, Callable, Literal, cast
+from pathlib import Path
+from typing import Any, Callable, Literal, Optional, Union, cast
 
 import arviz as az
 import bambi as bmb
+import cloudpickle as cpickle
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -257,6 +260,34 @@ class HSSM:
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
+        # Attach arguments to the instance
+        # so that we can easily define some
+        # methods that need to access these
+        # arguments (context: pickling / save - load).
+
+        # Define a dict with all call arguments:
+        self._init_args = {
+            "data": data,
+            "model": model,
+            "choices": choices,
+            "include": include,
+            "model_config": model_config,
+            "loglik": loglik,
+            "loglik_kind": loglik_kind,
+            "p_outlier": p_outlier,
+            "lapse": lapse,
+            "global_formula": global_formula,
+            "link_settings": link_settings,
+            "prior_settings": prior_settings,
+            "extra_namespace": extra_namespace,
+            "missing_data": missing_data,
+            "deadline": deadline,
+            "loglik_missing_data": loglik_missing_data,
+            "process_initvals": process_initvals,
+            "initval_jitter": initval_jitter,
+            **kwargs,
+        }
+
         self.data = data.copy()
         self._inference_obj: az.InferenceData | None = None
         self._initvals: dict[str, Any] = {}
@@ -325,17 +356,11 @@ class HSSM:
                         model,
                         ssms_model_config[model]["choices"],
                     )
-                # else:
-                #     raise ValueError(
-                #         f"Model {model} is not supported in ssm_simulators. "
-                #         " and no model config is provided."
-                #         "Please provide model data via the model_config."
-                #         " argument"
-                #     )
             else:
                 # Model config already constructed from defaults, and model string is
                 # in SupportedModels. So we are guaranteed that choices are in
                 # self.model_config already.
+
                 if choices is not None:
                     _logger.info(
                         "Model string is in SupportedModels."
@@ -470,6 +495,14 @@ class HSSM:
             {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
         )
         _logger.info("Model initialized successfully.")
+
+    @classmethod
+    def _store_init_args(cls, *args, **kwargs):
+        """Store initialization arguments using signature binding."""
+        sig = signature(cls.__init__)
+        bound_args = sig.bind(*args, **kwargs)
+        bound_args.apply_defaults()
+        return {k: v for k, v in bound_args.arguments.items() if k != "self"}
 
     def find_MAP(self, **kwargs):
         """Perform Maximum A Posteriori estimation.
@@ -1416,6 +1449,221 @@ class HSSM:
         if isinstance(traces, (str, PathLike)):
             traces = az.from_netcdf(traces)
         self._inference_obj = cast(az.InferenceData, traces)
+
+    def restore_vi_traces(
+        self, traces: az.InferenceData | pm.Approximation | str | PathLike
+    ) -> None:
+        """Restore VI traces from an InferenceData object or a .netcdf file.
+
+        Parameters
+        ----------
+        traces
+            An InferenceData object or a path to a file containing the VI traces.
+        """
+        if isinstance(traces, pm.Approximation):
+            self._inference_obj_vi = traces
+            return
+
+        if isinstance(traces, (str, PathLike)):
+            traces = az.from_netcdf(traces)
+        self._inference_obj_vi = cast(az.InferenceData, traces)
+
+    def save_model(
+        self,
+        model_name: str | None = None,
+        allow_absolute_base_path: bool = False,
+        base_path: str | Path = "hssm_models",
+        save_idata_only: bool = False,
+    ) -> None:
+        """Save a HSSM model instance and its inference results to disk.
+
+        Parameters
+        ----------
+        model : HSSM
+            The HSSM model instance to save
+        model_name : str | None
+            Name to use for the saved model files.
+            If None, will use model.model_name with timestamp
+        allow_absolute_base_path : bool
+            Whether to allow absolute paths for base_path
+        base_path : str | Path
+            Base directory to save model files in.
+            Must be relative path if allow_absolute_base_path=False
+        save_idata_only: bool = False,
+            Whether to save the model class instance itself
+
+        Raises
+        ------
+        ValueError
+            If base_path is absolute and allow_absolute_base_path=False
+        """
+        # check if base_path is absolute
+        if not allow_absolute_base_path:
+            if str(base_path).startswith("/"):
+                raise ValueError(
+                    "base_path must be a relative path"
+                    " if allow_absolute_base_path is False"
+                )
+
+        if model_name is None:
+            # Get date string format as suffix to model name
+            model_name = (
+                self.model_name
+                + "_"
+                + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+            )
+
+        # check if folder by name model_name exists
+        model_name = model_name.replace(" ", "_")
+        model_path = Path(base_path).joinpath(model_name)
+        model_path.mkdir(parents=True, exist_ok=True)
+
+        # Save model to pickle file
+        if not save_idata_only:
+            with open(model_path.joinpath("model.pkl"), "wb") as f:
+                cpickle.dump(self, f)
+
+        # Save traces to netcdf file
+        if self._inference_obj is not None:
+            az.to_netcdf(self._inference_obj, model_path.joinpath("traces.nc"))
+
+        # Save vi_traces to netcdf file
+        if self._inference_obj_vi is not None:
+            az.to_netcdf(self._inference_obj_vi, model_path.joinpath("vi_traces.nc"))
+
+    @classmethod
+    def load_model(
+        cls, path: Union[str, Path]
+    ) -> Union["HSSM", dict[str, Optional[az.InferenceData]]]:
+        """Load a HSSM model instance and its inference results from disk.
+
+        Parameters
+        ----------
+        path : str | Path
+            Path to the model directory or model.pkl file. If a directory is provided,
+            will look for model.pkl, traces.nc and vi_traces.nc files within it.
+
+        Returns
+        -------
+        HSSM
+            The loaded HSSM model instance with inference results attached if available.
+        """
+        # Convert path to Path object
+        path = Path(path)
+
+        # If path points to a file, assume it's model.pkl
+        if path.is_file():
+            model_dir = path.parent
+            model_path = path
+        else:
+            # Path points to directory
+            model_dir = path
+            model_path = model_dir.joinpath("model.pkl")
+
+        # check if model_dir exists
+        if not model_dir.exists():
+            raise FileNotFoundError(f"Model directory {model_dir} does not exist.")
+
+        # check if model.pkl exists raise logging information if not
+        if not model_path.exists():
+            _logger.info(
+                f"model.pkl file does not exist in {model_dir}. "
+                "Attempting to load traces only."
+            )
+            if (not model_dir.joinpath("traces.nc").exists()) and (
+                not model_dir.joinpath("vi_traces.nc").exists()
+            ):
+                raise FileNotFoundError(f"No traces found in {model_dir}.")
+            else:
+                idata_dict = cls.load_model_idata(model_dir)
+                return idata_dict
+        else:
+            # Load model from pickle file
+            with open(model_path, "rb") as f:
+                model = cpickle.load(f)
+
+            # Load traces if they exist
+            traces_path = model_dir.joinpath("traces.nc")
+            if traces_path.exists():
+                model.restore_traces(traces_path)
+
+            # Load VI traces if they exist
+            vi_traces_path = model_dir.joinpath("vi_traces.nc")
+            if vi_traces_path.exists():
+                model.restore_vi_traces(vi_traces_path)
+        return model
+
+    @classmethod
+    def load_model_idata(cls, path: str | Path) -> dict[str, az.InferenceData | None]:
+        """Load the traces from a model directory.
+
+        Parameters
+        ----------
+        path : str | Path
+            Path to the model directory containing traces.nc and/or vi_traces.nc files.
+
+        Returns
+        -------
+        dict[str, az.InferenceData | None]
+            A dictionary with keys "idata_mcmc" and "idata_vi" containing the traces
+            from the model directory. If the traces do not exist, the corresponding
+            value will be None.
+        """
+        idata_dict: dict[str, az.InferenceData | None] = {}
+        model_dir = Path(path)
+        # check if path exists
+        if not model_dir.exists():
+            raise FileNotFoundError(f"Model directory {model_dir} does not exist.")
+
+        # check if traces.nc exists
+        traces_path = model_dir.joinpath("traces.nc")
+        if not traces_path.exists():
+            _logger.warning(f"traces.nc file does not exist in {model_dir}.")
+            idata_dict["idata_mcmc"] = None
+        else:
+            idata_dict["idata_mcmc"] = az.from_netcdf(traces_path)
+
+        # check if vi_traces.nc exists
+        vi_traces_path = model_dir.joinpath("vi_traces.nc")
+        if not vi_traces_path.exists():
+            _logger.warning(f"vi_traces.nc file does not exist in {model_dir}.")
+            idata_dict["idata_vi"] = None
+        else:
+            idata_dict["idata_vi"] = az.from_netcdf(vi_traces_path)
+
+        return idata_dict
+
+    def __getstate__(self):
+        """Get the state of the model for pickling.
+
+        This method is called when pickling the model.
+        It returns a dictionary containing the constructor
+        arguments needed to recreate the model instance.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the constructor arguments
+            under the key 'constructor_args'.
+        """
+        state = {"constructor_args": self._init_args}
+        return state
+
+    def __setstate__(self, state):
+        """Set the state of the model when unpickling.
+
+        This method is called when unpickling the model. It creates a new instance
+        of HSSM using the constructor arguments stored in the state dictionary,
+        and copies its attributes to the current instance.
+
+        Parameters
+        ----------
+        state : dict
+            A dictionary containing the constructor arguments under the key
+            'constructor_args'.
+        """
+        new_instance = HSSM(**state["constructor_args"])
+        self.__dict__ = new_instance.__dict__
 
     def __repr__(self) -> str:
         """Create a representation of the model."""

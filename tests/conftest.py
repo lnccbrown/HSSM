@@ -101,6 +101,29 @@ def cavanagh_test():
     return pd.read_csv("tests/fixtures/cavanagh_theta_test.csv", index_col=None)
 
 
+# @pytest.fixture
+# def cavanagh_data():
+#     return hssm.load_data("cavanagh_theta")
+
+
+@pytest.fixture
+def basic_hssm_model():
+    cav_data = hssm.load_data("cavanagh_theta")
+    basic_hssm_model = hssm.HSSM(
+        data=cav_data,
+        process_initvals=True,
+        link_settings="log_logit",
+        model="angle",
+        include=[
+            {
+                "name": "v",
+                "formula": "v ~ 1 + C(stim)",
+            }
+        ],
+    )
+    return basic_hssm_model
+
+
 # Cartoon plot fixtures
 @pytest.fixture
 def cav_model_cartoon(cavanagh_test):
