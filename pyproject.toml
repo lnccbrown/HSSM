@@ -32,7 +32,7 @@ numpy = ">=1.26.4,<2.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.1"
-mistune = "^3.0.0"
+mistune = "3.0.2"
 mypy = "^1.11.1"
 pre-commit = "^2.20.0"
 jupyterlab = "^4.2.4"
