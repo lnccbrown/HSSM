@@ -5,6 +5,7 @@ description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     {name = "Alexander Fengler", email = "alexander_fengler@brown.edu"},
     {name = "Paul Xu", email = "yang_xu@brown.edu"},
+    {name = "Carlos Paniagua", email = "carlos_paniagua@brown.edu"},
     {name = "Aisulu Omar", email = "aisulu_omar@brown.edu"},
     {name = "Michael Frank", email = "michael_frank@brown.edu"}
 ]
