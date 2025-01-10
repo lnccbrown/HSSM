@@ -513,6 +513,69 @@ def _split_array(data: np.ndarray | list[int], divisor: int) -> list[np.ndarray]
     return [tmp.astype(int) for tmp in np.array_split(data, num_splits)]
 
 
+def decorate_atomic_simulator(
+    model_name: str,
+    choices: list | np.ndarray = [-1, 1],
+    obs_dim: int = 2,
+):
+    """Decorate to add attributes to simulator functions.
+
+    Parameters
+    ----------
+    model_name : str
+        Name of the model
+    choices : list
+        List of possible choices/responses
+    """
+
+    def decorator(func):
+        func.model_name = model_name
+        func.choices = choices
+        func.obs_dim = obs_dim
+        return func
+
+    return decorator
+
+
+def ssms_sim_wrapper(simulator_fun, theta, model, n_replicas, random_state, **kwargs):
+    """Wrap a ssms simulator function to match HSSM's expected interface.
+
+    Parameters
+    ----------
+    simulator_fun : callable
+        The simulator function to wrap, which should have the following interface:
+        - theta: array-like, shape (n_trials, n_parameters)
+        - model: str, name of the model to simulate
+        - n_samples: int, number of replica datasets to generate
+        - random_state: int, to be used as the random seed internally
+        - **kwargs: additional keyword arguments
+    theta : array-like
+        Model parameters, shape (n_trials, n_parameters)
+    model : str
+        Name of the model to simulate
+    n_replicas : int
+        Number of replica datasets to generate
+    random_state : int or numpy.random.Generator
+        Random seed or random number generator
+    **kwargs
+        Additional keyword arguments passed to simulator_fun
+
+    Returns
+    -------
+    array-like
+        Array of shape (n_trials, 2) containing reaction times and choices
+        stacked column-wise
+    """
+    out = simulator_fun(
+        theta=theta,
+        model=model,
+        n_samples=n_replicas,
+        random_state=random_state,
+        **kwargs,
+    )
+    return np.stack([out["rts"], out["choices"]], axis=-1).squeeze()
+
+
 class SuppressOutput:
     """Context manager for suppressing output.
 

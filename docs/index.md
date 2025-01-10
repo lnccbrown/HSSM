@@ -9,23 +9,38 @@
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/HSSM?link=https%3A%2F%2Fpypi.org%2Fproject%2Fhssm%2F)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/hssm)
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/lnccbrown/HSSM)
-![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/lnccbrown/HSSM/run_tests.yml)
+![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/lnccbrown/HSSM/run_slow_tests.yml)
 ![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-**HSSM** (Hierarchical Sequential Sampling Modeling) is a modern Python toolbox that provides state-of-the-art likelihood approximation methods within the Python Bayesian ecosystem. It facilitates hierarchical model building and inference via fast and robust MCMC samplers. User-friendly, extensible, and flexible, HSSM can rigorously estimate the impact of neural and other trial-by-trial covariates through parameter-wise mixed-effects models for a large variety of cognitive process models.
+**HSSM** (Hierarchical Sequential Sampling Modeling) is a modern Python toolbox
+that provides state-of-the-art likelihood approximation methods within the
+Python Bayesian ecosystem. It facilitates hierarchical model building and
+inference via fast and robust MCMC samplers. User-friendly, extensible, and
+flexible, HSSM can rigorously estimate the impact of neural and other
+trial-by-trial covariates through parameter-wise mixed-effects models for a
+large variety of cognitive process models.
 
-HSSM is a [BRAINSTORM](https://ccbs.carney.brown.edu/brainstorm) project in collaboration with the [Center for Computation and Visualization (CCV)](https://ccv.brown.edu/) and the [Center for Computational Brain Science](https://ccbs.carney.brown.edu/) within the [Carney Institute at Brown University](https://www.brown.edu/carney/).
+HSSM is a [BRAINSTORM](https://ccbs.carney.brown.edu/brainstorm) project in
+collaboration with the
+[Center for Computation and Visualization (CCV)](https://ccv.brown.edu/) and the
+[Center for Computational Brain Science](https://ccbs.carney.brown.edu/) within
+the [Carney Institute at Brown University](https://www.brown.edu/carney/).
 
 ## Features
 
-- Allows approximate hierarchical Bayesian inference via various likelihood approximators.
-- Estimate impact of neural and other trial-by-trial covariates via native hierarchical mixed-regression support.
+- Allows approximate hierarchical Bayesian inference via various likelihood
+  approximators.
+- Estimate impact of neural and other trial-by-trial covariates via native
+  hierarchical mixed-regression support.
 - Extensible for users to add novel models with corresponding likelihoods.
 - Built on PyMC with support from the Python Bayesian ecosystem at large.
-- Incorporates Bambi's intuitive `lmer`-like regression parameter specification for within- and between-subject effects.
-- Native ArviZ support for plotting and other convenience functions to aid the Bayesian workflow.
-- Utilizes the ONNX format for translation of differentiable likelihood approximators across backends.
+- Incorporates Bambi's intuitive `lmer`-like regression parameter specification
+  for within- and between-subject effects.
+- Native ArviZ support for plotting and other convenience functions to aid the
+  Bayesian workflow.
+- Utilizes the ONNX format for translation of differentiable likelihood
+  approximators across backends.
 
 ## Example
 
@@ -35,7 +50,7 @@ Here is a simple example of how to use HSSM:
 import hssm
 
 # Load a package-supplied dataset
-cav_data = hssm.load_data('cavanagh_theta')
+cav_data = hssm.load_data("cavanagh_theta")
 
 # Define a basic hierarchical model with trial-level covariates
 model = hssm.HSSM(
@@ -58,14 +73,20 @@ model = hssm.HSSM(
 model.sample()
 ```
 
-To quickly get started with HSSM, please follow [this tutorial](getting_started/getting_started.ipynb).
-For a deeper dive into HSSM, please follow [our main tutorial](tutorials/main_tutorial.ipynb).
+To quickly get started with HSSM, please follow
+[this tutorial](getting_started/getting_started.ipynb). For a deeper dive into
+HSSM, please follow [our main tutorial](tutorials/main_tutorial.ipynb).
 
 ## Installation
 
-HSSM can be directly installed into your conda environment on Linux and MacOS. Installing HSSM on windows takes only one more simple step. We have a more detailed [installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/) for users with more specific setups.
+HSSM can be directly installed into your conda environment on Linux and MacOS.
+Installing HSSM on windows takes only one more simple step. We have a more
+detailed
+[installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/)
+for users with more specific setups.
 
-**Important Update:** From HSSM 0.2.2, the official recommended way to install HSSM is through conda.
+**Important Update:** From HSSM 0.2.2, the official recommended way to install
+HSSM is through conda.
 
 ### Install HSSM on Linux and MacOS (CPU only)
 
@@ -77,7 +98,8 @@ conda install -c conda-forge hssm
 
 ### Install HSSM on Linux and MacOS (with GPU Support)
 
-If you need to sample with GPU, please install JAX with GPU support before installing HSSM:
+If you need to sample with GPU, please install JAX with GPU support before
+installing HSSM:
 
 ```bash
 conda install jaxlib=*=*cuda* jax cuda-nvcc -c conda-forge -c nvidia
@@ -86,11 +108,11 @@ conda install -c conda-forge hssm
 
 ### Install HSSM on Windows (CPU only)
 
-Because `jaxlib` is not available through `conda-forge` on Windows, you need to install JAX on Windows through `pip` before getting HSSM:
+On Windows, we need to install pymc through conda, and then HSSM through pip:
 
 ```bash
-pip install jax
-conda install -c conda-forge hssm
+conda install -c conda-forge pymc
+pip install hssm
 ```
 
 ### Install HSSM on Windows (with GPU support)
@@ -98,20 +120,22 @@ conda install -c conda-forge hssm
 You simply need to install JAX with GPU support before getting HSSM:
 
 ```bash
-pip install jax[cuda12]
-conda install -c conda-forge hssm
+conda install -c conda-forge pymc
+pip install hssm[cuda12]
 ```
 
 ### Support for Apple Silicon, AMD, and other GPUs
 
-JAX also has support other GPUs. Please follow the [Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) to install the correct version of JAX before installing HSSM.
-
+JAX also has support other GPUs. Please follow the
+[Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html)
+to install the correct version of JAX before installing HSSM.
 
 ## Advanced Installation
 
 ### Install HSSM directly with Pip
 
-HSSM is also available through PyPI. You can directly install it with pip into any virtual environment via:
+HSSM is also available through PyPI. You can directly install it with pip into
+any virtual environment via:
 
 ```bash
 pip install hssm
@@ -131,7 +155,9 @@ pip install git+https://github.com/lnccbrown/HSSM.git
 
 ### Install HSSM on Google Colab
 
-Google Colab comes with PyMC and JAX pre-configured. That holds true even if you are using the GPU and TPU backend, so you simply need to install HSSM via pip on Colab regardless of the backend you are using:
+Google Colab comes with PyMC and JAX pre-configured. That holds true even if you
+are using the GPU and TPU backend, so you simply need to install HSSM via pip on
+Colab regardless of the backend you are using:
 
 ```bash
 !pip install hssm
@@ -141,7 +167,8 @@ Google Colab comes with PyMC and JAX pre-configured. That holds true even if you
 
 !!! note
 
-    Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). Also feel free to start a new
+    Possible solutions to any issues with installations with hssm can be located
+    [here](https://github.com/lnccbrown/HSSM/discussions). Also feel free to start a new
     discussion thread if you don't find answers there. We recommend installing HSSM into
     a new conda environment with Python 3.10 or 3.11 to prevent any problems with dependencies
     during the installation process. Please note that hssm is only tested for python 3.10,
@@ -150,14 +177,19 @@ Google Colab comes with PyMC and JAX pre-configured. That holds true even if you
 
 ## License
 
-HSSM is licensed under [Copyright 2023, Brown University, Providence, RI](LICENSE)
+HSSM is licensed under
+[Copyright 2023, Brown University, Providence, RI](LICENSE)
 
 ## Support
 
-For questions, please feel free to [open a discussion](https://github.com/lnccbrown/HSSM/discussions).
+For questions, please feel free to
+[open a discussion](https://github.com/lnccbrown/HSSM/discussions).
 
-For bug reports and feature requests, please feel free to [open an issue](https://github.com/lnccbrown/HSSM/issues) using the corresponding template.
+For bug reports and feature requests, please feel free to
+[open an issue](https://github.com/lnccbrown/HSSM/issues) using the
+corresponding template.
 
 ## Contributing
 
-If you want to contribute to this project, please follow our [contribution guidelines](CONTRIBUTING.md).
+If you want to contribute to this project, please follow our
+[contribution guidelines](CONTRIBUTING.md).

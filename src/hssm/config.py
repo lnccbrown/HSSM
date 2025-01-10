@@ -151,6 +151,8 @@ class Config:
             self.list_params = user_config.list_params
         if user_config.choices is not None:
             self.choices = user_config.choices
+        if user_config.rv is not None:
+            self.rv = user_config.rv
 
         if (
             self.loglik_kind == "approx_differentiable"

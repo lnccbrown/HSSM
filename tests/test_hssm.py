@@ -319,3 +319,14 @@ def test_prior_settings_basic(cavanagh_test):
     assert isinstance(
         model_2.params[model_2._parent].prior, dict
     ), "Prior assigned to parent is not a dict!"
+
+
+def test_compile_logp(cavanagh_test):
+    model_1 = HSSM(
+        data=cavanagh_test,
+        global_formula="y ~ 1 + (1|participant_id)",
+        prior_settings=None,
+    )
+
+    out = model_1.compile_logp(model_1.initial_point(transformed=False))
+    assert out is not None

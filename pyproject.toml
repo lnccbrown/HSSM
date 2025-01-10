@@ -1,6 +1,6 @@
 [project]
 name = "HSSM"
-version = "0.2.4"
+version = "0.2.5"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     {name = "Alexander Fengler", email = "alexander_fengler@brown.edu"},
@@ -34,6 +34,7 @@ dependencies = [
 cuda12 = ["jax[cuda12]"]
 dev = [
 "pytest>=8.3.1",
+"mistune=3.0.2",
 "mypy>=1.11.1",
 "pre-commit>=2.20.0",
 "jupyterlab>=4.2.4",
@@ -46,7 +47,7 @@ dev = [
 "mkdocs>=1.6.0",
 "mkdocs-material>=9.5.21",
 "mkdocstrings-python>=1.10.0",
-"mkdocs-jupyter>=0.24.8",
+"mkdocs-jupyter>=0.25.1",
 "pytest-cov>=6.0.0",
 "coverage>=7.6.4"
 ]
@@ -167,6 +168,11 @@ ignore_missing_imports = true
 
 [tool.pytest]
 testpaths = ["tests"]
+
+[tool.pytest.ini_options]
+markers = [
+  "slow: marks tests as slow (add --runslow option to run these tests)"
+]
 
 [build-system]
 requires = ["hatchling"]

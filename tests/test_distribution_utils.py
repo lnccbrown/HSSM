@@ -16,7 +16,7 @@ from hssm.likelihoods.analytical import logp_ddm, DDM
 hssm.set_floatX("float32")
 
 
-def test_make_ssm_rv():
+def test_make_hssm_rv():
     params = ["v", "a", "z", "t"]
     seed = 42
 
@@ -24,7 +24,7 @@ def test_make_ssm_rv():
     # v, a, z, t
     true_values = [0.5, 0.5, 0.5, 0.3]
 
-    wfpt_rv = distribution_utils.make_ssm_rv("ddm", params)
+    wfpt_rv = distribution_utils.make_hssm_rv("ddm", params)
     rng = np.random.default_rng()
 
     random_sample = wfpt_rv.rng_fn(rng, *true_values, size=500)
@@ -48,15 +48,12 @@ def test_make_ssm_rv():
 
     random_sample = wfpt_rv.rng_fn(rng, *true_values, size=100)
 
-    assert random_sample.shape[0] == 100
-
-    with pytest.raises(ValueError):
-        wfpt_rv.rng_fn(rng, *true_values, size=499)
+    assert random_sample.shape == (100, 2)
 
 
 def test_lapse_distribution():
     lapse_dist = bmb.Prior("Uniform", lower=0.0, upper=1.0)
-    rv = distribution_utils.make_ssm_rv("ddm", ["v", "a", "z", "t"], lapse=lapse_dist)
+    rv = distribution_utils.make_hssm_rv("ddm", ["v", "a", "z", "t"], lapse=lapse_dist)
     random_sample = rv.rng_fn(np.random.default_rng(), *[0.5, 0.5, 0.5, 0.3], 0.05, 10)
     assert random_sample.shape == (10, 2)
 
@@ -134,7 +131,7 @@ def test_make_distribution():
     bounds = {"param1": [-1.0, 1.0], "param2": [-1.0, 1.0]}
 
     Dist = make_distribution(
-        "fake",
+        rv="fake",
         loglik=fake_logp_function,
         list_params=["param1", "param2"],
         bounds=bounds,
