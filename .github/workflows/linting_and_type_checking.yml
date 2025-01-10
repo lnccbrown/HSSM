@@ -26,7 +26,7 @@ jobs:
         run: uv run mypy src/hssm
 
       - name: Check formatting
-        run: uv run ruff format --check .
+        run: uv run ruff --version && uv run ruff format --check .
 
       - name: Linting
         run: uv run ruff check src/hssm
