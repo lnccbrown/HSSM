@@ -24,9 +24,6 @@ jobs:
         python-version: ["3.11"]
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Setup environment
         uses: ./.github/setup-env
         with:
@@ -48,6 +45,6 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
           uv run python -m twine upload dist/*
-          
+
       - name: Build and publish docs
         run: uv run mkdocs gh-deploy --force
