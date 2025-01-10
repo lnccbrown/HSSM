@@ -42,16 +42,12 @@ jobs:
         run: |
           uv run python -m twine upload --repository testpypi dist/*
 
-            - name: Publish to PyPI
+      - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
           uv run python -m twine upload dist/*
-
-      - name: Install doc dependencies
-        run: |
-          $HOME/.cargo/bin/uv pip install -e '.[dev]'
-
+          
       - name: Build and publish docs
         run: uv run mkdocs gh-deploy --force
