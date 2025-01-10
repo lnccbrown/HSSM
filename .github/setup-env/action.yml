@@ -8,10 +8,10 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ inputs.python-version }}
+    # - name: Setup Python
+    #   uses: actions/setup-python@v5
+    #   with:
+    #     python-version: ${{ inputs.python-version }}
 
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -21,12 +21,14 @@ runs:
       with:
         # Install a specific version of uv.
         version: "0.5.9"
+        # Install a specific Python version.
+        python-version: ${{ inputs.python-version }}
 
-    - name: Set up Python ${{ inputs.python-version }}
-      run: uv python install ${{ inputs.python-version }}
-      shell: bash
+    # - name: Set up Python ${{ inputs.python-version }}
+    #   run: uv python install ${{ inputs.python-version }}
+    #   shell: bash
 
     - name: Install hssm
       if: steps.cache.outputs.cache-hit != 'true'
-      run: uv pip install --system ".[dev]"
+      run: uv sync --all-extras
       shell: bash
