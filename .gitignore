@@ -48,7 +48,7 @@ __pypackages__/
 # Environments
 .env
 .venv
-env/
+.*env/
 venv/
 ENV/
 
@@ -73,3 +73,5 @@ site/
 /test_notebooks
 
 *.so
+.python-version
+uv.lock
