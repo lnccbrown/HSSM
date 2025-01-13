@@ -254,7 +254,7 @@ def _process_lines(
         line_attrs = list(line_attrs)
         if not all(isinstance(la, check_type) for la in line_attrs):
             raise ValueError(
-                f"The `{mode}` argument must be a string or a list of strings." "or 2."
+                f"The `{mode}` argument must be a string or a list of strings or `2`."
             )
         elif len(line_attrs) in {1, 2}:
             return line_attrs * 2 if len(line_attrs) == 1 else line_attrs
