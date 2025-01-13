@@ -1330,9 +1330,9 @@ class HSSM:
             Whether to call plt.tight_layout() after plotting. Defaults to True.
         """
         data = data or self.traces
-        assert isinstance(
-            data, az.InferenceData
-        ), "data must be an InferenceData object."
+        assert isinstance(data, az.InferenceData), (
+            "data must be an InferenceData object."
+        )
 
         if not include_deterministic:
             var_names = list(
@@ -1355,8 +1355,7 @@ class HSSM:
                         kwargs["var_names"] = var_names
                     else:
                         raise ValueError(
-                            "`var_names` must be a string, a list of strings"
-                            ", or None."
+                            "`var_names` must be a string, a list of strings, or None."
                         )
                 else:
                     kwargs["var_names"] = var_names
@@ -1397,9 +1396,9 @@ class HSSM:
             A pandas DataFrame or xarray Dataset containing the summary statistics.
         """
         data = data or self.traces
-        assert isinstance(
-            data, az.InferenceData
-        ), "data must be an InferenceData object."
+        assert isinstance(data, az.InferenceData), (
+            "data must be an InferenceData object."
+        )
 
         if not include_deterministic:
             var_names = list(
