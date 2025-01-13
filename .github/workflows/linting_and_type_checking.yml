@@ -17,16 +17,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Poetry environment
+      - name: Setup environment
         uses: ./.github/setup-env
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Run mypy
-        run: poetry run mypy src/hssm
+        run: mypy src/hssm
 
       - name: Check formatting
-        run: poetry run ruff format --check .
+        run: ruff format --check .
 
       - name: Linting
-        run: poetry run ruff check src/hssm
+        run: ruff check src/hssm
