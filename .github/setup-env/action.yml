@@ -13,23 +13,20 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-        virtualenvs-path: .venv
-        installer-parallel: true
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-    - name: Load cache
-      uses: actions/cache@v4
-      id: cache
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
       with:
-        path: .venv
-        key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ hashFiles('**/pyproject.toml') }}
+        # Install a specific version of uv.
+        version: "0.5.9"
+
+    - name: Set up Python ${{ inputs.python-version }}
+      run: uv python install ${{ inputs.python-version }}
+      shell: bash
 
     - name: Install hssm
       if: steps.cache.outputs.cache-hit != 'true'
-      run: poetry install --no-interaction
+      run: uv sync --all-extras
       shell: bash
