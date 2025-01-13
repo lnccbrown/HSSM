@@ -172,8 +172,8 @@ class SimpleParam(Param):
             raise ValueError(f"Invalid prior type {type(self.prior)}")
 
         if self.bounds is None:
-            return f"{self.name}:\n" f"    {prior}"
-        return f"{self.name}:\n" f"    {prior}\n" f"    Explicit bounds: {self.bounds}"
+            return f"{self.name}:\n    {prior}"
+        return f"{self.name}:\n    {prior}\n    Explicit bounds: {self.bounds}"
 
 
 class DefaultParam(SimpleParam):
