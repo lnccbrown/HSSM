@@ -24,6 +24,9 @@ jobs:
         python-version: ["3.11"]
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
       - name: Setup environment
         uses: ./.github/setup-env
         with:
@@ -32,19 +35,9 @@ jobs:
       - name: Build the wheel
         run: uv build
 
-      - name: Publish to test-PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
-        run: |
-          uv run python -m twine upload --repository testpypi dist/*
-
       - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
-          uv run python -m twine upload dist/*
+          uv publish --token ${{ secrets.PYPI_TOKEN }}
 
       - name: Build and publish docs
         run: uv run mkdocs gh-deploy --force
