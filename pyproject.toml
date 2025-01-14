@@ -10,7 +10,7 @@ authors = [
     { name = "Michael Frank", email = "michael_frank@brown.edu" },
 ]
 readme = "README.md"
-license = "Copyright 2023, Brown University, Providence, RI."
+license = "LicenseRef-Proprietary" # TODO: Update license
 repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
