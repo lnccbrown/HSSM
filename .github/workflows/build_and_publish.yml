@@ -35,16 +35,13 @@ jobs:
       - name: Build the wheel
         run: uv build
 
-      # Publish to TestPyPI
       - name: Publish to TestPyPI
         run: |
           uv publish --token ${{ secrets.TEST_PYPI_TOKEN }} --index testpypi
 
-      # Publish to PyPI (default index)
       - name: Publish to PyPI
         run: |
           uv publish --token ${{ secrets.PYPI_TOKEN }}
 
-      # Build and publish docs
       - name: Build and publish docs
         run: uv run mkdocs gh-deploy --force
