@@ -50,7 +50,7 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
 
 5. **Add the new feature/changes on your feature branch**. When finished, [_commit_](https://github.com/git-guides/git-commit) your changes:
    ```
-   git add modified_files
+   git add <modified_files>
    git commit -m "commit message here"
    ```
 
@@ -71,7 +71,7 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
 >
 > Remember to commit the newly changed files.
 > ```
-> git add pyproject.toml # add other edited files as needed
+> git add pyproject.toml
 > git commit -m "Add <package-name> dependency"
 > ```
 
