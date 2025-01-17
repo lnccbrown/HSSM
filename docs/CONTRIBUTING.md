@@ -71,7 +71,7 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
 >
 > Remember to commit the newly changed files.
 > ```
-> git add pyproject.toml uv.lock
+> git add pyproject.toml # add other edited files as needed
 > git commit -m "Add <package-name> dependency"
 > ```
 
