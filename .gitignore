@@ -73,3 +73,6 @@ site/
 /test_notebooks
 
 *.so
+.python-version
+uv.lock
+explorations/
