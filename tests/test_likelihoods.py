@@ -70,9 +70,9 @@ def test_no_inf_values(data_ddm, shared_params, param_name, param_values):
         params = shared_params | {param_name: value}
         logp = logp_ddm_sdv(data_ddm, **params).eval()
         assert logp.ndim == 1, "logp_ddm_sdv() returned wrong number of dimensions."
-        assert np.all(
-            np.isfinite(logp)
-        ), f"log_pdf_sv() returned non-finite values for {param_name} = {value}."
+        assert np.all(np.isfinite(logp)), (
+            f"log_pdf_sv() returned non-finite values for {param_name} = {value}."
+        )
 
 
 true_values = (0.5, 1.5, 0.5, 0.5)
@@ -140,9 +140,9 @@ def test_analytical_gradient():
 
     grad_sdv = np.array(grad_func_sdv(v_test, a_test, z_test, t_test, sv_test))
 
-    assert np.all(
-        np.isfinite(grad_sdv), axis=None
-    ), "Gradient contains non-finite values."
+    assert np.all(np.isfinite(grad_sdv), axis=None), (
+        "Gradient contains non-finite values."
+    )
 
 
 @pytest.mark.parametrize("p_outlier, loglik_kind", param_matrix)

@@ -172,7 +172,7 @@ class Params(UserDict[str, Param]):
             A string representation of the class.
         """
         params = "\n".join(repr(param) for _, param in self.items())
-        return "Parameters:\n" f"{params}"
+        return f"Parameters:\n{params}"
 
 
 def collect_user_params(
