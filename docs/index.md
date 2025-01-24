@@ -27,6 +27,12 @@ collaboration with the
 [Center for Computational Brain Science](https://ccbs.carney.brown.edu/) within
 the [Carney Institute at Brown University](https://www.brown.edu/carney/).
 
+## Citation
+
+Fengler, A., Xu, Y., Bera, K., Omar, A., Frank, M.J. (in preparation). HSSM: A
+generalized toolbox for hierarchical bayesian estimation of computational
+models in cognitive neuroscience.
+
 ## Features
 
 - Allows approximate hierarchical Bayesian inference via various likelihood

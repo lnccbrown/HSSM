@@ -306,9 +306,9 @@ def test_prior_settings_basic(cavanagh_test):
         prior_settings=None,
     )
 
-    assert (
-        model_1.params["v"].prior is None
-    ), "Default prior doesn't yield Nonetype for 'v'!"
+    assert model_1.params["v"].prior is None, (
+        "Default prior doesn't yield Nonetype for 'v'!"
+    )
 
     model_2 = HSSM(
         data=cavanagh_test,
@@ -316,9 +316,9 @@ def test_prior_settings_basic(cavanagh_test):
         prior_settings="safe",
     )
 
-    assert isinstance(
-        model_2.params[model_2._parent].prior, dict
-    ), "Prior assigned to parent is not a dict!"
+    assert isinstance(model_2.params[model_2._parent].prior, dict), (
+        "Prior assigned to parent is not a dict!"
+    )
 
 
 def test_compile_logp(cavanagh_test):
