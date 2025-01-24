@@ -222,7 +222,7 @@ def make_hssm_rv(
         # parameter is a scalar. The string to the right of the
         # `->` sign describes the output signature, which is `(2)`, which means the
         # random variable is a length-2 array.
-        signature: str = f"{','.join(['()']*len(list_params))}->({obs_dim_int})"
+        signature: str = f"{','.join(['()'] * len(list_params))}->({obs_dim_int})"
         dtype: str = "floatX"
         _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
         _list_params = list_params
