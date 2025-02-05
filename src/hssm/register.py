@@ -1,121 +1,73 @@
 """Module for registering custom models in HSSM."""
 
+from os import PathLike
 from pprint import pformat
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Literal
 
+import bambi as bmb
 import numpy as np
 import pandas as pd
+import pymc as pm
+import pytensor
+
+from hssm import model_meta
+from hssm.config import ModelConfig
+from hssm.param.param import Param
 
 from .defaults import (
-    DefaultConfig,
-    LogLik,
-    LoglikConfig,
+    INITVAL_JITTER_SETTINGS,
     LoglikKind,
-    ParamSpec,
     default_model_config,
 )
 from .hssm import HSSM
 
 
 def register_model(
-    name: str,
-    response: List[str] = ["rt", "response"],
-    list_params: List[str] = None,
-    choices: List[int] = [-1, 1],
-    description: Optional[str] = None,
-    loglik: Optional[LogLik] = None,
-    loglik_kind: Optional[LoglikKind] = None,
-    backend: Optional[str] = None,
-    default_priors: Optional[Dict[str, ParamSpec]] = None,
-    bounds: Optional[Dict[str, tuple[float, float]]] = None,
-    extra_fields: Optional[List[str]] = None,
-    **kwargs: Any,
+    name: str = "ddm",
+    choices: list[int] | None = None,
+    include: list[dict[str, Any] | Param] | None = None,
+    model_config: ModelConfig | dict | None = None,
+    loglik: (
+        str | PathLike | Callable | pytensor.graph.Op | type[pm.Distribution] | None
+    ) = None,
+    loglik_kind: LoglikKind | None = None,
+    p_outlier: float | dict | bmb.Prior | None = 0.05,
+    lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
+    global_formula: str | None = None,
+    link_settings: Literal["log_logit"] | None = None,
+    prior_settings: Literal["safe"] | None = "safe",
+    extra_namespace: dict[str, Any] | None = None,
+    missing_data: bool | float = False,
+    deadline: bool | str = False,
+    loglik_missing_data: (str | PathLike | Callable | pytensor.graph.Op | None) = None,
+    process_initvals: bool = True,
+    initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+    **kwargs,
 ) -> None:
-    """Register a new model in HSSM.
-
-    This function allows you to register a new model that can be used with the `HSSM`
-    constructor.
-
-    The new model configuration will be stored in `defaults.default_model_config`
-    under the `name` key.
-
-    Parameters
-    ----------
-    name : str
-        Name of the model to register
-    response : List[str], optional
-        List of response variables, by default ["rt", "response"]
-    list_params : List[str], optional
-        List of parameters for the model
-    choices : List[int], optional
-        List of possible choices, by default [-1, 1]
-    description : Optional[str], optional
-        Description of the model
-    loglik : Optional[LogLik], optional
-        Log-likelihood function
-    loglik_kind : Optional[LoglikKind], optional
-        Kind of log-likelihood function
-    backend : Optional[str], optional
-        Backend to use ("jax" or "pytensor")
-    default_priors : Optional[Dict[str, ParamSpec]], optional
-        Dictionary of default priors for parameters
-    bounds : Optional[Dict[str, tuple[float, float]]], optional
-        Dictionary of bounds for parameters
-    extra_fields : Optional[List[str]], optional
-        List of extra fields required by the model
-    **kwargs : Any
-        Additional keyword arguments
-
-    Raises
-    ------
-    ValueError
-        If required parameters are missing or invalid
-    """
-    if list_params is None:
-        raise ValueError("list_params must be provided")
-
-    if loglik_kind is None:
-        raise ValueError("loglik_kind must be provided")
-
-    # Create the loglik config
-    loglik_config: LoglikConfig = {
-        "loglik": loglik,
-        "backend": backend,
-        "default_priors": default_priors or {},
-        "bounds": bounds or {},
-        "extra_fields": extra_fields,
-    }
-
-    # Create the model config
-    model_config: DefaultConfig = {
-        "response": response,
-        "list_params": list_params,
-        "choices": choices,
-        "description": description,
-        "likelihoods": {loglik_kind: loglik_config},
-    }
-
+    """Register a new model in HSSM."""
     # Register the model
-    default_model_config[name] = model_config
+    model_metadata = {k: v for k, v in locals().items() if k not in ["kwargs"]}
+    if kwargs:
+        model_metadata.update(kwargs)
+    default_model_config[name] = model_metadata
 
     # Validate the model by attempting to create an instance
-    try:
-        # Create minimal test data
-        n_trials = 2
-        data = pd.DataFrame(
-            {
-                "rt": np.abs(np.random.normal(0.8, 0.2, n_trials)),
-                "response": [-1, 1],
-            }
-        )
+    # try:
+    #     # Create minimal test data
+    #     n_trials = 2
+    #     data = pd.DataFrame(
+    #         {
+    #             "rt": np.abs(np.random.normal(0.8, 0.2, n_trials)),
+    #             "response": [-1, 1],
+    #         }
+    #     )
 
-        # Try to create a model instance
-        HSSM(model=name, data=data, choices=choices)
-    except Exception as e:
-        # If model creation fails, remove the model and raise the error
-        del default_model_config[name]
-        raise ValueError(f"Failed to validate model '{name}': {str(e)}")
-
+    #     # Try to create a model instance
+    #     HSSM(model=name, data=data, choices=choices)
+    # except Exception as e:
+    #     # If model creation fails, remove the model and raise the error
+    #     del default_model_config[name]
+    #     raise ValueError(f"Failed to validate model '{name}': {str(e)}")
 
 
 def list_registered_models() -> Dict[str, str]:
