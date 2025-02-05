@@ -18,6 +18,7 @@ from .hssm import HSSM
 from .link import Link
 from .param import UserParam as Param
 from .prior import Prior
+from .register import register_model
 from .simulator import simulate_data
 from .utils import set_floatX
 
@@ -35,6 +36,7 @@ __all__ = [
     "ModelConfig",
     "Param",
     "Prior",
+    "register_model",
     "simulate_data",
     "set_floatX",
     "show_defaults",
