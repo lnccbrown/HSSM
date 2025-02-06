@@ -38,7 +38,7 @@ def test_register_model():
     )
     assert isinstance(model, hssm.HSSM)
 
-    assert isinstance(get_model_info(my_custom_model_name), str)
+    assert isinstance(get_model_info(my_custom_model_name), None)
 
     with pytest.raises(ValueError):
         get_model_info("non_existent_model")
