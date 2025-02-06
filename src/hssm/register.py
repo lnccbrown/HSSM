@@ -60,7 +60,7 @@ def list_registered_models() -> dict[SupportedModels, str]:
     }
 
 
-def get_model_info(name: SupportedModels | str) -> str:
+def get_model_info(name: SupportedModels | str) -> None:
     """Get detailed information about a registered model.
 
     Parameters
@@ -81,4 +81,4 @@ def get_model_info(name: SupportedModels | str) -> str:
     if name not in default_model_config:
         raise ValueError(f"Model '{name}' not found")
 
-    return f"Model: {name}\n" + pformat(default_model_config[name], indent=2)
+    print(f"Model: {name}\n" + pformat(default_model_config[name], indent=2))
