@@ -7,7 +7,7 @@ from hssm.register import register_model, list_registered_models, get_model_info
 from hssm.defaults import default_model_config
 
 
-def test_register_existing_model():
+def test_register_model():
     """Test registering a custom model"""
 
     my_custom_model_name = "my_custom_model"
