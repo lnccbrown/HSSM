@@ -1,7 +1,6 @@
 """Module for registering custom models in HSSM."""
 
 from pprint import pformat
-from typing import Dict
 
 from .defaults import (
     DefaultConfig,
@@ -47,12 +46,12 @@ def register_model(name: SupportedModels, config: DefaultConfig) -> None:
     default_model_config[name] = config
 
 
-def list_registered_models() -> Dict[SupportedModels, str]:
+def list_registered_models() -> dict[SupportedModels, str]:
     """List all registered models and their descriptions.
 
     Returns
     -------
-    Dict[SupportedModels, str]
+    dict[SupportedModels, str]
         Dictionary mapping model names to their descriptions
     """
     return {
