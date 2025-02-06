@@ -13,7 +13,6 @@ from copy import deepcopy
 from inspect import isclass, signature
 from os import PathLike
 from pathlib import Path
-from pprint import pprint
 from typing import Any, Callable, Literal, Optional, Union, cast
 
 import arviz as az
@@ -267,7 +266,9 @@ class HSSM:
         # arguments (context: pickling / save - load).
 
         # Define a dict with all call arguments:
-        self._init_args = {k: v for k, v in locals().items() if k not in ["self", "kwargs"]}
+        self._init_args = {
+            k: v for k, v in locals().items() if k not in ["self", "kwargs"]
+        }
         if kwargs:
             self._init_args.update(kwargs)
 
