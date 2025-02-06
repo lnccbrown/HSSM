@@ -5,11 +5,12 @@ from typing import Dict
 
 from .defaults import (
     DefaultConfig,
+    SupportedModels,
     default_model_config,
 )
 
 
-def register_model(name: str, config: DefaultConfig) -> None:
+def register_model(name: SupportedModels, config: DefaultConfig) -> None:
     """Register a new model in HSSM.
 
     Parameters
@@ -46,37 +47,37 @@ def register_model(name: str, config: DefaultConfig) -> None:
     default_model_config[name] = config
 
 
-def list_registered_models() -> Dict[str, str]:
+def list_registered_models() -> Dict[SupportedModels, str]:
     """List all registered models and their descriptions.
 
     Returns
     -------
-    Dict[str, str]
+    Dict[SupportedModels, str]
         Dictionary mapping model names to their descriptions
     """
     return {
-        name: config.get("description", "No description")
+        name: config.get("description") or "No description"
         for name, config in default_model_config.items()
     }
 
 
-def get_model_info(name: str) -> str:
+def get_model_info(name: SupportedModels | str) -> str:
     """Get detailed information about a registered model.
 
     Parameters
     ----------
-    name : str
+    name : SupportedModels | str
         Name of the model to get information about
 
     Returns
     -------
     str
-        Formatted string containing model information
+        Formatted string containing detailed model configuration metadata
 
     Raises
     ------
     ValueError
-        If the model name is not found
+        If the model name is not found in the registered models
     """
     if name not in default_model_config:
         raise ValueError(f"Model '{name}' not found")
