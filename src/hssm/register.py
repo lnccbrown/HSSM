@@ -1,6 +1,7 @@
 """Module for registering custom models in HSSM."""
 
 from pprint import pformat
+from typing import cast
 
 from .defaults import (
     DefaultConfig,
@@ -85,4 +86,5 @@ def get_model_info(name: SupportedModels | str) -> None:
     if name not in default_model_config:
         raise ValueError(f"Model '{name}' not found")
 
+    name = cast(SupportedModels, name)
     print(f"Model: {name}\n" + pformat(default_model_config[name], indent=2))
