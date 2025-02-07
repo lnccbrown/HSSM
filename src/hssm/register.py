@@ -34,6 +34,10 @@ def register_model(name: SupportedModels, config: DefaultConfig) -> None:
             }
         }
     """
+    # Ensure no collisions with existing models
+    if name in default_model_config:
+        raise ValueError(f"Model '{name}' already exists")
+
     # Validate required keys
     required_keys = set(DefaultConfig.__annotations__.keys())
     missing_keys = required_keys - set(config.keys())

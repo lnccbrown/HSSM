@@ -41,4 +41,7 @@ def test_register_model():
     assert get_model_info(my_custom_model_name) is None
 
     with pytest.raises(ValueError):
+        # Lookup non-existent model
         get_model_info("non_existent_model")
+        # Register model with existing name
+        register_model("ddm", config)
