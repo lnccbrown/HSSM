@@ -5,50 +5,59 @@ from typing import cast
 
 from .defaults import (
     DefaultConfig,
+    LoglikConfigs,
     SupportedModels,
-    default_model_config,
+)
+from .defaults import (
+    default_model_config as registered_models,
 )
 
 
-def register_model(name: SupportedModels, config: DefaultConfig) -> None:
+def register_model(
+    name: SupportedModels,
+    response: list[str],
+    list_params: list[str],
+    choices: list[int],
+    description: str,
+    likelihoods: LoglikConfigs,
+) -> None:
     """Register a new model in HSSM.
 
     Parameters
     ----------
     name : str
         Name of the model to register
-    config : DefaultConfig
-        Model configuration dictionary with the following structure:
-        {
-            "response": list[str],  # e.g. ["rt", "response"]
-            "list_params": list[str],  # e.g. ["v", "a", "z", "t"]
-            "choices": list[int],  # e.g. [-1, 1]
-            "description": str,  # Model description
-            "likelihoods": {
-                "kind": {  # One of: analytical, approx_differentiable, blackbox
-                    "loglik": Callable,  # Log-likelihood function
-                    "backend": str | None,  # Optional, e.g. "jax" or "pytensor"
-                    "bounds": dict,  # Parameter bounds
-                    "default_priors": dict,  # Default priors for parameters
-                    "extra_fields": list | None  # Optional extra fields
-                }
-            }
-        }
+    response : list[str]
+        List of response variables
+    list_params : list[str]
+        List of parameters
+    choices : list[int]
+        List of possible choices
+    description : str
+        Description of the model
+    likelihoods : LoglikConfigs
+        Dictionary of likelihood configurations
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    ValueError
+        If the model name already exists
     """
     # Ensure no collisions with existing models
-    if name in default_model_config:
+    if name in registered_models:
         raise ValueError(f"Model '{name}' already exists")
 
-    # Validate required keys
-    required_keys = set(DefaultConfig.__annotations__.keys())
-    missing_keys = required_keys - set(config.keys())
-    if missing_keys:
-        raise ValueError(f"Missing required keys in config: {missing_keys}")
+    _config = {k: v for k, v in locals().items() if k != "name"}
+    config = cast(DefaultConfig, _config)
 
     # TODO: validate provided configs?
 
     # Register the model
-    default_model_config[name] = config
+    registered_models[name] = config
 
 
 def list_registered_models() -> dict[SupportedModels, str]:
@@ -61,7 +70,7 @@ def list_registered_models() -> dict[SupportedModels, str]:
     """
     return {
         name: config.get("description") or "No description"
-        for name, config in default_model_config.items()
+        for name, config in registered_models.items()
     }
 
 
@@ -83,8 +92,8 @@ def get_model_info(name: SupportedModels | str) -> None:
     ValueError
         If the model name is not found in the registered models
     """
-    if name not in default_model_config:
+    if name not in registered_models:
         raise ValueError(f"Model '{name}' not found")
 
     name = cast(SupportedModels, name)
-    print(f"Model: {name}\n" + pformat(default_model_config[name], indent=2))
+    print(f"Model: {name}\n" + pformat(registered_models[name], indent=2))
