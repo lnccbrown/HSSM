@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING, Any, Literal, Union, cast
 
 import bambi as bmb
 
-from .defaults import LogLik, LoglikKind, SupportedModels, default_model_config
+from .defaults import LogLik, LoglikKind, SupportedModels
+from .configs.utils import load_model_config
 
 if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
@@ -36,6 +37,16 @@ class Config:
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
 
+    def __post_init__(self):
+        # Convert bounds lists to tuples and infinity strings to float
+        if self.bounds:
+            self.bounds = {
+                k: tuple(
+                    np.float_(x) if isinstance(x, str) and x.lower() in ('-inf', '-infinity', 'inf', 'infinity')
+                    else x for x in (v if isinstance(v, list) else v)
+                ) for k, v in self.bounds.items()
+            }
+
     @classmethod
     def from_defaults(
         cls, model_name: SupportedModels | str, loglik_kind: LoglikKind | None
@@ -49,16 +60,20 @@ class Config:
         loglik_kind
             The kind of the log-likelihood for the model.
         """
-        if loglik_kind is None:
-            if model_name not in default_model_config:
+        try:
+            # Try to load the model config from JSON
+            default_config = load_model_config(str(model_name))
+        except FileNotFoundError:
+            if loglik_kind is None:
                 raise ValueError(
                     "When using a custom model, please provide a `loglik_kind.`"
                 )
-            # Setting loglik_kind to be the first of analytical or
-            # approx_differentiable
+            # For custom models, set default response to ["rt", "response"]
+            return Config(model_name, loglik_kind=loglik_kind, response=["rt", "response"])
+
+        if loglik_kind is None:
+            # Setting loglik_kind to be the first of analytical or approx_differentiable
             for kind in ["analytical", "approx_differentiable", "blackbox"]:
-                model_name = cast(SupportedModels, model_name)
-                default_config = deepcopy(default_model_config[model_name])
                 if kind in default_config["likelihoods"]:
                     kind = cast(LoglikKind, kind)
                     loglik_config = default_config["likelihoods"][kind]
@@ -74,7 +89,7 @@ class Config:
                     )
 
             raise ValueError(
-                "No default model_config is found. Please provide a `loglik_kind."
+                "No default model_config is found. Please provide a `loglik_kind.`"
             )
         else:
             if loglik_kind not in [
@@ -86,28 +101,36 @@ class Config:
                     "`loglik_kind`, when provided, must be one of "
                     + '"analytical", "approx_differentiable", "blackbox".'
                 )
-            if model_name in default_model_config:
-                model_name = cast(SupportedModels, model_name)
-                default_config = deepcopy(default_model_config[model_name])
-                if loglik_kind in default_config["likelihoods"]:
-                    loglik_config = default_config["likelihoods"][loglik_kind]
-                    return Config(
-                        model_name,
-                        loglik_kind=loglik_kind,
-                        response=default_config["response"],
-                        choices=default_config["choices"],
-                        list_params=default_config["list_params"],
-                        description=default_config["description"],
-                        **loglik_config,
-                    )
-                return Config(
-                    model_name,
-                    loglik_kind=loglik_kind,
-                    response=default_config["response"],
-                    choices=default_config["choices"],
-                    list_params=default_config["list_params"],
-                    description=default_config["description"],
+
+            # If requested loglik_kind is not available, try to get base config from another kind
+            if loglik_kind not in default_config["likelihoods"]:
+                # Find any available kind to get base config
+                for kind in ["analytical", "approx_differentiable", "blackbox"]:
+                    if kind in default_config["likelihoods"]:
+                        # Use this kind's config for base fields
+                        base_config = default_config["likelihoods"][kind]
+                        return Config(
+                            model_name,
+                            loglik_kind=loglik_kind,
+                            response=default_config["response"],
+                            choices=default_config["choices"],
+                            list_params=default_config["list_params"],
+                            description=default_config["description"],
+                        )
+                raise ValueError(
+                    f"No model configuration found for {model_name} with {loglik_kind} likelihood."
                 )
+
+            loglik_config = default_config["likelihoods"][loglik_kind]
+            return Config(
+                model_name,
+                loglik_kind=loglik_kind,
+                response=default_config["response"],
+                choices=default_config["choices"],
+                list_params=default_config["list_params"],
+                description=default_config["description"],
+                **loglik_config,
+                    )
 
             return Config(model_name, loglik_kind, response=["rt", "response"])
 
@@ -166,10 +189,10 @@ class Config:
 
     def validate(self) -> None:
         """Ensure that mandatory fields are not None."""
-        if self.response is None:
-            raise ValueError("Please provide `response` via `model_config`.")
         if self.list_params is None:
             raise ValueError("Please provide `list_params` via `model_config`.")
+        if self.response is None:
+            raise ValueError("Please provide `response` via `model_config`.")
         if self.choices is None:
             raise ValueError("Please provide `choices` via `model_config`.")
         if self.loglik is None:

@@ -650,66 +650,65 @@ def make_likelihood_callable(
         elif loglik_kind == "blackbox":
             return make_blackbox_op(loglik)
         elif loglik_kind == "approx_differentiable":
-            if backend is None or backend == "jax":
+            if isinstance(loglik, (str, PathLike)):
+                if not Path(loglik).exists():
+                    loglik = download_hf(str(loglik))
+
+                onnx_model = onnx.load(str(loglik))
+
+                if backend == "pytensor":
+                    lan_logp_pt = make_pytensor_logp(onnx_model)
+                    return lan_logp_pt
+
                 if params_is_reg is None:
                     raise ValueError(
                         "You set `loglik_kind` to `approx_differentiable` "
-                        + "and `backend` to `jax` and supplied a jax callable, "
                         + "but did not set `params_is_reg`."
                     )
-                logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_jax_callable(
-                    loglik,
+
+                logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
+                    onnx_model,
                     params_is_reg,
                     params_only=False if params_only is None else params_only,
                 )
                 lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
                 return lan_logp_jax
-            if backend == "pytensor":
+            elif callable(loglik):
+                if backend is None or backend == "jax":
+                    if params_is_reg is None:
+                        raise ValueError(
+                            "You set `loglik_kind` to `approx_differentiable` "
+                            + "and `backend` to `jax` and supplied a jax callable, "
+                            + "but did not set `params_is_reg`."
+                        )
+                    logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_jax_callable(
+                        loglik,
+                        params_is_reg,
+                        params_only=False if params_only is None else params_only,
+                    )
+                    lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+                    return lan_logp_jax
+                elif backend == "pytensor":
+                    # For PyTensor backend, we can use the callable directly if it's a PyTensor Op
+                    if isinstance(loglik, pytensor.graph.Op):
+                        return loglik
+                    # Otherwise wrap it in a BlackBoxOp
+                    return make_blackbox_op(loglik)
+            else:
                 raise ValueError(
-                    "You set `backend` to `pytensor`, `loglik_kind` to"
-                    + "`approx_differentiable` and provided a callable."
-                    + "Currently we support only jax callables in this case."
+                    "For approx_differentiable loglik_kind, loglik must be a path to an ONNX model or a callable."
                 )
-            # In the approx_differentiable case or the blackbox case, unless the backend
-            # is `pytensor`, we wrap the callable in a BlackBoxOp.
-        # if backend == "pytensor":
-        #     return loglik
-        #     # In all other cases, we assume that the callable cannot be directly
-        #     # used in the backend and thus we wrap it in a BlackBoxOp
-        # return make_blackbox_op(loglik)
-
-    # Other cases, when `loglik` is a string or a PathLike.
-    if loglik_kind != "approx_differentiable":
-        raise ValueError(
-            "You set `loglik_kind` to `approx_differentiable "
-            + "but did not provide a pm.Distribution, an Op, or a callable "
-            + "as `loglik`."
-        )
-
-    if isinstance(loglik, (str, PathLike)):
-        if not Path(loglik).exists():
-            loglik = download_hf(str(loglik))
-
-    onnx_model = onnx.load(str(loglik))
-
-    if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp(onnx_model)
-        return lan_logp_pt
-
-    if params_is_reg is None:
-        raise ValueError(
-            "You set `loglik_kind` to `approx_differentiable` "
-            + "and `backend` to `jax` but did not provide `params_is_reg`."
-        )
-
-    logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
-        onnx_model,
-        params_is_reg,
-        params_only=False if params_only is None else params_only,
-    )
-    lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
-
-    return lan_logp_jax
+    else:
+        if isinstance(loglik, str):
+            # For non-approx_differentiable kinds, string loglik should be a function name
+            if loglik in LOGLIK_MAP:
+                return LOGLIK_MAP[loglik]
+            else:
+                raise ValueError(f"Unknown loglik function name: {loglik}")
+        else:
+            raise ValueError(
+                f"For {loglik_kind} loglik_kind, loglik must be a function name or callable."
+            )
 
 
 def make_missing_data_callable(
