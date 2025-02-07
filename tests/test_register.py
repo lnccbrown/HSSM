@@ -4,25 +4,32 @@ import pytest
 
 import hssm
 from hssm.register import register_model, list_registered_models, get_model_info
-from hssm.defaults import default_model_config
+from hssm.defaults import (
+    SupportedModels,
+    LoglikConfigs,
+    default_model_config as registered_models,
+)
 
 
 def test_register_model():
     """Test registering a custom model"""
 
-    my_custom_model_name = "my_custom_model"
-    config = default_model_config["ddm"]
+    # Test data for registration
+    name = "custom_model"
+    # get some model metadata for testing purposes
+    config = registered_models["ddm"]
 
-    # Register the model with a new name
-    register_model(my_custom_model_name, config)
+    # Register the model
+    register_model(name=name, **config)
 
-    # Verify registration
-    assert my_custom_model_name in default_model_config
+    # Test listing models
+    list_registered_models()
+    assert name in registered_models
 
     # Verify model can be instantiated
     data = hssm.load_data("cavanagh_theta")
     model = hssm.HSSM(
-        model=my_custom_model_name,
+        model=name,
         data=data,
         include=[
             {
@@ -38,10 +45,13 @@ def test_register_model():
     )
     assert isinstance(model, hssm.HSSM)
 
-    assert get_model_info(my_custom_model_name) is None
+    # Test model info (should print but not return anything)
+    assert get_model_info(name) is None
 
+    # Test error cases
     with pytest.raises(ValueError):
-        # Lookup non-existent model
+        # Try to register model with existing name
+        register_model(name=name, **config)
+
+        # Try to get info for non-existent model
         get_model_info("non_existent_model")
-        # Register model with existing name
-        register_model("ddm", config)
