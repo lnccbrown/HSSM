@@ -1,0 +1,53 @@
+{
+  "response": [
+    "rt",
+    "response"
+  ],
+  "list_params": [
+    "v",
+    "a",
+    "z",
+    "t",
+    "alpha",
+    "beta"
+  ],
+  "choices": [
+    -1,
+    1
+  ],
+  "description": null,
+  "likelihoods": {
+    "approx_differentiable": {
+      "loglik": "weibull.onnx",
+      "backend": "jax",
+      "default_priors": {},
+      "bounds": {
+        "v": [
+          -2.5,
+          2.5
+        ],
+        "a": [
+          0.3,
+          2.5
+        ],
+        "z": [
+          0.2,
+          0.8
+        ],
+        "t": [
+          0.001,
+          2.0
+        ],
+        "alpha": [
+          0.31,
+          4.99
+        ],
+        "beta": [
+          0.31,
+          6.99
+        ]
+      },
+      "extra_fields": null
+    }
+  }
+}

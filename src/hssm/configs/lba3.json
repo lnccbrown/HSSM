@@ -1,0 +1,49 @@
+{
+  "response": [
+    "rt",
+    "response"
+  ],
+  "list_params": [
+    "A",
+    "b",
+    "v0",
+    "v1",
+    "v2"
+  ],
+  "choices": [
+    0,
+    1,
+    2
+  ],
+  "description": "Linear Ballistic Accumulator 3 Choices (LBA3)",
+  "likelihoods": {
+    "analytical": {
+      "loglik": "logp_lba3",
+      "backend": null,
+      "default_priors": {},
+      "bounds": {
+        "A": [
+          0.0,
+          "inf"
+        ],
+        "b": [
+          0.2,
+          "inf"
+        ],
+        "v0": [
+          0.0,
+          "inf"
+        ],
+        "v1": [
+          0.0,
+          "inf"
+        ],
+        "v2": [
+          0.0,
+          "inf"
+        ]
+      },
+      "extra_fields": null
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "response": [
+    "rt",
+    "response"
+  ],
+  "list_params": [
+    "v",
+    "a",
+    "z",
+    "t",
+    "sz",
+    "sv",
+    "st"
+  ],
+  "choices": [
+    -1,
+    1
+  ],
+  "description": "The full Drift Diffusion Model (DDM)",
+  "likelihoods": {
+    "blackbox": {
+      "loglik": "outer",
+      "backend": null,
+      "bounds": {
+        "v": [
+          "-inf",
+          "inf"
+        ],
+        "a": [
+          0.0,
+          "inf"
+        ],
+        "z": [
+          0.0,
+          1.0
+        ],
+        "t": [
+          0.0,
+          "inf"
+        ],
+        "sv": [
+          0.0,
+          "inf"
+        ],
+        "sz": [
+          0,
+          "inf"
+        ],
+        "st": [
+          0,
+          "inf"
+        ]
+      },
+      "default_priors": {
+        "t": {
+          "name": "HalfNormal",
+          "sigma": 2.0
+        }
+      },
+      "extra_fields": null
+    }
+  }
+}
