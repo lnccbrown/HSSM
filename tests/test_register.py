@@ -17,14 +17,14 @@ def test_register_model():
     # Test data for registration
     name = "custom_model"
     # get some model metadata for testing purposes
-    config = registered_models["ddm"]
+    config = registered_models()["ddm"]
 
     # Register the model
     register_model(name=name, **config)
 
     # Test listing models
     list_registered_models()
-    assert name in registered_models
+    assert name in registered_models()
 
     # Verify model can be instantiated
     data = hssm.load_data("cavanagh_theta")

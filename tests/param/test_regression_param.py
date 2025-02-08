@@ -195,16 +195,16 @@ def test_validate():
     assert v.link.bounds == (0.0, 1.0)
 
 
-angle_params = default_model_config["angle"]["list_params"]
-angle_bounds = default_model_config["angle"]["likelihoods"]["approx_differentiable"][
+angle_params = default_model_config()["angle"]["list_params"]
+angle_bounds = default_model_config()["angle"]["likelihoods"]["approx_differentiable"][
     "bounds"
 ].values()
 param_and_bounds_angle = list(
     zip(angle_params, angle_bounds, [False] * len(angle_params))
 )
 
-ddm_params = default_model_config["full_ddm"]["list_params"]
-ddm_bounds = default_model_config["full_ddm"]["likelihoods"]["blackbox"][
+ddm_params = default_model_config()["full_ddm"]["list_params"]
+ddm_bounds = default_model_config()["full_ddm"]["likelihoods"]["blackbox"][
     "bounds"
 ].values()
 param_and_bounds_ddm = list(zip(ddm_params, ddm_bounds, [True] * len(ddm_params)))

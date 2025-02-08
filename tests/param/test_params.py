@@ -27,10 +27,10 @@ def create_mock_model(
     prior_settings=None,
 ):
     def mock_config(model: SupportedModels, loglik_kind="analytical"):
-        if model not in default_model_config:
+        if model not in default_model_config():
             return lambda param: (None, None)
 
-        defaults = default_model_config[model]["likelihoods"][loglik_kind]
+        defaults = default_model_config()[model]["likelihoods"][loglik_kind]
 
         priors = defaults["default_priors"]
         bounds = defaults["bounds"]
@@ -51,7 +51,7 @@ def create_mock_model(
     model = Mock(
         model_name=model_name,
         spec=HSSM,
-        list_params=default_model_config[model_name]["list_params"] + ["p_outlier"],
+        list_params=default_model_config()[model_name]["list_params"] + ["p_outlier"],
         has_lapse=True,
         loglik_kind=loglik_kind,
         global_formula=global_formula,
@@ -125,7 +125,7 @@ def test_make_param_from_user_param():
     assert param.prior is None
     assert (
         param.bounds
-        == default_model_config["ddm"]["likelihoods"]["analytical"]["bounds"]["a"]
+        == default_model_config()["ddm"]["likelihoods"]["analytical"]["bounds"]["a"]
     )
     assert param.link is None
     assert param.user_param is reg_user_param
@@ -168,7 +168,7 @@ def test_make_param_from_user_param():
     assert param.prior is None
     assert (
         param.bounds
-        == default_model_config["ddm"]["likelihoods"]["analytical"]["bounds"]["a"]
+        == default_model_config()["ddm"]["likelihoods"]["analytical"]["bounds"]["a"]
     )
     assert param.link == "log"
     assert param.user_param is reg_user_param

@@ -48,7 +48,7 @@ def register_model(
         If the model name already exists
     """
     # Ensure no collisions with existing models
-    if name in registered_models:
+    if name in registered_models():
         raise ValueError(f"Model '{name}' already exists")
 
     _config = {k: v for k, v in locals().items() if k != "name"}
@@ -57,7 +57,7 @@ def register_model(
     # TODO: validate provided configs?
 
     # Register the model
-    registered_models[name] = config
+    registered_models()[name] = config
 
 
 def list_registered_models() -> None:
@@ -65,7 +65,7 @@ def list_registered_models() -> None:
     pp(
         {
             name: config.get("description") or "No description"
-            for name, config in registered_models.items()
+            for name, config in registered_models().items()
         },
         sort_dicts=True,
     )
@@ -89,8 +89,8 @@ def get_model_info(name: SupportedModels | str) -> None:
     ValueError
         If the model name is not found in the registered models
     """
-    if name not in registered_models:
+    if name not in registered_models():
         raise ValueError(f"Model '{name}' not found")
 
     name = cast(SupportedModels, name)
-    print(f"Model: {name}\n" + pformat(registered_models[name], indent=2))
+    print(f"Model: {name}\n" + pformat(registered_models()[name], indent=2))
