@@ -1,6 +1,6 @@
 """Module for registering custom models in HSSM."""
 
-from pprint import pformat
+from pprint import pformat, pp
 from typing import cast
 
 from .defaults import (
@@ -68,10 +68,13 @@ def list_registered_models() -> dict[SupportedModels, str]:
     dict[SupportedModels, str]
         Dictionary mapping model names to their descriptions
     """
-    return {
-        name: config.get("description") or "No description"
-        for name, config in registered_models.items()
-    }
+    pp(
+        {
+            name: config.get("description") or "No description"
+            for name, config in registered_models.items()
+        },
+        sort_dicts=True,
+    )
 
 
 def get_model_info(name: SupportedModels | str) -> None:
