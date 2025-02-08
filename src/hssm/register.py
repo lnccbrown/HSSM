@@ -60,14 +60,8 @@ def register_model(
     registered_models[name] = config
 
 
-def list_registered_models() -> dict[SupportedModels, str]:
-    """List all registered models and their descriptions.
-
-    Returns
-    -------
-    dict[SupportedModels, str]
-        Dictionary mapping model names to their descriptions
-    """
+def list_registered_models() -> None:
+    """List all registered models and their descriptions."""
     pp(
         {
             name: config.get("description") or "No description"
