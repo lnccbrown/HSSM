@@ -87,7 +87,7 @@ def _plot_model_cartoon_1D(
     else:
         ax = plt.gca()
 
-    config_tmp = default_model_config[cast(SupportedModels, model_name)]
+    config_tmp = default_model_config()[cast(SupportedModels, model_name)]
     model_params = config_tmp["list_params"]
 
     n_choices = len(config_tmp["choices"])
@@ -229,7 +229,7 @@ def _plot_model_cartoon_2D(
 def compute_merge_necessary_deterministics(model, idata, inplace=True):
     """Compute the necessary deterministic variables for the model."""
     # Get the list of deterministic variables
-    necessary_params = default_model_config[model.model_name]["list_params"]
+    necessary_params = default_model_config()[model.model_name]["list_params"]
     deterministics_list = []
     idata_posterior_keys = list(idata["posterior"].keys())
     # Compute the deterministic variables
@@ -251,7 +251,7 @@ def compute_merge_necessary_deterministics(model, idata, inplace=True):
 
 def attach_trialwise_params_to_df(model, df, idata):
     """Attach the trial-wise parameters to the dataframe."""
-    necessary_params = default_model_config[model.model_name]["list_params"]
+    necessary_params = default_model_config()[model.model_name]["list_params"]
     df[necessary_params] = 0.0
 
     for chain_tmp, draw_tmp in {(x[0], x[1]) for x in list(df.index) if x[0] != -1}:
@@ -1556,7 +1556,7 @@ def plot_func_model_n(
 
     # ADD HISTOGRAMS
     # -------------------------------
-    choices = default_model_config[cast(SupportedModels, model_name)]["choices"]
+    choices = default_model_config()[cast(SupportedModels, model_name)]["choices"]
     cnt_cumul = 0
 
     # POSTERIOR MEAN BASED HISTOGRAM
