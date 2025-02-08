@@ -151,7 +151,9 @@ def get_default_model_config() -> DefaultConfigs:
             "response": ["rt", "response"],
             "list_params": ddm_sdv_params,
             "choices": [-1, 1],
-            "description": "The Drift Diffusion Model (DDM) with standard deviation for v",
+            "description": (
+                "The Drift Diffusion Model (DDM) with standard deviation for v"
+            ),
             "likelihoods": {
                 "analytical": {
                     "loglik": logp_ddm_sdv,
