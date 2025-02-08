@@ -379,6 +379,7 @@ def get_default_model_config() -> DefaultConfigs:
         },
     }
 
+
 # cache the default model configurations
 _default_model_config: Optional[DefaultConfigs] = None
 
