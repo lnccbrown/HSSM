@@ -267,26 +267,10 @@ class HSSM:
 
         # Define a dict with all call arguments:
         self._init_args = {
-            "data": data,
-            "model": model,
-            "choices": choices,
-            "include": include,
-            "model_config": model_config,
-            "loglik": loglik,
-            "loglik_kind": loglik_kind,
-            "p_outlier": p_outlier,
-            "lapse": lapse,
-            "global_formula": global_formula,
-            "link_settings": link_settings,
-            "prior_settings": prior_settings,
-            "extra_namespace": extra_namespace,
-            "missing_data": missing_data,
-            "deadline": deadline,
-            "loglik_missing_data": loglik_missing_data,
-            "process_initvals": process_initvals,
-            "initval_jitter": initval_jitter,
-            **kwargs,
+            k: v for k, v in locals().items() if k not in ["self", "kwargs"]
         }
+        if kwargs:
+            self._init_args.update(kwargs)
 
         self.data = data.copy()
         self._inference_obj: az.InferenceData | None = None
