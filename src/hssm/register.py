@@ -18,8 +18,8 @@ def register_model(
     response: list[str],
     list_params: list[str],
     choices: list[int],
-    description: str,
     likelihoods: LoglikConfigs,
+    description: str | None,
 ) -> None:
     """Register a new model in HSSM.
 

@@ -5,8 +5,7 @@ import pytest
 import hssm
 from hssm.register import register_model, list_registered_models, get_model_info
 from hssm.defaults import (
-    SupportedModels,
-    LoglikConfigs,
+    get_default_model_meta,
     default_model_config as registered_models,
 )
 
@@ -17,7 +16,7 @@ def test_register_model():
     # Test data for registration
     name = "custom_model"
     # get some model metadata for testing purposes
-    config = registered_models["ddm"]
+    config = get_default_model_meta("ddm")
 
     # Register the model
     register_model(name=name, **config)

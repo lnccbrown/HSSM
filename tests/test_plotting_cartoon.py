@@ -2,31 +2,9 @@
 
 import pytest
 
-import arviz as az
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import xarray as xr
 
 import hssm
-from hssm.plotting.utils import (
-    _get_plotting_df,
-    _xarray_to_df,
-    _get_title,
-    _subset_df,
-    _row_mask_with_error,
-    _process_df_for_qp_plot,
-)
-from hssm.plotting.posterior_predictive import (
-    _plot_posterior_predictive_1D,
-    _plot_posterior_predictive_2D,
-    plot_posterior_predictive,
-)
-from hssm.plotting.quantile_probability import (
-    _plot_quantile_probability_1D,
-    _plot_quantile_probability_2D,
-    plot_quantile_probability,
-)
 
 hssm.set_floatX("float32")
 

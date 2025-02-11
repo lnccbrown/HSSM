@@ -88,8 +88,19 @@ class DefaultConfig(TypedDict):
 
 DefaultConfigs = dict[SupportedModels, DefaultConfig]
 
-default_model_config: DefaultConfigs = {
-    "ddm": {
+
+def get_ddm_config() -> DefaultConfig:
+    """
+    Get the default configuration for the Drift Diffusion Model (DDM).
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the DDM,
+        including response variables, model parameters, choices, description,
+        and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": ddm_params,
         "choices": [-1, 1],
@@ -137,8 +148,21 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             },
         },
-    },
-    "ddm_sdv": {
+    }
+
+
+def get_ddm_svd_config() -> DefaultConfig:
+    """
+    Get the default configuration for the DDM with standard deviation for v.
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the model,
+        including response variables, model parameters, choices, description,
+        and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": ddm_sdv_params,
         "choices": [-1, 1],
@@ -187,8 +211,21 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             },
         },
-    },
-    "full_ddm": {
+    }
+
+
+def get_full_ddm_config() -> DefaultConfig:
+    """
+    Get the default configuration for the Full Drift Diffusion Model (FDDM).
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the FDDM,
+        including response variables, model parameters, choices, description,
+        and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "t", "sz", "sv", "st"],
         "choices": [-1, 1],
@@ -207,8 +244,21 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             }
         },
-    },
-    "lba2": {
+    }
+
+
+def get_lba2_config() -> DefaultConfig:
+    """
+    Get the default configuration for the Levy-Beard Model 2 (LBA2).
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the LBA2,
+        including response variables, model parameters, choices, description,
+        and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": lba2_params,
         "choices": [0, 1],
@@ -222,8 +272,21 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             }
         },
-    },
-    "lba3": {
+    }
+
+
+def get_lba3_config() -> DefaultConfig:
+    """
+    Get the default configuration for the Levy-Beard Model 3 (LBA3).
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the LBA3,
+        including response variables, model parameters, choices, description,
+        and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": lba3_params,
         "choices": [0, 1, 2],
@@ -237,8 +300,21 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             }
         },
-    },
-    "angle": {
+    }
+
+
+def get_angle_config() -> DefaultConfig:
+    """
+    Get the default configuration for the angle model.
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the angle model,
+        including response variables, model parameters, choices, description,
+        and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "t", "theta"],
         "choices": [-1, 1],
@@ -258,8 +334,21 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             },
         },
-    },
-    "levy": {
+    }
+
+
+def get_levy_config() -> DefaultConfig:
+    """
+    Get the default configuration for the levy model.
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the levy model,
+        including response variables, model parameters, choices, description,
+        and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "alpha", "t"],
         "choices": [-1, 1],
@@ -279,8 +368,22 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             },
         },
-    },
-    "ornstein": {
+    }
+
+
+def get_ornstein_config() -> DefaultConfig:
+    """
+    Get the default configuration for the ornstein model.
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for
+        the ornstein model, including response variables, model
+        parameters, choices, description,
+        and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "g", "t"],
         "choices": [-1, 1],
@@ -300,8 +403,21 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             },
         },
-    },
-    "weibull": {
+    }
+
+
+def get_weibull_config() -> DefaultConfig:
+    """
+    Get the default configuration for the weibull model.
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the
+        weibull model, including response variables, model parameters,
+        choices, description, and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": ["v", "a", "z", "t", "alpha", "beta"],
         "choices": [-1, 1],
@@ -322,8 +438,21 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             },
         },
-    },
-    "race_no_bias_angle_4": {
+    }
+
+
+def get_race_no_bias_angle_4_config() -> DefaultConfig:
+    """
+    Get the default configuration for the race model.
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the race model,
+        including response variables, model parameters, choices, description,
+        and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": ["v0", "v1", "v2", "v3", "a", "z", "t", "theta"],
         "choices": [0, 1, 2, 3],
@@ -346,8 +475,21 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             },
         },
-    },
-    "ddm_seq2_no_bias": {
+    }
+
+
+def get_ddm_seq2_no_bias_config() -> DefaultConfig:
+    """
+    Get the default configuration for the ddm_seq2_no_bias model.
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the
+        ddm_seq2_no_bias model, including response variables, model choices,
+        description, and likelihood specifications.
+    """
+    return {
         "response": ["rt", "response"],
         "list_params": ["vh", "vl1", "vl2", "a", "t"],
         "choices": [0, 1, 2, 3],
@@ -367,8 +509,47 @@ default_model_config: DefaultConfigs = {
                 "extra_fields": None,
             },
         },
-    },
-}
+    }
+
+
+def get_default_model_meta(model_name: SupportedModels) -> DefaultConfig:
+    """
+    Get the default configuration for a given model name.
+
+    Parameters
+    ----------
+    model_name
+        The name of the model.
+
+    Returns
+    -------
+    DefaultConfig
+        A dictionary containing the default configuration settings for the given model
+        name,
+        including response variables, model parameters, choices, description,
+        and likelihood specifications.
+
+    """
+    _map = {
+        "ddm": get_ddm_config,
+        "ddm_sdv": get_ddm_svd_config,
+        "full_ddm": get_full_ddm_config,
+        "angle": get_angle_config,
+        "levy": get_levy_config,
+        "ornstein": get_ornstein_config,
+        "weibull": get_weibull_config,
+        "race_no_bias_angle_4": get_race_no_bias_angle_4_config,
+        "ddm_seq2_no_bias": get_ddm_seq2_no_bias_config,
+        "lba3": get_lba3_config,
+        "lba2": get_lba2_config,
+    }
+    try:
+        return _map[model_name]()
+    except KeyError:
+        raise ValueError(f"Model {model_name} not currently registered in HSSM.")
+
+
+default_model_config: DefaultConfigs = {"ddm": get_ddm_config()}
 
 # TODO: Initval settings could be specified directly in model config as well.
 INITVAL_SETTINGS = {
