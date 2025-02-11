@@ -39,6 +39,7 @@ nav:
       - Plotting in HSSM: tutorials/plotting.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
       - Variational Inference: tutorials/variational_inference.ipynb
+      - Variational Inference with Hierarchical Models: tutorials/variational_inference_hierarchical.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
       - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
       - Custom models from onnx files: tutorials/blackbox_contribution_onnx_example.ipynb
@@ -57,6 +58,7 @@ plugins:
         - tutorials/main_tutorial.ipynb
         - tutorials/likelihoods.ipynb
         - tutorials/variational_inference.ipynb
+        - tutorials/variational_inference_hierarchical.ipynb
         - tutorials/initial_values.ipynb
         - tutorials/pymc.ipynb
         - tutorials/jax_callable_contribution_onnx_example.ipynb
