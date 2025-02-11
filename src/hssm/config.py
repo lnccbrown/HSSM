@@ -5,11 +5,18 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, Union, cast
+from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
 import bambi as bmb
 
-from .defaults import LogLik, LoglikKind, SupportedModels, default_model_config
+from .defaults import (
+    LogLik,
+    LoglikKind,
+    SupportedModels,
+    default_model_config,
+    get_default_model_meta,
+)
+from .register import register_model
 
 if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
@@ -49,6 +56,17 @@ class Config:
         loglik_kind
             The kind of the log-likelihood for the model.
         """
+        model_name_casted = cast(SupportedModels, model_name)
+        if all(
+            [
+                model_name_casted in get_args(SupportedModels),
+                model_name_casted not in default_model_config,
+            ]
+        ):
+            register_model(
+                model_name_casted, **get_default_model_meta(model_name_casted)
+            )
+
         if loglik_kind is None:
             if model_name not in default_model_config:
                 raise ValueError(
