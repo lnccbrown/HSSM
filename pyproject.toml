@@ -33,6 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.4.25"]
+nb = ["lanfactory>=0.4.4", "zeus>=0.11.0"]
 
 [dependency-groups]
 dev = [
