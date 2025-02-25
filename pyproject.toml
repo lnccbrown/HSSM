@@ -57,6 +57,10 @@ dev = [
     "pytest>=8.3.1",
     "ruff>=0.9.1",
 ]
+notebook = [
+    "ipykernel>=6.29.5",
+    "zeus-mcmc>=2.5.4",
+]
 
 [tool.ruff]
 line-length = 88
