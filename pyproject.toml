@@ -22,14 +22,14 @@ dependencies = [
     "cloudpickle>=3.0.0",
     "hddm-wfpt>=0.1.4",
     "huggingface-hub>=0.24.6",
-    "numpy>=1.26.4,<2.0.0",
+        "numpy>=1.26.4,<2.0.0",
     "numpyro>=0.16.0",
     "onnx>=1.16.0",
     "pymc>=5.19.0",
     "seaborn>=0.13.2",
     "ssm-simulators>=0.8.3",
     "tqdm>=4.66.0",
-]
+    ]
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.4.25"]
@@ -56,6 +56,10 @@ dev = [
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
     "ruff>=0.9.1",
+]
+notebook = [
+    "ipykernel>=6.29.5",
+    "lanfactory>=0.4.4",
 ]
 
 [tool.ruff]
