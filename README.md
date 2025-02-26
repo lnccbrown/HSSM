@@ -15,6 +15,18 @@ A Python-based tool for searching and analyzing PDF and Microsoft Word documents
 
 - Python >= 3.11
 - Tesseract OCR (for PDF OCR functionality)
+- Enchant (for spell checking)
+
+### Tesseract and Enchant installation
+```bash
+brew update
+brew install tesseract
+brew install enchant
+
+# Python doesn't always find the enchant library, so we need to set the PYENCHANT_LIBRARY_PATH environment variable
+echo 'export PYENCHANT_LIBRARY_PATH=$(brew --prefix enchant)/lib/libenchant-2.dylib' >> ~/.zshrc
+```
+
 
 ## Installation
 
