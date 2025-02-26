@@ -30,9 +30,43 @@ To install the project's dependencies:
 uv sync
 ```
 
-## Project Structure
+## Entry point with command-line interface
 
-- `main.py`: Entry point with command-line interface
+```bash
+$ uv run award --help
+usage: award [-h] {docx,pdf} ...
+
+Search for keywords in PDF and DOCX files
+
+positional arguments:
+  {docx,pdf}  Commands
+    docx      Search in DOC and DOCX files
+    pdf       Search in PDF files
+
+options:
+  -h, --help  show this help message and exit
+```
+
+As shown in the example, the tool provides subcommands for different document types (`docx` and `pdf`). For the `pdf` subcommand,
+```bash
+$ uv run award pdf --help
+usage: award pdf [-h] --input INPUT --keywords KEYWORDS --output OUTPUT
+
+Search for keywords in PDF files. Output is a json file where the keys are the file names and the values are the results of the search.
+
+options:
+  -h, --help            show this help message and exit
+  --input INPUT, -i INPUT
+                        Input directory
+  --keywords KEYWORDS, -k KEYWORDS
+                        Keywords file path
+  --output OUTPUT, -o OUTPUT
+                        Output json file path
+```
+
+## Features
+
+- `main.py`: entry point
 - `searchpdf.py`: PDF document search functionality
 - `searchdocx.py`: Microsoft Word document search functionality
 - `extract.py`: Text extraction utilities
@@ -45,12 +79,12 @@ The tool provides a command-line interface with subcommands for different docume
 
 For PDF documents:
 ```bash
-award pdf --input path/to/pdf --keywords path/to/keywords.txt --output results.json
+uv run award pdf --input path/to/pdf --keywords path/to/keywords.txt --output results.json
 ```
 
 For DOCX documents:
 ```bash
-award docx --input path/to/document.docx --keywords path/to/keywords.txt --output results.json
+uv run award docx --input path/to/document.docx --keywords path/to/keywords.txt --output results.json
 ```
 
 The tool outputs results in JSON format containing matched keywords and their context within the documents.
