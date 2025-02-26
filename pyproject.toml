@@ -1,0 +1,17 @@
+[project]
+name = "award"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=6.29.5",
+    "pillow>=11.1.0",
+    "ptpython>=3.0.29",
+    "pyenchant>=3.2.2",
+    "pymupdf>=1.25.3",
+    "pyspellchecker>=0.8.2",
+    "pytesseract>=0.3.13",
+    "textract>=1.6.5",
+    "tqdm>=4.67.1",
+]
