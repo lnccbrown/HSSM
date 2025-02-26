@@ -1,0 +1,20 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+assets/
+uv.lock
+explorations/
+txt/
+.vscode/settings.json
+results.json
+mynb.ipynb
+.python-version
+en.tar.gz
