@@ -1,18 +1,20 @@
 # Award Document Search
 
-A Python-based tool for extracting, searching, and classifying text content from PDF, MS Word, and Excel documents with support for both standard text extraction and OCR capabilities.
+A Python-based tool for searching and analyzing PDF and Microsoft Word documents using keyword-based search with support for both text extraction and OCR capabilities.
 
 ## Features
 
-- PDF text extraction using PyMuPDF for machine-readable documents
-- OCR support using Tesseract for scanned documents
-- Keyword-based search functionality
-- Support for exporting extracted text to files
+- PDF text extraction with OCR support using Tesseract
+- Microsoft Word (.docx) document processing
+- Keyword-based search with configurable output
+- JSON output format for structured results
+- Spell checking and text tokenization utilities
+- Command-line interface with subcommands for different document types
 
 ## Requirements
 
 - Python >= 3.11
-- Tesseract OCR (for OCR functionality)
+- Tesseract OCR (for PDF OCR functionality)
 
 ## Installation
 
@@ -30,16 +32,25 @@ uv sync
 
 ## Project Structure
 
-- `search.py`: Main script for PDF text extraction and search
-- `extract.py`: Additional extraction utilities
-- `readdocx.py`: Support for MS Word file processing
+- `main.py`: Entry point with command-line interface
+- `searchpdf.py`: PDF document search functionality
+- `searchdocx.py`: Microsoft Word document search functionality
+- `extract.py`: Text extraction utilities
 - `spellcheck.py`: Spell checking functionality
 - `tokenize_.py`: Text tokenization utilities
 
 ## Usage
 
-The main functionality is provided through the `search.py` script. Example usage:
+The tool provides a command-line interface with subcommands for different document types:
 
+For PDF documents:
 ```bash
-uv run python search.py --pdf-path path/to/document.pdf --keywords path/to/keywords.txt
+uv run python main.py pdf --input path/to/pdf --keywords path/to/keywords.txt --output results.json
 ```
+
+For DOCX documents:
+```bash
+uv run python main.py docx --input path/to/document.docx --keywords path/to/keywords.txt --output results.json
+```
+
+The tool outputs results in JSON format containing matched keywords and their context within the documents.
