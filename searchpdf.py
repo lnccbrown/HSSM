@@ -93,40 +93,47 @@ def search_keywords_in_text(text: str, keywords: tuple) -> dict:
     return results
 
 
-def main() -> None:
+def search_files(input_dir, keywords_file, output_file) -> None:
+    keywords = get_keywords(keywords_file)
+    results = {}
+
+    input_path = Path(input_dir)
+    for file in tqdm(list(input_path.glob("**/*.pdf"))):
+        if not file.is_file():
+            continue
+
+        text = extract_text_from_pdf(file, totxt=False)
+        results[str(file)] = search_keywords_in_text(text, keywords)
+
+    with open(output_file, "w") as f:
+        json.dump(results, f, indent=2)
+
+
+def add_pdf_subparser(subparsers):
+    """Add PDF search arguments to an argparse subparsers object."""
     description = "Search for keywords in PDF files. Output is a json file where the keys are the file names and the values are the results of the search."
-    parser = argparse.ArgumentParser(description=description)
-    parser.add_argument(
-        "pdf_directory", type=str, help="Path to the directory containing PDF files."
+    pdf_parser = subparsers.add_parser(
+        "pdf", help="Search in PDF files", description=description
     )
-    parser.add_argument(
-        "--keywords",
-        type=Path,
-        help="Path to the file containing keywords to search for.",
+    pdf_parser.add_argument("--input", "-i", required=True, help="Input directory")
+    pdf_parser.add_argument(
+        "--keywords", "-k", required=True, help="Keywords file path"
     )
+    pdf_parser.add_argument(
+        "--output", "-o", required=True, help="Output json file path"
+    )
+    return pdf_parser
 
-    parser.add_argument(
-        "--output",
-        type=Path,
-        help="Path to the output json file.",
-        required=True,
-    )
 
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    pdf_parser = add_pdf_subparser(subparsers)  # noqa: F841
     args = parser.parse_args()
-
-    pdf_directory = Path(args.pdf_directory)
-    keywords = get_keywords(args.keywords)
-
-    results = {
-        pdf_file.name: search_keywords_in_text(
-            extract_text_from_pdf(pdf_file), keywords
-        )
-        for pdf_file in pdf_directory.glob("*.pdf")
-    }
-
-    # serialize results to json file
-    with open(args.output, "w") as file:
-        json.dump(results, file, indent=4)
+    if args.command == "pdf":
+        search_files(args.input, args.keywords, args.output)
+    else:
+        parser.print_help()
 
 
 if __name__ == "__main__":
