@@ -11,8 +11,8 @@ import json
 import textract
 # from nltk.stem import WordNetLemmatizer
 
-from tokenize_ import get_tokens
-from searchpdf import get_keywords
+from .tokenize_ import get_tokens
+from .searchpdf import get_keywords
 
 
 def read_doc(file_path):
@@ -25,19 +25,19 @@ def filter_tokens_in_keywords(tokens, keywords):
 def search_files(input_dir, keywords_file, output_file):
     keywords = get_keywords(keywords_file)
     results = {}
-    
+
     input_path = Path(input_dir)
     for file in input_path.glob("**/*.doc*"):
         if not file.is_file():
             continue
-        
+
         text = read_doc(file)
         tokens = get_tokens(text)
         found = filter_tokens_in_keywords(tokens, keywords)
-        
+
         if found:
             results[str(file)] = found
-    
+
     with open(output_file, "w") as f:
         json.dump(results, f, indent=2)
 
@@ -54,7 +54,7 @@ def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
     docx_parser = add_docx_subparser(subparsers)
-    
+
     args = parser.parse_args()
     if args.command == 'docx':
         search_files(args.input, args.keywords, args.output)

@@ -1,6 +1,6 @@
 import argparse
-from searchdocx import search_files as search_docx, add_docx_subparser
-from searchpdf import search_files as search_pdf, add_pdf_subparser
+from .searchdocx import search_files as search_docx, add_docx_subparser
+from .searchpdf import search_files as search_pdf, add_pdf_subparser
 
 def main():
     parser = argparse.ArgumentParser(description='Search for keywords in PDF and DOCX files')

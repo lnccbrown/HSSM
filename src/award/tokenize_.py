@@ -1,5 +1,5 @@
 from enchant.tokenize import get_tokenizer
-from spellcheck import correct_text
+from .spellcheck import correct_text
 
 
 def get_tokens(text: str) -> list[str]:
