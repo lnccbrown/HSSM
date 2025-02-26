@@ -355,6 +355,7 @@ class HSSM:
             # Model config is not provided, but at this point was constructed from
             # defaults.
             if model not in typing.get_args(SupportedModels):
+                # TODO: ideally use self.supported_models above but mypy doesn't like it
                 if choices is not None:
                     self.model_config.update_choices(choices)
                 elif model in ssms_model_config:
