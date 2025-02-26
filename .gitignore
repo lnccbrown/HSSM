@@ -18,3 +18,7 @@ results.json
 mynb.ipynb
 .python-version
 en.tar.gz
+output-pdf.json
+output-doc.json
+
+/data
