@@ -45,12 +45,12 @@ The tool provides a command-line interface with subcommands for different docume
 
 For PDF documents:
 ```bash
-uv run python main.py pdf --input path/to/pdf --keywords path/to/keywords.txt --output results.json
+award pdf --input path/to/pdf --keywords path/to/keywords.txt --output results.json
 ```
 
 For DOCX documents:
 ```bash
-uv run python main.py docx --input path/to/document.docx --keywords path/to/keywords.txt --output results.json
+award docx --input path/to/document.docx --keywords path/to/keywords.txt --output results.json
 ```
 
 The tool outputs results in JSON format containing matched keywords and their context within the documents.
