@@ -1,10 +1,12 @@
 [project]
 name = "award"
 version = "0.1.0"
-description = "Add your description here"
+description = "Search and analyze PDF and DOCX documents using keyword-based search"
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [{ name = "Carlos Paniagua", email = "carlos_paniagua@brown.edu" }]
 dependencies = [
+    "nltk>=3.9.1",
     "pillow>=11.1.0",
     "pyenchant>=3.2.2",
     "pymupdf>=1.25.3",
@@ -14,8 +16,18 @@ dependencies = [
     "tqdm>=4.67.1",
 ]
 
+[project.scripts]
+award = "award.main:main"
+
 [dependency-groups]
-dev = [
-    "ipykernel>=6.29.5",
-    "ptpython>=3.0.29",
-]
+dev = ["ipykernel>=6.29.5", "ptpython>=3.0.29"]
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/award"]
