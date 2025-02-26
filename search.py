@@ -27,7 +27,17 @@ def export_text_to_file(text: str, output_path: Path) -> None:
         file.write(text)
 
 
-def extract_text_from_pdf_simple(pdf_path: Path) -> str:
+def extract_text_from_pdf_simple(pdf_path: Path) -> tuple[str, int]:
+    """Extract text content from a machine-readable PDF file.
+
+    Args:
+        pdf_path (Path): Path to the PDF file to process
+
+    Returns:
+        tuple: A tuple containing:
+            - str: The extracted text from all pages concatenated
+            - int: Total number of pages in the PDF
+    """
     pdf_path = Path(pdf_path)
     document = fitz.open(pdf_path)
     text = ""
