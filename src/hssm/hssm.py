@@ -13,7 +13,7 @@ from copy import deepcopy
 from inspect import isclass, signature
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Union, cast
+from typing import Any, Callable, Literal, Optional, Union, cast, get_args
 
 import arviz as az
 import bambi as bmb
@@ -59,6 +59,34 @@ from .param import Params
 from .param import UserParam as Param
 
 _logger = logging.getLogger("hssm")
+
+
+class classproperty:
+    """A decorator that combines the behavior of @property and @classmethod.
+
+    This decorator allows you to define a property that can be accessed on the class
+    itself, rather than on instances of the class. It is useful for defining class-level
+    properties that need to perform some computation or access class-level data.
+
+    This implementation is provided for compatibility with Python versions 3.10 through
+    3.12, as one cannot combine the @property and @classmethod decorators is across all
+    these versions.
+
+    Example
+    -------
+    class MyClass:
+        @classproperty
+        def my_class_property(cls):
+            return "This is a class property"
+
+    print(MyClass.my_class_property)  # Output: This is a class property
+    """
+
+    def __init__(self, fget):
+        self.fget = fget
+
+    def __get__(self, instance, owner):  # noqa: D105
+        return self.fget(owner)
 
 
 class HSSM:
@@ -479,6 +507,17 @@ class HSSM:
             {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
         )
         _logger.info("Model initialized successfully.")
+
+    @classproperty
+    def supported_models(cls) -> tuple[SupportedModels, ...]:
+        """Get a tuple of all supported models.
+
+        Returns
+        -------
+        tuple[SupportedModels, ...]
+            A tuple containing all supported model names.
+        """
+        return get_args(SupportedModels)
 
     @classmethod
     def _store_init_args(cls, *args, **kwargs):
