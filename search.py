@@ -84,7 +84,8 @@ def search_keywords_in_text(text: str, keywords: tuple) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Search for keywords in PDF files.")
+    description = "Search for keywords in PDF files. Output is a json file where the keys are the file names and the values are the results of the search."
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument(
         "pdf_directory", type=str, help="Path to the directory containing PDF files."
     )
@@ -92,6 +93,13 @@ def main() -> None:
         "--keywords",
         type=Path,
         help="Path to the file containing keywords to search for.",
+    )
+
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Path to the output json file.",
+        required=True,
     )
 
     args = parser.parse_args()
@@ -107,7 +115,7 @@ def main() -> None:
     }
 
     # serialize results to json file
-    with open("results.json", "w") as file:
+    with open(args.output, "w") as file:
         json.dump(results, file, indent=4)
 
 
