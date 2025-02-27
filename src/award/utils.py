@@ -6,6 +6,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 import pandas as pd
 import pytesseract
+import textract
 from PIL import Image
 from tqdm import tqdm
 
@@ -111,6 +112,16 @@ def extract_text_from_pdf(pdf_path: Path, totxt=True) -> str:
 
     return text
 
+
+## MS Word files processing
+
+def read_doc(file_path):
+    text = textract.process(file_path).decode("utf-8")
+    return text
+
+# def find_files_with_extensions(input_dir: Path, extensions: list) -> list:
+#     patterns = [f"**/*{ext}" for ext in extensions]
+#     return [file for pattern in patterns for file in input_dir.glob(pattern)]
 
 def search_files(input_dir, keywords_file, output_file) -> None:
     keywords = get_keywords(keywords_file)
