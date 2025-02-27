@@ -27,6 +27,6 @@ jobs:
 
       - name: Exercise notebooks
         run: |
-          uv sync --all-groups && uv run pytest --nbval --nbval-lax --capture=no --dist loadscope docs/
+          uv run pytest --nbval --nbval-lax --capture=no --dist loadscope docs/
         env:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}

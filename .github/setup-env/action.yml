@@ -25,5 +25,5 @@ runs:
 
     - name: Install hssm
       if: steps.cache.outputs.cache-hit != 'true'
-      run: uv sync
+      run: uv sync --all-groups
       shell: bash
