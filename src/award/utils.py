@@ -1,5 +1,5 @@
-
 import io
+import logging
 import re
 from pathlib import Path
 
@@ -9,6 +9,10 @@ import pytesseract
 import textract
 from PIL import Image
 from tqdm import tqdm
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 def get_document_code_description(file_path: Path) -> str:
@@ -56,7 +60,7 @@ def search_keywords_in_text(text: str, keywords: tuple) -> dict:
     return results
 
 
-def extract_text_from_pdf_simple(pdf_path: Path) -> tuple[str, int]:
+def extract_text_from_doc_simple(pdf_path: Path) -> tuple[str, int]:
     """Extract text content from a machine-readable PDF file.
 
     Args:
@@ -93,13 +97,14 @@ def extract_text_from_pdf_ocr(pdf_path: Path) -> str:
     return text
 
 
-def extract_text_from_pdf(pdf_path: Path, totxt=True) -> str:
+def extract_text_from_doc(pdf_path: Path, totxt=True) -> str:
     # first try simple if pdf is machine readable
-    text, page_count = extract_text_from_pdf_simple(pdf_path)
-    print(f"Extracted {page_count} pages from {pdf_path}")
-    # breakpoint()    # if text is too short, try OCR
+    text, page_count = extract_text_from_doc_simple(pdf_path)
+    logging.info("Extracted %d pages from %s", page_count, pdf_path)
+
+    # if text is too short, try OCR
     if len(text.split("\n")) < 10 * page_count:
-        print("Warning: File is not machine readable. Trying OCR.")
+        logging.info("Warning: File is not machine readable. Trying OCR.")
         text = extract_text_from_pdf_ocr(pdf_path)
 
         # TODO: apply spellcheck to OCR text
@@ -108,32 +113,33 @@ def extract_text_from_pdf(pdf_path: Path, totxt=True) -> str:
         out_name = pdf_path.stem
         out_name = Path(out_name).with_suffix(".txt")
         export_text_to_file(text, out_name)
-        print("Text extracted and saved to", out_name)
+        logging.info("Text extracted and saved to %s", out_name)
 
     return text
 
-
-## MS Word files processing
 
 def read_doc(file_path):
     text = textract.process(file_path).decode("utf-8")
     return text
 
-# def find_files_with_extensions(input_dir: Path, extensions: list) -> list:
-#     patterns = [f"**/*{ext}" for ext in extensions]
-#     return [file for pattern in patterns for file in input_dir.glob(pattern)]
 
-def search_files(input_dir, keywords_file, output_file) -> None:
+def find_files_with_extensions(input_dir: Path, extensions: list) -> list:
+    patterns = [f"**/*{ext}" for ext in extensions]
+    return [file for pattern in patterns for file in input_dir.glob(pattern)]
+
+
+def search_files(
+    input_dir, keywords_file, output_file, extensions=(".pdf", ".docx", ".doc")
+) -> None:
     keywords = get_keywords(keywords_file)
     results = {}
 
     input_path = Path(input_dir)
-    for file in tqdm(list(input_path.glob("**/*.pdf"))):
+    all_paths = find_files_with_extensions(input_path, extensions)
+    for file in tqdm(all_paths):
         if not file.is_file():
             continue
 
-        text = extract_text_from_pdf(file, totxt=False)
+        text = extract_text_from_doc(file, totxt=False)
         results[str(file)] = search_keywords_in_text(text, keywords)
     write_results_to_csv(results, output_file)
-
-
