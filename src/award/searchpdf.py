@@ -4,16 +4,16 @@
 # ///
 
 
-import fitz  # PyMuPDF
-from pathlib import Path
 import argparse
+import io
 import re
-from pprint import pp
+from pathlib import Path
+
+import fitz  # PyMuPDF
+import pandas as pd
 import pytesseract
 from PIL import Image
-import io
 from tqdm import tqdm
-import pandas as pd
 
 
 def get_document_code_description(file_path: Path) -> str:
