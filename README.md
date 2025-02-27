@@ -6,10 +6,8 @@ A Python-based tool for searching and analyzing PDF and Microsoft Word documents
 
 - PDF text extraction with OCR support using Tesseract
 - Microsoft Word (.docx) document processing
-- Keyword-based search with configurable output
-- JSON output format for structured results
-- Spell checking and text tokenization utilities
-- Command-line interface with subcommands for different document types
+- Keyword-based search
+- CSV output format for structured results
 
 ## Requirements
 
@@ -46,25 +44,9 @@ uv sync
 
 ```bash
 $ uv run award --help
-usage: award [-h] {docx,pdf} ...
+usage: award [-h] --input INPUT --keywords KEYWORDS --output OUTPUT
 
-Search for keywords in PDF and DOCX files
-
-positional arguments:
-  {docx,pdf}  Commands
-    docx      Search in DOC and DOCX files
-    pdf       Search in PDF files
-
-options:
-  -h, --help  show this help message and exit
-```
-
-As shown in the example, the tool provides subcommands for different document types (`docx` and `pdf`). For the `pdf` subcommand,
-```bash
-$ uv run award pdf --help
-usage: award pdf [-h] --input INPUT --keywords KEYWORDS --output OUTPUT
-
-Search for keywords in PDF files. Output is a json file where the keys are the file names and the values are the results of the search.
+Search for keywords in PDF, DOC, and DOCX files. Output is a CSV file.
 
 options:
   -h, --help            show this help message and exit
@@ -73,30 +55,53 @@ options:
   --keywords KEYWORDS, -k KEYWORDS
                         Keywords file path
   --output OUTPUT, -o OUTPUT
-                        Output json file path
+                        Output csv file path
 ```
 
 ## Features
 
 - `main.py`: entry point
-- `searchpdf.py`: PDF document search functionality
-- `searchdocx.py`: Microsoft Word document search functionality
-- `extract.py`: Text extraction utilities
+- `utils.py`: Miscellaneous utilities for document and search processing
+- `extract.py`: Zip file extraction utilities
 - `spellcheck.py`: Spell checking functionality
-- `tokenize_.py`: Text tokenization utilities
 
 ## Usage
 
-The tool provides a command-line interface with subcommands for different document types:
+The tool can handle PDF or MS-Word documents seamlessly through the `award` command.
 
-For PDF documents:
 ```bash
-uv run award pdf --input path/to/pdf --keywords path/to/keywords.txt --output results.json
+uv run award --input path/to/pdf-files --keywords path/to/keywords.txt --output results.csv
 ```
 
-For DOCX documents:
-```bash
-uv run award docx --input path/to/document.docx --keywords path/to/keywords.txt --output results.json
-```
+The tool outputs results in CSV format containing matched keywords and their context within the documents. For example:
 
-The tool outputs results in JSON format containing matched keywords and their context within the documents.
+<table border="1">
+    <tr>
+        <th>Code</th>
+        <th>Description</th>
+        <th>keyword1</th>
+        <th>keyword2</th>
+        <th>keyword3</th>
+    </tr>
+    <tr>
+        <td>001</td>
+        <td>File-name1</td>
+        <td>FALSE</td>
+        <td>FALSE</td>
+        <td>FALSE</td>
+    </tr>
+    <tr>
+        <td>002</td>
+        <td>File-name2</td>
+        <td>TRUE</td>
+        <td>TRUE</td>
+        <td>TRUE</td>
+    </tr>
+    <tr>
+        <td>003</td>
+        <td>File-name3</td>
+        <td>FALSE</td>
+        <td>FALSE</td>
+        <td>FALSE</td>
+    </tr>
+</table>

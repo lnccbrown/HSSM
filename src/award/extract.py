@@ -18,9 +18,6 @@ def extract_all_zips(source_dir: Path, target_dir: Path) -> None:
         print(f"Extracted {item.name} to {target_dir}")
 
 
-
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Extract all zip files in a directory to a target directory."
