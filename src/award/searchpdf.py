@@ -12,8 +12,34 @@ from pprint import pp
 import pytesseract
 from PIL import Image
 import io
-import json
 from tqdm import tqdm
+import pandas as pd
+
+
+def get_document_code_description(file_path: Path) -> str:
+    index = re.search(r"[^\d_]", file_path).start()
+    if index > 0:
+        return file_path[: index - 1], file_path[index:]
+    return None
+
+
+def parse_code_and_description(df: pd.DataFrame) -> pd.DataFrame:
+    leftmost_columns = ["Code", "Description"]
+    df[leftmost_columns] = df["File"].apply(
+        lambda x: pd.Series(get_document_code_description(Path(x).stem))
+    )
+    df = df.drop(columns=["File"])
+    df = df[
+        leftmost_columns + [col for col in df.columns if col not in leftmost_columns]
+    ]
+    return df
+
+
+def write_results_to_csv(results: dict, output_file: str) -> None:
+    df = pd.DataFrame.from_dict(results, orient="index").reset_index()
+    df = df.rename(columns={"index": "File"})
+    df = parse_code_and_description(df)
+    df.to_csv(output_file, index=False)
 
 
 def get_keywords(file_path: Path) -> tuple:
@@ -104,9 +130,7 @@ def search_files(input_dir, keywords_file, output_file) -> None:
 
         text = extract_text_from_pdf(file, totxt=False)
         results[str(file)] = search_keywords_in_text(text, keywords)
-
-    with open(output_file, "w") as f:
-        json.dump(results, f, indent=2)
+    write_results_to_csv(results, output_file)
 
 
 def add_pdf_subparser(subparsers):
