@@ -1,62 +1,13 @@
 """Provide default configurations for models in the HSSM class."""
 
 from enum import Enum
-from os import PathLike
-from typing import Any, Callable, Literal, Optional, TypedDict, Union
+from typing import Optional
 
 import bambi as bmb
-import numpy as np
-from pymc import Distribution
-from pytensor.graph.op import Op
 
-from .likelihoods.analytical import (
-    ddm_bounds,
-    ddm_params,
-    ddm_sdv_bounds,
-    ddm_sdv_params,
-    lba2_bounds,
-    lba2_params,
-    lba3_bounds,
-    lba3_params,
-    logp_ddm,
-    logp_ddm_sdv,
-    logp_lba2,
-    logp_lba3,
-)
-from .likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox, logp_full_ddm
+from ._types import DefaultConfigs, LoglikKind, SupportedModels
+from .modelmeta import get_ddm_config
 from .param.utils import _make_default_prior
-
-LogLik = Union[str, PathLike, Callable, Op, type[Distribution]]
-ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
-
-SupportedModels = Literal[
-    "ddm",
-    "ddm_sdv",
-    "full_ddm",
-    "angle",
-    "levy",
-    "ornstein",
-    "weibull",
-    "race_no_bias_angle_4",
-    "ddm_seq2_no_bias",
-    "lba3",
-    "lba2",
-]
-
-LoglikKind = Literal["analytical", "approx_differentiable", "blackbox"]
-
-
-class LoglikConfig(TypedDict):
-    """Type for the value of LoglikConfig."""
-
-    loglik: LogLik
-    backend: Optional[Literal["jax", "pytensor"]]
-    default_priors: dict[str, ParamSpec]
-    bounds: dict[str, tuple[float, float]]
-    extra_fields: Optional[list[str]]
-
-
-LoglikConfigs = dict[LoglikKind, LoglikConfig]
 
 
 class MissingDataNetwork(Enum):
