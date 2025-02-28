@@ -145,6 +145,10 @@ def search_files(
         if not file.is_file():
             continue
 
-        text = extract_text_from_doc(file, totxt=False)
+        try:
+            text = extract_text_from_doc(file, totxt=False)
+        except Exception as e:
+            logging.error("Error processing %s: %s", file, e)
+            continue
         results[str(file)] = search_keywords_in_text(text, keywords)
     write_results_to_csv(results, output_file)
