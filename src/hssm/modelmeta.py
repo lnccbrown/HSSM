@@ -26,6 +26,8 @@ get_weibull_config() -> DefaultConfig
 get_race_no_bias_angle_4_config() -> DefaultConfig
 """
 
+import functools
+
 import numpy as np
 
 from ._types import DefaultConfig, SupportedModels
@@ -469,6 +471,7 @@ def get_ddm_seq2_no_bias_config() -> DefaultConfig:
     }
 
 
+@functools.lru_cache
 def get_default_model_meta(model_name: SupportedModels) -> DefaultConfig:
     """
     Get the default configuration for a given model name.
