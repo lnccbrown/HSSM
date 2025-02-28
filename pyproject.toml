@@ -60,6 +60,7 @@ dev = [
 notebook = [
     "ipykernel>=6.29.5",
     "lanfactory>=0.4.4",
+    "zeus-mcmc>=2.5.4",
 ]
 
 [tool.ruff]
