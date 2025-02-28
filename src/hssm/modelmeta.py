@@ -471,7 +471,7 @@ def get_ddm_seq2_no_bias_config() -> DefaultConfig:
     }
 
 
-@functools.lru_cache
+@functools.cache
 def get_default_model_meta(model_name: SupportedModels) -> DefaultConfig:
     """
     Get the default configuration for a given model name.
