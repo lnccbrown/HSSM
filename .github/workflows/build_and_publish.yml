@@ -14,6 +14,10 @@ jobs:
     name: Run tests
     uses: ./.github/workflows/run_tests.yml
 
+  check_notebooks:
+    name: Check notebooks
+    uses: ./.github/workflows/check_notebooks.yml
+
   publish:
     name: Build wheel and publish to test-PyPI, then PyPI, and publish docs
     runs-on: ubuntu-latest
