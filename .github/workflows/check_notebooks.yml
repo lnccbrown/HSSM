@@ -32,27 +32,11 @@ jobs:
       - name: Run notebooks
         run: |
           for notebook in $(find docs -name "*.ipynb"); do
-            uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute $notebook
+            if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$notebook"; then
+              echo "::error::Failed to execute notebook: $notebook"
+              EXIT_CODE=1
+            fi
           done
-
-#       - name: Modify matplotlib import in scripts to prevent GUI
-#         run: |
-#           for script in $(find converted_nbs -maxdepth 1 -name "*.py"); do
-#             echo "Adding matplotlib.use('Agg') to $script"
-#             sed -i '1i import matplotlib; matplotlib.use("Agg")' "$script"
-#           done
-
-#           for file in converted_nbs/*; do
-#   mv "$file" "$(dirname "$file")/_$(basename "$file")"
-# done
-
-#       # - name: Run Scripts
-#       #   run: |
-#           EXIT_CODE=0
-#           for script in $(find converted_nbs -maxdepth 1 -name "*.py"); do
-#             echo "Running script: $script"
-#             uv run "$script" || EXIT_CODE=$?
-#           done
-      #     exit $EXIT_CODE
-      #   env:
-      #     PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
+          exit $EXIT_CODE
+        env:
+          PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
