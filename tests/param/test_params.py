@@ -1,12 +1,11 @@
 from unittest.mock import Mock
 
 import bambi as bmb
-import pytest
 
 from hssm import HSSM, Link, Prior
 from hssm.config import Config
-from hssm.defaults import SupportedModels, default_model_config
-from hssm.param.param import Param
+from hssm._types import SupportedModels
+from hssm.defaults import default_model_config
 from hssm.param.params import (
     Params,
     collect_user_params,

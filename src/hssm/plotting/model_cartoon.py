@@ -18,7 +18,8 @@ from matplotlib.lines import Line2D
 from ssms.basic_simulators.simulator import simulator
 
 # Original model cartoon plot from gui
-from ..defaults import SupportedModels, default_model_config
+from .._types import SupportedModels
+from ..defaults import default_model_config
 from .posterior_predictive import _process_lines
 from .utils import (
     _check_groups_and_groups_order,
