@@ -20,9 +20,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install BLAS and LAPACK
-        run: sudo apt-get update && sudo apt-get install -y libblas-dev liblapack-dev
-
       - name: Setup environment
         uses: ./.github/setup-env
         with:
