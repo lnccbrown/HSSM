@@ -1,11 +1,12 @@
-name: Run tests
+name: Check notebooks
 
 on:
   pull_request:
   workflow_call:
+  workflow_dispatch:
 
 jobs:
-  run_tests:
+  check_notebooks:
     runs-on: ubuntu-latest
     if: ${{ ! contains(github.event.head_commit.message, '[skip fast tests]') }}
     env:
@@ -14,7 +15,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.12"]
 
     steps:
       - name: Checkout repository
@@ -25,14 +26,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run tests and collect coverage
-        run: uv run pytest -n=auto --cov=. --cov-report=xml --cov-report=term-missing --exitfirst --capture=no -v tests/
+      - name: Run notebooks
+        run: |
+          echo "Running notebooks with Python ${{ matrix.python-version }}"
+          EXIT_CODE=0
+          for notebook in $(find docs -name "*.ipynb"); do
+            if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$notebook"; then
+              echo "::error::Failed to execute notebook: $notebook"
+              EXIT_CODE=1
+            fi
+          done
+          exit $EXIT_CODE
         env:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          verbose: true
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
