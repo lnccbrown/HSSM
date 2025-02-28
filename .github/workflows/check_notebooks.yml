@@ -3,9 +3,10 @@ name: Check notebooks
 on:
   pull_request:
   workflow_call:
+  workflow_dispatch:
 
 jobs:
-  run_tests:
+  check_notebooks:
     runs-on: ubuntu-latest
     if: ${{ ! contains(github.event.head_commit.message, '[skip fast tests]') }}
     env:
@@ -25,12 +26,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # - name: Check notebooks
-      #   run: |
-      #     uv run pytest --nbval --nbval-lax --capture=no --dist loadscope --current-env docs/
-
       - name: Run notebooks
         run: |
+          echo "Running notebooks with Python ${{ matrix.python-version }}"
+          EXIT_CODE=0
           for notebook in $(find docs -name "*.ipynb"); do
             if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$notebook"; then
               echo "::error::Failed to execute notebook: $notebook"
