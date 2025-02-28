@@ -15,6 +15,7 @@ runs:
 
     - name: Install BLAS and LAPACK
       run: sudo apt-get update && sudo apt-get install -y libblas-dev liblapack-dev
+      shell: bash
 
     - name: Checkout repository
       uses: actions/checkout@v4
