@@ -97,20 +97,25 @@ def extract_text_from_pdf_ocr(pdf_path: Path) -> str:
     return text
 
 
-def extract_text_from_doc(pdf_path: Path, totxt=True) -> str:
-    # first try simple if pdf is machine readable
-    text, page_count = extract_text_from_doc_simple(pdf_path)
-    logging.info("Extracted %d pages from %s", page_count, pdf_path)
+def extract_text_from_doc(file_path: Path, totxt=False) -> str:
+    extension = file_path.suffix.lower()
+    # first try simple if document is machine readable
+    if extension != ".doc":
+        text, page_count = extract_text_from_doc_simple(file_path)
+        logging.info("Extracted %d pages from %s", page_count, file_path)
 
-    # if text is too short, try OCR
-    if len(text.split("\n")) < 10 * page_count:
-        logging.info("Warning: File is not machine readable. Trying OCR.")
-        text = extract_text_from_pdf_ocr(pdf_path)
+        # if text is too short, try OCR
+        if len(text.split("\n")) < 10 * page_count:
+            logging.info("Warning: File is not machine readable. Trying OCR.")
+            text = extract_text_from_pdf_ocr(file_path)
+            # TODO: apply spellcheck to OCR text
 
-        # TODO: apply spellcheck to OCR text
+    else:
+        text = read_doc(file_path)
+        logging.info("Succesfully processed %s", file_path)
 
     if totxt:
-        out_name = pdf_path.stem
+        out_name = file_path.stem
         out_name = Path(out_name).with_suffix(".txt")
         export_text_to_file(text, out_name)
         logging.info("Text extracted and saved to %s", out_name)
