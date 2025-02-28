@@ -9,11 +9,13 @@ from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
 import bambi as bmb
 
-from .defaults import (
+from ._types import (
     LogLik,
     LoglikKind,
     SupportedModels,
-    default_model_config,
+)
+from .defaults import default_model_config
+from .modelmeta import (
     get_default_model_meta,
 )
 from .register import register_model
