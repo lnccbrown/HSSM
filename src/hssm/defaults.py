@@ -9,6 +9,8 @@ from ._types import DefaultConfigs, LoglikKind, SupportedModels
 from .modelmeta import get_ddm_config
 from .param.utils import _make_default_prior
 
+default_model_config: DefaultConfigs = {"ddm": get_ddm_config()}
+
 
 class MissingDataNetwork(Enum):
     """Enum for the missing data network."""
@@ -25,9 +27,6 @@ missing_data_networks_suffix = {
     MissingDataNetwork.GONOGO: "_gonogo",
     MissingDataNetwork.OPN: "_opn",
 }
-
-
-default_model_config: DefaultConfigs = {"ddm": get_ddm_config()}
 
 # TODO: Initval settings could be specified directly in model config as well.
 INITVAL_SETTINGS = {
