@@ -30,12 +30,14 @@ from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from ssms.config import model_config as ssms_model_config
 
+from hssm._types import (
+    LoglikKind,
+    SupportedModels,
+)
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
     INITVAL_SETTINGS,
-    LoglikKind,
     MissingDataNetwork,
-    SupportedModels,
     missing_data_networks_suffix,
 )
 from hssm.distribution_utils import (

@@ -3,19 +3,18 @@
 # This is necessary to enable forward looking
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
 import bambi as bmb
 
-from .defaults import (
+from ._types import (
     LogLik,
     LoglikKind,
     SupportedModels,
-    default_model_config,
-    get_default_model_meta,
 )
+from .defaults import default_model_config
+from .modelmeta import get_default_model_meta
 from .register import register_model
 
 if TYPE_CHECKING:
@@ -76,7 +75,7 @@ class Config:
             # approx_differentiable
             for kind in ["analytical", "approx_differentiable", "blackbox"]:
                 model_name = cast(SupportedModels, model_name)
-                default_config = deepcopy(default_model_config[model_name])
+                default_config = default_model_config[model_name]
                 if kind in default_config["likelihoods"]:
                     kind = cast(LoglikKind, kind)
                     loglik_config = default_config["likelihoods"][kind]
@@ -106,7 +105,7 @@ class Config:
                 )
             if model_name in default_model_config:
                 model_name = cast(SupportedModels, model_name)
-                default_config = deepcopy(default_model_config[model_name])
+                default_config = default_model_config[model_name]
                 if loglik_kind in default_config["likelihoods"]:
                     loglik_config = default_config["likelihoods"][loglik_kind]
                     return Config(

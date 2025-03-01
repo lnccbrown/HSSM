@@ -5,7 +5,7 @@ import pytest
 
 import hssm
 from hssm import Prior
-from hssm.defaults import get_angle_config, get_full_ddm_config
+from hssm.modelmeta import get_angle_config, get_full_ddm_config
 from hssm.link import Link
 from hssm.param import UserParam
 from hssm.param.regression_param import RegressionParam, _make_priors_recursive
