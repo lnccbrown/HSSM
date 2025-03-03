@@ -112,6 +112,7 @@ def extract_text_from_pdf_ocr(pdf_path: Path) -> str:
 
 
 def extract_text_from_doc(file_path: Path, totxt=False) -> str:
+    logging.info("Processing %s", file_path)
     extension = file_path.suffix.lower()
     # first try simple if document is machine readable
     if extension != ".doc":
@@ -144,7 +145,7 @@ def read_doc(file_path):
 
 def find_files_with_extensions(input_dir: Path, extensions: list) -> list:
     patterns = [f"**/*{ext}" for ext in extensions]
-    return [file for pattern in patterns for file in input_dir.glob(pattern)]
+    return sorted([file for pattern in patterns for file in input_dir.glob(pattern)])
 
 
 def search_files(
