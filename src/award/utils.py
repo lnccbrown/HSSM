@@ -16,17 +16,24 @@ logging.basicConfig(
 )
 
 
-def get_document_code_description(file_path: Path) -> str:
-    index = re.search(r"[^\d_]", file_path).start()
-    if index > 0:
-        return file_path[: index - 1], file_path[index:]
-    return None
+def get_document_code_description(file_path: Path | str)  -> tuple:
+    file_path = Path(file_path)
+    stem = file_path.stem
+    match = re.search(r"[^\d_]", stem)
+    if match:
+        index = match.start() - 1 if match.start() > 1 else None
+        code = stem[:index] if index else None
+        description = stem[index + 1 :] if index is not None else stem
+    else:
+        code = stem
+        description = None
+    return code, description
 
 
 def parse_code_and_description(df: pd.DataFrame) -> pd.DataFrame:
     leftmost_columns = ["Code", "Description"]
     df[leftmost_columns] = df["File"].apply(
-        lambda x: pd.Series(get_document_code_description(Path(x).stem))
+        lambda x: pd.Series(get_document_code_description(x))
     )
     df = df.drop(columns=["File"])
     df = df[

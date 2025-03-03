@@ -13,4 +13,4 @@ from award.utils import get_document_code_description
     ],
 )
 def test_get_document_code_description(path, expected):
-    assert get_document_code_description(Path(path)) == expected
+    assert get_document_code_description(path) == expected
