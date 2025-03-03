@@ -38,6 +38,7 @@ def write_results_to_csv(results: dict, output_file: str) -> None:
     df = pd.DataFrame.from_dict(results, orient="index").reset_index()
     df = df.rename(columns={"index": "File"})
     df = parse_code_and_description(df)
+    df = df.sort_values(by=["Code", "Description"])
     df.to_csv(output_file, index=False)
 
 
