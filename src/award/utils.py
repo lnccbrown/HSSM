@@ -2,8 +2,9 @@ import io
 import logging
 import re
 from pathlib import Path
+from pprint import pformat
 
-import fitz  # PyMuPDF
+import pymupdf
 import pandas as pd
 import pytesseract
 import textract
@@ -38,6 +39,7 @@ def write_results_to_csv(results: dict, output_file: str) -> None:
     df = pd.DataFrame.from_dict(results, orient="index").reset_index()
     df = df.rename(columns={"index": "File"})
     df = parse_code_and_description(df)
+    df = df.sort_values(by=["Code", "Description"])
     df.to_csv(output_file, index=False)
 
 
@@ -72,9 +74,14 @@ def extract_text_from_doc_simple(pdf_path: Path) -> tuple[str, int]:
             - int: Total number of pages in the PDF
     """
     pdf_path = Path(pdf_path)
-    document = fitz.open(pdf_path)
+    document = pymupdf.open(pdf_path)
+    page_count = document.page_count
+
+    if page_count < 1:
+        raise ValueError("No pages found. File may be corrupted or empty.")
+
     text = ""
-    for page_num in range(document.page_count):
+    for page_num in range(page_count):
         page = document.load_page(page_num)
         page_text = page.get_text()
         text += page_text
@@ -85,7 +92,7 @@ def extract_text_from_doc_simple(pdf_path: Path) -> tuple[str, int]:
 def extract_text_from_pdf_ocr(pdf_path: Path) -> str:
     pdf_path = Path(pdf_path)
     text = ""
-    document = fitz.open(pdf_path)
+    document = pymupdf.open(pdf_path)
     for page_num in range(document.page_count):
         page = document.load_page(page_num)
         pix = page.get_pixmap()
@@ -97,20 +104,25 @@ def extract_text_from_pdf_ocr(pdf_path: Path) -> str:
     return text
 
 
-def extract_text_from_doc(pdf_path: Path, totxt=True) -> str:
-    # first try simple if pdf is machine readable
-    text, page_count = extract_text_from_doc_simple(pdf_path)
-    logging.info("Extracted %d pages from %s", page_count, pdf_path)
+def extract_text_from_doc(file_path: Path, totxt=False) -> str:
+    extension = file_path.suffix.lower()
+    # first try simple if document is machine readable
+    if extension != ".doc":
+        text, page_count = extract_text_from_doc_simple(file_path)
+        logging.info("Extracted %d pages from %s", page_count, file_path)
 
-    # if text is too short, try OCR
-    if len(text.split("\n")) < 10 * page_count:
-        logging.info("Warning: File is not machine readable. Trying OCR.")
-        text = extract_text_from_pdf_ocr(pdf_path)
+        # if text is too short, try OCR
+        if len(text.split("\n")) < 10 * page_count:
+            logging.info("Warning: File is not machine readable. Trying OCR.")
+            text = extract_text_from_pdf_ocr(file_path)
+            # TODO: apply spellcheck to OCR text
 
-        # TODO: apply spellcheck to OCR text
+    else:
+        text = read_doc(file_path)
+        logging.info("Succesfully processed %s", file_path)
 
     if totxt:
-        out_name = pdf_path.stem
+        out_name = file_path.stem
         out_name = Path(out_name).with_suffix(".txt")
         export_text_to_file(text, out_name)
         logging.info("Text extracted and saved to %s", out_name)
@@ -133,13 +145,26 @@ def search_files(
 ) -> None:
     keywords = get_keywords(keywords_file)
     results = {}
-
+    failures = []
     input_path = Path(input_dir)
     all_paths = find_files_with_extensions(input_path, extensions)
     for file in tqdm(all_paths):
         if not file.is_file():
             continue
+        try:
+            text = extract_text_from_doc(file, totxt=False)
+            results[str(file)] = search_keywords_in_text(text, keywords)
+        except Exception as e:
+            logging.error("Error processing %s: %s", file, e)
+            failures.append(file)
+            continue
 
-        text = extract_text_from_doc(file, totxt=False)
-        results[str(file)] = search_keywords_in_text(text, keywords)
-    write_results_to_csv(results, output_file)
+    if failures:
+        logging.warning(
+            "Failed to process %d files:\n%s",
+            len(failures),
+            pformat([str(f) for f in failures]),
+        )
+
+    if results:
+        write_results_to_csv(results, output_file)
