@@ -21,7 +21,7 @@ dependencies = [
 award = "award.main:main"
 
 [dependency-groups]
-dev = ["ipykernel>=6.29.5", "ptpython>=3.0.29"]
+dev = ["ipykernel", "ptpython", "pytest"]
 
 [tool.uv]
 package = true

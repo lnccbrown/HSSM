@@ -1,0 +1,48 @@
+name: Run tests
+
+on:
+  pull_request:
+
+jobs:
+  run_tests:
+    runs-on: macos-latest
+
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache Homebrew
+        uses: actions/cache@v3
+        with:
+          path: /Users/runner/Library/Caches/Homebrew
+          key: ${{ runner.os }}-brew-${{ hashFiles('**/Brewfile') }}
+          restore-keys: |
+            ${{ runner.os }}-brew-
+
+      - name: Install deps
+        run: |
+            brew update
+            brew tap homebrew/cask
+            brew install --cask xquartz
+            brew install poppler antiword unrtf tesseract swig
+            brew install enchant
+            echo 'export PYENCHANT_LIBRARY_PATH=$(brew --prefix enchant)/lib/libenchant-2.dylib' >> ~/.bashrc
+        shell: bash
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+            # Install a specific version of uv.
+            version: "0.6.3"
+            enable-cache: true
+
+      - name: Run tests and collect coverage
+        run: uv sync --all-groups && uv run pytest
