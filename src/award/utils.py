@@ -2,8 +2,9 @@ import io
 import logging
 import re
 from pathlib import Path
+from pprint import pformat
 
-import fitz  # PyMuPDF
+import pymupdf
 import pandas as pd
 import pytesseract
 import textract
@@ -73,9 +74,14 @@ def extract_text_from_doc_simple(pdf_path: Path) -> tuple[str, int]:
             - int: Total number of pages in the PDF
     """
     pdf_path = Path(pdf_path)
-    document = fitz.open(pdf_path)
+    document = pymupdf.open(pdf_path)
+    page_count = document.page_count
+
+    if page_count < 1:
+        raise ValueError("No pages found. File may be corrupted or empty.")
+
     text = ""
-    for page_num in range(document.page_count):
+    for page_num in range(page_count):
         page = document.load_page(page_num)
         page_text = page.get_text()
         text += page_text
@@ -86,7 +92,7 @@ def extract_text_from_doc_simple(pdf_path: Path) -> tuple[str, int]:
 def extract_text_from_pdf_ocr(pdf_path: Path) -> str:
     pdf_path = Path(pdf_path)
     text = ""
-    document = fitz.open(pdf_path)
+    document = pymupdf.open(pdf_path)
     for page_num in range(document.page_count):
         page = document.load_page(page_num)
         pix = page.get_pixmap()
@@ -139,17 +145,26 @@ def search_files(
 ) -> None:
     keywords = get_keywords(keywords_file)
     results = {}
-
+    failures = []
     input_path = Path(input_dir)
     all_paths = find_files_with_extensions(input_path, extensions)
     for file in tqdm(all_paths):
         if not file.is_file():
             continue
-
         try:
             text = extract_text_from_doc(file, totxt=False)
+            results[str(file)] = search_keywords_in_text(text, keywords)
         except Exception as e:
             logging.error("Error processing %s: %s", file, e)
+            failures.append(file)
             continue
-        results[str(file)] = search_keywords_in_text(text, keywords)
-    write_results_to_csv(results, output_file)
+
+    if failures:
+        logging.warning(
+            "Failed to process %d files:\n%s",
+            len(failures),
+            pformat([str(f) for f in failures]),
+        )
+
+    if results:
+        write_results_to_csv(results, output_file)
