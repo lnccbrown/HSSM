@@ -34,7 +34,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
             # Install a specific version of uv.
-            version: "0.5.9"
+            version: "0.6.3"
             enable-cache: true
 
       - name: Run tests and collect coverage
