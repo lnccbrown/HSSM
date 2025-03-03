@@ -16,6 +16,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Cache Homebrew
+        uses: actions/cache@v3
+        with:
+          path: /Users/runner/Library/Caches/Homebrew
+          key: ${{ runner.os }}-brew-${{ hashFiles('**/Brewfile') }}
+          restore-keys: |
+            ${{ runner.os }}-brew-
+
       - name: Install deps
         run: |
             brew update
@@ -25,7 +33,6 @@ jobs:
             brew install enchant
             echo 'export PYENCHANT_LIBRARY_PATH=$(brew --prefix enchant)/lib/libenchant-2.dylib' >> ~/.bashrc
         shell: bash
-
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
