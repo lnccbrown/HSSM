@@ -112,6 +112,7 @@ def extract_text_from_pdf_ocr(pdf_path: Path) -> str:
 
 
 def extract_text_from_doc(file_path: Path, totxt=False) -> str:
+    logging.info("Processing %s", file_path)
     extension = file_path.suffix.lower()
     # first try simple if document is machine readable
     if extension != ".doc":
