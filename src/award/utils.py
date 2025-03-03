@@ -144,7 +144,7 @@ def read_doc(file_path):
 
 def find_files_with_extensions(input_dir: Path, extensions: list) -> list:
     patterns = [f"**/*{ext}" for ext in extensions]
-    return [file for pattern in patterns for file in input_dir.glob(pattern)]
+    return sorted([file for pattern in patterns for file in input_dir.glob(pattern)])
 
 
 def search_files(
