@@ -38,4 +38,4 @@ jobs:
             enable-cache: true
 
       - name: Run tests and collect coverage
-        run: uv run pytest
+        run: uv sync --all-groups && uv run pytest
