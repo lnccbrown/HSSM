@@ -39,11 +39,19 @@ nav:
       - Plotting in HSSM: tutorials/plotting.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
       - Variational Inference: tutorials/variational_inference.ipynb
+      - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
       - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
       - Custom models from onnx files: tutorials/blackbox_contribution_onnx_example.ipynb
       - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
       - Saving and loading models: tutorials/save_load_tutorial.ipynb
+      - Bayesian t-test: tutorials/tutorial_bayesian_t_test.ipynb
+      - Model Cartoon Plots: tutorials/tutorial_model_cartoon.ipynb
+      - Getting trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
+      - Stim Coding: tutorials/tutorial_stim_coding.ipynb
+  - Contributed Tutorials:
+      - Winterbrain 2025 Workshop Talk 1: tutorials/hssm_tutorial_workshop_1.ipynb
+      - Winterbrain 2025 Workshop Talk 2: tutorials/hssm_tutorial_workshop_2.ipynb
   - Contributing: CONTRIBUTING.md
 
 plugins:
@@ -57,12 +65,19 @@ plugins:
         - tutorials/main_tutorial.ipynb
         - tutorials/likelihoods.ipynb
         - tutorials/variational_inference.ipynb
+        - tutorials/variational_inference_hierarchical.ipynb
         - tutorials/initial_values.ipynb
         - tutorials/pymc.ipynb
         - tutorials/jax_callable_contribution_onnx_example.ipynb
         - tutorials/blackbox_contribution_onnx_example.ipynb
         - tutorials/compile_logp.ipynb
         - tutorials/save_load_tutorial.ipynb
+        - tutorials/tutorial_bayesian_t_test.ipynb
+        - tutorials/tutorial_model_cartoon.ipynb
+        - tutorials/tutorial_trial_wise_parameters.ipynb
+        - tutorials/tutorial_stim_coding.ipynb
+        - tutorials/hssm_tutorial_workshop_1.ipynb
+        - tutorials/hssm_tutorial_workshop_2.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:
