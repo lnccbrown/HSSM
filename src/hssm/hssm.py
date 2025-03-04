@@ -13,7 +13,7 @@ from copy import deepcopy
 from inspect import isclass, signature
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Union, cast
+from typing import Any, Callable, Literal, Optional, Union, cast, get_args
 
 import arviz as az
 import bambi as bmb
@@ -59,6 +59,34 @@ from .param import Params
 from .param import UserParam as Param
 
 _logger = logging.getLogger("hssm")
+
+
+class classproperty:
+    """A decorator that combines the behavior of @property and @classmethod.
+
+    This decorator allows you to define a property that can be accessed on the class
+    itself, rather than on instances of the class. It is useful for defining class-level
+    properties that need to perform some computation or access class-level data.
+
+    This implementation is provided for compatibility with Python versions 3.10 through
+    3.12, as one cannot combine the @property and @classmethod decorators is across all
+    these versions.
+
+    Example
+    -------
+    class MyClass:
+        @classproperty
+        def my_class_property(cls):
+            return "This is a class property"
+
+    print(MyClass.my_class_property)  # Output: This is a class property
+    """
+
+    def __init__(self, fget):
+        self.fget = fget
+
+    def __get__(self, instance, owner):  # noqa: D105
+        return self.fget(owner)
 
 
 class HSSM:
@@ -267,26 +295,10 @@ class HSSM:
 
         # Define a dict with all call arguments:
         self._init_args = {
-            "data": data,
-            "model": model,
-            "choices": choices,
-            "include": include,
-            "model_config": model_config,
-            "loglik": loglik,
-            "loglik_kind": loglik_kind,
-            "p_outlier": p_outlier,
-            "lapse": lapse,
-            "global_formula": global_formula,
-            "link_settings": link_settings,
-            "prior_settings": prior_settings,
-            "extra_namespace": extra_namespace,
-            "missing_data": missing_data,
-            "deadline": deadline,
-            "loglik_missing_data": loglik_missing_data,
-            "process_initvals": process_initvals,
-            "initval_jitter": initval_jitter,
-            **kwargs,
+            k: v for k, v in locals().items() if k not in ["self", "kwargs"]
         }
+        if kwargs:
+            self._init_args.update(kwargs)
 
         self.data = data.copy()
         self._inference_obj: az.InferenceData | None = None
@@ -343,6 +355,7 @@ class HSSM:
             # Model config is not provided, but at this point was constructed from
             # defaults.
             if model not in typing.get_args(SupportedModels):
+                # TODO: ideally use self.supported_models above but mypy doesn't like it
                 if choices is not None:
                     self.model_config.update_choices(choices)
                 elif model in ssms_model_config:
@@ -495,6 +508,17 @@ class HSSM:
             {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
         )
         _logger.info("Model initialized successfully.")
+
+    @classproperty
+    def supported_models(cls) -> tuple[SupportedModels, ...]:
+        """Get a tuple of all supported models.
+
+        Returns
+        -------
+        tuple[SupportedModels, ...]
+            A tuple containing all supported model names.
+        """
+        return get_args(SupportedModels)
 
     @classmethod
     def _store_init_args(cls, *args, **kwargs):
@@ -1330,9 +1354,9 @@ class HSSM:
             Whether to call plt.tight_layout() after plotting. Defaults to True.
         """
         data = data or self.traces
-        assert isinstance(
-            data, az.InferenceData
-        ), "data must be an InferenceData object."
+        assert isinstance(data, az.InferenceData), (
+            "data must be an InferenceData object."
+        )
 
         if not include_deterministic:
             var_names = list(
@@ -1355,8 +1379,7 @@ class HSSM:
                         kwargs["var_names"] = var_names
                     else:
                         raise ValueError(
-                            "`var_names` must be a string, a list of strings"
-                            ", or None."
+                            "`var_names` must be a string, a list of strings, or None."
                         )
                 else:
                     kwargs["var_names"] = var_names
@@ -1397,9 +1420,9 @@ class HSSM:
             A pandas DataFrame or xarray Dataset containing the summary statistics.
         """
         data = data or self.traces
-        assert isinstance(
-            data, az.InferenceData
-        ), "data must be an InferenceData object."
+        assert isinstance(data, az.InferenceData), (
+            "data must be an InferenceData object."
+        )
 
         if not include_deterministic:
             var_names = list(

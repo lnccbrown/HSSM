@@ -101,7 +101,7 @@ def test_repr():
     """Test the __repr__ method."""
     param = SimpleParam(name="test", prior={"name": "Normal", "mu": 0, "sigma": 1})
     param.process_prior()
-    assert repr(param) == "test:\n" "    Prior: Normal(mu: 0.0, sigma: 1.0)"
+    assert repr(param) == "test:\n    Prior: Normal(mu: 0.0, sigma: 1.0)"
     param = SimpleParam(
         name="test", prior={"name": "Normal", "mu": 0, "sigma": 1}, bounds=(0, 1)
     )
@@ -114,18 +114,14 @@ def test_repr():
     )
     param = SimpleParam(name="test", prior=0.5, bounds=(0, 1))
     param.process_prior()
-    assert repr(param) == "test:\n" "    Value: 0.5\n" "    Explicit bounds: (0, 1)"
+    assert repr(param) == "test:\n    Value: 0.5\n    Explicit bounds: (0, 1)"
     prior = np.random.uniform(size=3)
     param = SimpleParam(name="test", prior=prior, bounds=(0, 1))
     param.process_prior()
-    assert (
-        repr(param) == f"test:\n" f"    Value: {prior}\n" f"    Explicit bounds: (0, 1)"
-    )
+    assert repr(param) == f"test:\n    Value: {prior}\n    Explicit bounds: (0, 1)"
     prior = np.random.uniform(size=10)
     param = SimpleParam(name="test", prior=prior, bounds=(0, 1))
     param.process_prior()
     assert (
-        repr(param) == f"test:\n"
-        f"    Value: {prior[:5]}...\n"
-        f"    Explicit bounds: (0, 1)"
+        repr(param) == f"test:\n    Value: {prior[:5]}...\n    Explicit bounds: (0, 1)"
     )
