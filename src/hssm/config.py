@@ -9,10 +9,8 @@ from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
 import bambi as bmb
 
+from ._types import LogLik, LoglikKind, SupportedModels
 from .defaults import (
-    LogLik,
-    LoglikKind,
-    SupportedModels,
     default_model_config,
     get_default_model_meta,
 )
