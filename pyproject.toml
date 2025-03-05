@@ -68,6 +68,7 @@ notebook = [
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+exclude = ["*.ipynb"]
 
 [tool.ruff.format]
 docstring-code-format = true
