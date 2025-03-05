@@ -644,6 +644,7 @@ def plot_func_model(
     color_data: str = "blue",
     color_pp_mean: str = "black",
     color_pp: str = "black",
+    alpha_mean: float = 1,
     alpha_pp: float = 0.05,
     alpha_trajectories: float = 0.5,
     **kwargs,
@@ -696,6 +697,8 @@ def plot_func_model(
         Color for posterior mean. Defaults to "black".
     color_pp : str, optional
         Color for posterior samples. Defaults to "black".
+    alpha_mean : float, optional
+        Transparency of posterior mean. Defaults to 1.
     alpha_pp : float, optional
         Transparency of posterior samples. Defaults to 0.05.
     alpha_trajectories : float, optional
@@ -771,7 +774,7 @@ def plot_func_model(
                 no_noise=False,
                 delta_t=delta_t_model,
                 bin_dim=None,
-                random_state=rand_int,
+                random_state=rand_int + i,
             )
 
     # Simulate trajectories
@@ -802,7 +805,7 @@ def plot_func_model(
             no_noise=False,
             delta_t=delta_t_model,
             bin_dim=None,
-            random_state=rand_int,
+            random_state=rand_int + i,
             smooth_unif=False,
         )
 
@@ -850,6 +853,7 @@ def plot_func_model(
             color_data=color_pp_mean,
             linewidth_histogram=linewidth_histogram,
             bins=bins,
+            alpha=alpha_mean,
             axis_twin_up=axis_twin_up,
             axis_twin_down=axis_twin_down,
             hist_histtype=hist_histtype,
@@ -879,6 +883,7 @@ def plot_func_model(
                 color_data=color_pp,
                 linewidth_histogram=linewidth_histogram,
                 bins=bins,
+                alpha=alpha_pp,
                 axis_twin_up=axis_twin_up,
                 axis_twin_down=axis_twin_down,
                 hist_histtype=hist_histtype,
@@ -898,6 +903,7 @@ def plot_func_model(
             color_data=color_data,
             linewidth_histogram=linewidth_histogram,
             bins=bins,
+            alpha=1,
             axis_twin_up=axis_twin_up,
             axis_twin_down=axis_twin_down,
             hist_histtype=hist_histtype,
@@ -950,7 +956,7 @@ def plot_func_model(
             markertype_starting_point=markertype_starting_point,
             markershift_starting_point=markershift_starting_point,
             delta_t_graph=delta_t_model,
-            alpha=1,
+            alpha=alpha_mean,
             lw_m=linewidth_model,
             ylim_low=ylim_low,
             ylim_high=ylim_high,
@@ -966,8 +972,8 @@ def plot_func_model(
             sample=sim_out_traj,
             t_s=t_s,
             delta_t_graph=delta_t_model,
-            n_trajectories=n_trajectories,
-            alpha_trajectories=alpha_trajectories,
+            n=n_trajectories,
+            alpha=alpha_trajectories,
             **kwargs,
         )
     return axis
@@ -1048,14 +1054,14 @@ def _add_trajectories(
     sample: dict[int, Any],
     t_s: np.ndarray,
     delta_t_graph: float = 0.01,
-    n_trajectories: int = 10,
-    highlight_trajectory_rt_choice: bool = True,
-    markersize_trajectory_rt_choice: float | int = 50,
-    markertype_trajectory_rt_choice: str = "*",
-    markercolor_trajectory_rt_choice: str | list[str] | dict[str, str] = "red",
-    linewidth_trajectories: float | int = 1,
-    alpha_trajectories: float | int = 0.5,
-    color_trajectories: str | list[str] | dict[str, str] = "black",
+    n: int = 10,
+    highlight_rt_choice: bool = True,
+    markersize_rt_choice: float | int = 50,
+    markertype_rt_choice: str = "*",
+    markercolor_rt_choice: str | list[str] | dict[str, str] = "red",
+    linewidth: float | int = 1,
+    alpha: float | int = 0.5,
+    colors: str | list[str] | dict[str, str] = "black",
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1070,7 +1076,7 @@ def _add_trajectories(
         Array of timepoints for plotting.
     delta_t_graph : float, optional
         Time step size for plotting, by default 0.01.
-    n_trajectories : int, optional
+    n : int, optional
         Number of trajectories to plot, by default 10.
     highlight_trajectory_rt_choice : bool, optional
         Whether to highlight the response time and choice with a marker, by default
@@ -1082,29 +1088,29 @@ def _add_trajectories(
     markercolor_trajectory_rt_choice : str, int, list or dict, optional
         Color(s) for response time/choice markers. Can be a single color,
         list of colors, or dict mapping choices to colors. By default "red".
-    linewidth_trajectories : float or int, optional
+    linewidth : float or int, optional
         Line width for trajectories, by default 1.
-    alpha_trajectories : float or int, optional
+    alpha : float or int, optional
         Opacity of trajectories, by default 0.5.
-    color_trajectories : str, list or dict, optional
+    colors : str, list or dict, optional
         Color(s) for trajectories. Can be a single color, list of colors,
         or dict mapping choices to colors. By default "black".
     **kwargs
         Additional keyword arguments passed to plotting functions.
     """
     # Check markercolor type
-    if isinstance(markercolor_trajectory_rt_choice, str):
-        markercolor_trajectory_rt_choice_dict = {
-            value_: markercolor_trajectory_rt_choice
+    if isinstance(markercolor_rt_choice, str):
+        markercolor_rt_choice_dict = {
+            value_: markercolor_rt_choice
             for value_ in sample[0]["metadata"]["possible_choices"]
         }
-    elif isinstance(markercolor_trajectory_rt_choice, list):
-        markercolor_trajectory_rt_choice_dict = {
-            value_: markercolor_trajectory_rt_choice[cnt]
+    elif isinstance(markercolor_rt_choice, list):
+        markercolor_rt_choice_dict = {
+            value_: markercolor_rt_choice[cnt]
             for cnt, value_ in enumerate(sample[0]["metadata"]["possible_choices"])
         }
-    elif isinstance(markercolor_trajectory_rt_choice, dict):
-        markercolor_trajectory_rt_choice_dict = markercolor_trajectory_rt_choice
+    elif isinstance(markercolor_rt_choice, dict):
+        markercolor_rt_choice_dict = markercolor_rt_choice
     else:
         raise ValueError(
             "The `markercolor_trajectory_rt_choice`"
@@ -1112,17 +1118,17 @@ def _add_trajectories(
         )
 
     # Check trajectory color type
-    if isinstance(color_trajectories, str):
-        color_trajectories_dict = {}
+    if isinstance(colors, str):
+        colors_dict = {}
         for value_ in sample[0]["metadata"]["possible_choices"]:
-            color_trajectories_dict[value_] = color_trajectories
-    elif isinstance(color_trajectories, list):
+            colors_dict[value_] = colors
+    elif isinstance(colors, list):
         cnt = 0
         for value_ in sample[0]["metadata"]["possible_choices"]:
-            color_trajectories_dict[value_] = color_trajectories[cnt]
+            colors_dict[value_] = colors[cnt]
             cnt += 1
-    elif isinstance(color_trajectories, dict):
-        color_trajectories_dict = color_trajectories
+    elif isinstance(colors, dict):
+        colors_dict = colors
     else:
         raise ValueError(
             "The `color_trajectories` argument must be a string, list, or dict."
@@ -1143,7 +1149,7 @@ def _add_trajectories(
     b_low[:n_roll] = b_l_init
 
     # Trajectories
-    for i in range(n_trajectories):
+    for i in range(n):
         metadata = sample[i]["metadata"]
         tmp_traj = metadata["trajectory"]
         tmp_traj_choice = float(sample[i]["choices"].flatten())
@@ -1155,19 +1161,19 @@ def _add_trajectories(
         axis.plot(
             t_s[:maxid] + metadata["t"][0],  # sample.t.values[0],
             tmp_traj[:maxid],
-            color=color_trajectories_dict[tmp_traj_choice],
-            alpha=alpha_trajectories,
-            linewidth=linewidth_trajectories,
+            color=colors_dict[tmp_traj_choice],
+            alpha=alpha,
+            linewidth=linewidth,
             zorder=2000 + i,
         )
-        if highlight_trajectory_rt_choice:
+        if highlight_rt_choice:
             axis.scatter(
                 t_s[maxid] + metadata["t"][0],
                 b_tmp,
-                markersize_trajectory_rt_choice,
-                color=markercolor_trajectory_rt_choice_dict[tmp_traj_choice],
+                markersize_rt_choice,
+                color=markercolor_rt_choice_dict[tmp_traj_choice],
                 alpha=1,
-                marker=markertype_trajectory_rt_choice,
+                marker=markertype_rt_choice,
                 zorder=2000 + i,
             )
 
@@ -1180,13 +1186,30 @@ def add_histograms_to_twin_axes(
     color_data: str,
     linewidth_histogram: float,
     bins: list[float],
+    alpha: float,
     axis_twin_up: Axes,
     axis_twin_down: Axes,
     hist_histtype: Literal["bar", "barstacked", "step", "stepfilled"],
     bin_size: float,
     zorder: int = -1,
 ):
-    """Add histograms to a given matplotlib axis."""
+    """Add histograms to upper and lower twin axes.
+
+    Args:
+        data_up: Array of data points for upper histogram.
+        data_down: Array of data points for lower histogram.
+        hist_bottom_high: Bottom position for upper histogram.
+        hist_bottom_low: Bottom position for lower histogram.
+        color_data: Color to use for histogram bars/lines.
+        linewidth_histogram: Width of histogram lines.
+        bins: List of bin edges for histograms.
+        alpha: Transparency value for histograms.
+        axis_twin_up: Upper twin axis to plot on.
+        axis_twin_down: Lower twin axis to plot on.
+        hist_histtype: Type of histogram ('bar', 'barstacked', 'step', or 'stepfilled').
+        bin_size: Size of histogram bins.
+        zorder: Z-order for plot elements. Defaults to -1.
+    """
     # Compute weights
     weights_up_data = np.tile(
         (1 / bin_size) / (data_up.shape[0] + data_down.shape[0]),
@@ -1204,7 +1227,7 @@ def add_histograms_to_twin_axes(
         weights=weights_up_data,
         histtype=hist_histtype,
         bottom=hist_bottom_high,
-        alpha=1,
+        alpha=alpha,
         color=color_data,
         edgecolor=color_data,
         linewidth=linewidth_histogram,
@@ -1217,7 +1240,7 @@ def add_histograms_to_twin_axes(
         weights=weights_down_data,
         histtype=hist_histtype,
         bottom=hist_bottom_low,
-        alpha=1,
+        alpha=alpha,
         color=color_data,
         edgecolor=color_data,
         linewidth=linewidth_histogram,
@@ -1382,7 +1405,7 @@ def plot_func_model_n(
     legend_location: str = "upper right",
     delta_t_model: float = 0.01,
     add_legend: bool = True,
-    alpha: float = 1.0,
+    alpha_mean: float = 1.0,
     alpha_pp: float = 0.05,
     alpha_trajectories: float = 0.5,
     keep_frame: bool = False,
@@ -1423,7 +1446,7 @@ def plot_func_model_n(
         Time step size for model cartoon plotting.
     add_legend : bool, default=True
         Whether to add legend to plot.
-    alpha : float, default=1.0
+    alpha_mean : float, default=1.0
         Transparency for main plot elements.
     alpha_pp : float, default=0.05
         Transparency for posterior predictive samples.
@@ -1550,7 +1573,7 @@ def plot_func_model_n(
             no_noise=False,
             delta_t=delta_t_model,
             bin_dim=None,
-            random_state=rand_int,
+            random_state=rand_int + i,
             smooth_unif=False,
         )
 
@@ -1590,7 +1613,7 @@ def plot_func_model_n(
                 bottom=bottom,
                 weights=weights,
                 histtype="step",
-                alpha=alpha,
+                alpha=alpha_mean,
                 color=color_dict[choice],
                 zorder=cnt_cumul,
                 label=tmp_label,
@@ -1704,7 +1727,7 @@ def plot_func_model_n(
             sample=sim_out_no_noise,
             axis=axis,
             delta_t_graph=delta_t_model,
-            alpha=alpha,
+            alpha=alpha_mean,
             lw_m=linewidth_model,
             tmp_label=tmp_label,
             linestyle="-",
@@ -1722,8 +1745,8 @@ def plot_func_model_n(
             sample=sim_out_traj,
             t_s=t_s,
             delta_t_graph=delta_t_model,
-            n_trajectories=n_trajectories,
-            alpha_trajectories=alpha_trajectories,
+            n=n_trajectories,
+            alpha=alpha_trajectories,
             **kwargs,
         )
     elif n_trajectories > 0:
@@ -1757,15 +1780,13 @@ def _add_trajectories_n(
     sample: dict[Any, Any],
     t_s: np.ndarray,
     delta_t_graph: float = 0.01,
-    n_trajectories: int = 10,
+    n: int = 10,
     highlight_rt_choice: bool = True,
     marker_size_rt_choice: float = 50,
     marker_type_rt_choice: str = "*",
-    linewidth_trajectories: float = 1,
-    alpha_trajectories: float = 0.5,
-    color_trajectories: (
-        str | list[str] | dict[str, str] | dict[int, str]
-    ) = TRAJ_COLOR_DEFAULT_DICT,
+    linewidth: float = 1,
+    alpha: float = 0.5,
+    colors: str | list[str] | dict[str, str] | dict[int, str] = TRAJ_COLOR_DEFAULT_DICT,
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1780,7 +1801,7 @@ def _add_trajectories_n(
         Array of time points for plotting
     delta_t_graph : float, default=0.01
         Time step size for plotting
-    n_trajectories : int, default=10
+    n : int, default=10
         Number of trajectories to plot
     highlight_rt_choice : bool, default=True
         Whether to highlight response time and choice with markers
@@ -1788,11 +1809,11 @@ def _add_trajectories_n(
         Size of markers for response time/choice
     marker_type_rt_choice : str, default="*"
         Marker style for chosen response
-    linewidth_trajectories : float, default=1
+    linewidth: float, default=1
         Line width for trajectory paths
-    alpha_trajectories : float, default=0.5
+    alpha : float, default=0.5
         Transparency of trajectory paths
-    color_trajectories : str or list or dict, default="black"
+    colors : str or list or dict, default="black"
         Color(s) for trajectories. Can be:
         - str: Single color for all trajectories
         - list: List of colors mapped to possible choices
@@ -1807,18 +1828,17 @@ def _add_trajectories_n(
     process leading to a decision.
     """
     # Check trajectory color type
-    if isinstance(color_trajectories, str):
-        color_trajectories_dict = {
-            value_: color_trajectories
-            for value_ in sample[0]["metadata"]["possible_choices"]
+    if isinstance(colors, str):
+        colors_dict = {
+            value_: colors for value_ in sample[0]["metadata"]["possible_choices"]
         }
-    elif isinstance(color_trajectories, list):
-        color_trajectories_dict = {
-            value_: color_trajectories[i]
+    elif isinstance(colors, list):
+        colors_dict = {
+            value_: colors[i]
             for i, value_ in enumerate(sample[0]["metadata"]["possible_choices"])
         }
-    elif isinstance(color_trajectories, dict):
-        color_trajectories_dict = color_trajectories
+    elif isinstance(colors, dict):
+        colors_dict = colors
     else:
         raise ValueError(
             "The `color_trajectories` argument must be a string, list, or dict."
@@ -1832,7 +1852,7 @@ def _add_trajectories_n(
     b[:n_roll] = b_init
 
     # Trajectories
-    for i in range(n_trajectories):
+    for i in range(n):
         metadata = sample[i]["metadata"]
         tmp_traj = metadata["trajectory"]
         tmp_traj_choice = float(sample[i]["choices"].flatten())
@@ -1848,9 +1868,9 @@ def _add_trajectories_n(
             axis.plot(
                 t_s[:tmp_maxid] + metadata["t"][0],
                 tmp_traj[:tmp_maxid, j],
-                color=color_trajectories_dict[j],
-                alpha=alpha_trajectories,
-                linewidth=linewidth_trajectories,
+                color=colors_dict[j],
+                alpha=alpha,
+                linewidth=linewidth,
                 zorder=2000 + i,
             )
 
@@ -1859,19 +1879,19 @@ def _add_trajectories_n(
                     t_s[tmp_maxid] + metadata["t"][0],
                     b_tmp,
                     marker_size_rt_choice,
-                    color=color_trajectories_dict[tmp_traj_choice],
+                    color=colors_dict[tmp_traj_choice],
                     alpha=1,
                     marker=marker_type_rt_choice,
                     zorder=2000 + i,
                 )
             elif highlight_rt_choice and tmp_traj_choice != j:
                 axis.scatter(
-                    t_s[tmp_maxid] + metadata["t"][0] + 0.05,
+                    t_s[tmp_maxid] + metadata["t"][0],  #  + 0.05,
                     tmp_traj[tmp_maxid, j],
                     marker_size_rt_choice,
-                    color=color_trajectories_dict[j],
+                    color=colors_dict[j],
                     alpha=1,
-                    marker=marker_type_rt_choice,
+                    marker="|",
                     zorder=2000 + i,
                 )
 
