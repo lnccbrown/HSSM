@@ -3,7 +3,7 @@
 from pprint import pformat, pp
 from typing import cast
 
-from .defaults import (
+from ._types import (
     DefaultConfig,
     LoglikConfigs,
     SupportedModels,
