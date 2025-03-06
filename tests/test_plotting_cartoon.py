@@ -39,8 +39,8 @@ def test_plot_model_cartoon_2_choice(
                 groups=groups,
                 plot_pp_mean=plot_pp_mean,
                 plot_pp_samples=plot_pp_samples,
-                alpha=0.025,
-                **{"n_trajectories": n_trajectories},
+                alpha_mean=0.025,
+                n_trajectories=n_trajectories,
             )
     else:
         ax = hssm.plotting.plot_model_cartoon(
@@ -52,8 +52,8 @@ def test_plot_model_cartoon_2_choice(
             groups=groups,
             plot_pp_mean=plot_pp_mean,
             plot_pp_samples=plot_pp_samples,
-            alpha=0.025,
-            **{"n_trajectories": n_trajectories},
+            alpha_mean=0.025,
+            n_trajectories=n_trajectories,
         )
 
         if groups is None:
@@ -95,8 +95,8 @@ def test_plot_model_cartoon_3_choice(
                 groups=groups,
                 plot_pp_mean=plot_pp_mean,
                 plot_pp_samples=plot_pp_samples,
-                alpha=0.025,
-                **{"n_trajectories": n_trajectories},
+                alpha_mean=0.025,
+                n_trajectories=n_trajectories,
             )
     else:
         ax = hssm.plotting.plot_model_cartoon(
@@ -108,8 +108,8 @@ def test_plot_model_cartoon_3_choice(
             groups=groups,
             plot_pp_mean=plot_pp_mean,
             plot_pp_samples=plot_pp_samples,
-            alpha=0.025,
-            **{"n_trajectories": n_trajectories},
+            alpha_mean=0.025,
+            n_trajectories=n_trajectories,
         )
 
         if groups is None:
