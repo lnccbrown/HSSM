@@ -34,5 +34,5 @@ jobs:
       - name: Notebook metadata
         run: |
           for notebook in $(find docs -name "*.ipynb"); do
-            uv run nb-clean check -M "$notebook"
+            uv run nb-clean check -o "$notebook"
           done
