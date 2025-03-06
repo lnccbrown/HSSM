@@ -30,3 +30,9 @@ jobs:
 
       - name: Linting
         run: uv run ruff check src/hssm
+
+      - name: Notebook metadata
+        run: |
+          for notebook in $(find docs -name "*.ipynb"); do
+            uv run nb-clean check -M "$notebook"
+          done
