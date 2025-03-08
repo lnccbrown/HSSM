@@ -1418,9 +1418,8 @@ class HSSM:
             A pandas DataFrame or xarray Dataset containing the summary statistics.
         """
         data = data or self.traces
-        assert isinstance(
-            data, az.InferenceData
-        ), "data must be an InferenceData object."
+        if not isinstance(data, az.InferenceData):
+            raise TypeError("data must be an InferenceData object.")
 
         if not include_deterministic:
             var_names = list(
@@ -1735,8 +1734,7 @@ class HSSM:
                 else ""
             )
 
-        # TODO: p_outlier regression likely still needs to be
-        # handled correctly here.
+        # TODO: Handle p_outlier regression correctly here.
         if self.p_outlier is not None:
             output.append("")
             output.append(f"Lapse probability: {self.p_outlier.prior}")
