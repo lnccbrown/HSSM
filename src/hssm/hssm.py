@@ -1735,9 +1735,9 @@ class HSSM:
                 else ""
             )
 
+        # TODO: p_outlier regression likely still needs to be
+        # handled correctly here.
         if self.p_outlier is not None:
-            # TODO: p_outlier regression likely still needs to be
-            # handled correctly here.
             output.append("")
             output.append(f"Lapse probability: {self.p_outlier.prior}")
             output.append(f"Lapse distribution: {self.lapse}")
