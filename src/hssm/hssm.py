@@ -1354,9 +1354,8 @@ class HSSM:
             Whether to call plt.tight_layout() after plotting. Defaults to True.
         """
         data = data or self.traces
-        assert isinstance(
-            data, az.InferenceData
-        ), "data must be an InferenceData object."
+        if not isinstance(data, az.InferenceData):
+            raise TypeError("data must be an InferenceData object.")
 
         if not include_deterministic:
             var_names = list(
@@ -1738,12 +1737,8 @@ class HSSM:
             )
 
         if self.p_outlier is not None:
-            # # TODO: Allow regression for self.p_outlier
-            # # Need to determine what the output should look like
-            # if self.p_outlier.is_regression:
-            #     raise NotImplementedError(
-            #         "Regression for `p_outlier` is not implemented yet."
-            #     )
+            # TODO: p_outlier regression likely still needs to be
+            # handled correctly here.
             output.append("")
             output.append(f"Lapse probability: {self.p_outlier.prior}")
             output.append(f"Lapse distribution: {self.lapse}")
