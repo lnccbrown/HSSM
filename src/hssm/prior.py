@@ -321,16 +321,18 @@ HDDM_MU: dict[Any, Any] = {
     "sv": {"dist": "HalfNormal", "sigma": 2.0},
     "st": {"dist": "HalfNormal", "sigma": 0.3},
     "sz": {"dist": "HalfNormal", "sigma": 0.5},
+    "p_outlier": {"dist": "Beta", "alpha": 5, "beta": 100},
 }
 
 HDDM_SIGMA: dict[Any, Any] = {
     "v": {"dist": "HalfNormal", "sigma": 2.0},
     "a": {"dist": "HalfNormal", "sigma": 0.1},
-    "z": {"dist": "Weibull", "alpha": 1.2, "beta": "0.25"},
+    "z": {"dist": "Weibull", "alpha": 1.2, "beta": 0.25},
     "t": {"dist": "HalfNormal", "sigma": 0.2},
-    "sv": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
-    "sz": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
-    "st": {"dist": "Weibull", "alpha": 1.5, "beta": "0.3"},
+    "sv": {"dist": "Weibull", "alpha": 1.5, "beta": 0.3},
+    "sz": {"dist": "Weibull", "alpha": 1.5, "beta": 0.3},
+    "st": {"dist": "Weibull", "alpha": 1.5, "beta": 0.3},
+    "p_outlier": {"dist": "Weibull", "alpha": 1.5, "beta": 0.3},
 }
 
 HDDM_SETTINGS_GROUP: dict[Any, Any] = {
@@ -345,4 +347,9 @@ HDDM_SETTINGS_GROUP: dict[Any, Any] = {
     "sv": {"dist": "Gamma", "mu": HDDM_MU["sv"], "sigma": HDDM_SIGMA["sv"]},
     "sz": {"dist": "Gamma", "mu": HDDM_MU["sz"], "sigma": HDDM_SIGMA["sz"]},
     "st": {"dist": "Gamma", "mu": HDDM_MU["st"], "sigma": HDDM_SIGMA["st"]},
+    "p_outlier": {
+        "dist": "Beta",
+        "alpha": HDDM_MU["p_outlier"],
+        "beta": HDDM_SIGMA["p_outlier"],
+    },
 }
