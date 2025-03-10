@@ -40,7 +40,7 @@ def get_document_code_description(file_path: Path | str) -> tuple:
     match = re.search(r"[^\d_]", stem)
     if match:
         index = match.start() - 1 if match.start() > 1 else None
-        code = stem[:index] if index else None
+        code = stem[:index] if index else f"NoCode_{generate_random_string()}"
         description = stem[index + 1 :] if index is not None else stem
     else:
         code = stem
