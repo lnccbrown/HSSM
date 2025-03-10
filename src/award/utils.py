@@ -219,23 +219,26 @@ def find_files_with_extensions(
 
 
 def search_files(
-    input_dir, keywords_file, output_file, extensions=(".pdf", ".docx", ".doc")
+    input_dir,
+    keywords_file,
+    output_file,
 ) -> None:
     keywords = get_keywords(keywords_file)
     results = {}
     failures = []
     input_path = Path(input_dir)
-    all_paths = find_files_with_extensions(input_path, extensions)
-    for file in tqdm(all_paths):
-        if not file.is_file():
-            continue
-        try:
-            text = extract_text_from_doc(file, totxt=False)
-            results[str(file)] = search_keywords_in_text(text, keywords)
-        except Exception as e:
-            logging.error("Error processing %s: %s", file, e)
-            failures.append(file)
-            continue
+    all_paths = find_files_with_extensions(input_path)
+
+    process_file_with_keywords = partial(process_file, keywords=keywords)
+    with ProcessPoolExecutor() as executor:
+        for result in tqdm(
+            executor.map(process_file_with_keywords, all_paths), total=len(all_paths)
+        ):
+            if result:
+                file, keywords_result = result
+                results[file] = keywords_result
+            else:
+                failures.append(file)
 
     if failures:
         logging.warning(
@@ -245,4 +248,4 @@ def search_files(
         )
 
     if results:
-        write_results_to_csv(results, output_file)
+        write_results_to_table(results, output_file)
