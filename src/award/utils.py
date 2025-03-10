@@ -50,13 +50,9 @@ def get_document_code_description(file_path: Path | str) -> tuple:
 
 def parse_code_and_description(df: pd.DataFrame) -> pd.DataFrame:
     leftmost_columns = ["Code", "Description"]
-    df[leftmost_columns] = df["File"].apply(
-        lambda x: pd.Series(get_document_code_description(x))
-    )
+    df[leftmost_columns] = df["File"].apply(lambda x: pd.Series(get_document_code_description(x)))
     df = df.drop(columns=["File"])
-    df = df[
-        leftmost_columns + [col for col in df.columns if col not in leftmost_columns]
-    ]
+    df = df[leftmost_columns + [col for col in df.columns if col not in leftmost_columns]]
     return df
 
 
