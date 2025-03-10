@@ -2,10 +2,12 @@
 
 import hashlib
 import json
+import logging
+from dataclasses import dataclass, field
 from pathlib import Path
-from pprint import pp
+from pprint import pp  # noqa: F401
 
-import meilisearch
+import meilisearch  # noqa: F401
 import pymupdf
 
 from award.utils import find_files_with_extensions, get_document_code_description
@@ -149,6 +151,7 @@ def hash_string(input_string: str | Path) -> str:
         str: The resulting SHA-256 hash as a hexadecimal string.
 
     """
+    input_string = str(input_string)
     sha256_hash = hashlib.sha256()
     sha256_hash.update(input_string.encode("utf-8"))
     return sha256_hash.hexdigest()
@@ -166,43 +169,54 @@ def get_document_meta(file_path: Path | str) -> dict:
 
     """
     file_path = Path(file_path)
+    id = hash_string(str(file_path))
     code, description = get_document_code_description(file_path)
 
     try:
-        document = pymupdf.open(file_path)
-    except pymupdf.FileDataError:
-        return dict(id=code, description=description, pages={})
-    pages = {i: t.get_text() for (i, t) in enumerate(document, 1)}
-    return dict(id=code, description=description, pages=pages)
-
-
-def dir2index(directory: Path, output: Path = None) -> dict:
-    """Convert a directory of documents to an index compatible with Meilisearch."""
-    directory = Path(directory)
-    files = find_files_with_extensions(directory)
-    d = [get_document_meta(file) for file in files]
-
-    if output:
-        with open(output, "w") as file:
-            json.dump(d, file, indent=4)
-
-    return d
+        with pymupdf.open(file_path) as document:
+            pages = {i: t.get_text() for (i, t) in enumerate(document, 1)}
+    except (pymupdf.FileDataError, pymupdf.mupdf.FzErrorUnsupported) as e:
+        logging.error(f"Error opening document {file_path}: {e}")
+        pages = {}
+    except Exception as e:
+        logging.error(f"Unexpected error processing document {file_path}: {e}")
+        pages = {}
+    return dict(id=id, code=code, description=description, pages=pages)
 
 
 if __name__ == "__main__":
     pdf = Path(
-        "assets/testfiles/009126_00038255_3_Brown University Requisition No. 04199154 Contract Draft_RN_03.29.23.pdf"
+        "assets/testfiles/009126_00038255_3_Brown University Requisition No. 04199154 Contract Draft_RN_03.29.23.pdf"  # noqa: E501
     )
     directory = Path("assets/testfiles")
 
-    index = dir2index(directory, output="index.json")
+    # index = dir2index(directory, output="index.json")
+    # index = dir2index(directory, output="index.json")
 
-    client = meilisearch.Client("http://localhost:7700", "aSampleMasterKey")
+    # client = meilisearch.Client("http://localhost:7700", "aSampleMasterKey")
 
-    json_file = open("index.json", encoding="utf-8")
-    docs = json.load(json_file)
+    # json_file = open("index.json", encoding="utf-8")
+    # docs = json.load(json_file)
     # client.index('pdfs1').add_documents(docs)
-    client.index("pdfs1").add_documents(index)
+    # client.index("pdfs1").add_documents(index)
 
-    pp(client.index("pdfs1").search("funambulo"))
-    pp(client.index("pdfs1").search("foobarbaz"))
+    # pp(client.index("pdfs1").search("funambulo"))
+    # pp(client.index("pdfs1").search("foobarbaz"))
+
+    # directory = Path("assets/testfiles")
+    # indexer = DocumentIndexer(directory, output="index.json")
+    # index = indexer.dir2index()
+
+    loaded_indexer = DocumentIndexer(directory, input="index.json")
+    loaded_indexer.index = loaded_indexer.index[:2]
+    loaded_indexer._update_reduced_index()
+    assert len(loaded_indexer.index) == 2
+    assert len(loaded_indexer.reduced_index) == 2
+    loaded_indexer.update(directory)
+    assert len(loaded_indexer.index) == 13
+    assert len(loaded_indexer.reduced_index) == 13
+    # client = meilisearch.Client("http://localhost:7700", "aSampleMasterKey")
+    # client.index("pdfs1").add_documents(index)
+
+    # pp(client.index("pdfs1").search("funambulo"))
+    # pp(client.index("pdfs1").search("foobarbaz"))
