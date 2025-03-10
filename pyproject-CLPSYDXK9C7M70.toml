@@ -1,0 +1,196 @@
+[project]
+name = "HSSM"
+version = "0.2.5"
+description = "Bayesian inference for hierarchical sequential sampling models."
+authors = [
+    { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
+    { name = "Paul Xu", email = "yang_xu@brown.edu" },
+    { name = "Carlos Paniagua", email = "carlos_paniagua@brown.edu" },
+    { name = "Aisulu Omar", email = "aisulu_omar@brown.edu" },
+    { name = "Michael Frank", email = "michael_frank@brown.edu" },
+]
+readme = "README.md"
+license = { file = "LICENSE" }
+repository = "https://github.com/lnccbrown/HSSM"
+keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
+
+requires-python = ">=3.10,<3.13"
+
+dependencies = [
+    "arviz>=0.19.0",
+    "bambi>=0.15.0, <0.16.0",
+    "cloudpickle>=3.0.0",
+    "hddm-wfpt>=0.1.4",
+    "huggingface-hub>=0.24.6",
+    "numpy>=1.26.4,<2.0.0",
+    "numpyro>=0.16.0",
+    "onnx>=1.16.0",
+    "pymc>=5.19.0",
+    "seaborn>=0.13.2",
+    "ssm-simulators>=0.8.3",
+    "tqdm>=4.66.0",
+    ]
+
+[project.optional-dependencies]
+cuda12 = ["jax[cuda12]>=0.4.25"]
+
+[dependency-groups]
+dev = [
+    "coverage>=7.6.4",
+    "graphviz>=0.20.3",
+    "ipykernel>=6.29.5",
+    "ipython>=8.31.0",
+    "ipywidgets>=8.1.2",
+    "jupyterlab>=4.2.4",
+    "mistune>=3.0.2",
+    "mkdocs-material>=9.5.21",
+    "mkdocs>=1.6.0",
+    "mkdocs-jupyter>=0.25.1",
+    "mkdocstrings-python>=1.10.0",
+    "mypy>=1.11.1",
+    "nb-clean>=4.0.1",
+    "nbconvert>=7.16.5",
+    "onnxruntime>=1.17.1",
+    "pre-commit>=2.20.0",
+    "ptpython>=3.0.29",
+    "pytest-cov>=6.0.0",
+    "pytest-xdist>=3.6.1",
+    "pytest>=8.3.1",
+    "ruff>=0.9.1",
+]
+notebook = [
+    "ipykernel>=6.29.5",
+    "lanfactory>=0.4.4",
+    "zeus-mcmc>=2.5.4",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+exclude = ["*.ipynb"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+unfixable = ["E711"]
+
+select = [
+    # pydocstyle
+    "D",
+    # pyflakes
+    "F",
+    # pycodestyle
+    "E",
+    "I",
+    "W",
+    # flake8-2020
+    "YTT",
+    # flake8-bugbear
+    "B",
+    # flake8-quotes
+    "Q",
+    # pylint
+    "PLE",
+    "PLR",
+    "PLW",
+    # misc lints
+    "PIE",
+    # flake8-pyi
+    "PYI",
+    # tidy imports
+    "TID",
+    # type-checking imports
+    "TCH",
+]
+
+ignore = [
+    # space before : (needed for how black formats slicing)
+    # "E203",  # not yet implemented
+    # module level import not at top of file
+    "E402",
+    # do not assign a lambda expression, use a def
+    "E731",
+    # line break before binary operator
+    # "W503",  # not yet implemented
+    # line break after binary operator
+    # "W504",  # not yet implemented
+    # controversial
+    "B006",
+    # controversial
+    "B007",
+    # controversial
+    "B008",
+    # setattr is used to side-step mypy
+    "B009",
+    # getattr is used to side-step mypy
+    "B010",
+    # tests use assert False
+    "B011",
+    # tests use comparisons but not their returned value
+    "B015",
+    # false positives
+    "B019",
+    # Loop control variable overrides iterable it iterates
+    "B020",
+    # Function definition does not bind loop variable
+    "B023",
+    # zip()` without an explicit `strict=
+    "B905",
+    # Functions defined inside a loop must not use variables redefined in the loop
+    # "B301",  # not yet implemented
+    # Too many arguments to function call
+    "PLR0913",
+    # Too many returns
+    "PLR0911",
+    # Too many branches
+    "PLR0912",
+    # Too many statements
+    "PLR0915",
+    # Global statements are discouraged
+    "PLW0603",
+    # Docstrings should not be included in stubs
+    "PYI021",
+    # Use typing_extensions.TypeAlias for type aliases
+    # "PYI026",  # not yet implemented
+    # Use "collections.abc.*" instead of "typing.*" (PEP 585 syntax)
+    # "PYI027",  # not yet implemented
+    # while int | float can be shortened to float, the former is more explicit
+    # "PYI041",  # not yet implemented
+
+    # Additional checks that don't pass yet
+    # Within an except clause, raise exceptions with ...
+    "B904",
+    # Magic number
+    "PLR2004",
+    # Consider `elif` instead of `else` then `if` to remove indentation level
+    "PLR5501",
+    # Ignore "Use `float` instead of `int | float`."
+    "PYI041",
+    # Allow importing from parent modules
+    "TID252",
+]
+
+exclude = [".github", "docs", "notebook", "tests/*"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.pytest]
+testpaths = ["tests"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (add --runslow option to run these tests)",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[[tool.uv.index]]
+name = "default"
+url = "https://pypi.org/simple/"
