@@ -10,13 +10,27 @@ import pytesseract
 import textract
 from PIL import Image
 from tqdm import tqdm
+import openpyxl
+from openpyxl.formatting.rule import ColorScaleRule
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-def get_document_code_description(file_path: Path | str)  -> tuple:
+def process_file(file, keywords):
+    try:
+        text = extract_text_from_doc(file, totxt=False)
+        return str(file), search_keywords_in_text(text, keywords)
+    except Exception as e:
+        logging.error("Error processing %s: %s", file, e)
+        return None
+
+
+def generate_random_string(length=6):
+    characters = string.ascii_letters + string.digits
+    return "".join(random.choice(characters) for _ in range(length))
+
+
+def get_document_code_description(file_path: Path | str) -> tuple:
     file_path = Path(file_path)
     stem = file_path.stem
     match = re.search(r"[^\d_]", stem)
