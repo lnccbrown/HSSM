@@ -56,12 +56,57 @@ def parse_code_and_description(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def write_results_to_csv(results: dict, output_file: str) -> None:
+def write_results_to_table(results: dict, output_file: str, format="xlsx") -> None:
     df = pd.DataFrame.from_dict(results, orient="index").reset_index()
     df = df.rename(columns={"index": "File"})
     df = parse_code_and_description(df)
-    df = df.sort_values(by=["Code", "Description"])
-    df.to_csv(output_file, index=False)
+    df["Score"] = df.iloc[:, 2:].sum(axis=1)
+
+    # Insert the new column after the 'Description' column
+    description_index = df.columns.get_loc("Description")
+    df.insert(description_index + 1, "Score", df.pop("Score"))
+
+    df = df.sort_values(by=["Score", "Code", "Description"], ascending=[False, True, True])
+    if format == "csv":
+        df.to_csv(output_file, index=False)
+    elif format == "xlsx":
+        df.to_excel(output_file, index=False)
+
+    # Apply conditional formatting using openpyxl
+    apply_conditional_formatting(output_file)
+
+
+def apply_conditional_formatting(output_file: str) -> None:
+    wb = openpyxl.load_workbook(output_file)
+    ws = wb.active
+
+    # Find the column with the "Score" heading
+    score_col_letter = None
+    for col in ws.iter_cols(1, ws.max_column):
+        if col[0].value == "Score":
+            score_col_letter = col[0].column_letter
+            break
+
+    if score_col_letter is None:
+        raise ValueError("No 'Score' column found in the worksheet")
+
+    # Define the color scale rule for the 'Score' column
+    color_scale_rule = ColorScaleRule(
+        start_type="min",
+        start_color="FFFFFF",
+        mid_type="percentile",
+        mid_value=50,
+        mid_color="FF9999",
+        end_type="max",
+        end_color="FF0000",
+    )
+
+    # Apply the color scale rule to the 'Score' column
+    ws.conditional_formatting.add(
+        f"{score_col_letter}2:{score_col_letter}{ws.max_row}", color_scale_rule
+    )
+
+    wb.save(output_file)
 
 
 def get_keywords(file_path: Path) -> tuple:
