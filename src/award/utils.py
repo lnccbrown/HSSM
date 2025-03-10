@@ -202,7 +202,18 @@ def read_doc(file_path):
     return text
 
 
-def find_files_with_extensions(input_dir: Path, extensions: list) -> list:
+def find_files_with_extensions(
+    input_dir: Path, extensions: tuple = (".pdf", ".docx", ".doc")
+) -> list:
+    """Find files with specified extensions in a directory.
+
+    Args:
+        input_dir (Path): Target directory to search for files.
+        extensions (tuple, optional): Defaults to (".pdf", ".docx", ".doc").
+
+    Returns:
+        list: A list of file paths matching the specified extensions.
+    """
     patterns = [f"**/*{ext}" for ext in extensions]
     return sorted([file for pattern in patterns for file in input_dir.glob(pattern)])
 
