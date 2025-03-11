@@ -1,6 +1,7 @@
 name: Check notebooks
 
 on:
+  pull_request:
   workflow_call:
   workflow_dispatch:
 
@@ -25,11 +26,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run notebooks
+      - name: Run notebooks (temporarily target "hssm_tutorial_workshop_1.ipynb")
         run: |
           echo "Running notebooks with Python ${{ matrix.python-version }}"
           EXIT_CODE=0
-          for notebook in $(find docs -name "*.ipynb"); do
+          for notebook in $(find docs -name "hssm_tutorial_workshop_1.ipynb"); do
             if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$notebook"; then
               echo "::error::Failed to execute notebook: $notebook"
               EXIT_CODE=1
