@@ -245,9 +245,9 @@ def _process_lines(
 
     if isinstance(line_attrs, check_type):
         if check_type is str:
-            return [cast(str, line_attrs)] * 2
+            return [cast("str", line_attrs)] * 2
         elif check_type is float:
-            return [cast(float, line_attrs)] * 2
+            return [cast("float", line_attrs)] * 2
         else:
             raise ValueError(f"Invalid type: {check_type}")
     elif isinstance(line_attrs, (list, tuple)):
@@ -272,22 +272,22 @@ def _process_lines(
             if mode == "linestyles":
                 return [
                     cast(
-                        str,
+                        "str",
                         line_attrs.get("predicted", dict_defaults_ls["predicted"]),
                     ),
                     cast(
-                        str,
+                        "str",
                         line_attrs.get("observed", dict_defaults_ls["observed"]),
                     ),
                 ]
             elif mode == "linewidths":
                 return [
                     cast(
-                        float,
+                        "float",
                         line_attrs.get("predicted", dict_defaults_lw["predicted"]),
                     ),
                     cast(
-                        float,
+                        "float",
                         line_attrs.get("observed", dict_defaults_lw["observed"]),
                     ),
                 ]

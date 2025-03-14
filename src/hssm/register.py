@@ -52,7 +52,7 @@ def register_model(
         raise ValueError(f"Model '{name}' already exists")
 
     _config = {k: v for k, v in locals().items() if k != "name"}
-    config = cast(DefaultConfig, _config)
+    config = cast("DefaultConfig", _config)
 
     # TODO: validate provided configs?
 
@@ -92,5 +92,5 @@ def get_model_info(name: SupportedModels | str) -> None:
     if name not in registered_models:
         raise ValueError(f"Model '{name}' not found")
 
-    name = cast(SupportedModels, name)
+    name = cast("SupportedModels", name)
     print(f"Model: {name}\n" + pformat(registered_models[name], indent=2))

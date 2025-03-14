@@ -54,7 +54,7 @@ class Config:
         loglik_kind
             The kind of the log-likelihood for the model.
         """
-        model_name_casted = cast(SupportedModels, model_name)
+        model_name_casted = cast("SupportedModels", model_name)
         if all(
             [
                 model_name_casted in get_args(SupportedModels),
@@ -73,10 +73,10 @@ class Config:
             # Setting loglik_kind to be the first of analytical or
             # approx_differentiable
             for kind in ["analytical", "approx_differentiable", "blackbox"]:
-                model_name = cast(SupportedModels, model_name)
+                model_name = cast("SupportedModels", model_name)
                 default_config = deepcopy(default_model_config[model_name])
                 if kind in default_config["likelihoods"]:
-                    kind = cast(LoglikKind, kind)
+                    kind = cast("LoglikKind", kind)
                     loglik_config = default_config["likelihoods"][kind]
 
                     return Config(
@@ -103,7 +103,7 @@ class Config:
                     + '"analytical", "approx_differentiable", "blackbox".'
                 )
             if model_name in default_model_config:
-                model_name = cast(SupportedModels, model_name)
+                model_name = cast("SupportedModels", model_name)
                 default_config = deepcopy(default_model_config[model_name])
                 if loglik_kind in default_config["likelihoods"]:
                     loglik_config = default_config["likelihoods"][loglik_kind]
