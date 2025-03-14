@@ -87,7 +87,7 @@ def _plot_model_cartoon_1D(
     else:
         ax = plt.gca()
 
-    config_tmp = default_model_config[cast(SupportedModels, model_name)]
+    config_tmp = default_model_config[cast("SupportedModels", model_name)]
     model_params = config_tmp["list_params"]
 
     n_choices = len(config_tmp["choices"])
@@ -821,8 +821,8 @@ def plot_func_model(
     hist_histtype = kwargs.get("hist_histtype", "step")
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
-    axis_twin_up: Axes = cast(Axes, axis.twinx())
-    axis_twin_down: Axes = cast(Axes, axis.twinx())
+    axis_twin_up: Axes = cast("Axes", axis.twinx())
+    axis_twin_down: Axes = cast("Axes", axis.twinx())
     axis_twin_up.set_ylim(ylim_low, ylim_high)
     axis_twin_up.set_yticks([])
     axis_twin_down.set_ylim(ylim_high, ylim_low)
@@ -1579,7 +1579,7 @@ def plot_func_model_n(
 
     # ADD HISTOGRAMS
     # -------------------------------
-    choices = default_model_config[cast(SupportedModels, model_name)]["choices"]
+    choices = default_model_config[cast("SupportedModels", model_name)]["choices"]
     cnt_cumul = 0
 
     # POSTERIOR MEAN BASED HISTOGRAM

@@ -378,8 +378,8 @@ def _check_groups_and_groups_order(
             groups = [groups]
 
     # Cast to the right types to satisfy mypy
-    groups = cast(Iterable, groups)
-    groups_order = cast(dict, groups_order)
+    groups = cast("Iterable", groups)
+    groups_order = cast("dict", groups_order)
 
     return groups, groups_order
 
@@ -422,7 +422,7 @@ def _use_traces_or_sample(
         )
         sampled = True
 
-    return cast(az.InferenceData, idata), sampled
+    return cast("az.InferenceData", idata), sampled
 
 
 def _check_sample_size(plotting_df):

@@ -120,7 +120,7 @@ def _get_alias_dict(
     dict[str, str | dict]
         A dict that indicates how Bambi should alias its parameters.
     """
-    parent_name = cast(str, parent.name)
+    parent_name = cast("str", parent.name)
     alias_dict: dict[str, Any] = {response_c: response_str}
 
     if len(model.distributional_components) == 1:

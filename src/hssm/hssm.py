@@ -1468,7 +1468,7 @@ class HSSM:
 
         if isinstance(traces, (str, PathLike)):
             traces = az.from_netcdf(traces)
-        self._inference_obj = cast(az.InferenceData, traces)
+        self._inference_obj = cast("az.InferenceData", traces)
 
     def restore_vi_traces(
         self, traces: az.InferenceData | pm.Approximation | str | PathLike
@@ -1486,7 +1486,7 @@ class HSSM:
 
         if isinstance(traces, (str, PathLike)):
             traces = az.from_netcdf(traces)
-        self._inference_obj_vi = cast(az.InferenceData, traces)
+        self._inference_obj_vi = cast("az.InferenceData", traces)
 
     def save_model(
         self,
