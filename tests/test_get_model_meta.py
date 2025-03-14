@@ -1,6 +1,7 @@
 import pytest
 
-from hssm.defaults import get_default_model_meta, default_model_config
+from hssm.modelmeta import get_default_model_meta
+from hssm.defaults import default_model_config
 
 
 def test_get_model_meta():

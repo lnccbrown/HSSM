@@ -12,8 +12,8 @@ import bambi as bmb
 from ._types import LogLik, LoglikKind, SupportedModels
 from .defaults import (
     default_model_config,
-    get_default_model_meta,
 )
+from .modelmeta import get_default_model_meta
 from .register import register_model
 
 if TYPE_CHECKING:

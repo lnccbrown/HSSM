@@ -4,8 +4,8 @@ import pytest
 
 import hssm
 from hssm.register import register_model, list_registered_models, get_model_info
+from hssm.modelmeta import get_default_model_meta
 from hssm.defaults import (
-    get_default_model_meta,
     default_model_config as registered_models,
 )
 
