@@ -1,6 +1,9 @@
 name: Check notebooks
 
 on:
+  pull_request:
+    branches:
+      - main
   workflow_call:
   workflow_dispatch:
 
@@ -32,7 +35,7 @@ jobs:
           for notebook in $(find docs -name "*.ipynb"); do
             echo "Cleaning $notebook"
             uv run nb-clean clean -o "$notebook"
-            if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook "$notebook"; then
+            if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$notebook"; then
               echo "::error::Failed to execute notebook: $notebook"
               EXIT_CODE=1
             fi
