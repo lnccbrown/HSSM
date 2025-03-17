@@ -162,7 +162,7 @@ class RegressionParam(Param):
         self.validate()
         if self.prior is None:
             return
-        self.prior = cast(dict[str, Any], self.prior)
+        self.prior = cast("dict[str, Any]", self.prior)
         self.prior = _make_prior_dict(self.prior)
 
     def set_loglogit_link(self):
@@ -270,7 +270,7 @@ class RegressionParam(Param):
                             "group_specific", self.name, bounds=None, link=self.link
                         )
         if self.prior is not None:
-            self.prior = cast(dict[str, Any], self.prior)
+            self.prior = cast("dict[str, Any]", self.prior)
             safe_priors.update(self.prior)
         self.prior = safe_priors
 
@@ -284,7 +284,7 @@ class RegressionParam(Param):
         eval_env
             The evaluation environment
         """
-        formula = cast(str, self.formula)
+        formula = cast("str", self.formula)
         rhs = formula.split("~")[1]
         formula = "rt ~ " + rhs
         dm = design_matrices(formula, data=data, extra_namespace=extra_namespace)
@@ -371,7 +371,7 @@ def _make_prior_dict(
     """
     priors = {
         # Convert dict to bmb.Prior if a dict is passed
-        param: _make_priors_recursive(cast(dict[str, Any], prior))
+        param: _make_priors_recursive(cast("dict[str, Any]", prior))
         if isinstance(prior, dict)
         else prior
         for param, prior in prior.items()
