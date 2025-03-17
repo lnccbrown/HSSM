@@ -30,7 +30,9 @@ jobs:
           echo "Running notebooks with Python ${{ matrix.python-version }}"
           EXIT_CODE=0
           for notebook in $(find docs -name "*.ipynb"); do
-            if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$notebook"; then
+            echo "Cleaning $notebook"
+            uv run nb-clean clean -o "$notebook"
+            if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook "$notebook"; then
               echo "::error::Failed to execute notebook: $notebook"
               EXIT_CODE=1
             fi
