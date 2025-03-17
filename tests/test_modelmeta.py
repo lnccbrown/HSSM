@@ -3,6 +3,7 @@ from hssm.modelmeta import (
     get_levy_config,
     get_weibull_config,
     get_ddm_seq2_no_bias_config,
+    get_ornstein_config,
 )
 
 
@@ -82,4 +83,21 @@ def test_get_ddm_seq2_no_bias_config():
         "vl2": (-4.0, 4.0),
         "a": (0.3, 2.5),
         "t": (0.0, 2.0),
+    }
+
+
+def test_get_ornstein_config():
+    ornstein_model_config = get_ornstein_config()
+    assert ornstein_model_config["response"] == ["rt", "response"]
+    assert ornstein_model_config["choices"] == [-1, 1]
+    assert ornstein_model_config["list_params"] == ["v", "a", "z", "g", "t"]
+
+    likelihood = ornstein_model_config["likelihoods"]["approx_differentiable"]
+    likelihood["loglik"] == "ornstein.onnx"
+    assert likelihood["bounds"] == {
+        "v": (-2.0, 2.0),
+        "a": (0.3, 3.0),
+        "z": (0.1, 0.9),
+        "g": (-1.0, 1.0),
+        "t": (1e-3, 2.0),
     }
