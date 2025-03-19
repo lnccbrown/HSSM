@@ -10,7 +10,7 @@ from ._types import (
     Optional,
     SupportedModels,
 )
-from .modelmeta import get_ddm_config
+from .modelconfig import get_ddm_config
 from .param.utils import _make_default_prior
 
 

@@ -1,4 +1,4 @@
-from hssm.modelmeta import (
+from hssm.modelconfig import (
     get_ddm_svd_config,
     get_levy_config,
     get_weibull_config,
