@@ -13,7 +13,7 @@ from ._types import LogLik, LoglikKind, SupportedModels
 from .defaults import (
     default_model_config,
 )
-from .modelmeta import get_default_model_meta
+from .modelmeta import get_default_model_config
 from .register import register_model
 
 if TYPE_CHECKING:
@@ -62,7 +62,7 @@ class Config:
             ]
         ):
             register_model(
-                model_name_casted, **get_default_model_meta(model_name_casted)
+                model_name_casted, **get_default_model_config(model_name_casted)
             )
 
         if loglik_kind is None:

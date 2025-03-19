@@ -40,7 +40,7 @@ from .race_no_bias_angle_4_config import get_race_no_bias_angle_4_config
 from .weibull_config import get_weibull_config
 
 
-def get_default_model_meta(model_name: SupportedModels) -> DefaultConfig:
+def get_default_model_config(model_name: SupportedModels) -> DefaultConfig:
     """
     Get the default configuration for a given model name.
 
