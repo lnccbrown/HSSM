@@ -1,0 +1,42 @@
+name: Check notebooks
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  check_notebooks:
+    runs-on: ubuntu-latest
+    if: ${{ ! contains(github.event.head_commit.message, '[skip fast tests]') }}
+    env:
+      PYTENSOR_FLAGS: "blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
+
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup environment
+        uses: ./.github/setup-env
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run notebooks
+        run: |
+          echo "Running notebooks with Python ${{ matrix.python-version }}"
+          EXIT_CODE=0
+          for notebook in $(find docs -name "*.ipynb"); do
+            echo "Cleaning $notebook"
+            uv run nb-clean clean -o "$notebook"
+            if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$notebook"; then
+              echo "::error::Failed to execute notebook: $notebook"
+              EXIT_CODE=1
+            fi
+          done
+          exit $EXIT_CODE
+        env:
+          PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}

@@ -77,3 +77,7 @@ site/
 *.so
 .python-version
 uv.lock
+explorations/
+*.nbconvert.ipynb
+pypi-token
+pre-commit
