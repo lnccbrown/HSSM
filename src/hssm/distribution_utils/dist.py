@@ -40,6 +40,193 @@ _logger = logging.getLogger("hssm")
 LOGP_LB = pm.floatX(-66.1)
 
 
+def _handle_size(args, kwargs):
+    """Handle the size argument in the likelihood function.
+
+    This function is used to handle the size argument in the likelihood function.
+    It is used to ensure that the size argument is always a scalar.
+
+    Assumptions: either the size argument is passed as a keyword argument or as the last
+    unnamed argument. If it is passed as a keyword argument, it is removed from the
+    keyword arguments. If it is passed as the last unnamed argument, it is removed from
+    the unnamed arguments.
+
+    Parameters
+    ----------
+    args
+        The unnamed arguments of the likelihood function.
+    kwargs
+        The keyword arguments of the likelihood function.
+
+    Returns
+    -------
+        The size argument.
+    """
+    if "size" in kwargs:
+        size = kwargs.pop("size")
+    else:
+        size = args[-1]
+        args = args[:-1]
+
+    if size is None:
+        size = 1
+
+    # Although we got around the ndims_supp issue, the size parameter passed
+    # here is still an array with one element. We need to take it out.
+    if not np.isscalar(size):
+        size = np.squeeze(size)
+
+    return size, args, kwargs
+
+def _get_arg_arrays(args, list_params):
+    """Get the argument arrays from the unnamed arguments.
+
+    This function is used to get the argument arrays from the unnamed arguments of the
+    likelihood function. It is used to ensure that the arguments are always arrays.
+
+    Parameters
+    ----------
+    args
+        The unnamed arguments of the likelihood function.
+    list_params
+        A list of parameters for the likelihood function.
+
+    Returns
+    -------
+        The argument arrays.
+    """
+    # TODO: We need to figure out what to do with extra_fields when
+    # doing posterior predictive sampling. Right now nothing is done.
+    arg_arrays = [np.asarray(arg) for arg in args]
+    if len(list_params) < len(args):
+        arg_arrays = arg_arrays[: len(list_params)]
+
+    return arg_arrays
+
+def _check_p_outlier_lapse_condition(p_outlier, lapse):
+    """Check if p_outlier and lapse are compatible.
+
+    Parameters
+    ----------
+    p_outlier
+        The p_outlier parameter.
+    lapse
+        The lapse parameter.
+
+    Returns
+    -------
+        True if p_outlier and lapse are compatible, False otherwise.
+    """
+    if p_outlier is not None and lapse is None:
+        raise ValueError(
+            "You have specified `p_outlier`, the probability of the lapse "
+            "distribution but did not specify the distribution."
+        )
+
+def _get_seed(rng:np.random.Generator):
+    """Get the seed from the random number generator.
+
+    Parameters
+    ----------
+    rng
+        The random number generator.
+
+    Returns
+    -------
+        The seed.
+    """
+    return rng.integers(0, np.iinfo(np.uint32).max, dtype=np.uint32)
+
+
+def _get_theta_n_replicas(arg_arrays, size):
+    """Prepare the theta matrix and determine the number of replicas.
+
+    This function processes the argument arrays to create a matrix `theta`
+    containing the parameters for the simulator and determines the number
+    of replicas (`n_replicas`) required for simulation.
+
+    Parameters
+    ----------
+    arg_arrays : list[np.ndarray]
+        A list of argument arrays representing the parameters for the simulator.
+    size : int
+        The size parameter indicating the number of samples to generate.
+
+    Returns
+    -------
+    tuple[np.ndarray, int]
+        A tuple containing the `theta` matrix and the number of replicas (`n_replicas`).
+
+    Raises
+    ------
+    ValueError
+        If `size` is not a multiple of the largest parameter array size when
+        parameters are not all scalars.
+    """
+    is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
+    if is_all_args_scalar: # all parameters are scalars
+        theta = np.stack(arg_arrays)
+        theta = theta.squeeze(axis=-1) if theta.ndim > 1 else theta
+        theta = np.tile(theta, (size, 1))
+        return theta, 1
+
+    # Preprocess all parameters, reshape them into a matrix of dimension
+    # (size, n_params) where size is the number of elements in the largest
+    # of all parameters passed to *arg
+    elem_max_size = np.argmax([arg.size for arg in arg_arrays])
+    max_shape = arg_arrays[elem_max_size].shape
+    new_data_size = max_shape[-1]
+
+    theta = np.column_stack(
+        [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
+    )
+
+    # We eventually want to get rid of this part, and
+    # simply make the simulators behave as would be expected
+    # by pymc directly.
+    if size is None or size == 1:
+        n_replicas = 1
+    elif size % new_data_size != 0:
+        raise ValueError(
+            "`size` needs to be a multiple of the size of data"
+        )
+    else:
+        n_replicas = size // new_data_size
+
+    return theta, n_replicas, is_all_args_scalar
+
+def _reshape_sims_out(sims_out, max_shape, n_replicas, obs_dim_int):
+    """Reshape the simulated output.
+
+    This function reshapes the simulated output to ensure that it has the correct
+    dimensions based on the maximum shape and number of replicas.
+
+    Parameters
+    ----------
+    sims_out : np.ndarray
+        The simulated output.
+    max_shape : tuple[int]
+        The maximum shape of the parameters.
+    n_replicas : int
+        The number of replicas.
+    obs_dim_int : int
+        The observation dimension.
+
+    Returns
+    -------
+        The reshaped simulated output.
+    """
+    if n_replicas == 1:
+        sims_out = sims_out.reshape(
+            (*max_shape[:-1], max_shape[-1], obs_dim_int)
+        )
+    else:
+        sims_out = sims_out.reshape(
+            (*max_shape[:-1], max_shape[-1], n_replicas, obs_dim_int)
+        )
+
+    return sims_out
+
 def apply_param_bounds_to_loglik(
     logp: Any,
     list_params: list[str],
@@ -280,82 +467,22 @@ def make_hssm_rv(
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
+            # We assume that the last unnamed argument is the size.
+            size, args, kwargs = _handle_size(args, kwargs)
+            arg_arrays = _get_arg_arrays(args, cls._list_params)
 
-            if "size" in kwargs:
-                size = kwargs.pop("size")
-            else:
-                size = args[-1]
-                args = args[:-1]
+            last_list_param_is_p_outlier = cls._list_params[-1] == "p_outlier"
+            p_outlier = arg_arrays.pop(-1) if last_list_param_is_p_outlier else None
+            _check_p_outlier_lapse_condition(p_outlier, cls._lapse)
 
-            if size is None:
-                size = 1
-
-            # Although we got around the ndims_supp issue, the size parameter passed
-            # here is still an array with one element. We need to take it out.
-            if not np.isscalar(size):
-                size = np.squeeze(size)
-
-            num_params = len(cls._list_params)
-
-            # TODO: We need to figure out what to do with extra_fields when
-            # doing posterior predictive sampling. Right now nothing is done.
-            if num_params < len(args):
-                arg_arrays = [np.asarray(arg) for arg in args[:num_params]]
-            else:
-                arg_arrays = [np.asarray(arg) for arg in args]
-
-            p_outlier = None
-
-            if cls._list_params[-1] == "p_outlier":
-                p_outlier = arg_arrays.pop(-1)
-
-            iinfo32 = np.iinfo(np.uint32)
-            seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
-
-            is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
-
-            if is_all_args_scalar:
-                # All parameters are scalars
-
-                theta = np.stack(arg_arrays)
-                if theta.ndim > 1:
-                    theta = theta.squeeze(axis=-1)
-
-                theta = np.tile(theta, (size, 1))
-                n_replicas = 1
-            else:
-                # Preprocess all parameters, reshape them into a matrix of dimension
-                # (size, n_params) where size is the number of elements in the largest
-                # of all parameters passed to *arg
-                elem_max_size = np.argmax([arg.size for arg in arg_arrays])
-                max_shape = arg_arrays[elem_max_size].shape
-
-                new_data_size = max_shape[-1]
-
-                theta = np.column_stack(
-                    [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
-                )
-
-                # We eventually want to get rid of this part, and
-                # simply make the simulators behave as would be expected
-                # by pymc directly.
-                if size is None or size == 1:
-                    n_replicas = 1
-                elif size % new_data_size != 0:
-                    raise ValueError(
-                        "`size` needs to be a multiple of the size of data"
-                    )
-                else:
-                    n_replicas = size // new_data_size
+            theta, n_replicas, is_all_args_scalar = _get_theta_n_replicas(arg_arrays, size)
 
             sims_out = simulator_fun_internal(
                 theta=theta,
-                random_state=seed,
+                random_state=_get_seed(rng),
                 n_replicas=n_replicas,
                 **kwargs,
             )
-
-            # return sims_out, max_shape, size
 
             if not is_all_args_scalar:
                 if n_replicas == 1:
@@ -363,9 +490,6 @@ def make_hssm_rv(
                         (*max_shape[:-1], max_shape[-1], obs_dim_int)
                     )
                 else:
-                    # sims_out = sims_out.reshape(
-                    #     (*max_shape[:-1], max_shape[-1] * size, obs_dim_int)
-                    # )
                     sims_out = sims_out.reshape(
                         (*max_shape[:-1], max_shape[-1], n_replicas, obs_dim_int)
                     )
