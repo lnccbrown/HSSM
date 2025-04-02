@@ -81,6 +81,7 @@ def test_lapse_distribution():
     np.testing.assert_array_equal(random_sample_a, random_sample_b)
 
 
+@pytest.mark.slow
 def test_apply_param_bounds_to_loglik():
     """Tests the function in separation."""
     logp = np.random.normal(size=1000)
@@ -121,6 +122,7 @@ def test_apply_param_bounds_to_loglik():
     )
 
 
+@pytest.mark.slow
 def test_make_distribution():
     def fake_logp_function(data, param1, param2):
         """Make up a fake log likelihood function for this test only."""
@@ -165,6 +167,7 @@ def test_make_distribution():
     )
 
 
+@pytest.mark.slow
 def test_extra_fields(data_ddm):
     ones = np.ones(data_ddm.shape[0])
     x = ones * 0.5
@@ -231,6 +234,7 @@ def test_extra_fields(data_ddm):
     )
 
 
+@pytest.mark.slow
 def test_ensure_positive_ndt():
     data = np.zeros((1000, 2))
     data[:, 0] = np.random.uniform(size=1000)

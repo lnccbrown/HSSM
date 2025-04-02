@@ -10,6 +10,7 @@ from hssm.defaults import (
 )
 
 
+@pytest.mark.slow
 def test_register_model():
     """Test registering a custom model"""
 

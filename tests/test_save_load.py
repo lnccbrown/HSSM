@@ -1,6 +1,9 @@
 import numpy as np
 import shutil
 from pathlib import Path
+
+import pytest
+
 import hssm
 
 
@@ -19,6 +22,7 @@ def compare_hssm_class_attributes(model_a, model_b):
     ], "Basic RVs not the same"
 
 
+@pytest.mark.slow
 def test_save_load_model_only(basic_hssm_model):
     tmp_folder_name = "models_pytest"
     tmp_model_name = "hssm_model_pytest"
@@ -32,6 +36,7 @@ def test_save_load_model_only(basic_hssm_model):
     shutil.rmtree(tmp_folder_name)
 
 
+@pytest.mark.slow
 def test_save_load_vi_mcmc(basic_hssm_model):
     tmp_folder_name = "models_pytest"
     tmp_model_name = "hssm_model_pytest"
