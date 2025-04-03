@@ -419,7 +419,12 @@ def _apply_lapse_model(
         )
 
     out_shape = sims_out.shape[:-1]
-    # Handle array-like p_outlier
+
+    # Handle p_outlier shape/type to ensure consistent shape:
+    # - 0-dim numpy array (scalar array) -> convert to float
+    # - 1-dim array with single value -> broadcast to match output shape
+    # - n-dim array -> reshape to match output shape
+    # - Python scalar (float) -> fill array of output shape
     if isinstance(p_outlier, np.ndarray):
         if p_outlier.ndim == 0:  # scalar array
             p_outlier = float(p_outlier)
