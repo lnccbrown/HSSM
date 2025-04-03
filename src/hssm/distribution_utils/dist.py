@@ -419,10 +419,13 @@ def _apply_lapse_model(
         )
 
     out_shape = sims_out.shape[:-1]
+    # Handle array-like p_outlier
     if isinstance(p_outlier, np.ndarray):
-        if p_outlier.shape[-1] == 1:
+        if p_outlier.ndim == 0:  # scalar array
+            p_outlier = float(p_outlier)
+        elif p_outlier.shape[-1] == 1:  # vector with single value
             p_outlier = np.broadcast_to(p_outlier, out_shape)
-        else:
+        else:  # reshape to match output shape
             p_outlier = p_outlier.reshape(out_shape)
     else:  # p_outlier is a float/scalar
         p_outlier = np.full(out_shape, p_outlier)
