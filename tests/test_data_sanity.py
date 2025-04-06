@@ -11,6 +11,7 @@ def cpn():
     return Path(__file__).parent / "fixtures" / "ddm_cpn.onnx"
 
 
+@pytest.mark.slow
 def test_data_sanity_check(data_ddm, cpn, caplog):
     # Case 1: raise error if there are missing fields in data
     with pytest.raises(ValueError, match="Field rt not found in data."):

@@ -36,6 +36,7 @@ def data():
 cases = product(["cpn", "opn"], [True, False])
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("cpn, is_vector", cases)
 def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
     is_cpn = cpn == "cpn"
