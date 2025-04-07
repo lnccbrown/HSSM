@@ -78,8 +78,8 @@ def test_no_inf_values(data_ddm, shared_params, param_name, param_values):
 true_values = (0.5, 1.5, 0.5, 0.5)
 true_values_sdv = true_values + (0,)
 standard = (logp_ddm, logp_ddm_bbox, true_values)
-svd = (logp_ddm_sdv, logp_ddm_sdv_bbox, true_values_sdv)
-parameters = [standard, svd]  # type: ignore
+sdv = (logp_ddm_sdv, logp_ddm_sdv_bbox, true_values_sdv)
+parameters = [standard, sdv]  # type: ignore
 
 
 @pytest.mark.parametrize("logp_func, logp_bbox_func, true_values", parameters)
