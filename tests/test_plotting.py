@@ -151,6 +151,7 @@ def test__plot_posterior_predictive_2D(cav_idata, cavanagh_test):
     assert len(g2.figure.axes[0].get_lines()) == 1
 
 
+@pytest.mark.slow
 def test_plot_posterior_predictive(cav_idata, cavanagh_test):
     # Mock model object
     model = hssm.HSSM(
@@ -289,6 +290,7 @@ def test__plot_quantile_probability_2D(cav_idata, cavanagh_test):
     assert len(g.figure.axes) == 5 * 4
 
 
+@pytest.mark.slow
 def test_plot_quantile_probability(cav_idata, cavanagh_test):
     # Mock model object
     model = hssm.HSSM(
