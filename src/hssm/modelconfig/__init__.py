@@ -29,6 +29,8 @@ get_default_model_config(model_name: SupportedModels) -> DefaultConfig
 """
 
 import importlib
+import sys
+from typing import get_args
 
 from .._types import DefaultConfig, SupportedModels
 
@@ -51,20 +53,25 @@ def get_default_model_config(model_name: SupportedModels) -> DefaultConfig:
         and likelihood specifications.
 
     """
-    try:
-        # Construct the module name and function name based on the model name
-        module_name = f"{model_name}_config"
-        function_name = f"get_{module_name}"
+    supported_models = get_args(SupportedModels)
+    if model_name not in supported_models:
+        error_message = (
+            f"{model_name} is not a supported model in HSSM. "
+            f"Supported models are: {', '.join(supported_models)}."
+        )
+        raise ValueError(error_message)
 
-        # Dynamically import the module
-        module = importlib.import_module(f".{module_name}", package="hssm.modelconfig")
+    # Construct the module name and function name based on the model name
+    module_name = f"{model_name}_config"
+    function_name = f"get_{module_name}"
 
-        # Retrieve the function from the module
-        function = getattr(module, function_name)
+    # Dynamically import the module
+    module = importlib.import_module(f".{module_name}", package="hssm.modelconfig")
 
-        # Call and return the function
-        return function()
-    except ModuleNotFoundError:
-        raise ValueError(f"Module for model {model_name} not found in HSSM.")
-    except AttributeError:
-        raise ValueError(f"Function {function_name} not found in module {module_name}.")
+    # Retrieve model configuration
+    modelconf = getattr(module, function_name)()
+
+    # Unload the module after use
+    del sys.modules[module.__name__]
+
+    return modelconf
