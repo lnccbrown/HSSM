@@ -5,12 +5,12 @@ import hssm
 
 
 def test_get_ddm_sdv_config():
-    ddm_svd_model_config = get_default_model_config("ddm_sdv")
-    assert ddm_svd_model_config["response"] == ["rt", "response"]
-    assert ddm_svd_model_config["choices"] == [-1, 1]
-    assert ddm_svd_model_config["list_params"] == ["v", "a", "z", "t", "sv"]
+    ddm_sdv_model_config = get_default_model_config("ddm_sdv")
+    assert ddm_sdv_model_config["response"] == ["rt", "response"]
+    assert ddm_sdv_model_config["choices"] == [-1, 1]
+    assert ddm_sdv_model_config["list_params"] == ["v", "a", "z", "t", "sv"]
 
-    likelihoods = ddm_svd_model_config["likelihoods"]
+    likelihoods = ddm_sdv_model_config["likelihoods"]
     lk_analytical = likelihoods["analytical"]
     assert lk_analytical["bounds"] == {
         "v": (-float("inf"), float("inf")),
