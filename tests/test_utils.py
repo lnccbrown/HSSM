@@ -15,6 +15,7 @@ from hssm.utils import (
 hssm.set_floatX("float32")
 
 
+@pytest.mark.slow
 def test_get_alias_dict():
     # Simulate some data:
     v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 0.5]
