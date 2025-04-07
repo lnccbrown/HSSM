@@ -1,6 +1,8 @@
+import pytest
+
 import hssm
 
-
+@pytest.mark.slow
 def test_simple_graphing(data_ddm):
     model = hssm.HSSM(data=data_ddm, model="ddm")
     graph = model.graph()
