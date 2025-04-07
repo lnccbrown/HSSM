@@ -25,7 +25,7 @@ def test_get_ddm_sdv_config():
     }
 
 
-def test_get_levy_conofig():
+def test_get_levy_config():
     levy_model_config = get_default_model_config("levy")
     assert levy_model_config["response"] == ["rt", "response"]
     assert levy_model_config["choices"] == [-1, 1]
