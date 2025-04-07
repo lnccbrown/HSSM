@@ -1,14 +1,11 @@
-from hssm.modelconfig import (
-    get_ddm_svd_config,
-    get_levy_config,
-    get_weibull_config,
-    get_ddm_seq2_no_bias_config,
-    get_ornstein_config,
-)
+import pytest
+
+from hssm.modelconfig import get_default_model_config
+import hssm
 
 
-def test_get_ddm_svd_config():
-    ddm_svd_model_config = get_ddm_svd_config()
+def test_get_ddm_sdv_config():
+    ddm_svd_model_config = get_default_model_config("ddm_sdv")
     assert ddm_svd_model_config["response"] == ["rt", "response"]
     assert ddm_svd_model_config["choices"] == [-1, 1]
     assert ddm_svd_model_config["list_params"] == ["v", "a", "z", "t", "sv"]
@@ -29,7 +26,7 @@ def test_get_ddm_svd_config():
 
 
 def test_get_levy_conofig():
-    levy_model_config = get_levy_config()
+    levy_model_config = get_default_model_config("levy")
     assert levy_model_config["response"] == ["rt", "response"]
     assert levy_model_config["choices"] == [-1, 1]
     assert levy_model_config["list_params"] == ["v", "a", "z", "alpha", "t"]
@@ -46,7 +43,7 @@ def test_get_levy_conofig():
 
 
 def test_get_weibull_config():
-    weibull_model_config = get_weibull_config()
+    weibull_model_config = get_default_model_config("weibull")
     assert weibull_model_config["response"] == ["rt", "response"]
     assert weibull_model_config["choices"] == [-1, 1]
     assert weibull_model_config["list_params"] == ["v", "a", "z", "t", "alpha", "beta"]
@@ -64,7 +61,7 @@ def test_get_weibull_config():
 
 
 def test_get_ddm_seq2_no_bias_config():
-    ddm_seq2_no_bias_model_config = get_ddm_seq2_no_bias_config()
+    ddm_seq2_no_bias_model_config = get_default_model_config("ddm_seq2_no_bias")
     assert ddm_seq2_no_bias_model_config["response"] == ["rt", "response"]
     assert ddm_seq2_no_bias_model_config["choices"] == [0, 1, 2, 3]
     assert ddm_seq2_no_bias_model_config["list_params"] == [
@@ -87,7 +84,7 @@ def test_get_ddm_seq2_no_bias_config():
 
 
 def test_get_ornstein_config():
-    ornstein_model_config = get_ornstein_config()
+    ornstein_model_config = get_default_model_config("ornstein")
     assert ornstein_model_config["response"] == ["rt", "response"]
     assert ornstein_model_config["choices"] == [-1, 1]
     assert ornstein_model_config["list_params"] == ["v", "a", "z", "g", "t"]
@@ -101,3 +98,8 @@ def test_get_ornstein_config():
         "g": (-1.0, 1.0),
         "t": (1e-3, 2.0),
     }
+
+
+@pytest.mark.parametrize("model", hssm.HSSM.supported_models)
+def test_load_all_supported_model_configs(model):
+    assert isinstance(get_default_model_config(model), dict)
