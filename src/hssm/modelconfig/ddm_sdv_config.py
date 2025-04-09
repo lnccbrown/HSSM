@@ -7,7 +7,7 @@ from ..likelihoods.analytical import (
 from ..likelihoods.blackbox import logp_ddm_sdv_bbox
 
 
-def get_ddm_svd_config() -> DefaultConfig:
+def get_ddm_sdv_config() -> DefaultConfig:
     """
     Get the default configuration for the DDM with standard deviation for v.
 

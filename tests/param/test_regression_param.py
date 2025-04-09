@@ -4,7 +4,7 @@ import pytest
 
 import hssm
 from hssm import Prior
-from hssm.modelconfig import get_angle_config, get_full_ddm_config
+from hssm.modelconfig import get_default_model_config
 from hssm.link import Link
 from hssm.param import UserParam
 from hssm.param.regression_param import RegressionParam, _make_priors_recursive
@@ -194,14 +194,14 @@ def test_validate():
     assert v.link.bounds == (0.0, 1.0)
 
 
-angle_config = get_angle_config()
+angle_config = get_default_model_config("angle")
 angle_params = angle_config["list_params"]
 angle_bounds = angle_config["likelihoods"]["approx_differentiable"]["bounds"].values()
 param_and_bounds_angle = list(
     zip(angle_params, angle_bounds, [False] * len(angle_params))
 )
 
-ddm_config = get_full_ddm_config()
+ddm_config = get_default_model_config("full_ddm")
 ddm_params = ddm_config["list_params"]
 ddm_bounds = ddm_config["likelihoods"]["blackbox"]["bounds"].values()
 param_and_bounds_ddm = list(zip(ddm_params, ddm_bounds, [True] * len(ddm_params)))
