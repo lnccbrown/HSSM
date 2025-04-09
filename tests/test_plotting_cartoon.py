@@ -10,6 +10,7 @@ hssm.set_floatX("float32")
 
 
 # I want to parameter
+@pytest.mark.slow
 @pytest.mark.parametrize(
     ["n_trajectories", "groups", "plot_pp_mean", "plot_pp_samples", "row", "col"],
     [
@@ -66,6 +67,7 @@ def test_plot_model_cartoon_2_choice(
             assert len(ax) == len(cav_model_cartoon.data[groups[0]].unique())
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     ["n_trajectories", "groups", "plot_pp_mean", "plot_pp_samples", "row", "col"],
     [
