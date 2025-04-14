@@ -193,7 +193,6 @@ addopts = [
     "--cov-report=xml",
     "--exitfirst",
     "--capture=no",
-    "--random-order-seed=1234",
 ]
 markers = [
     "slow: marks tests as slow (add --runslow option to run these tests)",
