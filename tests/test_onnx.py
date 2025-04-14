@@ -101,7 +101,7 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     )
 
 
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_make_jax_logp_ops(fixture_path):
     """Tests whether the logp Op returned from make_jax_logp_ops with different backends
     work the same way.
