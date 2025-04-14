@@ -28,7 +28,7 @@ def onnx_session(fixture_path):
     )
 
 
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_interpret_onnx(onnx_session, fixture_path):
     """Tests whether both versions of interpret_onnx return similar values as does the
     ONNX runtime.
