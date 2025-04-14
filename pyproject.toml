@@ -58,6 +58,7 @@ dev = [
     "pytest>=8.3.1",
     "ruff>=0.9.1",
     "pytest-random-order>=1.1.1",
+    "pytest-rerunfailures>=15.0",
 ]
 notebook = [
     "ipykernel>=6.29.5",
