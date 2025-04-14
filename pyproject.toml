@@ -57,6 +57,7 @@ dev = [
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
     "ruff>=0.9.1",
+    "pytest-random-order>=1.1.1",
 ]
 notebook = [
     "ipykernel>=6.29.5",
@@ -180,9 +181,19 @@ convention = "numpy"
 ignore_missing_imports = true
 
 [tool.pytest]
-testpaths = ["tests"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
+log_cli = true
+log_cli_level = "INFO" # set minimum log level for console output
+addopts = [
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+    "--exitfirst",
+    "--capture=no",
+    "--random-order-seed=1234",
+]
 markers = [
     "slow: marks tests as slow (add --runslow option to run these tests)",
 ]
