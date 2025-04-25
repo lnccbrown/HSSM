@@ -22,6 +22,7 @@ param_v = {
 param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "include, should_raise_exception",
     [
@@ -80,6 +81,7 @@ def test_transform_params_general(data_ddm_reg, include, should_raise_exception)
         assert len(model.params) == 5
 
 
+@pytest.mark.slow
 def test_custom_model(data_ddm):
     with pytest.raises(
         ValueError, match="When using a custom model, please provide a `loglik_kind.`"
@@ -132,6 +134,7 @@ def test_custom_model(data_ddm):
     assert model.list_params == ["v", "a", "z", "t", "p_outlier"]
 
 
+@pytest.mark.slow
 def test_model_definition_outside_include(data_ddm):
     model_with_one_param_fixed = HSSM(data_ddm, a=0.5)
 
@@ -151,6 +154,7 @@ def test_model_definition_outside_include(data_ddm):
         HSSM(data_ddm, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
 
+@pytest.mark.slow
 def test_sample_prior_predictive(data_ddm_reg):
     data_ddm_reg = data_ddm_reg.iloc[:10, :]
 
@@ -195,6 +199,7 @@ def test_sample_prior_predictive(data_ddm_reg):
     )
 
 
+@pytest.mark.slow
 def test_override_default_link(caplog, data_ddm_reg):
     param_v = {
         "name": "v",
@@ -225,6 +230,7 @@ def test_override_default_link(caplog, data_ddm_reg):
     assert "strange" in caplog.records[0].message
 
 
+@pytest.mark.slow
 def test_resampling(data_ddm):
     model = HSSM(data=data_ddm)
     sample_1 = model.sample(draws=10, chains=1, tune=0)
@@ -236,6 +242,7 @@ def test_resampling(data_ddm):
     assert sample_1 is not sample_2
 
 
+@pytest.mark.slow
 def test_add_likelihood_parameters_to_data(data_ddm):
     """Test if the likelihood parameters are added to the InferenceData object."""
     model = HSSM(data=data_ddm)
@@ -271,6 +278,7 @@ def test_add_likelihood_parameters_to_data(data_ddm):
 
 
 # Setting any parameter to a fixed value should work:
+@pytest.mark.slow
 def test_model_creation_constant_parameter(data_ddm):
     for param_name in ["v", "a", "z", "t"]:
         model = HSSM(data=data_ddm, **{param_name: 1.0})
@@ -279,6 +287,7 @@ def test_model_creation_constant_parameter(data_ddm):
 
 
 # Setting any single parameter to a regression should respect the default bounds:
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "param_name, dist_name",
     [("v", "Normal"), ("a", "Gamma"), ("z", "Beta"), ("t", "Gamma")],
@@ -299,6 +308,7 @@ def test_model_creation_all_parameters_constant(data_ddm):
 
 
 # Prior settings
+@pytest.mark.slow
 def test_prior_settings_basic(cavanagh_test):
     model_1 = HSSM(
         data=cavanagh_test,
@@ -321,6 +331,7 @@ def test_prior_settings_basic(cavanagh_test):
     )
 
 
+@pytest.mark.slow
 def test_compile_logp(cavanagh_test):
     model_1 = HSSM(
         data=cavanagh_test,

@@ -59,6 +59,7 @@ theta_lba2 = dict(A=0.2, b=0.5, v0=1.0, v1=1.0)
 theta_lba3 = theta_lba2 | {"v2": 1.0}
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "logp_func, model, theta",
     [(logp_lba2, "lba2", theta_lba2), (logp_lba3, "lba3", theta_lba3)],

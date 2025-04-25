@@ -64,6 +64,7 @@ values = [2.5, 3.0, 3.0]
 parameters = [(name, np.arange(value, 5.1, 0.5)) for name, value in zip(names, values)]
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("param_name, param_values", parameters)
 def test_no_inf_values(data_ddm, shared_params, param_name, param_values):
     for value in param_values:
@@ -78,10 +79,11 @@ def test_no_inf_values(data_ddm, shared_params, param_name, param_values):
 true_values = (0.5, 1.5, 0.5, 0.5)
 true_values_sdv = true_values + (0,)
 standard = (logp_ddm, logp_ddm_bbox, true_values)
-svd = (logp_ddm_sdv, logp_ddm_sdv_bbox, true_values_sdv)
-parameters = [standard, svd]  # type: ignore
+sdv = (logp_ddm_sdv, logp_ddm_sdv_bbox, true_values_sdv)
+parameters = [standard, sdv]  # type: ignore
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("logp_func, logp_bbox_func, true_values", parameters)
 def test_bbox(data_ddm, logp_func, logp_bbox_func, true_values):
     data = data_ddm.values
@@ -101,6 +103,7 @@ param_matrix = product(
 nan_guard_mode = NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=False)
 
 
+@pytest.mark.slow
 def test_analytical_gradient():
     v = pt.dvector()
     a = pt.dvector()
@@ -145,6 +148,7 @@ def test_analytical_gradient():
     )
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("p_outlier, loglik_kind", param_matrix)
 def test_lapse_distribution_cav(p_outlier, loglik_kind):
     true_values = (1.5, 0.5, 0.5)
