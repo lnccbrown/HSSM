@@ -10,7 +10,7 @@ from ._types import (
     Optional,
     SupportedModels,
 )
-from .modelconfig import get_ddm_config
+from .modelconfig import get_default_model_config
 from .param.utils import _make_default_prior
 
 
@@ -31,7 +31,7 @@ missing_data_networks_suffix = {
 }
 
 
-default_model_config: DefaultConfigs = {"ddm": get_ddm_config()}
+default_model_config: DefaultConfigs = {"ddm": get_default_model_config("ddm")}
 
 # TODO: Initval settings could be specified directly in model config as well.
 INITVAL_SETTINGS = {
