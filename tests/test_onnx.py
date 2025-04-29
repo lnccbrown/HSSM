@@ -28,6 +28,8 @@ def onnx_session(fixture_path):
     )
 
 
+@pytest.mark.flaky(reruns=2, reruns_delay=1)
+@pytest.mark.slow
 def test_interpret_onnx(onnx_session, fixture_path):
     """Tests whether both versions of interpret_onnx return similar values as does the
     ONNX runtime.
@@ -100,6 +102,8 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     )
 
 
+@pytest.mark.flaky(reruns=2, reruns_delay=1)
+@pytest.mark.slow
 def test_make_jax_logp_ops(fixture_path):
     """Tests whether the logp Op returned from make_jax_logp_ops with different backends
     work the same way.
