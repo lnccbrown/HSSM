@@ -74,7 +74,9 @@ def make_jax_logp_ops(
             self.params_only = data is not None
 
             # COMMENT
-            # Format inputs to have subj as the first dimension (for vectorization) followed by all the parameters.
+            # Prepare the list of input tensor variables for the Apply node.
+            # `subj` is always the first input, followed by `data`,
+            # and then the distribution parameters.
             inputs = [pt.as_tensor_variable(subj)] + param_inputs
 
             if self.params_only:
@@ -124,6 +126,8 @@ def make_jax_logp_ops(
 
             if self.params_only:
                 # COMMENT
+                # Call the LANLogpVJPOp to compute the VJPs for the parameters.
+                # Inputs are: subj, data, *dist_params, gz (output_gradient)
                 results = lan_logp_vjp_op(
                     inputs[0], inputs[1], *inputs[2:], gz=output_gradients[0]
                 )
@@ -134,18 +138,23 @@ def make_jax_logp_ops(
                     results = lan_logp_vjp_op(inputs[0], None, *inputs[1:], gz=output_gradients[0])
 
             # COMMENT
+            # Initialize a list for gradients w.r.t each input.
+            # The length matches the number of inputs to the Op.
             output = [None] * len(inputs)
             
             # COMMENT
-            # Format output to compute gradients only with respect to the params. 
-            # Gradients should not be computed for inputs indexes 0 (subj) and 1 (data).
+            # Format output to compute gradients only with respect to the params.
+            # Gradients are not implemented for `subj` (inputs[0]) and `data` (inputs[1])
             if self.params_only:
-
+                # Mark gradients for 'subj' and 'data' as not implemented.
                 output[0] = pytensor.gradient.grad_not_implemented(self, 0, inputs[0])
                 output[1] = pytensor.gradient.grad_not_implemented(self, 1, inputs[1])
+                
+                # Assign the computed VJPs to the corresponding parameter inputs.
                 for i in range(num_params):
                     output[2 + i] = results[i]
                 
+                # Mark gradients for extra fields (e.g., participant_id, trial, feedback) as undefined.
                 for i in range(num_extra_fields):
                     input_idx = 2 + num_params + i
                     output[input_idx] = pytensor.gradient.grad_undefined(
@@ -174,14 +183,18 @@ def make_jax_logp_ops(
             inputs = [pt.as_tensor_variable(subj)] + param_inputs
 
             # COMMENT
+            # If data is present, add it to the inputs after subj.
             if self.params_only:
                 inputs = [pt.as_tensor_variable(subj), pt.as_tensor_variable(data)] + param_inputs
             if not self.scalars_only:
                 inputs += [pt.as_tensor_variable(gz)]
 
             # COMMENT
+            # Define the output types. The outputs are the VJPs for each parameter.
+            # Their types should match the types of the corresponding parameter inputs.
             if self.params_only:
-                # COMMENT
+                # If data is present, VJPs are for inputs[2] (first param) up to before gz.
+                # The VJP results correspond to the parameters, not subj or data.
                 outputs = [inp.type() for inp in inputs[2:-1]]
             else:
                 if self.scalars_only:
@@ -207,8 +220,12 @@ def make_jax_logp_ops(
                 the Op.
             """
             # COMMENT
+            # Call the JAX VJP function.
             if self.params_only:
                 # COMMENT
+                # Inputs to logp_vjp: subj, data, *params, gz=gz_value
+                # The VJP function returns VJPs for subj, data, and then params.
+                # We are interested in VJPs for params, which start at index 2.
                 results = logp_vjp(*inputs[:-1], gz=inputs[-1])[2:]
             else:
                 if self.scalars_only:
@@ -234,7 +251,7 @@ def make_jax_logp_ops(
     return lan_logp_op
 
 
-def make_likelihood_callable_TEST(
+def make_likelihood_callable_rlssm(
     loglik: pytensor.graph.Op | Callable | PathLike | str,
     loglik_kind: Literal["analytical", "approx_differentiable", "blackbox"],
     backend: Literal["pytensor", "jax", "other"] | None,
@@ -343,30 +360,40 @@ def make_jax_logp_funcs_from_onnx_TEST(
     def logp(*inputs) -> jnp.ndarray:
 
         # COMMENT
-        # Makes a matrix to feed to the LAN model
+        # If params_only is True, inputs are subj, data, param1, param2, ...
+        # The LAN model expects a matrix where columns are features/parameters.
+        # Here, inputs[0] is subj, inputs[1] is data, and inputs[2:] are parameters.
         if params_only:
             # COMMENT
             input_vector = jnp.array(inputs)
         else:
             # COMMENT
+            # `data` here is expected to be the (rt, response) columns from the model inputs.
+            # inputs[0] is subj, inputs[1] is data (rt, response), inputs[2:] are other params/extra_fields
             data = jnp.array([inputs[1].squeeze()]).squeeze().T
-
-            # COMMENT
-            num_params = 6
-            num_extra_fields = 3
-            trials_per_subject = 200
             
             # COMMENT
+            # Construct the input vector for the model.
+            # It concatenates the `data` (rt, response) with other parameters/extra_fields.
+            # inputs[2:] would be [rl_alpha, scaler, a, z, t, theta, participant_id, trial, feedback]
             input_vector = jnp.array([inp.squeeze() for inp in inputs[2:]])
             input_vector = jnp.concatenate((data, input_vector)).T
+            # The shape of input_vector should be (n_trials_for_subject, n_features_for_LAN)
+            # For RLSSM, the jax_LL_func in the notebook does more complex processing trial-by-trial.
 
         if isinstance(model, (str, PathLike, onnx.ModelProto)):
             return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
         else:
             # COMMENT
+            # Extract the subject index. inputs[0] is the subject identifier.
             subj = jnp.array(inputs[0].squeeze())
             
             # COMMENT
+            # Call the user-provided JAX model callable.
+            # For RLSSM (from tutorial): model_callable is jax_LL_func.
+            # Its signature: subj_index, data, rl_alpha, scaler, a, z, t, theta, participant_id, trial, feedback
+            # inputs to this logp: [subj, data_rt_resp, rl_alpha, scaler, a, z, t, theta, pid, trial, feedback]
+            # So, inputs[0] is subj, inputs[1] is data_rt_resp, inputs[2] is rl_alpha, ..., inputs[10] is feedback.
             return model_callable(subj, input_vector[:, 0:2], input_vector[:, 2], input_vector[:, 3],
                                         input_vector[:, 4], input_vector[:, 5], input_vector[:, 6], input_vector[:, 7],
                                         input_vector[:, 8], input_vector[:, 9], input_vector[:, 10])
@@ -380,9 +407,15 @@ def make_jax_logp_funcs_from_onnx_TEST(
         in_axes = [0] + in_axes
 
     # COMMENT
-    # The idea here is to construct a likelihood callable where only the first dimension is vectorized. 
-    # The remaining indexes are thus None. 
-    in_axes = [0] + [None]*10
+    # The idea here is to construct a likelihood callable where only the first dimension (subject) is vectorized.
+    # The remaining indexes (data, parameters, extra_fields) are broadcasted (None) if they are single values,
+    # or should already be correctly shaped per subject if they are arrays (e.g., from pm.Deterministic).
+    # For the RLSSM tutorial, `jax_LL_func` is vmapped with `in_axes=(0, None, None, ..., None)`.
+    # This means `subj_index` is vmapped, and all other arguments (data, params, extra_fields)
+    # are passed as is to each call of `jax_LL_func`. 
+    # `make_likelihood_callable_rlssm` sets `params_is_reg=[True]*10` for the RLSSM tutorial.
+    # This `in_axes` setup is specific to how `jax_LL_func` is structured for RLSSM.
+    in_axes = [0] + [None]*10 # [subj, data, param1, ..., param6, extra1, extra2, extra3]
 
     _vmap_logp_internal = vmap(
         logp,
@@ -390,7 +423,8 @@ def make_jax_logp_funcs_from_onnx_TEST(
     )
 
     # COMMENT
-    # use ravel to flatten the output
+    # Wrapper for the vmapped logp to ensure the output is flattened.
+    # This is important for PyMC, which expects a 1D array of log-likelihoods.
     def vmap_logp(*args):
         return _vmap_logp_internal(*args).ravel()
 
