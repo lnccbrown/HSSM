@@ -86,6 +86,22 @@ def test_pre_check_data_sanity():
     dv._pre_check_data_sanity()  # Should not raise any exceptions
 
 
+# TODO rewrite using pytest fixtures and parameterization
 def test_post_check_data_sanity_valid():
     dv = dv_instance(base_data_with_missing)
     dv._post_check_data_sanity()  # Should not raise any exceptions
+
+    dv_instance_no_missing = dv_instance(base_data)
+    with pytest.raises(ValueError, match="You have no missing data in your dataset"):
+        dv_instance_no_missing._post_check_data_sanity()
+
+    dv_instance_nan = dv_instance(base_data_nan_missing)
+    with pytest.raises(ValueError, match="You have NaN response times in your dataset"):
+        dv_instance_nan._post_check_data_sanity()
+
+    dv_instance_no_missing.data = dv_instance_no_missing.data * -1
+    dv_instance_no_missing.deadline = False
+    with pytest.raises(
+        ValueError, match="You have negative response times in your dataset"
+    ):
+        dv_instance_no_missing._post_check_data_sanity()
