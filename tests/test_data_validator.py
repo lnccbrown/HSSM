@@ -16,8 +16,9 @@ def base_data():
     )
 
 
-def test_constructor(base_data):
-    dv = DataValidator(
+@pytest.fixture
+def dv_instance(base_data):
+    return DataValidator(
         data=base_data.copy(),
         response=["rt", "response"],
         choices=[0, 1],
