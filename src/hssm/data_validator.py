@@ -35,10 +35,25 @@ class DataValidator:
         self.missing_data = missing_data
         self.missing_data_value = missing_data_value
 
+    @staticmethod
+    def check_fields(a, b):
+        """Check if all fields in a are in b."""
+        missing = set(a) - set(b)
+        if missing: # there are leftover fields
+            raise ValueError(f"Field(s) `{', '.join(missing)}` not found in data.")
+
+    def _check_extra_fields(self, data: pd.DataFrame | None = None) -> bool:
+        """Check if every field in self.extra_fields exists in data."""
+        if not self.extra_fields:
+            return False
+
+        data = data if data is not None else self.data
+
+        DataValidator.check_fields(self.extra_fields, data.columns)
+
+        return True
+
     def _pre_check_data_sanity(self):
         """Check if the data is clean enough for the model."""
-        for field in self.response:
-            if field not in self.data.columns:
-                raise ValueError(f"Field {field} not found in data.")
-
+        DataValidator.check_fields(self.response, self.data.columns)
         self._check_extra_fields()
