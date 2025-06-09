@@ -4,7 +4,7 @@ import numpy as np
 from hssm.data_validator import DataValidator
 
 
-@pytest.fixture
+# @pytest.fixture
 def base_data():
     return pd.DataFrame(
         {
@@ -16,10 +16,22 @@ def base_data():
     )
 
 
-@pytest.fixture
-def dv_instance(base_data):
+# @pytest.fixture
+def base_data_with_missing():
+    return pd.DataFrame(
+        {
+            "rt": [0.5, 0.7, -999.0, 1.1],
+            "response": [1, 0, -999.0, 0],
+            "deadline": [1.0, 1.0, 1.0, 1.0],
+            "extra": [10, 20, -999.0, 40],
+        }
+    )
+
+
+# @pytest.fixture
+def dv_instance(data_factory: pd.DataFrame) -> DataValidator:
     return DataValidator(
-        data=base_data.copy(),
+        data=data_factory(),
         response=["rt", "response"],
         choices=[0, 1],
         n_choices=2,
@@ -31,11 +43,12 @@ def dv_instance(base_data):
     )
 
 
-def test_constructor(dv_instance, base_data):
-    dv = dv_instance
+def test_constructor():
+    data = base_data()
+    dv = dv_instance(base_data)
 
     assert isinstance(dv, DataValidator)
-    assert dv.data.equals(base_data)
+    assert dv.data.equals(data)
     assert dv.response == ["rt", "response"]
     assert dv.choices == [0, 1]
     assert dv.n_choices == 2
@@ -46,15 +59,22 @@ def test_constructor(dv_instance, base_data):
     assert dv.missing_data_value == -999.0
 
 
-def test_check_extra_fields(dv_instance):
+def test_check_extra_fields():
+    dv = dv_instance(base_data)
     # Should not raise an exception
-    assert dv_instance._check_extra_fields()
+    assert dv._check_extra_fields()
 
     # Test with missing extra field
-    dv_instance.extra_fields = ["missing_field, foo, bar"]
+    dv.extra_fields = ["missing_field", "foo", "bar"]
     with pytest.raises(ValueError, match="Field.* not found in data."):
-        dv_instance._check_extra_fields()
+        dv._check_extra_fields()
 
 
-def test_pre_check_data_sanity(dv_instance):
-    dv_instance._pre_check_data_sanity()  # Should not raise any exceptions
+def test_pre_check_data_sanity():
+    dv = dv_instance(base_data)
+    dv._pre_check_data_sanity()  # Should not raise any exceptions
+
+
+def test_post_check_data_sanity_valid():
+    dv = dv_instance(base_data_with_missing)
+    dv._post_check_data_sanity()  # Should not raise any exceptions
