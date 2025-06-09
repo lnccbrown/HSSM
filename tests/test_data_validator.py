@@ -28,6 +28,17 @@ def base_data_with_missing():
     )
 
 
+def base_data_nan_missing():
+    return pd.DataFrame(
+        {
+            "rt": [-999.0, 0.7, np.nan, 1.1],
+            "response": [1, 0, np.nan, 0],
+            "deadline": [1.0, 1.0, 1.0, 1.0],
+            "extra": [10, 20, np.nan, 40],
+        }
+    )
+
+
 # @pytest.fixture
 def dv_instance(data_factory: pd.DataFrame) -> DataValidator:
     return DataValidator(
