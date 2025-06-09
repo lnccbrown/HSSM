@@ -29,6 +29,11 @@ def dv_instance(base_data):
         missing_data=False,
         missing_data_value=-999.0,
     )
+
+
+def test_constructor(dv_instance, base_data):
+    dv = dv_instance
+
     assert isinstance(dv, DataValidator)
     assert dv.data.equals(base_data)
     assert dv.response == ["rt", "response"]
