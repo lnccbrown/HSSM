@@ -44,3 +44,17 @@ def test_constructor(dv_instance, base_data):
     assert dv.deadline_name == "deadline"
     assert dv.missing_data is False
     assert dv.missing_data_value == -999.0
+
+
+def test_check_extra_fields(dv_instance):
+    # Should not raise an exception
+    assert dv_instance._check_extra_fields()
+
+    # Test with missing extra field
+    dv_instance.extra_fields = ["missing_field, foo, bar"]
+    with pytest.raises(ValueError, match="Field.* not found in data."):
+        dv_instance._check_extra_fields()
+
+
+def test_pre_check_data_sanity(dv_instance):
+    dv_instance._pre_check_data_sanity()  # Should not raise any exceptions
