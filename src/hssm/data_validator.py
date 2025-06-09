@@ -1,6 +1,7 @@
 """Data validation and preprocessing utilities for HSSM behavioral models."""
 
 import logging
+import warnings
 
 import numpy as np  # noqa: F401
 import pandas as pd  # noqa: F401
@@ -96,8 +97,11 @@ class DataValidator:
 
         if len(unique_responses) != self.n_choices:
             missing_responses = sorted(np.setdiff1d(self.choices, unique_responses))
-            _logger.warning(
-                "You set choices to be %s, but %s are missing from your dataset.",
-                self.choices,
-                missing_responses,
+            warnings.warn(
+                (
+                    f"You set choices to be {self.choices}, but {missing_responses} "
+                    "are missing from your dataset."
+                ),
+                UserWarning,
+                stacklevel=2,
             )
