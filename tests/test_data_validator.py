@@ -1,3 +1,5 @@
+import random
+
 import pytest
 import pandas as pd
 import numpy as np
@@ -105,3 +107,13 @@ def test_post_check_data_sanity_valid():
         ValueError, match="You have negative response times in your dataset"
     ):
         dv_instance_no_missing._post_check_data_sanity()
+
+    dv_instance_no_missing = dv_instance(base_data)
+    invalid_response = random.choice(range(2, 100))
+    dv_instance_no_missing.data.iloc[0, 1] = invalid_response
+    dv_instance_no_missing.deadline = False
+    dv_instance_no_missing.missing_data = False
+    with pytest.raises(
+        ValueError, match=f"Invalid responses found in your dataset: "
+    ):
+        dv_instance_no_missing._post_check_data_sanity()  # Should not raise any exceptions
