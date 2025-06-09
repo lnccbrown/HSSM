@@ -109,11 +109,19 @@ def test_post_check_data_sanity_valid():
         dv_instance_no_missing._post_check_data_sanity()
 
     dv_instance_no_missing = dv_instance(base_data)
-    invalid_response = random.choice(range(2, 100))
-    dv_instance_no_missing.data.iloc[0, 1] = invalid_response
     dv_instance_no_missing.deadline = False
     dv_instance_no_missing.missing_data = False
-    with pytest.raises(
-        ValueError, match=f"Invalid responses found in your dataset: "
+    invalid_response = random.choice(range(2, 100))
+    dv_instance_no_missing.data.iloc[0, 1] = invalid_response
+    with pytest.raises(ValueError, match=f"Invalid responses found in your dataset: "):
+        dv_instance_no_missing._post_check_data_sanity()
+
+    dv_instance_no_missing.choices = [0, 1, 2]
+    dv_instance_no_missing.n_choices = len(dv_instance_no_missing.choices)
+    dv_instance_no_missing.data.iloc[0, 1] = 1
+
+    with pytest.warns(
+        UserWarning,
+        match=(r"missing from your dataset"),
     ):
-        dv_instance_no_missing._post_check_data_sanity()  # Should not raise any exceptions
+        dv_instance_no_missing._post_check_data_sanity()
