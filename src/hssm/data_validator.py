@@ -2,10 +2,10 @@
 
 import logging
 
-import numpy as np
-import pandas as pd
+import numpy as np  # noqa: F401
+import pandas as pd  # noqa: F401
 
-from hssm.defaults import MissingDataNetwork
+from hssm.defaults import MissingDataNetwork  # noqa: F401
 
 _logger = logging.getLogger("hssm")
 
@@ -34,3 +34,11 @@ class DataValidator:
         self.deadline_name = deadline_name
         self.missing_data = missing_data
         self.missing_data_value = missing_data_value
+
+    def _pre_check_data_sanity(self):
+        """Check if the data is clean enough for the model."""
+        for field in self.response:
+            if field not in self.data.columns:
+                raise ValueError(f"Field {field} not found in data.")
+
+        self._check_extra_fields()
