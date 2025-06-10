@@ -132,12 +132,7 @@ def test_handle_missing_data_and_deadline_deadline_column_missing():
     data = base_data().drop(columns=["deadline"])
     dv = DataValidator(
         data=data,
-        response=["rt", "response"],
-        choices=[0, 1],
-        n_choices=2,
-        missing_data=False,
         deadline=True,
-        deadline_name="deadline",
     )
     with pytest.raises(ValueError, match="`deadline` is not found in your dataset"):
         dv._handle_missing_data_and_deadline()
