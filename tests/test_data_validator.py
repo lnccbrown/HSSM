@@ -61,9 +61,6 @@ def test_constructor(base_data):
         data=base_data,
         extra_fields=["extra"],
         deadline=True,
-        deadline_name="deadline",
-        missing_data=False,
-        missing_data_value=-999.0,
     )
 
 
