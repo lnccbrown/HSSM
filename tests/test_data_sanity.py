@@ -11,14 +11,21 @@ def cpn():
     return Path(__file__).parent / "fixtures" / "ddm_cpn.onnx"
 
 
-@pytest.mark.slow
-def test_data_sanity_check(data_ddm, cpn, caplog):
+pattern = r"Field\(s\) `.*` not found in data\."
+
+# The DataValidator class is tested in the test_data_validator.py file, so this file
+# can probably be removed in the future. CP
+
+
+def test_data_sanity_check(data_ddm):
     # Case 1: raise error if there are missing fields in data
-    with pytest.raises(ValueError, match="Field rt not found in data."):
+    with pytest.raises(ValueError, match=pattern):
         hssm.HSSM(data=data_ddm.loc[:, ["response"]], model_name="ddm")
 
+
+def test_extra_fields_not_found(data_ddm):
     # Case 2: raise error if fields in "extra_fields" are not found in data
-    with pytest.raises(ValueError, match="Field extra_field not found in data."):
+    with pytest.raises(ValueError, match=pattern):
         hssm.HSSM(
             data=data_ddm,
             model_name="ddm",
