@@ -1,4 +1,5 @@
 import random
+from typing import Callable
 
 import pytest
 import pandas as pd
@@ -41,8 +42,9 @@ def base_data_nan_missing():
     )
 
 
-# @pytest.fixture
-def dv_instance(data_factory: pd.DataFrame) -> DataValidator:
+def dv_instance(
+    data_factory: Callable = _base_data, deadline: bool = True
+) -> DataValidator:
     return DataValidator(
         data=data_factory(),
         response=["rt", "response"],
