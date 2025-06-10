@@ -105,3 +105,49 @@ class DataValidator:
                 UserWarning,
                 stacklevel=2,
             )
+
+    def _handle_missing_data_and_deadline(self):
+        """Handle missing data and deadline."""
+        if not self.missing_data and not self.deadline:
+            # In the case where missing_data is set to False, we need to drop the
+            # cases where rt = na_value
+            if pd.isna(self.missing_data_value):
+                na_dropped = self.data.dropna(subset=["rt"])
+            else:
+                na_dropped = self.data.loc[
+                    self.data["rt"] != self.missing_data_value, :
+                ]
+
+            if len(na_dropped) != len(self.data):
+                warnings.warn(
+                    "`missing_data` is set to False, "
+                    + "but you have missing data in your dataset. "
+                    + "Missing data will be dropped.",
+                    stacklevel=2,
+                )
+            self.data = na_dropped
+
+        elif self.missing_data and not self.deadline:
+            # In the case where missing_data is set to True, we need to replace the
+            # missing data with a specified na_value
+
+            # Create a shallow copy to avoid modifying the original dataframe
+            if pd.isna(self.missing_data_value):
+                self.data["rt"] = self.data["rt"].fillna(-999.0)
+            else:
+                self.data["rt"] = self.data["rt"].replace(
+                    self.missing_data_value, -999.0
+                )
+
+        else:  # deadline = True
+            if self.deadline_name not in self.data.columns:
+                raise ValueError(
+                    "You have specified that your data has deadline, but "
+                    + f"`{self.deadline_name}` is not found in your dataset."
+                )
+            else:
+                self.data.loc[:, "rt"] = np.where(
+                    self.data["rt"] < self.data[self.deadline_name],
+                    self.data["rt"],
+                    -999.0,
+                )
