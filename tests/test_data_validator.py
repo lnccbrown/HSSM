@@ -51,9 +51,14 @@ def dv_instance(
 ) -> DataValidator:
     return DataValidator(
         data=data_factory(),
-        response=["rt", "response"],
-        choices=[0, 1],
-        n_choices=2,
+        extra_fields=["extra"],
+        deadline=deadline,
+    )
+
+
+def test_constructor(base_data):
+    dv = DataValidator(
+        data=base_data,
         extra_fields=["extra"],
         deadline=True,
         deadline_name="deadline",
