@@ -31,6 +31,7 @@ from bambi.transformations import transformations_namespace
 from ssms.config import model_config as ssms_model_config
 
 from hssm._types import LoglikKind, SupportedModels
+from hssm.data_validator import DataValidator
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
     INITVAL_SETTINGS,
@@ -88,7 +89,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSM:
+class HSSM(DataValidator):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
@@ -1955,20 +1956,6 @@ class HSSM:
                 else [deepcopy(self.data[field].values) for field in self.extra_fields]
             ),
         )
-
-    def _check_extra_fields(self, data: pd.DataFrame | None = None) -> bool:
-        """Check if every field in self.extra_fields exists in data."""
-        if not self.extra_fields:
-            return False
-
-        if not data:
-            data = self.data
-
-        for field in self.extra_fields:
-            if field not in data.columns:
-                raise ValueError(f"Field {field} not found in data.")
-
-        return True
 
     def _update_extra_fields(self, new_data: pd.DataFrame | None = None):
         """Update the extra fields data in self.model_distribution.
