@@ -17,9 +17,9 @@ class DataValidator:
     def __init__(
         self,
         data,
-        response = ["rt", "response"],
-        choices = [0, 1],
-        n_choices = 2,
+        response=["rt", "response"],
+        choices=[0, 1],
+        n_choices=2,
         extra_fields=None,
         deadline=False,
         deadline_name="deadline",
@@ -151,3 +151,18 @@ class DataValidator:
                     self.data["rt"],
                     -999.0,
                 )
+
+    def _update_extra_fields(self, new_data: pd.DataFrame | None = None):
+        """Update the extra fields data in self.model_distribution.
+
+        Parameters
+        ----------
+        new_data
+            A DataFrame containing new data for update.
+        """
+        if not new_data:
+            new_data = self.data
+
+        self.model_distribution.extra_fields = [
+            new_data[field].values for field in self.extra_fields
+        ]
