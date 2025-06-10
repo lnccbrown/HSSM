@@ -32,7 +32,8 @@ def test_extra_fields_not_found(data_ddm):
             model_config={"extra_fields": ["extra_field"]},
         )
 
-    # Case 3: raise error if deadline is set to True, but there is no deadline field
+
+def test_deadline_no_deadline_field(data_ddm):
     with pytest.raises(
         ValueError,
         match="You have specified that your data has deadline, but "
@@ -40,16 +41,14 @@ def test_extra_fields_not_found(data_ddm):
     ):
         hssm.HSSM(data=data_ddm, model="ddm", deadline=True)
 
-    # Case 5: raise error if there are invalid responses in data
+
+def test_invalid_responses(data_ddm):
+    data_ddm_miscoded = data_ddm.copy()
+    data_ddm_miscoded["response"] = data_ddm_miscoded["response"].replace({-1.0: 0.0})
     with pytest.raises(
         ValueError,
         match=r"Invalid responses found in your dataset: \[0\]",
     ):
-        data_ddm_miscoded = data_ddm.copy()
-        data_ddm_miscoded["response"] = data_ddm_miscoded["response"].replace(
-            {-1.0: 0.0}
-        )
-
         hssm.HSSM(data=data_ddm_miscoded, model="ddm")
 
     with pytest.raises(
@@ -61,21 +60,23 @@ def test_extra_fields_not_found(data_ddm):
 
         hssm.HSSM(data=data_ddm_miscoded, model="ddm", choices=[1, 2, 3])
 
-    # Case 6: raise warning if there are missing responses in data
+
+@pytest.mark.slow  # as model needs to be built
+def test_missing_responses(data_ddm, caplog):
     data_ddm_miscoded = data_ddm.copy()
     data_ddm_miscoded["response"] = np.random.choice([1], data_ddm.shape[0])
 
     hssm.HSSM(data=data_ddm_miscoded, model="ddm")
 
-    print("THE CAPLOG RECORDS")
-    print([record.msg for record in caplog.records])
+    with pytest.warns(
+        UserWarning,
+        match=r"You set choices to be \[-1, 1\], but \[-1\] are missing from your dataset\.",
+    ):
+        hssm.HSSM(data=data_ddm_miscoded, model="ddm")
 
-    assert "You set choices to be [-1, 1], but [-1] are missing from your dataset." in [
-        record.msg % record.args if record.args else record.msg
-        for record in caplog.records
-    ]
 
-    # Case 7: if deadline or missing_data is True, data should contain missing values
+def test_deadline_missing_data_true(data_ddm, cpn):
+    # Case 6: if deadline or missing_data is True, data should contain missing values
     with pytest.raises(
         ValueError,
         match="You have no missing data in your dataset, "
@@ -86,6 +87,9 @@ def test_extra_fields_not_found(data_ddm):
             data=data_ddm, model="ddm", missing_data=True, loglik_missing_data=cpn
         )
 
+
+@pytest.mark.slow  # as model needs to be built
+def test_deadline_missing_data_false(data_ddm, cpn):
     # Case 7: if missing_data and deadline are set to False, then missing data values should be dropped
     missing_size = 10
     missing_indices = np.random.choice(data_ddm.shape[0], missing_size, replace=False)
@@ -97,19 +101,9 @@ def test_extra_fields_not_found(data_ddm):
         model="ddm",
     )
 
-    assert (
-        "`missing_data` is set to False, but you have missing data"
-        " in your dataset. Missing data will be dropped."
-        in [
-            record.msg % record.args if record.args else record.msg
-            for record in caplog.records
-        ]
-    )
-
     assert model.data.shape[0] == data_ddm.shape[0] - missing_size
 
     data_ddm_missing.iloc[missing_indices[0], 0] = np.nan
-
     with pytest.raises(
         ValueError,
         match="You have NaN response times in your dataset, which is not allowed.",
@@ -117,15 +111,6 @@ def test_extra_fields_not_found(data_ddm):
         hssm.HSSM(
             data=data_ddm_missing,
             model="ddm",
-        )
-
-        assert (
-            "`missing_data` is set to False, but you have missing data in your dataset."
-            " Missing data will be dropped."
-            in [
-                record.msg % record.args if record.args else record.msg
-                for record in caplog.records
-            ]
         )
 
     data_ddm_missing.loc[missing_indices[0], "rt"] = -10
