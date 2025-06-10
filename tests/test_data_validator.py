@@ -136,3 +136,16 @@ def test_handle_missing_data_and_deadline_deadline_column_missing():
     )
     with pytest.raises(ValueError, match="`deadline` is not found in your dataset"):
         dv._handle_missing_data_and_deadline()
+
+
+def test_handle_missing_data_and_deadline_deadline_applied():
+    # Should set rt to -999.0 where rt >= deadline
+    data = base_data()
+    data.loc[0, "rt"] = 2.0  # Exceeds deadline
+    dv = DataValidator(
+        data=data,
+        deadline=True,
+    )
+    dv._handle_missing_data_and_deadline()
+    assert dv.data.loc[0, "rt"] == -999.0
+    assert all(dv.data.loc[1:, "rt"] < dv.data.loc[1:, "deadline"])
