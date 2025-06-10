@@ -63,13 +63,8 @@ def test_constructor(base_data):
         deadline=True,
     )
 
-
-def test_constructor():
-    data = base_data()
-    dv = dv_instance(base_data)
-
     assert isinstance(dv, DataValidator)
-    assert dv.data.equals(data)
+    assert dv.data.equals(_base_data())
     assert dv.response == ["rt", "response"]
     assert dv.choices == [0, 1]
     assert dv.n_choices == 2
