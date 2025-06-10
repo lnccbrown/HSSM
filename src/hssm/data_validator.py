@@ -163,7 +163,11 @@ class DataValidator:
         if not new_data:
             new_data = self.data
 
-        self.model_distribution.extra_fields = [
+        # The attribute 'model_distribution' is not defined in DataValidator itself,
+        # but is expected to exist in subclasses (e.g., HSSM).
+        # The 'type: ignore[attr-defined]' comment tells mypy to ignore the missing
+        # attribute error here and avoid moving this method to the HSSM class.
+        self.model_distribution.extra_fields = [  # type: ignore[attr-defined]
             new_data[field].values for field in self.extra_fields
         ]
 
