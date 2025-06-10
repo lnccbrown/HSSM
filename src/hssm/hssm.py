@@ -429,7 +429,7 @@ class HSSM(DataValidator):
         # Update data based on missing_data and deadline
         self._handle_missing_data_and_deadline()
         # Set self.missing_data_network based on `missing_data` and `deadline`
-        self.missing_data_network = _set_missing_data_and_deadline(
+        self.missing_data_network = self._set_missing_data_and_deadline(
             self.missing_data, self.deadline, self.data
         )
 
@@ -2208,35 +2208,3 @@ class HSSM(DataValidator):
 
             dtype = self.initvals[name_tmp].dtype
             self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
-
-
-def _set_missing_data_and_deadline(
-    missing_data: bool, deadline: bool, data: pd.DataFrame
-) -> MissingDataNetwork:
-    """Set missing data and deadline."""
-    if not missing_data and not deadline:
-        return MissingDataNetwork.NONE
-
-    if missing_data and not deadline:
-        network = MissingDataNetwork.CPN
-    elif not missing_data and deadline:
-        network = MissingDataNetwork.OPN
-    else:
-        network = MissingDataNetwork.GONOGO
-
-    if np.all(data["rt"] == -999.0):
-        if network == MissingDataNetwork.CPN:
-            raise ValueError(
-                "`missing_data` is set to True, but you have no missing data in your "
-                + "dataset."
-            )
-        elif network == MissingDataNetwork.OPN:
-            raise ValueError(
-                "`deadline` is set to True, but you have no rts exceeding the deadline."
-            )
-        else:
-            raise ValueError(
-                "`missing_data` and `deadline` are both set to True, but you have no "
-                + "missing data and/or no rts exceeding the deadline."
-            )
-    return network
