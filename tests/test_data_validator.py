@@ -76,7 +76,7 @@ def test_constructor(base_data):
 
 
 def test_check_extra_fields():
-    dv = dv_instance(base_data)
+    dv = dv_instance()
     # Should not raise an exception
     assert dv._check_extra_fields()
 
@@ -87,16 +87,14 @@ def test_check_extra_fields():
 
 
 def test_pre_check_data_sanity():
-    dv = dv_instance(base_data)
-    dv._pre_check_data_sanity()  # Should not raise any exceptions
+    dv_instance()._pre_check_data_sanity()  # Should not raise any exceptions
 
 
-# TODO rewrite using pytest fixtures and parameterization
-def test_post_check_data_sanity_valid():
+def test_post_check_data_sanity_valid(base_data):
     dv = dv_instance(base_data_with_missing)
     dv._post_check_data_sanity()  # Should not raise any exceptions
 
-    dv_instance_no_missing = dv_instance(base_data)
+    dv_instance_no_missing = dv_instance()
     with pytest.raises(ValueError, match="You have no missing data in your dataset"):
         dv_instance_no_missing._post_check_data_sanity()
 
@@ -111,18 +109,20 @@ def test_post_check_data_sanity_valid():
     ):
         dv_instance_no_missing._post_check_data_sanity()
 
-    dv_instance_no_missing = dv_instance(base_data)
-    dv_instance_no_missing.deadline = False
-    dv_instance_no_missing.missing_data = False
+    dv_instance_no_missing = DataValidator(
+        data=base_data,
+        deadline=False,
+        missing_data=False,
+        choices = [0, 1, 2],
+        n_choices = 3,
+    )
+
     invalid_response = random.choice(range(2, 100))
     dv_instance_no_missing.data.iloc[0, 1] = invalid_response
     with pytest.raises(ValueError, match=f"Invalid responses found in your dataset: "):
         dv_instance_no_missing._post_check_data_sanity()
 
-    dv_instance_no_missing.choices = [0, 1, 2]
-    dv_instance_no_missing.n_choices = len(dv_instance_no_missing.choices)
-    dv_instance_no_missing.data.iloc[0, 1] = 1
-
+    dv_instance_no_missing.data.iloc[0, 1] = 1  # Reset to valid response
     with pytest.warns(
         UserWarning,
         match=(r"missing from your dataset"),
@@ -130,9 +130,9 @@ def test_post_check_data_sanity_valid():
         dv_instance_no_missing._post_check_data_sanity()
 
 
-def test_handle_missing_data_and_deadline_deadline_column_missing():
+def test_handle_missing_data_and_deadline_deadline_column_missing(base_data):
     # Should raise ValueError if deadline is True but deadline_name column is missing
-    data = base_data().drop(columns=["deadline"])
+    data = base_data.drop(columns=["deadline"])
     dv = DataValidator(
         data=data,
         deadline=True,
