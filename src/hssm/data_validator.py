@@ -166,3 +166,36 @@ class DataValidator:
         self.model_distribution.extra_fields = [
             new_data[field].values for field in self.extra_fields
         ]
+
+    @staticmethod
+    def _set_missing_data_and_deadline(
+        missing_data: bool, deadline: bool, data: pd.DataFrame
+    ) -> MissingDataNetwork:
+        """Set missing data and deadline."""
+        if not missing_data and not deadline:
+            return MissingDataNetwork.NONE
+
+        if missing_data and not deadline:
+            network = MissingDataNetwork.CPN
+        elif not missing_data and deadline:
+            network = MissingDataNetwork.OPN
+        else:
+            network = MissingDataNetwork.GONOGO
+
+        if np.all(data["rt"] == -999.0):
+            if network == MissingDataNetwork.CPN:
+                raise ValueError(
+                    "`missing_data` is set to True, but you have no valid data in your "
+                    "dataset."
+                )
+            elif network == MissingDataNetwork.OPN:
+                raise ValueError(
+                    "`deadline` is set to True, but you have no rts exceeding the "
+                    "deadline."
+                )
+            else:
+                raise ValueError(
+                    "`missing_data` and `deadline` are both set to True, but you have "
+                    "no missing data and/or no rts exceeding the deadline."
+                )
+        return network
