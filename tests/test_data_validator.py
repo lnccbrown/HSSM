@@ -24,7 +24,6 @@ def base_data():
     return _base_data()
 
 
-# @pytest.fixture
 def base_data_with_missing():
     return pd.DataFrame(
         {
