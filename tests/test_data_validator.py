@@ -7,8 +7,7 @@ import numpy as np
 from hssm.data_validator import DataValidator
 
 
-# @pytest.fixture
-def base_data():
+def _base_data():
     return pd.DataFrame(
         {
             "rt": [0.5, 0.7, 0.9, 1.1],
@@ -17,6 +16,11 @@ def base_data():
             "extra": [10, 20, 30, 40],
         }
     )
+
+
+@pytest.fixture
+def base_data():
+    return _base_data()
 
 
 # @pytest.fixture
