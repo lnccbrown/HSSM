@@ -151,3 +151,31 @@ def test_handle_missing_data_and_deadline_deadline_applied(base_data):
     dv._handle_missing_data_and_deadline()
     assert dv.data.loc[0, "rt"] == -999.0
     assert all(dv.data.loc[1:, "rt"] < dv.data.loc[1:, "deadline"])
+
+def test_update_extra_fields(monkeypatch):
+    # Create a DataValidator with extra_fields
+    data = pd.DataFrame({
+        "rt": [0.5, 0.7],
+        "response": [1, 0],
+        "deadline": [1.0, 1.0],
+        "extra": [10, 20],
+        "extra2": [100, 200],
+    })
+    dv = DataValidator(
+        data=data,
+        extra_fields=["extra", "extra2"],
+    )
+
+    # Mock the model_distribution attribute
+    class DummyModelDist:
+        pass
+    dv.model_distribution = DummyModelDist()
+
+    # Call the method
+    dv._update_extra_fields()
+
+    # Check that extra_fields were updated correctly
+    assert len(dv.model_distribution.extra_fields) == 2
+    assert (dv.model_distribution.extra_fields[0] == data["extra"].values).all()
+    for i, field in enumerate(dv.extra_fields):
+        assert (dv.model_distribution.extra_fields[i] == data[field].values).all()
