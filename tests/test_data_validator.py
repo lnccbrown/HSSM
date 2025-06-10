@@ -141,12 +141,11 @@ def test_handle_missing_data_and_deadline_deadline_column_missing(base_data):
         dv._handle_missing_data_and_deadline()
 
 
-def test_handle_missing_data_and_deadline_deadline_applied():
+def test_handle_missing_data_and_deadline_deadline_applied(base_data):
     # Should set rt to -999.0 where rt >= deadline
-    data = base_data()
-    data.loc[0, "rt"] = 2.0  # Exceeds deadline
+    base_data.loc[0, "rt"] = 2.0  # Exceeds deadline
     dv = DataValidator(
-        data=data,
+        data=base_data,
         deadline=True,
     )
     dv._handle_missing_data_and_deadline()
