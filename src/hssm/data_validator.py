@@ -17,9 +17,9 @@ class DataValidator:
     def __init__(
         self,
         data,
-        response,
-        choices,
-        n_choices,
+        response = ["rt", "response"],
+        choices = [0, 1],
+        n_choices = 2,
         extra_fields=None,
         deadline=False,
         deadline_name="deadline",
