@@ -5,6 +5,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from hssm.data_validator import DataValidator
+from hssm.defaults import MissingDataNetwork
 
 
 def _base_data():
@@ -113,8 +114,8 @@ def test_post_check_data_sanity_valid(base_data):
         data=base_data,
         deadline=False,
         missing_data=False,
-        choices = [0, 1, 2],
-        n_choices = 3,
+        choices=[0, 1, 2],
+        n_choices=3,
     )
 
     invalid_response = random.choice(range(2, 100))
@@ -152,15 +153,18 @@ def test_handle_missing_data_and_deadline_deadline_applied(base_data):
     assert dv.data.loc[0, "rt"] == -999.0
     assert all(dv.data.loc[1:, "rt"] < dv.data.loc[1:, "deadline"])
 
+
 def test_update_extra_fields(monkeypatch):
     # Create a DataValidator with extra_fields
-    data = pd.DataFrame({
-        "rt": [0.5, 0.7],
-        "response": [1, 0],
-        "deadline": [1.0, 1.0],
-        "extra": [10, 20],
-        "extra2": [100, 200],
-    })
+    data = pd.DataFrame(
+        {
+            "rt": [0.5, 0.7],
+            "response": [1, 0],
+            "deadline": [1.0, 1.0],
+            "extra": [10, 20],
+            "extra2": [100, 200],
+        }
+    )
     dv = DataValidator(
         data=data,
         extra_fields=["extra", "extra2"],
@@ -169,6 +173,7 @@ def test_update_extra_fields(monkeypatch):
     # Mock the model_distribution attribute
     class DummyModelDist:
         pass
+
     dv.model_distribution = DummyModelDist()
 
     # Call the method
@@ -179,3 +184,49 @@ def test_update_extra_fields(monkeypatch):
     assert (dv.model_distribution.extra_fields[0] == data["extra"].values).all()
     for i, field in enumerate(dv.extra_fields):
         assert (dv.model_distribution.extra_fields[i] == data[field].values).all()
+
+
+def test_set_missing_data_and_deadline():
+    # No missing data and no deadline
+    data = pd.DataFrame({"rt": [0.5, 0.7]})
+    assert (
+        DataValidator._set_missing_data_and_deadline(False, False, data)
+        == MissingDataNetwork.NONE
+    )
+    # Missing data but no deadline
+    data = pd.DataFrame({"rt": [0.5, -999.0]})
+    assert (
+        DataValidator._set_missing_data_and_deadline(True, False, data)
+        == MissingDataNetwork.CPN
+    )
+    assert (
+        DataValidator._set_missing_data_and_deadline(False, True, data)
+        == MissingDataNetwork.OPN
+    )
+    assert (
+        DataValidator._set_missing_data_and_deadline(True, True, data)
+        == MissingDataNetwork.GONOGO
+    )
+
+
+def test_set_missing_data_and_deadline_all_missing():
+    data = pd.DataFrame({"rt": [-999.0, -999.0]})
+    # cpn
+    with pytest.raises(
+        ValueError, match="`missing_data` is set to True, but you have no valid data"
+    ):
+        DataValidator._set_missing_data_and_deadline(True, False, data)
+
+    # opn
+    with pytest.raises(
+        ValueError,
+        match="`deadline` is set to True, but you have no rts exceeding the deadline",
+    ):
+        DataValidator._set_missing_data_and_deadline(False, True, data)
+
+    # gonogo
+    data = pd.DataFrame({"rt": [-999.0, -999.0]})
+    with pytest.raises(
+        ValueError, match="`missing_data` and `deadline` are both set to True"
+    ):
+        DataValidator._set_missing_data_and_deadline(True, True, data)
