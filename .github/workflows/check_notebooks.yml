@@ -14,16 +14,14 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python-version: ["3.12"]
+        python-version: ["3.11"]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup environment
-        uses: ./.github/setup-env
-        with:
-          python-version: ${{ matrix.python-version }}
+        run: uv sync --group notebook
 
       - name: Run notebooks
         run: make run-notebooks
