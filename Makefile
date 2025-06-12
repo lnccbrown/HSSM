@@ -5,7 +5,7 @@ run-notebooks:
 		echo "Cleaning $$notebook"; \
 		uv run nb-clean clean -o "$$notebook"; \
 		if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$$notebook"; then \
-			echo "Failed to execute notebook: $$notebook"; \
+			echo "::error::Failed to execute notebook: $$notebook"; \
 			EXIT_CODE=1; \
 		fi; \
 	done; \
