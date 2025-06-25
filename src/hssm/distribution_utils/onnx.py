@@ -42,7 +42,7 @@ def make_jax_logp_funcs_from_jax_callable(
         If `True`, the function will return a JIT-compiled version of the vectorized
         logp function, its VJP, and the non-jitted version of the logp function.
         If `False`, it will return the non-jitted version of the vectorized logp
-        functionand its VJP.
+        function and its VJP.
 
     Returns
     -------
@@ -82,7 +82,7 @@ def make_jax_logp_funcs_from_onnx(
         If `True`, the function will return a JIT-compiled version of the vectorized
         logp function, its VJP, and the non-jitted version of the logp function.
         If `False`, it will return the non-jitted version of the vectorized logp
-        functionand its VJP.
+        function and its VJP.
 
     Returns
     -------
