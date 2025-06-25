@@ -706,7 +706,7 @@ def make_likelihood_callable(
                         + "but did not set `params_is_reg`."
                     )
                 logp, logp_grad, logp_nojit = cast(
-                    tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc],
+                    "tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]",
                     make_jax_logp_funcs_from_jax_callable(
                         loglik,
                         params_is_reg,
@@ -754,7 +754,7 @@ def make_likelihood_callable(
         )
 
     logp, logp_grad, logp_nojit = cast(
-        tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc],
+        "tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]",
         make_jax_logp_funcs_from_onnx(
             onnx_model,
             params_is_reg,

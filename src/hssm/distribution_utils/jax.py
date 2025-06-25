@@ -81,7 +81,7 @@ def make_vmap_func(
     if return_jit:
         return jit(vmap_logp), jit(vjp_vmap_logp), vmap_logp
 
-    return vmap_logp, cast(LogLikeGrad, vjp_vmap_logp)
+    return vmap_logp, cast("LogLikeGrad", vjp_vmap_logp)
 
 
 def make_jax_logp_ops(
