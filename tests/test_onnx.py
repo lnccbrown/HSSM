@@ -194,12 +194,11 @@ def test_make_jax_logp_ops_with_extra_fields(fixture_path):
 
     data = np.random.rand(10).astype(np.float32)
     a, b = np.random.rand(2).astype(np.float32)
-    var_a = pt.as_tensor_variable(a)
+    var_b = pt.as_tensor_variable(a)
     e1 = np.random.rand(10).astype(np.float32)
     e2 = np.random.rand(10).astype(np.float32)
 
     params1 = [a, b, e1, e2]
-    params2 = [var_a, b, e1, e2]
 
     jax_loglik = jax_logp_op(data, *params1)
     np.testing.assert_array_almost_equal(
@@ -207,8 +206,8 @@ def test_make_jax_logp_ops_with_extra_fields(fixture_path):
         jax_logp_func(data, *params1).astype(np.float32),
         decimal=DECIMAL,
     )
-    jax_loglik = jax_logp_op(data, *params2)
-    assert pytensor.grad(jax_loglik.sum(), wrt=var_a).eval().size == 1
+    jax_loglik = jax_logp_op(data, a, var_b, e1, e2)
+    assert pytensor.grad(jax_loglik.sum(), wrt=var_b).eval().size == 1
 
     with pytest.raises(pytensor.gradient.NullTypeGradError):
         e1 = pt.as_tensor_variable(np.random.rand(10).astype(np.float32))
