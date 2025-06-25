@@ -8,7 +8,12 @@ import pytensor.tensor as pt
 import pytest
 
 import hssm
-from hssm.distribution_utils.onnx import *
+from hssm.distribution_utils.onnx_utils import *
+from hssm.distribution_utils.onnx import (
+    make_jax_logp_funcs_from_onnx,
+    make_pytensor_logp,
+)
+from hssm.distribution_utils.jax import make_jax_logp_ops
 
 hssm.set_floatX("float32")
 DECIMAL = 4
