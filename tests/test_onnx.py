@@ -1,5 +1,7 @@
+from math import dist
 from pathlib import Path
 
+import jax
 import numpy as np
 import onnx
 import onnxruntime
@@ -14,6 +16,7 @@ from hssm.distribution_utils.onnx import (
     make_pytensor_logp,
 )
 from hssm.distribution_utils.jax import make_jax_logp_ops
+from hssm.distribution_utils.onnx import make_jax_logp_funcs_from_jax_callable
 
 hssm.set_floatX("float32")
 DECIMAL = 4
@@ -167,3 +170,48 @@ def test_make_jax_logp_ops(fixture_path):
         pytensor.grad(pt_loglik.sum(), wrt=v).eval(),
         decimal=DECIMAL,
     )
+
+
+def test_make_jax_logp_ops_with_extra_fields(fixture_path):
+    # Load an arbitrary ONNX model
+    def jax_logp_func(data, a, b, e1, e2):
+        """A simple JAX logp function for testing."""
+        return data + a + b + e1 + e2
+
+    vmap_jax_logp_func = jax.vmap(jax_logp_func, in_axes=(0, None, None, 0, 0))
+
+    def vjp_vmap_func(*inputs, gz):
+        """A simple JAX vjp function for testing."""
+        _, vjp_fn = jax.vjp(vmap_jax_logp_func, *inputs)
+        return vjp_fn(gz)[1:]
+
+    grad_logp_func = jax.jit(vjp_vmap_func)
+    jit_logp_func = jax.jit(jax_logp_func)
+
+    jax_logp_op = make_jax_logp_ops(
+        jit_logp_func, grad_logp_func, jit_logp_func, n_params=2
+    )
+
+    data = np.random.rand(10).astype(np.float32)
+    a, b = np.random.rand(2).astype(np.float32)
+    var_a = pt.as_tensor_variable(a)
+    e1 = np.random.rand(10).astype(np.float32)
+    e2 = np.random.rand(10).astype(np.float32)
+
+    params1 = [a, b, e1, e2]
+    params2 = [var_a, b, e1, e2]
+
+    jax_loglik = jax_logp_op(data, *params1)
+    np.testing.assert_array_almost_equal(
+        jax_loglik.eval(),
+        jax_logp_func(data, *params1).astype(np.float32),
+        decimal=DECIMAL,
+    )
+    jax_loglik = jax_logp_op(data, *params2)
+    assert pytensor.grad(jax_loglik.sum(), wrt=var_a).eval().size == 1
+
+    with pytest.raises(pytensor.gradient.NullTypeGradError):
+        e1 = pt.as_tensor_variable(np.random.rand(10).astype(np.float32))
+        params3 = [a, b, e1, e2]
+        jax_loglik = jax_logp_op(data, *params3)
+        assert np.isscalar(pytensor.grad(jax_loglik.sum(), wrt=e1).eval())
