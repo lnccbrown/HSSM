@@ -5,10 +5,13 @@ import jax.numpy as jnp
 from jax.lax import dynamic_slice, scan
 
 from ..distribution_utils.onnx import make_jax_logp_funcs_from_onnx
+from ..utils import download_hf
+
+angle_onnx = download_hf("angle.onnx")
 
 # Obtain an angle log-likelihood function from an ONNX model.
 angle_logp_func, _ = make_jax_logp_funcs_from_onnx(
-    model="angle.onnx",
+    model=angle_onnx,
     params_is_reg=[True] * 5,
     params_only=False,
     return_jit=False,
@@ -46,6 +49,8 @@ def jax_LL_inner(
     """Compute the log likelihood for a given subject using the RLDM model."""
     rt = data[:, 0]
     response = data[:, 1]
+
+    subj = jnp.astype(subj, jnp.int32)
 
     # Extracting the parameters and data for the specific subject
     subj_rl_alpha = dynamic_slice(rl_alpha, [subj * ntrials_subj], [ntrials_subj])
@@ -94,8 +99,9 @@ def jax_LL_inner(
         segment_result = jnp.array(
             [computed_v, subj_a[t], subj_z[t], subj_t[t], subj_theta[t], rt, action]
         )
+        LAN_matrix = LAN_matrix.at[t, :].set(segment_result)
 
-        return (q_val, LL, LAN_matrix, t + 1), segment_result
+        return (q_val, LL, LAN_matrix, t + 1), None
 
     trials = (
         subj_trial,
@@ -125,8 +131,7 @@ def vec_logp(*args):
 
     'subj_index' arg to the JAX likelihood should be vectorized.
     """
-    # return jnp.sum(vmap(*args))
-    res_LL = jax_LL_inner(*args).ravel()
+    res_LL = jax_LL_inner_vmapped(*args).ravel()
     res_LL = jnp.reshape(res_LL, (len(res_LL), 1))
 
     return res_LL
@@ -146,16 +151,16 @@ def logp(data, *dist_params) -> jnp.ndarray:
     jnp.ndarray
         The log likelihoods for each subject.
     """
-    participant_id = dist_params[5]
-    trial = dist_params[6]
-    feedback = dist_params[7]
+    participant_id = dist_params[6]
+    trial = dist_params[7]
+    feedback = dist_params[8]
 
     subj = jnp.unique(participant_id).astype(jnp.int32)
-    num_subj = subj.size
-    ntrials = (trial.size / num_subj).astype(jnp.int32)
+    num_subj = len(subj)
+    ntrials = jnp.astype(trial.size / num_subj, jnp.int32)
 
     # create parameter arrays to be passed to the likelihood function
-    rl_alpha, scaler, a, z, t, theta = dist_params[:5]
+    rl_alpha, scaler, a, z, t, theta = dist_params[:6]
 
     return vec_logp(
         subj,
