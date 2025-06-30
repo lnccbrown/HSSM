@@ -102,6 +102,7 @@ def make_jax_logp_ops(
     logp: LogLikeFunc,
     logp_vjp: LogLikeGrad,
     logp_nojit: LogLikeFunc,
+    n_params: int | None = None,
 ) -> Op:
     """Wrap the JAX functions and its gradient in pytensor Ops.
 
@@ -114,6 +115,10 @@ def make_jax_logp_ops(
         The Jax function that calculates the VJP of the logp function.
     logp_nojit
         The non-jit version of logp.
+    n_params : optional
+        Only required when `extra_fields` are used, in which case the resulting Op will
+        not compute gradients with respect to the extra fields. Supply the number of
+        parameters that are used in the likelihood computation.
 
     Returns
     -------
@@ -142,7 +147,10 @@ def make_jax_logp_ops(
             """
             inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
             self.scalars_only = all(inp.ndim == 0 for inp in inputs)
+            # params_only means calculate gradients only with respect to the
+            # parameters, not the data.
             self.params_only = data is not None
+            self.n_params = n_params
 
             if self.params_only:
                 inputs = [pt.as_tensor_variable(data)] + inputs
@@ -201,6 +209,11 @@ def make_jax_logp_ops(
                 output = [
                     pytensor.gradient.grad_not_implemented(self, 0, inputs[0]),
                 ] + output
+
+            if self.n_params is not None:
+                start_idx = self.n_params + 1 if self.params_only else 0
+                for i in range(start_idx, len(output)):
+                    output[i] = pytensor.gradient.grad_undefined(self, i, inputs[i])
 
             return output
 
