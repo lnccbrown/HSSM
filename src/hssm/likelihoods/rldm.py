@@ -1,9 +1,12 @@
 """The log-likelihood function for the RLDM model."""
 
+from typing import Callable
+
 import jax
 import jax.numpy as jnp
 from jax.lax import dynamic_slice, scan
 
+from ..distribution_utils.jax import make_jax_logp_ops
 from ..distribution_utils.onnx import make_jax_logp_funcs_from_onnx
 from ..utils import download_hf
 
@@ -90,7 +93,6 @@ def jax_LL_inner(
         delta_RL = reward - q_val[action]
 
         # update the q-values using the RL learning rule (here, simple TD rule)
-        LAN_matrix = jnp.zeros((ntrials_subj, 7))
         q_val = q_val.at[action].set(q_val[action] + subj_rl_alpha[t] * delta_RL)
 
         # update the LAN_matrix with the current trial data
@@ -122,7 +124,7 @@ def jax_LL_inner(
 jax_LL_inner_vmapped = jax.vmap(
     jax_LL_inner,
     # Only the first argument (subj), needs to be vectorized
-    in_axes=(0, None, None, None, None, None, None, None, None, None, None),
+    in_axes=[0] + [None] * 10,
 )
 
 
@@ -132,46 +134,121 @@ def vec_logp(*args):
     'subj_index' arg to the JAX likelihood should be vectorized.
     """
     res_LL = jax_LL_inner_vmapped(*args).ravel()
-    res_LL = jnp.reshape(res_LL, (len(res_LL), 1))
 
     return res_LL
 
 
-def logp(data, *dist_params) -> jnp.ndarray:
-    """Compute the log likelihood for the RLDM model.
+def make_logp_func(n_participants: int, n_trials: int) -> Callable:
+    """Create a log likelihood function for the RLDM model.
 
     Parameters
     ----------
-    args : tuple
-        A tuple containing the subject index, number of trials per subject,
-        data, and model parameters (rl_alpha, scaler, a, z, t, theta, trial, feedback).
+    n_participants : int
+        The number of participants in the dataset.
+    n_trials : int
+        The number of trials per participant.
 
     Returns
     -------
-    jnp.ndarray
-        The log likelihoods for each subject.
+    callable
+        A function that computes the log likelihood for the RLDM model.
     """
-    participant_id = dist_params[6]
-    trial = dist_params[7]
-    feedback = dist_params[8]
+    subj = jnp.arange(n_participants, dtype=jnp.int32)
 
-    subj = jnp.unique(participant_id).astype(jnp.int32)
-    num_subj = len(subj)
-    ntrials = jnp.astype(trial.size / num_subj, jnp.int32)
+    def logp(data, *dist_params) -> jnp.ndarray:
+        """Compute the log likelihood for the RLDM model.
 
-    # create parameter arrays to be passed to the likelihood function
-    rl_alpha, scaler, a, z, t, theta = dist_params[:6]
+        Parameters
+        ----------
+        args : tuple
+            A tuple containing the subject index, number of trials per subject,
+            data, and model parameters
+            (rl_alpha, scaler, a, z, t, theta, trial, feedback).
 
-    return vec_logp(
-        subj,
-        ntrials,
-        data,
-        rl_alpha,
-        scaler,
-        a,
-        z,
-        t,
-        theta,
-        trial,
-        feedback,
+        Returns
+        -------
+        jnp.ndarray
+            The log likelihoods for each subject.
+        """
+        trial = dist_params[7]
+        feedback = dist_params[8]
+
+        # create parameter arrays to be passed to the likelihood function
+        rl_alpha, scaler, a, z, t, theta = dist_params[:6]
+
+        return vec_logp(
+            subj,
+            n_trials,
+            data,
+            rl_alpha,
+            scaler,
+            a,
+            z,
+            t,
+            theta,
+            trial,
+            feedback,
+        )
+
+    return logp
+
+
+def make_vjp_logp_func(logp) -> Callable:
+    """Create a vector-Jacobian product (VJP) function for the RLDM log likelihood.
+
+    Parameters
+    ----------
+    logp : callable
+        The log likelihood function.
+
+    Returns
+    -------
+    callable
+        A function that computes the VJP of the log likelihood for the RLDM model.
+    """
+
+    def vjp_logp(inputs, gz):
+        """Compute the vector-Jacobian product (VJP) of the log likelihood function.
+
+        Parameters
+        ----------
+        inputs : tuple
+            A tuple containing the subject index, number of trials per subject,
+            data, and model parameters
+            (rl_alpha, scaler, a, z, t, theta, trial, feedback).
+
+        Returns
+        -------
+        jnp.ndarray
+            The VJP of the log likelihoods for each subject.
+        """
+        _, vjp_logp = jax.vjp(logp, *inputs)
+        return vjp_logp(gz)[1:]
+
+    return vjp_logp
+
+
+def make_rldm_logp_op(n_participants: int, n_trials: int) -> Callable:
+    """Create a pytensor Op for the likelihood function of RLDM model.
+
+    Parameters
+    ----------
+    n_participants : int
+        The number of participants in the dataset.
+    n_trials : int
+        The number of trials per participant.
+
+    Returns
+    -------
+    callable
+        A function that computes the log likelihood for the RLDM model.
+    """
+    logp = make_logp_func(n_participants, n_trials)
+    vjp_logp = make_vjp_logp_func(logp)
+
+    return make_jax_logp_ops(
+        logp=jax.jit(logp),
+        logp_vjp=jax.jit(vjp_logp),
+        logp_nojit=logp,
+        n_params=6,  # rl_alpha, scaler, a, z, t, theta
     )
