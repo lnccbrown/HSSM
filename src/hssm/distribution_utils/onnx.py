@@ -89,7 +89,7 @@ def make_jax_logp_funcs_from_onnx(
 ) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]: ...
 @overload
 def make_jax_logp_funcs_from_onnx(
-    model: Callable,
+    model: str | PathLike | onnx.ModelProto | Callable,
     params_is_reg: list[bool],
     params_only: bool = False,
     return_jit: Literal[False] = False,
