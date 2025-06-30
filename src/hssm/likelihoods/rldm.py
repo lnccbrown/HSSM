@@ -153,7 +153,6 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
     callable
         A function that computes the log likelihood for the RLDM model.
     """
-    subj = jnp.arange(n_participants, dtype=jnp.int32)
 
     def logp(data, *dist_params) -> jnp.ndarray:
         """Compute the log likelihood for the RLDM model.
@@ -170,8 +169,11 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
         jnp.ndarray
             The log likelihoods for each subject.
         """
+        participant_id = dist_params[6]
         trial = dist_params[7]
         feedback = dist_params[8]
+
+        subj = jnp.unique(participant_id, size=n_participants).astype(jnp.int32)
 
         # create parameter arrays to be passed to the likelihood function
         rl_alpha, scaler, a, z, t, theta = dist_params[:6]
