@@ -89,14 +89,16 @@ class DataValidator:
 
         if np.any(~np.isin(unique_responses, self.choices)):
             invalid_responses = sorted(
-                unique_responses[~np.isin(unique_responses, self.choices)]
+                unique_responses[~np.isin(unique_responses, self.choices)].tolist()
             )
             raise ValueError(
                 f"Invalid responses found in your dataset: {invalid_responses}"
             )
 
         if len(unique_responses) != self.n_choices:
-            missing_responses = sorted(np.setdiff1d(self.choices, unique_responses))
+            missing_responses = sorted(
+                np.setdiff1d(self.choices, unique_responses).tolist()
+            )
             warnings.warn(
                 (
                     f"You set choices to be {self.choices}, but {missing_responses} "
