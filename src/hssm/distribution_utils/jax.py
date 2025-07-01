@@ -132,13 +132,13 @@ def make_jax_logp_ops(
                 can be a mix of scalars and arrays.
             """
             inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
-            self.scalars_only = all(inp.ndim == 0 for inp in inputs)
+            self.is_scalars_only = all(inp.ndim == 0 for inp in inputs)
             # params_only means calculate gradients only with respect to the
             # parameters, not the data.
-            self.params_only = data is not None
+            self.is_params_only = data is not None
             self.n_params = n_params
 
-            if self.params_only:
+            if self.is_params_only:
                 inputs = [pt.as_tensor_variable(data)] + inputs
 
             outputs = [pt.vector()]
@@ -179,25 +179,25 @@ def make_jax_logp_ops(
                 outputs `y`, and the gradient at `y` is grad(x), the required output
                 is y*grad(x).
             """
-            if self.params_only:
+            if self.is_params_only:
                 results = lan_logp_vjp_op(
                     inputs[0], *inputs[1:], gz=output_gradients[0]
                 )
             else:
-                if self.scalars_only:
+                if self.is_scalars_only:
                     results = lan_logp_vjp_op(None, *inputs, gz=None)
                 else:
                     results = lan_logp_vjp_op(None, *inputs, gz=output_gradients[0])
 
             output = results
 
-            if self.params_only:
+            if self.is_params_only:
                 output = [
                     pytensor.gradient.grad_not_implemented(self, 0, inputs[0]),
                 ] + output
 
             if self.n_params is not None:
-                start_idx = self.n_params + 1 if self.params_only else 0
+                start_idx = self.n_params + 1 if self.is_params_only else 0
                 for i in range(start_idx, len(output)):
                     output[i] = pytensor.gradient.grad_undefined(self, i, inputs[i])
 
@@ -218,18 +218,18 @@ def make_jax_logp_ops(
             dist_params:
                 A list of parameters used in the likelihood computation.
             """
-            self.params_only = data is not None
-            self.scalars_only = gz is None
+            self.is_params_only = data is not None
+            self.is_scalars_only = gz is None
             inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
-            if self.params_only:
+            if self.is_params_only:
                 inputs = [pt.as_tensor_variable(data)] + inputs
-            if not self.scalars_only:
+            if not self.is_scalars_only:
                 inputs += [pt.as_tensor_variable(gz)]
 
-            if self.params_only:
+            if self.is_params_only:
                 outputs = [inp.type() for inp in inputs[1:-1]]
             else:
-                if self.scalars_only:
+                if self.is_scalars_only:
                     outputs = [inp.type() for inp in inputs]
                 else:
                     outputs = [inp.type() for inp in inputs[:-1]]
@@ -251,10 +251,10 @@ def make_jax_logp_ops(
                 output_storage. There is one storage cell for each output of
                 the Op.
             """
-            if self.params_only:
+            if self.is_params_only:
                 results = logp_vjp(*inputs[:-1], gz=inputs[-1])
             else:
-                if self.scalars_only:
+                if self.is_scalars_only:
                     # NOTE: this looks like a bug, but it's not. The inputs are
                     # passed as a list so that the gradient are returned as a list.
                     # The reason why this works is that JAX can handle inputs as a
