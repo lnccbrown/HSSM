@@ -23,8 +23,7 @@ pymc_dist_args = ["rng", "initval", "dims", "observed", "total_size", "transform
 
 
 # mypy: disable-error-code="has-type"
-# noqa: PLW1641
-class Prior(bmb.Prior):
+class Prior(bmb.Prior):  # noqa: PLW1641
     """Abstract specification of a prior.
 
     Parameters
