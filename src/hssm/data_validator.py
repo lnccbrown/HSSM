@@ -97,7 +97,7 @@ class DataValidator:
 
         if len(unique_responses) != self.n_choices:
             missing_responses = sorted(
-                np.setdiff1d(self.choices, unique_responses).to_list()
+                np.setdiff1d(self.choices, unique_responses).tolist()
             )
             warnings.warn(
                 (
