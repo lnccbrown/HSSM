@@ -46,18 +46,23 @@ dev = [
     "mkdocs>=1.6.0",
     "mkdocs-jupyter>=0.25.1",
     "mkdocstrings-python>=1.10.0",
-    "mypy>=1.11.1",
     "nbconvert>=7.16.5",
     "onnxruntime>=1.17.1",
     "nb-clean>=4.0.1",
     "nbval>=0.11.0",
     "pre-commit>=2.20.0",
     "ptpython>=3.0.29",
+    "HSSM[test]",
+]
+
+test = [
+    "mypy>=1.11.1",
     "pytest-cov>=6.0.0",
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
     "ruff>=0.9.1",
 ]
+
 notebook = ["ipykernel>=6.29.5", "lanfactory>=0.4.4", "zeus-mcmc>=2.5.4"]
 
 [tool.ruff]
