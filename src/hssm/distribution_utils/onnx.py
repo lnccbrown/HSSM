@@ -132,7 +132,7 @@ def make_jax_logp_funcs_from_onnx(
         function.
     """
     if isinstance(model, (str, PathLike, onnx.ModelProto)):
-        loaded_model = (
+        model_onnx = (
             onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
         )
     else:
@@ -168,7 +168,7 @@ def make_jax_logp_funcs_from_onnx(
                 param_vector = param_vector.squeeze(axis=-1)
             input_vector = jnp.concatenate((param_vector, data))
         if isinstance(model, (str, PathLike, onnx.ModelProto)):
-            return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
+            return interpret_onnx(model_onnx.graph, input_vector)[0].squeeze()
         else:
             return model_callable(input_vector).squeeze()
 
@@ -215,7 +215,7 @@ def make_pytensor_logp(
         The logp function that applies the ONNX model to data and returns the element-
         wise log-likelihoods.
     """
-    loaded_model: onnx.ModelProto = (
+    model_onnx: onnx.ModelProto = (
         onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
     )
 
@@ -243,6 +243,6 @@ def make_pytensor_logp(
             )
 
         # Returns elementwise log-likelihoods
-        return pt.squeeze(pt_interpret_onnx(loaded_model.graph, inputs)[0])
+        return pt.squeeze(pt_interpret_onnx(model_onnx.graph, inputs)[0])
 
     return logp
