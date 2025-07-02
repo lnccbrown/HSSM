@@ -27,38 +27,11 @@ import pytensor.tensor as pt
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from bambi.utils import get_aliased_name, response_evaluate_new_data
-from huggingface_hub import hf_hub_download
 from tqdm import tqdm
 
 from .param.param import Param
 
 _logger = logging.getLogger("hssm")
-
-REPO_ID = "franklab/HSSM"
-
-
-def download_hf(path: str):
-    """
-    Download a file from a HuggingFace repository.
-
-    Parameters
-    ----------
-    path : str
-        The path of the file to download in the repository.
-
-    Returns
-    -------
-    str
-        The local path where the file is downloaded.
-
-    Notes
-    -----
-    The repository is specified by the REPO_ID constant,
-    which should be a valid HuggingFace.co repository ID.
-    The file is downloaded using the HuggingFace Hub's
-     hf_hub_download function.
-    """
-    return hf_hub_download(repo_id=REPO_ID, filename=path)
 
 
 def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:

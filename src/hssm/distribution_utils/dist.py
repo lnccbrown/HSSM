@@ -23,13 +23,14 @@ from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
 
 from .._types import LogLikeFunc
-from ..utils import decorate_atomic_simulator, download_hf, ssms_sim_wrapper
+from ..utils import decorate_atomic_simulator, ssms_sim_wrapper
 from .blackbox import make_blackbox_op
 from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
     make_jax_logp_funcs_from_onnx,
     make_pytensor_logp,
 )
+from .onnx_utils.model import download_hf
 
 _logger = logging.getLogger("hssm")
 
