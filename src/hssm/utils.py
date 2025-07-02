@@ -608,7 +608,7 @@ def check_data_for_rl(
     )
 
     n_participants = data[participant_id_col].nunique()
-    trials_by_participant = sorted_data.groupby(participant_id_col)[trial_id_col].size
+    trials_by_participant = sorted_data.groupby(participant_id_col)[trial_id_col].size()
 
     if not np.all(trials_by_participant == trials_by_participant.iloc[0]):
         raise ValueError("All participants must have the same number of trials.")
