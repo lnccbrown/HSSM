@@ -25,7 +25,7 @@ from ssms.config import model_config as ssms_model_config
 from .._types import LogLikeFunc
 from ..utils import decorate_atomic_simulator, download_hf, ssms_sim_wrapper
 from .blackbox import make_blackbox_op
-from .jax import make_jax_logp_funcs_from_jax_callable, make_jax_logp_ops
+from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
     make_jax_logp_funcs_from_onnx,
     make_pytensor_logp,
@@ -704,7 +704,7 @@ def make_likelihood_callable(
                         + "and `backend` to `jax` and supplied a jax callable, "
                         + "but did not set `params_is_reg`."
                     )
-                logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_jax_callable(
+                logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_callable(
                     loglik,
                     vmap=True,
                     params_is_reg=params_is_reg,

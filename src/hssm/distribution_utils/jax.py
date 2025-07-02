@@ -207,7 +207,7 @@ def make_jax_logp_ops(
 
 
 @overload
-def make_jax_logp_funcs_from_jax_callable(
+def make_jax_logp_funcs_from_callable(
     logp: Callable,
     vmap: bool = True,
     params_is_reg: list[bool] | None = None,
@@ -215,14 +215,14 @@ def make_jax_logp_funcs_from_jax_callable(
     return_jit: Literal[True] = True,
 ) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]: ...
 @overload
-def make_jax_logp_funcs_from_jax_callable(
+def make_jax_logp_funcs_from_callable(
     logp: Callable,
     vmap: bool = True,
     params_is_reg: list[bool] | None = None,
     params_only: bool = False,
     return_jit: Literal[False] = False,
 ) -> tuple[LogLikeFunc, LogLikeGrad]: ...
-def make_jax_logp_funcs_from_jax_callable(
+def make_jax_logp_funcs_from_callable(
     logp: Callable,
     vmap: bool = True,
     params_is_reg: list[bool] | None = None,
@@ -279,6 +279,11 @@ def make_jax_logp_funcs_from_jax_callable(
         ]
         if not params_only:
             in_axes.insert(0, 0)
+
+        if all(axis is None for axis in in_axes):
+            raise ValueError(
+                "No vmap is needed in your use case, since all parameters are scalars."
+            )
 
         if return_jit:
             return make_vmap_func(

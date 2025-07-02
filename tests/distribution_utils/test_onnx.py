@@ -7,10 +7,7 @@ import pytest
 
 import hssm
 from hssm.distribution_utils.onnx_utils import *
-from hssm.distribution_utils.onnx import (
-    make_jax_logp_funcs_from_jax_callable,
-    make_jax_logp_funcs_from_onnx,
-)
+from hssm.distribution_utils.onnx import make_jax_logp_funcs_from_onnx
 
 hssm.set_floatX("float32")
 DECIMAL = 4
@@ -121,26 +118,3 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
         interpret_onnx(model.graph, input_matrix)[0].squeeze(),
         decimal=DECIMAL,
     )
-
-
-def test_make_jax_logp_funcs_from_jax_callable(fixture_path):
-    # A fake JAX callable to test the conversion
-    def fake_jax_callable(data, param1, param2):
-        """A fake JAX callable that computes a simple operation."""
-        return data * param1 * param2
-
-    nojit_funcs = make_jax_logp_funcs_from_jax_callable(
-        fake_jax_callable,
-        params_is_reg=[False, False],
-        return_jit=False,
-    )
-
-    assert len(nojit_funcs) == 2
-
-    jit_funcs = make_jax_logp_funcs_from_jax_callable(
-        fake_jax_callable,
-        params_is_reg=[False, False],
-        return_jit=True,
-    )
-
-    assert len(jit_funcs) == 3
