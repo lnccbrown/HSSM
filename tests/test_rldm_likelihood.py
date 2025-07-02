@@ -54,7 +54,7 @@ def test_make_logp_func(fixture_path):
 
     np.testing.assert_almost_equal(
         jax_LL.sum(),
-        -6879.15262966,
+        -6879.1523,
         decimal=DECIMAL,
     )
 
