@@ -7,7 +7,7 @@ import pytensor.tensor as pt
 import pytest
 
 import hssm
-from hssm.distribution_utils.jax import make_jax_logp_ops, make_vmap_func
+from hssm.distribution_utils.jax import make_jax_logp_ops
 from hssm.distribution_utils.onnx import (
     make_jax_logp_funcs_from_onnx,
     make_pytensor_logp,
@@ -20,29 +20,6 @@ hssm.set_floatX("float32")
 @pytest.fixture
 def fixture_path():
     return Path(__file__).parent.parent / "fixtures"
-
-
-def test_make_vmap_func(fixture_path):
-    def fake_jax_callable(data, param1, param2):
-        """A fake JAX callable that computes a simple operation."""
-        return data * param1 * param2
-
-    nojit_funcs = make_vmap_func(
-        fake_jax_callable,
-        in_axes=(0, None, None),
-        params_only=False,
-        return_jit=False,
-    )
-    assert len(nojit_funcs) == 2
-
-    jit_funcs = make_vmap_func(
-        fake_jax_callable,
-        in_axes=(0, None, None),
-        params_only=False,
-        return_jit=True,
-    )
-
-    assert len(jit_funcs) == 3
 
 
 def test_make_jax_logp_ops(fixture_path):
