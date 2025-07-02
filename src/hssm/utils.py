@@ -613,7 +613,7 @@ def check_data_for_rl(
     if not np.all(trials_by_participant == trials_by_participant.iloc[0]):
         raise ValueError("All participants must have the same number of trials.")
 
-    n_trials = len(trials_by_participant)
+    n_trials = trials_by_participant.iloc[0]
 
     return sorted_data, n_participants, n_trials
 
