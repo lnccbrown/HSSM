@@ -28,7 +28,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "ssm-simulators>=0.8.3",
     "tqdm>=4.66.0",
-    ]
+]
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.4.25"]
@@ -61,13 +61,9 @@ test = [
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
     "ruff>=0.9.1",
-    ]
-
-notebook = [
-    "ipykernel>=6.29.5",
-    "lanfactory>=0.4.4",
-    "zeus-mcmc>=2.5.4",
 ]
+
+notebook = ["ipykernel>=6.29.5", "lanfactory>=0.4.4", "zeus-mcmc>=2.5.4"]
 
 [tool.ruff]
 line-length = 88
@@ -154,6 +150,8 @@ ignore = [
     "PLR0915",
     # Global statements are discouraged
     "PLW0603",
+    # Implement of __eq__ without __hash__ function
+    "PLW1641",
     # Docstrings should not be included in stubs
     "PYI021",
     # Use typing_extensions.TypeAlias for type aliases

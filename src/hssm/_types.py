@@ -4,6 +4,7 @@ from os import PathLike
 from typing import Any, Callable, Literal, Optional, TypedDict, Union
 
 import bambi as bmb
+from numpy.typing import ArrayLike
 from pymc import Distribution
 from pytensor.graph.op import Op
 
@@ -52,3 +53,6 @@ class DefaultConfig(TypedDict):
 
 
 DefaultConfigs = dict[SupportedModels, DefaultConfig]
+
+LogLikeFunc = Callable[..., ArrayLike]
+LogLikeGrad = Callable[..., ArrayLike]
