@@ -8,12 +8,10 @@ generation ops.
 import logging
 from functools import partial
 from os import PathLike
-from pathlib import Path
-from typing import Any, Callable, Literal, Type
+from typing import Any, Callable, Literal, Type, cast
 
 import bambi as bmb
 import numpy as np
-import onnx
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
@@ -30,7 +28,7 @@ from .onnx import (
     make_jax_logp_funcs_from_onnx,
     make_pytensor_logp,
 )
-from .onnx_utils.model import download_hf
+from .onnx_utils.model import load_onnx_model
 
 _logger = logging.getLogger("hssm")
 
@@ -735,11 +733,8 @@ def make_likelihood_callable(
             + "as `loglik`."
         )
 
-    if isinstance(loglik, (str, PathLike)):
-        if not Path(loglik).exists():
-            loglik = download_hf(str(loglik))
-
-    onnx_model = onnx.load(str(loglik))
+    loglik = cast("str | PathLike", loglik)
+    onnx_model = load_onnx_model(loglik)
 
     if backend == "pytensor":
         lan_logp_pt = make_pytensor_logp(onnx_model)

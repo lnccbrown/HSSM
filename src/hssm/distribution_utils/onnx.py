@@ -16,6 +16,7 @@ from numpy.typing import ArrayLike
 
 from .._types import LogLikeFunc, LogLikeGrad
 from .jax import make_vmap_func
+from .onnx_utils.model import load_onnx_model
 from .onnx_utils.onnx2pt import pt_interpret_onnx
 from .onnx_utils.onnx2xla import interpret_onnx
 
@@ -71,7 +72,7 @@ def make_jax_logp_funcs_from_onnx(
         calculates the forward pass, and the second calculates the VJP of the logp
         function.
     """
-    model_onnx = onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
+    model_onnx = load_onnx_model(model)
     scalars_only = all(not is_reg for is_reg in params_is_reg)
 
     def logp(*inputs) -> jnp.ndarray:
@@ -147,9 +148,7 @@ def make_pytensor_logp(
         The logp function that applies the ONNX model to data and returns the element-
         wise log-likelihoods.
     """
-    model_onnx: onnx.ModelProto = (
-        onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
-    )
+    model_onnx = load_onnx_model(model)
 
     def logp(data: np.ndarray | None, *dist_params) -> ArrayLike:
         # Specify input layer of MLP
@@ -198,7 +197,7 @@ def make_simple_jax_logp_funcs_from_onnx(
         directly to the neural network represented by the ONNX model to compute the
         log-likelihoods.
     """
-    model_onnx = onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
+    model_onnx = load_onnx_model(model)
 
     def logp(input_matrix) -> jnp.ndarray:
         """Compute the log-likelihood.

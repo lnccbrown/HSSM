@@ -10,13 +10,10 @@ from hssm.distribution_utils.func_utils import make_vjp_func
 
 from ..distribution_utils.jax import make_jax_logp_ops
 from ..distribution_utils.onnx import make_simple_jax_logp_funcs_from_onnx
-from ..utils import download_hf
-
-angle_onnx = download_hf("angle.onnx")
 
 # Obtain the angle log-likelihood function from an ONNX model.
 angle_logp_jax_func = make_simple_jax_logp_funcs_from_onnx(
-    model=angle_onnx,
+    model="angle.onnx",
 )
 
 
