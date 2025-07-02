@@ -12,7 +12,6 @@ from hssm.distribution_utils.onnx import (
     make_jax_logp_funcs_from_onnx,
 )
 
-
 hssm.set_floatX("float32")
 DECIMAL = 4
 
