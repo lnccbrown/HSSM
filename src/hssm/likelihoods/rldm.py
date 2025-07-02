@@ -6,38 +6,18 @@ import jax
 import jax.numpy as jnp
 from jax.lax import dynamic_slice, scan
 
+from hssm.distribution_utils.func_utils import make_vjp_func
+
 from ..distribution_utils.jax import make_jax_logp_ops
-from ..distribution_utils.onnx import make_jax_logp_funcs_from_onnx
+from ..distribution_utils.onnx import make_simple_jax_logp_funcs_from_onnx
 from ..utils import download_hf
 
 angle_onnx = download_hf("angle.onnx")
 
 # Obtain the angle log-likelihood function from an ONNX model.
-angle_logp_jax_func, _ = make_jax_logp_funcs_from_onnx(
+angle_logp_jax_func = make_simple_jax_logp_funcs_from_onnx(
     model=angle_onnx,
-    params_is_reg=[True] * 5,
-    params_only=False,
-    return_jit=False,
 )
-
-
-def jax_lan_wrapper(input_matrix):
-    """Forward pass through the LAN to compute log likelihoods.
-
-    This function is just a wrapper that changes the column order of the input matrix
-    to match the expected input for the angle log likelihood function.
-    """
-    net_input = jnp.array(input_matrix)
-    angle_loglik = angle_logp_jax_func(
-        net_input[:, 5:7],
-        net_input[:, 0],
-        net_input[:, 1],
-        net_input[:, 2],
-        net_input[:, 3],
-        net_input[:, 4],
-    )
-
-    return angle_loglik
 
 
 def rldm_logp_inner_func(
@@ -103,7 +83,7 @@ def rldm_logp_inner_func(
         # The first column is the drift rate, followed by
         # the parameters a, z, t, theta, rt, and action
         segment_result = jnp.array(
-            [computed_v, subj_a[t], subj_z[t], subj_t[t], subj_theta[t], rt, action]
+            [rt, action, computed_v, subj_a[t], subj_z[t], subj_t[t], subj_theta[t]]
         )
         LAN_matrix = LAN_matrix.at[t, :].set(segment_result)
 
@@ -120,9 +100,9 @@ def rldm_logp_inner_func(
     )
 
     # forward pass through the LAN to compute log likelihoods
-    LL = jax_lan_wrapper(LAN_matrix)
+    LL = angle_logp_jax_func(LAN_matrix)
 
-    return LL.ravel()
+    return LL
 
 
 rldm_logp_inner_func_vmapped = jax.vmap(
@@ -199,41 +179,6 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
     return logp
 
 
-def make_vjp_logp_func(logp) -> Callable:
-    """Create a vector-Jacobian product (VJP) function for the RLDM log likelihood.
-
-    Parameters
-    ----------
-    logp : callable
-        The log likelihood function.
-
-    Returns
-    -------
-    callable
-        A function that computes the VJP of the log likelihood for the RLDM model.
-    """
-
-    def vjp_logp(inputs, gz):
-        """Compute the vector-Jacobian product (VJP) of the log likelihood function.
-
-        Parameters
-        ----------
-        inputs : tuple
-            A tuple containing the subject index, number of trials per subject,
-            data, and model parameters
-            (rl_alpha, scaler, a, z, t, theta, trial, feedback).
-
-        Returns
-        -------
-        jnp.ndarray
-            The VJP of the log likelihoods for each subject.
-        """
-        _, vjp_logp = jax.vjp(logp, *inputs)
-        return vjp_logp(gz)[1:]
-
-    return vjp_logp
-
-
 def make_rldm_logp_op(n_participants: int, n_trials: int) -> Callable:
     """Create a pytensor Op for the likelihood function of RLDM model.
 
@@ -250,7 +195,7 @@ def make_rldm_logp_op(n_participants: int, n_trials: int) -> Callable:
         A function that computes the log likelihood for the RLDM model.
     """
     logp = make_logp_func(n_participants, n_trials)
-    vjp_logp = make_vjp_logp_func(logp)
+    vjp_logp = make_vjp_func(logp, params_only=False)
 
     return make_jax_logp_ops(
         logp=jax.jit(logp),
