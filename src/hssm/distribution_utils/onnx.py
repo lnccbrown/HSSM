@@ -5,7 +5,7 @@ from onnx model files and wrapping jax log-likelihood functions in pytensor Ops.
 """
 
 from os import PathLike
-from typing import Callable
+from typing import Callable, Literal, overload
 
 import jax.numpy as jnp
 import numpy as np
@@ -20,6 +20,20 @@ from .onnx_utils.onnx2pt import pt_interpret_onnx
 from .onnx_utils.onnx2xla import interpret_onnx
 
 
+@overload
+def make_jax_logp_funcs_from_jax_callable(
+    logp: Callable,
+    params_is_reg: list[bool],
+    params_only: bool = False,
+    return_jit: Literal[True] = True,
+) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]: ...
+@overload
+def make_jax_logp_funcs_from_jax_callable(
+    logp: Callable,
+    params_is_reg: list[bool],
+    params_only: bool = False,
+    return_jit: Literal[False] = False,
+) -> tuple[LogLikeFunc, LogLikeGrad]: ...
 def make_jax_logp_funcs_from_jax_callable(
     logp: Callable,
     params_is_reg: list[bool],
@@ -56,9 +70,30 @@ def make_jax_logp_funcs_from_jax_callable(
         calculates the forward pass, and the second calculates the VJP of the logp
         function.
     """
-    return make_jax_logp_funcs_from_onnx(logp, params_is_reg, params_only, return_jit)
+    # This looks silly but is required to satisfy the type checker
+    if return_jit:
+        return make_jax_logp_funcs_from_onnx(
+            logp, params_is_reg, params_only, return_jit=True
+        )
+    return make_jax_logp_funcs_from_onnx(
+        logp, params_is_reg, params_only, return_jit=False
+    )
 
 
+@overload
+def make_jax_logp_funcs_from_onnx(
+    model: str | PathLike | onnx.ModelProto | Callable,
+    params_is_reg: list[bool],
+    params_only: bool = False,
+    return_jit: Literal[True] = True,
+) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]: ...
+@overload
+def make_jax_logp_funcs_from_onnx(
+    model: str | PathLike | onnx.ModelProto | Callable,
+    params_is_reg: list[bool],
+    params_only: bool = False,
+    return_jit: Literal[False] = False,
+) -> tuple[LogLikeFunc, LogLikeGrad]: ...
 def make_jax_logp_funcs_from_onnx(
     model: str | PathLike | onnx.ModelProto | Callable,
     params_is_reg: list[bool],
@@ -97,7 +132,7 @@ def make_jax_logp_funcs_from_onnx(
         function.
     """
     if isinstance(model, (str, PathLike, onnx.ModelProto)):
-        loaded_model = (
+        model_onnx = (
             onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
         )
     else:
@@ -133,7 +168,7 @@ def make_jax_logp_funcs_from_onnx(
                 param_vector = param_vector.squeeze(axis=-1)
             input_vector = jnp.concatenate((param_vector, data))
         if isinstance(model, (str, PathLike, onnx.ModelProto)):
-            return interpret_onnx(loaded_model.graph, input_vector)[0].squeeze()
+            return interpret_onnx(model_onnx.graph, input_vector)[0].squeeze()
         else:
             return model_callable(input_vector).squeeze()
 
@@ -143,12 +178,19 @@ def make_jax_logp_funcs_from_onnx(
             return jit(logp_vec), jit(grad(logp)), logp_vec
         return logp_vec, grad(logp)
 
-    in_axes: list = [0 if is_regression else None for is_regression in params_is_reg]
+    in_axes: list[int | None] = [
+        0 if is_regression else None for is_regression in params_is_reg
+    ]
     if not params_only:
-        in_axes = [0] + in_axes
+        in_axes.insert(0, 0)
 
+    # This looks silly but is required to satisfy the type checker
+    if return_jit:
+        return make_vmap_func(
+            logp, in_axes=in_axes, params_only=params_only, return_jit=True
+        )
     return make_vmap_func(
-        logp, in_axes=in_axes, params_only=params_only, return_jit=return_jit
+        logp, in_axes=in_axes, params_only=params_only, return_jit=False
     )
 
 
@@ -173,7 +215,7 @@ def make_pytensor_logp(
         The logp function that applies the ONNX model to data and returns the element-
         wise log-likelihoods.
     """
-    loaded_model: onnx.ModelProto = (
+    model_onnx: onnx.ModelProto = (
         onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
     )
 
@@ -201,6 +243,6 @@ def make_pytensor_logp(
             )
 
         # Returns elementwise log-likelihoods
-        return pt.squeeze(pt_interpret_onnx(loaded_model.graph, inputs)[0])
+        return pt.squeeze(pt_interpret_onnx(model_onnx.graph, inputs)[0])
 
     return logp

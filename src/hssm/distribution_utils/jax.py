@@ -1,6 +1,6 @@
 """Utilities for wraping JAX likelihoods in Pytensor Ops."""
 
-from typing import cast
+from typing import Callable, Literal, cast, overload
 
 import numpy as np
 import pytensor
@@ -13,9 +13,23 @@ from pytensor.link.jax.dispatch import jax_funcify
 from .._types import LogLikeFunc, LogLikeGrad
 
 
+@overload
 def make_vmap_func(
-    logp: LogLikeFunc,
-    in_axes: list[bool],
+    logp: Callable,
+    in_axes: list[int | None],
+    params_only: bool = False,
+    return_jit: Literal[True] = True,
+) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]: ...
+@overload
+def make_vmap_func(
+    logp: Callable,
+    in_axes: list[int | None],
+    params_only: bool = False,
+    return_jit: Literal[False] = False,
+) -> tuple[LogLikeFunc, LogLikeGrad]: ...
+def make_vmap_func(
+    logp: Callable,
+    in_axes: list[int | None],
     params_only: bool = False,
     return_jit: bool = True,
 ) -> tuple[LogLikeFunc, LogLikeGrad] | tuple[LogLikeFunc, LogLikeFunc, LogLikeFunc]:

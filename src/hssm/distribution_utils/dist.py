@@ -9,7 +9,7 @@ import logging
 from functools import partial
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Literal, Type, cast
+from typing import Any, Callable, Literal, Type
 
 import bambi as bmb
 import numpy as np
@@ -22,7 +22,7 @@ from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
 
-from .._types import LogLikeFunc, LogLikeGrad
+from .._types import LogLikeFunc
 from ..utils import decorate_atomic_simulator, download_hf, ssms_sim_wrapper
 from .blackbox import make_blackbox_op
 from .jax import make_jax_logp_ops
@@ -705,13 +705,10 @@ def make_likelihood_callable(
                         + "and `backend` to `jax` and supplied a jax callable, "
                         + "but did not set `params_is_reg`."
                     )
-                logp, logp_grad, logp_nojit = cast(
-                    "tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]",
-                    make_jax_logp_funcs_from_jax_callable(
-                        loglik,
-                        params_is_reg,
-                        params_only=False if params_only is None else params_only,
-                    ),
+                logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_jax_callable(
+                    loglik,
+                    params_is_reg,
+                    params_only=False if params_only is None else params_only,
                 )  # type: ignore[assignment]
                 lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
                 return lan_logp_jax
@@ -753,14 +750,12 @@ def make_likelihood_callable(
             + "and `backend` to `jax` but did not provide `params_is_reg`."
         )
 
-    logp, logp_grad, logp_nojit = cast(
-        "tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]",
-        make_jax_logp_funcs_from_onnx(
-            onnx_model,
-            params_is_reg,
-            params_only=False if params_only is None else params_only,
-        ),
+    logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
+        onnx_model,
+        params_is_reg,
+        params_only=False if params_only is None else params_only,
     )
+
     lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
 
     return lan_logp_jax
