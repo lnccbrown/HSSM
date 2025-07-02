@@ -3,17 +3,15 @@ from pathlib import Path
 import numpy as np
 import onnx
 import onnxruntime
-import pytensor
-import pytensor.tensor as pt
 import pytest
 
 import hssm
 from hssm.distribution_utils.onnx_utils import *
 from hssm.distribution_utils.onnx import (
+    make_jax_logp_funcs_from_jax_callable,
     make_jax_logp_funcs_from_onnx,
-    make_pytensor_logp,
 )
-from hssm.distribution_utils.jax import make_jax_logp_ops
+
 
 hssm.set_floatX("float32")
 DECIMAL = 4
@@ -21,7 +19,7 @@ DECIMAL = 4
 
 @pytest.fixture
 def fixture_path():
-    return Path(__file__).parent / "fixtures"
+    return Path(__file__).parent.parent / "fixtures"
 
 
 @pytest.fixture
@@ -60,9 +58,30 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     """
     model = onnx.load(fixture_path / "angle.onnx")
 
-    jax_logp, _, jax_logp_nojit = make_jax_logp_funcs_from_onnx(
-        model, params_is_reg=[False] * 5
+    nojit_funcs = make_jax_logp_funcs_from_onnx(
+        model, params_is_reg=[False] * 5, params_only=True, return_jit=False
     )
+
+    assert len(nojit_funcs) == 2
+
+    nojit_funcs = make_jax_logp_funcs_from_onnx(
+        model, params_is_reg=[False] * 5, params_only=True, return_jit=False
+    )
+
+    assert len(nojit_funcs) == 2
+
+    jit_funcs = make_jax_logp_funcs_from_onnx(
+        model, params_is_reg=[False] * 5, params_only=False, return_jit=True
+    )
+
+    assert len(jit_funcs) == 3
+
+    jit_funcs = make_jax_logp_funcs_from_onnx(
+        model, params_is_reg=[False] * 5, params_only=False, return_jit=True
+    )
+
+    assert len(jit_funcs) == 3
+    jax_logp, _, jax_logp_nojit = jit_funcs
 
     data = np.random.rand(10, 2)
     params_all_scalars = np.random.rand(5)
@@ -105,65 +124,24 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     )
 
 
-def test_make_jax_logp_ops(fixture_path):
-    """Tests whether the logp Op returned from make_jax_logp_ops with different backends
-    work the same way.
-    """
-    model = onnx.load(fixture_path / "angle.onnx")
+def test_make_jax_logp_funcs_from_jax_callable(fixture_path):
+    # A fake JAX callable to test the conversion
+    def fake_jax_callable(data, param1, param2):
+        """A fake JAX callable that computes a simple operation."""
+        return data * param1 * param2
 
-    jax_logp_op = make_jax_logp_ops(
-        *make_jax_logp_funcs_from_onnx(model, params_is_reg=[False] * 5)
-    )
-    pytensor_logp = make_pytensor_logp(model)
-
-    data = np.random.rand(10, 2)
-    params_all_scalars = np.random.rand(5).astype(np.float32)
-
-    jax_loglik = jax_logp_op(data, *params_all_scalars)
-    pt_loglik = pytensor_logp(data, *params_all_scalars)
-
-    np.testing.assert_array_almost_equal(
-        np.asarray(jax_loglik.eval()), pt_loglik.eval(), decimal=DECIMAL
+    nojit_funcs = make_jax_logp_funcs_from_jax_callable(
+        fake_jax_callable,
+        params_is_reg=[False, False],
+        return_jit=False,
     )
 
-    v = pt.as_tensor_variable(np.random.rand())
+    assert len(nojit_funcs) == 2
 
-    params_with_v = [v, *params_all_scalars[1:]]
-    data = data.astype(np.float32)
-
-    jax_loglik = jax_logp_op(data, *params_with_v)
-    pt_loglik = pytensor_logp(data, *params_with_v)
-
-    np.testing.assert_array_almost_equal(
-        pytensor.grad(jax_loglik.sum(), wrt=v).eval(),
-        pytensor.grad(pt_loglik.sum(), wrt=v).eval(),
-        decimal=DECIMAL,
+    jit_funcs = make_jax_logp_funcs_from_jax_callable(
+        fake_jax_callable,
+        params_is_reg=[False, False],
+        return_jit=True,
     )
 
-    jax_logp_op = make_jax_logp_ops(
-        *make_jax_logp_funcs_from_onnx(model, params_is_reg=[True] + [False] * 4)
-    )
-    pytensor_logp = make_pytensor_logp(model)
-
-    v = np.random.rand(10)
-
-    jax_loglik = jax_logp_op(data, v, *params_all_scalars[1:])
-    pt_loglik = pytensor_logp(data, v, *params_all_scalars[1:])
-
-    np.testing.assert_array_almost_equal(
-        jax_loglik.eval(), pt_loglik.eval(), decimal=DECIMAL
-    )
-
-    v = pt.as_tensor_variable(np.random.rand(10).astype(np.float32))
-
-    params_with_v = params_all_scalars[1:]
-    data = data.astype(np.float32)
-
-    jax_loglik = jax_logp_op(data, v, *params_with_v)
-    pt_loglik = pytensor_logp(data, v, *params_with_v)
-
-    np.testing.assert_array_almost_equal(
-        pytensor.grad(jax_loglik.sum(), wrt=v).eval(),
-        pytensor.grad(pt_loglik.sum(), wrt=v).eval(),
-        decimal=DECIMAL,
-    )
+    assert len(jit_funcs) == 3
