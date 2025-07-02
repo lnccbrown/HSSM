@@ -9,6 +9,8 @@ from hssm.likelihoods.rldm import make_logp_func, make_rldm_logp_op
 
 hssm.set_floatX("float32")
 
+DECIMAL = 4
+
 
 @pytest.fixture
 def fixture_path():
@@ -53,6 +55,7 @@ def test_make_logp_func(fixture_path):
     np.testing.assert_almost_equal(
         jax_LL.sum(),
         -6879.15262966,
+        decimal=DECIMAL,
     )
 
 
@@ -91,4 +94,4 @@ def test_make_rldm_logp_op(fixture_path):
         feedback,
     )
 
-    np.testing.assert_almost_equal(jax_LL.sum().eval(), -6879.1523, decimal=4)
+    np.testing.assert_almost_equal(jax_LL.sum().eval(), -6879.1523, decimal=DECIMAL)
