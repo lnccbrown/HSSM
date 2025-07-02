@@ -116,9 +116,9 @@ def make_jax_logp_ops(
     logp_nojit
         The non-jit version of logp.
     n_params : optional
-        Only required when `extra_fields` are used, in which case the resulting Op will
-        not compute gradients with respect to the extra fields. Supply the number of
-        parameters that are used in the likelihood computation.
+        Number of parameters used in the likelihood computation. Only required
+        when `extra_fields` are used, in which case the resulting Op will not
+        compute gradients with respect to the extra fields.
 
     Returns
     -------
