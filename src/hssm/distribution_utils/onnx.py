@@ -21,81 +21,21 @@ from .onnx_utils.onnx2xla import interpret_onnx
 
 
 @overload
-def make_jax_logp_funcs_from_jax_callable(
-    logp: Callable,
-    params_is_reg: list[bool],
-    params_only: bool = False,
-    return_jit: Literal[True] = True,
-) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]: ...
-@overload
-def make_jax_logp_funcs_from_jax_callable(
-    logp: Callable,
-    params_is_reg: list[bool],
-    params_only: bool = False,
-    return_jit: Literal[False] = False,
-) -> tuple[LogLikeFunc, LogLikeGrad]: ...
-def make_jax_logp_funcs_from_jax_callable(
-    logp: Callable,
-    params_is_reg: list[bool],
-    params_only: bool = False,
-    return_jit: bool = True,
-) -> tuple[LogLikeFunc, LogLikeGrad] | tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]:
-    """Make a jax function and its Vector-Jacobian Product from a jax callable.
-
-    Parameters
-    ----------
-    model:
-        A jax callable function that computes log-likelihoods.
-    params_is_reg:
-        A list of booleans indicating whether the parameters are regressions.
-        Parameters that are regressions will not be vectorized in likelihood
-        calculations.
-    params_only:
-        If True, the log-likelihood function will only take parameters as input.
-    return_jit
-        If `True`, the function will return a JIT-compiled version of the vectorized
-        logp function, its VJP, and the non-jitted version of the logp function.
-        If `False`, it will return the non-jitted version of the vectorized logp
-        function and its VJP.
-
-    Returns
-    -------
-    LogLikeFunc | tuple[LogLikeFunc, LogLikeFunc, LogLikeFunc]
-        If `return_jit` is `True`, a triple of jax functions. The first calculates the
-        forward pass, the second calculates the VJP, and the third is
-        the forward-pass that's not jitted. When `params_only` is True, and all
-        parameters are scalars, only a scalar function, its gradient, and the non-jitted
-        version of the function are returned.
-        If `return_jit` is `False`, a pair of jax functions. The first
-        calculates the forward pass, and the second calculates the VJP of the logp
-        function.
-    """
-    # This looks silly but is required to satisfy the type checker
-    if return_jit:
-        return make_jax_logp_funcs_from_onnx(
-            logp, params_is_reg, params_only, return_jit=True
-        )
-    return make_jax_logp_funcs_from_onnx(
-        logp, params_is_reg, params_only, return_jit=False
-    )
-
-
-@overload
 def make_jax_logp_funcs_from_onnx(
-    model: str | PathLike | onnx.ModelProto | Callable,
+    model: str | PathLike | onnx.ModelProto,
     params_is_reg: list[bool],
     params_only: bool = False,
     return_jit: Literal[True] = True,
 ) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]: ...
 @overload
 def make_jax_logp_funcs_from_onnx(
-    model: str | PathLike | onnx.ModelProto | Callable,
+    model: str | PathLike | onnx.ModelProto,
     params_is_reg: list[bool],
     params_only: bool = False,
     return_jit: Literal[False] = False,
 ) -> tuple[LogLikeFunc, LogLikeGrad]: ...
 def make_jax_logp_funcs_from_onnx(
-    model: str | PathLike | onnx.ModelProto | Callable,
+    model: str | PathLike | onnx.ModelProto,
     params_is_reg: list[bool],
     params_only: bool = False,
     return_jit: bool = True,
@@ -131,13 +71,7 @@ def make_jax_logp_funcs_from_onnx(
         calculates the forward pass, and the second calculates the VJP of the logp
         function.
     """
-    if isinstance(model, (str, PathLike, onnx.ModelProto)):
-        model_onnx = (
-            onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
-        )
-    else:
-        model_callable = model
-
+    model_onnx = onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
     scalars_only = all(not is_reg for is_reg in params_is_reg)
 
     def logp(*inputs) -> jnp.ndarray:
@@ -167,10 +101,8 @@ def make_jax_logp_funcs_from_onnx(
             if param_vector.shape[-1] == 1:
                 param_vector = param_vector.squeeze(axis=-1)
             input_vector = jnp.concatenate((param_vector, data))
-        if isinstance(model, (str, PathLike, onnx.ModelProto)):
-            return interpret_onnx(model_onnx.graph, input_vector)[0].squeeze()
-        else:
-            return model_callable(input_vector).squeeze()
+
+        return interpret_onnx(model_onnx.graph, input_vector)[0].squeeze()
 
     if params_only and scalars_only:
         logp_vec = lambda *inputs: logp(*inputs).reshape((1,))
