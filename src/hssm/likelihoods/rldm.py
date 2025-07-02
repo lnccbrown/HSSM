@@ -12,8 +12,8 @@ from ..utils import download_hf
 
 angle_onnx = download_hf("angle.onnx")
 
-# Obtain an angle log-likelihood function from an ONNX model.
-angle_logp_func, _ = make_jax_logp_funcs_from_onnx(
+# Obtain the angle log-likelihood function from an ONNX model.
+angle_logp_jax_func, _ = make_jax_logp_funcs_from_onnx(
     model=angle_onnx,
     params_is_reg=[True] * 5,
     params_only=False,
@@ -21,10 +21,14 @@ angle_logp_func, _ = make_jax_logp_funcs_from_onnx(
 )
 
 
-def jax_call_LAN(LAN_matrix):
-    """Forward pass through the LAN to compute log likelihoods."""
-    net_input = jnp.array(LAN_matrix)
-    LL = angle_logp_func(
+def jax_lan_wrapper(input_matrix):
+    """Forward pass through the LAN to compute log likelihoods.
+
+    This function is just a wrapper that changes the column order of the input matrix
+    to match the expected input for the angle log likelihood function.
+    """
+    net_input = jnp.array(input_matrix)
+    angle_loglik = angle_logp_jax_func(
         net_input[:, 5:7],
         net_input[:, 0],
         net_input[:, 1],
@@ -33,10 +37,10 @@ def jax_call_LAN(LAN_matrix):
         net_input[:, 4],
     )
 
-    return LL
+    return angle_loglik
 
 
-def jax_LL_inner(
+def rldm_logp_inner_func(
     subj,
     ntrials_subj,
     data,
@@ -77,7 +81,7 @@ def jax_LL_inner(
 
     # function to process each trial
     def process_trial(carry, inputs):
-        q_val, LL, LAN_matrix, t = carry
+        q_val, loglik, LAN_matrix, t = carry
         state, action, rt, reward = inputs
         state = jnp.astype(state, jnp.int32)
         action = jnp.astype(action, jnp.int32)
@@ -103,7 +107,7 @@ def jax_LL_inner(
         )
         LAN_matrix = LAN_matrix.at[t, :].set(segment_result)
 
-        return (q_val, LL, LAN_matrix, t + 1), None
+        return (q_val, loglik, LAN_matrix, t + 1), None
 
     trials = (
         subj_trial,
@@ -116,13 +120,13 @@ def jax_LL_inner(
     )
 
     # forward pass through the LAN to compute log likelihoods
-    LL = jax_call_LAN(LAN_matrix)
+    LL = jax_lan_wrapper(LAN_matrix)
 
-    return LL
+    return LL.ravel()
 
 
-jax_LL_inner_vmapped = jax.vmap(
-    jax_LL_inner,
+rldm_logp_inner_func_vmapped = jax.vmap(
+    rldm_logp_inner_func,
     # Only the first argument (subj), needs to be vectorized
     in_axes=[0] + [None] * 10,
 )
@@ -133,9 +137,9 @@ def vec_logp(*args):
 
     'subj_index' arg to the JAX likelihood should be vectorized.
     """
-    res_LL = jax_LL_inner_vmapped(*args).ravel()
+    output = rldm_logp_inner_func_vmapped(*args).ravel()
 
-    return res_LL
+    return output
 
 
 def make_logp_func(n_participants: int, n_trials: int) -> Callable:
