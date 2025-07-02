@@ -178,3 +178,45 @@ def make_pytensor_logp(
         return pt.squeeze(pt_interpret_onnx(model_onnx.graph, inputs)[0])
 
     return logp
+
+
+def make_simple_jax_logp_funcs_from_onnx(
+    model: str | PathLike | onnx.ModelProto,
+) -> LogLikeFunc:
+    """Make a jax function and its Vector-Jacobian Product from an ONNX Model.
+
+    Parameters
+    ----------
+    model:
+        A path or url to the ONNX model, or an ONNX Model object that's
+        already loaded.
+
+    Returns
+    -------
+    LogLikeFunc
+        A jax function that is not jitted, which accepts a matrix passed
+        directly to the neural network represented by the ONNX model to compute the
+        log-likelihoods.
+    """
+    model_onnx = onnx.load(str(model)) if isinstance(model, (str, PathLike)) else model
+
+    def logp(input_matrix) -> jnp.ndarray:
+        """Compute the log-likelihood.
+
+        A function that computes the element-wise log-likelihoods given one data point
+        and arbitrary numbers of parameters as scalars.
+
+        Parameters
+        ----------
+        inputs
+            A list of data and parameters used in the likelihood computation. Also
+            supports the case where only parameters are passed.
+
+        Returns
+        -------
+        jnp.ndarray
+            The element-wise log-likelihoods.
+        """
+        return interpret_onnx(model_onnx.graph, input_matrix)[0].squeeze()
+
+    return logp
