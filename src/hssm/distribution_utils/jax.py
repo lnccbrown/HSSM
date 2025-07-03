@@ -1,101 +1,16 @@
 """Utilities for wraping JAX likelihoods in Pytensor Ops."""
 
-from typing import Callable, Literal, cast, overload
+from typing import Callable, Literal, overload
 
 import numpy as np
 import pytensor
 import pytensor.tensor as pt
-from jax import jit, vjp, vmap
-from numpy.typing import ArrayLike
+from jax import jit
 from pytensor.graph import Apply, Op
 from pytensor.link.jax.dispatch import jax_funcify
 
 from .._types import LogLikeFunc, LogLikeGrad
-
-
-@overload
-def make_vmap_func(
-    logp: Callable,
-    in_axes: list[int | None],
-    params_only: bool = False,
-    return_jit: Literal[True] = True,
-) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]: ...
-@overload
-def make_vmap_func(
-    logp: Callable,
-    in_axes: list[int | None],
-    params_only: bool = False,
-    return_jit: Literal[False] = False,
-) -> tuple[LogLikeFunc, LogLikeGrad]: ...
-def make_vmap_func(
-    logp: Callable,
-    in_axes: list[int | None],
-    params_only: bool = False,
-    return_jit: bool = True,
-) -> tuple[LogLikeFunc, LogLikeGrad] | tuple[LogLikeFunc, LogLikeFunc, LogLikeFunc]:
-    """Make a vectorized version of the logp function.
-
-    Parameters
-    ----------
-    logp
-        A JAX function that computes the log-likelihood.
-    in_axes
-        A list of booleans indicating which inputs to vectorize. If `True`, the
-        corresponding input will be vectorized. If `False`, the input will not be
-        vectorized. The length of this list should match the number of inputs to the
-        `logp` function.
-    params_only
-        If `True`, the function will only vectorize the parameters and not the data.
-    return_jit
-        If `True`, the function will return a JIT-compiled version of the vectorized
-        logp function, its VJP, and the non-jitted version of the logp function.
-        If `False`, it will return the non-jitted version of the vectorized logp
-        function and its VJP.
-
-    Returns
-    -------
-    LogLikeFunc | tuple[LogLikeFunc, LogLikeFunc, LogLikeFunc]
-        If `return_jit` is `True`, a triple of jax functions. The first calculates the
-        forward pass, the second calculates the VJP, and the third is
-        the forward-pass that's not jitted. When `params_only` is True, and all
-        parameters are scalars, only a scalar function, its gradient, and the non-jitted
-        version of the function are returned.
-        If `return_jit` is `False`, a pair of jax functions. The first
-        calculates the forward pass, and the second calculates the VJP of the logp
-        function.
-    """
-    # The vectorization of the logp function
-    vmap_logp = vmap(
-        logp,
-        in_axes=in_axes,
-    )
-
-    def vjp_vmap_logp(
-        *inputs: list[float | ArrayLike], gz: ArrayLike
-    ) -> list[ArrayLike]:
-        """Compute the VJP of the log-likelihood function.
-
-        Parameters
-        ----------
-        inputs
-            A list of data and parameters used in the likelihood computation. Also
-            supports the case where only parameters are passed.
-        gz
-            The value of vmap_logp at which the VJP is evaluated, typically is just
-            vmap_logp(data, *dist_params)
-
-        Returns
-        -------
-        list[ArrayLike]
-            The VJP of the log-likelihood function computed at gz.
-        """
-        _, vjp_fn = vjp(vmap_logp, *inputs)
-        return vjp_fn(gz) if params_only else vjp_fn(gz)[1:]
-
-    if return_jit:
-        return jit(vmap_logp), jit(vjp_vmap_logp), vmap_logp
-
-    return vmap_logp, cast("LogLikeGrad", vjp_vmap_logp)
+from .func_utils import make_vjp_func, make_vmap_func
 
 
 def make_jax_logp_ops(
@@ -289,3 +204,107 @@ def make_jax_logp_ops(
         return logp_nojit
 
     return lan_logp_op
+
+
+@overload
+def make_jax_logp_funcs_from_callable(
+    logp: Callable,
+    vmap: bool = True,
+    params_is_reg: list[bool] | None = None,
+    params_only: bool = False,
+    return_jit: Literal[True] = True,
+) -> tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]: ...
+@overload
+def make_jax_logp_funcs_from_callable(
+    logp: Callable,
+    vmap: bool = True,
+    params_is_reg: list[bool] | None = None,
+    params_only: bool = False,
+    return_jit: Literal[False] = False,
+) -> tuple[LogLikeFunc, LogLikeGrad]: ...
+def make_jax_logp_funcs_from_callable(
+    logp: Callable,
+    vmap: bool = True,
+    params_is_reg: list[bool] | None = None,
+    params_only: bool = False,
+    return_jit: bool = True,
+) -> tuple[LogLikeFunc, LogLikeGrad] | tuple[LogLikeFunc, LogLikeGrad, LogLikeFunc]:
+    """Make a jax function and its Vector-Jacobian Product from a jax callable.
+
+    Parameters
+    ----------
+    logp:
+        A jax callable function that computes log-likelihoods. The function should have
+        this signature: `logp(data, *params, [*extra_fields]) -> jnp.ndarray` where
+        extra_fields are optional additional fields that can be used in the
+        likelihood computation. The `data` argument is a two-column numpy array
+        with response time and response.
+    vmap:
+        If `True`, the function will be vectorized using JAX's vmap. If `False`, the
+        function is assumed to be already vectorized.
+    params_is_reg:
+        A list of booleans indicating whether the parameters are regressions.
+        Parameters that are regressions will not be vectorized in likelihood
+        calculations.
+    params_only:
+        If True, the log-likelihood function will only take parameters as input.
+    return_jit
+        If `True`, the function will return a JIT-compiled version of the vectorized
+        logp function, its VJP, and the non-jitted version of the logp function.
+        If `False`, it will return the non-jitted version of the vectorized logp
+        function and its VJP.
+
+    Returns
+    -------
+    tuple[LogLikeFunc, LogLikeGrad] | tuple[LogLikeFunc, LogLikeFunc, LogLikeFunc]
+        If `return_jit` is `True`, a triple of jax functions. The first calculates the
+        forward pass, the second calculates the VJP, and the third is
+        the forward-pass that's not jitted. When `params_only` is True, and all
+        parameters are scalars, only a scalar function, its gradient, and the non-jitted
+        version of the function are returned.
+        If `return_jit` is `False`, a pair of jax functions. The first
+        calculates the forward pass, and the second calculates the VJP of the logp
+        function.
+    """
+    if vmap and params_is_reg is None:
+        raise ValueError(
+            "If `vmap` is True, `params_is_reg` must be provided to specify which "
+            "parameters are regressions."
+        )
+
+    # Looks silly but is required to please mypy.
+    if vmap and params_is_reg is not None:
+        in_axes: list[int | None] = [
+            0 if is_regression else None for is_regression in params_is_reg
+        ]
+        if not params_only:
+            in_axes.insert(0, 0)
+
+        if all(axis is None for axis in in_axes):
+            raise ValueError(
+                "No vmap is needed in your use case, since all parameters are scalars."
+            )
+
+        if return_jit:
+            return make_vmap_func(
+                logp,
+                in_axes=in_axes,
+                params_only=params_only,
+                return_jit=True,
+            )
+        return make_vmap_func(
+            logp,
+            in_axes=in_axes,
+            params_only=params_only,
+            return_jit=False,
+        )
+
+    vjp_logp = make_vjp_func(
+        logp,
+        params_only=params_only,
+    )
+
+    if return_jit:
+        return jit(logp), jit(vjp_logp), logp
+
+    return logp, vjp_logp

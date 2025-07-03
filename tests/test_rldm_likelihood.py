@@ -5,7 +5,7 @@ import jax
 import numpy as np
 
 import hssm
-from hssm.likelihoods.rldm import make_logp_func, make_rldm_logp_op
+from hssm.likelihoods.rldm import make_rldm_logp_func, make_rldm_logp_op
 
 hssm.set_floatX("float32")
 
@@ -17,7 +17,7 @@ def fixture_path():
     return Path(__file__).parent / "fixtures"
 
 
-def test_make_logp_func(fixture_path):
+def test_make_rldm_logp_func(fixture_path):
     """Test the JAX log-likelihood function for the RLDM model."""
     data = np.load(fixture_path / "rldm_data.npy", allow_pickle=True).item()["data"]
     participant_id = data["participant_id"].values
@@ -34,7 +34,7 @@ def test_make_logp_func(fixture_path):
     t = np.ones(n_trials) * 0.1
     theta = np.ones(n_trials) * 0.1
 
-    logp = make_logp_func(n_participants=len(subj), n_trials=n_trials)
+    logp = make_rldm_logp_func(n_participants=len(subj), n_trials=n_trials)
     jitted_logp = jax.jit(logp)
 
     jax_LL = jitted_logp(
