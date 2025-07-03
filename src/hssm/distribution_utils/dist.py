@@ -692,12 +692,12 @@ def make_likelihood_callable(
         if loglik_kind == "analytical":
             if backend is None or backend == "pytensor":
                 return loglik
-            logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_callable(
+            logp_funcs = make_jax_logp_funcs_from_callable(
                 loglik,
                 vmap=False,
                 params_only=False if params_only is None else params_only,
             )
-            lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+            lan_logp_jax = make_jax_logp_ops(*logp_funcs)
             return lan_logp_jax
         elif loglik_kind == "blackbox":
             return make_blackbox_op(loglik)
@@ -709,13 +709,13 @@ def make_likelihood_callable(
                         + "and `backend` to `jax` and supplied a jax callable, "
                         + "but did not set `params_is_reg`."
                     )
-                logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_callable(
+                logp_funcs = make_jax_logp_funcs_from_callable(
                     loglik,
                     vmap=True,
                     params_is_reg=params_is_reg,
                     params_only=False if params_only is None else params_only,
                 )
-                lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+                lan_logp_jax = make_jax_logp_ops(*logp_funcs)
                 return lan_logp_jax
             if backend == "pytensor":
                 raise ValueError(
