@@ -7,7 +7,10 @@ import pytest
 
 import hssm
 from hssm.distribution_utils.onnx_utils import *
-from hssm.distribution_utils.onnx import make_jax_logp_funcs_from_onnx
+from hssm.distribution_utils.onnx import (
+    make_jax_logp_funcs_from_onnx,
+    make_simple_jax_logp_funcs_from_onnx,
+)
 
 hssm.set_floatX("float32")
 DECIMAL = 4
@@ -116,5 +119,38 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     np.testing.assert_array_almost_equal(
         jax_logp_nojit(data, v, *params_all_scalars[1:]),
         interpret_onnx(model.graph, input_matrix)[0].squeeze(),
+        decimal=DECIMAL,
+    )
+
+
+def test_make_simple_jax_logp_funcs_from_onnx(fixture_path):
+    """Tests whether the simple jax logp functions returned from onnx
+    returns the same values to interpret_onnx.
+    """
+    model = onnx.load(fixture_path / "angle.onnx")
+
+    jax_logp, _, _ = make_jax_logp_funcs_from_onnx(
+        model, params_is_reg=[False] * 5, params_only=False, return_jit=True
+    )
+
+    data = np.random.rand(10, 2)
+    params_all_scalars = np.random.rand(5)
+
+    result_boxed_function = jax_logp(data, *params_all_scalars)
+
+    jax_logp_simple = make_simple_jax_logp_funcs_from_onnx(model)
+
+    input_matrix = np.hstack(
+        [
+            np.broadcast_to(params_all_scalars, (10, 5)),
+            data,
+        ]
+    )
+
+    result_simple = jax_logp_simple(input_matrix)
+
+    np.testing.assert_array_almost_equal(
+        result_boxed_function,
+        result_simple,
         decimal=DECIMAL,
     )
