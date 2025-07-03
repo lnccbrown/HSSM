@@ -109,17 +109,7 @@ rldm_logp_inner_func_vmapped = jax.vmap(
 )
 
 
-def vec_logp(*args):
-    """Parallelize (vectorize) the likelihood computation across subjects.
-
-    'subj_index' arg to the JAX likelihood should be vectorized.
-    """
-    output = rldm_logp_inner_func_vmapped(*args).ravel()
-
-    return output
-
-
-def make_logp_func(n_participants: int, n_trials: int) -> Callable:
+def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
     """Create a log likelihood function for the RLDM model.
 
     Parameters
@@ -159,7 +149,7 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
         # create parameter arrays to be passed to the likelihood function
         rl_alpha, scaler, a, z, t, theta = dist_params[:6]
 
-        return vec_logp(
+        return rldm_logp_inner_func_vmapped(
             subj,
             n_trials,
             data,
@@ -171,7 +161,7 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
             theta,
             trial,
             feedback,
-        )
+        ).ravel()
 
     return logp
 
@@ -191,7 +181,7 @@ def make_rldm_logp_op(n_participants: int, n_trials: int) -> Callable:
     callable
         A function that computes the log likelihood for the RLDM model.
     """
-    logp = make_logp_func(n_participants, n_trials)
+    logp = make_rldm_logp_func(n_participants, n_trials)
     vjp_logp = make_vjp_func(logp, params_only=False)
 
     return make_jax_logp_ops(
