@@ -163,9 +163,9 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
 
         Parameters
         ----------
-        args : tuple
+        dist_params
             A tuple containing the subject index, number of trials per subject,
-            data, and model parameters
+            data, and model parameters. In this case, it is expected to be
             (rl_alpha, scaler, a, z, t, theta, trial, feedback).
 
         Returns
@@ -199,7 +199,7 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
     return logp
 
 
-def make_vjp_logp_func(logp) -> Callable:
+def make_vjp_logp_func(logp: Callable) -> Callable:
     """Create a vector-Jacobian product (VJP) function for the RLDM log likelihood.
 
     Parameters
@@ -222,6 +222,8 @@ def make_vjp_logp_func(logp) -> Callable:
             A tuple containing the subject index, number of trials per subject,
             data, and model parameters
             (rl_alpha, scaler, a, z, t, theta, trial, feedback).
+        gz: jnp.ndarray
+            The vector to multiply with the Jacobian of the log likelihood.
 
         Returns
         -------
