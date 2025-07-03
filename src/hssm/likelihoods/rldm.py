@@ -80,7 +80,7 @@ def rldm_logp_inner_func(
         # The first column is the drift rate, followed by
         # the parameters a, z, t, theta, rt, and action
         segment_result = jnp.array(
-            [rt, action, computed_v, subj_a[t], subj_z[t], subj_t[t], subj_theta[t]]
+            [computed_v, subj_a[t], subj_z[t], subj_t[t], subj_theta[t], rt, action]
         )
         LAN_matrix = LAN_matrix.at[t, :].set(segment_result)
 
