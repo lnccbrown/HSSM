@@ -576,6 +576,48 @@ def ssms_sim_wrapper(simulator_fun, theta, model, n_replicas, random_state, **kw
     return np.stack([out["rts"], out["choices"]], axis=-1).squeeze()
 
 
+def check_data_for_rl(
+    data: pd.DataFrame,
+    participant_id_col: str = "participant_id",
+    trial_id_col: str = "trial_id",
+) -> tuple[pd.DataFrame, int, int]:
+    """Check if the data is suitable for Reinforcement Learning (RL) models.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        The data to check.
+    participant_id_col : str
+        The name of the column containing participant IDs.
+    trial_id_col : str
+        The name of the column containing trial IDs.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, int, int]
+        A tuple containing the cleaned data, number of participants,
+        and number of trials.
+    """
+    if participant_id_col not in data.columns:
+        raise ValueError(f"Column '{participant_id_col}' not found in data.")
+    if trial_id_col not in data.columns:
+        raise ValueError(f"Column '{trial_id_col}' not found in data.")
+
+    sorted_data = data.sort_values(
+        by=[participant_id_col, trial_id_col], ignore_index=True
+    )
+
+    n_participants = data[participant_id_col].nunique()
+    trials_by_participant = sorted_data.groupby(participant_id_col)[trial_id_col].size()
+
+    if not np.all(trials_by_participant == trials_by_participant.iloc[0]):
+        raise ValueError("All participants must have the same number of trials.")
+
+    n_trials = trials_by_participant.iloc[0]
+
+    return sorted_data, n_participants, n_trials
+
+
 class SuppressOutput:
     """Context manager for suppressing output.
 
