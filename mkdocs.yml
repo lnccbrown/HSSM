@@ -27,6 +27,7 @@ nav:
           - hssm.simulate_data: api/simulate_data.md
           - hssm.set_floatX: api/set_floatx.md
           - hssm.show_defaults: api/show_defaults.md
+          - hssm.check_data_for_rl: api/check_data_for_rl.md
       - Likelihoods:
           - hssm.likelihoods: api/likelihoods.md
       - Working with distributions:
