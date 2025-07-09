@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.lax import scan
+from pytensor.graph import Op
 
 from hssm.distribution_utils.func_utils import make_vjp_func
 
@@ -18,7 +19,9 @@ angle_logp_jax_func = make_simple_jax_logp_funcs_from_onnx(
 )
 
 
-def compute_v_inner(
+# Inner function to compute the drift rate and update q-values for each trial.
+# This function is used with `jax.lax.scan` to process each trial in the RLDM model.
+def compute_v_trial_wise(
     q_val: jnp.ndarray, inputs: jnp.ndarray
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Compute the drift rate and updates the q-values for each trial.
@@ -31,11 +34,13 @@ def compute_v_inner(
 
     Parameters
     ----------
-    carry
-        A tuple containing the current q-values and log likelihood.
+    q_val
+        A length-2 jnp array containing the current q-values for the two alternatives.
+        These values are updated in each iteration and carried forward to the next
+        trial.
     inputs
-        A jnp array containing the RL parameters (rl_alpha, scaler), action (response),
-        and reward (feedback) for the current trial.
+        A 2D jnp array containing the RL parameters (rl_alpha, scaler),
+        action (response), and reward (feedback) for the current trial.
 
     Returns
     -------
@@ -61,10 +66,14 @@ def compute_v_inner(
     return q_val, computed_v
 
 
-def compute_v(
+# This function computes the drift rates (v) for each subject by processing
+# their trials one by one. It uses `jax.lax.scan` to efficiently iterate over
+# the trials and compute the drift rates based on the RL parameters, actions,
+# and rewards for each trial.
+def compute_v_subject_wise(
     subj_trials: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Compute the log likelihood for a given subject using the RLDM model.
+    """Compute the drift rates (v) for a given subject.
 
     Parameters
     ----------
@@ -78,7 +87,7 @@ def compute_v(
         The log likelihoods for the RLDM model for the given subject.
     """
     _, v = scan(
-        compute_v_inner,
+        compute_v_trial_wise,
         jnp.ones(2) * 0.5,  # initial q-values for the two alternatives
         subj_trials,
     )
@@ -86,7 +95,8 @@ def compute_v(
     return v
 
 
-compute_v_vmapped = jax.vmap(compute_v, in_axes=0)
+# Vectorized version of the compute_v_subject_wise function to handle multiple subjects.
+compute_v_subject_wise_vmapped = jax.vmap(compute_v_subject_wise, in_axes=0)
 
 
 def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
@@ -140,7 +150,7 @@ def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
         )
 
         # Use the compute_v function to get the drift rates (v)
-        v = compute_v_vmapped(subj_trials).reshape((-1, 1))
+        v = compute_v_subject_wise_vmapped(subj_trials).reshape((-1, 1))
 
         # create parameter arrays to be passed to the likelihood function
         ddm_params_matrix = jnp.stack(dist_params[2:6], axis=1)
@@ -151,7 +161,7 @@ def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
     return logp
 
 
-def make_rldm_logp_op(n_participants: int, n_trials: int) -> Callable:
+def make_rldm_logp_op(n_participants: int, n_trials: int) -> Op:
     """Create a pytensor Op for the likelihood function of RLDM model.
 
     Parameters
@@ -163,8 +173,8 @@ def make_rldm_logp_op(n_participants: int, n_trials: int) -> Callable:
 
     Returns
     -------
-    callable
-        A function that computes the log likelihood for the RLDM model.
+    Op
+        A pytensor Op that computes the log likelihood for the RLDM model.
     """
     logp = make_rldm_logp_func(n_participants, n_trials)
     vjp_logp = make_vjp_func(logp, params_only=False)
