@@ -4,7 +4,8 @@ from typing import Callable
 
 import jax
 import jax.numpy as jnp
-from jax.lax import dynamic_slice, scan
+import numpy as np
+from jax.lax import scan
 
 from hssm.distribution_utils.func_utils import make_vjp_func
 
@@ -17,7 +18,9 @@ angle_logp_jax_func = make_simple_jax_logp_funcs_from_onnx(
 )
 
 
-def compute_v(q_val: jnp.ndarray, inputs: jnp.ndarray) -> tuple:
+def compute_v_inner(
+    q_val: jnp.ndarray, inputs: jnp.ndarray
+) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Compute the drift rate and updates the q-values for each trial.
 
     This function is used with `jax.lax.scan` to process each trial. It takes the
@@ -58,52 +61,32 @@ def compute_v(q_val: jnp.ndarray, inputs: jnp.ndarray) -> tuple:
     return q_val, computed_v
 
 
-def rldm_logp_inner_func(
-    subj,
-    ntrials_subj,
-    data,
-    rl_alpha,
-    scaler,
-    a,
-    z,
-    t,
-    theta,
-    feedback,
-):
-    """Compute the log likelihood for a given subject using the RLDM model."""
-    rt = data[:, 0]
-    response = data[:, 1]
+def compute_v(
+    subj_trials: jnp.ndarray,
+) -> jnp.ndarray:
+    """Compute the log likelihood for a given subject using the RLDM model.
 
-    subj = jnp.astype(subj, jnp.int32)
+    Parameters
+    ----------
+    subj_trials:
+        A jnp array of dimension (n_trials, 4) containing rl_alpha, scaler,
+        action (response), and reward (feedback) for each trial of the subject.
 
-    compute_v_input = jnp.stack([rl_alpha, scaler, response, feedback], axis=1)
-    subj_trials = dynamic_slice(
-        compute_v_input, [subj * ntrials_subj, 0], [ntrials_subj, 4]
-    )
+    Returns
+    -------
+    jnp.ndarray
+        The log likelihoods for the RLDM model for the given subject.
+    """
     _, v = scan(
-        compute_v,
+        compute_v_inner,
         jnp.ones(2) * 0.5,  # initial q-values for the two alternatives
         subj_trials,
     )
 
-    lan_input = jnp.stack(
-        [a, z, t, theta, rt, response], axis=1
-    )  # Combine all parameters and data into a single input matrix
-    lan_matrix = jnp.concatenate(
-        [
-            v.reshape((-1, 1)),
-            dynamic_slice(lan_input, [subj * ntrials_subj, 0], [ntrials_subj, 6]),
-        ],
-        axis=1,
-    )
-    return angle_logp_jax_func(lan_matrix)
+    return v
 
 
-rldm_logp_inner_func_vmapped = jax.vmap(
-    rldm_logp_inner_func,
-    # Only the first argument (subj), needs to be vectorized
-    in_axes=[0] + [None] * 9,
-)
+compute_v_vmapped = jax.vmap(compute_v, in_axes=0)
 
 
 def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
@@ -122,41 +105,48 @@ def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
         A function that computes the log likelihood for the RLDM model.
     """
 
-    def logp(data, *dist_params) -> jnp.ndarray:
+    def logp(data, *dist_params) -> np.ndarray:
         """Compute the log likelihood for the RLDM model.
 
         Parameters
         ----------
-        args : tuple
-            A tuple containing the subject index, number of trials per subject,
-            data, and model parameters
-            (rl_alpha, scaler, a, z, t, theta, feedback).
+        data:
+            A 2D numpy array of shape (n_trials * n_participants, 2) containing the
+            response and reaction time for each trial.
+        dist_params:
+            A list of parameters for the RLDM model, including:
+            - rl_alpha: learning rate for the RL model.
+            - scaler: scaling factor for the drift rate.
+            - a: boundary separation.
+            - z: starting point.
+            - t: non-decision time.
+            - theta: lapse rate.
+            - feedback: feedback for each trial.
 
         Returns
         -------
-        jnp.ndarray
+        np.ndarray
             The log likelihoods for each subject.
         """
-        participant_id = dist_params[6]
-        feedback = dist_params[7]
+        action = data[:, 1]
+        rl_alpha = dist_params[0]
+        scaler = dist_params[1]
+        feedback = dist_params[-1]
 
-        subj = jnp.unique(participant_id, size=n_participants).astype(jnp.int32)
+        # Reshape subj_trials into a 3D array of shape (n_participants, n_trials, 4)
+        # so we can vmap the compute_v function over its first axis.
+        subj_trials = jnp.stack((rl_alpha, scaler, action, feedback), axis=1).reshape(
+            n_participants, n_trials, -1
+        )
+
+        # Use the compute_v function to get the drift rates (v)
+        v = compute_v_vmapped(subj_trials).reshape((-1, 1))
 
         # create parameter arrays to be passed to the likelihood function
-        rl_alpha, scaler, a, z, t, theta = dist_params[:6]
+        ddm_params_matrix = jnp.stack(dist_params[2:6], axis=1)
+        lan_matrix = jnp.concatenate((v, ddm_params_matrix, data), axis=1)
 
-        return rldm_logp_inner_func_vmapped(
-            subj,
-            n_trials,
-            data,
-            rl_alpha,
-            scaler,
-            a,
-            z,
-            t,
-            theta,
-            feedback,
-        ).ravel()
+        return angle_logp_jax_func(lan_matrix)
 
     return logp
 
