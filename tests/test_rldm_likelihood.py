@@ -79,6 +79,7 @@ def test_make_rldm_logp_op(fixture_path):
     logp_op = make_rldm_logp_op(
         n_participants=len(subj),
         n_trials=total_trials // len(subj),
+        n_params=6,
     )
 
     jax_LL = logp_op(
