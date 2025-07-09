@@ -17,6 +17,47 @@ angle_logp_jax_func = make_simple_jax_logp_funcs_from_onnx(
 )
 
 
+def compute_v(q_val: jnp.ndarray, inputs: jnp.ndarray) -> tuple:
+    """Compute the drift rate and updates the q-values for each trial.
+
+    This function is used with `jax.lax.scan` to process each trial. It takes the
+    current q-values and the RL parameters (rl_alpha, scaler), action (response),
+    and reward (feedback) for the current trial, computes the drift rate, and
+    updates the q-values. The q_values are updated in each iteration and carried
+    forward to the next one.
+
+    Parameters
+    ----------
+    carry
+        A tuple containing the current q-values and log likelihood.
+    inputs
+        A jnp array containing the RL parameters (rl_alpha, scaler), action (response),
+        and reward (feedback) for the current trial.
+
+    Returns
+    -------
+    tuple
+        A tuple containing the updated q-values and the computed drift rate (v).
+    """
+    rl_alpha, scaler, action, reward = inputs
+    action = jnp.astype(action, jnp.int32)
+
+    # drift rate on each trial depends on difference in expected rewards for
+    # the two alternatives:
+    # drift rate = (q_up - q_low) * scaler where
+    # the scaler parameter describes the weight to put on the difference in
+    # q-values.
+    computed_v = (q_val[1] - q_val[0]) * scaler
+
+    # compute the reward prediction error
+    delta_RL = reward - q_val[action]
+
+    # update the q-values using the RL learning rule (here, simple TD rule)
+    q_val = q_val.at[action].set(q_val[action] + rl_alpha * delta_RL)
+
+    return q_val, computed_v
+
+
 def rldm_logp_inner_func(
     subj,
     ntrials_subj,
@@ -27,7 +68,6 @@ def rldm_logp_inner_func(
     z,
     t,
     theta,
-    trial,
     feedback,
 ):
     """Compute the log likelihood for a given subject using the RLDM model."""
@@ -36,76 +76,33 @@ def rldm_logp_inner_func(
 
     subj = jnp.astype(subj, jnp.int32)
 
-    # Extracting the parameters and data for the specific subject
-    subj_rl_alpha = dynamic_slice(rl_alpha, [subj * ntrials_subj], [ntrials_subj])
-    subj_scaler = dynamic_slice(scaler, [subj * ntrials_subj], [ntrials_subj])
-    subj_a = dynamic_slice(a, [subj * ntrials_subj], [ntrials_subj])
-    subj_z = dynamic_slice(z, [subj * ntrials_subj], [ntrials_subj])
-    subj_t = dynamic_slice(t, [subj * ntrials_subj], [ntrials_subj])
-    subj_theta = dynamic_slice(theta, [subj * ntrials_subj], [ntrials_subj])
-
-    subj_trial = dynamic_slice(trial, [subj * ntrials_subj], [ntrials_subj])
-    subj_response = dynamic_slice(response, [subj * ntrials_subj], [ntrials_subj])
-    subj_rt = dynamic_slice(rt, [subj * ntrials_subj], [ntrials_subj])
-    subj_feedback = dynamic_slice(feedback, [subj * ntrials_subj], [ntrials_subj])
-
-    # Initialize the LAN matrix that will hold the trial-by-trial data
-    # The matrix will have 7 columns: data (choice, rt) and parameters of
-    # the angle model (v, a, z, t, theta)
-    # The number of rows is equal to the number of trials for the subject
-    q_val = jnp.ones(2) * 0.5
-    LAN_matrix_init = jnp.zeros((ntrials_subj, 7))
-
-    # function to process each trial
-    def process_trial(carry, inputs):
-        q_val, loglik, LAN_matrix, t = carry
-        state, action, rt, reward = inputs
-        state = jnp.astype(state, jnp.int32)
-        action = jnp.astype(action, jnp.int32)
-
-        # drift rate on each trial depends on difference in expected rewards for
-        # the two alternatives:
-        # drift rate = (q_up - q_low) * scaler where
-        # the scaler parameter describes the weight to put on the difference in
-        # q-values.
-        computed_v = (q_val[1] - q_val[0]) * subj_scaler[t]
-
-        # compute the reward prediction error
-        delta_RL = reward - q_val[action]
-
-        # update the q-values using the RL learning rule (here, simple TD rule)
-        q_val = q_val.at[action].set(q_val[action] + subj_rl_alpha[t] * delta_RL)
-
-        # update the LAN_matrix with the current trial data
-        # The first column is the drift rate, followed by
-        # the parameters a, z, t, theta, rt, and action
-        segment_result = jnp.array(
-            [computed_v, subj_a[t], subj_z[t], subj_t[t], subj_theta[t], rt, action]
-        )
-        LAN_matrix = LAN_matrix.at[t, :].set(segment_result)
-
-        return (q_val, loglik, LAN_matrix, t + 1), None
-
-    trials = (
-        subj_trial,
-        subj_response,
-        subj_rt,
-        subj_feedback,
+    compute_v_input = jnp.stack([rl_alpha, scaler, response, feedback], axis=1)
+    subj_trials = dynamic_slice(
+        compute_v_input, [subj * ntrials_subj, 0], [ntrials_subj, 4]
     )
-    (q_val, LL, LAN_matrix, _), _ = scan(
-        process_trial, (q_val, 0.0, LAN_matrix_init, 0), trials
+    _, v = scan(
+        compute_v,
+        jnp.ones(2) * 0.5,  # initial q-values for the two alternatives
+        subj_trials,
     )
 
-    # forward pass through the LAN to compute log likelihoods
-    LL = angle_logp_jax_func(LAN_matrix)
-
-    return LL
+    lan_input = jnp.stack(
+        [a, z, t, theta, rt, response], axis=1
+    )  # Combine all parameters and data into a single input matrix
+    lan_matrix = jnp.concatenate(
+        [
+            v.reshape((-1, 1)),
+            dynamic_slice(lan_input, [subj * ntrials_subj, 0], [ntrials_subj, 6]),
+        ],
+        axis=1,
+    )
+    return angle_logp_jax_func(lan_matrix)
 
 
 rldm_logp_inner_func_vmapped = jax.vmap(
     rldm_logp_inner_func,
     # Only the first argument (subj), needs to be vectorized
-    in_axes=[0] + [None] * 10,
+    in_axes=[0] + [None] * 9,
 )
 
 
@@ -133,7 +130,7 @@ def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
         args : tuple
             A tuple containing the subject index, number of trials per subject,
             data, and model parameters
-            (rl_alpha, scaler, a, z, t, theta, trial, feedback).
+            (rl_alpha, scaler, a, z, t, theta, feedback).
 
         Returns
         -------
@@ -141,8 +138,7 @@ def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
             The log likelihoods for each subject.
         """
         participant_id = dist_params[6]
-        trial = dist_params[7]
-        feedback = dist_params[8]
+        feedback = dist_params[7]
 
         subj = jnp.unique(participant_id, size=n_participants).astype(jnp.int32)
 
@@ -159,7 +155,6 @@ def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
             z,
             t,
             theta,
-            trial,
             feedback,
         ).ravel()
 
