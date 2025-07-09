@@ -84,7 +84,7 @@ def compute_v_subject_wise(
     Returns
     -------
     jnp.ndarray
-        The log likelihoods for the RLDM model for the given subject.
+        The computed drift rates (v) for the RLDM model for the given subject.
     """
     _, v = scan(
         compute_v_trial_wise,
