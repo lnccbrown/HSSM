@@ -11,10 +11,10 @@ from pytensor.graph import Op
 from hssm.distribution_utils.func_utils import make_vjp_func
 
 from ..distribution_utils.jax import make_jax_logp_ops
-from ..distribution_utils.onnx import make_simple_jax_logp_funcs_from_onnx
+from ..distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 
 # Obtain the angle log-likelihood function from an ONNX model.
-angle_logp_jax_func = make_simple_jax_logp_funcs_from_onnx(
+angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
     model="angle.onnx",
 )
 
@@ -161,7 +161,7 @@ def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
     return logp
 
 
-def make_rldm_logp_op(n_participants: int, n_trials: int) -> Op:
+def make_rldm_logp_op(n_participants: int, n_trials: int, n_params: int) -> Op:
     """Create a pytensor Op for the likelihood function of RLDM model.
 
     Parameters
@@ -177,11 +177,11 @@ def make_rldm_logp_op(n_participants: int, n_trials: int) -> Op:
         A pytensor Op that computes the log likelihood for the RLDM model.
     """
     logp = make_rldm_logp_func(n_participants, n_trials)
-    vjp_logp = make_vjp_func(logp, params_only=False)
+    vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
 
     return make_jax_logp_ops(
         logp=jax.jit(logp),
         logp_vjp=jax.jit(vjp_logp),
         logp_nojit=logp,
-        n_params=6,  # rl_alpha, scaler, a, z, t, theta
+        n_params=n_params,  # rl_alpha, scaler, a, z, t, theta
     )

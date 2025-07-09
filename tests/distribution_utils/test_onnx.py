@@ -9,7 +9,7 @@ import hssm
 from hssm.distribution_utils.onnx_utils import *
 from hssm.distribution_utils.onnx import (
     make_jax_logp_funcs_from_onnx,
-    make_simple_jax_logp_funcs_from_onnx,
+    make_jax_matrix_logp_funcs_from_onnx,
 )
 
 hssm.set_floatX("float32")
@@ -138,7 +138,7 @@ def test_make_simple_jax_logp_funcs_from_onnx(fixture_path):
 
     result_boxed_function = jax_logp(data, *params_all_scalars)
 
-    jax_logp_simple = make_simple_jax_logp_funcs_from_onnx(model)
+    jax_logp_simple = make_jax_matrix_logp_funcs_from_onnx(model)
 
     input_matrix = np.hstack(
         [

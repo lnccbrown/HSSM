@@ -26,7 +26,7 @@ from .blackbox import make_blackbox_op
 from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
     make_jax_logp_funcs_from_onnx,
-    make_pytensor_logp,
+    make_pytensor_logp_from_onnx,
 )
 from .onnx_utils.model import load_onnx_model
 
@@ -743,7 +743,7 @@ def make_likelihood_callable(
     onnx_model = load_onnx_model(loglik)
 
     if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp(onnx_model)
+        lan_logp_pt = make_pytensor_logp_from_onnx(onnx_model)
         return lan_logp_pt
 
     if params_is_reg is None:

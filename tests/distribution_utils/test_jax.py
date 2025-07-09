@@ -13,7 +13,7 @@ from hssm.distribution_utils.jax import (
 )
 from hssm.distribution_utils.onnx import (
     make_jax_logp_funcs_from_onnx,
-    make_pytensor_logp,
+    make_pytensor_logp_from_onnx,
 )
 
 DECIMAL = 4
@@ -34,7 +34,7 @@ def test_make_jax_logp_ops(fixture_path):
     jax_logp_op = make_jax_logp_ops(
         *make_jax_logp_funcs_from_onnx(model, params_is_reg=[False] * 5)
     )
-    pytensor_logp = make_pytensor_logp(model)
+    pytensor_logp = make_pytensor_logp_from_onnx(model)
 
     data = np.random.rand(10, 2)
     params_all_scalars = np.random.rand(5).astype(np.float32)
@@ -63,7 +63,7 @@ def test_make_jax_logp_ops(fixture_path):
     jax_logp_op = make_jax_logp_ops(
         *make_jax_logp_funcs_from_onnx(model, params_is_reg=[True] + [False] * 4)
     )
-    pytensor_logp = make_pytensor_logp(model)
+    pytensor_logp = make_pytensor_logp_from_onnx(model)
 
     v = np.random.rand(10)
 

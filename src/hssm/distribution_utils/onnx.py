@@ -127,7 +127,7 @@ def make_jax_logp_funcs_from_onnx(
     )
 
 
-def make_pytensor_logp(
+def make_pytensor_logp_from_onnx(
     model: str | PathLike | onnx.ModelProto,
 ) -> Callable[..., ArrayLike]:
     """Convert onnx model file to pytensor.
@@ -179,7 +179,7 @@ def make_pytensor_logp(
     return logp
 
 
-def make_simple_jax_logp_funcs_from_onnx(
+def make_jax_matrix_logp_funcs_from_onnx(
     model: str | PathLike | onnx.ModelProto,
 ) -> LogLikeFunc:
     """Make a jax function and its Vector-Jacobian Product from an ONNX Model.
