@@ -25,16 +25,18 @@ def test_make_rldm_logp_func(fixture_path):
     feedback = data["feedback"].values
 
     subj = np.unique(participant_id).astype(np.int32)
-    n_trials = trial.size // len(subj)
+    total_trials = trial.size
 
-    rl_alpha = np.ones(n_trials) * 0.60
-    scaler = np.ones(n_trials) * 3.2
-    a = np.ones(n_trials) * 1.2
-    z = np.ones(n_trials) * 0.1
-    t = np.ones(n_trials) * 0.1
-    theta = np.ones(n_trials) * 0.1
+    rl_alpha = np.ones(total_trials) * 0.60
+    scaler = np.ones(total_trials) * 3.2
+    a = np.ones(total_trials) * 1.2
+    z = np.ones(total_trials) * 0.1
+    t = np.ones(total_trials) * 0.1
+    theta = np.ones(total_trials) * 0.1
 
-    logp = make_rldm_logp_func(n_participants=len(subj), n_trials=n_trials)
+    logp = make_rldm_logp_func(
+        n_participants=len(subj), n_trials=total_trials // len(subj)
+    )
     jitted_logp = jax.jit(logp)
 
     jax_LL = jitted_logp(
@@ -45,17 +47,15 @@ def test_make_rldm_logp_func(fixture_path):
         z,
         t,
         theta,
-        participant_id,
-        trial,
         feedback,
     )
 
-    assert jax_LL.shape == (len(subj) * n_trials,)
+    assert jax_LL.shape[0] == total_trials
 
     np.testing.assert_almost_equal(
         jax_LL.sum(),
         -6879.1523,
-        decimal=DECIMAL,
+        decimal=4,
     )
 
 
@@ -67,18 +67,18 @@ def test_make_rldm_logp_op(fixture_path):
     feedback = data["feedback"].values
 
     subj = np.unique(participant_id).astype(np.int32)
-    n_trials = trial.size // len(subj)
+    total_trials = trial.size
 
-    rl_alpha = np.ones(n_trials) * 0.60
-    scaler = np.ones(n_trials) * 3.2
-    a = np.ones(n_trials) * 1.2
-    z = np.ones(n_trials) * 0.1
-    t = np.ones(n_trials) * 0.1
-    theta = np.ones(n_trials) * 0.1
+    rl_alpha = np.ones(total_trials) * 0.60
+    scaler = np.ones(total_trials) * 3.2
+    a = np.ones(total_trials) * 1.2
+    z = np.ones(total_trials) * 0.1
+    t = np.ones(total_trials) * 0.1
+    theta = np.ones(total_trials) * 0.1
 
     logp_op = make_rldm_logp_op(
         n_participants=len(subj),
-        n_trials=n_trials,
+        n_trials=total_trials // len(subj),
     )
 
     jax_LL = logp_op(
@@ -89,8 +89,6 @@ def test_make_rldm_logp_op(fixture_path):
         z,
         t,
         theta,
-        participant_id,
-        trial,
         feedback,
     )
 

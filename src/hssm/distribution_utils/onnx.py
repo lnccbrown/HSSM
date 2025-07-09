@@ -75,7 +75,7 @@ def make_jax_logp_funcs_from_onnx(
     model_onnx = load_onnx_model(model)
     scalars_only = all(not is_reg for is_reg in params_is_reg)
 
-    def logp(*inputs) -> jnp.ndarray:
+    def logp(*inputs) -> np.ndarray:
         """Compute the log-likelihood.
 
         A function that computes the element-wise log-likelihoods given one data point
@@ -199,7 +199,7 @@ def make_simple_jax_logp_funcs_from_onnx(
     """
     model_onnx = load_onnx_model(model)
 
-    def logp(input_matrix) -> jnp.ndarray:
+    def logp(input_matrix) -> np.ndarray:
         """Compute the log-likelihood.
 
         A function that computes the element-wise log-likelihoods given one data point
