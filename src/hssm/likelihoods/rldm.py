@@ -166,6 +166,43 @@ def make_rldm_logp_func(n_participants: int, n_trials: int) -> Callable:
     return logp
 
 
+def make_vjp_logp_func(logp: Callable) -> Callable:
+    """Create a vector-Jacobian product (VJP) function for the RLDM log likelihood.
+
+    Parameters
+    ----------
+    logp : callable
+        The log likelihood function.
+
+    Returns
+    -------
+    callable
+        A function that computes the VJP of the log likelihood for the RLDM model.
+    """
+
+    def vjp_logp(*inputs, gz):
+        """Compute the vector-Jacobian product (VJP) of the log likelihood function.
+
+        Parameters
+        ----------
+        inputs : list
+            A list of data and parameters used in the likelihood computation.
+            Also includes the extra_fields data columns.
+            Eg. [data, rl_alpha, scaler, a, z, t, theta, trial, feedback].
+        gz: jnp.ndarray
+            The vector to multiply with the Jacobian of the log likelihood.
+
+        Returns
+        -------
+        jnp.ndarray
+            The VJP of the log likelihoods for each subject.
+        """
+        _, vjp_logp = jax.vjp(logp, *inputs)
+        return vjp_logp(gz)[1:7]  # Exclude the data and the extra fields
+
+    return vjp_logp
+
+
 def make_rldm_logp_op(n_participants: int, n_trials: int) -> Callable:
     """Create a pytensor Op for the likelihood function of RLDM model.
 
