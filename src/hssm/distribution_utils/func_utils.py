@@ -2,8 +2,9 @@
 
 from typing import Callable, Literal, cast, overload
 
+import numpy as np
 from jax import jit, vjp, vmap
-from numpy.typing import ArrayLike
+from jax.tree_util import Partial
 
 from .._types import LogLikeFunc, LogLikeGrad
 
@@ -79,6 +80,7 @@ def make_vmap_func(
 def make_vjp_func(
     logp: Callable,
     params_only: bool = False,
+    n_params: int | None = None,
 ) -> LogLikeGrad:
     """Make a non-jitted VJP of the logp function.
 
@@ -95,7 +97,12 @@ def make_vjp_func(
         The VJP of the logp function.
     """
 
-    def vjp_logp(*inputs: list[float | ArrayLike], gz: ArrayLike) -> list[ArrayLike]:
+    def vjp_logp(
+        *inputs: list[float | np.ndarray],
+        gz: np.ndarray,
+        params_only: bool = False,
+        n_params: int | None = None,
+    ) -> list[np.ndarray]:
         """Compute the VJP of the log-likelihood function.
 
         Parameters
@@ -113,6 +120,14 @@ def make_vjp_func(
             The VJP of the log-likelihood function computed at gz.
         """
         _, vjp_fn = vjp(logp, *inputs)
-        return vjp_fn(gz) if params_only else vjp_fn(gz)[1:]
+        if params_only:
+            if n_params is None:
+                return vjp_fn(gz)
+            return vjp_fn(gz)[:n_params]
+        else:
+            if n_params is None:
+                return vjp_fn(gz)[1:]
+            return vjp_fn(gz)[1 : n_params + 1]
 
+    vjp_logp = Partial(vjp_logp, params_only=params_only, n_params=n_params)
     return cast("LogLikeGrad", vjp_logp)
