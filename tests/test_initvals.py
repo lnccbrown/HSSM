@@ -1,9 +1,6 @@
-from re import T
 import numpy as np
 import pytest
 import hssm
-from hssm import HSSM
-from hssm.utils import download_hf
 import logging
 
 hssm.set_floatX("float32", update_jax=True)

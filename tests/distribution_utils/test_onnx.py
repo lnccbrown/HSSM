@@ -8,8 +8,8 @@ import pytest
 import hssm
 from hssm.distribution_utils.onnx_utils import *
 from hssm.distribution_utils.onnx import (
-    make_jax_logp_funcs_from_jax_callable,
     make_jax_logp_funcs_from_onnx,
+    make_jax_matrix_logp_funcs_from_onnx,
 )
 
 hssm.set_floatX("float32")
@@ -123,24 +123,34 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
     )
 
 
-def test_make_jax_logp_funcs_from_jax_callable(fixture_path):
-    # A fake JAX callable to test the conversion
-    def fake_jax_callable(data, param1, param2):
-        """A fake JAX callable that computes a simple operation."""
-        return data * param1 * param2
+def test_make_simple_jax_logp_funcs_from_onnx(fixture_path):
+    """Tests whether the simple jax logp functions returned from onnx
+    returns the same values to interpret_onnx.
+    """
+    model = onnx.load(fixture_path / "angle.onnx")
 
-    nojit_funcs = make_jax_logp_funcs_from_jax_callable(
-        fake_jax_callable,
-        params_is_reg=[False, False],
-        return_jit=False,
+    jax_logp, _, _ = make_jax_logp_funcs_from_onnx(
+        model, params_is_reg=[False] * 5, params_only=False, return_jit=True
     )
 
-    assert len(nojit_funcs) == 2
+    data = np.random.rand(10, 2)
+    params_all_scalars = np.random.rand(5)
 
-    jit_funcs = make_jax_logp_funcs_from_jax_callable(
-        fake_jax_callable,
-        params_is_reg=[False, False],
-        return_jit=True,
+    result_boxed_function = jax_logp(data, *params_all_scalars)
+
+    jax_logp_simple = make_jax_matrix_logp_funcs_from_onnx(model)
+
+    input_matrix = np.hstack(
+        [
+            np.broadcast_to(params_all_scalars, (10, 5)),
+            data,
+        ]
     )
 
-    assert len(jit_funcs) == 3
+    result_simple = jax_logp_simple(input_matrix)
+
+    np.testing.assert_array_almost_equal(
+        result_boxed_function,
+        result_simple,
+        decimal=DECIMAL,
+    )
