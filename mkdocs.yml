@@ -54,7 +54,9 @@ nav:
   - Contributed Tutorials:
       - Winterbrain 2025 Workshop Talk 1: tutorials/hssm_tutorial_workshop_1.ipynb
       - Winterbrain 2025 Workshop Talk 2: tutorials/hssm_tutorial_workshop_2.ipynb
-  - Contributing: CONTRIBUTING.md
+  - Contributing:
+      - Developing locally: local_development.md
+      - Contributing: CONTRIBUTING.md
 
 plugins:
   - search
