@@ -1,0 +1,45 @@
+{% extends "base.html" %} {% block announce %}
+<span class="show-on-small right-margin">
+  <span class="twemoji right-margin show-on-small move-down">
+    {% include ".icons/fontawesome/solid/angles-down.svg" %}
+  </span>
+  Navigate the site here!
+</span>
+<span class="right-margin"> v0.2.7 is released! </span>
+<span>
+  <span class="twemoji">
+    {% include ".icons/material/head-question.svg" %}
+  </span>
+  Questions?
+  <a href="https://github.com/lnccbrown/HSSM/discussions">
+    Open a discussion here!
+  </a>
+</span>
+{% endblock %} {% block content %} {{ super() }}
+
+<style>
+  pre {
+    font-size: 0.7rem;
+  }
+
+  .jp-OutputArea-executeResult pre {
+    font-size: 0.7rem;
+  }
+
+  .jp-xr-text-repr-fallback pre {
+    font-size: 0.7rem;
+  }
+
+  .xr-sections {
+    font-size: 0.7rem;
+  }
+
+  div .jp-RenderedText {
+    font-size: 0.7rem !important;
+  }
+
+  .jupyter-wrapper .jp-RenderedText pre {
+    font-size: 0.7rem !important;
+  }
+</style>
+{% endblock content %}
