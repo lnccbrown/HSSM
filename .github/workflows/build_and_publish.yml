@@ -41,7 +41,7 @@ jobs:
 
       - name: Publish to TestPyPI
         run: |
-          uv publish --token ${{ secrets.TEST_PYPI_TOKEN }} --index https://test.pypi.org/legacy/
+          uv publish --token ${{ secrets.TEST_PYPI_TOKEN }} --index testpypi-upload
 
       - name: Publish to PyPI
         run: |

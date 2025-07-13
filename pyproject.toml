@@ -207,3 +207,7 @@ url = "https://pypi.org/simple/"
 [[tool.uv.index]]
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
+
+[[tool.uv.index]]
+name = "testpypi-upload"
+url = "https://test.pypi.org/legacy/"
