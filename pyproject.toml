@@ -53,7 +53,7 @@ dev = [
     "pre-commit>=2.20.0",
     "ptpython>=3.0.29",
     "pyarrow>=20.0.0",
-    "lanfactory==0.5.3",
+    "lanfactory>=0.5.3",
     "HSSM[test]",
 ]
 
