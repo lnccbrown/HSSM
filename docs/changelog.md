@@ -1,12 +1,18 @@
 # Changelog
 
+### 0.2.7
+
+This version of HSSM incorporated the following changes:
+
+1. Bugfix in `mkdocs.yml`. No tutorial notebooks should be actively executed when re-building docs.
+
 ### 0.2.6
 
 This version of HSSM incorporated the following changes:
 
 1. Overhaul of our development infrastructure to depend on `uv`
 2. Addition of various new tutorials (highlight: how to fit RL+SSM models)
-3. New `rldm` likelihoods 
+3. New `rldm` likelihoods
 4. Major internal refactor (e.g. `DataValidator` class for pre-processing)
 
 ### 0.2.5
