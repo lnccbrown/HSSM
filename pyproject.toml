@@ -201,5 +201,5 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [[tool.uv.index]]
-name = "default"
-url = "https://pypi.org/simple/"
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
