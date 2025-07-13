@@ -83,6 +83,8 @@ plugins:
         - tutorials/tutorial_p_outlier_regression.ipynb
         - tutorials/hssm_tutorial_workshop_1.ipynb
         - tutorials/hssm_tutorial_workshop_2.ipynb
+        - tutorials/add_custom_rlssm_model.ipynb
+        - tutorials/rlssm_tutorial.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:
