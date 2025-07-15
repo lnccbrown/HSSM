@@ -22,6 +22,17 @@ rlssm_model_config_list = {
         "extra_fields": ["participant_id", "trial_id", "feedback"], 
         "decision_model": "LAN", 
         "LAN": "angle", 
+    },
+
+    "rlssm2": {
+        "name": "rlssm2", 
+        "description": "Custom RLSSM with special features", 
+        "n_params": 7, 
+        "n_extra_fields": 3, 
+        "list_params": ["rl.alpha", "rl.alpha_neg", "scaler", "a", "Z", "t", "theta"], 
+        "extra_fields": ["participant_id", "trial_id", "feedback"], 
+        "decision_model": "LAN", 
+        "LAN": "angle", 
     }
 }
 
@@ -30,38 +41,10 @@ MODEL_CONFIG = rlssm_model_config_list[MODEL_NAME]
 num_params = MODEL_CONFIG["n_params"]
 total_params = MODEL_CONFIG["n_params"] + MODEL_CONFIG["n_extra_fields"]
 
-# lan_onnx = download_hf("angle.onnx")
-
-# # Obtain the angle log-likelihood function from an ONNX model.
-# lan_logp_jax_func, _ = make_jax_logp_funcs_from_onnx(
-#     model=lan_onnx,
-#     params_is_reg=[True] * 5,
-#     params_only=False,
-#     return_jit=False,
-# )
 
 lan_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
     model="angle.onnx",
 )
-
-
-# def jax_lan_wrapper(input_matrix):
-#     """Forward pass through the LAN to compute log likelihoods.
-
-#     This function is just a wrapper that changes the column order of the input matrix
-#     to match the expected input for the angle log likelihood function.
-#     """
-#     net_input = jnp.array(input_matrix)
-#     lan_loglik = lan_logp_jax_func(
-#         net_input[:, 5:7],
-#         net_input[:, 0],
-#         net_input[:, 1],
-#         net_input[:, 2],
-#         net_input[:, 3],
-#         net_input[:, 4],
-#     )
-
-#     return lan_loglik
 
 
 def rlssm1_logp_inner_func(
@@ -328,7 +311,6 @@ def make_rldm_logp_op(n_participants: int, n_trials: int, n_params: int) -> Call
         A function that computes the log likelihood for the RLDM model.
     """
     logp = make_logp_func(n_participants, n_trials)
-    #vjp_logp = make_vjp_logp_func(logp, n_params)
     vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
 
     return make_jax_logp_ops(
