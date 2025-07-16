@@ -86,6 +86,7 @@ plugins:
         - tutorials/add_custom_rlssm_model.ipynb
         - tutorials/rlssm_tutorial.ipynb
         - tutorials/lapse_prob_and_dist.ipynb
+        - tutorials/plotting.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:
