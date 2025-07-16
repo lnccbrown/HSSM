@@ -5,6 +5,7 @@ from typing import Callable
 import jax
 import jax.numpy as jnp
 from jax.lax import dynamic_slice, scan
+from jax.scipy.special import logsumexp
 
 from ..distribution_utils.jax import make_jax_logp_ops
 from ..distribution_utils.func_utils import make_vjp_func
@@ -33,10 +34,21 @@ rlssm_model_config_list = {
         "extra_fields": ["participant_id", "trial_id", "feedback"], 
         "decision_model": "LAN", 
         "LAN": "angle", 
+    },
+
+    "rlwmssm_v2": {
+        "name": "rlwmssm_v2", 
+        "description": "Custom RLSSM with special features", 
+        "n_params": 10, 
+        "n_extra_fields": 6, 
+        "list_params": ['a', 'z', 'theta', 'alpha', 'phi', 'rho', 'gamma', 'epsilon', 'C', 'eta'], 
+        "extra_fields": ["participant_id", "set_size", "stimulus_id", "feedback", 'new_block_start', "unidim_mask"], 
+        "decision_model": "LAN", 
+        "LAN": "dev_lba_angle_3_v2", 
     }
 }
 
-MODEL_NAME = "rlssm1"
+MODEL_NAME = "rlwmssm_v2"
 MODEL_CONFIG = rlssm_model_config_list[MODEL_NAME]
 num_params = MODEL_CONFIG["n_params"]
 total_params = MODEL_CONFIG["n_params"] + MODEL_CONFIG["n_extra_fields"]
@@ -45,6 +57,10 @@ total_params = MODEL_CONFIG["n_params"] + MODEL_CONFIG["n_extra_fields"]
 lan_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
     model="angle.onnx",
 )
+
+jax_LAN_logp = make_jax_logp_funcs_from_onnx(
+    "/Users/krishnbera/Documents/revert_rldm/HSSM/tests/fixtures/dev_lba_angle_3_v2.onnx", [True] * 6
+)[0]
 
 
 def rlssm1_logp_inner_func(
@@ -222,9 +238,194 @@ def rlssm2_logp_inner_func(
     return LL.ravel()
 
 
+def jax_call_LAN(LAN_matrix, unidim_mask):
+    net_input = jnp.array(LAN_matrix)
+    LL = jax_LAN_logp(
+        net_input[:, 6:8],
+        net_input[:, 0],
+        net_input[:, 1],
+        net_input[:, 2],
+        net_input[:, 3],
+        net_input[:, 4],
+        net_input[:, 5],
+    )
+
+    LL = jnp.multiply(LL, (1 - unidim_mask))
+
+    return LL
+
+
+def jax_softmax(q_values, beta):
+    return jnp.exp(beta * q_values - logsumexp(beta * q_values))
+
+def rlwmssm_v2(
+    subj,
+    ntrials_subj,
+    data,
+    a,
+    z,
+    theta,
+    alpha,
+    phi,
+    rho,
+    gamma,
+    epsilon,
+    C,
+    eta,
+    participant_id,
+    set_size,
+    stimulus_id,
+    feedback,
+    new_block_start,
+    unidim_mask,
+):
+    
+    rt = data[:, 0]
+    response = data[:, 1]
+
+    num_actions = 3
+    beta = 100
+    subj = jnp.astype(subj, jnp.int32)
+
+    def init_block(bl_set_size, subj_rho, subj_C):
+        max_set_size = 5
+        set_size_mask = jnp.arange(max_set_size) >= bl_set_size
+        set_size_mask = set_size_mask[:, None]
+
+        q_RL = jnp.ones((max_set_size, num_actions)) / num_actions
+        q_RL = jnp.where(set_size_mask, -1000.0, q_RL)
+
+        q_WM = jnp.ones((max_set_size, num_actions)) / num_actions
+        q_WM = jnp.where(set_size_mask, -1000.0, q_WM)
+
+        weight = subj_rho * jnp.minimum(1, subj_C / bl_set_size)
+
+        return q_RL, q_WM, weight
+
+    def update_q_values(carry, inputs):
+        q_RL, q_WM, alpha, gamma, phi, num_actions = carry
+        state, action, reward = inputs
+
+        delta_RL = reward - q_RL[state, action]
+        delta_WM = reward - q_WM[state, action]
+
+        RL_alpha_factor = jnp.where(reward == 1, alpha, gamma * alpha)
+        WM_alpha_factor = jnp.where(reward == 1, 1.0, gamma)
+
+        q_RL = q_RL.at[state, action].set(
+            q_RL[state, action] + RL_alpha_factor * delta_RL
+        )
+        q_WM = q_WM.at[state, action].set(
+            q_WM[state, action] + WM_alpha_factor * delta_WM
+        )
+
+        q_WM = q_WM + phi * ((1 / num_actions) - q_WM)
+
+        return q_RL, q_WM
+
+    # Extracting the parameters for the specific subject
+    subj_a = dynamic_slice(a, [subj * ntrials_subj], [ntrials_subj])
+    subj_z = dynamic_slice(z, [subj * ntrials_subj], [ntrials_subj])
+    subj_theta = dynamic_slice(theta, [subj * ntrials_subj], [ntrials_subj])
+    subj_alpha = dynamic_slice(alpha, [subj * ntrials_subj], [ntrials_subj])
+    subj_alpha = jnp.exp(subj_alpha)
+    subj_phi = dynamic_slice(phi, [subj * ntrials_subj], [ntrials_subj])
+    subj_rho = dynamic_slice(rho, [subj * ntrials_subj], [ntrials_subj])
+    subj_gamma = dynamic_slice(gamma, [subj * ntrials_subj], [ntrials_subj])
+    subj_epsilon = dynamic_slice(epsilon, [subj * ntrials_subj], [ntrials_subj])
+    subj_C = dynamic_slice(C, [subj * ntrials_subj], [ntrials_subj])
+    subj_eta = dynamic_slice(eta, [subj * ntrials_subj], [ntrials_subj])
+
+    # Extracting the data for the specific subject
+    subj_set_size = dynamic_slice(
+        set_size, [subj * ntrials_subj], [ntrials_subj]
+    )
+    subj_stimulus_id = dynamic_slice(
+        stimulus_id, [subj * ntrials_subj], [ntrials_subj]
+    )
+    subj_response = dynamic_slice(
+        response, [subj * ntrials_subj], [ntrials_subj]
+    )
+    subj_feedback = dynamic_slice(
+        feedback, [subj * ntrials_subj], [ntrials_subj]
+    )
+    subj_new_block_start = dynamic_slice(
+        new_block_start, [subj * ntrials_subj], [ntrials_subj]
+    )
+    subj_unidim_mask = dynamic_slice(
+        unidim_mask, [subj * ntrials_subj], [ntrials_subj]
+    )
+    subj_rt = dynamic_slice(rt, [subj * ntrials_subj], [ntrials_subj])
+
+    LAN_matrix_init = jnp.zeros((ntrials_subj, 8))
+
+    def process_trial(carry, inputs):
+        q_RL, q_WM, weight, LL, LAN_matrix, t = carry
+        bl_set_size, state, action, rt, reward, new_block = inputs
+        state = jnp.astype(state, jnp.int32)
+        action = jnp.astype(action, jnp.int32)
+
+        q_RL, q_WM, weight = jax.lax.cond(
+            new_block == 1,
+            lambda _: init_block(bl_set_size, subj_rho[t], subj_C[t]),
+            lambda _: (q_RL, q_WM, weight),
+            None,
+        )
+
+        pol_RL = jax_softmax(q_RL[state, :], beta)
+        pol_WM = jax_softmax(q_WM[state, :], beta)
+
+        pol = weight * pol_WM + (1 - weight) * pol_RL
+        pol = (
+            subj_epsilon[t] * (jnp.ones_like(pol) * 1 / num_actions)
+            + (1 - subj_epsilon[t]) * pol
+        )
+        pol_final = pol * subj_eta[t]
+
+        q_RL, q_WM = update_q_values(
+            (q_RL, q_WM, subj_alpha[t], subj_gamma[t], subj_phi[t], num_actions),
+            (state, action, reward),
+        )
+
+        LAN_matrix = LAN_matrix.at[t, :].set(
+            jnp.array(
+                [
+                    pol_final[0],
+                    pol_final[1],
+                    pol_final[2],
+                    subj_a[t],
+                    subj_z[t],
+                    subj_theta[t],
+                    rt,
+                    action,
+                ]
+            )
+        )
+
+        return (q_RL, q_WM, weight, LL, LAN_matrix, t + 1), None
+
+
+    q_RL, q_WM, weight = init_block(5, 0, 5)
+    trials = (
+        subj_set_size,
+        subj_stimulus_id,
+        subj_response,
+        subj_rt,
+        subj_feedback,
+        subj_new_block_start,
+    )
+    (q_RL, q_WM, weight, LL, LAN_matrix, _), _ = jax.lax.scan(
+        process_trial, (q_RL, q_WM, weight, 0.0, LAN_matrix_init, 0), trials
+    )
+
+    LL = jax_call_LAN(LAN_matrix, subj_unidim_mask)
+    
+    return LL.ravel()
+
+
 rldm_logp_inner_func_vmapped = jax.vmap(
-    rlssm1_logp_inner_func,  
-    in_axes=[0] + [None] * (total_params + 1),
+    rlwmssm_v2,  
+    in_axes=[0] + [None] * (total_params + 2),
 )
 
 
@@ -269,28 +470,40 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
         jnp.ndarray
             The log likelihoods for each subject.
         """
-        participant_id = dist_params[6]
-        trial = dist_params[7]
-        feedback = dist_params[8]
+
+        participant_id = dist_params[num_params]
+        set_size = dist_params[num_params + 1]
+        stimulus_id = dist_params[num_params + 2]
+        feedback = dist_params[num_params + 3]
+        new_block_start = dist_params[num_params + 4]
+        unidim_mask = dist_params[num_params + 5]
 
         subj = jnp.unique(participant_id, size=n_participants).astype(jnp.int32)
 
         # create parameter arrays to be passed to the likelihood function
-        rl_alpha, scaler, a, z, t, theta = dist_params[:num_params]
+        a, z, theta, alpha, phi, rho, gamma, epsilon, C, eta = dist_params[:num_params]
 
         return vec_logp(
             subj,
             n_trials,
             data,
-            rl_alpha,
-            scaler,
             a,
             z,
-            t,
             theta,
-            trial,
+            alpha,
+            phi,
+            rho,
+            gamma,
+            epsilon,
+            C,
+            eta,
+            participant_id,
+            set_size,
+            stimulus_id,
             feedback,
-        )
+            new_block_start,
+            unidim_mask,
+        )   
 
     return logp
 
