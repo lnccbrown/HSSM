@@ -16,7 +16,8 @@ from ..distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 rlssm_model_config_list = {
     "rlssm1": {
         "name": "rlssm1", 
-        "description": "Custom RLSSM with special features", 
+        "description": "RLSSM model where the learning process is a simple Rescorla-Wagner model in a 2-armed bandit task. \
+                        The decision process is a collapsing bound DDM (angle model).",
         "n_params": 6, 
         "n_extra_fields": 3, 
         "list_params": ["rl.alpha", "scaler", "a", "Z", "t", "theta"], 
@@ -27,7 +28,9 @@ rlssm_model_config_list = {
 
     "rlssm2": {
         "name": "rlssm2", 
-        "description": "Custom RLSSM with special features", 
+        "description": "RLSSM model where the learning process is a simple Rescorla-Wagner model in a 2-armed bandit task. \
+                        The decision process is a collapsing bound DDM (angle model). Same as rlssm1, but with dual learning rates for positive and negative prediction errors. \
+                        This model is meant to serve as a tutorial for showing how to implement a custom RLSSM model in HSSM.", 
         "n_params": 7, 
         "n_extra_fields": 3, 
         "list_params": ["rl.alpha", "rl.alpha_neg", "scaler", "a", "Z", "t", "theta"], 
@@ -38,7 +41,8 @@ rlssm_model_config_list = {
 
     "rlwmssm_v2": {
         "name": "rlwmssm_v2", 
-        "description": "Custom RLSSM with special features", 
+        "description": "RLSSM model where the learning process is the RLWM model (see Collins & Frank, 2012 for details).  \
+                        The decision process is a collapsing bound LBA (LBA angle model). ", 
         "n_params": 10, 
         "n_extra_fields": 6, 
         "list_params": ['a', 'z', 'theta', 'alpha', 'phi', 'rho', 'gamma', 'epsilon', 'C', 'eta'], 
@@ -48,7 +52,7 @@ rlssm_model_config_list = {
     }
 }
 
-MODEL_NAME = "rlwmssm_v2"
+MODEL_NAME = "rlssm1"
 MODEL_CONFIG = rlssm_model_config_list[MODEL_NAME]
 num_params = MODEL_CONFIG["n_params"]
 total_params = MODEL_CONFIG["n_params"] + MODEL_CONFIG["n_extra_fields"]
@@ -62,7 +66,7 @@ jax_LAN_logp = make_jax_logp_funcs_from_onnx(
     "/Users/krishnbera/Documents/revert_rldm/HSSM/tests/fixtures/dev_lba_angle_3_v2.onnx", [True] * 6
 )[0]
 
-
+# RLSSM model likelihood function
 def rlssm1_logp_inner_func(
     subj,
     ntrials_subj,
@@ -147,7 +151,7 @@ def rlssm1_logp_inner_func(
 
     return LL.ravel()
 
-
+# RLSSM model liklihood function
 def rlssm2_logp_inner_func(
     subj,
     ntrials_subj,
@@ -238,6 +242,7 @@ def rlssm2_logp_inner_func(
     return LL.ravel()
 
 
+# auxiliary function for the RLWMSSM model
 def jax_call_LAN(LAN_matrix, unidim_mask):
     net_input = jnp.array(LAN_matrix)
     LL = jax_LAN_logp(
@@ -254,11 +259,12 @@ def jax_call_LAN(LAN_matrix, unidim_mask):
 
     return LL
 
-
+# auxiliary function for the RLWMSSM model
 def jax_softmax(q_values, beta):
     return jnp.exp(beta * q_values - logsumexp(beta * q_values))
 
-def rlwmssm_v2(
+# RLSSM model likelihood function
+def rlwmssm_v2_inner_func(
     subj,
     ntrials_subj,
     data,
@@ -424,8 +430,8 @@ def rlwmssm_v2(
 
 
 rldm_logp_inner_func_vmapped = jax.vmap(
-    rlwmssm_v2,  
-    in_axes=[0] + [None] * (total_params + 2),
+    rlssm1_logp_inner_func,  
+    in_axes=[0] + [None] * (total_params + 1),
 )
 
 
@@ -455,6 +461,7 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
         A function that computes the log likelihood for the RLDM model.
     """
 
+    # Ensure parameters are correctly extracted and passed to your custom function.
     def logp(data, *dist_params) -> jnp.ndarray:
         """Compute the log likelihood for the RLDM model.
 
@@ -471,39 +478,30 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
             The log likelihoods for each subject.
         """
 
+        # Extract extra fields (adjust indices based on your model)
         participant_id = dist_params[num_params]
-        set_size = dist_params[num_params + 1]
-        stimulus_id = dist_params[num_params + 2]
-        feedback = dist_params[num_params + 3]
-        new_block_start = dist_params[num_params + 4]
-        unidim_mask = dist_params[num_params + 5]
+        trial = dist_params[num_params + 1]
+        feedback = dist_params[num_params + 2]
 
         subj = jnp.unique(participant_id, size=n_participants).astype(jnp.int32)
 
         # create parameter arrays to be passed to the likelihood function
-        a, z, theta, alpha, phi, rho, gamma, epsilon, C, eta = dist_params[:num_params]
+        rl_alpha, scaler, a, z, t, theta = dist_params[:num_params]
 
+        # pass the parameters and data to the likelihood function
         return vec_logp(
             subj,
             n_trials,
             data,
+            rl_alpha,
+            scaler,
             a,
             z,
+            t,
             theta,
-            alpha,
-            phi,
-            rho,
-            gamma,
-            epsilon,
-            C,
-            eta,
-            participant_id,
-            set_size,
-            stimulus_id,
+            trial,
             feedback,
-            new_block_start,
-            unidim_mask,
-        )   
+        )
 
     return logp
 
