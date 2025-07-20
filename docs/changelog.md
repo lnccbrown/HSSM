@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.2.8
+
+This version of HSSM incorporated the following changes:
+
+1. Bugfix in `mkdocs.yml`. No tutorial notebooks should be actively executed when re-building docs.
+
 ### 0.2.7
 
 This version of HSSM incorporated the following changes:
