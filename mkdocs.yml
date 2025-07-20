@@ -87,6 +87,7 @@ plugins:
         - tutorials/hssm_tutorial_workshop_2.ipynb
         - tutorials/add_custom_rlssm_model.ipynb
         - tutorials/rlssm_tutorial.ipynb
+        - tutorials/rlssm_rlwm_model.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:

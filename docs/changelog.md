@@ -4,7 +4,8 @@
 
 This version of HSSM incorporated the following changes:
 
-1. Bugfix in `mkdocs.yml`. No tutorial notebooks should be actively executed when re-building docs.
+1. Addition of tutorials for RLSSM paradigms. 
+2. Restructure `rldm.py` to make it more template-based to allow easy introduction of new models. 
 
 ### 0.2.7
 
