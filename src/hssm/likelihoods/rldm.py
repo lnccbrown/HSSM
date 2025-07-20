@@ -7,55 +7,90 @@ import jax.numpy as jnp
 from jax.lax import dynamic_slice, scan
 from jax.scipy.special import logsumexp
 
-from ..distribution_utils.jax import make_jax_logp_ops
 from ..distribution_utils.func_utils import make_vjp_func
-from ..distribution_utils.onnx import make_jax_logp_funcs_from_onnx
+from ..distribution_utils.jax import make_jax_logp_ops
+
 # from ..onnx_utils.model import download_hf
-from ..distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
+from ..distribution_utils.onnx import (
+    make_jax_logp_funcs_from_onnx,
+    make_jax_matrix_logp_funcs_from_onnx,
+)
 
 rlssm_model_config_list = {
     "rlssm1": {
-        "name": "rlssm1", 
-        "description": "RLSSM model where the learning process is a simple Rescorla-Wagner model in a 2-armed bandit task. \
+        "name": "rlssm1",
+        "description": "RLSSM model where the learning process is a simple  \
+                        Rescorla-Wagner model in a 2-armed bandit task. \
                         The decision process is a collapsing bound DDM (angle model).",
-        "n_params": 6, 
-        "n_extra_fields": 3, 
-        "list_params": ["rl.alpha", "scaler", "a", "Z", "t", "theta"], 
-        "extra_fields": ["participant_id", "trial_id", "feedback"], 
-        "decision_model": "LAN", 
-        "LAN": "angle", 
+        "n_params": 6,
+        "n_extra_fields": 3,
+        "list_params": ["rl.alpha", "scaler", "a", "Z", "t", "theta"],
+        "extra_fields": ["participant_id", "trial_id", "feedback"],
+        "decision_model": "LAN",
+        "LAN": "angle",
     },
-
     "rlssm2": {
-        "name": "rlssm2", 
-        "description": "RLSSM model where the learning process is a simple Rescorla-Wagner model in a 2-armed bandit task. \
-                        The decision process is a collapsing bound DDM (angle model). Same as rlssm1, but with dual learning rates for positive and negative prediction errors. \
-                        This model is meant to serve as a tutorial for showing how to implement a custom RLSSM model in HSSM.", 
-        "n_params": 7, 
-        "n_extra_fields": 3, 
-        "list_params": ["rl.alpha", "rl.alpha_neg", "scaler", "a", "Z", "t", "theta"], 
-        "extra_fields": ["participant_id", "trial_id", "feedback"], 
-        "decision_model": "LAN", 
-        "LAN": "angle", 
+        "name": "rlssm2",
+        "description": "RLSSM model where the learning process is a simple \
+                        Rescorla-Wagner model in a 2-armed bandit task. \
+                        The decision process is a collapsing bound DDM (angle model). \
+                        Same as rlssm1, but with dual learning rates for positive and \
+                         negative prediction errors. \
+                        This model is meant to serve as a tutorial for showing how to  \
+                         implement a custom RLSSM model in HSSM.",
+        "n_params": 7,
+        "n_extra_fields": 3,
+        "list_params": ["rl.alpha", "rl.alpha_neg", "scaler", "a", "Z", "t", "theta"],
+        "extra_fields": ["participant_id", "trial_id", "feedback"],
+        "decision_model": "LAN",
+        "LAN": "angle",
     },
-
     "rlwmssm_v2": {
-        "name": "rlwmssm_v2", 
-        "description": "RLSSM model where the learning process is the RLWM model (see Collins & Frank, 2012 for details).  \
-                        The decision process is a collapsing bound LBA (LBA angle model). ", 
-        "n_params": 10, 
-        "n_extra_fields": 6, 
-        "list_params": ['a', 'z', 'theta', 'alpha', 'phi', 'rho', 'gamma', 'epsilon', 'C', 'eta'], 
-        "extra_fields": ["participant_id", "set_size", "stimulus_id", "feedback", 'new_block_start', "unidim_mask"], 
-        "decision_model": "LAN", 
-        "LAN": "dev_lba_angle_3_v2", 
-    }
+        "name": "rlwmssm_v2",
+        "description": "RLSSM model where the learning process is the RLWM model \
+                        (see Collins & Frank, 2012 for details).  \
+                        The decision process is a collapsing bound LBA \
+                            (LBA angle model). ",
+        "n_params": 10,
+        "n_extra_fields": 6,
+        "list_params": [
+            "a",
+            "z",
+            "theta",
+            "alpha",
+            "phi",
+            "rho",
+            "gamma",
+            "epsilon",
+            "C",
+            "eta",
+        ],
+        "extra_fields": [
+            "participant_id",
+            "set_size",
+            "stimulus_id",
+            "feedback",
+            "new_block_start",
+            "unidim_mask",
+        ],
+        "decision_model": "LAN",
+        "LAN": "dev_lba_angle_3_v2",
+    },
 }
 
 MODEL_NAME = "rlssm1"
 MODEL_CONFIG = rlssm_model_config_list[MODEL_NAME]
-num_params = MODEL_CONFIG["n_params"]
-total_params = MODEL_CONFIG["n_params"] + MODEL_CONFIG["n_extra_fields"]
+
+if not isinstance(MODEL_CONFIG["n_extra_fields"], int) or not isinstance(
+    MODEL_CONFIG["n_params"], int
+):
+    raise ValueError(
+        f"Expected 'n_extra_fields' to be an int, \
+            got {type(MODEL_CONFIG['n_extra_fields'])}."
+    )
+num_params = int(MODEL_CONFIG["n_params"])
+num_extra_fields = int(MODEL_CONFIG["n_extra_fields"])
+total_params = num_params + num_extra_fields
 
 
 lan_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
@@ -63,8 +98,10 @@ lan_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
 )
 
 jax_LAN_logp = make_jax_logp_funcs_from_onnx(
-    "/Users/krishnbera/Documents/revert_rldm/HSSM/tests/fixtures/dev_lba_angle_3_v2.onnx", [True] * 6
+    "/Users/krishnbera/Documents/revert_rldm/HSSM/tests/fixtures/dev_lba_angle_3_v2.onnx",
+    [True] * 6,
 )[0]
+
 
 # RLSSM model likelihood function
 def rlssm1_logp_inner_func(
@@ -151,6 +188,7 @@ def rlssm1_logp_inner_func(
 
     return LL.ravel()
 
+
 # RLSSM model liklihood function
 def rlssm2_logp_inner_func(
     subj,
@@ -174,7 +212,9 @@ def rlssm2_logp_inner_func(
 
     # Extracting the parameters and data for the specific subject
     subj_rl_alpha = dynamic_slice(rl_alpha, [subj * ntrials_subj], [ntrials_subj])
-    subj_rl_alpha_neg = dynamic_slice(rl_alpha_neg, [subj * ntrials_subj], [ntrials_subj])
+    subj_rl_alpha_neg = dynamic_slice(
+        rl_alpha_neg, [subj * ntrials_subj], [ntrials_subj]
+    )
     subj_scaler = dynamic_slice(scaler, [subj * ntrials_subj], [ntrials_subj])
     subj_a = dynamic_slice(a, [subj * ntrials_subj], [ntrials_subj])
     subj_z = dynamic_slice(z, [subj * ntrials_subj], [ntrials_subj])
@@ -210,7 +250,8 @@ def rlssm2_logp_inner_func(
         # compute the reward prediction error
         delta_RL = reward - q_val[action]
 
-        # if delta_RL < 0, use learning rate subj_rl_alpha_neg[t] else use subj_rl_alpha[t]
+        # if delta_RL < 0, use learning rate subj_rl_alpha_neg[t]
+        # else use subj_rl_alpha[t]
         rl_alpha_t = jnp.where(delta_RL < 0, subj_rl_alpha_neg[t], subj_rl_alpha[t])
 
         # update the q-values using the RL learning rule (here, simple TD rule)
@@ -244,6 +285,12 @@ def rlssm2_logp_inner_func(
 
 # auxiliary function for the RLWMSSM model
 def jax_call_LAN(LAN_matrix, unidim_mask):
+    """
+    Call the LAN log likelihood function with the LAN matrix and unidim_mask.
+
+    The unidim_mask is used to mask out the log likelihoods for the
+    flagged unidimensional trials.
+    """
     net_input = jnp.array(LAN_matrix)
     LL = jax_LAN_logp(
         net_input[:, 6:8],
@@ -259,9 +306,12 @@ def jax_call_LAN(LAN_matrix, unidim_mask):
 
     return LL
 
+
 # auxiliary function for the RLWMSSM model
 def jax_softmax(q_values, beta):
+    """Compute the softmax of q_values with temperature beta."""
     return jnp.exp(beta * q_values - logsumexp(beta * q_values))
+
 
 # RLSSM model likelihood function
 def rlwmssm_v2_inner_func(
@@ -285,7 +335,7 @@ def rlwmssm_v2_inner_func(
     new_block_start,
     unidim_mask,
 ):
-    
+    """Compute the log likelihood for a given subject using the RLWMSSM model."""
     rt = data[:, 0]
     response = data[:, 1]
 
@@ -343,24 +393,14 @@ def rlwmssm_v2_inner_func(
     subj_eta = dynamic_slice(eta, [subj * ntrials_subj], [ntrials_subj])
 
     # Extracting the data for the specific subject
-    subj_set_size = dynamic_slice(
-        set_size, [subj * ntrials_subj], [ntrials_subj]
-    )
-    subj_stimulus_id = dynamic_slice(
-        stimulus_id, [subj * ntrials_subj], [ntrials_subj]
-    )
-    subj_response = dynamic_slice(
-        response, [subj * ntrials_subj], [ntrials_subj]
-    )
-    subj_feedback = dynamic_slice(
-        feedback, [subj * ntrials_subj], [ntrials_subj]
-    )
+    subj_set_size = dynamic_slice(set_size, [subj * ntrials_subj], [ntrials_subj])
+    subj_stimulus_id = dynamic_slice(stimulus_id, [subj * ntrials_subj], [ntrials_subj])
+    subj_response = dynamic_slice(response, [subj * ntrials_subj], [ntrials_subj])
+    subj_feedback = dynamic_slice(feedback, [subj * ntrials_subj], [ntrials_subj])
     subj_new_block_start = dynamic_slice(
         new_block_start, [subj * ntrials_subj], [ntrials_subj]
     )
-    subj_unidim_mask = dynamic_slice(
-        unidim_mask, [subj * ntrials_subj], [ntrials_subj]
-    )
+    subj_unidim_mask = dynamic_slice(unidim_mask, [subj * ntrials_subj], [ntrials_subj])
     subj_rt = dynamic_slice(rt, [subj * ntrials_subj], [ntrials_subj])
 
     LAN_matrix_init = jnp.zeros((ntrials_subj, 8))
@@ -410,7 +450,6 @@ def rlwmssm_v2_inner_func(
 
         return (q_RL, q_WM, weight, LL, LAN_matrix, t + 1), None
 
-
     q_RL, q_WM, weight = init_block(5, 0, 5)
     trials = (
         subj_set_size,
@@ -425,12 +464,12 @@ def rlwmssm_v2_inner_func(
     )
 
     LL = jax_call_LAN(LAN_matrix, subj_unidim_mask)
-    
+
     return LL.ravel()
 
 
 rldm_logp_inner_func_vmapped = jax.vmap(
-    rlssm1_logp_inner_func,  
+    rlssm1_logp_inner_func,
     in_axes=[0] + [None] * (total_params + 1),
 )
 
@@ -477,7 +516,6 @@ def make_logp_func(n_participants: int, n_trials: int) -> Callable:
         jnp.ndarray
             The log likelihoods for each subject.
         """
-
         # Extract extra fields (adjust indices based on your model)
         participant_id = dist_params[num_params]
         trial = dist_params[num_params + 1]
