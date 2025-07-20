@@ -98,7 +98,7 @@ lan_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
 )
 
 jax_LAN_logp = make_jax_logp_funcs_from_onnx(
-    "/Users/krishnbera/Documents/revert_rldm/HSSM/tests/fixtures/dev_lba_angle_3_v2.onnx",
+    "../../tests/fixtures/dev_lba_angle_3_v2.onnx",
     [True] * 6,
 )[0]
 
