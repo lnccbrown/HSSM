@@ -1,9 +1,6 @@
-from re import T
 import numpy as np
 import pytest
 import hssm
-from hssm import HSSM
-from hssm.utils import download_hf
 import logging
 
 hssm.set_floatX("float32", update_jax=True)
@@ -36,6 +33,7 @@ parameter_grid = [
 ]
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_sample_map(caplog, loglik_kind, model, sampler, initvals):
     """Test sampling from MAP starting point."""
@@ -136,6 +134,7 @@ def _check_initval_defaults_correctness(model) -> None:
             pass
 
 
+@pytest.mark.slow
 def test_basic_model(caplog):
     """Test basic model with p_outlier distribution defined."""
     caplog.set_level(logging.INFO)
@@ -149,6 +148,7 @@ def test_basic_model(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.slow
 def test_basic_model_p_outlier(caplog):
     """Test basic model with p_outlier distribution defined."""
     caplog.set_level(logging.INFO)
@@ -163,6 +163,7 @@ def test_basic_model_p_outlier(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.slow
 def test_basic_model_p_outlier_initval(caplog):
     """Test basic model with p_outlier distribution defined."""
     caplog.set_level(logging.INFO)
@@ -180,6 +181,7 @@ def test_basic_model_p_outlier_initval(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.slow
 def test_reg_model(caplog):
     """Test regression model, with regression on all parameters."""
     caplog.set_level(logging.INFO)
@@ -199,6 +201,7 @@ def test_reg_model(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.slow
 def test_reg_model_subset(caplog):
     """Test regression model, with subset of parameters being regressions."""
     caplog.set_level(logging.INFO)
@@ -217,6 +220,7 @@ def test_reg_model_subset(caplog):
     )
 
 
+@pytest.mark.slow
 def test_angle_model_reg(caplog):
     """Test with angle model regression."""
     caplog.set_level(logging.INFO)
@@ -237,6 +241,7 @@ def test_angle_model_reg(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.slow
 def test_angle_model(caplog):
     """Test with angle model basic."""
     caplog.set_level(logging.INFO)
@@ -250,6 +255,7 @@ def test_angle_model(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.slow
 def test_process_no_process(caplog):
     """Test mismatch with and without preprocessing."""
     caplog.set_level(logging.INFO)

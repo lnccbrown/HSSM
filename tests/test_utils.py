@@ -15,6 +15,7 @@ from hssm.utils import (
 hssm.set_floatX("float32")
 
 
+@pytest.mark.slow
 def test_get_alias_dict():
     # Simulate some data:
     v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 0.5]
@@ -163,3 +164,67 @@ def test__random_sample(
 
     assertions(caplog, posterior, n_samples, expected)
     assertions(caplog, posterior_predictive, n_samples, expected)
+
+
+def test_check_data_for_rl():
+    # Valid DataFrame
+    data_valid = pd.DataFrame(
+        {
+            "participant_id": [2, 2, 1, 1],
+            "trial_id": [1, 2, 1, 2],
+            "value": [10, 20, 30, 40],
+        }
+    )
+    sorted_data, n_participants, n_trials = hssm.utils.check_data_for_rl(data_valid)
+    # Check sorting
+    assert list(sorted_data["participant_id"]) == [1, 1, 2, 2]
+    assert list(sorted_data["trial_id"]) == [1, 2, 1, 2]
+    assert n_participants == 2
+    assert n_trials == 2
+
+    # Missing participant_id column
+    data_missing_participant = pd.DataFrame(
+        {
+            "trial_id": [1, 2, 1, 2],
+            "value": [10, 20, 30, 40],
+        }
+    )
+    with pytest.raises(ValueError, match="participant_id"):
+        hssm.utils.check_data_for_rl(data_missing_participant)
+
+    # Missing trial_id column
+    data_missing_trial = pd.DataFrame(
+        {
+            "participant_id": [1, 1, 2, 2],
+            "value": [10, 20, 30, 40],
+        }
+    )
+    with pytest.raises(ValueError, match="trial_id"):
+        hssm.utils.check_data_for_rl(data_missing_trial)
+
+    # Unequal number of trials per participant
+    data_unequal_trials = pd.DataFrame(
+        {
+            "participant_id": [1, 1, 2],
+            "trial_id": [1, 2, 1],
+            "value": [10, 20, 30],
+        }
+    )
+    with pytest.raises(ValueError, match="same number of trials"):
+        hssm.utils.check_data_for_rl(data_unequal_trials)
+
+    # Custom column names
+    data_custom_cols = pd.DataFrame(
+        {
+            "subj": [1, 1, 2, 2],
+            "trial": [1, 2, 1, 2],
+            "value": [10, 20, 30, 40],
+        }
+    )
+    sorted_data, n_participants, n_trials = hssm.utils.check_data_for_rl(
+        data_custom_cols, participant_id_col="subj", trial_id_col="trial"
+    )
+    assert list(sorted_data["subj"]) == [1, 1, 2, 2]
+    assert list(sorted_data["trial"]) == [1, 2, 1, 2]
+    assert n_participants == 2
+    assert n_trials == 2

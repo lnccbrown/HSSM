@@ -3,6 +3,7 @@ import numpy as np
 import pymc as pm
 import pytest
 import pytensor.tensor as pt
+from unittest.mock import patch
 
 import hssm
 from hssm import distribution_utils
@@ -121,6 +122,7 @@ def test_apply_param_bounds_to_loglik():
     )
 
 
+@pytest.mark.slow
 def test_make_distribution():
     def fake_logp_function(data, param1, param2):
         """Make up a fake log likelihood function for this test only."""
@@ -165,6 +167,7 @@ def test_make_distribution():
     )
 
 
+@pytest.mark.slow
 def test_extra_fields(data_ddm):
     ones = np.ones(data_ddm.shape[0])
     x = ones * 0.5
@@ -231,6 +234,7 @@ def test_extra_fields(data_ddm):
     )
 
 
+@pytest.mark.slow
 def test_ensure_positive_ndt():
     data = np.zeros((1000, 2))
     data[:, 0] = np.random.uniform(size=1000)
@@ -245,3 +249,44 @@ def test_ensure_positive_ndt():
 
     assert np.all(after_replacement[mask] == np.array(-66.1))
     assert np.all(after_replacement[~mask] == logp[~mask])
+
+
+def test_make_likelihood_callable():
+    """Test the make_likelihood_callable function."""
+
+    def mock_func(*args, **kwargs):
+        return 1, 2, 3
+
+    with patch(
+        "hssm.distribution_utils.dist.make_jax_logp_funcs_from_callable",
+        return_value=("mocked_function", "mocked_grad", "mocked_nojit"),
+    ) as mock_make_jax_logp_funcs:
+        distribution_utils.make_likelihood_callable(
+            loglik=mock_func,
+            loglik_kind="analytical",
+            backend="jax",
+            params_only=False,
+        )
+
+        mock_make_jax_logp_funcs.assert_called_once_with(
+            mock_func, vmap=False, params_only=False
+        )
+
+    with patch(
+        "hssm.distribution_utils.dist.make_jax_logp_funcs_from_callable",
+        return_value=("mocked_function", "mocked_grad", "mocked_nojit"),
+    ) as mock_make_jax_logp_funcs:
+        distribution_utils.make_likelihood_callable(
+            loglik=mock_func,
+            loglik_kind="approx_differentiable",
+            params_is_reg=[False, False, False, False],
+            backend="jax",
+            params_only=False,
+        )
+
+        mock_make_jax_logp_funcs.assert_called_once_with(
+            mock_func,
+            vmap=True,
+            params_only=False,
+            params_is_reg=[False, False, False, False],
+        )
