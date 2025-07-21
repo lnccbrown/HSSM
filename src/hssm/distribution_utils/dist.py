@@ -8,32 +8,27 @@ generation ops.
 import logging
 from functools import partial
 from os import PathLike
-from pathlib import Path
-from typing import Any, Callable, Literal, Type
+from typing import Any, Callable, Literal, Type, cast
 
 import bambi as bmb
 import numpy as np
-import onnx
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
-from numpy.typing import ArrayLike
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
 
-from ..utils import decorate_atomic_simulator, download_hf, ssms_sim_wrapper
+from .._types import LogLikeFunc
+from ..utils import decorate_atomic_simulator, ssms_sim_wrapper
 from .blackbox import make_blackbox_op
+from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
-    make_jax_logp_funcs_from_jax_callable,
     make_jax_logp_funcs_from_onnx,
-    make_jax_logp_ops,
-    make_pytensor_logp,
+    make_pytensor_logp_from_onnx,
 )
-
-LogLikeFunc = Callable[..., ArrayLike]
-LogLikeGrad = Callable[..., ArrayLike]
+from .onnx_utils.model import load_onnx_model
 
 _logger = logging.getLogger("hssm")
 
@@ -370,45 +365,96 @@ def make_hssm_rv(
                         (*max_shape[:-1], max_shape[-1], n_replicas, obs_dim_int)
                     )
 
-            if p_outlier is not None:
-                assert cls._lapse is not None, (
-                    "You have specified `p_outlier`, the probability of the lapse "
-                    + "distribution but did not specify the distribution."
-                )
-                out_shape = sims_out.shape[:-1]
-                if not np.isscalar(p_outlier) and len(p_outlier.shape) > 0:
-                    if p_outlier.shape[-1] == 1:
-                        p_outlier = np.broadcast_to(p_outlier, out_shape)
-                    else:
-                        p_outlier = p_outlier.reshape(out_shape)
-
-                replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
-                replace_n = int(np.sum(replace, axis=None))
-                if replace_n == 0:
-                    return sims_out
-
-                replace_shape = (*out_shape[:-1], replace_n)
-                replace_mask = np.stack([replace, replace], axis=-1)
-                n_draws = np.prod(replace_shape)
-                lapse_rt = pm.draw(
-                    get_distribution_from_prior(cls._lapse).dist(**cls._lapse.args),
-                    n_draws,
-                    random_seed=rng,
-                ).reshape(replace_shape)
-
-                lapse_response = rng.choice(
-                    choices,
-                    p=1 / len(choices) * np.ones(len(choices)),
-                    size=replace_shape,
-                )
-                lapse_output = np.stack(
-                    [lapse_rt, lapse_response],
-                    axis=-1,
-                )
-                np.putmask(sims_out, replace_mask, lapse_output)
+            sims_out = _apply_lapse_model(
+                sims_out=sims_out,
+                p_outlier=p_outlier,
+                rng=rng,
+                lapse_dist=cls._lapse,
+                choices=choices,
+            )
             return sims_out
 
     return HSSMRV
+
+
+def _apply_lapse_model(
+    sims_out: np.ndarray,
+    p_outlier: np.ndarray | float | None,
+    rng: np.random.Generator,
+    lapse_dist: bmb.Prior | None,
+    choices: list,
+) -> np.ndarray:
+    """Apply lapse model to the simulation output.
+
+    Parameters
+    ----------
+    sims_out : np.ndarray
+        The simulation output to apply lapse model to
+    p_outlier : np.ndarray | float
+        Probability of outlier/lapse for each trial
+    rng : np.random.Generator
+        Random number generator
+    lapse_dist : bmb.Prior
+        The lapse distribution to draw from
+    choices : list
+        List of possible choices
+
+    Returns
+    -------
+    np.ndarray
+        The simulation output with lapse model applied
+    """
+    if p_outlier is None:
+        return sims_out
+
+    if lapse_dist is None:
+        raise ValueError(
+            "You have specified `p_outlier`, the probability of the lapse "
+            "distribution but did not specify the distribution."
+        )
+
+    out_shape = sims_out.shape[:-1]
+
+    # Handle p_outlier shape/type to ensure consistent shape:
+    # - 0-dim numpy array (scalar array) -> convert to float
+    # - 1-dim array with single value -> broadcast to match output shape
+    # - n-dim array -> reshape to match output shape
+    # - Python scalar (float) -> fill array of output shape
+    if isinstance(p_outlier, np.ndarray):
+        if p_outlier.ndim == 0:  # scalar array
+            p_outlier = float(p_outlier)
+        elif p_outlier.shape[-1] == 1:  # vector with single value
+            p_outlier = np.broadcast_to(p_outlier, out_shape)
+        else:  # reshape to match output shape
+            p_outlier = p_outlier.reshape(out_shape)
+    else:  # p_outlier is a float/scalar
+        p_outlier = np.full(out_shape, p_outlier)
+
+    replace = rng.binomial(n=1, p=p_outlier, size=out_shape).astype(bool)
+    replace_n = int(np.sum(replace, axis=None))
+    if replace_n == 0:
+        return sims_out
+
+    replace_shape = (*out_shape[:-1], replace_n)
+    replace_mask = np.stack([replace, replace], axis=-1)
+    n_draws = np.prod(replace_shape)
+    lapse_rt = pm.draw(
+        get_distribution_from_prior(lapse_dist).dist(**lapse_dist.args),
+        n_draws,
+        random_seed=rng,
+    ).reshape(replace_shape)
+
+    lapse_response = rng.choice(
+        choices,
+        p=1 / len(choices) * np.ones(len(choices)),
+        size=replace_shape,
+    )
+    lapse_output = np.stack(
+        [lapse_rt, lapse_response],
+        axis=-1,
+    )
+    np.putmask(sims_out, replace_mask, lapse_output)
+    return sims_out
 
 
 def make_distribution(
@@ -646,7 +692,13 @@ def make_likelihood_callable(
         if loglik_kind == "analytical":
             if backend is None or backend == "pytensor":
                 return loglik
-            return make_blackbox_op(loglik)
+            logp_funcs = make_jax_logp_funcs_from_callable(
+                loglik,
+                vmap=False,
+                params_only=False if params_only is None else params_only,
+            )
+            lan_logp_jax = make_jax_logp_ops(*logp_funcs)
+            return lan_logp_jax
         elif loglik_kind == "blackbox":
             return make_blackbox_op(loglik)
         elif loglik_kind == "approx_differentiable":
@@ -657,12 +709,13 @@ def make_likelihood_callable(
                         + "and `backend` to `jax` and supplied a jax callable, "
                         + "but did not set `params_is_reg`."
                     )
-                logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_jax_callable(
+                logp_funcs = make_jax_logp_funcs_from_callable(
                     loglik,
-                    params_is_reg,
+                    vmap=True,
+                    params_is_reg=params_is_reg,
                     params_only=False if params_only is None else params_only,
                 )
-                lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+                lan_logp_jax = make_jax_logp_ops(*logp_funcs)
                 return lan_logp_jax
             if backend == "pytensor":
                 raise ValueError(
@@ -686,14 +739,11 @@ def make_likelihood_callable(
             + "as `loglik`."
         )
 
-    if isinstance(loglik, (str, PathLike)):
-        if not Path(loglik).exists():
-            loglik = download_hf(str(loglik))
-
-    onnx_model = onnx.load(str(loglik))
+    loglik = cast("str | PathLike", loglik)
+    onnx_model = load_onnx_model(loglik)
 
     if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp(onnx_model)
+        lan_logp_pt = make_pytensor_logp_from_onnx(onnx_model)
         return lan_logp_pt
 
     if params_is_reg is None:
@@ -707,6 +757,7 @@ def make_likelihood_callable(
         params_is_reg,
         params_only=False if params_only is None else params_only,
     )
+
     lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
 
     return lan_logp_jax

@@ -1,11 +1,12 @@
 [project]
 name = "HSSM"
-version = "0.2.5"
+version = "0.2.8"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
     { name = "Paul Xu", email = "yang_xu@brown.edu" },
     { name = "Carlos Paniagua", email = "carlos_paniagua@brown.edu" },
+    { name = "Krishn Bera", email = "krishn_bera@brown.edu" },
     { name = "Aisulu Omar", email = "aisulu_omar@brown.edu" },
     { name = "Michael Frank", email = "michael_frank@brown.edu" },
 ]
@@ -14,24 +15,24 @@ license = { file = "LICENSE" }
 repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
-requires-python = ">=3.10,<3.13"
+requires-python = ">3.10,<3.13"
 
 dependencies = [
     "arviz>=0.19.0",
     "bambi>=0.15.0, <0.16.0",
     "cloudpickle>=3.0.0",
-    "hddm-wfpt>=0.1.4",
+    "hddm-wfpt>=0.1.5",
     "huggingface-hub>=0.25",
-    "numpyro>=0.16.0",
+    "numpyro>=0.17.0",
     "onnx>=1.16.0",
     "pymc>=5.21.0",
     "seaborn>=0.13.2",
-    "ssm-simulators>=0.8.3",
+    "ssm-simulators>=0.10.2",
     "tqdm>=4.66.0",
-    ]
+]
 
 [project.optional-dependencies]
-cuda12 = ["jax[cuda12]>=0.4.25"]
+cuda12 = ["jax[cuda12]>=0.5.2"]
 
 [dependency-groups]
 dev = [
@@ -46,21 +47,27 @@ dev = [
     "mkdocs>=1.6.0",
     "mkdocs-jupyter>=0.25.1",
     "mkdocstrings-python>=1.10.0",
-    "mypy>=1.11.1",
     "nbconvert>=7.16.5",
     "onnxruntime>=1.17.1",
     "nb-clean>=4.0.1",
     "nbval>=0.11.0",
     "pre-commit>=2.20.0",
     "ptpython>=3.0.29",
+    "pyarrow>=20.0.0",
+    "lanfactory>=0.5.3",
+    "HSSM[test]",
+]
+
+test = [
+    "mypy>=1.11.1",
     "pytest-cov>=6.0.0",
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
     "ruff>=0.9.1",
 ]
+
 notebook = [
     "ipykernel>=6.29.5",
-    "lanfactory>=0.4.4",
     "zeus-mcmc>=2.5.4",
 ]
 
@@ -149,6 +156,8 @@ ignore = [
     "PLR0915",
     # Global statements are discouraged
     "PLW0603",
+    # Implement of __eq__ without __hash__ function
+    "PLW1641",
     # Docstrings should not be included in stubs
     "PYI021",
     # Use typing_extensions.TypeAlias for type aliases
@@ -192,5 +201,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [[tool.uv.index]]
-name = "default"
+name = "pypi"
 url = "https://pypi.org/simple/"
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"

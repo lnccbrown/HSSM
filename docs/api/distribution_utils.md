@@ -10,6 +10,7 @@ own PyMC models, they can use these functions to create `pm.Distribution` and
     options:
         members:
         - download_hf
+        - load_onnx_model
         - make_distribution
         - make_ssm_rv
         - make_family

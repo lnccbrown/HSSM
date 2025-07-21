@@ -27,6 +27,7 @@ nav:
           - hssm.simulate_data: api/simulate_data.md
           - hssm.set_floatX: api/set_floatx.md
           - hssm.show_defaults: api/show_defaults.md
+          - hssm.check_data_for_rl: api/check_data_for_rl.md
       - Likelihoods:
           - hssm.likelihoods: api/likelihoods.md
       - Working with distributions:
@@ -41,6 +42,8 @@ nav:
       - Variational Inference: tutorials/variational_inference.ipynb
       - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
+      - Reinforcement Learning - Sequential Sampling Models (RLSSM): tutorials/rlssm_tutorial.ipynb
+      - Add custom RLSSM models: tutorials/add_custom_rlssm_model.ipynb
       - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
       - Custom models from onnx files: tutorials/blackbox_contribution_onnx_example.ipynb
       - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
@@ -53,7 +56,9 @@ nav:
   - Contributed Tutorials:
       - Winterbrain 2025 Workshop Talk 1: tutorials/hssm_tutorial_workshop_1.ipynb
       - Winterbrain 2025 Workshop Talk 2: tutorials/hssm_tutorial_workshop_2.ipynb
-  - Contributing: CONTRIBUTING.md
+  - Contributing:
+      - Developing locally: local_development.md
+      - Contributing: CONTRIBUTING.md
 
 plugins:
   - search
@@ -80,6 +85,9 @@ plugins:
         - tutorials/tutorial_p_outlier_regression.ipynb
         - tutorials/hssm_tutorial_workshop_1.ipynb
         - tutorials/hssm_tutorial_workshop_2.ipynb
+        - tutorials/add_custom_rlssm_model.ipynb
+        - tutorials/rlssm_tutorial.ipynb
+        - tutorials/rlssm_rlwm_model.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:
