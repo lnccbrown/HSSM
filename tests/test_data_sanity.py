@@ -16,6 +16,7 @@ pattern = r"Field\(s\) `.*` not found in data\."
 # The DataValidator class is tested in the test_data_validator.py file, so this file
 # can probably be removed in the future. CP
 
+
 @pytest.mark.slow
 def test_data_sanity_check(data_ddm):
     # Case 1: raise error if there are missing fields in data

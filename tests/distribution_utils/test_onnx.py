@@ -123,6 +123,7 @@ def test_make_jax_logp_funcs_from_onnx(fixture_path):
         decimal=DECIMAL,
     )
 
+
 @pytest.mark.slow
 def test_make_simple_jax_logp_funcs_from_onnx(fixture_path):
     """Tests whether the simple jax logp functions returned from onnx
