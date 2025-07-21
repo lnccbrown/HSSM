@@ -27,38 +27,11 @@ import pytensor.tensor as pt
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from bambi.utils import get_aliased_name, response_evaluate_new_data
-from huggingface_hub import hf_hub_download
 from tqdm import tqdm
 
 from .param.param import Param
 
 _logger = logging.getLogger("hssm")
-
-REPO_ID = "franklab/HSSM"
-
-
-def download_hf(path: str):
-    """
-    Download a file from a HuggingFace repository.
-
-    Parameters
-    ----------
-    path : str
-        The path of the file to download in the repository.
-
-    Returns
-    -------
-    str
-        The local path where the file is downloaded.
-
-    Notes
-    -----
-    The repository is specified by the REPO_ID constant,
-    which should be a valid HuggingFace.co repository ID.
-    The file is downloaded using the HuggingFace Hub's
-     hf_hub_download function.
-    """
-    return hf_hub_download(repo_id=REPO_ID, filename=path)
 
 
 def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
@@ -286,7 +259,7 @@ def log_likelihood(
     # Compile likelihood function
     if not response_term.is_constrained:
         rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
-        logp_compiled = pm.compile_pymc(
+        logp_compiled = pm.compile(
             [val for key_, val in pt_dict.items()],
             rv_logp,
             allow_input_downcast=True,
@@ -304,7 +277,7 @@ def log_likelihood(
             ),
             y_values,
         )
-        logp_compiled = pm.compile_pymc(
+        logp_compiled = pm.compile(
             [val for key_, val in pt_dict.items()], rv_logp, allow_input_downcast=True
         )
 
@@ -574,6 +547,48 @@ def ssms_sim_wrapper(simulator_fun, theta, model, n_replicas, random_state, **kw
         **kwargs,
     )
     return np.stack([out["rts"], out["choices"]], axis=-1).squeeze()
+
+
+def check_data_for_rl(
+    data: pd.DataFrame,
+    participant_id_col: str = "participant_id",
+    trial_id_col: str = "trial_id",
+) -> tuple[pd.DataFrame, int, int]:
+    """Check if the data is suitable for Reinforcement Learning (RL) models.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        The data to check.
+    participant_id_col : str
+        The name of the column containing participant IDs.
+    trial_id_col : str
+        The name of the column containing trial IDs.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, int, int]
+        A tuple containing the cleaned data, number of participants,
+        and number of trials.
+    """
+    if participant_id_col not in data.columns:
+        raise ValueError(f"Column '{participant_id_col}' not found in data.")
+    if trial_id_col not in data.columns:
+        raise ValueError(f"Column '{trial_id_col}' not found in data.")
+
+    sorted_data = data.sort_values(
+        by=[participant_id_col, trial_id_col], ignore_index=True
+    )
+
+    n_participants = data[participant_id_col].nunique()
+    trials_by_participant = sorted_data.groupby(participant_id_col)[trial_id_col].size()
+
+    if not np.all(trials_by_participant == trials_by_participant.iloc[0]):
+        raise ValueError("All participants must have the same number of trials.")
+
+    n_trials = trials_by_participant.iloc[0]
+
+    return sorted_data, n_participants, n_trials
 
 
 class SuppressOutput:

@@ -8,32 +8,27 @@ generation ops.
 import logging
 from functools import partial
 from os import PathLike
-from pathlib import Path
-from typing import Any, Callable, Literal, Type
+from typing import Any, Callable, Literal, Type, cast
 
 import bambi as bmb
 import numpy as np
-import onnx
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
-from numpy.typing import ArrayLike
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
 
-from ..utils import decorate_atomic_simulator, download_hf, ssms_sim_wrapper
+from .._types import LogLikeFunc
+from ..utils import decorate_atomic_simulator, ssms_sim_wrapper
 from .blackbox import make_blackbox_op
+from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
-    make_jax_logp_funcs_from_jax_callable,
     make_jax_logp_funcs_from_onnx,
-    make_jax_logp_ops,
-    make_pytensor_logp,
+    make_pytensor_logp_from_onnx,
 )
-
-LogLikeFunc = Callable[..., ArrayLike]
-LogLikeGrad = Callable[..., ArrayLike]
+from .onnx_utils.model import load_onnx_model
 
 _logger = logging.getLogger("hssm")
 
@@ -697,7 +692,13 @@ def make_likelihood_callable(
         if loglik_kind == "analytical":
             if backend is None or backend == "pytensor":
                 return loglik
-            return make_blackbox_op(loglik)
+            logp_funcs = make_jax_logp_funcs_from_callable(
+                loglik,
+                vmap=False,
+                params_only=False if params_only is None else params_only,
+            )
+            lan_logp_jax = make_jax_logp_ops(*logp_funcs)
+            return lan_logp_jax
         elif loglik_kind == "blackbox":
             return make_blackbox_op(loglik)
         elif loglik_kind == "approx_differentiable":
@@ -708,12 +709,13 @@ def make_likelihood_callable(
                         + "and `backend` to `jax` and supplied a jax callable, "
                         + "but did not set `params_is_reg`."
                     )
-                logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_jax_callable(
+                logp_funcs = make_jax_logp_funcs_from_callable(
                     loglik,
-                    params_is_reg,
+                    vmap=True,
+                    params_is_reg=params_is_reg,
                     params_only=False if params_only is None else params_only,
                 )
-                lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
+                lan_logp_jax = make_jax_logp_ops(*logp_funcs)
                 return lan_logp_jax
             if backend == "pytensor":
                 raise ValueError(
@@ -737,14 +739,11 @@ def make_likelihood_callable(
             + "as `loglik`."
         )
 
-    if isinstance(loglik, (str, PathLike)):
-        if not Path(loglik).exists():
-            loglik = download_hf(str(loglik))
-
-    onnx_model = onnx.load(str(loglik))
+    loglik = cast("str | PathLike", loglik)
+    onnx_model = load_onnx_model(loglik)
 
     if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp(onnx_model)
+        lan_logp_pt = make_pytensor_logp_from_onnx(onnx_model)
         return lan_logp_pt
 
     if params_is_reg is None:
@@ -758,6 +757,7 @@ def make_likelihood_callable(
         params_is_reg,
         params_only=False if params_only is None else params_only,
     )
+
     lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
 
     return lan_logp_jax

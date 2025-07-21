@@ -7,9 +7,9 @@ from hssm.param.param import Param
 
 def test_bounds_validation():
     """Test that the bounds are validated correctly."""
-    with pytest.raises(ValueError, match="Invalid bounds: \(0, 0, 1\)"):
+    with pytest.raises(ValueError, match=r"Invalid bounds: \(0, 0, 1\)"):
         Param(name="test", prior=0, bounds=(0, 0, 1))
-    with pytest.raises(ValueError, match="Invalid bounds: \(1, 0\)"):
+    with pytest.raises(ValueError, match=r"Invalid bounds: \(1, 0\)"):
         Param(name="test", prior=0, bounds=(1, 0))
 
 
