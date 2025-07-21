@@ -17,6 +17,7 @@ pattern = r"Field\(s\) `.*` not found in data\."
 # can probably be removed in the future. CP
 
 
+@pytest.mark.slow
 def test_data_sanity_check(data_ddm):
     # Case 1: raise error if there are missing fields in data
     with pytest.raises(ValueError, match=pattern):
