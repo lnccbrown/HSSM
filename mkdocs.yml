@@ -53,9 +53,11 @@ nav:
       - Getting trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
       - Stim Coding: tutorials/tutorial_stim_coding.ipynb
       - P-outlier Regression: tutorials/tutorial_p_outlier_regression.ipynb
+      - PyMC to HSSM: tutorials/pymc_to_hssm.ipynb
   - Contributed Tutorials:
       - Winterbrain 2025 Workshop Talk 1: tutorials/hssm_tutorial_workshop_1.ipynb
       - Winterbrain 2025 Workshop Talk 2: tutorials/hssm_tutorial_workshop_2.ipynb
+      - Scientific Workflow: tutorials/scientific_workflow_hssm.ipynb
   - Contributing:
       - Developing locally: local_development.md
       - Contributing: CONTRIBUTING.md
@@ -87,6 +89,10 @@ plugins:
         - tutorials/hssm_tutorial_workshop_2.ipynb
         - tutorials/add_custom_rlssm_model.ipynb
         - tutorials/rlssm_tutorial.ipynb
+        - tutorials/lapse_prob_and_dist.ipynb
+        - tutorials/plotting.ipynb
+        - tutorials/scientific_workflow_hssm.ipynb
+        - tutorials/pymc_to_hssm.ipynb
         - tutorials/rlssm_rlwm_model.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
