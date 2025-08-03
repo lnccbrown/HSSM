@@ -42,6 +42,8 @@ nav:
       - Variational Inference: tutorials/variational_inference.ipynb
       - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
+      - Reinforcement Learning - Sequential Sampling Models (RLSSM): tutorials/rlssm_tutorial.ipynb
+      - Add custom RLSSM models: tutorials/add_custom_rlssm_model.ipynb
       - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
       - Custom models from onnx files: tutorials/blackbox_contribution_onnx_example.ipynb
       - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
@@ -91,6 +93,7 @@ plugins:
         - tutorials/plotting.ipynb
         - tutorials/scientific_workflow_hssm.ipynb
         - tutorials/pymc_to_hssm.ipynb
+        - tutorials/rlssm_rlwm_model.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:

@@ -1,6 +1,6 @@
 [project]
 name = "HSSM"
-version = "0.2.7"
+version = "0.2.8"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
@@ -64,6 +64,8 @@ test = [
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
     "ruff>=0.9.1",
+    "pytest-random-order>=1.1.1",
+    "pytest-rerunfailures>=15.0",
 ]
 
 notebook = [
@@ -189,9 +191,18 @@ convention = "numpy"
 ignore_missing_imports = true
 
 [tool.pytest]
-testpaths = ["tests"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
+log_cli = true
+log_cli_level = "INFO" # set minimum log level for console output
+addopts = [
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+    "--exitfirst",
+    "--capture=no",
+]
 markers = [
     "slow: marks tests as slow (add --runslow option to run these tests)",
 ]

@@ -259,7 +259,7 @@ def log_likelihood(
     # Compile likelihood function
     if not response_term.is_constrained:
         rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
-        logp_compiled = pm.compile_pymc(
+        logp_compiled = pm.compile(
             [val for key_, val in pt_dict.items()],
             rv_logp,
             allow_input_downcast=True,
@@ -277,7 +277,7 @@ def log_likelihood(
             ),
             y_values,
         )
-        logp_compiled = pm.compile_pymc(
+        logp_compiled = pm.compile(
             [val for key_, val in pt_dict.items()], rv_logp, allow_input_downcast=True
         )
 

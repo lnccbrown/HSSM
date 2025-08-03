@@ -5,7 +5,7 @@ import jax
 import numpy as np
 
 import hssm
-from hssm.likelihoods.rldm import make_rldm_logp_func, make_rldm_logp_op
+from hssm.likelihoods.rldm_optimized import make_rldm_logp_func, make_rldm_logp_op
 
 hssm.set_floatX("float32")
 
