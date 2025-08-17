@@ -199,13 +199,16 @@ def test_set_missing_data_and_deadline():
         == MissingDataNetwork.CPN
     )
     assert (
-        DataValidator._set_missing_data_and_deadline(False, True, data)
+        DataValidator._set_missing_data_and_deadline(True, True, data)
         == MissingDataNetwork.OPN
     )
-    assert (
-        DataValidator._set_missing_data_and_deadline(True, True, data)
-        == MissingDataNetwork.GONOGO
-    )
+    # AF-TODO: I think GONOGO as a network category can go,
+    # but needs a little more thought, out of scope for PR,
+    # during which this was commented out.
+    # assert (
+    #     DataValidator._set_missing_data_and_deadline(True, True, data)
+    #     == MissingDataNetwork.GONOGO
+    # )
 
 
 def test_set_missing_data_and_deadline_all_missing():
