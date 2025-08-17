@@ -178,32 +178,35 @@ class DataValidator:
         missing_data: bool, deadline: bool, data: pd.DataFrame
     ) -> MissingDataNetwork:
         """Set missing data and deadline."""
-        if not missing_data and not deadline:
-            return MissingDataNetwork.NONE
-
+        network = MissingDataNetwork.NONE
+        if not missing_data:
+            return network
         if missing_data and not deadline:
             network = MissingDataNetwork.CPN
         elif missing_data and deadline:
             network = MissingDataNetwork.OPN
-        else:
-            # TODO: This won't behave as expected yet, GONOGO needs to be split
-            # into a deadline case and a non-deadline case.
-            network = MissingDataNetwork.GONOGO
+        # AF-TODO: GONOGO case not yet correctly implemented
+        # else:
+        #     # TODO: This won't behave as expected yet, GONOGO needs to be split
+        #     # into a deadline case and a non-deadline case.
+        #     network = MissingDataNetwork.GONOGO
 
         if np.all(data["rt"] == -999.0):
-            if network == MissingDataNetwork.CPN:
+            if network in [MissingDataNetwork.CPN, MissingDataNetwork.OPN]:
                 raise ValueError(
                     "`missing_data` is set to True, but you have no valid data in your "
                     "dataset."
                 )
-            elif network == MissingDataNetwork.OPN:
-                raise ValueError(
-                    "`deadline` is set to True, but you have no rts exceeding the "
-                    "deadline."
-                )
-            else:
-                raise ValueError(
-                    "`missing_data` and `deadline` are both set to True, but you have "
-                    "no missing data and/or no rts exceeding the deadline."
-                )
+            # AF-TODO: This one needs refinement for GONOGO case
+            # elif network == MissingDataNetwork.OPN:
+            #     raise ValueError(
+            #         "`deadline` is set to True and `missing_data` is set to True, "
+            #         "but ."
+            #     )
+            # else:
+            #     raise ValueError(
+            #         "`missing_data` and `deadline` are both set to True,
+            #         "but you have "
+            #         "no missing data and/or no rts exceeding the deadline."
+            #     )
         return network
