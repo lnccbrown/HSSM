@@ -94,6 +94,7 @@ def make_jax_logp_funcs_from_onnx(
         """
         # Makes a matrix to feed to the LAN model
         if params_only:
+            # Constructing parameter vector
             input_vector = jnp.array(inputs)
         else:
             data = inputs[0]

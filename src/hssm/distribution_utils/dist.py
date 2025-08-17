@@ -114,9 +114,12 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
 
     t = dist_params[list_params.index("t")]
 
+    # Skip the check for missing data (encoded as -999.0)
+    missing_mask = pt.eq(rt, -999.0)
+
     return pt.where(
         # consistent with the epsilon in the analytical likelihood
-        rt - t <= 1e-15,
+        pt.bitwise_and(rt - t <= 1e-15, pt.bitwise_not(missing_mask)),
         LOGP_LB,
         logp,
     )
@@ -585,6 +588,7 @@ def make_distribution(
                 logp = loglik(data, *dist_params, *extra_fields)
                 # Ensure that non-decision time is always smaller than rt.
                 # Assuming that the non-decision time parameter is always named "t".
+                # AF: Temporary removal
                 logp = ensure_positive_ndt(data, logp, list_params, dist_params)
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)
@@ -595,9 +599,12 @@ def make_distribution(
                 logp = loglik(data, *dist_params, *extra_fields)
                 # Ensure that non-decision time is always smaller than rt.
                 # Assuming that the non-decision time parameter is always named "t".
+
+                # AF: Temporary removal
                 logp = ensure_positive_ndt(data, logp, list_params, dist_params)
 
             if bounds is not None:
+                # AF: Temporary removal
                 logp = apply_param_bounds_to_loglik(
                     logp, list_params, *dist_params, bounds=bounds
                 )
@@ -723,13 +730,6 @@ def make_likelihood_callable(
                     + "`approx_differentiable` and provided a callable."
                     + "Currently we support only jax callables in this case."
                 )
-            # In the approx_differentiable case or the blackbox case, unless the backend
-            # is `pytensor`, we wrap the callable in a BlackBoxOp.
-        # if backend == "pytensor":
-        #     return loglik
-        #     # In all other cases, we assume that the callable cannot be directly
-        #     # used in the backend and thus we wrap it in a BlackBoxOp
-        # return make_blackbox_op(loglik)
 
     # Other cases, when `loglik` is a string or a PathLike.
     if loglik_kind != "approx_differentiable":
@@ -773,28 +773,40 @@ def make_missing_data_callable(
 
     Please refer to the documentation of `make_likelihood_callable` for more.
     """
-    if backend == "jax":
-        if params_is_reg is None:
-            raise ValueError(
-                "You have chosen `jax` as the backend for the missing data likelihood. "
-                + "However, you have not provided any values to `params_is_reg`."
-            )
-        if params_only is None:
-            raise ValueError(
-                "You have chosen `jax` as the backend for the missing data likelihood. "
-                + "However, you have not provided any values to `params_only`."
-            )
+    # AF-TODO: Remove this once clear that it is actually not needed
+    # if backend == "jax":
+    #     if params_is_reg is None:
+    #         raise ValueError(
+    #             "You have chosen `jax` as the backend for "
+    #             + "the missing data likelihood. "
+    #             + "However, you have not provided any values to `params_is_reg`."
+    #         )
+    #     if params_only is None:
+    #         raise ValueError(
+    #             "You have chosen `jax` as the backend "
+    #             + "for the missing data likelihood. "
+    #             + "However, you have not provided any values to `params_only`."
+    #         )
+
+    if params_is_reg is not None:
+        params_only = True if (not any(params_is_reg)) else False
+    else:
+        params_only = False
 
     # We assume that the missing data network is always approx_differentiable
     return make_likelihood_callable(
-        loglik, "approx_differentiable", backend, params_is_reg, params_only
+        loglik=loglik,
+        loglik_kind="approx_differentiable",
+        backend=backend,
+        params_is_reg=params_is_reg,
+        params_only=params_only,
     )
 
 
 def assemble_callables(
     callable: pytensor.graph.Op | Callable,
     missing_data_callable: pytensor.graph.Op | Callable,
-    params_only: bool,
+    params_only: bool | None,
     has_deadline: bool,
 ) -> Callable:
     """Assemble the likelihood callables into a single callable.
@@ -827,6 +839,7 @@ def assemble_callables(
             raise ValueError("No missing data in the data.")
 
         observed_data = data[n_missing:, :]
+        missing_data = data[:n_missing, -1:]
 
         dist_params_observed = [
             param[n_missing:] if param.ndim >= 1 else param for param in dist_params
@@ -841,16 +854,11 @@ def assemble_callables(
             param[:n_missing] if param.ndim >= 1 else param for param in dist_params
         ]
 
-        if params_only:
-            logp_missing = missing_data_callable(None, *dist_params_missing)
-        else:
-            missing_data = data[:n_missing, -1:]
-            logp_missing = missing_data_callable(missing_data, *dist_params_missing)
+        logp_missing = missing_data_callable(missing_data, *dist_params_missing)
 
         logp = pt.empty_like(data[:, 0], dtype=pytensor.config.floatX)
         logp = pt.set_subtensor(logp[n_missing:], logp_observed)
         logp = pt.set_subtensor(logp[:n_missing], logp_missing)
-
         return logp
 
     return likelihood_callable

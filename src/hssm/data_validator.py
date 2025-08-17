@@ -183,9 +183,11 @@ class DataValidator:
 
         if missing_data and not deadline:
             network = MissingDataNetwork.CPN
-        elif not missing_data and deadline:
+        elif missing_data and deadline:
             network = MissingDataNetwork.OPN
         else:
+            # TODO: This won't behave as expected yet, GONOGO needs to be split
+            # into a deadline case and a non-deadline case.
             network = MissingDataNetwork.GONOGO
 
         if np.all(data["rt"] == -999.0):

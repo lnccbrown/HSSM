@@ -1920,18 +1920,17 @@ class HSSM(DataValidator):
                     + missing_data_networks_suffix[self.missing_data_network]
                     + ".onnx"
                 )
-            params_only = self.missing_data_network == MissingDataNetwork.CPN
 
             if self.model_config.backend != "pytensor":
                 missing_data_callable = make_missing_data_callable(
-                    self.loglik_missing_data, "jax", params_is_reg, params_only
+                    self.loglik_missing_data, "jax", params_is_reg, None
                 )
             else:
                 missing_data_callable = make_missing_data_callable(
                     self.loglik_missing_data,
                     self.model_config.backend,
+                    params_is_reg,
                     None,
-                    params_only,
                 )
 
             self.loglik_missing_data = missing_data_callable
@@ -1939,10 +1938,16 @@ class HSSM(DataValidator):
             self.loglik = assemble_callables(
                 self.loglik,
                 self.loglik_missing_data,
-                params_only,
+                None,
                 has_deadline=self.deadline,
             )
 
+        if self.missing_data:
+            _logger.info(
+                f"Re-arranging data to put split missing and observed datapoints. "
+                f"Missing data (rt == {self.missing_data_value}) will be on top, "
+                f"observed datapoints follow."
+            )
         self.data = _rearrange_data(self.data)
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
