@@ -849,7 +849,11 @@ def assemble_callables(
             param[:n_missing] if param.ndim >= 1 else param for param in dist_params
         ]
 
-        logp_missing = missing_data_callable(missing_data, *dist_params_missing)
+        if has_deadline:
+            logp_missing = missing_data_callable(missing_data, *dist_params_missing)
+        else:
+            print("passing here")
+            logp_missing = missing_data_callable(None, *dist_params_missing)
 
         logp = pt.empty_like(data[:, 0], dtype=pytensor.config.floatX)
         logp = pt.set_subtensor(logp[n_missing:], logp_observed)
