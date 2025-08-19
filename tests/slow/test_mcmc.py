@@ -319,63 +319,65 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, ex
 
 
 # AF-TODO: CPN / GONOGO part has to be rethought
-# @pytest.mark.slow
-# @pytest.mark.parametrize(parameter_names, parameter_grid)
-# def test_simple_models_missing_data(
-#     data_ddm_missing, loglik_kind, backend, sampler, step, expected, cpn
-# ):
-#     """Test simple model with missing data (deadline e.g.)"""
-#     print("PYMC VERSION: ")
-#     print(pm.__version__)
-#     print("TEST INPUTS WERE: ")
-#     print("REPORTING FROM SIMPLE MODELS MISSING DATA TEST")
-#     print(loglik_kind, backend, sampler, step, expected)
+@pytest.mark.slow
+@pytest.mark.parametrize(parameter_names, parameter_grid)
+@pytest.mark.xfail(reason="Needs to be reactivated, CPN logic needs to be revised")
+def test_simple_models_missing_data(
+    data_ddm_missing, loglik_kind, backend, sampler, step, expected, cpn
+):
+    """Test simple model with missing data (deadline e.g.)"""
+    print("PYMC VERSION: ")
+    print(pm.__version__)
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM SIMPLE MODELS MISSING DATA TEST")
+    print(loglik_kind, backend, sampler, step, expected)
 
-#     model = hssm.HSSM(
-#         data_ddm_missing,
-#         loglik_kind=loglik_kind,
-#         model_config={"backend": backend},
-#         missing_data=True,
-#         loglik_missing_data=cpn,
-#     )
-#     assert np.all(
-#         [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
-#     )
-#     run_sample(model, sampler, step, expected)
+    model = hssm.HSSM(
+        data_ddm_missing,
+        loglik_kind=loglik_kind,
+        model_config={"backend": backend},
+        missing_data=True,
+        loglik_missing_data=cpn,
+    )
+    assert np.all(
+        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
+    )
+    run_sample(model, sampler, step, expected)
 
 
-# @pytest.mark.slow
-# @pytest.mark.parametrize(parameter_names, parameter_grid)
-# def test_reg_models_missing_data(
-#     data_ddm_reg_missing, loglik_kind, backend, sampler, step, expected, cpn
-# ):
-#     """Test regression model with missing data (deadline e.g.)"""
-#     print("PYMC VERSION: ")
-#     print(pm.__version__)
-#     print("TEST INPUTS WERE: ")
-#     print("REPORTING FROM REG MODELS MISSING DATA TEST")
-#     print(loglik_kind, backend, sampler, step, expected)
+@pytest.mark.slow
+@pytest.mark.xfail(reason="Needs to be reactivated, CPN logic needs to be revised")
+@pytest.mark.parametrize(parameter_names, parameter_grid)
+def test_reg_models_missing_data(
+    data_ddm_reg_missing, loglik_kind, backend, sampler, step, expected, cpn
+):
+    """Test regression model with missing data (deadline e.g.)"""
+    print("PYMC VERSION: ")
+    print(pm.__version__)
+    print("TEST INPUTS WERE: ")
+    print("REPORTING FROM REG MODELS MISSING DATA TEST")
+    print(loglik_kind, backend, sampler, step, expected)
 
-#     param_reg = dict(
-#         formula="v ~ 1 + x + y",
-#         prior={
-#             "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-#             "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-#             "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-#         },
-#     )
-#     model = hssm.HSSM(
-#         data_ddm_reg_missing,
-#         loglik_kind=loglik_kind,
-#         model_config={"backend": backend},
-#         v=param_reg,
-#         missing_data=True,
-#         loglik_missing_data=cpn,
-#     )
-#     assert np.all(
-#         [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
-#     )
-#     run_sample(model, sampler, step, expected)
+    param_reg = dict(
+        formula="v ~ 1 + x + y",
+        prior={
+            "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
+            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+        },
+    )
+    model = hssm.HSSM(
+        data_ddm_reg_missing,
+        loglik_kind=loglik_kind,
+        model_config={"backend": backend},
+        v=param_reg,
+        missing_data=True,
+        loglik_missing_data=cpn,
+    )
+    assert np.all(
+        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
+    )
+    run_sample(model, sampler, step, expected)
 
 
 @pytest.mark.slow

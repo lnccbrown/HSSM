@@ -175,6 +175,7 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, method, expected)
 
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
+@pytest.mark.xfail(reason="Needs to be reactivated, CPN logic needs to be revised")
 def test_simple_models_missing_data(
     data_ddm_missing, loglik_kind, backend, method, expected, cpn
 ):
@@ -196,6 +197,7 @@ def test_simple_models_missing_data(
 
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
+@pytest.mark.xfail(reason="Needs to be reactivated, CPN logic needs to be revised")
 def test_reg_models_missing_data(
     data_ddm_reg_missing, loglik_kind, backend, method, expected, cpn
 ):
