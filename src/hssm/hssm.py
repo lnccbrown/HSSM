@@ -1975,7 +1975,7 @@ class HSSM(DataValidator):
 
         if self.missing_data:
             _logger.info(
-                f"Re-arranging data to put split missing and observed datapoints. "
+                f"Re-arranging data to separate missing and observed datapoints. "
                 f"Missing data (rt == {self.missing_data_value}) will be on top, "
                 f"observed datapoints follow."
             )
