@@ -312,6 +312,8 @@ class HSSM(DataValidator):
         self.link_settings = link_settings
         self.prior_settings = prior_settings
 
+        self.missing_data_value = -999.0
+
         additional_namespace = transformations_namespace.copy()
         if extra_namespace is not None:
             additional_namespace.update(extra_namespace)
@@ -421,20 +423,13 @@ class HSSM(DataValidator):
                     "However, you have no RTs of -999.0 in your dataset!"
                 )
             elif (not missing_data) and (self.data.rt == -999.0).any():
-                _logger.info(
-                    "Missing data provided as False (consistent with default), "
-                    "however you have RTs of -999.0 in your dataset. \n"
-                    "The setting will be overriden to True!"
+                # self.missing_data = True
+                raise ValueError(
+                    "Missing data provided as False. \n"
+                    "However, you have RTs of -999.0 in your dataset!"
                 )
-                self.missing_data = True
-                self.missing_data_value = -999.0
-                # raise ValueError(
-                #     "Missing data provided as False. \n"
-                #     "However, you have RTs of -999.0 in your dataset!"
-                # )
             else:
                 self.missing_data = missing_data
-                self.missing_data_value = -999.0
         else:
             raise ValueError(
                 "missing_data argument must be a bool or a float! \n"

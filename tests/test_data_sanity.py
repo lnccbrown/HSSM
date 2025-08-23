@@ -79,9 +79,9 @@ def test_deadline_missing_data_true(data_ddm, cpn):
     # Case 6: if deadline or missing_data is True, data should contain missing values
     with pytest.raises(
         ValueError,
-        match="You have no missing data in your dataset, "
-        + "which is not allowed when `missing_data` or `deadline` is set to "
-        + "True.",
+        match=r"Missing data is provided as True, "
+        " so RTs of -999.0 are treated as missing. \n"
+        "However, you have no RTs of -999.0 in your dataset!",
     ):
         hssm.HSSM(
             data=data_ddm, model="ddm", missing_data=True, loglik_missing_data=cpn
@@ -90,20 +90,33 @@ def test_deadline_missing_data_true(data_ddm, cpn):
 
 @pytest.mark.slow  # as model needs to be built
 def test_deadline_missing_data_false(data_ddm, cpn):
-    # Case 7: if missing_data and deadline are set to False, then missing data values should be dropped
+    # AF-TODO: Let's take the save route and let
+    # the user delete the data, re below:
+    # Case 7: if missing_data and deadline are set to False,
+    # then missing data values should be dropped
     missing_size = 10
     missing_indices = np.random.choice(data_ddm.shape[0], missing_size, replace=False)
     data_ddm_missing = data_ddm.copy()
     data_ddm_missing.loc[missing_indices, "rt"] = -999.0
 
-    model = hssm.HSSM(
-        data=data_ddm_missing,
-        model="ddm",
-    )
+    with pytest.raises(
+        ValueError,
+        match="Missing data provided as False. \n"
+        "However, you have RTs of -999.0 in your dataset!",
+    ):
+        hssm.HSSM(
+            data=data_ddm_missing,
+            model="ddm",
+            loglik_missing_data=cpn,  # Once on huggingface, this is not needd
+        )
 
-    assert model.data.shape[0] == data_ddm.shape[0] - missing_size
+    # assert model.data.shape[0] == data_ddm.shape[0] - missing_size
 
-    data_ddm_missing.iloc[missing_indices[0], 0] = np.nan
+    # AF-TODO: Previously this test had a subset of the missing data
+    # set to nan.
+    # But the check for `no missing data` and `some rts ==-999.0`
+    # flags this with ValueError before the `nan` check is applied.
+    data_ddm_missing.loc[missing_indices, "rt"] = np.nan
     with pytest.raises(
         ValueError,
         match="You have NaN response times in your dataset, which is not allowed.",
@@ -113,7 +126,9 @@ def test_deadline_missing_data_false(data_ddm, cpn):
             model="ddm",
         )
 
-    data_ddm_missing.loc[missing_indices[0], "rt"] = -10
+    # Same logic, here overwriting the nans ALL with -10
+    data_ddm_missing.loc[missing_indices, "rt"] = -999.0
+    data_ddm_missing.iloc[missing_indices[0], 0] = -10
 
     with pytest.raises(
         ValueError,
@@ -132,7 +147,7 @@ def test_deadline_missing_data_false(data_ddm, cpn):
         + "set the missing_data or deadline flag to True.",
     ):
         hssm.HSSM(
-            data=data_ddm_missing,
+            data=data_ddm,
             model="ddm",
             loglik_missing_data=cpn,
         )
