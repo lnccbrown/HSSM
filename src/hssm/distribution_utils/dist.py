@@ -852,7 +852,6 @@ def assemble_callables(
         if has_deadline:
             logp_missing = missing_data_callable(missing_data, *dist_params_missing)
         else:
-            print("passing here")
             logp_missing = missing_data_callable(None, *dist_params_missing)
 
         logp = pt.empty_like(data[:, 0], dtype=pytensor.config.floatX)

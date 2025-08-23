@@ -188,12 +188,26 @@ def test_simple_models_deadline(
         loglik_kind=loglik_kind,
         model_config={"backend": backend},
         deadline=True,
+        missing_data=True,
         loglik_missing_data=opn,
     )
     assert np.all(
         [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
     )
     run_sample(model, sampler, step, expected)
+
+    with pytest.raises(
+        ValueError,
+        match="Missing data provided as False. \n"
+        "However, you have RTs of -999.0 in your dataset!",
+    ):
+        model = hssm.HSSM(
+            data_ddm_deadline,
+            loglik_kind=loglik_kind,
+            model_config={"backend": backend},
+            deadline=True,
+            loglik_missing_data=opn,
+        )
 
 
 @pytest.mark.slow
@@ -215,9 +229,24 @@ def test_reg_models_deadline(
         model_config={"backend": backend},
         v=param_reg,
         deadline=True,
+        missing_data=True,
         loglik_missing_data=opn,
     )
     assert np.all(
         [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
     )
     run_sample(model, sampler, step, expected)
+
+    with pytest.raises(
+        ValueError,
+        match="Missing data provided as False. \n"
+        "However, you have RTs of -999.0 in your dataset!",
+    ):
+        model = hssm.HSSM(
+            data_ddm_reg_deadline,
+            loglik_kind=loglik_kind,
+            model_config={"backend": backend},
+            v=param_reg,
+            deadline=True,
+            loglik_missing_data=opn,
+        )
