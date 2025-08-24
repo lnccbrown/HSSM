@@ -138,6 +138,7 @@ def test_simple_models_deadline(
         loglik_kind=loglik_kind,
         model_config={"backend": backend},
         deadline=True,
+        missing_data=True,
         loglik_missing_data=opn,
     )
     run_vi(model, method, expected)
@@ -162,6 +163,7 @@ def test_reg_models_deadline(
         model_config={"backend": backend},
         v=param_reg,
         deadline=True,
+        missing_data=True,
         loglik_missing_data=opn,
     )
     run_vi(model, method, expected)
