@@ -146,6 +146,25 @@ def _extract_size(args, kwargs):
     return size, args, kwargs
 
 
+def _get_p_outlier(list_params, arg_arrays):
+    """Get p_outlier from arg_arrays and update arg_arrays."""
+    p_outlier = None
+    if list_params and list_params[-1] == "p_outlier":
+        p_outlier = arg_arrays.pop(-1)
+    return p_outlier, arg_arrays
+
+
+def _create_arg_arrays(args, num_params):
+    """Create arg_arrays from args."""
+    # TODO: We need to figure out what to do with extra_fields when
+    # doing posterior predictive sampling. Right now nothing is done.
+    if num_params < len(args):
+        arg_arrays = [np.asarray(arg) for arg in args[:num_params]]
+    else:
+        arg_arrays = [np.asarray(arg) for arg in args]
+    return arg_arrays
+
+
 def make_hssm_rv(
     simulator_fun: Callable | str,
     list_params: list[str],
@@ -301,19 +320,8 @@ def make_hssm_rv(
             # we are going to use this hack.
             size, args, kwargs = _extract_size(args, kwargs)
 
-            num_params = len(cls._list_params)
-
-            # TODO: We need to figure out what to do with extra_fields when
-            # doing posterior predictive sampling. Right now nothing is done.
-            if num_params < len(args):
-                arg_arrays = [np.asarray(arg) for arg in args[:num_params]]
-            else:
-                arg_arrays = [np.asarray(arg) for arg in args]
-
-            p_outlier = None
-
-            if cls._list_params[-1] == "p_outlier":
-                p_outlier = arg_arrays.pop(-1)
+            arg_arrays = _create_arg_arrays(args, len(cls._list_params))
+            p_outlier, arg_arrays = _get_p_outlier(cls._list_params, arg_arrays)
 
             iinfo32 = np.iinfo(np.uint32)
             seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
