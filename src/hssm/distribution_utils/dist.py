@@ -167,6 +167,12 @@ def _create_arg_arrays(cls, args):
     return arg_arrays
 
 
+def _get_seed(rng):
+    """Get a seed for the random number generator."""
+    iinfo32 = np.iinfo(np.uint32)
+    return rng.integers(0, iinfo32.max, dtype=np.uint32)
+
+
 def make_hssm_rv(
     simulator_fun: Callable | str,
     list_params: list[str],
