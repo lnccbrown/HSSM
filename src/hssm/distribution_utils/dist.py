@@ -299,20 +299,7 @@ def make_hssm_rv(
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
-
-            if "size" in kwargs:
-                size = kwargs.pop("size")
-            else:
-                size = args[-1]
-                args = args[:-1]
-
-            if size is None:
-                size = 1
-
-            # Although we got around the ndims_supp issue, the size parameter passed
-            # here is still an array with one element. We need to take it out.
-            if not np.isscalar(size):
-                size = np.squeeze(size)
+            size, args, kwargs = _extract_size(args, kwargs)
 
             num_params = len(cls._list_params)
 
