@@ -146,8 +146,9 @@ def _extract_size(args, kwargs):
     return size, args, kwargs
 
 
-def _get_p_outlier(list_params, arg_arrays):
+def _get_p_outlier(cls, arg_arrays):
     """Get p_outlier from arg_arrays and update arg_arrays."""
+    list_params = cls._list_params
     p_outlier = None
     if list_params and list_params[-1] == "p_outlier":
         p_outlier = arg_arrays.pop(-1)
