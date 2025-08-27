@@ -125,10 +125,14 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
 def _extract_size(args, kwargs):
     """Extract size from args and kwargs.
 
-    Note
-    ----
-    This function has a side effect on `kwargs`. If "size" is present in `kwargs`,
-    it will be removed (popped) from the dictionary.
+    Returns
+    -------
+    size : int
+        The size of the random sample to generate.
+    args : tuple
+        The original arguments, with size removed if it was present.
+    kwargs : dict
+        The original keyword arguments, with size removed if it was present.
     """
     if "size" in kwargs:
         size = kwargs.pop("size")
@@ -139,7 +143,7 @@ def _extract_size(args, kwargs):
     if size is None:
         size = 1
 
-    return size, args
+    return size, args, kwargs
 
 
 def make_hssm_rv(
