@@ -173,6 +173,92 @@ def _get_seed(rng):
     return rng.integers(0, iinfo32.max, dtype=np.uint32)
 
 
+def _prepare_theta_and_shape(arg_arrays, size):
+    """
+    Prepare the parameter matrix `theta` for simulation.
+
+    If all parameters passed are scalar, assemble all parameters into a 1D array
+    and pass it to the `theta` argument. In this case, size is number of observations.
+    If any parameter is a vector, preprocess all parameters, reshape them into a matrix
+    of dimension (size, n_params) where size is the number of elements in the largest
+    of all parameters passed to *arg.
+    """
+    is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
+    if is_all_args_scalar:
+        theta = np.stack(arg_arrays)
+        if theta.ndim > 1:
+            theta = theta.squeeze(axis=-1)
+        theta = np.tile(theta, (size, 1))
+        max_shape = None
+        new_data_size = None
+    else:
+        # Preprocess all parameters, reshape them into a matrix of dimension
+        # (size, n_params) where size is the number of elements in the
+        # largest of all parameters passed to *arg
+        elem_max_size = np.argmax([arg.size for arg in arg_arrays])
+        max_shape = arg_arrays[elem_max_size].shape
+        new_data_size = max_shape[-1]
+        theta = np.column_stack(
+            [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
+        )
+    return is_all_args_scalar, theta, max_shape, new_data_size
+
+
+def _calculate_n_replicas(is_all_args_scalar, size, new_data_size):
+    """
+    Calculate the number of replicas (samples) to draw from each trial based on input arguments.
+
+    Parameters
+    ----------
+    is_all_args_scalar : bool
+        Indicates whether all input arguments are scalars.
+    size : int or None
+        The total number of samples to be drawn. If None or 1, only one replica is
+        drawn.
+    new_data_size : int
+        The size of the new data to be used for sampling.
+
+    Returns
+    -------
+    int
+        The number of replicas to draw for each trial.
+
+    Raises
+    ------
+    ValueError
+        If `size` is not compatible with `new_data_size` as determined by
+        `_validate_size`.
+    """  # noqa: E501
+    # The multiple then becomes how many samples we draw from each trial.
+    if is_all_args_scalar:
+        return 1
+    if size is None or size == 1:
+        return 1
+    _validate_size(size, new_data_size)
+    return size // new_data_size
+
+
+def _validate_size(size, new_data_size):
+    """Validate that `size` is a multiple of `new_data_size`.
+
+    Parameters
+    ----------
+    size : int
+        The total number of samples to be drawn.
+    new_data_size : int
+        The size of the new data to be used for sampling.
+
+    Raises
+    ------
+    ValueError
+        If `size` is not a multiple of `new_data_size`.
+    """
+    # If size is not None, we check if size is a multiple of the largest size.
+    # If not, an error is thrown.
+    if size % new_data_size != 0:
+        raise ValueError("`size` needs to be a multiple of the size of data")
+
+
 def make_hssm_rv(
     simulator_fun: Callable | str,
     list_params: list[str],
