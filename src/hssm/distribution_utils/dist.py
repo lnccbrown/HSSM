@@ -448,17 +448,8 @@ def make_hssm_rv(
             )
 
             if not is_all_args_scalar:
-                if n_replicas == 1:
-                    sims_out = sims_out.reshape(
-                        (*max_shape[:-1], max_shape[-1], obs_dim_int)
-                    )
-                else:
-                    # sims_out = sims_out.reshape(
-                    #     (*max_shape[:-1], max_shape[-1] * size, obs_dim_int)
-                    # )
-                    sims_out = sims_out.reshape(
-                        (*max_shape[:-1], max_shape[-1], n_replicas, obs_dim_int)
-                    )
+                shape_spec = _reshape_sims_out(max_shape, n_replicas, obs_dim_int)
+                sims_out = sims_out.reshape(shape_spec)
 
             sims_out = _apply_lapse_model(
                 sims_out=sims_out,
