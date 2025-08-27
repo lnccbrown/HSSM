@@ -155,10 +155,11 @@ def _get_p_outlier(cls, arg_arrays):
     return p_outlier, arg_arrays
 
 
-def _create_arg_arrays(args, num_params):
+def _create_arg_arrays(cls, args):
     """Create arg_arrays from args."""
     # TODO: We need to figure out what to do with extra_fields when
     # doing posterior predictive sampling. Right now nothing is done.
+    num_params = len(cls._list_params)
     if num_params < len(args):
         arg_arrays = [np.asarray(arg) for arg in args[:num_params]]
     else:
