@@ -167,6 +167,30 @@ def _create_arg_arrays(cls, args):
     return arg_arrays
 
 
+def _reshape_sims_out(max_shape, n_replicas, obs_dim_int):
+    """Calculate the output shape for simulation results.
+
+    Parameters
+    ----------
+    max_shape : tuple or list
+        The maximum shape of the input parameters.
+    n_replicas : int
+        Number of replicas (samples) to draw for each trial.
+    obs_dim_int : int
+        The number of observation dimensions.
+
+    Returns
+    -------
+    tuple
+        The shape of the simulation output.
+    """
+    shape = [*max_shape[:-1], max_shape[-1]]
+    if n_replicas != 1:
+        shape.append(n_replicas)
+    shape.append(obs_dim_int)
+    return tuple(shape)
+
+
 def _get_seed(rng):
     """Get a seed for the random number generator."""
     iinfo32 = np.iinfo(np.uint32)
