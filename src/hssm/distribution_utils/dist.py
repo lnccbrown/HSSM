@@ -263,7 +263,15 @@ def _validate_size(size, new_data_size):
     """
     # If size is not None, we check if size is a multiple of the largest size.
     # If not, an error is thrown.
-    if size % new_data_size != 0:
+    # Handle case where size is a tuple (e.g., (np.int64(100),))
+    if isinstance(size, tuple):
+        if len(size) == 1:
+            size_val = size[0]
+        else:
+            size_val = size[0]  # Or handle multi-element tuple as needed
+    else:
+        size_val = size
+    if size_val % new_data_size != 0:
         raise ValueError("`size` needs to be a multiple of the size of data")
 
 
