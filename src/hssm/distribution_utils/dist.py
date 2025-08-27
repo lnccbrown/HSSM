@@ -418,41 +418,11 @@ def make_hssm_rv(
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
             seed = _get_seed(rng)
 
-            is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
-
-            if is_all_args_scalar:
-                # All parameters are scalars
-
-                theta = np.stack(arg_arrays)
-                if theta.ndim > 1:
-                    theta = theta.squeeze(axis=-1)
-
-                theta = np.tile(theta, (size, 1))
-                n_replicas = 1
-            else:
-                # Preprocess all parameters, reshape them into a matrix of dimension
-                # (size, n_params) where size is the number of elements in the largest
-                # of all parameters passed to *arg
-                elem_max_size = np.argmax([arg.size for arg in arg_arrays])
-                max_shape = arg_arrays[elem_max_size].shape
-
-                new_data_size = max_shape[-1]
-
-                theta = np.column_stack(
-                    [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
-                )
-
-                # We eventually want to get rid of this part, and
-                # simply make the simulators behave as would be expected
-                # by pymc directly.
-                if size is None or size == 1:
-                    n_replicas = 1
-                elif size % new_data_size != 0:
-                    raise ValueError(
-                        "`size` needs to be a multiple of the size of data"
-                    )
-                else:
-                    n_replicas = size // new_data_size
+            # --- Refactored logic ---
+            is_all_args_scalar, theta, max_shape, new_data_size = (
+                _prepare_theta_and_shape(arg_arrays, size)
+            )
+            n_replicas = _calculate_n_replicas(is_all_args_scalar, size, new_data_size)
 
             sims_out = simulator_fun_internal(
                 theta=theta,
