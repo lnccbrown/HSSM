@@ -328,11 +328,9 @@ def make_hssm_rv(
             # we are going to use this hack.
             size, args, kwargs = _extract_size(args, kwargs)
 
-            arg_arrays = _create_arg_arrays(args, len(cls._list_params))
-            p_outlier, arg_arrays = _get_p_outlier(cls._list_params, arg_arrays)
-
-            iinfo32 = np.iinfo(np.uint32)
-            seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
+            arg_arrays = _create_arg_arrays(cls, args)
+            p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
+            seed = _get_seed(rng)
 
             is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
 
