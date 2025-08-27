@@ -235,7 +235,15 @@ def _calculate_n_replicas(is_all_args_scalar, size, new_data_size):
     if size is None or size == 1:
         return 1
     _validate_size(size, new_data_size)
-    return size // new_data_size
+    # Handle case where size is a tuple (e.g., (np.int64(100),))
+    if isinstance(size, tuple):
+        if len(size) == 1:
+            size_val = size[0]
+        else:
+            size_val = size[0]  # Or handle multi-element tuple as needed
+    else:
+        size_val = size
+    return size_val // new_data_size
 
 
 def _validate_size(size, new_data_size):
