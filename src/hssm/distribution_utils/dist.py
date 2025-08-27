@@ -431,8 +431,6 @@ def make_hssm_rv(
                 **kwargs,
             )
 
-            # return sims_out, max_shape, size
-
             if not is_all_args_scalar:
                 if n_replicas == 1:
                     sims_out = sims_out.reshape(
