@@ -228,6 +228,34 @@ def _prepare_theta_and_shape(arg_arrays, size):
     return is_all_args_scalar, theta, max_shape, new_data_size
 
 
+def _extract_size_val(size: tuple | int) -> int:
+    """Extract integer value from size, handling tuple or scalar."""
+    if isinstance(size, tuple):
+        return size[0]
+    return size
+
+
+def _validate_size(size_val: int, new_data_size: int) -> None:
+    """Validate that `size` is a multiple of `new_data_size`.
+
+    Parameters
+    ----------
+    size_val : int
+        The total number of samples to be drawn.
+    new_data_size : int
+        The size of the new data to be used for sampling.
+
+    Raises
+    ------
+    ValueError
+        If `size_val` is not a multiple of `new_data_size`.
+    """
+    # If size is not None, we check if size is a multiple of the largest size.
+    # If not, an error is thrown.
+    if size_val % new_data_size != 0:
+        raise ValueError("`size` needs to be a multiple of the size of data")
+
+
 def _calculate_n_replicas(is_all_args_scalar, size, new_data_size):
     """
     Calculate the number of replicas (samples) to draw from each trial based on input arguments.
