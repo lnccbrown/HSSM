@@ -282,49 +282,11 @@ def _calculate_n_replicas(is_all_args_scalar, size, new_data_size):
         `_validate_size`.
     """  # noqa: E501
     # The multiple then becomes how many samples we draw from each trial.
-    if is_all_args_scalar:
+    if any([is_all_args_scalar, size is None, size == 1]):
         return 1
-    if size is None or size == 1:
-        return 1
-    _validate_size(size, new_data_size)
-    # Handle case where size is a tuple (e.g., (np.int64(100),))
-    if isinstance(size, tuple):
-        if len(size) == 1:
-            size_val = size[0]
-        else:
-            size_val = size[0]  # Or handle multi-element tuple as needed
-    else:
-        size_val = size
+    size_val = _extract_size_val(size)
+    _validate_size(size_val, new_data_size)
     return size_val // new_data_size
-
-
-def _validate_size(size, new_data_size):
-    """Validate that `size` is a multiple of `new_data_size`.
-
-    Parameters
-    ----------
-    size : int
-        The total number of samples to be drawn.
-    new_data_size : int
-        The size of the new data to be used for sampling.
-
-    Raises
-    ------
-    ValueError
-        If `size` is not a multiple of `new_data_size`.
-    """
-    # If size is not None, we check if size is a multiple of the largest size.
-    # If not, an error is thrown.
-    # Handle case where size is a tuple (e.g., (np.int64(100),))
-    if isinstance(size, tuple):
-        if len(size) == 1:
-            size_val = size[0]
-        else:
-            size_val = size[0]  # Or handle multi-element tuple as needed
-    else:
-        size_val = size
-    if size_val % new_data_size != 0:
-        raise ValueError("`size` needs to be a multiple of the size of data")
 
 
 def _build_decorated_simulator(model_name: str, choices: list) -> Callable:
@@ -497,7 +459,6 @@ def make_hssm_rv(
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
             seed = _get_seed(rng)
 
-            # --- Refactored logic ---
             is_all_args_scalar, theta, max_shape, new_data_size = (
                 _prepare_theta_and_shape(arg_arrays, size)
             )
