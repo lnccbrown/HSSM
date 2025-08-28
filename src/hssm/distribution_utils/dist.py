@@ -357,34 +357,16 @@ def make_hssm_rv(
         if simulator_fun_str not in ssms_model_config:
             _logger.warning(
                 "You supplied a model '%s', which is currently not supported in "
-                + "the ssm_simulators package. An error will be thrown when sampling "
-                + "from the random variable or when using any "
-                + "posterior or prior predictive sampling methods.",
+                "the ssm_simulators package. An error will be thrown when sampling "
+                "from the random variable or when using any "
+                "posterior or prior predictive sampling methods.",
                 simulator_fun_str,
             )
-            # We still build a bogus simulator function here
-            # that will raise an error when finally called.
-            simulator_fun_internal = decorate_atomic_simulator(
-                model_name=simulator_fun_str, choices=[0, 1, 2], obs_dim=2
-            )(
-                partial(
-                    ssms_sim_wrapper,
-                    simulator_fun=simulator,
-                    model=simulator_fun_str,  # will raise error due to unkown string
-                )
-            )
-        else:
-            simulator_fun_internal = decorate_atomic_simulator(
-                model_name=simulator_fun_str,
-                choices=ssms_model_config[simulator_fun_str]["choices"],
-                obs_dim=2,  # At least for now ssms models all fall under 2 obs dims
-            )(
-                partial(
-                    ssms_sim_wrapper,
-                    simulator_fun=simulator,  # Passing simulator from ssm-simulators
-                    model=simulator_fun_str,
-                )
-            )
+        choices = ssms_model_config[simulator_fun_str].get("choices", [0, 1, 2])
+        simulator_fun_internal = _build_decorated_simulator(
+            model_name=simulator_fun_str,
+            choices=choices,
+        )
     elif callable(simulator_fun):
         simulator_fun_internal = simulator_fun
     else:
