@@ -299,6 +299,35 @@ def _validate_size(size, new_data_size):
         raise ValueError("`size` needs to be a multiple of the size of data")
 
 
+def _build_decorated_simulator(model_name: str, choices: list) -> Callable:
+    """
+    Build a decorated simulator function for a given model and choices.
+
+    Parameters
+    ----------
+    model_name : str
+        The name of the model to use for simulation.
+    choices : list
+        A list of possible choices for the simulator.
+
+    Returns
+    -------
+    Callable
+        A decorated simulator function.
+    """
+    decorated_simulator = decorate_atomic_simulator(
+        model_name=model_name,
+        choices=choices,
+        obs_dim=2,
+    )
+    sim_wrapper = partial(
+        ssms_sim_wrapper,
+        simulator_fun=simulator,
+        model=model_name,
+    )
+    return decorated_simulator(sim_wrapper)
+
+
 def make_hssm_rv(
     simulator_fun: Callable | str,
     list_params: list[str],
