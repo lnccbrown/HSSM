@@ -442,11 +442,10 @@ def make_hssm_rv(
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
     simulator_fun_internal = _get_simulator_fun_internal(simulator_fun)
+    model_name, choices, obs_dim_int = _validate_simulator_fun(simulator_fun_internal)
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
-
-    model_name, choices, obs_dim_int = _validate_simulator_fun(simulator_fun_internal)
 
     # pylint: disable=W0511, R0903
     class HSSMRV(RandomVariable):
