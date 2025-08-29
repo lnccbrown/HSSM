@@ -416,13 +416,32 @@ def _get_simulator_fun_internal(simulator_fun: Callable | str):
             model_name=simulator_fun_str,
             choices=choices,
         )
-    elif callable(simulator_fun):
-        simulator_fun_internal = simulator_fun
-    else:
-        raise ValueError(
-            "The simulator argument must be a string or a callable, "
-            f"but you passed {simulator_fun}."
-        )
+        return simulator_fun_internal
+    return simulator_fun
+
+
+def make_hssm_rv(
+    simulator_fun: Callable | str,
+    list_params: list[str],
+    lapse: bmb.Prior | None = None,
+) -> Type[RandomVariable]:
+    """Build a RandomVariable Op according to the list of parameters.
+
+    Parameters
+    ----------
+    simulator_fun
+        A simulator function with the `model_name` and `choices` attributes.
+    list_params
+        A list of str of all parameters for this `RandomVariable`.
+    lapse : optional
+        A bmb.Prior object representing the lapse distribution.
+
+    Returns
+    -------
+    Type[RandomVariable]
+        A class of RandomVariable that are to be used in a `pm.Distribution`.
+    """
+    simulator_fun_internal = _get_simulator_fun_internal(simulator_fun)
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
