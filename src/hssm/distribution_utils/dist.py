@@ -446,21 +446,7 @@ def make_hssm_rv(
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
 
-    if hasattr(simulator_fun_internal, "model_name"):
-        model_name = simulator_fun_internal.model_name
-    else:
-        raise ValueError("The simulator function must have a `model_name` attribute.")
-    if hasattr(simulator_fun_internal, "choices"):
-        choices = simulator_fun_internal.choices
-    else:
-        raise ValueError("The simulator function must have a `choices` attribute.")
-    if hasattr(simulator_fun_internal, "obs_dim"):
-        if isinstance(simulator_fun_internal.obs_dim, int):
-            obs_dim_int = simulator_fun_internal.obs_dim
-        else:
-            raise ValueError("The obs_dim attribute must be an integer")
-    else:
-        raise ValueError("The simulator function must have a `obs_dim` attribute.")
+    model_name, choices, obs_dim_int = _validate_simulator_fun(simulator_fun_internal)
 
     # pylint: disable=W0511, R0903
     class HSSMRV(RandomVariable):
