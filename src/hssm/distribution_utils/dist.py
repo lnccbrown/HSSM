@@ -335,7 +335,7 @@ def _build_decorated_simulator(model_name: str, choices: list) -> Callable:
     return decorated_simulator(sim_wrapper)
 
 
-def _validate_simulator_fun_arg(simulator_fun: Callable | str) -> None:
+def _validate_simulator_fun_arg(simulator_fun: Any) -> None:
     """
     Validate the simulator function argument.
 
