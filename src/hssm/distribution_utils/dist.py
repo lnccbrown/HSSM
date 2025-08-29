@@ -651,7 +651,7 @@ def _apply_lapse_model(
 
 
 def make_distribution(
-    rv: str | Type[RandomVariable] | RandomVariable | Callable,
+    rv: str | Type[RandomVariable] | RandomVariable | Callable[..., Any],
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     bounds: dict | None = None,
@@ -700,7 +700,14 @@ def make_distribution(
         rv_instance = rv()
     elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
         rv_instance = rv
-    elif callable(rv) or isinstance(rv, str):
+    elif callable(rv):
+        random_variable = make_hssm_rv(
+            simulator_fun=cast("Callable[..., Any]", rv),
+            list_params=list_params,
+            lapse=lapse,
+        )
+        rv_instance = random_variable()
+    elif isinstance(rv, str):
         random_variable = make_hssm_rv(
             simulator_fun=rv,
             list_params=list_params,
@@ -848,7 +855,7 @@ class SSMFamily(bmb.Family):
 
 
 def make_likelihood_callable(
-    loglik: pytensor.graph.Op | Callable | PathLike | str,
+    loglik: pytensor.graph.Op | Callable[..., Any] | PathLike | str,
     loglik_kind: Literal["analytical", "approx_differentiable", "blackbox"],
     backend: Literal["pytensor", "jax", "other"] | None,
     params_is_reg: list[bool] | None = None,
@@ -884,16 +891,16 @@ def make_likelihood_callable(
         # callable directly. Otherwise, we wrap it in a BlackBoxOp.
         if loglik_kind == "analytical":
             if backend is None or backend == "pytensor":
-                return loglik
+                return cast("Callable[..., Any]", loglik)
             logp_funcs = make_jax_logp_funcs_from_callable(
-                loglik,
+                cast("Callable[..., Any]", loglik),
                 vmap=False,
                 params_only=False if params_only is None else params_only,
             )
             lan_logp_jax = make_jax_logp_ops(*logp_funcs)
             return lan_logp_jax
         elif loglik_kind == "blackbox":
-            return make_blackbox_op(loglik)
+            return make_blackbox_op(cast("Callable[..., Any]", loglik))
         elif loglik_kind == "approx_differentiable":
             if backend is None or backend == "jax":
                 if params_is_reg is None:
@@ -903,7 +910,7 @@ def make_likelihood_callable(
                         + "but did not set `params_is_reg`."
                     )
                 logp_funcs = make_jax_logp_funcs_from_callable(
-                    loglik,
+                    cast("Callable[..., Any]", loglik),
                     vmap=True,
                     params_is_reg=params_is_reg,
                     params_only=False if params_only is None else params_only,
@@ -925,35 +932,37 @@ def make_likelihood_callable(
         # return make_blackbox_op(loglik)
 
     # Other cases, when `loglik` is a string or a PathLike.
-    if loglik_kind != "approx_differentiable":
-        raise ValueError(
-            "You set `loglik_kind` to `approx_differentiable "
-            + "but did not provide a pm.Distribution, an Op, or a callable "
-            + "as `loglik`."
+    if isinstance(loglik, str) or isinstance(loglik, PathLike):
+        if loglik_kind != "approx_differentiable":
+            raise ValueError(
+                "You set `loglik_kind` to `approx_differentiable "
+                + "but did not provide a pm.Distribution, an Op, or a callable "
+                + "as `loglik`."
+            )
+
+        loglik_path = cast("str | PathLike", loglik)
+        onnx_model = load_onnx_model(loglik_path)
+
+        if backend == "pytensor":
+            lan_logp_pt = make_pytensor_logp_from_onnx(onnx_model)
+            return lan_logp_pt
+
+        if params_is_reg is None:
+            raise ValueError(
+                "You set `loglik_kind` to `approx_differentiable` "
+                + "and `backend` to `jax` but did not provide `params_is_reg`."
+            )
+
+        logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
+            onnx_model,
+            params_is_reg,
+            params_only=False if params_only is None else params_only,
         )
 
-    loglik = cast("str | PathLike", loglik)
-    onnx_model = load_onnx_model(loglik)
+        lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
 
-    if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp_from_onnx(onnx_model)
-        return lan_logp_pt
-
-    if params_is_reg is None:
-        raise ValueError(
-            "You set `loglik_kind` to `approx_differentiable` "
-            + "and `backend` to `jax` but did not provide `params_is_reg`."
-        )
-
-    logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
-        onnx_model,
-        params_is_reg,
-        params_only=False if params_only is None else params_only,
-    )
-
-    lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
-
-    return lan_logp_jax
+        return lan_logp_jax
+    raise TypeError("loglik must be a Callable, str, or PathLike")
 
 
 def make_missing_data_callable(
