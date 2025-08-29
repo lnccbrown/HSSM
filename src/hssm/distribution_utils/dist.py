@@ -172,10 +172,8 @@ def _create_arg_arrays(cls: type, args: tuple) -> list[np.ndarray]:
         List of argument arrays.
     """
     num_params = len(cls._list_params)
-    if num_params < len(args):
-        arg_arrays = [np.asarray(arg) for arg in args[:num_params]]
-    else:
-        arg_arrays = [np.asarray(arg) for arg in args]
+    n_args = min(num_params, len(args))
+    arg_arrays = [np.asarray(arg) for arg in args[:n_args]]
     return arg_arrays
 
 
