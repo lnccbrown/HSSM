@@ -415,26 +415,29 @@ def _get_simulator_fun_internal(simulator_fun: Callable | str):
     """
     _validate_simulator_fun_arg(simulator_fun)
 
-    if isinstance(simulator_fun, str):
-        # If simulator_fun is passed as a string,
-        # we assume it is a valid model in the
-        # ssm-simulators package.
-        simulator_fun_str = simulator_fun
-        if simulator_fun_str not in ssms_model_config:
-            _logger.warning(
-                "You supplied a model '%s', which is currently not supported in "
-                "the ssm_simulators package. An error will be thrown when sampling "
-                "from the random variable or when using any "
-                "posterior or prior predictive sampling methods.",
-                simulator_fun_str,
-            )
-        choices = ssms_model_config.get(simulator_fun_str, {}).get("choices", [0, 1, 2])
-        simulator_fun_internal = _build_decorated_simulator(
-            model_name=simulator_fun_str,
-            choices=choices,
+    if callable(simulator_fun):
+        return cast("Callable[..., Any]", simulator_fun)
+
+    # If simulator_fun is passed as a string,
+    # we assume it is a valid model in the
+    # ssm-simulators package.
+    if not isinstance(simulator_fun, str):
+        raise ValueError("simulator_fun must be a string or callable.")
+    simulator_fun_str = simulator_fun
+    if simulator_fun_str not in ssms_model_config:
+        _logger.warning(
+            "You supplied a model '%s', which is currently not supported in "
+            "the ssm_simulators package. An error will be thrown when sampling "
+            "from the random variable or when using any "
+            "posterior or prior predictive sampling methods.",
+            simulator_fun_str,
         )
-        return simulator_fun_internal
-    return simulator_fun
+    choices = ssms_model_config.get(simulator_fun_str, {}).get("choices", [0, 1, 2])
+    simulator_fun_internal = _build_decorated_simulator(
+        model_name=simulator_fun_str,
+        choices=choices,
+    )
+    return simulator_fun_internal
 
 
 def make_hssm_rv(
