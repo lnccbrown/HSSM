@@ -224,23 +224,25 @@ def _prepare_theta_and_shape(arg_arrays, size):
     """
     is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
     if is_all_args_scalar:
+        # If all parameters passed are scalar, assemble all parameters into a 1D array
+        # and pass it to the `theta` argument. In this case, size is the number of
+        # observations.
         theta = np.stack(arg_arrays)
         if theta.ndim > 1:
             theta = theta.squeeze(axis=-1)
         theta = np.tile(theta, (size, 1))
-        max_shape = None
-        new_data_size = None
-    else:
-        # Preprocess all parameters, reshape them into a matrix of dimension
-        # (size, n_params) where size is the number of elements in the
-        # largest of all parameters passed to *arg
-        elem_max_size = np.argmax([arg.size for arg in arg_arrays])
-        max_shape = arg_arrays[elem_max_size].shape
-        new_data_size = max_shape[-1]
-        theta = np.column_stack(
-            [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
-        )
-    return is_all_args_scalar, theta, max_shape, new_data_size
+        return True, theta, None, None
+
+    # Preprocess all parameters, reshape them into a matrix of dimension
+    # (size, n_params) where size is the number of elements in the
+    # largest of all parameters passed to *arg
+    largest_param_idx = np.argmax([arg.size for arg in arg_arrays])
+    max_shape = arg_arrays[largest_param_idx].shape
+    new_data_size = max_shape[-1]
+    theta = np.column_stack(
+        [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
+    )
+    return False, theta, max_shape, new_data_size
 
 
 def _extract_size_val(size: tuple | int) -> int:
