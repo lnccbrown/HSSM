@@ -352,7 +352,7 @@ def make_hssm_rv(
                 "posterior or prior predictive sampling methods.",
                 simulator_fun_str,
             )
-        choices = ssms_model_config[simulator_fun_str].get("choices", [0, 1, 2])
+        choices = ssms_model_config.get(simulator_fun_str, {}).get("choices", [0, 1, 2])
         simulator_fun_internal = _build_decorated_simulator(
             model_name=simulator_fun_str,
             choices=choices,
