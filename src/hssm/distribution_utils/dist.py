@@ -156,7 +156,7 @@ def _get_p_outlier(cls, arg_arrays):
     return p_outlier, arg_arrays
 
 
-class _HasListParams(Protocol): # for mypy
+class _HasListParams(Protocol):  # for mypy
     _list_params: list[str]
 
 
