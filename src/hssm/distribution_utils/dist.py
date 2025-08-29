@@ -339,14 +339,14 @@ def _validate_simulator_fun_arg(simulator_fun: Callable | str) -> None:
         )
 
 
-def _validate_simulator_fun(simulator_fun: Callable) -> tuple:
+def _validate_simulator_fun(simulator_fun: Any) -> tuple[str, list, int]:
     """
     Validate that the simulator function has required attributes.
 
     Parameters
     ----------
-    simulator_fun : Callable
-        The simulator function to validate.
+    simulator_fun : Any
+        The simulator function or object to validate.
 
     Returns
     -------
