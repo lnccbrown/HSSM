@@ -6,9 +6,10 @@ generation ops.
 """
 
 import logging
+from collections.abc import Callable
 from functools import partial
 from os import PathLike
-from typing import Any, Callable, Literal, Type, cast
+from typing import Any, Literal, Protocol, Type, cast
 
 import bambi as bmb
 import numpy as np
@@ -155,7 +156,11 @@ def _get_p_outlier(cls, arg_arrays):
     return p_outlier, arg_arrays
 
 
-def _create_arg_arrays(cls: type, args: tuple) -> list[np.ndarray]:
+class _HasListParams(Protocol): # for mypy
+    _list_params: list[str]
+
+
+def _create_arg_arrays(cls: _HasListParams, args: tuple) -> list[np.ndarray]:
     """
     Create argument arrays from input arguments.
 
