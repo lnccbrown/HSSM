@@ -396,6 +396,8 @@ def _get_simulator_fun_internal(simulator_fun: Callable | str):
     ValueError
         If the simulator argument is not a string or a callable.
     """
+    _validate_simulator_fun_arg(simulator_fun)
+
     if isinstance(simulator_fun, str):
         # If simulator_fun is passed as a string,
         # we assume it is a valid model in the
