@@ -318,26 +318,83 @@ def _build_decorated_simulator(model_name: str, choices: list) -> Callable:
     return decorated_simulator(sim_wrapper)
 
 
-def make_hssm_rv(
-    simulator_fun: Callable | str,
-    list_params: list[str],
-    lapse: bmb.Prior | None = None,
-) -> Type[RandomVariable]:
-    """Build a RandomVariable Op according to the list of parameters.
+def _validate_simulator_fun_arg(simulator_fun: Callable | str) -> None:
+    """
+    Validate the simulator function argument.
 
     Parameters
     ----------
-    simulator_fun
-        A simulator function with the `model_name` and `choices` attributes.
-    list_params
-        A list of str of all parameters for this `RandomVariable`.
-    lapse : optional
-        A bmb.Prior object representing the lapse distribution.
+    simulator_fun : Callable or str
+        The simulator function or the name of the model as a string.
+
+    Raises
+    ------
+    ValueError
+        If the simulator argument is not a string or a callable.
+    """
+    if not (isinstance(simulator_fun, str) or callable(simulator_fun)):
+        raise ValueError(
+            "The simulator argument must be a string or a callable, "
+            f"but you passed {type(simulator_fun)}."
+        )
+
+
+def _validate_simulator_fun(simulator_fun: Callable) -> tuple:
+    """
+    Validate that the simulator function has required attributes.
+
+    Parameters
+    ----------
+    simulator_fun : Callable
+        The simulator function to validate.
 
     Returns
     -------
-    Type[RandomVariable]
-        A class of RandomVariable that are to be used in a `pm.Distribution`.
+    tuple
+        A tuple containing model_name, choices, and obs_dim_int.
+
+    Raises
+    ------
+    ValueError
+        If any required attribute is missing or invalid.
+    """
+    if not hasattr(simulator_fun, "model_name"):
+        raise ValueError("The simulator function must have a `model_name` attribute.")
+    model_name = simulator_fun.model_name
+
+    if not hasattr(simulator_fun, "choices"):
+        raise ValueError("The simulator function must have a `choices` attribute.")
+    choices = simulator_fun.choices
+
+    if not hasattr(simulator_fun, "obs_dim"):
+        raise ValueError("The simulator function must have a `obs_dim` attribute.")
+    obs_dim = simulator_fun.obs_dim
+
+    if not isinstance(obs_dim, int):
+        raise ValueError("The obs_dim attribute must be an integer")
+    obs_dim_int = obs_dim
+
+    return model_name, choices, obs_dim_int
+
+
+def _get_simulator_fun_internal(simulator_fun: Callable | str):
+    """
+    Get the internal simulator function for a given model.
+
+    Parameters
+    ----------
+    simulator_fun : Callable or str
+        The simulator function or the name of the model as a string.
+
+    Returns
+    -------
+    Callable
+        The decorated simulator function.
+
+    Raises
+    ------
+    ValueError
+        If the simulator argument is not a string or a callable.
     """
     if isinstance(simulator_fun, str):
         # If simulator_fun is passed as a string,
