@@ -82,3 +82,4 @@ explorations/
 *.nbconvert.ipynb
 pypi-token
 pre-commit
+.github/copilot-instructions.md

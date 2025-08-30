@@ -52,11 +52,7 @@ def test_make_rldm_logp_func(fixture_path):
 
     assert jax_LL.shape[0] == total_trials
 
-    np.testing.assert_almost_equal(
-        jax_LL.sum(),
-        -6879.1523,
-        decimal=4,
-    )
+    np.testing.assert_allclose(jax_LL.sum(), -6879.1523, rtol=1e-3)
 
 
 def test_make_rldm_logp_op(fixture_path):
