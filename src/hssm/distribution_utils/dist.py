@@ -28,6 +28,7 @@ from ssms.hssm_support import (
     _get_seed,
     _prepare_theta_and_shape,
     _reshape_sims_out,
+    _validate_simulator_fun,
 )
 
 from .._types import LogLikeFunc
@@ -180,44 +181,6 @@ def _validate_simulator_fun_arg(simulator_fun: Any) -> None:
             "The simulator argument must be a string or a callable, "
             f"but you passed {type(simulator_fun)}."
         )
-
-
-def _validate_simulator_fun(simulator_fun: Any) -> tuple[str, list, int]:
-    """
-    Validate that the simulator function has required attributes.
-
-    Parameters
-    ----------
-    simulator_fun : Any
-        The simulator function or object to validate.
-
-    Returns
-    -------
-    tuple
-        A tuple containing model_name, choices, and obs_dim_int.
-
-    Raises
-    ------
-    ValueError
-        If any required attribute is missing or invalid.
-    """
-    if not hasattr(simulator_fun, "model_name"):
-        raise ValueError("The simulator function must have a `model_name` attribute.")
-    model_name = simulator_fun.model_name
-
-    if not hasattr(simulator_fun, "choices"):
-        raise ValueError("The simulator function must have a `choices` attribute.")
-    choices = simulator_fun.choices
-
-    if not hasattr(simulator_fun, "obs_dim"):
-        raise ValueError("The simulator function must have a `obs_dim` attribute.")
-    obs_dim = simulator_fun.obs_dim
-
-    if not isinstance(obs_dim, int):
-        raise ValueError("The obs_dim attribute must be an integer")
-    obs_dim_int = obs_dim
-
-    return model_name, choices, obs_dim_int
 
 
 def _get_simulator_fun_internal(simulator_fun: Callable | str):
