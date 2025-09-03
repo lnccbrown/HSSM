@@ -20,7 +20,13 @@ from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
-from ssms.hssm_support import _calculate_n_replicas, _create_arg_arrays, _extract_size
+from ssms.hssm_support import (
+    _calculate_n_replicas,
+    _create_arg_arrays,
+    _extract_size,
+    _get_p_outlier,
+    _get_seed,
+)
 
 from .._types import LogLikeFunc
 from ..utils import decorate_atomic_simulator, ssms_sim_wrapper
@@ -124,15 +130,6 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
     )
 
 
-def _get_p_outlier(cls, arg_arrays):
-    """Get p_outlier from arg_arrays and update arg_arrays."""
-    list_params = cls._list_params
-    p_outlier = None
-    if list_params and list_params[-1] == "p_outlier":
-        p_outlier = arg_arrays.pop(-1)
-    return p_outlier, arg_arrays
-
-
 def _reshape_sims_out(max_shape, n_replicas, obs_dim_int):
     """Calculate the output shape for simulation results.
 
@@ -155,12 +152,6 @@ def _reshape_sims_out(max_shape, n_replicas, obs_dim_int):
         shape.append(n_replicas)
     shape.append(obs_dim_int)
     return tuple(shape)
-
-
-def _get_seed(rng):
-    """Get a seed for the random number generator."""
-    iinfo32 = np.iinfo(np.uint32)
-    return rng.integers(0, iinfo32.max, dtype=np.uint32)
 
 
 def _prepare_theta_and_shape(arg_arrays, size):
