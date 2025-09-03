@@ -29,6 +29,7 @@ from ssms.hssm_support import (
     _prepare_theta_and_shape,
     _reshape_sims_out,
     _validate_simulator_fun,
+    _validate_simulator_fun_arg,
 )
 
 from .._types import LogLikeFunc
@@ -162,27 +163,7 @@ def _build_decorated_simulator(model_name: str, choices: list) -> Callable:
     return decorated_simulator(sim_wrapper)
 
 
-def _validate_simulator_fun_arg(simulator_fun: Any) -> None:
-    """
-    Validate the simulator function argument.
-
-    Parameters
-    ----------
-    simulator_fun : Callable or str
-        The simulator function or the name of the model as a string.
-
-    Raises
-    ------
-    ValueError
-        If the simulator argument is not a string or a callable.
-    """
-    if not (isinstance(simulator_fun, str) or callable(simulator_fun)):
-        raise ValueError(
-            "The simulator argument must be a string or a callable, "
-            f"but you passed {type(simulator_fun)}."
-        )
-
-
+# leave for last
 def _get_simulator_fun_internal(simulator_fun: Callable | str):
     """
     Get the internal simulator function for a given model.
