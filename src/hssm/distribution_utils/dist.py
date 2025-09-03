@@ -27,6 +27,7 @@ from ssms.hssm_support import (
     _get_p_outlier,
     _get_seed,
     _prepare_theta_and_shape,
+    _reshape_sims_out,
 )
 
 from .._types import LogLikeFunc
@@ -129,30 +130,6 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
         LOGP_LB,
         logp,
     )
-
-
-def _reshape_sims_out(max_shape, n_replicas, obs_dim_int):
-    """Calculate the output shape for simulation results.
-
-    Parameters
-    ----------
-    max_shape : tuple or list
-        The maximum shape of the input parameters.
-    n_replicas : int
-        Number of replicas (samples) to draw for each trial.
-    obs_dim_int : int
-        The number of observation dimensions.
-
-    Returns
-    -------
-    tuple
-        The shape of the simulation output.
-    """
-    shape = [*max_shape[:-1], max_shape[-1]]
-    if n_replicas != 1:
-        shape.append(n_replicas)
-    shape.append(obs_dim_int)
-    return tuple(shape)
 
 
 def _build_decorated_simulator(model_name: str, choices: list) -> Callable:
