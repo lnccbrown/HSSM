@@ -9,7 +9,7 @@ import logging
 from collections.abc import Callable
 from functools import partial
 from os import PathLike
-from typing import Any, Literal, Protocol, Type, cast
+from typing import Any, Literal, Type, cast
 
 import bambi as bmb
 import numpy as np
@@ -20,6 +20,7 @@ from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
+from ssms.hssm_support import _create_arg_arrays
 
 from .._types import LogLikeFunc
 from ..utils import decorate_atomic_simulator, ssms_sim_wrapper
@@ -154,32 +155,6 @@ def _get_p_outlier(cls, arg_arrays):
     if list_params and list_params[-1] == "p_outlier":
         p_outlier = arg_arrays.pop(-1)
     return p_outlier, arg_arrays
-
-
-class _HasListParams(Protocol):  # for mypy
-    _list_params: list[str]
-
-
-def _create_arg_arrays(cls: _HasListParams, args: tuple) -> list[np.ndarray]:
-    """
-    Create argument arrays from input arguments.
-
-    Parameters
-    ----------
-    cls : type
-        The class containing `_list_params`.
-    args : tuple
-        Input arguments.
-
-    Returns
-    -------
-    list of np.ndarray
-        List of argument arrays.
-    """
-    num_params = len(cls._list_params)
-    n_args = min(num_params, len(args))
-    arg_arrays = [np.asarray(arg) for arg in args[:n_args]]
-    return arg_arrays
 
 
 def _reshape_sims_out(max_shape, n_replicas, obs_dim_int):
