@@ -7,7 +7,6 @@ generation ops.
 
 import logging
 from collections.abc import Callable
-from functools import partial
 from os import PathLike
 from typing import Any, Literal, Type, cast
 
@@ -18,22 +17,19 @@ import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
-from ssms.basic_simulators.simulator import simulator
-from ssms.config import model_config as ssms_model_config
 from ssms.hssm_support import (
     _calculate_n_replicas,
     _create_arg_arrays,
     _extract_size,
     _get_p_outlier,
     _get_seed,
+    _get_simulator_fun_internal,
     _prepare_theta_and_shape,
     _reshape_sims_out,
     _validate_simulator_fun,
-    _validate_simulator_fun_arg,
 )
 
 from .._types import LogLikeFunc
-from ..utils import decorate_atomic_simulator, ssms_sim_wrapper
 from .blackbox import make_blackbox_op
 from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
@@ -132,82 +128,6 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
         LOGP_LB,
         logp,
     )
-
-
-def _build_decorated_simulator(model_name: str, choices: list) -> Callable:
-    """
-    Build a decorated simulator function for a given model and choices.
-
-    Parameters
-    ----------
-    model_name : str
-        The name of the model to use for simulation.
-    choices : list
-        A list of possible choices for the simulator.
-
-    Returns
-    -------
-    Callable
-        A decorated simulator function.
-    """
-    decorated_simulator = decorate_atomic_simulator(
-        model_name=model_name,
-        choices=choices,
-        obs_dim=2,
-    )
-    sim_wrapper = partial(
-        ssms_sim_wrapper,
-        simulator_fun=simulator,
-        model=model_name,
-    )
-    return decorated_simulator(sim_wrapper)
-
-
-# leave for last
-def _get_simulator_fun_internal(simulator_fun: Callable | str):
-    """
-    Get the internal simulator function for a given model.
-
-    Parameters
-    ----------
-    simulator_fun : Callable or str
-        The simulator function or the name of the model as a string.
-
-    Returns
-    -------
-    Callable
-        The decorated simulator function.
-
-    Raises
-    ------
-    ValueError
-        If the simulator argument is not a string or a callable.
-    """
-    _validate_simulator_fun_arg(simulator_fun)
-
-    if callable(simulator_fun):
-        return cast("Callable[..., Any]", simulator_fun)
-
-    # If simulator_fun is passed as a string,
-    # we assume it is a valid model in the
-    # ssm-simulators package.
-    if not isinstance(simulator_fun, str):
-        raise ValueError("simulator_fun must be a string or callable.")
-    simulator_fun_str = simulator_fun
-    if simulator_fun_str not in ssms_model_config:
-        _logger.warning(
-            "You supplied a model '%s', which is currently not supported in "
-            "the ssm_simulators package. An error will be thrown when sampling "
-            "from the random variable or when using any "
-            "posterior or prior predictive sampling methods.",
-            simulator_fun_str,
-        )
-    choices = ssms_model_config.get(simulator_fun_str, {}).get("choices", [0, 1, 2])
-    simulator_fun_internal = _build_decorated_simulator(
-        model_name=simulator_fun_str,
-        choices=choices,
-    )
-    return simulator_fun_internal
 
 
 def make_hssm_rv(
