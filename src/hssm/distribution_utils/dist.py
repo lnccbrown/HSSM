@@ -20,7 +20,7 @@ from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
-from ssms.hssm_support import _calculate_n_replicas, _create_arg_arrays
+from ssms.hssm_support import _calculate_n_replicas, _create_arg_arrays, _extract_size
 
 from .._types import LogLikeFunc
 from ..utils import decorate_atomic_simulator, ssms_sim_wrapper
@@ -122,30 +122,6 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
         LOGP_LB,
         logp,
     )
-
-
-def _extract_size(args, kwargs):
-    """Extract size from args and kwargs.
-
-    Returns
-    -------
-    size : int
-        The size of the random sample to generate.
-    args : tuple
-        The original arguments, with size removed if it was present.
-    kwargs : dict
-        The original keyword arguments, with size removed if it was present.
-    """
-    if "size" in kwargs:
-        size = kwargs.pop("size")
-    else:
-        size = args[-1]
-        args = args[:-1]
-
-    if size is None:
-        size = 1
-
-    return size, args, kwargs
 
 
 def _get_p_outlier(cls, arg_arrays):
