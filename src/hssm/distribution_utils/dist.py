@@ -20,7 +20,7 @@ from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
 from ssms.basic_simulators.simulator import simulator
 from ssms.config import model_config as ssms_model_config
-from ssms.hssm_support import _create_arg_arrays
+from ssms.hssm_support import _calculate_n_replicas, _create_arg_arrays
 
 from .._types import LogLikeFunc
 from ..utils import decorate_atomic_simulator, ssms_sim_wrapper
@@ -218,67 +218,6 @@ def _prepare_theta_and_shape(arg_arrays, size):
         [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
     )
     return False, theta, max_shape, new_data_size
-
-
-def _extract_size_val(size: tuple | int) -> int:
-    """Extract integer value from size, handling tuple or scalar."""
-    if isinstance(size, tuple):
-        return size[0]
-    return size
-
-
-def _validate_size(size_val: int, new_data_size: int) -> None:
-    """Validate that `size` is a multiple of `new_data_size`.
-
-    Parameters
-    ----------
-    size_val : int
-        The total number of samples to be drawn.
-    new_data_size : int
-        The size of the new data to be used for sampling.
-
-    Raises
-    ------
-    ValueError
-        If `size_val` is not a multiple of `new_data_size`.
-    """
-    # If size is not None, we check if size is a multiple of the largest size.
-    # If not, an error is thrown.
-    if size_val % new_data_size != 0:
-        raise ValueError("`size` needs to be a multiple of the size of data")
-
-
-def _calculate_n_replicas(is_all_args_scalar, size, new_data_size):
-    """
-    Calculate the number of replicas (samples) to draw from each trial based on input arguments.
-
-    Parameters
-    ----------
-    is_all_args_scalar : bool
-        Indicates whether all input arguments are scalars.
-    size : int or None
-        The total number of samples to be drawn. If None or 1, only one replica is
-        drawn.
-    new_data_size : int
-        The size of the new data to be used for sampling.
-
-    Returns
-    -------
-    int
-        The number of replicas to draw for each trial.
-
-    Raises
-    ------
-    ValueError
-        If `size` is not compatible with `new_data_size` as determined by
-        `_validate_size`.
-    """  # noqa: E501
-    # The multiple then becomes how many samples we draw from each trial.
-    if any([is_all_args_scalar, size is None, size == 1]):
-        return 1
-    size_val = _extract_size_val(size)
-    _validate_size(size_val, new_data_size)
-    return size_val // new_data_size
 
 
 def _build_decorated_simulator(model_name: str, choices: list) -> Callable:
