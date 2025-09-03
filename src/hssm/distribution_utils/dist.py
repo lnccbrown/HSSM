@@ -26,6 +26,7 @@ from ssms.hssm_support import (
     _extract_size,
     _get_p_outlier,
     _get_seed,
+    _prepare_theta_and_shape,
 )
 
 from .._types import LogLikeFunc
@@ -152,39 +153,6 @@ def _reshape_sims_out(max_shape, n_replicas, obs_dim_int):
         shape.append(n_replicas)
     shape.append(obs_dim_int)
     return tuple(shape)
-
-
-def _prepare_theta_and_shape(arg_arrays, size):
-    """
-    Prepare the parameter matrix `theta` for simulation.
-
-    If all parameters passed are scalar, assemble all parameters into a 1D array
-    and pass it to the `theta` argument. In this case, size is number of observations.
-    If any parameter is a vector, preprocess all parameters, reshape them into a matrix
-    of dimension (size, n_params) where size is the number of elements in the largest
-    of all parameters passed to *arg.
-    """
-    is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
-    if is_all_args_scalar:
-        # If all parameters passed are scalar, assemble all parameters into a 1D array
-        # and pass it to the `theta` argument. In this case, size is the number of
-        # observations.
-        theta = np.stack(arg_arrays)
-        if theta.ndim > 1:
-            theta = theta.squeeze(axis=-1)
-        theta = np.tile(theta, (size, 1))
-        return True, theta, None, None
-
-    # Preprocess all parameters, reshape them into a matrix of dimension
-    # (size, n_params) where size is the number of elements in the
-    # largest of all parameters passed to *arg
-    largest_param_idx = np.argmax([arg.size for arg in arg_arrays])
-    max_shape = arg_arrays[largest_param_idx].shape
-    new_data_size = max_shape[-1]
-    theta = np.column_stack(
-        [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
-    )
-    return False, theta, max_shape, new_data_size
 
 
 def _build_decorated_simulator(model_name: str, choices: list) -> Callable:
