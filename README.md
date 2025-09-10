@@ -47,8 +47,7 @@ for Computational Brain Science within the Carney Institute at Brown University.
 ## Cite HSSM
 
 Fengler, A., Xu, Y., Bera, K., Omar, A., Frank, M.J. (in preparation). HSSM: A
-generalized toolbox for hierarchical bayesian estimation of computational models
-in cognitive neuroscience.
+widely applicable toolbox for hierarchical bayesian neurocognitive modeling.
 
 ## Example
 
