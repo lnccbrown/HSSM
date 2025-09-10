@@ -46,7 +46,7 @@ for Computational Brain Science within the Carney Institute at Brown University.
 
 ## Cite HSSM
 
-Fengler, A., Xu, Y., Bera, K., Omar, A., Frank, M.J. (in preparation). HSSM: A
+Fengler, A., Xu, Y., Bera, K., Paniagua, C.,  Omar, A., Frank, M.J. (in preparation). HSSM: A
 widely applicable toolbox for hierarchical bayesian neurocognitive modeling.
 
 ## Example
