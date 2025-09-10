@@ -9,8 +9,11 @@ This file defines the entry class HSSM.
 import datetime
 import logging
 import typing
+import warnings
 from copy import deepcopy
+from dataclasses import dataclass
 from inspect import isclass, signature
+from itertools import repeat
 from os import PathLike
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, Union, cast, get_args
@@ -87,6 +90,58 @@ class classproperty:
 
     def __get__(self, instance, owner):  # noqa: D105
         return self.fget(owner)
+
+
+@dataclass
+class LapseConfig:
+    """Configuration for lapse/outlier modeling.
+
+    This class encapsulates the parameters needed for modeling lapse responses
+    (outliers) in sequential sampling models. Lapse responses are trials where
+    participants respond from a contaminant process rather than the main
+    decision-making process.
+
+    Parameters
+    ----------
+    p_outlier : float | bmb.Prior
+        The lapse probability. Can be a fixed value between 0 and 1, or a
+        prior distribution (e.g., bmb.Prior("Beta", alpha=1, beta=19)).
+    lapse_dist : bmb.Prior, optional
+        The distribution for lapse response times. Defaults to a uniform
+        distribution between 0 and 20 seconds. Choice responses for lapse
+        trials are assumed to be uniformly random across available choices.
+
+    Examples
+    --------
+    Fixed 5% lapse probability:
+    >>> lapse_config = LapseConfig(p_outlier=0.05)
+
+    Estimated lapse probability with custom distributions:
+    >>> lapse_config = LapseConfig(
+    ...     p_outlier=bmb.Prior("Beta", alpha=1, beta=19),
+    ...     lapse_dist=bmb.Prior("Uniform", lower=0.0, upper=10.0),
+    ... )
+    """
+
+    p_outlier: Union[float, bmb.Prior]
+    lapse_dist: bmb.Prior = None  # Will be set in __post_init__
+
+    def __post_init__(self) -> None:
+        """Validate and set default values for lapse configuration."""
+        # Set default lapse distribution if not provided
+        if self.lapse_dist is None:
+            self.lapse_dist = bmb.Prior("Uniform", lower=0.0, upper=20.0)
+
+        # Validate p_outlier type and value
+        if isinstance(self.p_outlier, (int, float)):
+            if not (0.0 <= self.p_outlier <= 1.0):
+                raise ValueError(
+                    f"p_outlier must be between 0 and 1, got {self.p_outlier}"
+                )
+        elif not isinstance(self.p_outlier, bmb.Prior):
+            raise TypeError(
+                f"p_outlier must be a float or bambi.Prior, got {type(self.p_outlier)}"
+            )
 
 
 class HSSM(DataValidator):
@@ -173,13 +228,26 @@ class HSSM(DataValidator):
             will be `analytical`. For other models supported, it will be
             `approx_differentiable`. If the model is a custom one, a ValueError
             will be raised.
+    lapse_config : optional
+        Configuration for lapse/outlier modeling. Can be a `LapseConfig` object,
+        a dictionary with 'p_outlier' and optionally 'lapse_dist' keys, or `None`
+        to disable lapse modeling. When provided, this is the recommended way to
+        configure lapse parameters. Defaults to `None`.
+
+    Examples
+    --------
+    - `LapseConfig(p_outlier=0.05)` for fixed 5% lapse probability
+    - `LapseConfig(p_outlier=bmb.Prior("Beta", alpha=1, beta=19))` for estimated
+    - `{'p_outlier': 0.05, 'lapse_dist': bmb.Prior("Uniform", lower=0, upper=10)}`
     p_outlier : optional
-        The fixed lapse probability or the prior distribution of the lapse probability.
-        Defaults to a fixed value of 0.05. When `None`, the lapse probability will not
-        be included in estimation.
+        **DEPRECATED:** Use `lapse_config` instead. The fixed lapse probability or
+        the prior distribution of the lapse probability. Defaults to a fixed value
+        of 0.05. When `None`, the lapse probability will not be included in estimation.
+        Cannot be used together with `lapse_config`.
     lapse : optional
-        The lapse distribution. This argument is required only if `p_outlier` is not
-        `None`. Defaults to Uniform(0.0, 10.0).
+        **DEPRECATED:** Use `lapse_config` instead. The lapse distribution. This
+        argument is required only if `p_outlier` is not `None`. Defaults to
+        Uniform(0.0, 10.0). Cannot be used together with `lapse_config`.
     global_formula : optional
         A string that specifies a regressions formula which will be used for all model
         parameters. If you specify parameter-wise regressions in addition, these will
@@ -273,6 +341,7 @@ class HSSM(DataValidator):
             str | PathLike | Callable | pytensor.graph.Op | type[pm.Distribution] | None
         ) = None,
         loglik_kind: LoglikKind | None = None,
+        lapse_config: LapseConfig | dict | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
         global_formula: str | None = None,
@@ -436,9 +505,15 @@ class HSSM(DataValidator):
         if self.deadline:
             self.response.append(self.deadline_name)
 
-        # Process lapse distribution
-        self.has_lapse = p_outlier is not None and p_outlier != 0
-        self._check_lapse(lapse)
+        # Process lapse configuration with backward compatibility
+        self._processed_lapse_config = self._process_lapse_configuration(
+            lapse_config, p_outlier, lapse
+        )
+        self.has_lapse = (
+            self._processed_lapse_config is not None
+            and self._processed_lapse_config.p_outlier is not None
+            and self._processed_lapse_config.p_outlier != 0
+        )
         if self.has_lapse and self.list_params[-1] != "p_outlier":
             self.list_params.append("p_outlier")
 
@@ -447,7 +522,9 @@ class HSSM(DataValidator):
             model=self,
             include=[] if include is None else include,
             kwargs=kwargs,
-            p_outlier=p_outlier,
+            p_outlier=(
+                self._processed_lapse_config.p_outlier if self.has_lapse else p_outlier
+            ),
         )
 
         self._parent = self.params.parent
@@ -464,9 +541,9 @@ class HSSM(DataValidator):
             if param.is_regression and param.bounds is not None
         }
 
-        # Set p_outlier and lapse
+        # Set p_outlier and lapse from processed configuration
         self.p_outlier = self.params.get("p_outlier")
-        self.lapse = lapse if self.has_lapse else None
+        self.lapse = self._processed_lapse_config.lapse_dist if self.has_lapse else None
 
         self._post_check_data_sanity()
 
@@ -1712,9 +1789,9 @@ class HSSM(DataValidator):
                 intercept_term = component.intercept_term
                 if intercept_term is not None:
                     output.append(_print_prior(intercept_term))
-                for _, common_term in component.common_terms.items():
+                for common_term in component.common_terms.values():
                     output.append(_print_prior(common_term))
-                for _, group_specific_term in component.group_specific_terms.items():
+                for group_specific_term in component.group_specific_terms.values():
                     output.append(_print_prior(group_specific_term))
                 output.append(f"    Link: {param.link}")
             # None regression case
@@ -1864,6 +1941,96 @@ class HSSM(DataValidator):
                 + "parameter is not None"
             )
 
+    def _process_lapse_configuration(
+        self,
+        lapse_config: LapseConfig | dict | None,
+        p_outlier: float | dict | bmb.Prior | None,
+        lapse: dict | bmb.Prior | None,
+    ) -> LapseConfig | None:
+        """Process lapse configuration with backward compatibility and deprecation.
+
+        Parameters
+        ----------
+        lapse_config : LapseConfig | dict | None
+            New-style lapse configuration
+        p_outlier : float | dict | bmb.Prior | None
+            Old-style lapse probability parameter
+        lapse : dict | bmb.Prior | None
+            Old-style lapse distribution parameter
+
+        Returns
+        -------
+        LapseConfig | None
+            Processed lapse configuration, or None if no lapse modeling
+
+        Raises
+        ------
+        ValueError
+            If both new and old interfaces are used together
+        """
+        # Check if both new and old interfaces are used
+        new_interface_used = lapse_config is not None
+        old_interface_used = (p_outlier is not None and p_outlier != 0.05) or (
+            lapse is not None and lapse != bmb.Prior("Uniform", lower=0.0, upper=20.0)
+        )
+
+        if new_interface_used and old_interface_used:
+            raise ValueError(
+                "Cannot specify both lapse_config and deprecated p_outlier/lapse "
+                "parameters together. Please use only lapse_config."
+            )
+
+        # Handle new interface
+        if lapse_config is not None:
+            if isinstance(lapse_config, dict):
+                # Convert dict to LapseConfig
+                if "p_outlier" not in lapse_config:
+                    raise ValueError(
+                        "lapse_config dictionary must contain 'p_outlier' key"
+                    )
+                return LapseConfig(
+                    p_outlier=lapse_config["p_outlier"],
+                    lapse_dist=lapse_config.get(
+                        "lapse_dist", bmb.Prior("Uniform", lower=0.0, upper=20.0)
+                    ),
+                )
+            elif isinstance(lapse_config, LapseConfig):
+                return lapse_config
+            else:
+                raise TypeError(
+                    "lapse_config must be a LapseConfig object, dictionary, or None"
+                )
+
+        # Handle old interface with deprecation warnings
+        if p_outlier is not None and p_outlier != 0:
+            warnings.warn(
+                "The 'p_outlier' and 'lapse' parameters are deprecated. "
+                "Please use the 'lapse_config' parameter instead:\n"
+                "  # Old way:\n"
+                f"  HSSM(data, p_outlier={p_outlier!r}, lapse=...)\n"
+                "  # New way:\n"
+                f"  HSSM(data, lapse_config=LapseConfig(p_outlier={p_outlier!r}))",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            return LapseConfig(p_outlier=p_outlier, lapse_dist=lapse)
+
+        # No lapse modeling
+        if p_outlier is None or p_outlier == 0:
+            return None
+
+        # Default case (p_outlier=0.05)
+        warnings.warn(
+            "The default 'p_outlier=0.05' parameter is deprecated. "
+            "To enable lapse modeling, use:\n"
+            "  HSSM(data, lapse_config=LapseConfig(p_outlier=0.05))\n"
+            "To disable lapse modeling, use:\n"
+            "  HSSM(data, lapse_config=None)",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return LapseConfig(p_outlier=p_outlier, lapse_dist=lapse)
+
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
         ### Logic for different types of likelihoods:
@@ -1886,7 +2053,7 @@ class HSSM(DataValidator):
             if param_name != "p_outlier"
         ]
         if self.extra_fields is not None:
-            params_is_reg += [True for _ in self.extra_fields]
+            params_is_reg += list(repeat(True, len(self.extra_fields)))
 
         if self.loglik_kind == "approx_differentiable":
             if self.model_config.backend == "jax":

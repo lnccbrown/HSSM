@@ -14,7 +14,7 @@ import sys
 from .config import ModelConfig
 from .datasets import load_data
 from .defaults import show_defaults
-from .hssm import HSSM
+from .hssm import HSSM, LapseConfig
 from .link import Link
 from .param import UserParam as Param
 from .prior import Prior
@@ -41,4 +41,5 @@ __all__ = [
     "simulate_data",
     "set_floatX",
     "show_defaults",
+    "LapseConfig",
 ]
