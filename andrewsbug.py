@@ -21,18 +21,17 @@ shrinkspot_2_logp_jax_op_simple = make_likelihood_callable(
     loglik=network_path_extended_r_10,
     # Because we are using a network trained to approximate a likelihood
     loglik_kind="approx_differentiable",
-    backend="jax",  # Basically our default backend
+    backend="jax",  
     params_is_reg=[
-        True,
+        False,
+        False,
         False,
         False,
         True,
-        True,
         False,
-        True,
+        False,
     ],
-    # At point of construction, we have to decide which parameters will be the target of
-    # regressions
+    
     params_only=False,
 )
 
@@ -93,9 +92,6 @@ data_hier_a = decorated_simulator(
 
 data_pd_sim = pd.DataFrame(data_hier_a, columns=["rt", "response"])
 
-data_pd_sim["p_trial_properties"] = p_trial_properties_sim
-data_pd_sim["pouter_trialwise"] = pouter_trialwise
-
 
 with pm.Model() as model_1:
     # data
@@ -124,3 +120,4 @@ with pm.Model() as model_1:
         p_outlier=p_outlier,
         observed=y,
     )
+pm.model_to_graphviz(model_1)
