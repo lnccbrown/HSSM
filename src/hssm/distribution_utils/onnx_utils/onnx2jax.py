@@ -36,6 +36,6 @@ def make_jax_func(onnx_model: onnx.ModelProto) -> Callable:
 
     # Create a JAX function that takes the input and applies the ONNX model.
     run_func = jax.tree_util.Partial(model_func, model_weights)
-    jax_func = lambda x: run_func({input_name: x})
+    jax_func = lambda x: run_func({input_name: x})[0].squeeze()
 
     return jax_func

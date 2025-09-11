@@ -104,7 +104,7 @@ def make_jax_logp_funcs_from_onnx(
                 param_vector = param_vector.squeeze(axis=-1)
             input_vector = jnp.concatenate((param_vector, data))
 
-        return jax_func(input_vector)[0].squeeze()
+        return jax_func(input_vector)
 
     if params_only and scalars_only:
         logp_vec = lambda *inputs: logp(*inputs).reshape((1,))
@@ -218,6 +218,6 @@ def make_jax_matrix_logp_funcs_from_onnx(
         jnp.ndarray
             The element-wise log-likelihoods.
         """
-        return jax_func(input_matrix)[0].squeeze()
+        return jax_func(input_matrix)
 
     return logp
