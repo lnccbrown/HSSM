@@ -23,6 +23,7 @@ dependencies = [
     "cloudpickle>=3.0.0",
     "hddm-wfpt>=0.1.5",
     "huggingface-hub>=0.34.0",
+    "jaxonnxruntime>=0.3.0",
     "numpyro>=0.19",
     "onnx>=1.16.0",
     "pymc>=5.25.0",
@@ -56,6 +57,8 @@ dev = [
     "pyarrow>=20.0.0",
     "lanfactory>=0.5.3",
     "HSSM[test]",
+    "bayeux-ml==0.1.15",
+    "flowmc==0.3.4",
 ]
 
 test = [
