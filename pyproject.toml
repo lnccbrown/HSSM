@@ -57,8 +57,6 @@ dev = [
     "pyarrow>=20.0.0",
     "lanfactory>=0.5.3",
     "HSSM[test]",
-    "bayeux-ml==0.1.15",
-    "flowmc==0.3.4",
 ]
 
 test = [
