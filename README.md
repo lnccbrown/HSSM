@@ -44,7 +44,10 @@ for Computational Brain Science within the Carney Institute at Brown University.
 
 ### [Official documentation](https://lnccbrown.github.io/HSSM/).
 
-### [Explore the behavior of Sequential Sampling Models](https://franklab-ssms-gui.hf.space/).
+
+### Explore the behavior of Sequential Sampling Models.
+
+HSSM provides flexibility to estimate and validate a wide variety of SSMs. Check out this <a href="https://franklab-ssms-gui.hf.space/" target="_blank" rel="noopener noreferrer">applet</a> to compare and explore their dynamics.
 
 ## Cite HSSM
 
