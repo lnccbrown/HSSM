@@ -213,7 +213,6 @@ class RegressionParam(Param):
         use_hddm
             Whether to use HDDM default priors.
         """
-        # print("param name: ", self.name)
         safe_priors = {}
         dm = self._get_design_matrices(data, eval_env)
 
@@ -221,7 +220,6 @@ class RegressionParam(Param):
         specified_priors = (
             set(self.prior.keys()) if isinstance(self.prior, dict) else set()
         )
-        # print("specified_priors", specified_priors)
 
         # For each term in the design matrix, if the prior is not already specified,
         # add the default prior for that term.
@@ -229,12 +227,8 @@ class RegressionParam(Param):
         # We also handle intercept and non-intercept terms separately.
         has_common_intercept = False
         if dm.common is not None:
-            # print("from dm.common")
             for name, term in dm.common.terms.items():
                 self.terms.append(name)
-                # print("name", name)
-                # print("term.kind", term.kind)
-                # print("specified_priors", specified_priors)
                 if name not in specified_priors:
                     if term.kind == "intercept":
                         has_common_intercept = True
@@ -250,11 +244,7 @@ class RegressionParam(Param):
                         has_common_intercept = True
 
         if dm.group is not None:
-            # print("from dm.group")
             for name, term in dm.group.terms.items():
-                # print("name", name)
-                # print("term.kind", term.kind)
-                # print("specified_priors", specified_priors)
                 if name not in specified_priors:
                     if term.kind == "intercept":
                         self.terms.append(name)

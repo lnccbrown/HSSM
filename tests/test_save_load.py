@@ -45,7 +45,6 @@ def test_save_load_vi_mcmc(basic_hssm_model):
 
     # 1
     # Save model and mcmc traces, no vi
-    print("Saving model and mcmc traces, no vi")
     basic_hssm_model.save_model(model_name=tmp_model_name, base_path=tmp_folder_name)
     loaded_model = hssm.HSSM.load_model(
         path=Path(tmp_folder_name).joinpath(tmp_model_name)
@@ -79,7 +78,6 @@ def test_save_load_vi_mcmc(basic_hssm_model):
 
     # 3
     # Save and load idata only
-    print("Saving idata only")
     basic_hssm_model.save_model(
         model_name=tmp_model_name, save_idata_only=True, base_path=tmp_folder_name
     )
@@ -99,7 +97,6 @@ def test_save_load_vi_mcmc(basic_hssm_model):
     # 4
     # Save model with vi traces, no mcmc traces
     # Just need to delete the vi traces and save/load again here
-    print("Saving model with vi traces, no mcmc traces")
     basic_hssm_model._inference_obj_vi = None
     basic_hssm_model.save_model(model_name=tmp_model_name, base_path=tmp_folder_name)
     loaded_model = hssm.HSSM.load_model(

@@ -57,10 +57,6 @@ def test_sample_posterior_predictive(
         idata=cav_idata_copy, draws=draws, safe_mode=safe_mode, inplace=inplace
     )
 
-    # print(cav_idata_copy.posterior_predictive)
-    # print("Now printing posterior predictive")
-    # print(posterior_predictive)
-
     if draws is None:
         size = 500
     elif isinstance(draws, int):
@@ -72,23 +68,13 @@ def test_sample_posterior_predictive(
     else:
         raise ValueError("draws must be int, None, np.ndarray, or list")
 
-    print(
-        f"size: {size}",
-        f"draws: {draws}",
-        f"safe_mode: {safe_mode}",
-        f"inplace: {inplace}",
-    )
     try:
         if inplace:
-            print("running through inplace")
             assert "posterior_predictive" in cav_idata_copy
             assert cav_idata_copy.posterior_predictive.draw.size == size
         else:
-            print("not running through inplace")
             assert posterior_predictive is not None
             assert "posterior_predictive" not in cav_idata_copy
             assert posterior_predictive.posterior_predictive.draw.size == size
     except AssertionError:
-        print(cav_idata_copy)
-        print(posterior_predictive)
         raise
