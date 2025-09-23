@@ -100,12 +100,15 @@ def make_jax_logp_funcs_from_onnx(
             data = inputs[0]
             dist_params = inputs[1:]
             param_vector = jnp.array([inp.squeeze() for inp in dist_params])
+            # AF-TODO: Unclear if trailing dimension of 1 is actually ever
+            # happening.
             if param_vector.shape[-1] == 1:
                 param_vector = param_vector.squeeze(axis=-1)
             input_vector = jnp.concatenate((param_vector, data))
 
         return interpret_onnx(model_onnx.graph, input_vector)[0].squeeze()
 
+    # Special handling if parameters are scalars only
     if params_only and scalars_only:
         logp_vec = lambda *inputs: logp(*inputs).reshape((1,))
         if return_jit:

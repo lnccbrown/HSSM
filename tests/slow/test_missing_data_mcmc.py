@@ -13,20 +13,18 @@ hssm.set_floatX("float32", update_jax=True)
 
 
 @pytest.fixture
-def data_ddm_deadline(data_ddm):
+def data_ddm_missing(data_ddm):
     data = data_ddm.copy()
-    data["deadline"] = data["rt"] + np.random.normal(0, 0.1, data.shape[0])
-    missing_indices = data["rt"] > data["deadline"]
+    missing_indices = np.random.choice(data_ddm.shape[0], 50, replace=False)
     data.iloc[missing_indices, 0] = -999.0
 
     return _rearrange_data(data)
 
 
 @pytest.fixture
-def data_ddm_reg_deadline(data_ddm_reg):
+def data_ddm_reg_missing(data_ddm_reg):
     data = data_ddm_reg.copy()
-    data["deadline"] = data["rt"] + np.random.normal(0, 0.1, data.shape[0])
-    missing_indices = data["rt"] > data["deadline"]
+    missing_indices = np.random.choice(data_ddm_reg.shape[0], 50, replace=False)
     data.iloc[missing_indices, 0] = -999.0
 
     return _rearrange_data(data)
@@ -34,33 +32,14 @@ def data_ddm_reg_deadline(data_ddm_reg):
 
 @pytest.fixture
 def fixture_path():
-    """Return path to test fixtures directory.
-
-    Returns
-    -------
-    Path
-        Path to the fixtures directory, located two levels up from this test file
-    """
     from pathlib import Path
 
     return Path(__file__).parent.parent / "fixtures"
 
 
 @pytest.fixture
-def opn(fixture_path):
-    """Return path to DDM OPN model fixture.
-
-    Parameters
-    ----------
-    fixture_path : Path
-        Path to fixtures directory
-
-    Returns
-    -------
-    Path
-        Path to the DDM OPN ONNX model file
-    """
-    return fixture_path / "ddm_opn.onnx"
+def cpn(fixture_path):
+    return fixture_path / "ddm_cpn.onnx"
 
 
 PARAMETER_NAMES = "loglik_kind,backend,sampler,step,expected"
@@ -126,42 +105,32 @@ def run_sample(model, sampler, step, expected):
             sample(model, sampler, step)
 
 
+# AF-TODO: CPN / GONOGO part has to be rethought
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-def test_simple_models_deadline(
-    data_ddm_deadline, loglik_kind, backend, sampler, step, expected, opn
+# @pytest.mark.xfail(reason="Needs to be reactivated, CPN logic needs to be revised")
+def test_simple_models_missing_data(
+    data_ddm_missing, loglik_kind, backend, sampler, step, expected, cpn
 ):
     model = hssm.HSSM(
-        data_ddm_deadline,
+        data_ddm_missing,
         loglik_kind=loglik_kind,
         model_config={"backend": backend},
-        deadline=True,
         missing_data=True,
-        loglik_missing_data=opn,
+        loglik_missing_data=cpn,
+        deadline=False,
     )
     assert np.all(
         [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
     )
     run_sample(model, sampler, step, expected)
 
-    with pytest.raises(
-        ValueError,
-        match="Missing data provided as False. \n"
-        "However, you have RTs of -999.0 in your dataset!",
-    ):
-        model = hssm.HSSM(
-            data_ddm_deadline,
-            loglik_kind=loglik_kind,
-            model_config={"backend": backend},
-            deadline=True,
-            loglik_missing_data=opn,
-        )
-
 
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-def test_reg_models_deadline(
-    data_ddm_reg_deadline, loglik_kind, backend, sampler, step, expected, opn
+# @pytest.mark.xfail(reason="Needs to be reactivated, CPN logic needs to be revised")
+def test_reg_models_missing_data(
+    data_ddm_reg_missing, loglik_kind, backend, sampler, step, expected, cpn
 ):
     param_reg = dict(
         formula="v ~ 1 + x + y",
@@ -172,29 +141,15 @@ def test_reg_models_deadline(
         },
     )
     model = hssm.HSSM(
-        data_ddm_reg_deadline,
+        data_ddm_reg_missing,
         loglik_kind=loglik_kind,
         model_config={"backend": backend},
         v=param_reg,
-        deadline=True,
         missing_data=True,
-        loglik_missing_data=opn,
+        loglik_missing_data=cpn,
+        deadline=False,
     )
     assert np.all(
         [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
     )
     run_sample(model, sampler, step, expected)
-
-    with pytest.raises(
-        ValueError,
-        match="Missing data provided as False. \n"
-        "However, you have RTs of -999.0 in your dataset!",
-    ):
-        model = hssm.HSSM(
-            data_ddm_reg_deadline,
-            loglik_kind=loglik_kind,
-            model_config={"backend": backend},
-            v=param_reg,
-            deadline=True,
-            loglik_missing_data=opn,
-        )

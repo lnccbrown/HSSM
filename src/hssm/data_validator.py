@@ -197,6 +197,7 @@ class DataValidator:
 
         if np.all(data["rt"] == -999.0):
             if network in [MissingDataNetwork.CPN, MissingDataNetwork.OPN]:
+                # AF-TODO: I think we should allow invalid-only datasets.
                 raise ValueError(
                     "`missing_data` is set to True, but you have no valid data in your "
                     "dataset."

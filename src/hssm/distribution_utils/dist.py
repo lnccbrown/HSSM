@@ -769,24 +769,24 @@ def make_missing_data_callable(
     Please refer to the documentation of `make_likelihood_callable` for more.
     """
     # AF-TODO: Remove this once clear that it is actually not needed
-    # if backend == "jax":
-    #     if params_is_reg is None:
-    #         raise ValueError(
-    #             "You have chosen `jax` as the backend for "
-    #             + "the missing data likelihood. "
-    #             + "However, you have not provided any values to `params_is_reg`."
-    #         )
-    #     if params_only is None:
-    #         raise ValueError(
-    #             "You have chosen `jax` as the backend "
-    #             + "for the missing data likelihood. "
-    #             + "However, you have not provided any values to `params_only`."
-    #         )
+    if backend == "jax":
+        if params_is_reg is None:
+            raise ValueError(
+                "You have chosen `jax` as the backend for "
+                + "the missing data likelihood. "
+                + "However, you have not provided any values to `params_is_reg`."
+            )
+        if params_only is None:
+            raise ValueError(
+                "You have chosen `jax` as the backend "
+                + "for the missing data likelihood. "
+                + "However, you have not provided any values to `params_only`."
+            )
 
-    if params_is_reg is not None:
-        params_only = True if (not any(params_is_reg)) else False
-    else:
-        params_only = False
+    # if params_is_reg is not None:
+    #     params_only = True if (not any(params_is_reg)) else False
+    # else:
+    #     params_only = False
 
     # We assume that the missing data network is always approx_differentiable
     return make_likelihood_callable(
@@ -829,6 +829,8 @@ def assemble_callables(
         # squeeze this dimension out.
         dist_params = [pt.squeeze(param) for param in dist_params]
 
+        # AF-TODO: This part actually overrides what
+        #          is treated as missing to always be -999.0
         n_missing = pt.sum(pt.eq(data[:, 0], -999.0)).astype(int)
         if n_missing == 0:
             raise ValueError("No missing data in the data.")
@@ -840,19 +842,26 @@ def assemble_callables(
             param[n_missing:] if param.ndim >= 1 else param for param in dist_params
         ]
 
-        if has_deadline:
-            logp_observed = callable(observed_data[:, :-1], *dist_params_observed)
-        else:
-            logp_observed = callable(observed_data, *dist_params_observed)
-
         dist_params_missing = [
             param[:n_missing] if param.ndim >= 1 else param for param in dist_params
         ]
 
         if has_deadline:
+            logp_observed = callable(observed_data[:, :-1], *dist_params_observed)
             logp_missing = missing_data_callable(missing_data, *dist_params_missing)
         else:
+            if not params_only:
+                raise ValueError(
+                    "When `has_deadline` is False, `params_only` must be True. \n"
+                    "The provided settings are inconsistent."
+                )
+            logp_observed = callable(observed_data, *dist_params_observed)
             logp_missing = missing_data_callable(None, *dist_params_missing)
+
+        # if has_deadline:
+        #     logp_missing = missing_data_callable(missing_data, *dist_params_missing)
+        # else:
+        # logp_missing = missing_data_callable(None, *dist_params_missing)
 
         logp = pt.empty_like(data[:, 0], dtype=pytensor.config.floatX)
         logp = pt.set_subtensor(logp[n_missing:], logp_observed)

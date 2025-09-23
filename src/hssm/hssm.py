@@ -1940,6 +1940,13 @@ class HSSM(DataValidator):
         # Make the callable for missing data
         # And assemble it with the callable for the likelihood
         if self.missing_data_network != MissingDataNetwork.NONE:
+            if self.missing_data_network == MissingDataNetwork.OPN:
+                params_only = False
+            elif self.missing_data_network == MissingDataNetwork.CPN:
+                params_only = True
+            else:
+                params_only = None
+
             if self.loglik_missing_data is None:
                 self.loglik_missing_data = (
                     self.model_name
@@ -1949,14 +1956,14 @@ class HSSM(DataValidator):
 
             if self.model_config.backend != "pytensor":
                 missing_data_callable = make_missing_data_callable(
-                    self.loglik_missing_data, "jax", params_is_reg, None
+                    self.loglik_missing_data, "jax", params_is_reg, params_only
                 )
             else:
                 missing_data_callable = make_missing_data_callable(
                     self.loglik_missing_data,
                     self.model_config.backend,
                     params_is_reg,
-                    None,
+                    params_only,
                 )
 
             self.loglik_missing_data = missing_data_callable
@@ -1964,7 +1971,7 @@ class HSSM(DataValidator):
             self.loglik = assemble_callables(
                 self.loglik,
                 self.loglik_missing_data,
-                None,
+                params_only,
                 has_deadline=self.deadline,
             )
 
