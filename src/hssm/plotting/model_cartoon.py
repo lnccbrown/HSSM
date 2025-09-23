@@ -733,7 +733,6 @@ def plot_func_model(
             n_samples=n_samples,
             no_noise=False,
             delta_t=delta_t_model,
-            bin_dim=None,
             random_state=rand_int,
         )
 
@@ -745,7 +744,6 @@ def plot_func_model(
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
-            bin_dim=None,
             smooth_unif=False,
         )
 
@@ -762,7 +760,6 @@ def plot_func_model(
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
-                bin_dim=None,
                 smooth_unif=False,
             )
 
@@ -773,7 +770,6 @@ def plot_func_model(
                 n_samples=n_samples,
                 no_noise=False,
                 delta_t=delta_t_model,
-                bin_dim=None,
                 random_state=rand_int + i,
             )
 
@@ -804,7 +800,6 @@ def plot_func_model(
             n_samples=1,
             no_noise=False,
             delta_t=delta_t_model,
-            bin_dim=None,
             random_state=rand_int + i,
             smooth_unif=False,
         )
@@ -1501,7 +1496,6 @@ def plot_func_model_n(
             n_samples=n_samples,
             no_noise=False,
             delta_t=delta_t_model,
-            bin_dim=None,
             random_state=rand_int,
         )
 
@@ -1511,7 +1505,6 @@ def plot_func_model_n(
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
-            bin_dim=None,
             smooth_unif=False,
         )
 
@@ -1529,7 +1522,6 @@ def plot_func_model_n(
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
-                bin_dim=None,
                 smooth_unif=False,
             )
 
@@ -1540,7 +1532,6 @@ def plot_func_model_n(
                 n_samples=1,
                 no_noise=False,
                 delta_t=delta_t_model,
-                bin_dim=None,
                 random_state=rand_int,
             )
 
@@ -1572,7 +1563,6 @@ def plot_func_model_n(
             n_samples=1,
             no_noise=False,
             delta_t=delta_t_model,
-            bin_dim=None,
             random_state=rand_int + i,
             smooth_unif=False,
         )
