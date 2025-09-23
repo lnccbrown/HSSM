@@ -44,11 +44,12 @@ for Computational Brain Science within the Carney Institute at Brown University.
 
 ### [Official documentation](https://lnccbrown.github.io/HSSM/).
 
+### [Explore the behavior of Sequential Sampling Models](https://franklab-ssms-gui.hf.space/).
+
 ## Cite HSSM
 
-Fengler, A., Xu, Y., Bera, K., Omar, A., Frank, M.J. (in preparation). HSSM: A
-generalized toolbox for hierarchical bayesian estimation of computational models
-in cognitive neuroscience.
+Fengler, A., Xu, Y., Bera, K., Paniagua, C.,  Omar, A., Frank, M.J. (in preparation). HSSM: A
+widely applicable toolbox for hierarchical bayesian neurocognitive modeling.
 
 ## Example
 
