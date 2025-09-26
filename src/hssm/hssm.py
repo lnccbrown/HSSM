@@ -312,6 +312,8 @@ class HSSM(DataValidator):
         self.link_settings = link_settings
         self.prior_settings = prior_settings
 
+        self.missing_data_value = -999.0
+
         additional_namespace = transformations_namespace.copy()
         if extra_namespace is not None:
             additional_namespace.update(extra_namespace)
@@ -402,13 +404,37 @@ class HSSM(DataValidator):
         self.n_choices = len(self.choices)
         self._pre_check_data_sanity()
 
-        # Go-NoGo
+        # Process missing data setting
+        # AF-TODO: Could be a function in data validator?
         if isinstance(missing_data, float):
-            self.missing_data = True
-            self.missing_data_value = missing_data
+            if not ((self.data.rt == missing_data).any()):
+                raise ValueError(
+                    f"missing_data argument is provided as a float {missing_data}, "
+                    f"However, you have no RTs of {missing_data} in your dataset!"
+                )
+            else:
+                self.missing_data = True
+                self.missing_data_value = missing_data
+        elif isinstance(missing_data, bool):
+            if missing_data and (not (self.data.rt == -999.0).any()):
+                raise ValueError(
+                    "missing_data argument is provided as True, "
+                    " so RTs of -999.0 are treated as missing. \n"
+                    "However, you have no RTs of -999.0 in your dataset!"
+                )
+            elif (not missing_data) and (self.data.rt == -999.0).any():
+                # self.missing_data = True
+                raise ValueError(
+                    "Missing data provided as False. \n"
+                    "However, you have RTs of -999.0 in your dataset!"
+                )
+            else:
+                self.missing_data = missing_data
         else:
-            self.missing_data = missing_data
-            self.missing_data_value = -999.0
+            raise ValueError(
+                "missing_data argument must be a bool or a float! \n"
+                f"You provided: {type(missing_data)}"
+            )
 
         if isinstance(deadline, str):
             self.deadline = True
@@ -1914,25 +1940,28 @@ class HSSM(DataValidator):
         # Make the callable for missing data
         # And assemble it with the callable for the likelihood
         if self.missing_data_network != MissingDataNetwork.NONE:
+            if self.missing_data_network == MissingDataNetwork.OPN:
+                params_only = False
+            elif self.missing_data_network == MissingDataNetwork.CPN:
+                params_only = True
+            else:
+                params_only = None
+
             if self.loglik_missing_data is None:
                 self.loglik_missing_data = (
                     self.model_name
                     + missing_data_networks_suffix[self.missing_data_network]
                     + ".onnx"
                 )
-            params_only = self.missing_data_network == MissingDataNetwork.CPN
 
-            if self.model_config.backend != "pytensor":
-                missing_data_callable = make_missing_data_callable(
-                    self.loglik_missing_data, "jax", params_is_reg, params_only
-                )
-            else:
-                missing_data_callable = make_missing_data_callable(
-                    self.loglik_missing_data,
-                    self.model_config.backend,
-                    None,
-                    params_only,
-                )
+            backend_tmp: Literal["pytensor", "jax", "other"] | None = (
+                "jax"
+                if self.model_config.backend != "pytensor"
+                else self.model_config.backend
+            )
+            missing_data_callable = make_missing_data_callable(
+                self.loglik_missing_data, backend_tmp, params_is_reg, params_only
+            )
 
             self.loglik_missing_data = missing_data_callable
 
@@ -1941,6 +1970,14 @@ class HSSM(DataValidator):
                 self.loglik_missing_data,
                 params_only,
                 has_deadline=self.deadline,
+            )
+
+        if self.missing_data:
+            _logger.info(
+                "Re-arranging data to separate missing and observed datapoints. "
+                "Missing data (rt == %s) will be on top, "
+                "observed datapoints follow.",
+                self.missing_data_value,
             )
 
         self.data = _rearrange_data(self.data)
