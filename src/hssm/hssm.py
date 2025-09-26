@@ -1954,7 +1954,7 @@ class HSSM(DataValidator):
                     + ".onnx"
                 )
 
-            backend_tmp = (
+            backend_tmp: Literal["pytensor", "jax", "other"] | None = (
                 "jax"
                 if self.model_config.backend != "pytensor"
                 else self.model_config.backend
