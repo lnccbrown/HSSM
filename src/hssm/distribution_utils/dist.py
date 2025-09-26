@@ -244,10 +244,6 @@ def make_hssm_rv(
             # we are going to use this hack.
             size, args, kwargs = _extract_size(args, kwargs)
 
-            # print(f"size: {size}")
-            # print(f"args: {args}")
-            # print(f"kwarg names: {list(kwargs.keys())}")
-
             arg_arrays = _create_arg_arrays(cls, args)
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
             seed = _get_seed(rng)
@@ -255,13 +251,8 @@ def make_hssm_rv(
             is_all_args_scalar, theta, max_shape, new_data_size = (
                 _prepare_theta_and_shape(arg_arrays, size)
             )
-            # print(f"args all scalar?: {is_all_args_scalar}")
-            n_replicas = _calculate_n_replicas(is_all_args_scalar, size, new_data_size)
 
-            # print(f"theta: {theta}")
-            # print(f"theta shape: {theta.shape}")
-            # print(f"max_shape: {max_shape}")
-            # print(f"n_replicas: {n_replicas}")
+            n_replicas = _calculate_n_replicas(is_all_args_scalar, size, new_data_size)
 
             sims_out = simulator_fun_internal(
                 theta=theta,
@@ -273,9 +264,6 @@ def make_hssm_rv(
             if not is_all_args_scalar:
                 shape_spec = _reshape_sims_out(max_shape, n_replicas, obs_dim_int)
                 sims_out = sims_out.reshape(shape_spec)
-
-            # print("shape spec aplpying reshape: ", shape_spec)
-            # print(f"shape of sims_out: {sims_out.shape}")
 
             sims_out = _apply_lapse_model(
                 sims_out=sims_out,
