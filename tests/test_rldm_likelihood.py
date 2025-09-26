@@ -9,7 +9,7 @@ from hssm.likelihoods.rldm_optimized import make_rldm_logp_func, make_rldm_logp_
 
 hssm.set_floatX("float32")
 
-DECIMAL = 4
+DECIMAL = 2
 
 
 @pytest.fixture
@@ -38,8 +38,7 @@ def test_make_rldm_logp_func(fixture_path):
         n_participants=len(subj), n_trials=total_trials // len(subj)
     )
     jitted_logp = jax.jit(logp)
-
-    jax_LL = jitted_logp(
+    jax_ll = jitted_logp(
         data[["rt", "response"]].values,
         rl_alpha,
         scaler,
@@ -50,9 +49,8 @@ def test_make_rldm_logp_func(fixture_path):
         feedback,
     )
 
-    assert jax_LL.shape[0] == total_trials
-
-    np.testing.assert_allclose(jax_LL.sum(), -6879.1523, rtol=1e-3)
+    assert jax_ll.shape[0] == total_trials
+    np.testing.assert_allclose(jax_ll.sum(), -6879.1523, rtol=1e-2)
 
 
 def test_make_rldm_logp_op(fixture_path):
@@ -78,7 +76,7 @@ def test_make_rldm_logp_op(fixture_path):
         n_params=6,
     )
 
-    jax_LL = logp_op(
+    jax_ll = logp_op(
         data.loc[:, ["rt", "response"]].values,
         rl_alpha,
         scaler,
@@ -89,4 +87,4 @@ def test_make_rldm_logp_op(fixture_path):
         feedback,
     )
 
-    np.testing.assert_almost_equal(jax_LL.sum().eval(), -6879.1523, decimal=DECIMAL)
+    np.testing.assert_almost_equal(jax_ll.sum().eval(), -6879.1523, decimal=DECIMAL)

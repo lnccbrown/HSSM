@@ -239,6 +239,9 @@ class RegressionParam(Param):
                         safe_priors[name] = get_prior(
                             "common", self.name, bounds=None, link=self.link
                         )
+                else:
+                    if term.kind == "intercept":
+                        has_common_intercept = True
 
         if dm.group is not None:
             for name, term in dm.group.terms.items():
@@ -371,9 +374,11 @@ def _make_prior_dict(
     """
     priors = {
         # Convert dict to bmb.Prior if a dict is passed
-        param: _make_priors_recursive(cast("dict[str, Any]", prior))
-        if isinstance(prior, dict)
-        else prior
+        param: (
+            _make_priors_recursive(cast("dict[str, Any]", prior))
+            if isinstance(prior, dict)
+            else prior
+        )
         for param, prior in prior.items()
     }
 

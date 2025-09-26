@@ -95,17 +95,21 @@ def make_jax_logp_funcs_from_onnx(
         """
         # Makes a matrix to feed to the LAN model
         if params_only:
+            # Constructing parameter vector
             input_vector = jnp.array(inputs)
         else:
             data = inputs[0]
             dist_params = inputs[1:]
             param_vector = jnp.array([inp.squeeze() for inp in dist_params])
+            # AF-TODO: Unclear if trailing dimension of 1 is actually ever
+            # happening.
             if param_vector.shape[-1] == 1:
                 param_vector = param_vector.squeeze(axis=-1)
             input_vector = jnp.concatenate((param_vector, data))
 
         return jax_func(input_vector)
 
+    # Special handling if parameters are scalars only
     if params_only and scalars_only:
         logp_vec = lambda *inputs: logp(*inputs).reshape((1,))
         if return_jit:
