@@ -79,7 +79,7 @@ def test_deadline_missing_data_true(data_ddm, cpn):
     # Case 6: if deadline or missing_data is True, data should contain missing values
     with pytest.raises(
         ValueError,
-        match=r"Missing data is provided as True, "
+        match=r"missing_data argument is provided as True, "
         " so RTs of -999.0 are treated as missing. \n"
         "However, you have no RTs of -999.0 in your dataset!",
     ):

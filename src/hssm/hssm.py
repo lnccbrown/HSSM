@@ -409,7 +409,7 @@ class HSSM(DataValidator):
         if isinstance(missing_data, float):
             if not ((self.data.rt == missing_data).any()):
                 raise ValueError(
-                    f"Missing data is provided as a float {missing_data}, "
+                    f"missing_data argument is provided as a float {missing_data}, "
                     f"However, you have no RTs of {missing_data} in your dataset!"
                 )
             else:
@@ -418,7 +418,7 @@ class HSSM(DataValidator):
         elif isinstance(missing_data, bool):
             if missing_data and (not (self.data.rt == -999.0).any()):
                 raise ValueError(
-                    "Missing data is provided as True, "
+                    "missing_data argument is provided as True, "
                     " so RTs of -999.0 are treated as missing. \n"
                     "However, you have no RTs of -999.0 in your dataset!"
                 )
@@ -1954,17 +1954,14 @@ class HSSM(DataValidator):
                     + ".onnx"
                 )
 
-            if self.model_config.backend != "pytensor":
-                missing_data_callable = make_missing_data_callable(
-                    self.loglik_missing_data, "jax", params_is_reg, params_only
-                )
-            else:
-                missing_data_callable = make_missing_data_callable(
-                    self.loglik_missing_data,
-                    self.model_config.backend,
-                    params_is_reg,
-                    params_only,
-                )
+            backend_tmp = (
+                "jax"
+                if self.model_config.backend != "pytensor"
+                else self.model_config.backend
+            )
+            missing_data_callable = make_missing_data_callable(
+                self.loglik_missing_data, backend_tmp, params_is_reg, params_only
+            )
 
             self.loglik_missing_data = missing_data_callable
 
@@ -1977,10 +1974,12 @@ class HSSM(DataValidator):
 
         if self.missing_data:
             _logger.info(
-                f"Re-arranging data to separate missing and observed datapoints. "
-                f"Missing data (rt == {self.missing_data_value}) will be on top, "
-                f"observed datapoints follow."
+                "Re-arranging data to separate missing and observed datapoints. "
+                "Missing data (rt == %s) will be on top, "
+                "observed datapoints follow.",
+                self.missing_data_value,
             )
+
         self.data = _rearrange_data(self.data)
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
