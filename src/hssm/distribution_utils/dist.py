@@ -177,6 +177,11 @@ def make_hssm_rv(
         # pylint: disable=arguments-renamed,bad-option-value,W0221
         # NOTE: `rng` now is a np.random.Generator instead of RandomState
         # since the latter is now deprecated from numpy
+
+        # AF-TODO: I think the doc-string about sizes is too confusing.
+        # We are missing the separation of concepts between the
+        # `size` argument that is passed
+        # and the parameter vector shapes that are passed?
         @classmethod
         def rng_fn(
             cls,
@@ -210,23 +215,35 @@ def make_hssm_rv(
             First, size could be an array with one element. We squeeze the array and
             use that element as size.
 
-            Then, size could depend on whether the parameters passed to this method.
+            Then, size could depend on the parameters
+            passed to this method, individually.
+
             If all parameters passed are scalar, that is the easy case. We just
             assemble all parameters into a 1D array and pass it to the `theta`
-            argument. In this case, size is number of observations.
+            argument. In this case, we will assign as size the
+            number of `observations` (i.e. `trials`).
 
-            If one of the parameters is a vector, which happens one or more parameters
-            is the target of a regression. In this case, we take the size of the
-            parameter with the largest size. If size is None, we will set size to be
-            this largest size. If size is not None, we check if size is a multiple of
-            the largest size. If not, an error is thrown. Otherwise, we assemble the
-            parameter as a matrix and pass it as the `theta` argument. The multiple then
-            becomes how many samples we draw from each trial.
+            If one or more parameters are passed as vectors,
+            which happens if one or more parameters are the target of a regression,
+            we set as `size` the size of the parameter with the largest shape.
+
+            If size is None, we will set size to be this largest size or the passed
+            parameters.
+
+            If size is not None, we check if size is a multiple of the largest size.
+            If not, an error is thrown. Otherwise, we assemble the
+            parameter as a matrix and pass it as the `theta` argument.
+
+            The multiple then becomes how many samples we draw from each trial.
             """
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
             size, args, kwargs = _extract_size(args, kwargs)
+
+            # print(f"size: {size}")
+            # print(f"args: {args}")
+            # print(f"kwarg names: {list(kwargs.keys())}")
 
             arg_arrays = _create_arg_arrays(cls, args)
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
@@ -235,7 +252,13 @@ def make_hssm_rv(
             is_all_args_scalar, theta, max_shape, new_data_size = (
                 _prepare_theta_and_shape(arg_arrays, size)
             )
+            # print(f"args all scalar?: {is_all_args_scalar}")
             n_replicas = _calculate_n_replicas(is_all_args_scalar, size, new_data_size)
+
+            # print(f"theta: {theta}")
+            # print(f"theta shape: {theta.shape}")
+            # print(f"max_shape: {max_shape}")
+            # print(f"n_replicas: {n_replicas}")
 
             sims_out = simulator_fun_internal(
                 theta=theta,
@@ -247,6 +270,9 @@ def make_hssm_rv(
             if not is_all_args_scalar:
                 shape_spec = _reshape_sims_out(max_shape, n_replicas, obs_dim_int)
                 sims_out = sims_out.reshape(shape_spec)
+
+            # print("shape spec aplpying reshape: ", shape_spec)
+            # print(f"shape of sims_out: {sims_out.shape}")
 
             sims_out = _apply_lapse_model(
                 sims_out=sims_out,

@@ -115,9 +115,10 @@ def _plot_model_cartoon_1D(
         plot_function = plot_func_model
     elif n_choices > 2:
         plot_function = plot_func_model_n
-    else:
+
+    if plot_function is None:
         raise NotImplementedError(
-            "The model plot works only for >2 choice models at the moment"
+            "The model plot works only for >=2 choice models at the moment"
         )
 
     ax = plot_function(
