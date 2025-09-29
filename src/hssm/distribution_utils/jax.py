@@ -2,6 +2,7 @@
 
 from typing import Callable, Literal, overload
 
+import jax.numpy as jnp
 import numpy as np
 import pytensor
 import pytensor.tensor as pt
@@ -272,6 +273,9 @@ def make_jax_logp_funcs_from_callable(
             "parameters are regressions."
         )
 
+    print("params_only: ", params_only)
+    print("params_is_reg: ", params_is_reg)
+
     # Looks silly but is required to please mypy.
     if vmap and params_is_reg is not None:
         in_axes: list[int | None] = [
@@ -308,3 +312,87 @@ def make_jax_logp_funcs_from_callable(
         return jit(logp), jit(vjp_logp), logp
 
     return logp, vjp_logp
+
+
+# AF-TODO: This needs some tests!
+def make_jax_single_trial_logp_from_network_forward(
+    jax_forward_fn: Callable, params_only: bool = False
+) -> Callable:
+    """Make a JAX log-likelihood function from a JAX forward function.
+
+    This function creates a JAX log-likelihood function that computes the element-wise
+    log-likelihoods given one data point and arbitrary numbers of parameters as scalars.
+
+    Parameters
+    ----------
+    jax_forward_fn : Callable
+        The JAX forward function to use for the log-likelihood computation.
+    params_only : bool, optional
+        Whether to compute the log-likelihood for only the parameters.
+        This will not assume a data part in the input.
+        `params_only = True` is appropriate for CPNs and OPNs,
+        where the data is not used in the log-likelihood computation.
+        `params_only = False` is appropriate for LANs,
+        where the data is used in the log-likelihood computation.
+
+    Returns
+    -------
+    Callable
+        A JAX function that computes the element-wise
+        log-likelihoods given one data point and arbitrary
+        numbers of parameters as scalars.
+    """
+
+    def jax_single_trial_logp_from_lan_forward(*inputs) -> np.ndarray:
+        """Compute the log-likelihood.
+
+        A function that computes the element-wise log-likelihoods given one data point
+        and arbitrary numbers of parameters as scalars.
+
+        Parameters
+        ----------
+        inputs
+            A list of data and parameters used in the likelihood computation. Also
+            supports the case where only parameters are passed.
+
+        Returns
+        -------
+        jnp.ndarray
+            The element-wise log-likelihoods.
+        """
+        # Makes a matrix to feed to the LAN model
+        data = inputs[0]
+        dist_params = inputs[1:]
+
+        param_vector = jnp.array([inp.squeeze() for inp in dist_params])
+
+        if param_vector.shape[-1] == 1:
+            param_vector = param_vector.squeeze(axis=-1)
+
+        input_vector = jnp.concatenate((param_vector, data))
+        return jax_forward_fn(input_vector).squeeze()
+
+    def jax_single_trial_logp_from_opn_cpn_forward(*inputs) -> np.ndarray:
+        """Compute the log-likelihood.
+
+        A function that computes the element-wise log-likelihoods given one data point
+        and arbitrary numbers of parameters as scalars.
+
+        Parameters
+        ----------
+        inputs
+            A list of data and parameters used in the likelihood computation. Also
+            supports the case where only parameters are passed.
+
+        Returns
+        -------
+        jnp.ndarray
+            The element-wise log-likelihoods.
+        """
+        input_vector = jnp.array(inputs)
+        return jax_forward_fn(input_vector).squeeze()
+
+    if params_only:
+        return jax_single_trial_logp_from_opn_cpn_forward
+    else:
+        return jax_single_trial_logp_from_lan_forward
