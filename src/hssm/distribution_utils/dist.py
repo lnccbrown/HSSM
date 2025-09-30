@@ -18,16 +18,10 @@ import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
 from ssms.hssm_support import (
-    _calculate_n_replicas,
-    _create_arg_arrays,
-    _extract_size,
-    _get_p_outlier,
-    _get_seed,
-    _prepare_theta_and_shape,
-    _reshape_sims_out,
     get_simulator_fun_internal,
     validate_simulator_fun,
 )
+from ssms.hssm_support import rng_fn as _rng_fn
 
 from .._types import LogLikeFunc
 from .blackbox import make_blackbox_op
@@ -192,85 +186,16 @@ def make_hssm_rv(
             *args,
             **kwargs,
         ) -> np.ndarray:
-            """Generate random variables from this distribution.
-
-            Parameters
-            ----------
-            rng
-                A `np.random.Generator` object for random state.
-            args
-                Unnamed arguments of parameters, in the order of `_list_params`, plus
-                the last one as size.
-            kwargs
-                Other keyword arguments passed to the ssms simulator.
-
-            Returns
-            -------
-            np.ndarray
-                An array of `(rt, response)` generated from the distribution.
-
-            Note
-            ----
-            How size is handled in this method:
-
-            We apply multiple tricks to get this method to work with ssm_simulators.
-
-            First, size could be an array with one element. We squeeze the array and
-            use that element as size.
-
-            Then, size could depend on the parameters
-            passed to this method, individually.
-
-            If all parameters passed are scalar, that is the easy case. We just
-            assemble all parameters into a 1D array and pass it to the `theta`
-            argument. In this case, we will assign as size the
-            number of `observations` (i.e. `trials`).
-
-            If one or more parameters are passed as vectors,
-            which happens if one or more parameters are the target of a regression,
-            we set as `size` the size of the parameter with the largest shape.
-
-            If size is None, we will set size to be this largest size or the passed
-            parameters.
-
-            If size is not None, we check if size is a multiple of the largest size.
-            If not, an error is thrown. Otherwise, we assemble the
-            parameter as a matrix and pass it as the `theta` argument.
-
-            The multiple then becomes how many samples we draw from each trial.
-            """
-            # First figure out what the size specified here is
-            # Since the number of unnamed arguments is undetermined,
-            # we are going to use this hack.
-            size, args, kwargs = _extract_size(args, kwargs)
-
-            arg_arrays = _create_arg_arrays(cls, args)
-            p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
-            seed = _get_seed(rng)
-
-            is_all_args_scalar, theta, max_shape, new_data_size = (
-                _prepare_theta_and_shape(arg_arrays, size)
-            )
-
-            n_replicas = _calculate_n_replicas(is_all_args_scalar, size, new_data_size)
-
-            sims_out = simulator_fun_internal(
-                theta=theta,
-                random_state=seed,
-                n_replicas=n_replicas,
+            """Generate random variables from this distribution."""
+            sims_out = _rng_fn(
+                cls,
+                rng,
+                simulator_fun_internal,
+                _apply_lapse_model,
+                choices,
+                obs_dim_int,
+                *args,
                 **kwargs,
-            )
-
-            if not is_all_args_scalar:
-                shape_spec = _reshape_sims_out(max_shape, n_replicas, obs_dim_int)
-                sims_out = sims_out.reshape(shape_spec)
-
-            sims_out = _apply_lapse_model(
-                sims_out=sims_out,
-                p_outlier=p_outlier,
-                rng=rng,
-                lapse_dist=cls._lapse,
-                choices=choices,
             )
             return sims_out
 
