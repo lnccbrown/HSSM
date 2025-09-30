@@ -23,10 +23,10 @@ from ssms.hssm_support import (
     _extract_size,
     _get_p_outlier,
     _get_seed,
-    _get_simulator_fun_internal,
     _prepare_theta_and_shape,
     _reshape_sims_out,
-    _validate_simulator_fun,
+    get_simulator_fun_internal,
+    validate_simulator_fun,
 )
 
 from .._types import LogLikeFunc
@@ -154,8 +154,8 @@ def make_hssm_rv(
     Type[RandomVariable]
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
-    simulator_fun_internal = _get_simulator_fun_internal(simulator_fun)
-    model_name, choices, obs_dim_int = _validate_simulator_fun(simulator_fun_internal)
+    simulator_fun_internal = get_simulator_fun_internal(simulator_fun)
+    model_name, choices, obs_dim_int = validate_simulator_fun(simulator_fun_internal)
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
