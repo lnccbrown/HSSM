@@ -234,13 +234,13 @@ def _prepare_theta_and_shape(arg_arrays, size):
         if theta.ndim > 1:
             theta = theta.squeeze(axis=-1)
 
-        if isinstance(size, tuple):
-            size_ = size[-1]
+        if isinstance(size, tuple) and len(size) == 1:
+            size_ = size[0]
         elif isinstance(size, int):
             size_ = size
         else:
             raise ValueError(
-                f"Size must be a tuple or an integer, but got {type(size)}"
+                f"Size must be a tuple of length 1 or an integer, but got {type(size)}"
             )
         theta = np.tile(theta, (size_, 1))
         return True, theta, None, None
@@ -250,8 +250,6 @@ def _prepare_theta_and_shape(arg_arrays, size):
     # largest of all parameters passed to *arg
     largest_param_idx = np.argmax([arg.size for arg in arg_arrays])
     max_shape = arg_arrays[largest_param_idx].shape
-    print("max_shape: ", max_shape)
-    print("size: ", size)
     new_data_size = max_shape[-1]
     theta = np.column_stack(
         [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
@@ -922,7 +920,6 @@ def make_likelihood_callable(
                         + "and `backend` to `jax` and supplied a jax callable, "
                         + "but did not set `params_is_reg`."
                     )
-                print("passing here: ")
                 logp_funcs = make_jax_logp_funcs_from_callable(
                     cast("Callable[..., Any]", loglik),
                     vmap=True,
@@ -996,11 +993,6 @@ def make_missing_data_callable(
                 + "for the missing data likelihood. "
                 + "However, you have not provided any values to `params_only`."
             )
-
-    # if params_is_reg is not None:
-    #     params_only = True if (not any(params_is_reg)) else False
-    # else:
-    #     params_only = False
 
     # We assume that the missing data network is always approx_differentiable
     return make_likelihood_callable(
