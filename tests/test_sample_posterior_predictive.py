@@ -58,7 +58,7 @@ def test_sample_posterior_predictive(
     )
 
     if draws is None:
-        size = 200
+        size = 500
     elif isinstance(draws, int):
         size = draws
     elif isinstance(draws, np.ndarray):
