@@ -14,7 +14,6 @@
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/HSSM?link=https%3A%2F%2Fpypi.org%2Fproject%2Fhssm%2F)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/hssm)
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/lnccbrown/HSSM)
-<!-- ![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/lnccbrown/HSSM/run_tests.yml) -->
 [![CI](https://github.com/lnccbrown/HSSM/actions/workflows/run_tests.yml/badge.svg?branch=main)](https://github.com/lnccbrown/HSSM/actions/workflows/run_tests.yml)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![codecov](https://codecov.io/gh/lnccbrown/HSSM/branch/main/graph/badge.svg)](https://codecov.io/gh/lnccbrown/HSSM)
