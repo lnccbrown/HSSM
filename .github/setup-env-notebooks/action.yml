@@ -1,0 +1,32 @@
+name: Setup Python environment
+description: Set up Python environment for the repository
+inputs:
+  python-version:
+    description: "The Python version to set up"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install BLAS and LAPACK
+      run: sudo apt-get update && sudo apt-get install -y libblas-dev liblapack-dev
+      shell: bash
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+      with:
+        version: "latest"
+        enable-cache: true
+
+    - name: Install hssm
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: uv sync --group test --group notebook
+      shell: bash

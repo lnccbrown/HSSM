@@ -614,11 +614,6 @@ def make_missing_data_callable(
                 + "However, you have not provided any values to `params_only`."
             )
 
-    # if params_is_reg is not None:
-    #     params_only = True if (not any(params_is_reg)) else False
-    # else:
-    #     params_only = False
-
     # We assume that the missing data network is always approx_differentiable
     return make_likelihood_callable(
         loglik=loglik,
