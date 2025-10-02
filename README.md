@@ -8,12 +8,12 @@
 ## HSSM - Hierarchical Sequential Sampling Modeling
 
 [![DOI](https://zenodo.org/badge/545006401.svg)](https://doi.org/10.5281/zenodo.17247695)
+![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
 ![PyPI](https://img.shields.io/pypi/v/hssm)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/HSSM?link=https%3A%2F%2Fpypi.org%2Fproject%2Fhssm%2F)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/hssm)
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/lnccbrown/HSSM)
 ![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/lnccbrown/HSSM/run_slow_tests.yml)
-![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![codecov](https://codecov.io/gh/lnccbrown/HSSM/branch/main/graph/badge.svg)](https://codecov.io/gh/lnccbrown/HSSM)
 
