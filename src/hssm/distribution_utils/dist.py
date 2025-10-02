@@ -233,7 +233,16 @@ def _prepare_theta_and_shape(arg_arrays, size):
         theta = np.stack(arg_arrays)
         if theta.ndim > 1:
             theta = theta.squeeze(axis=-1)
-        theta = np.tile(theta, (size, 1))
+
+        if isinstance(size, tuple) and len(size) == 1:
+            size_ = size[0]
+        elif isinstance(size, int):
+            size_ = size
+        else:
+            raise ValueError(
+                f"Size must be a tuple of length 1 or an integer, but got {type(size)}"
+            )
+        theta = np.tile(theta, (size_, 1))
         return True, theta, None, None
 
     # Preprocess all parameters, reshape them into a matrix of dimension
@@ -984,11 +993,6 @@ def make_missing_data_callable(
                 + "for the missing data likelihood. "
                 + "However, you have not provided any values to `params_only`."
             )
-
-    # if params_is_reg is not None:
-    #     params_only = True if (not any(params_is_reg)) else False
-    # else:
-    #     params_only = False
 
     # We assume that the missing data network is always approx_differentiable
     return make_likelihood_callable(
