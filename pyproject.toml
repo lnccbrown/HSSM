@@ -15,7 +15,13 @@ license = { file = "LICENSE" }
 repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
-requires-python = ">3.10,<3.13"
+requires-python = ">=3.11,<3.13"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
 
 dependencies = [
     "arviz>=0.22.0",
