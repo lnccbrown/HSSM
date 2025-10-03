@@ -187,16 +187,24 @@ def make_hssm_rv(
             **kwargs,
         ) -> np.ndarray:
             """Generate random variables from this distribution."""
-            sims_out = _rng_fn(
+            sims_out, p_outlier = _rng_fn(
                 cls,
                 rng,
                 simulator_fun_internal,
-                _apply_lapse_model,
                 choices,
                 obs_dim_int,
                 *args,
                 **kwargs,
             )
+
+            sims_out = _apply_lapse_model(
+                sims_out=sims_out,
+                p_outlier=p_outlier,
+                rng=rng,
+                lapse_dist=cls._lapse,
+                choices=choices,
+            )
+
             return sims_out
 
     return HSSMRV
