@@ -191,7 +191,6 @@ def make_hssm_rv(
                 cls,
                 rng,
                 simulator_fun_internal,
-                choices,
                 obs_dim_int,
                 *args,
                 **kwargs,
