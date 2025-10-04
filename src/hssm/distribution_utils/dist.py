@@ -127,6 +127,66 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
     )
 
 
+class _RandomVariable(Protocol):  # for mypy
+    _list_params: list[str]
+    _lapse: bmb.Prior
+
+
+def _extract_size(args, kwargs):
+    """Extract size from args and kwargs.
+
+    Returns
+    -------
+    size : int
+        The size of the random sample to generate.
+    args : tuple
+        The original arguments, with size removed if it was present.
+    kwargs : dict
+        The original keyword arguments, with size removed if it was present.
+    """
+    if "size" in kwargs:
+        size = kwargs.pop("size")
+    else:
+        size = args[-1]
+        args = args[:-1]
+
+    if size is None:
+        size = 1
+
+    return size, args, kwargs
+
+
+def _create_arg_arrays(cls: bmb.Prior, args: tuple) -> list[np.ndarray]:
+    """
+    Create argument arrays from input arguments.
+
+    Parameters
+    ----------
+    cls : type
+        The class containing `_list_params`.
+    args : tuple
+        Input arguments.
+
+    Returns
+    -------
+    list of np.ndarray
+        List of argument arrays.
+    """
+    num_params = len(cls._list_params)
+    n_args = min(num_params, len(args))
+    arg_arrays = [np.asarray(arg) for arg in args[:n_args]]
+    return arg_arrays
+
+
+def _get_p_outlier(cls: _RandomVariable, arg_arrays):
+    """Get p_outlier from arg_arrays and update arg_arrays."""
+    list_params = cls._list_params
+    p_outlier = None
+    if list_params and list_params[-1] == "p_outlier":
+        p_outlier = arg_arrays.pop(-1)
+    return p_outlier, arg_arrays
+
+
 def make_hssm_rv(
     simulator_fun: Callable | str,
     list_params: list[str],
@@ -186,9 +246,40 @@ def make_hssm_rv(
             *args,
             **kwargs,
         ) -> np.ndarray:
-            """Generate random variables from this distribution."""
-            sims_out, p_outlier = _rng_fn(
-                cls,
+            """Generate random variables from this distribution.
+
+            Note
+            ----
+            How size is handled in this method:
+
+            We apply multiple tricks to get this method to work with ssm_simulators.
+
+            First, size could be an array with one element. We squeeze the array and
+            use that element as size.
+
+            Then, size could depend on whether the parameters passed to this method.
+            If all parameters passed are scalar, that is the easy case. We just
+            assemble all parameters into a 1D array and pass it to the `theta`
+            argument. In this case, size is number of observations.
+
+            If one of the parameters is a vector, which happens one or more parameters
+            is the target of a regression. In this case, we take the size of the
+            parameter with the largest size. If size is None, we will set size to be
+            this largest size. If size is not None, we check if size is a multiple of
+            the largest size. If not, an error is thrown. Otherwise, we assemble the
+            parameter as a matrix and pass it as the `theta` argument. The multiple then
+            becomes how many samples we draw from each trial.
+            """
+            # First figure out what the size specified here is
+            # Since the number of unnamed arguments is undetermined,
+            # we are going to use this hack.
+            size, args, kwargs = _extract_size(args, kwargs)
+            arg_arrays = _create_arg_arrays(cls, args)
+            p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
+
+            sims_out = ssms_rng_fn(
+                arg_arrays,
+                size,
                 rng,
                 simulator_fun_internal,
                 obs_dim_int,
