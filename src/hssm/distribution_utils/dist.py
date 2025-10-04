@@ -8,7 +8,7 @@ generation ops.
 import logging
 from collections.abc import Callable
 from os import PathLike
-from typing import Any, Literal, Type, cast
+from typing import Any, Literal, Protocol, Type, cast
 
 import bambi as bmb
 import numpy as np
@@ -21,7 +21,7 @@ from ssms.hssm_support import (
     get_simulator_fun_internal,
     validate_simulator_fun,
 )
-from ssms.hssm_support import rng_fn as _rng_fn
+from ssms.hssm_support import rng_fn as ssms_rng_fn
 
 from .._types import LogLikeFunc
 from .blackbox import make_blackbox_op
