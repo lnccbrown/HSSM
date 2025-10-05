@@ -7,7 +7,6 @@ generation ops.
 
 import logging
 from collections.abc import Callable
-from functools import partial
 from os import PathLike
 from typing import Any, Literal, Protocol, Type, cast
 
@@ -18,11 +17,13 @@ import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
-from ssms.basic_simulators.simulator import simulator
-from ssms.config import model_config as ssms_model_config
+from ssms.hssm_support import (
+    get_simulator_fun_internal,
+    validate_simulator_fun,
+)
+from ssms.hssm_support import rng_fn as ssms_rng_fn
 
 from .._types import LogLikeFunc
-from ..utils import decorate_atomic_simulator, ssms_sim_wrapper
 from .blackbox import make_blackbox_op
 from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
@@ -126,6 +127,11 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
     )
 
 
+class _RandomVariable(Protocol):  # for mypy
+    _list_params: list[str]
+    _lapse: bmb.Prior
+
+
 def _extract_size(args, kwargs):
     """Extract size from args and kwargs.
 
@@ -150,20 +156,7 @@ def _extract_size(args, kwargs):
     return size, args, kwargs
 
 
-def _get_p_outlier(cls, arg_arrays):
-    """Get p_outlier from arg_arrays and update arg_arrays."""
-    list_params = cls._list_params
-    p_outlier = None
-    if list_params and list_params[-1] == "p_outlier":
-        p_outlier = arg_arrays.pop(-1)
-    return p_outlier, arg_arrays
-
-
-class _HasListParams(Protocol):  # for mypy
-    _list_params: list[str]
-
-
-def _create_arg_arrays(cls: _HasListParams, args: tuple) -> list[np.ndarray]:
+def _create_arg_arrays(cls: bmb.Prior, args: tuple) -> list[np.ndarray]:
     """
     Create argument arrays from input arguments.
 
@@ -185,271 +178,13 @@ def _create_arg_arrays(cls: _HasListParams, args: tuple) -> list[np.ndarray]:
     return arg_arrays
 
 
-def _reshape_sims_out(max_shape, n_replicas, obs_dim_int):
-    """Calculate the output shape for simulation results.
-
-    Parameters
-    ----------
-    max_shape : tuple or list
-        The maximum shape of the input parameters.
-    n_replicas : int
-        Number of replicas (samples) to draw for each trial.
-    obs_dim_int : int
-        The number of observation dimensions.
-
-    Returns
-    -------
-    tuple
-        The shape of the simulation output.
-    """
-    shape = [*max_shape[:-1], max_shape[-1]]
-    if n_replicas != 1:
-        shape.append(n_replicas)
-    shape.append(obs_dim_int)
-    return tuple(shape)
-
-
-def _get_seed(rng):
-    """Get a seed for the random number generator."""
-    iinfo32 = np.iinfo(np.uint32)
-    return rng.integers(0, iinfo32.max, dtype=np.uint32)
-
-
-def _prepare_theta_and_shape(arg_arrays, size):
-    """
-    Prepare the parameter matrix `theta` for simulation.
-
-    If all parameters passed are scalar, assemble all parameters into a 1D array
-    and pass it to the `theta` argument. In this case, size is number of observations.
-    If any parameter is a vector, preprocess all parameters, reshape them into a matrix
-    of dimension (size, n_params) where size is the number of elements in the largest
-    of all parameters passed to *arg.
-    """
-    is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
-    if is_all_args_scalar:
-        # If all parameters passed are scalar, assemble all parameters into a 1D array
-        # and pass it to the `theta` argument. In this case, size is the number of
-        # observations.
-        theta = np.stack(arg_arrays)
-        if theta.ndim > 1:
-            theta = theta.squeeze(axis=-1)
-
-        if isinstance(size, tuple) and len(size) == 1:
-            size_ = size[0]
-        elif isinstance(size, int):
-            size_ = size
-        else:
-            raise ValueError(
-                f"Size must be a tuple of length 1 or an integer, but got {type(size)}"
-            )
-        theta = np.tile(theta, (size_, 1))
-        return True, theta, None, None
-
-    # Preprocess all parameters, reshape them into a matrix of dimension
-    # (size, n_params) where size is the number of elements in the
-    # largest of all parameters passed to *arg
-    largest_param_idx = np.argmax([arg.size for arg in arg_arrays])
-    max_shape = arg_arrays[largest_param_idx].shape
-    new_data_size = max_shape[-1]
-    theta = np.column_stack(
-        [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
-    )
-    return False, theta, max_shape, new_data_size
-
-
-def _extract_size_val(size: tuple | int) -> int:
-    """Extract integer value from size, handling tuple or scalar."""
-    if isinstance(size, tuple):
-        return size[0]
-    return size
-
-
-def _validate_size(size_val: int, new_data_size: int) -> None:
-    """Validate that `size` is a multiple of `new_data_size`.
-
-    Parameters
-    ----------
-    size_val : int
-        The total number of samples to be drawn.
-    new_data_size : int
-        The size of the new data to be used for sampling.
-
-    Raises
-    ------
-    ValueError
-        If `size_val` is not a multiple of `new_data_size`.
-    """
-    # If size is not None, we check if size is a multiple of the largest size.
-    # If not, an error is thrown.
-    if size_val % new_data_size != 0:
-        raise ValueError("`size` needs to be a multiple of the size of data")
-
-
-def _calculate_n_replicas(is_all_args_scalar, size, new_data_size):
-    """
-    Calculate the number of replicas (samples) to draw from each trial based on input arguments.
-
-    Parameters
-    ----------
-    is_all_args_scalar : bool
-        Indicates whether all input arguments are scalars.
-    size : int or None
-        The total number of samples to be drawn. If None or 1, only one replica is
-        drawn.
-    new_data_size : int
-        The size of the new data to be used for sampling.
-
-    Returns
-    -------
-    int
-        The number of replicas to draw for each trial.
-
-    Raises
-    ------
-    ValueError
-        If `size` is not compatible with `new_data_size` as determined by
-        `_validate_size`.
-    """  # noqa: E501
-    # The multiple then becomes how many samples we draw from each trial.
-    if any([is_all_args_scalar, size is None, size == 1]):
-        return 1
-    size_val = _extract_size_val(size)
-    _validate_size(size_val, new_data_size)
-    return size_val // new_data_size
-
-
-def _build_decorated_simulator(model_name: str, choices: list) -> Callable:
-    """
-    Build a decorated simulator function for a given model and choices.
-
-    Parameters
-    ----------
-    model_name : str
-        The name of the model to use for simulation.
-    choices : list
-        A list of possible choices for the simulator.
-
-    Returns
-    -------
-    Callable
-        A decorated simulator function.
-    """
-    decorated_simulator = decorate_atomic_simulator(
-        model_name=model_name,
-        choices=choices,
-        obs_dim=2,
-    )
-    sim_wrapper = partial(
-        ssms_sim_wrapper,
-        simulator_fun=simulator,
-        model=model_name,
-    )
-    return decorated_simulator(sim_wrapper)
-
-
-def _validate_simulator_fun_arg(simulator_fun: Any) -> None:
-    """
-    Validate the simulator function argument.
-
-    Parameters
-    ----------
-    simulator_fun : Callable or str
-        The simulator function or the name of the model as a string.
-
-    Raises
-    ------
-    ValueError
-        If the simulator argument is not a string or a callable.
-    """
-    if not (isinstance(simulator_fun, str) or callable(simulator_fun)):
-        raise ValueError(
-            "The simulator argument must be a string or a callable, "
-            f"but you passed {type(simulator_fun)}."
-        )
-
-
-def _validate_simulator_fun(simulator_fun: Any) -> tuple[str, list, int]:
-    """
-    Validate that the simulator function has required attributes.
-
-    Parameters
-    ----------
-    simulator_fun : Any
-        The simulator function or object to validate.
-
-    Returns
-    -------
-    tuple
-        A tuple containing model_name, choices, and obs_dim_int.
-
-    Raises
-    ------
-    ValueError
-        If any required attribute is missing or invalid.
-    """
-    if not hasattr(simulator_fun, "model_name"):
-        raise ValueError("The simulator function must have a `model_name` attribute.")
-    model_name = simulator_fun.model_name
-
-    if not hasattr(simulator_fun, "choices"):
-        raise ValueError("The simulator function must have a `choices` attribute.")
-    choices = simulator_fun.choices
-
-    if not hasattr(simulator_fun, "obs_dim"):
-        raise ValueError("The simulator function must have a `obs_dim` attribute.")
-    obs_dim = simulator_fun.obs_dim
-
-    if not isinstance(obs_dim, int):
-        raise ValueError("The obs_dim attribute must be an integer")
-    obs_dim_int = obs_dim
-
-    return model_name, choices, obs_dim_int
-
-
-def _get_simulator_fun_internal(simulator_fun: Callable | str):
-    """
-    Get the internal simulator function for a given model.
-
-    Parameters
-    ----------
-    simulator_fun : Callable or str
-        The simulator function or the name of the model as a string.
-
-    Returns
-    -------
-    Callable
-        The decorated simulator function.
-
-    Raises
-    ------
-    ValueError
-        If the simulator argument is not a string or a callable.
-    """
-    _validate_simulator_fun_arg(simulator_fun)
-
-    if callable(simulator_fun):
-        return cast("Callable[..., Any]", simulator_fun)
-
-    # If simulator_fun is passed as a string,
-    # we assume it is a valid model in the
-    # ssm-simulators package.
-    if not isinstance(simulator_fun, str):
-        raise ValueError("simulator_fun must be a string or callable.")
-    simulator_fun_str = simulator_fun
-    if simulator_fun_str not in ssms_model_config:
-        _logger.warning(
-            "You supplied a model '%s', which is currently not supported in "
-            "the ssm_simulators package. An error will be thrown when sampling "
-            "from the random variable or when using any "
-            "posterior or prior predictive sampling methods.",
-            simulator_fun_str,
-        )
-    choices = ssms_model_config.get(simulator_fun_str, {}).get("choices", [0, 1, 2])
-    simulator_fun_internal = _build_decorated_simulator(
-        model_name=simulator_fun_str,
-        choices=choices,
-    )
-    return simulator_fun_internal
+def _get_p_outlier(cls: _RandomVariable, arg_arrays):
+    """Get p_outlier from arg_arrays and update arg_arrays."""
+    list_params = cls._list_params
+    p_outlier = None
+    if list_params and list_params[-1] == "p_outlier":
+        p_outlier = arg_arrays.pop(-1)
+    return p_outlier, arg_arrays
 
 
 def make_hssm_rv(
@@ -473,8 +208,8 @@ def make_hssm_rv(
     Type[RandomVariable]
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
-    simulator_fun_internal = _get_simulator_fun_internal(simulator_fun)
-    model_name, choices, obs_dim_int = _validate_simulator_fun(simulator_fun_internal)
+    simulator_fun_internal = get_simulator_fun_internal(simulator_fun)
+    model_name, choices, obs_dim_int = validate_simulator_fun(simulator_fun_internal)
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
@@ -499,6 +234,11 @@ def make_hssm_rv(
         # pylint: disable=arguments-renamed,bad-option-value,W0221
         # NOTE: `rng` now is a np.random.Generator instead of RandomState
         # since the latter is now deprecated from numpy
+
+        # AF-TODO: I think the doc-string about sizes is too confusing.
+        # We are missing the separation of concepts between the
+        # `size` argument that is passed
+        # and the parameter vector shapes that are passed?
         @classmethod
         def rng_fn(
             cls,
@@ -507,21 +247,6 @@ def make_hssm_rv(
             **kwargs,
         ) -> np.ndarray:
             """Generate random variables from this distribution.
-
-            Parameters
-            ----------
-            rng
-                A `np.random.Generator` object for random state.
-            args
-                Unnamed arguments of parameters, in the order of `_list_params`, plus
-                the last one as size.
-            kwargs
-                Other keyword arguments passed to the ssms simulator.
-
-            Returns
-            -------
-            np.ndarray
-                An array of `(rt, response)` generated from the distribution.
 
             Note
             ----
@@ -549,26 +274,18 @@ def make_hssm_rv(
             # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
             size, args, kwargs = _extract_size(args, kwargs)
-
             arg_arrays = _create_arg_arrays(cls, args)
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
-            seed = _get_seed(rng)
 
-            is_all_args_scalar, theta, max_shape, new_data_size = (
-                _prepare_theta_and_shape(arg_arrays, size)
-            )
-            n_replicas = _calculate_n_replicas(is_all_args_scalar, size, new_data_size)
-
-            sims_out = simulator_fun_internal(
-                theta=theta,
-                random_state=seed,
-                n_replicas=n_replicas,
+            sims_out = ssms_rng_fn(
+                arg_arrays,
+                size,
+                rng,
+                simulator_fun_internal,
+                obs_dim_int,
+                *args,
                 **kwargs,
             )
-
-            if not is_all_args_scalar:
-                shape_spec = _reshape_sims_out(max_shape, n_replicas, obs_dim_int)
-                sims_out = sims_out.reshape(shape_spec)
 
             sims_out = _apply_lapse_model(
                 sims_out=sims_out,
@@ -577,6 +294,7 @@ def make_hssm_rv(
                 lapse_dist=cls._lapse,
                 choices=choices,
             )
+
             return sims_out
 
     return HSSMRV

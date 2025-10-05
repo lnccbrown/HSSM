@@ -11,6 +11,9 @@ from hssm.distribution_utils.dist import (
     apply_param_bounds_to_loglik,
     make_distribution,
     ensure_positive_ndt,
+    _create_arg_arrays,
+    _extract_size,
+    _get_p_outlier,
 )
 from hssm.likelihoods.analytical import logp_ddm, DDM
 
@@ -290,3 +293,112 @@ def test_make_likelihood_callable():
             params_only=False,
             params_is_reg=[False, False, False, False],
         )
+
+
+class MockHasListParams:
+    """Mock class that implements _HasListParams protocol."""
+
+    def __init__(self, list_params):
+        self._list_params = list_params
+
+
+class TestCreateArgArrays:
+    """Tests for _create_arg_arrays function."""
+
+    def test_create_arg_arrays_basic(self):
+        """Test basic functionality of _create_arg_arrays."""
+        cls = MockHasListParams(["a", "b", "c"])
+        args = (1, 2, 3, 4)
+        result = _create_arg_arrays(cls, args)
+        assert result == [np.array(i) for i in (1, 2, 3)]
+
+    def test_create_arg_arrays_fewer_args_than_params(self):
+        """Test _create_arg_arrays when args has fewer elements than params."""
+        cls = MockHasListParams(["a", "b", "c", "d"])
+        args = (1, 2)
+        result = _create_arg_arrays(cls, args)
+        assert result == [np.array(i) for i in (1, 2)]
+
+    def test_create_arg_arrays_array_inputs(self):
+        """Test _create_arg_arrays with array inputs."""
+        cls = MockHasListParams(["a", "b"])
+        args = ([1, 2, 3], np.array([4, 5, 6]))
+        result = _create_arg_arrays(cls, args)
+
+        assert len(result) == 2
+        np.testing.assert_array_equal(result[0], np.array([1, 2, 3]))
+        np.testing.assert_array_equal(result[1], np.array([4, 5, 6]))
+
+
+class TestExtractSize:
+    """Tests for _extract_size function."""
+
+    def test_extract_size_from_kwargs(self):
+        """Test _extract_size when size is in kwargs."""
+        args = (1, 2, 3)
+        kwargs = {"size": 10, "other": "value"}
+
+        size, new_args, new_kwargs = _extract_size(args, kwargs)
+
+        assert size == 10
+        assert new_args == (1, 2, 3)
+        assert new_kwargs == {"other": "value"}
+
+    def test_extract_size_from_args(self):
+        """Test _extract_size when size is in args."""
+        args = (1, 2, 3, 15)
+        kwargs = {"other": "value"}
+
+        size, new_args, new_kwargs = _extract_size(args, kwargs)
+
+        assert size == 15
+        assert new_args == (1, 2, 3)
+        assert new_kwargs == {"other": "value"}
+
+    def test_extract_size_none_default(self):
+        """Test _extract_size when size is None, should default to 1."""
+        args = (1, 2, 3, None)
+        kwargs = {}
+
+        size, new_args, new_kwargs = _extract_size(args, kwargs)
+
+        assert size == 1
+        assert new_args == (1, 2, 3)
+        assert new_kwargs == {}
+
+
+class TestGetPOutlier:
+    """Tests for _get_p_outlier function."""
+
+    def test_get_p_outlier_present(self):
+        """Test _get_p_outlier when p_outlier is present."""
+        cls = MockHasListParams(["a", "b", "p_outlier"])
+        arg_arrays = [np.array([1, 2]), np.array([3, 4]), np.array([0.1, 0.2])]
+
+        p_outlier, new_arg_arrays = _get_p_outlier(cls, arg_arrays)
+
+        np.testing.assert_array_equal(p_outlier, np.array([0.1, 0.2]))
+        assert len(new_arg_arrays) == 2
+        np.testing.assert_array_equal(new_arg_arrays[0], np.array([1, 2]))
+        np.testing.assert_array_equal(new_arg_arrays[1], np.array([3, 4]))
+
+    def test_get_p_outlier_not_present(self):
+        """Test _get_p_outlier when p_outlier is not present."""
+        cls = MockHasListParams(["a", "b", "c"])
+        arg_arrays = [np.array([1, 2]), np.array([3, 4]), np.array([5, 6])]
+
+        p_outlier, new_arg_arrays = _get_p_outlier(cls, arg_arrays)
+
+        assert p_outlier is None
+        assert len(new_arg_arrays) == 3
+        assert new_arg_arrays is arg_arrays  # Should be the same object
+
+    def test_get_p_outlier_empty_params(self):
+        """Test _get_p_outlier when _list_params is empty."""
+        cls = MockHasListParams([])
+        arg_arrays = [np.array([1, 2])]
+
+        p_outlier, new_arg_arrays = _get_p_outlier(cls, arg_arrays)
+
+        assert p_outlier is None
+        assert new_arg_arrays is arg_arrays
