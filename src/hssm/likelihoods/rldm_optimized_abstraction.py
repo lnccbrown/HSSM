@@ -95,7 +95,7 @@ def compute_v_subject_wise(
     return v
 
 
-def make_rldm_logp_func(
+def make_rl_logp_func(
     mapping_function: Callable, n_participants: int, n_trials: int
 ) -> Callable:
     """Create a function to compute the drift rates (v) for the RLDM model.
@@ -161,7 +161,7 @@ def make_rldm_logp_func(
 
 
 # TODO[CP]: Not really sure how to adapt this function given the changes to
-# make_rldm_logp_func
+# make_rl_logp_func
 def make_rldm_logp_op(
     mapping_function: Callable, n_participants: int, n_trials: int, n_params: int
 ) -> Op:
@@ -179,7 +179,7 @@ def make_rldm_logp_op(
     Op
         A pytensor Op that computes the log likelihood for the RLDM model.
     """
-    logp = make_rldm_logp_func(mapping_function, n_participants, n_trials)
+    logp = make_rl_logp_func(mapping_function, n_participants, n_trials)
     vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
 
     return make_jax_logp_ops(

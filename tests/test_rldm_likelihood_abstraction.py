@@ -6,7 +6,7 @@ import numpy as np
 
 import hssm
 from hssm.likelihoods.rldm_optimized_abstraction import (
-    make_rldm_logp_func,
+    make_rl_logp_func,
     make_rldm_logp_op,
     compute_v_subject_wise,
 )
@@ -22,7 +22,7 @@ def fixture_path():
 
 
 class TestRldmLikelihoodAbstraction:
-    def test_make_rldm_logp_func(self, fixture_path):
+    def test_make_rl_logp_func(self, fixture_path):
         """Test the JAX log-likelihood function for the RLDM model."""
         data = np.load(fixture_path / "rldm_data.npy", allow_pickle=True).item()["data"]
         participant_id = data["participant_id"].values
@@ -39,7 +39,7 @@ class TestRldmLikelihoodAbstraction:
         t = np.ones(total_trials) * 0.1
         theta = np.ones(total_trials) * 0.1
 
-        logp_drift_rates = make_rldm_logp_func(
+        logp_drift_rates = make_rl_logp_func(
             compute_v_subject_wise,
             n_participants=len(subj),
             n_trials=total_trials // len(subj),
