@@ -98,19 +98,21 @@ def compute_v_subject_wise(
 def make_rldm_logp_func(
     mapping_function: Callable, n_participants: int, n_trials: int
 ) -> Callable:
-    """Create a log likelihood function for the RLDM model.
+    """Create a function to compute the drift rates (v) for the RLDM model.
 
     Parameters
     ----------
+    mapping_function : Callable
+        Function that computes drift rates for a subject's trials.
     n_participants : int
-        The number of participants in the dataset.
+        Number of participants in the dataset.
     n_trials : int
-        The number of trials per participant.
+        Number of trials per participant.
 
     Returns
     -------
-    callable
-        A function that computes the log likelihood for the RLDM model.
+    Callable
+        A function that computes drift rates (v) for all subjects given their trial data and RLDM parameters.
     """
     # Vectorized version of  mapping_function to handle multiple subjects.
     subject_wise_vmapped = jax.vmap(mapping_function, in_axes=0)
