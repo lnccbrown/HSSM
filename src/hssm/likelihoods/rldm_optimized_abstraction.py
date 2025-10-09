@@ -153,9 +153,9 @@ def make_rl_logp_func(
         )
 
         # Use the compute_v function to get the drift rates (v)
-        v = subject_wise_vmapped(subj_trials).reshape((-1, 1))
+        drift_rates = subject_wise_vmapped(subj_trials).reshape((-1, 1))
 
-        return v
+        return drift_rates
 
     return logp
 
