@@ -144,7 +144,7 @@ def make_rldm_logp_func(
         feedback = dist_params[-1]
 
         # Reshape subj_trials into a 3D array of shape (n_participants, n_trials, 4)
-        # so we can vmap the compute_v function over its first axis.
+        # so we can act on this object with the vmapped version of the mapping function
         subj_trials = jnp.stack((rl_alpha, scaler, action, feedback), axis=1).reshape(
             n_participants, n_trials, -1
         )
@@ -152,11 +152,7 @@ def make_rldm_logp_func(
         # Use the compute_v function to get the drift rates (v)
         v = subject_wise_vmapped(subj_trials).reshape((-1, 1))
 
-        # create parameter arrays to be passed to the likelihood function
-        ddm_params_matrix = jnp.stack(dist_params[2:6], axis=1)
-        lan_matrix = jnp.concatenate((v, ddm_params_matrix, data), axis=1)
-
-        return angle_logp_jax_func(lan_matrix)
+        return v
 
     return logp
 
