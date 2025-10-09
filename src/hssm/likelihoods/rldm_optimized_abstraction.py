@@ -112,7 +112,8 @@ def make_rldm_logp_func(
     Returns
     -------
     Callable
-        A function that computes drift rates (v) for all subjects given their trial data and RLDM parameters.
+        A function that computes drift rates (v) for all subjects given their trial data
+        and RLDM parameters.
     """
     # Vectorized version of  mapping_function to handle multiple subjects.
     subject_wise_vmapped = jax.vmap(mapping_function, in_axes=0)
@@ -159,7 +160,8 @@ def make_rldm_logp_func(
     return logp
 
 
-# TODO[CP]: Note really sure how to adapt this function given the changes to make_rldm_logp_func
+# TODO[CP]: Not really sure how to adapt this function given the changes to
+# make_rldm_logp_func
 def make_rldm_logp_op(
     mapping_function: Callable, n_participants: int, n_trials: int, n_params: int
 ) -> Op:
