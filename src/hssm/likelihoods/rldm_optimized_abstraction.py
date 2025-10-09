@@ -119,7 +119,7 @@ def make_rl_logp_func(
     subject_wise_vmapped = jax.vmap(subject_wise_func, in_axes=0)
 
     def logp(data, *dist_params) -> np.ndarray:
-        """Compute the log likelihood for the RLDM model.
+        """Compute the log likelihood for the specified RL model.
 
         Parameters
         ----------
