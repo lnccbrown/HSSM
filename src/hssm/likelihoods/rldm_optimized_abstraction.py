@@ -96,13 +96,13 @@ def compute_v_subject_wise(
 
 
 def make_rl_logp_func(
-    mapping_function: Callable, n_participants: int, n_trials: int
+    subject_wise_func: Callable, n_participants: int, n_trials: int
 ) -> Callable:
     """Create a function to compute the drift rates (v) for the RLDM model.
 
     Parameters
     ----------
-    mapping_function : Callable
+    subject_wise_func : Callable
         Function that computes drift rates for a subject's trials.
     n_participants : int
         Number of participants in the dataset.
@@ -115,8 +115,8 @@ def make_rl_logp_func(
         A function that computes drift rates (v) for all subjects given their trial data
         and RLDM parameters.
     """
-    # Vectorized version of  mapping_function to handle multiple subjects.
-    subject_wise_vmapped = jax.vmap(mapping_function, in_axes=0)
+    # Vectorized version of  subject_wise_func to handle multiple subjects.
+    subject_wise_vmapped = jax.vmap(subject_wise_func, in_axes=0)
 
     def logp(data, *dist_params) -> np.ndarray:
         """Compute the log likelihood for the RLDM model.
@@ -163,7 +163,7 @@ def make_rl_logp_func(
 # TODO[CP]: Not really sure how to adapt this function given the changes to
 # make_rl_logp_func
 def make_rldm_logp_op(
-    mapping_function: Callable, n_participants: int, n_trials: int, n_params: int
+    subject_wise_func: Callable, n_participants: int, n_trials: int, n_params: int
 ) -> Op:
     """Create a pytensor Op for the likelihood function of RLDM model.
 
@@ -179,7 +179,7 @@ def make_rldm_logp_op(
     Op
         A pytensor Op that computes the log likelihood for the RLDM model.
     """
-    logp = make_rl_logp_func(mapping_function, n_participants, n_trials)
+    logp = make_rl_logp_func(subject_wise_func, n_participants, n_trials)
     vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
 
     return make_jax_logp_ops(
