@@ -141,9 +141,9 @@ def make_rl_logp_func(
         np.ndarray
             The log likelihoods for each subject.
         """
-        action = data[:, 1]
         rl_alpha = dist_params[0]
         scaler = dist_params[1]
+        action = data[:, 1]
         feedback = dist_params[-1]
 
         # Reshape subj_trials into a 3D array of shape (n_participants, n_trials, 4)
