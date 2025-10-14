@@ -12,15 +12,14 @@ authors = [
 ]
 readme = "README.md"
 license = { file = "LICENSE" }
-repository = "https://github.com/lnccbrown/HSSM"
 keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
 requires-python = ">=3.11,<3.13"
 classifiers = [
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 
 dependencies = [
@@ -37,6 +36,11 @@ dependencies = [
     "ssm-simulators>=0.11.1",
     "tqdm>=4.66.0",
 ]
+
+[project.urls]
+homepage = "https://lnccbrown.github.io/HSSM/"
+documentation = "https://lnccbrown.github.io/HSSM/"
+repository = "https://github.com/lnccbrown/HSSM"
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.5.2"]
@@ -217,11 +221,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.sdist]
 exclude = [
-  "docs/**",            # remove all docs content from the source tarball
+    "docs/**", # remove all docs content from the source tarball
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/hssm"]  # keep as-is so only package code goes into the wheel
+packages = ["src/hssm"] # keep as-is so only package code goes into the wheel
 
 [[tool.uv.index]]
 name = "pypi"
