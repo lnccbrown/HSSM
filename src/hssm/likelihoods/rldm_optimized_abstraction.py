@@ -160,8 +160,7 @@ def make_rl_logp_func(
     return logp
 
 
-# TODO[CP]: Not really sure how to adapt this function given the changes to
-# make_rl_logp_func
+# TODO[CP]: Adapt this function given the changes to make_rl_logp_func
 def make_rldm_logp_op(
     subject_wise_func: Callable, n_participants: int, n_trials: int, n_params: int
 ) -> Op:
