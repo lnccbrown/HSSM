@@ -19,13 +19,14 @@ from ssms.basic_simulators.simulator import simulator
 
 # Original model cartoon plot from gui
 from ..defaults import SupportedModels, default_model_config
-from .posterior_predictive import _process_lines
+from .predictive import _process_lines
 from .utils import (
     _check_groups_and_groups_order,
     _get_plotting_df,
     _get_title,
     # _hdi_to_interval, # TODO: We eventually want to add HDI plotting back in here
     _subset_df,
+    _to_idata_group,
     _use_traces_or_sample,
 )
 
@@ -57,6 +58,9 @@ def _plot_model_cartoon_1D(
     plot_data: bool = True,
     plot_mean: bool = True,
     plot_samples: bool = False,
+    predictive_group: Literal[
+        "posterior_predictive", "prior_predictive"
+    ] = "posterior_predictive",
     colors: str | list[str] | None = None,
     title: str | None = "Model Plots",
     xlabel: str | None = "Response Time",
@@ -92,30 +96,32 @@ def _plot_model_cartoon_1D(
 
     n_choices = len(config_tmp["choices"])
 
-    is_pp_mean = data.source == "posterior_predictive_mean"
-    is_pp_samples = data.source == "posterior_predictive"
+    is_predictive_mean = data.source == predictive_group + "_mean"
+    is_predictive_samples = data.source == predictive_group
     is_observed = data.observed == "observed"
     is_predicted = data.observed == "predicted"
 
-    data_posterior_predictive_mean = data.loc[
-        is_pp_mean & is_predicted,
+    data_predictive_mean = data.loc[
+        is_predictive_mean & is_predicted,
         :,
     ]
 
+    data_observed = None
+
     if plot_mean:
-        data_observed = data.loc[is_pp_mean & is_observed, :]
+        data_observed = data.loc[is_predictive_mean & is_observed, :]
+    elif plot_samples and (not plot_mean):
+        data_observed = data.loc[is_predictive_samples & is_observed, :]
 
-    if plot_samples and (not plot_mean):
-        data_observed = data.loc[is_pp_samples & is_observed, :]
+    data_predictive = data.loc[is_predictive_samples & is_predicted, :]
 
-    data_posterior_predictive = data.loc[is_pp_samples & is_predicted, :]
-
-    plot_function: PlotFunctionProtocol
+    plot_function: PlotFunctionProtocol | None = None
     if n_choices == 2:
         plot_function = plot_func_model
     elif n_choices > 2:
         plot_function = plot_func_model_n
-    else:
+
+    if plot_function is None:
         raise NotImplementedError(
             "The model plot works only for >2 choice models at the moment"
         )
@@ -124,14 +130,10 @@ def _plot_model_cartoon_1D(
         model_name=model_name,
         axis=ax,
         theta_mean=(
-            data_posterior_predictive_mean.reset_index()[model_params]
-            if plot_mean
-            else None
+            data_predictive_mean.reset_index()[model_params] if plot_mean else None
         ),
-        theta_posterior=(
-            data_posterior_predictive[model_params] if plot_samples else None
-        ),
-        data=(data_observed.reset_index() if plot_data else None),
+        theta_samples=(data_predictive[model_params] if plot_samples else None),
+        data=(None if not plot_data else data_observed.reset_index()),
         **kwargs,
     )
 
@@ -151,6 +153,9 @@ def _plot_model_cartoon_2D(
     plot_data: bool = True,
     plot_mean: bool = True,
     plot_samples: bool = False,
+    predictive_group: Literal[
+        "posterior_predictive", "prior_predictive"
+    ] = "posterior_predictive",
     row: str | None = None,
     col: str | None = None,
     col_wrap: int | None = None,
@@ -208,12 +213,12 @@ def _plot_model_cartoon_2D(
             Line2D([0], [0], color="black", linestyle="-", lw=1.5),
         ]
 
-        custom_labels = ["observed", "mean_pp"]
+        custom_labels = ["observed", "mean_predictive"]
 
         g.add_legend(
             dict(zip(custom_labels, custom_lines)),
             title="",
-            label_order=["observed", "mean_pp"],
+            label_order=["observed", "mean_predictive"],
         )
 
     if title:
@@ -226,30 +231,34 @@ def _plot_model_cartoon_2D(
     return g
 
 
-def compute_merge_necessary_deterministics(model, idata, inplace=True):
+def compute_merge_necessary_deterministics(
+    model, idata, idata_group: Literal["posterior", "prior"] = "posterior"
+):
     """Compute the necessary deterministic variables for the model."""
     # Get the list of deterministic variables
     necessary_params = default_model_config[model.model_name]["list_params"]
     deterministics_list = []
-    idata_posterior_keys = list(idata["posterior"].keys())
+    idata_group_keys = list(idata[idata_group].keys())
     # Compute the deterministic variables
     for param in necessary_params:
-        if param not in idata_posterior_keys:
+        if param not in idata_group_keys:
             if param in [
                 deterministic.name for deterministic in model.pymc_model.deterministics
             ]:
                 deterministics_list.append(
                     pm.compute_deterministics(
-                        idata.posterior, model=model.pymc_model, var_names=[param]
+                        idata[idata_group], model=model.pymc_model, var_names=[param]
                     )
                 )
 
     deterministics_idata = xr.merge(deterministics_list)
-    setattr(idata, "posterior", xr.merge([idata.posterior, deterministics_idata]))
+    setattr(idata, idata_group, xr.merge([idata[idata_group], deterministics_idata]))
     return idata
 
 
-def attach_trialwise_params_to_df(model, df, idata):
+def attach_trialwise_params_to_df(
+    model, df, idata, idata_group: Literal["posterior", "prior"] = "posterior"
+):
     """Attach the trial-wise parameters to the dataframe."""
     necessary_params = default_model_config[model.model_name]["list_params"]
     df[necessary_params] = 0.0
@@ -257,7 +266,7 @@ def attach_trialwise_params_to_df(model, df, idata):
     for chain_tmp, draw_tmp in {(x[0], x[1]) for x in list(df.index) if x[0] != -1}:
         for param in necessary_params:
             df.loc[(chain_tmp, draw_tmp, slice(None)), param] = (
-                idata["posterior"].sel(chain=chain_tmp, draw=draw_tmp)[param].values
+                idata[idata_group].sel(chain=chain_tmp, draw=draw_tmp)[param].values
             )
     return df
 
@@ -291,10 +300,42 @@ def _make_idata_mean_posterior(idata: az.InferenceData) -> az.InferenceData:
     return idata
 
 
+def _make_idata_mean_prior(idata: az.InferenceData) -> az.InferenceData:
+    """Create a new InferenceData object containing only the prior mean.
+
+    Takes an InferenceData object and computes the mean across chains and draws,
+    then restructures it to have a single chain and draw. Removes posterior
+    predictive samples if present.
+
+    Parameters
+    ----------
+    idata : arviz.InferenceData
+        The InferenceData object to process
+
+    Returns
+    -------
+    arviz.InferenceData
+        A new InferenceData object containing only the posterior mean
+    """
+    setattr(idata, "prior", idata["prior"].mean(dim=["chain", "draw"]))
+    setattr(idata, "prior", idata["prior"].assign_coords(chain=[0], draw=[0]))
+    for data_var in list(idata["posterior"].data_vars):
+        idata["prior"][data_var] = idata["prior"][data_var].expand_dims(
+            dim=["chain", "draw"], axis=[0, 1]
+        )
+
+    if "posterior_predictive" in idata:
+        del idata["prior_predictive"]
+    return idata
+
+
 def plot_model_cartoon(
     model,
     idata: az.InferenceData | None = None,
     data: pd.DataFrame | None = None,
+    predictive_group: Literal[
+        "posterior_predictive", "prior_predictive"
+    ] = "posterior_predictive",
     plot_data: bool = True,
     n_samples: int | float | None = 20,
     row: str | None = None,
@@ -304,8 +345,8 @@ def plot_model_cartoon(
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
     bins: int | np.ndarray | str | None = 50,
     step: bool = False,
-    plot_pp_mean: bool = True,
-    plot_pp_samples: bool = False,
+    plot_predictive_mean: bool = True,
+    plot_predictive_samples: bool = False,
     colors: str | list[str] | None = None,
     linestyles: str | list[str] | tuple[str] | dict[str, str] = "-",
     linewidths: float | list[float] | tuple[float] | dict[str, float] = 1.25,
@@ -342,6 +383,9 @@ def plot_model_cartoon(
         using the data stored in the `model` object. If posterior predictive samples
         exist in the `idata` object, these samples will be used for plotting, but a
         ValueError will be thrown if any of `col` or `row` is not None.
+    predictive_group : optional
+        The type of predictive distribution to plot, by default "posterior_predictive".
+        Can be "posterior_predictive" or "prior_predictive".
     plot_data : optional
         Whether to plot the observed data, by default True.
     n_samples : optional
@@ -421,8 +465,11 @@ def plot_model_cartoon(
     mpl.axes.Axes | sns.FacetGrid
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
-    if not (plot_pp_mean or plot_pp_samples):
-        raise ValueError("At least one of plot_pp_mean or plot_pp_samples must be True")
+    if not (plot_predictive_mean or plot_predictive_samples):
+        raise ValueError(
+            "At least one of plot_predictive_mean or "
+            "plot_predictive_samples must be True"
+        )
 
     # Process linestyles
     linestyles_ = _process_lines(linestyles, mode="linestyles")
@@ -442,7 +489,7 @@ def plot_model_cartoon(
             (not extra_dims)
             and (not plot_data)
             and (idata is not None)
-            and ("posterior_predictive" in idata)
+            and (predictive_group in idata)
         ):
             # Allows data to be None only when plot_data=False and no extra_dims
             # and posterior predictive samples are available
@@ -452,11 +499,18 @@ def plot_model_cartoon(
 
     # Mean version of plot
     plotting_df_mean = None
-    if plot_pp_mean:
-        idata_mean = _make_idata_mean_posterior(
-            deepcopy(model.traces if idata is None else idata)
+    if plot_predictive_mean:
+        if predictive_group == "posterior_predictive":
+            idata_mean = _make_idata_mean_posterior(
+                deepcopy(model.traces if idata is None else idata)
+            )
+        else:
+            idata_mean = _make_idata_mean_prior(
+                deepcopy(model.traces if idata is None else idata)
+            )
+        idata_mean, _ = _use_traces_or_sample(
+            model, data, idata_mean, n_samples=None, predictive_group=predictive_group
         )
-        idata_mean, _ = _use_traces_or_sample(model, data, idata_mean, n_samples=None)
 
         # Get the plotting dataframe by chain and sample
         plotting_df_mean = _get_plotting_df(
@@ -465,11 +519,14 @@ def plot_model_cartoon(
             extra_dims=extra_dims,
             n_samples=None,
             response_str=model.response_str,
+            predictive_group=predictive_group,
         )
 
         # Get plotting dataframe for posterior mean
         # df by chain and sample
-        idata_mean = compute_merge_necessary_deterministics(model, idata_mean)
+        idata_mean = compute_merge_necessary_deterministics(
+            model, idata_mean, idata_group=_to_idata_group(predictive_group)
+        )
         plotting_df_mean = attach_trialwise_params_to_df(
             model, plotting_df_mean, idata_mean
         )
@@ -484,10 +541,12 @@ def plot_model_cartoon(
                 plotting_df_mean["rt"] * plotting_df_mean["response"]
             )
 
-        plotting_df_mean["source"] = "posterior_predictive_mean"
+        plotting_df_mean["source"] = predictive_group + "_mean"
 
-    if plot_pp_samples:
-        idata, sampled = _use_traces_or_sample(model, data, idata, n_samples=n_samples)
+    if plot_predictive_samples:
+        idata, sampled = _use_traces_or_sample(
+            model, data, idata, n_samples=n_samples, predictive_group=predictive_group
+        )
 
         # Get the plotting dataframe by chain and sample
         plotting_df = _get_plotting_df(
@@ -496,12 +555,20 @@ def plot_model_cartoon(
             extra_dims=extra_dims,
             n_samples=None if sampled else n_samples,
             response_str=model.response_str,
+            predictive_group=predictive_group,
         )
 
         # Get plotting dataframe for posterior mean
         # df by chain and sample
-        idata = compute_merge_necessary_deterministics(model, idata)
-        plotting_df = attach_trialwise_params_to_df(model, plotting_df, idata)
+        idata = compute_merge_necessary_deterministics(
+            model, idata, idata_group=_to_idata_group(predictive_group)
+        )
+        plotting_df = attach_trialwise_params_to_df(
+            model,
+            plotting_df,
+            idata,
+            idata_group=_to_idata_group(predictive_group),
+        )
 
         # Flip the rt values if necessary
         if np.any(plotting_df["response"] == 0) and model.n_choices == 2:
@@ -509,7 +576,7 @@ def plot_model_cartoon(
         if model.n_choices == 2:
             plotting_df["rt"] = plotting_df["rt"] * plotting_df["response"]
 
-        plotting_df["source"] = "posterior_predictive"
+        plotting_df["source"] = predictive_group
     else:
         plotting_df = None
 
@@ -526,8 +593,9 @@ def plot_model_cartoon(
             data=plotting_df,
             model_name=model.model_name,
             plot_data=plot_data,
-            plot_mean=plot_pp_mean,
-            plot_samples=plot_pp_samples,
+            plot_mean=plot_predictive_mean,
+            plot_samples=plot_predictive_samples,
+            predictive_group=predictive_group,
             bins=bins,
             step=step,
             # interval=interval,
@@ -545,7 +613,7 @@ def plot_model_cartoon(
             Line2D([0], [0], color="black", linestyle="-", lw=1.5),
         ]
 
-        custom_labels = ["observed", "mean_pp"]
+        custom_labels = ["observed", "mean_predictive"]
         ax.legend(custom_lines, custom_labels, title="", loc="upper right")
         return ax
 
@@ -556,8 +624,9 @@ def plot_model_cartoon(
             data=plotting_df,
             model_name=model.model_name,
             plot_data=plot_data,
-            plot_mean=plot_pp_mean,
-            plot_samples=plot_pp_samples,
+            plot_mean=plot_predictive_mean,
+            plot_samples=plot_predictive_samples,
+            predictive_group=predictive_group,
             row=row,
             col=col,
             col_wrap=col_wrap,
@@ -598,8 +667,9 @@ def plot_model_cartoon(
             data=df,
             model_name=model.model_name,
             plot_data=plot_data,
-            plot_mean=plot_pp_mean,
-            plot_samples=plot_pp_samples,
+            plot_mean=plot_predictive_mean,
+            plot_samples=plot_predictive_samples,
+            predictive_group=predictive_group,
             row=row,
             col=col,
             col_wrap=col_wrap,
@@ -625,7 +695,7 @@ def plot_func_model(
     model_name: str,
     axis: Axes,
     theta_mean: pd.DataFrame | None = None,
-    theta_posterior: pd.DataFrame | None = None,
+    theta_samples: pd.DataFrame | None = None,
     data: pd.DataFrame | None = None,
     n_samples=10,
     bin_size: float = 0.05,
@@ -642,13 +712,13 @@ def plot_func_model(
     linewidth_histogram: float | int = 1.5,
     linewidth_model: float | int = 1.5,
     color_data: str = "blue",
-    color_pp_mean: str = "black",
-    color_pp: str = "black",
+    color_predictive_mean: str = "black",
+    color_predictive: str = "black",
     alpha_mean: float = 1,
-    alpha_pp: float = 0.05,
+    alpha_predictive: float = 0.05,
     alpha_trajectories: float = 0.5,
     **kwargs,
-):
+) -> Axes:
     """Plot model cartoon with posterior predictive samples.
 
     Parameters
@@ -659,7 +729,7 @@ def plot_func_model(
         Axis to plot into.
     theta_mean : pd.DataFrame, optional
         DataFrame containing posterior mean parameter values.
-    theta_posterior : pd.DataFrame, optional
+    theta_samples : pd.DataFrame, optional
         DataFrame containing posterior samples of parameters.
     data : pd.DataFrame, optional
         DataFrame containing observed data to overlay.
@@ -693,13 +763,13 @@ def plot_func_model(
         Width of model lines. Defaults to 0.5.
     color_data : str, optional
         Color for data histogram. Defaults to "blue".
-    color_pp_mean : str, optional
+    color_predictive_mean : str, optional
         Color for posterior mean. Defaults to "black".
-    color_pp : str, optional
+    color_predictive : str, optional
         Color for posterior samples. Defaults to "black".
     alpha_mean : float, optional
         Transparency of posterior mean. Defaults to 1.
-    alpha_pp : float, optional
+    alpha_predictive : float, optional
         Transparency of posterior samples. Defaults to 0.05.
     alpha_trajectories : float, optional
         Transparency of trajectories. Defaults to 0.5.
@@ -726,6 +796,7 @@ def plot_func_model(
 
     rand_int = np.random.randint(0, 400000000)
 
+    sim_out = None
     if theta_mean is not None:
         sim_out = simulator(
             model=model_name,
@@ -748,15 +819,15 @@ def plot_func_model(
         )
 
     # Simulate model without noise: posterior samples
-    if theta_posterior is not None:
+    if theta_samples is not None:
         posterior_pred_no_noise = {}
         posterior_pred_sims = {}
         for i, (chain, draw) in enumerate(
-            list(theta_posterior.index.droplevel("obs_n").unique())
+            list(theta_samples.index.droplevel("obs_n").unique())
         ):
             posterior_pred_no_noise[i] = simulator(
                 model=model_name,
-                theta=theta_posterior.loc[(chain, draw), :].values,
+                theta=theta_samples.loc[(chain, draw), :].values,
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
@@ -766,7 +837,7 @@ def plot_func_model(
             # Simulate model: posterior samples
             posterior_pred_sims[i] = simulator(
                 model=model_name,
-                theta=theta_posterior.loc[(chain, draw), :].values,
+                theta=theta_samples.loc[(chain, draw), :].values,
                 n_samples=n_samples,
                 no_noise=False,
                 delta_t=delta_t_model,
@@ -780,17 +851,17 @@ def plot_func_model(
             tmp_theta = theta_mean.loc[
                 (np.random.choice(theta_mean.shape[0], 1)), :
             ].values
-        elif theta_posterior is not None:
+        elif theta_samples is not None:
             # wrap in max statement here
             # because negative value are possible,
             # however refer to data instead of posterior samples
             random_index = tuple(
                 [
-                    np.random.choice(theta_posterior.index.get_level_values(name_))
+                    np.random.choice(theta_samples.index.get_level_values(name_))
                     for name_ in ("chain", "draw", "obs_n")
                 ]
             )
-            tmp_theta = theta_posterior.loc[random_index, :].values
+            tmp_theta = theta_samples.loc[random_index, :].values
         else:
             raise ValueError("No theta values provided but n_trajectories is > 0")
 
@@ -807,9 +878,9 @@ def plot_func_model(
     # ADD DATA HISTOGRAMS
     hist_bottom_high, hist_bottom_low = calculate_histogram_bounds(
         theta_mean,
-        theta_posterior,
+        theta_samples,
         sim_out if (theta_mean is not None) else None,
-        posterior_pred_no_noise if (theta_posterior is not None) else None,
+        posterior_pred_no_noise if (theta_samples is not None) else None,
         **kwargs,
     )
 
@@ -845,7 +916,7 @@ def plot_func_model(
             data_down=data_down,
             hist_bottom_high=hist_bottom_high,
             hist_bottom_low=hist_bottom_low,
-            color_data=color_pp_mean,
+            color_data=color_predictive_mean,
             linewidth_histogram=linewidth_histogram,
             bins=bins,
             alpha=alpha_mean,
@@ -856,7 +927,7 @@ def plot_func_model(
             zorder=-1,
         )
 
-    if theta_posterior is not None:
+    if theta_samples is not None:
         # Add histograms for posterior samples:
         for k, sim_out_tmp in posterior_pred_sims.items():
             data_up = np.abs(
@@ -875,10 +946,10 @@ def plot_func_model(
                 data_down=data_down,
                 hist_bottom_high=hist_bottom_high,
                 hist_bottom_low=hist_bottom_low,
-                color_data=color_pp,
+                color_data=color_predictive,
                 linewidth_histogram=linewidth_histogram,
                 bins=bins,
-                alpha=alpha_pp,
+                alpha=alpha_predictive,
                 axis_twin_up=axis_twin_up,
                 axis_twin_down=axis_twin_down,
                 hist_histtype=hist_histtype,
@@ -907,7 +978,7 @@ def plot_func_model(
 
     z_cnt = 0  # controlling the order of elements in plot
 
-    if theta_posterior is not None:
+    if theta_samples is not None:
         # ADD MODEL CARTOONS:
         t_s = np.arange(
             0, posterior_pred_no_noise[0]["metadata"]["max_t"], delta_t_model
@@ -926,12 +997,12 @@ def plot_func_model(
                 markertype_starting_point=markertype_starting_point,
                 markershift_starting_point=markershift_starting_point,
                 delta_t_graph=delta_t_model,
-                alpha=alpha_pp,
+                alpha=alpha_predictive,
                 lw_m=linewidth_model,
                 ylim_low=ylim_low,
                 ylim_high=ylim_high,
                 t_s=t_s,
-                color=color_pp,
+                color=color_predictive,
                 zorder_cnt=z_cnt,
             )
 
@@ -956,7 +1027,7 @@ def plot_func_model(
             ylim_low=ylim_low,
             ylim_high=ylim_high,
             t_s=t_s,
-            color=color_pp,
+            color=color_predictive,
             zorder_cnt=z_cnt + 1,
         )
 
@@ -976,7 +1047,7 @@ def plot_func_model(
 
 def calculate_histogram_bounds(
     theta_mean: pd.DataFrame | None,
-    theta_posterior: pd.DataFrame | None,
+    theta_samples: pd.DataFrame | None,
     sim_out: dict[str, Any] | None,
     posterior_pred_no_noise: dict[int, dict[str, Any]] | None,
     **kwargs: Any,
@@ -991,8 +1062,8 @@ def calculate_histogram_bounds(
     ----------
     theta_mean : pd.DataFrame | None
         DataFrame containing posterior mean parameters. If None, will try to use
-        theta_posterior instead.
-    theta_posterior : pd.DataFrame | None
+        theta_samples instead.
+    theta_samples : pd.DataFrame | None
         DataFrame containing posterior samples. Only used if theta_mean is None.
     sim_out : dict[str, Any] | None
         Dictionary containing simulation output for posterior mean.
@@ -1009,10 +1080,10 @@ def calculate_histogram_bounds(
         Upper and lower bounds for the histograms (hist_bottom_high, hist_bottom_low).
     """
     theta_mean_is_none = theta_mean is None
-    theta_posterior_is_none = theta_posterior is None
+    theta_samples_is_none = theta_samples is None
     b_high = 3
     b_low = 3
-    if all([theta_mean_is_none, theta_posterior_is_none]):
+    if all([theta_mean_is_none, theta_samples_is_none]):
         _logger.warning(
             'No "theta_mean" provided. Using default values for histogram'
             " location. Likely highly suboptimal choice!"
@@ -1026,10 +1097,10 @@ def calculate_histogram_bounds(
             boundary_data = sim_out["metadata"]["boundary"]
             b_high = np.maximum(boundary_data, 0)[0]
             b_low = np.minimum(-boundary_data, 0)[0]
-    elif not theta_posterior_is_none:
+    elif not theta_samples_is_none:
         if posterior_pred_no_noise is None:
             raise ValueError(
-                "No posterior_pred_no_noise provided but theta_posterior is not None"
+                "No posterior_pred_no_noise provided but theta_samples is not None"
             )
         else:
             all_boundaries = [
@@ -1388,7 +1459,7 @@ def plot_func_model_n(
     model_name: str,
     axis: Axes,
     theta_mean: pd.DataFrame | None = None,
-    theta_posterior: pd.DataFrame | None = None,
+    theta_samples: pd.DataFrame | None = None,
     data: pd.DataFrame | None = None,
     n_trajectories: int = 10,
     bin_size: float = 0.05,
@@ -1401,12 +1472,12 @@ def plot_func_model_n(
     delta_t_model: float = 0.01,
     add_legend: bool = True,
     alpha_mean: float = 1.0,
-    alpha_pp: float = 0.05,
+    alpha_predictive: float = 0.05,
     alpha_trajectories: float = 0.5,
     keep_frame: bool = False,
     random_state: int | None = None,
     **kwargs,
-):
+) -> Axes:
     """Calculate and plot posterior predictive for a model.
 
     Parameters
@@ -1417,7 +1488,7 @@ def plot_func_model_n(
         The axis to plot on.
     theta_mean : pandas.DataFrame, optional
         Mean parameter values for simulation.
-    theta_posterior : pandas.DataFrame, optional
+    theta_samples : pandas.DataFrame, optional
         Posterior samples of parameters.
     data : pandas.DataFrame, optional
         Observed data to plot.
@@ -1443,7 +1514,7 @@ def plot_func_model_n(
         Whether to add legend to plot.
     alpha_mean : float, default=1.0
         Transparency for main plot elements.
-    alpha_pp : float, default=0.05
+    alpha_predictive : float, default=0.05
         Transparency for posterior predictive samples.
     alpha_trajectories : float, default=0.5
         Transparency for trajectory paths.
@@ -1509,16 +1580,16 @@ def plot_func_model_n(
         )
 
     # Simulate model without noise: posterior samples
-    if theta_posterior is not None:
+    if theta_samples is not None:
         posterior_pred_no_noise = {}
         posterior_pred_sims = {}
         for i, (chain, draw) in enumerate(
-            list(theta_posterior.index.droplevel("obs_n").unique())
+            list(theta_samples.index.droplevel("obs_n").unique())
         ):
             # Simulate model: no noise
             posterior_pred_no_noise[i] = simulator(
                 model=model_name,
-                theta=theta_posterior.loc[(chain, draw), :].values,
+                theta=theta_samples.loc[(chain, draw), :].values,
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
@@ -1528,7 +1599,7 @@ def plot_func_model_n(
             # Simulate model: posterior samples
             posterior_pred_sims[i] = simulator(
                 model=model_name,
-                theta=theta_posterior.loc[(chain, draw), :].values,
+                theta=theta_samples.loc[(chain, draw), :].values,
                 n_samples=1,
                 no_noise=False,
                 delta_t=delta_t_model,
@@ -1542,18 +1613,18 @@ def plot_func_model_n(
             tmp_theta = theta_mean.loc[
                 (np.random.choice(theta_mean.shape[0], 1)), :
             ].values
-        elif theta_posterior is not None:
+        elif theta_samples is not None:
             # wrap in max statement here
             # because negative value are possible,
             # however refer to data instead of posterior samples
             random_index = tuple(
                 [
-                    np.random.choice(theta_posterior.index.get_level_values(name_))
+                    np.random.choice(theta_samples.index.get_level_values(name_))
                     for name_ in ("chain", "draw", "obs_n")
                 ]
             )
 
-            tmp_theta = theta_posterior.loc[random_index, :].values
+            tmp_theta = theta_samples.loc[random_index, :].values
         else:
             raise ValueError("No theta values provided but n_trajectories is > 0")
 
@@ -1613,7 +1684,7 @@ def plot_func_model_n(
             cnt_cumul += 1
 
     # POSTERIOR SAMPLE BASED HISTOGRAM
-    if theta_posterior is not None:
+    if theta_samples is not None:
         if theta_mean is None:
             bottom = np.max(
                 [
@@ -1651,7 +1722,7 @@ def plot_func_model_n(
                     bottom=bottom,
                     weights=weights,
                     histtype="step",
-                    alpha=alpha_pp,
+                    alpha=alpha_predictive,
                     color=color_dict[choice],
                     zorder=cnt_cumul,
                     label=tmp_label,
@@ -1693,14 +1764,14 @@ def plot_func_model_n(
 
     tmp_label = None
     z_cnt = 0
-    if theta_posterior is not None:
+    if theta_samples is not None:
         for k, sim_out_tmp in posterior_pred_no_noise.items():
             t_s = np.arange(0, sim_out_tmp["metadata"]["max_t"], delta_t_model)
             _add_model_n_cartoon_to_ax(
                 sample=sim_out_tmp,
                 axis=axis,
                 delta_t_graph=delta_t_model,
-                alpha=alpha_pp,
+                alpha=alpha_predictive,
                 lw_m=linewidth_model,
                 tmp_label=tmp_label,
                 linestyle="-",
@@ -1728,7 +1799,7 @@ def plot_func_model_n(
         )
 
     if (n_trajectories > 0) and (
-        (theta_mean is not None) or (theta_posterior is not None)
+        (theta_mean is not None) or (theta_samples is not None)
     ):
         _add_trajectories_n(
             axis=axis,

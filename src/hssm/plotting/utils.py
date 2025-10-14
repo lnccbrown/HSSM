@@ -1,7 +1,7 @@
 """Plotting utilities for HSSM."""
 
 import logging
-from typing import Any, Iterable, cast
+from typing import Any, Iterable, Literal, cast
 
 import arviz as az
 import numpy as np
@@ -121,6 +121,9 @@ def _get_plotting_df(
     extra_dims: list[str] | None = None,
     n_samples: int | float | None = 20,
     response_str: str = "rt,response",
+    predictive_group: Literal[
+        "posterior_predictive", "prior_predictive"
+    ] = "posterior_predictive",
 ) -> pd.DataFrame:
     """Prepare a dataframe for plotting.
 
@@ -158,10 +161,8 @@ def _get_plotting_df(
         return data
 
     # get the posterior samples
-    idata_posterior_predictive = idata["posterior_predictive"][response_str]
-    posterior_predictive = _xarray_to_df(
-        idata_posterior_predictive, n_samples=n_samples
-    )
+    idata_predictive = idata[predictive_group][response_str]
+    predictive = _xarray_to_df(idata_predictive, n_samples=n_samples)
 
     if data is None:
         if extra_dims:
@@ -170,10 +171,10 @@ def _get_plotting_df(
                 + " HSSM requires a dataset to determine the values of the covariates"
                 + " to plot these additional dimensions."
             )
-        posterior_predictive.insert(0, "observed", "predicted")
-        return posterior_predictive
+        predictive.insert(0, "observed", "predicted")
+        return predictive
 
-    if extra_dims and idata_posterior_predictive["__obs__"].size != data.shape[0]:
+    if extra_dims and idata_predictive["__obs__"].size != data.shape[0]:
         raise ValueError(
             "The number of observations in the data and the number of posterior "
             + "samples are not equal."
@@ -183,8 +184,8 @@ def _get_plotting_df(
 
     # merge the posterior samples with the data
     if extra_dims:
-        posterior_predictive = (
-            posterior_predictive.reset_index()
+        predictive = (
+            predictive.reset_index()
             .merge(
                 data.loc[:, extra_dims],
                 on="obs_n",
@@ -195,7 +196,7 @@ def _get_plotting_df(
 
     # concatenate the posterior samples with the data
     plotting_df = pd.concat(
-        {"predicted": posterior_predictive, "observed": data},
+        {"predicted": predictive, "observed": data},
         names=["observed", "chain", "draw", "obs_n"],
     ).reset_index("observed")
 
@@ -389,6 +390,9 @@ def _use_traces_or_sample(
     data: pd.DataFrame | None,
     idata: az.InferenceData | None,
     n_samples: int | float | None,
+    predictive_group: Literal[
+        "posterior_predictive", "prior_predictive"
+    ] = "posterior_predictive",
 ) -> tuple[az.InferenceData, bool]:
     """Check if idata is provided, otherwise use traces.
 
@@ -407,19 +411,28 @@ def _use_traces_or_sample(
 
     sampled = False
 
-    if "posterior_predictive" not in idata:
+    if predictive_group not in idata:
         _logger.info(
-            "No posterior predictive samples found. Generating posterior predictive "
-            + "samples using the provided InferenceData object and the original data. "
-            + "This will modify the provided InferenceData object, or if not provided, "
-            + "the traces object stored inside the model."
+            "No %s samples found. Generating %s samples using the provided "
+            "InferenceData object and the original data. "
+            "This will modify the provided InferenceData object, "
+            "or if not provided, the traces object stored inside the model.",
+            predictive_group,
+            predictive_group,
         )
-        model.sample_posterior_predictive(
-            idata=idata,
-            data=data,
-            inplace=True,
-            draws=n_samples,
-        )
+        if predictive_group == "posterior_predictive":
+            model.sample_posterior_predictive(
+                idata=idata,
+                data=data,
+                inplace=True,
+                draws=n_samples,
+            )
+        elif predictive_group == "prior_predictive":
+            model.sample_prior_predictive(
+                draws=n_samples,
+            )
+        else:
+            raise ValueError(f"Invalid predictive group: {predictive_group}")
         sampled = True
 
     return cast("az.InferenceData", idata), sampled
@@ -438,3 +451,9 @@ def _check_sample_size(plotting_df):
             "The number of posterior predictive samples is less than 50. "
             + "The uncertainty interval may not be accurate."
         )
+
+
+def _to_idata_group(
+    predictive_group: Literal["posterior_predictive", "prior_predictive"],
+) -> Literal["posterior", "prior"]:
+    return "posterior" if predictive_group == "posterior_predictive" else "prior"

@@ -2,7 +2,7 @@
 
 import logging
 from itertools import product
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 import arviz as az
 import matplotlib as mpl
@@ -29,7 +29,7 @@ def _plot_quantile_probability_1D(
     x: str = "proportion",
     y: str = "rt",
     hue: str = "quantile",
-    plot_posterior: bool = True,
+    plot_predictive: bool = True,
     correct: str | None = None,
     q: int | Iterable[float] = 5,
     title: str | None = "Quantile Probability Plot",
@@ -68,8 +68,8 @@ def _plot_quantile_probability_1D(
         **data_kwargs,
     )
 
-    if plot_posterior:
-        df_posterior = plot_data.loc[plot_data["observed"] == "predicted", :]
+    if plot_predictive:
+        df_predictive = plot_data.loc[plot_data["observed"] == "predicted", :]
 
         if pps_kwargs is None:
             pps_kwargs = kwargs.copy()
@@ -81,7 +81,7 @@ def _plot_quantile_probability_1D(
 
         pps_kwargs = pps_kwargs_default | pps_kwargs
         ax = sns.scatterplot(
-            data=df_posterior,
+            data=df_predictive,
             x=x,
             y=y,
             hue="quantile",
@@ -121,7 +121,7 @@ def _plot_quantile_probability_2D(
     row: str | None = None,
     col: str | None = None,
     col_wrap: int | None = None,
-    plot_posterior: bool = True,
+    plot_predictive: bool = True,
     correct: str | None = None,
     q: int | Iterable[float] = 5,
     title: str | None = "Quantile Probability Plot",
@@ -156,7 +156,7 @@ def _plot_quantile_probability_2D(
         y=y,
         cond=cond,
         hue=hue,
-        plot_posterior=plot_posterior,
+        plot_predictive=plot_predictive,
         correct=correct,
         q=q,
         title=None,
@@ -170,15 +170,15 @@ def _plot_quantile_probability_2D(
 
     g.add_legend()
     if title:
-        g.fig.subplots_adjust(top=0.85)
-        g.fig.suptitle(title)
+        g.figure.subplots_adjust(top=0.85)
+        g.figure.suptitle(title)
 
     g.set_xlabels(xlabel)
     g.set_ylabels(ylabel)
 
     # Ensures that the x-limits for the axes on top are correct.
-    first_ax = g.fig.axes[0]
-    for ax in g.fig.get_axes():
+    first_ax = g.figure.axes[0]
+    for ax in g.figure.get_axes():
         if ax.get_label() == cond:
             ax.set_xlim(first_ax.get_xlim())
 
@@ -190,6 +190,8 @@ def plot_quantile_probability(
     cond: str,
     data: pd.DataFrame | None = None,
     idata: az.InferenceData | None = None,
+    predictive_group: Literal["posterior_predictive", "prior_predictive"]
+    | None = "posterior_predictive",
     n_samples: int = 20,
     x: str = "proportion",
     y: str = "rt",
@@ -199,7 +201,6 @@ def plot_quantile_probability(
     col_wrap: int | None = None,
     groups: str | Iterable[str] | None = None,
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
-    plot_posterior: bool = True,
     correct: str | None = None,
     q: int | Iterable[float] = 5,
     title: str | None = "Quantile Probability Plot",
@@ -225,8 +226,11 @@ def plot_quantile_probability(
     idata : optional
         An arviz InferenceData object. If None, the model's trace will be used.
         If the model's trace does not contain posterior predictive samples, and
-        "plot_posterior" is True, will use the model and `data` to produce posterior
+        "plot_predictive" is True, will use the model and `data` to produce posterior
         predictive samples.
+    predictive_group : optional
+        The type of predictive distribution to plot, by default "posterior_predictive".
+        Can be "posterior_predictive" or "prior_predictive".
     n_samples : optional
         When idata is provided, the number or proportion of posterior predictive samples
         randomly drawn to be used from each chain for plotting. When idata is not
@@ -267,8 +271,6 @@ def plot_quantile_probability(
         order in which the groups appear in the data. Only when `groups` is a string,
         this can be an iterable of strings. Otherwise, this is a dictionary mapping the
         dimension name to the order of the groups in that dimension.
-    plot_posterior : optional
-        Whether to plot the posterior predictive distribution. By default True.
     correct : optional
         The column in `data` that indicates the correct responses. If None, `response`
         column from `data` indicates whether the response is correct or not. By default
@@ -323,9 +325,11 @@ def plot_quantile_probability(
     if extra_dims is not None and groups is not None:
         extra_dims += list(groups)
 
-    if plot_posterior:
+    if predictive_group is not None:
         # Use the model's trace if idata is None
-        idata, sampled = _use_traces_or_sample(model, data, idata, n_samples)
+        idata, sampled = _use_traces_or_sample(
+            model, data, idata, n_samples, predictive_group
+        )
 
         plotting_df = _get_plotting_df(
             idata,
@@ -333,6 +337,7 @@ def plot_quantile_probability(
             extra_dims=extra_dims,
             n_samples=None if sampled else n_samples,
             response_str=model.response_str,
+            predictive_group=predictive_group,
         )
     else:
         plotting_df = _get_plotting_df(
@@ -341,6 +346,7 @@ def plot_quantile_probability(
             extra_dims=extra_dims,
             n_samples=None,
             response_str=model.response_str,
+            predictive_group=predictive_group,
         )
 
     # Flip the rt values if necessary
@@ -357,7 +363,7 @@ def plot_quantile_probability(
             x=x,
             y=y,
             hue=hue,
-            plot_posterior=plot_posterior,
+            plot_predictive=predictive_group is not None,
             correct=correct,
             q=q,
             title=title,
@@ -382,7 +388,7 @@ def plot_quantile_probability(
             row=row,
             col=col,
             col_wrap=col_wrap,
-            plot_posterior=plot_posterior,
+            plot_predictive=predictive_group is not None,
             correct=correct,
             q=q,
             title=title,
@@ -419,7 +425,7 @@ def plot_quantile_probability(
             row=row,
             col=col,
             col_wrap=col_wrap,
-            plot_posterior=plot_posterior,
+            plot_predictive=predictive_group is not None,
             correct=correct,
             q=q,
             title=title,
