@@ -123,11 +123,10 @@ def make_rl_logp_func(
 
         Parameters
         ----------
-        data:
-            A 2D numpy array of shape (n_trials * n_participants, 2) containing the
-            response and reaction time for each trial.
-        dist_params:
-            A list of parameters for the RLDM model, including:
+        *args:
+            Variable number of arguments containing trial data and RLDM model parameters.
+            Arguments should be provided in the order they will be stacked, and can
+            include any combination of:
             - rl_alpha: learning rate for the RL model.
             - scaler: scaling factor for the drift rate.
             - a: boundary separation.
@@ -135,11 +134,13 @@ def make_rl_logp_func(
             - t: non-decision time.
             - theta: lapse rate.
             - feedback: feedback for each trial.
+            - any other relevant parameter as needed.
+            Each argument should be a 1D array of length (n_trials * n_participants).
 
         Returns
         -------
         np.ndarray
-            The log likelihoods for each subject.
+            The computed drift rates for each trial, reshaped as a 2D array.
         """
         # Reshape subj_trials into a 3D array of shape (n_participants, n_trials, len(args))
         # so we can act on this object with the vmapped version of the mapping function
