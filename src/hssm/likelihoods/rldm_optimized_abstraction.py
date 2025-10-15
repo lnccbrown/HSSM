@@ -124,7 +124,7 @@ def make_rl_logp_func(
         Parameters
         ----------
         *args:
-            Variable number of arguments containing trial data and RLDM model parameters.
+            Variable number of arguments containing trial data and model parameters.
             Arguments should be provided in the order they will be stacked, and can
             include any combination of:
             - rl_alpha: learning rate for the RL model.
@@ -142,7 +142,8 @@ def make_rl_logp_func(
         np.ndarray
             The computed drift rates for each trial, reshaped as a 2D array.
         """
-        # Reshape subj_trials into a 3D array of shape (n_participants, n_trials, len(args))
+        # Reshape subj_trials into a 3D array of shape
+        # (n_participants, n_trials, len(args))
         # so we can act on this object with the vmapped version of the mapping function
         subj_trials = jnp.stack((*args,), axis=1).reshape(
             n_participants, n_trials, -1
