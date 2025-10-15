@@ -118,7 +118,7 @@ def make_rl_logp_func(
     # Vectorized version of  subject_wise_func to handle multiple subjects.
     subject_wise_vmapped = jax.vmap(subject_wise_func, in_axes=0)
 
-    def logp(data, *dist_params) -> np.ndarray:
+    def logp(*args) -> np.ndarray:
         """Compute the log likelihood for the specified RL model.
 
         Parameters
@@ -141,14 +141,9 @@ def make_rl_logp_func(
         np.ndarray
             The log likelihoods for each subject.
         """
-        rl_alpha = dist_params[0]
-        scaler = dist_params[1]
-        action = data[:, 1]
-        feedback = dist_params[-1]
-
-        # Reshape subj_trials into a 3D array of shape (n_participants, n_trials, 4)
+        # Reshape subj_trials into a 3D array of shape (n_participants, n_trials, len(args))
         # so we can act on this object with the vmapped version of the mapping function
-        subj_trials = jnp.stack((rl_alpha, scaler, action, feedback), axis=1).reshape(
+        subj_trials = jnp.stack((*args,), axis=1).reshape(
             n_participants, n_trials, -1
         )
 
