@@ -34,9 +34,7 @@ class TestRldmLikelihoodAbstraction:
 
         rl_alpha = np.ones(total_trials) * 0.60
         scaler = np.ones(total_trials) * 3.2
-        a = np.ones(total_trials) * 1.2
-        z = np.ones(total_trials) * 0.1
-        t = np.ones(total_trials) * 0.1
+        action = data.response.values
         theta = np.ones(total_trials) * 0.1
 
         logp_drift_rates = make_rl_logp_func(
@@ -46,13 +44,9 @@ class TestRldmLikelihoodAbstraction:
         )
         jitted_logp = jax.jit(logp_drift_rates)
         jax_ll = jitted_logp(
-            data[["rt", "response"]].values,
             rl_alpha,
             scaler,
-            a,
-            z,
-            t,
-            theta,
+            action,
             feedback,
         )
         assert jax_ll.shape[0] == total_trials
