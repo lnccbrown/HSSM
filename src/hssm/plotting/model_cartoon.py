@@ -107,11 +107,13 @@ def _plot_model_cartoon_1D(
     ]
 
     data_observed = None
-
     if plot_mean:
         data_observed = data.loc[is_predictive_mean & is_observed, :]
     elif plot_samples and (not plot_mean):
         data_observed = data.loc[is_predictive_samples & is_observed, :]
+
+    if plot_data and data_observed is None:
+        raise ValueError("No data to plot. Please set plot_data=False or provide data.")
 
     data_predictive = data.loc[is_predictive_samples & is_predicted, :]
 
@@ -133,7 +135,11 @@ def _plot_model_cartoon_1D(
             data_predictive_mean.reset_index()[model_params] if plot_mean else None
         ),
         theta_samples=(data_predictive[model_params] if plot_samples else None),
-        data=(None if not plot_data else data_observed.reset_index()),
+        data=(
+            None
+            if not plot_data or data_observed is None
+            else data_observed.reset_index()
+        ),
         **kwargs,
     )
 
@@ -535,7 +541,7 @@ def plot_model_cartoon(
             # we should find a better way to do this eventually.
             idata_mean_tmp = model.predict(
                 **dict(
-                    idata=az.InferenceData(posterior=idata_mean.prior),
+                    idata=az.InferenceData(posterior=idata_mean["prior"]),
                     kind="response",
                     inplace=False,
                 )
@@ -945,6 +951,8 @@ def plot_func_model(
     axis_twin_down.set_zorder(0)
 
     if theta_mean is not None:
+        if sim_out is None:
+            raise ValueError("No sim_out provided but theta_mean is not None")
         data_up = np.abs(
             sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] == 1)]
         )
