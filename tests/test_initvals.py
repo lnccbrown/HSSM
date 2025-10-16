@@ -100,10 +100,6 @@ def _check_initval_defaults_correctness(model) -> None:
                 name_, return_value=True
             )
 
-            # print("Is actually in initval default dict...")
-            print(f"testing initial value for {name_}...")
-            # print(f"{user_initval=}")
-
             if user_initval is not None:
                 # If the user specified custom initial values for anything
                 # in our INITVAL_DEFAULTS dictionary, we need to check if

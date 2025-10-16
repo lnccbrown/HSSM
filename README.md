@@ -7,12 +7,14 @@
 
 ## HSSM - Hierarchical Sequential Sampling Modeling
 
+[![DOI](https://zenodo.org/badge/545006401.svg)](https://doi.org/10.5281/zenodo.17247695)
+![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
 ![PyPI](https://img.shields.io/pypi/v/hssm)
+[![Conda Version](https://img.shields.io/conda/vn/conda-forge/hssm.svg)](https://anaconda.org/conda-forge/hssm)
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/HSSM?link=https%3A%2F%2Fpypi.org%2Fproject%2Fhssm%2F)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/hssm)
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/lnccbrown/HSSM)
-![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/lnccbrown/HSSM/run_slow_tests.yml)
-![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
+[![CI](https://github.com/lnccbrown/HSSM/actions/workflows/run_tests.yml/badge.svg)](https://github.com/lnccbrown/HSSM/actions/workflows/run_tests.yml)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![codecov](https://codecov.io/gh/lnccbrown/HSSM/branch/main/graph/badge.svg)](https://codecov.io/gh/lnccbrown/HSSM)
 
@@ -44,11 +46,14 @@ for Computational Brain Science within the Carney Institute at Brown University.
 
 ### [Official documentation](https://lnccbrown.github.io/HSSM/).
 
+### [Explore the behavior of Sequential Sampling Models](https://franklab-ssms-gui.hf.space/).
+
 ## Cite HSSM
 
-Fengler, A., Xu, Y., Bera, K., Omar, A., Frank, M.J. (in preparation). HSSM: A
-generalized toolbox for hierarchical bayesian estimation of computational models
-in cognitive neuroscience.
+Fengler, A., Xu, Y., Bera, K., Paniagua, C.,  Omar, A., Frank, M.J. (in preparation). HSSM: A
+widely applicable toolbox for hierarchical bayesian neurocognitive modeling.
+
+Please also use this DOI: [https://doi.org/10.5281/zenodo.17247695](https://doi.org/10.5281/zenodo.17247695)
 
 ## Example
 

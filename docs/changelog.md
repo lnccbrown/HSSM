@@ -98,7 +98,7 @@ be thrown.
 - Added `link_settings` and `prior_settings` arguments to `hssm.HSSM`, which allows HSSM
   to use intelligent default priors and link functions for complex hierarchical models.
 
-- Added an `hssm.plotting` submodule with `plot_posterior_predictive()` and
+- Added an `hssm.plotting` submodule with `plot_predictive()` and
   `plot_quantile_probability` for creating posterior predictive plots and quantile
   probability plots.
 

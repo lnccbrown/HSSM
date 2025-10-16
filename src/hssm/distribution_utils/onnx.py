@@ -17,8 +17,8 @@ from numpy.typing import ArrayLike
 from .._types import LogLikeFunc, LogLikeGrad
 from .jax import make_vmap_func
 from .onnx_utils.model import load_onnx_model
+from .onnx_utils.onnx2jax import make_jax_func
 from .onnx_utils.onnx2pt import pt_interpret_onnx
-from .onnx_utils.onnx2xla import interpret_onnx
 
 
 @overload
@@ -74,6 +74,7 @@ def make_jax_logp_funcs_from_onnx(
     """
     model_onnx = load_onnx_model(model)
     scalars_only = all(not is_reg for is_reg in params_is_reg)
+    jax_func = make_jax_func(model_onnx)
 
     def logp(*inputs) -> np.ndarray:
         """Compute the log-likelihood.
@@ -94,17 +95,21 @@ def make_jax_logp_funcs_from_onnx(
         """
         # Makes a matrix to feed to the LAN model
         if params_only:
+            # Constructing parameter vector
             input_vector = jnp.array(inputs)
         else:
             data = inputs[0]
             dist_params = inputs[1:]
             param_vector = jnp.array([inp.squeeze() for inp in dist_params])
+            # AF-TODO: Unclear if trailing dimension of 1 is actually ever
+            # happening.
             if param_vector.shape[-1] == 1:
                 param_vector = param_vector.squeeze(axis=-1)
             input_vector = jnp.concatenate((param_vector, data))
 
-        return interpret_onnx(model_onnx.graph, input_vector)[0].squeeze()
+        return jax_func(input_vector)
 
+    # Special handling if parameters are scalars only
     if params_only and scalars_only:
         logp_vec = lambda *inputs: logp(*inputs).reshape((1,))
         if return_jit:
@@ -198,6 +203,7 @@ def make_jax_matrix_logp_funcs_from_onnx(
         log-likelihoods.
     """
     model_onnx = load_onnx_model(model)
+    jax_func = make_jax_func(model_onnx)
 
     def logp(input_matrix) -> np.ndarray:
         """Compute the log-likelihood.
@@ -216,6 +222,6 @@ def make_jax_matrix_logp_funcs_from_onnx(
         jnp.ndarray
             The element-wise log-likelihoods.
         """
-        return interpret_onnx(model_onnx.graph, input_matrix)[0].squeeze()
+        return jax_func(input_matrix)
 
     return logp

@@ -6,9 +6,9 @@ generation ops.
 """
 
 import logging
-from functools import partial
+from collections.abc import Callable
 from os import PathLike
-from typing import Any, Callable, Literal, Type, cast
+from typing import Any, Literal, Protocol, Type, cast
 
 import bambi as bmb
 import numpy as np
@@ -17,11 +17,13 @@ import pytensor
 import pytensor.tensor as pt
 from bambi.backend.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
-from ssms.basic_simulators.simulator import simulator
-from ssms.config import model_config as ssms_model_config
+from ssms.hssm_support import (
+    get_simulator_fun_internal,
+    validate_simulator_fun,
+)
+from ssms.hssm_support import rng_fn as ssms_rng_fn
 
 from .._types import LogLikeFunc
-from ..utils import decorate_atomic_simulator, ssms_sim_wrapper
 from .blackbox import make_blackbox_op
 from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
@@ -114,12 +116,75 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
 
     t = dist_params[list_params.index("t")]
 
+    # Skip the check for missing data (encoded as -999.0)
+    missing_mask = pt.eq(rt, -999.0)
+
     return pt.where(
         # consistent with the epsilon in the analytical likelihood
-        rt - t <= 1e-15,
+        pt.bitwise_and(rt - t <= 1e-15, pt.bitwise_not(missing_mask)),
         LOGP_LB,
         logp,
     )
+
+
+class _RandomVariable(Protocol):  # for mypy
+    _list_params: list[str]
+    _lapse: bmb.Prior
+
+
+def _extract_size(args, kwargs):
+    """Extract size from args and kwargs.
+
+    Returns
+    -------
+    size : int
+        The size of the random sample to generate.
+    args : tuple
+        The original arguments, with size removed if it was present.
+    kwargs : dict
+        The original keyword arguments, with size removed if it was present.
+    """
+    if "size" in kwargs:
+        size = kwargs.pop("size")
+    else:
+        size = args[-1]
+        args = args[:-1]
+
+    if size is None:
+        size = 1
+
+    return size, args, kwargs
+
+
+def _create_arg_arrays(cls: bmb.Prior, args: tuple) -> list[np.ndarray]:
+    """
+    Create argument arrays from input arguments.
+
+    Parameters
+    ----------
+    cls : type
+        The class containing `_list_params`.
+    args : tuple
+        Input arguments.
+
+    Returns
+    -------
+    list of np.ndarray
+        List of argument arrays.
+    """
+    num_params = len(cls._list_params)
+    n_args = min(num_params, len(args))
+    arg_arrays = [np.asarray(arg) for arg in args[:n_args]]
+    return arg_arrays
+
+
+def _get_p_outlier(cls: _RandomVariable, arg_arrays):
+    """Get p_outlier from arg_arrays and update arg_arrays."""
+    list_params = cls._list_params
+    p_outlier = None
+    if list_params and list_params[-1] == "p_outlier":
+        p_outlier = arg_arrays.pop(-1)
+    return p_outlier, arg_arrays
 
 
 def make_hssm_rv(
@@ -143,68 +208,11 @@ def make_hssm_rv(
     Type[RandomVariable]
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
-    if isinstance(simulator_fun, str):
-        # If simulator_fun is passed as a string,
-        # we assume it is a valid model in the
-        # ssm-simulators package.
-        simulator_fun_str = simulator_fun
-        if simulator_fun_str not in ssms_model_config:
-            _logger.warning(
-                "You supplied a model '%s', which is currently not supported in "
-                + "the ssm_simulators package. An error will be thrown when sampling "
-                + "from the random variable or when using any "
-                + "posterior or prior predictive sampling methods.",
-                simulator_fun_str,
-            )
-            # We still build a bogus simulator function here
-            # that will raise an error when finally called.
-            simulator_fun_internal = decorate_atomic_simulator(
-                model_name=simulator_fun_str, choices=[0, 1, 2], obs_dim=2
-            )(
-                partial(
-                    ssms_sim_wrapper,
-                    simulator_fun=simulator,
-                    model=simulator_fun_str,  # will raise error due to unkown string
-                )
-            )
-        else:
-            simulator_fun_internal = decorate_atomic_simulator(
-                model_name=simulator_fun_str,
-                choices=ssms_model_config[simulator_fun_str]["choices"],
-                obs_dim=2,  # At least for now ssms models all fall under 2 obs dims
-            )(
-                partial(
-                    ssms_sim_wrapper,
-                    simulator_fun=simulator,  # Passing simulator from ssm-simulators
-                    model=simulator_fun_str,
-                )
-            )
-    elif callable(simulator_fun):
-        simulator_fun_internal = simulator_fun
-    else:
-        raise ValueError(
-            "The simulator argument must be a string or a callable, "
-            f"but you passed {simulator_fun}."
-        )
+    simulator_fun_internal = get_simulator_fun_internal(simulator_fun)
+    model_name, choices, obs_dim_int = validate_simulator_fun(simulator_fun_internal)
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
-
-    if hasattr(simulator_fun_internal, "model_name"):
-        model_name = simulator_fun_internal.model_name
-    else:
-        raise ValueError("The simulator function must have a `model_name` attribute.")
-    if hasattr(simulator_fun_internal, "choices"):
-        choices = simulator_fun_internal.choices
-    else:
-        raise ValueError("The simulator function must have a `choices` attribute.")
-    if hasattr(simulator_fun_internal, "obs_dim"):
-        if isinstance(simulator_fun_internal.obs_dim, int):
-            obs_dim_int = simulator_fun_internal.obs_dim
-        else:
-            raise ValueError("The obs_dim attribute must be an integer")
-    else:
-        raise ValueError("The simulator function must have a `obs_dim` attribute.")
 
     # pylint: disable=W0511, R0903
     class HSSMRV(RandomVariable):
@@ -226,6 +234,11 @@ def make_hssm_rv(
         # pylint: disable=arguments-renamed,bad-option-value,W0221
         # NOTE: `rng` now is a np.random.Generator instead of RandomState
         # since the latter is now deprecated from numpy
+
+        # AF-TODO: I think the doc-string about sizes is too confusing.
+        # We are missing the separation of concepts between the
+        # `size` argument that is passed
+        # and the parameter vector shapes that are passed?
         @classmethod
         def rng_fn(
             cls,
@@ -234,21 +247,6 @@ def make_hssm_rv(
             **kwargs,
         ) -> np.ndarray:
             """Generate random variables from this distribution.
-
-            Parameters
-            ----------
-            rng
-                A `np.random.Generator` object for random state.
-            args
-                Unnamed arguments of parameters, in the order of `_list_params`, plus
-                the last one as size.
-            kwargs
-                Other keyword arguments passed to the ssms simulator.
-
-            Returns
-            -------
-            np.ndarray
-                An array of `(rt, response)` generated from the distribution.
 
             Note
             ----
@@ -275,95 +273,19 @@ def make_hssm_rv(
             # First figure out what the size specified here is
             # Since the number of unnamed arguments is undetermined,
             # we are going to use this hack.
+            size, args, kwargs = _extract_size(args, kwargs)
+            arg_arrays = _create_arg_arrays(cls, args)
+            p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
 
-            if "size" in kwargs:
-                size = kwargs.pop("size")
-            else:
-                size = args[-1]
-                args = args[:-1]
-
-            if size is None:
-                size = 1
-
-            # Although we got around the ndims_supp issue, the size parameter passed
-            # here is still an array with one element. We need to take it out.
-            if not np.isscalar(size):
-                size = np.squeeze(size)
-
-            num_params = len(cls._list_params)
-
-            # TODO: We need to figure out what to do with extra_fields when
-            # doing posterior predictive sampling. Right now nothing is done.
-            if num_params < len(args):
-                arg_arrays = [np.asarray(arg) for arg in args[:num_params]]
-            else:
-                arg_arrays = [np.asarray(arg) for arg in args]
-
-            p_outlier = None
-
-            if cls._list_params[-1] == "p_outlier":
-                p_outlier = arg_arrays.pop(-1)
-
-            iinfo32 = np.iinfo(np.uint32)
-            seed = rng.integers(0, iinfo32.max, dtype=np.uint32)
-
-            is_all_args_scalar = all(arg.size == 1 for arg in arg_arrays)
-
-            if is_all_args_scalar:
-                # All parameters are scalars
-
-                theta = np.stack(arg_arrays)
-                if theta.ndim > 1:
-                    theta = theta.squeeze(axis=-1)
-
-                theta = np.tile(theta, (size, 1))
-                n_replicas = 1
-            else:
-                # Preprocess all parameters, reshape them into a matrix of dimension
-                # (size, n_params) where size is the number of elements in the largest
-                # of all parameters passed to *arg
-                elem_max_size = np.argmax([arg.size for arg in arg_arrays])
-                max_shape = arg_arrays[elem_max_size].shape
-
-                new_data_size = max_shape[-1]
-
-                theta = np.column_stack(
-                    [np.broadcast_to(arg, max_shape).reshape(-1) for arg in arg_arrays]
-                )
-
-                # We eventually want to get rid of this part, and
-                # simply make the simulators behave as would be expected
-                # by pymc directly.
-                if size is None or size == 1:
-                    n_replicas = 1
-                elif size % new_data_size != 0:
-                    raise ValueError(
-                        "`size` needs to be a multiple of the size of data"
-                    )
-                else:
-                    n_replicas = size // new_data_size
-
-            sims_out = simulator_fun_internal(
-                theta=theta,
-                random_state=seed,
-                n_replicas=n_replicas,
+            sims_out = ssms_rng_fn(
+                arg_arrays,
+                size,
+                rng,
+                simulator_fun_internal,
+                obs_dim_int,
+                *args,
                 **kwargs,
             )
-
-            # return sims_out, max_shape, size
-
-            if not is_all_args_scalar:
-                if n_replicas == 1:
-                    sims_out = sims_out.reshape(
-                        (*max_shape[:-1], max_shape[-1], obs_dim_int)
-                    )
-                else:
-                    # sims_out = sims_out.reshape(
-                    #     (*max_shape[:-1], max_shape[-1] * size, obs_dim_int)
-                    # )
-                    sims_out = sims_out.reshape(
-                        (*max_shape[:-1], max_shape[-1], n_replicas, obs_dim_int)
-                    )
 
             sims_out = _apply_lapse_model(
                 sims_out=sims_out,
@@ -372,6 +294,7 @@ def make_hssm_rv(
                 lapse_dist=cls._lapse,
                 choices=choices,
             )
+
             return sims_out
 
     return HSSMRV
@@ -458,7 +381,7 @@ def _apply_lapse_model(
 
 
 def make_distribution(
-    rv: str | Type[RandomVariable] | RandomVariable | Callable,
+    rv: str | Type[RandomVariable] | RandomVariable | Callable[..., Any],
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     bounds: dict | None = None,
@@ -507,7 +430,14 @@ def make_distribution(
         rv_instance = rv()
     elif not isinstance(rv, type) and isinstance(rv, RandomVariable):
         rv_instance = rv
-    elif callable(rv) or isinstance(rv, str):
+    elif callable(rv):
+        random_variable = make_hssm_rv(
+            simulator_fun=cast("Callable[..., Any]", rv),
+            list_params=list_params,
+            lapse=lapse,
+        )
+        rv_instance = random_variable()
+    elif isinstance(rv, str):
         random_variable = make_hssm_rv(
             simulator_fun=rv,
             list_params=list_params,
@@ -594,7 +524,6 @@ def make_distribution(
             else:
                 logp = loglik(data, *dist_params, *extra_fields)
                 # Ensure that non-decision time is always smaller than rt.
-                # Assuming that the non-decision time parameter is always named "t".
                 logp = ensure_positive_ndt(data, logp, list_params, dist_params)
 
             if bounds is not None:
@@ -655,7 +584,7 @@ class SSMFamily(bmb.Family):
 
 
 def make_likelihood_callable(
-    loglik: pytensor.graph.Op | Callable | PathLike | str,
+    loglik: pytensor.graph.Op | Callable[..., Any] | PathLike | str,
     loglik_kind: Literal["analytical", "approx_differentiable", "blackbox"],
     backend: Literal["pytensor", "jax", "other"] | None,
     params_is_reg: list[bool] | None = None,
@@ -691,16 +620,16 @@ def make_likelihood_callable(
         # callable directly. Otherwise, we wrap it in a BlackBoxOp.
         if loglik_kind == "analytical":
             if backend is None or backend == "pytensor":
-                return loglik
+                return cast("Callable[..., Any]", loglik)
             logp_funcs = make_jax_logp_funcs_from_callable(
-                loglik,
+                cast("Callable[..., Any]", loglik),
                 vmap=False,
                 params_only=False if params_only is None else params_only,
             )
             lan_logp_jax = make_jax_logp_ops(*logp_funcs)
             return lan_logp_jax
         elif loglik_kind == "blackbox":
-            return make_blackbox_op(loglik)
+            return make_blackbox_op(cast("Callable[..., Any]", loglik))
         elif loglik_kind == "approx_differentiable":
             if backend is None or backend == "jax":
                 if params_is_reg is None:
@@ -710,7 +639,7 @@ def make_likelihood_callable(
                         + "but did not set `params_is_reg`."
                     )
                 logp_funcs = make_jax_logp_funcs_from_callable(
-                    loglik,
+                    cast("Callable[..., Any]", loglik),
                     vmap=True,
                     params_is_reg=params_is_reg,
                     params_only=False if params_only is None else params_only,
@@ -723,44 +652,39 @@ def make_likelihood_callable(
                     + "`approx_differentiable` and provided a callable."
                     + "Currently we support only jax callables in this case."
                 )
-            # In the approx_differentiable case or the blackbox case, unless the backend
-            # is `pytensor`, we wrap the callable in a BlackBoxOp.
-        # if backend == "pytensor":
-        #     return loglik
-        #     # In all other cases, we assume that the callable cannot be directly
-        #     # used in the backend and thus we wrap it in a BlackBoxOp
-        # return make_blackbox_op(loglik)
 
     # Other cases, when `loglik` is a string or a PathLike.
-    if loglik_kind != "approx_differentiable":
-        raise ValueError(
-            "You set `loglik_kind` to `approx_differentiable "
-            + "but did not provide a pm.Distribution, an Op, or a callable "
-            + "as `loglik`."
+    if isinstance(loglik, str) or isinstance(loglik, PathLike):
+        if loglik_kind != "approx_differentiable":
+            raise ValueError(
+                "You set `loglik_kind` to `approx_differentiable "
+                + "but did not provide a pm.Distribution, an Op, or a callable "
+                + "as `loglik`."
+            )
+
+        loglik_path = cast("str | PathLike", loglik)
+        onnx_model = load_onnx_model(loglik_path)
+
+        if backend == "pytensor":
+            lan_logp_pt = make_pytensor_logp_from_onnx(onnx_model)
+            return lan_logp_pt
+
+        if params_is_reg is None:
+            raise ValueError(
+                "You set `loglik_kind` to `approx_differentiable` "
+                + "and `backend` to `jax` but did not provide `params_is_reg`."
+            )
+
+        logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
+            onnx_model,
+            params_is_reg,
+            params_only=False if params_only is None else params_only,
         )
 
-    loglik = cast("str | PathLike", loglik)
-    onnx_model = load_onnx_model(loglik)
+        lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
 
-    if backend == "pytensor":
-        lan_logp_pt = make_pytensor_logp_from_onnx(onnx_model)
-        return lan_logp_pt
-
-    if params_is_reg is None:
-        raise ValueError(
-            "You set `loglik_kind` to `approx_differentiable` "
-            + "and `backend` to `jax` but did not provide `params_is_reg`."
-        )
-
-    logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
-        onnx_model,
-        params_is_reg,
-        params_only=False if params_only is None else params_only,
-    )
-
-    lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
-
-    return lan_logp_jax
+        return lan_logp_jax
+    raise TypeError("loglik must be a Callable, str, or PathLike")
 
 
 def make_missing_data_callable(
@@ -773,28 +697,35 @@ def make_missing_data_callable(
 
     Please refer to the documentation of `make_likelihood_callable` for more.
     """
+    # AF-TODO: Remove this once clear that it is actually not needed
     if backend == "jax":
         if params_is_reg is None:
             raise ValueError(
-                "You have chosen `jax` as the backend for the missing data likelihood. "
+                "You have chosen `jax` as the backend for "
+                + "the missing data likelihood. "
                 + "However, you have not provided any values to `params_is_reg`."
             )
         if params_only is None:
             raise ValueError(
-                "You have chosen `jax` as the backend for the missing data likelihood. "
+                "You have chosen `jax` as the backend "
+                + "for the missing data likelihood. "
                 + "However, you have not provided any values to `params_only`."
             )
 
     # We assume that the missing data network is always approx_differentiable
     return make_likelihood_callable(
-        loglik, "approx_differentiable", backend, params_is_reg, params_only
+        loglik=loglik,
+        loglik_kind="approx_differentiable",
+        backend=backend,
+        params_is_reg=params_is_reg,
+        params_only=params_only,
     )
 
 
 def assemble_callables(
     callable: pytensor.graph.Op | Callable,
     missing_data_callable: pytensor.graph.Op | Callable,
-    params_only: bool,
+    params_only: bool | None,
     has_deadline: bool,
 ) -> Callable:
     """Assemble the likelihood callables into a single callable.
@@ -822,35 +753,43 @@ def assemble_callables(
         # squeeze this dimension out.
         dist_params = [pt.squeeze(param) for param in dist_params]
 
+        # AF-TODO: This part actually overrides what
+        #          is treated as missing to always be -999.0
         n_missing = pt.sum(pt.eq(data[:, 0], -999.0)).astype(int)
         if n_missing == 0:
             raise ValueError("No missing data in the data.")
 
         observed_data = data[n_missing:, :]
+        missing_data = data[:n_missing, -1:]
 
         dist_params_observed = [
             param[n_missing:] if param.ndim >= 1 else param for param in dist_params
         ]
 
-        if has_deadline:
-            logp_observed = callable(observed_data[:, :-1], *dist_params_observed)
-        else:
-            logp_observed = callable(observed_data, *dist_params_observed)
-
         dist_params_missing = [
             param[:n_missing] if param.ndim >= 1 else param for param in dist_params
         ]
 
-        if params_only:
-            logp_missing = missing_data_callable(None, *dist_params_missing)
-        else:
-            missing_data = data[:n_missing, -1:]
+        if has_deadline:
+            logp_observed = callable(observed_data[:, :-1], *dist_params_observed)
             logp_missing = missing_data_callable(missing_data, *dist_params_missing)
+        else:
+            if not params_only:
+                raise ValueError(
+                    "When `has_deadline` is False, `params_only` must be True. \n"
+                    "The provided settings are inconsistent."
+                )
+            logp_observed = callable(observed_data, *dist_params_observed)
+            logp_missing = missing_data_callable(None, *dist_params_missing)
+
+        # if has_deadline:
+        #     logp_missing = missing_data_callable(missing_data, *dist_params_missing)
+        # else:
+        # logp_missing = missing_data_callable(None, *dist_params_missing)
 
         logp = pt.empty_like(data[:, 0], dtype=pytensor.config.floatX)
         logp = pt.set_subtensor(logp[n_missing:], logp_observed)
         logp = pt.set_subtensor(logp[:n_missing], logp_missing)
-
         return logp
 
     return likelihood_callable
