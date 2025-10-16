@@ -17,7 +17,7 @@ from hssm.plotting.utils import (
     _row_mask_with_error,
     _process_df_for_qp_plot,
 )
-from hssm.plotting.posterior_predictive import (
+from hssm.plotting.predictive import (
     _plot_predictive_1D,
     _plot_predictive_2D,
     plot_predictive,

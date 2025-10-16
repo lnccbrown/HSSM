@@ -1159,6 +1159,10 @@ class HSSM(DataValidator):
         """
         return plotting.plot_quantile_probability(self, **kwargs)
 
+    def predict(self, **kwargs) -> az.InferenceData:
+        """Generate samples from the predictive distribution."""
+        return self.model.predict(**kwargs)
+
     def sample_prior_predictive(
         self,
         draws: int = 500,
@@ -1227,7 +1231,10 @@ class HSSM(DataValidator):
                     name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
                 ),
             )
-        return idata
+
+        # Update self._inference_obj to match the cleaned idata
+        self._inference_obj = idata
+        return deepcopy(self._inference_obj)
 
     @property
     def pymc_model(self) -> pm.Model:

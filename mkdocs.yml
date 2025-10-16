@@ -37,7 +37,7 @@ nav:
   - Tutorials:
       - Main tutorial: tutorials/main_tutorial.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
-      - Plotting in HSSM: tutorials/plotting.ipynb
+      - Plotting: tutorials/plotting.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
       - Variational Inference: tutorials/variational_inference.ipynb
       - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
@@ -49,7 +49,6 @@ nav:
       - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
       - Saving and loading models: tutorials/save_load_tutorial.ipynb
       - Bayesian t-test: tutorials/tutorial_bayesian_t_test.ipynb
-      - Model Cartoon Plots: tutorials/tutorial_model_cartoon.ipynb
       - Getting trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
       - Stim Coding: tutorials/tutorial_stim_coding.ipynb
       - P-outlier Regression: tutorials/tutorial_p_outlier_regression.ipynb
@@ -82,7 +81,6 @@ plugins:
         - tutorials/compile_logp.ipynb
         - tutorials/save_load_tutorial.ipynb
         - tutorials/tutorial_bayesian_t_test.ipynb
-        - tutorials/tutorial_model_cartoon.ipynb
         - tutorials/tutorial_trial_wise_parameters.ipynb
         - tutorials/tutorial_stim_coding.ipynb
         - tutorials/tutorial_p_outlier_regression.ipynb

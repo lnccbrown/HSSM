@@ -161,7 +161,7 @@ def _plot_model_cartoon_2D(
     col_wrap: int | None = None,
     bins: int | np.ndarray | str | None = 100,
     step: bool = False,
-    interval: tuple[float, float] | None = None,
+    # interval: tuple[float, float] | None = None,
     colors: str | list[str] | None = None,
     linestyles: str | list[str] = "-",
     linewidths: float | list[float] = 1.25,
@@ -195,9 +195,10 @@ def _plot_model_cartoon_2D(
         plot_data=plot_data,
         plot_mean=plot_mean,
         plot_samples=plot_samples,
+        predictive_group=predictive_group,
         bins=bins,
         step=step,
-        interval=interval,
+        # interval=interval,
         colors=colors,
         linestyles=linestyles,
         linewidths=linewidths,
@@ -304,7 +305,7 @@ def _make_idata_mean_prior(idata: az.InferenceData) -> az.InferenceData:
     """Create a new InferenceData object containing only the prior mean.
 
     Takes an InferenceData object and computes the mean across chains and draws,
-    then restructures it to have a single chain and draw. Removes posterior
+    then restructures it to have a single chain and draw. Removes prior
     predictive samples if present.
 
     Parameters
@@ -319,12 +320,12 @@ def _make_idata_mean_prior(idata: az.InferenceData) -> az.InferenceData:
     """
     setattr(idata, "prior", idata["prior"].mean(dim=["chain", "draw"]))
     setattr(idata, "prior", idata["prior"].assign_coords(chain=[0], draw=[0]))
-    for data_var in list(idata["posterior"].data_vars):
+    for data_var in list(idata["prior"].data_vars):
         idata["prior"][data_var] = idata["prior"][data_var].expand_dims(
             dim=["chain", "draw"], axis=[0, 1]
         )
 
-    if "posterior_predictive" in idata:
+    if "prior_predictive" in idata:
         del idata["prior_predictive"]
     return idata
 
@@ -338,6 +339,7 @@ def plot_model_cartoon(
     ] = "posterior_predictive",
     plot_data: bool = True,
     n_samples: int | float | None = 20,
+    n_samples_prior: int = 500,
     row: str | None = None,
     col: str | None = None,
     col_wrap: int | None = None,
@@ -389,16 +391,23 @@ def plot_model_cartoon(
     plot_data : optional
         Whether to plot the observed data, by default True.
     n_samples : optional
-        When idata is provided, the number or proportion of posterior predictive samples
+        When idata is provided, the number or proportion of predictive samples
         randomly drawn to be used from each chain for plotting. When idata is not
-        provided, the number or proportion of posterior samples to be used to generate
-        posterior predictive samples. The number or proportion are defined as follows:
+        provided, the number or proportion of posterior/prior
+        samples to be used to generate predictive samples.
+        The number or proportion are defined as follows:
 
         - When an integer >= 1, the number of samples to be extracted from the draw
           dimension.
         - When a float between 0 and 1, the proportion of samples to be extracted from
           the draw dimension.
         - When None, all samples are extracted.
+    n_samples_prior : int
+        When predictive_group is "prior_predictive", the number or proportion of prior
+        samples to be used to generate predictive samples. The number or proportion are
+        defined as follows:
+        - When an integer >= 1, the number of samples to be drawn from the prior and
+          respectively from the prior predictive.
     row : optional
         Variables that define subsets of the data, which will be drawn on the row
         dimension of the facets in the grid. When both row and col are None, one single
@@ -504,15 +513,40 @@ def plot_model_cartoon(
             idata_mean = _make_idata_mean_posterior(
                 deepcopy(model.traces if idata is None else idata)
             )
-        else:
-            idata_mean = _make_idata_mean_prior(
-                deepcopy(model.traces if idata is None else idata)
+            idata_mean, _ = _use_traces_or_sample(
+                model,
+                data,
+                idata_mean,
+                n_samples=None,
+                predictive_group="posterior_predictive",
             )
-        idata_mean, _ = _use_traces_or_sample(
-            model, data, idata_mean, n_samples=None, predictive_group=predictive_group
-        )
+        else:
+            # Need to sample from prior predictive here to get samples from the prior
+            idata, _ = _use_traces_or_sample(
+                model,
+                data,
+                idata,
+                n_samples=n_samples_prior,
+                predictive_group=predictive_group,
+            )
 
-        # Get the plotting dataframe by chain and sample
+            idata_mean = _make_idata_mean_prior(deepcopy(idata))
+            # AF-COMMENT: This is a hack to get the prior predictive mean
+            # we should find a better way to do this eventually.
+            idata_mean_tmp = model.predict(
+                **dict(
+                    idata=az.InferenceData(posterior=idata_mean.prior),
+                    kind="response",
+                    inplace=False,
+                )
+            )
+
+            if hasattr(idata_mean, "prior_predictive"):
+                del idata_mean["prior_predictive"]
+
+            idata_mean.add_groups(prior_predictive=idata_mean_tmp.posterior_predictive)
+
+        # # Get the plotting dataframe by chain and sample
         plotting_df_mean = _get_plotting_df(
             idata_mean,
             data,
@@ -522,13 +556,17 @@ def plot_model_cartoon(
             predictive_group=predictive_group,
         )
 
-        # Get plotting dataframe for posterior mean
+        # Get plotting dataframe for predictive mean
         # df by chain and sample
         idata_mean = compute_merge_necessary_deterministics(
             model, idata_mean, idata_group=_to_idata_group(predictive_group)
         )
+
         plotting_df_mean = attach_trialwise_params_to_df(
-            model, plotting_df_mean, idata_mean
+            model,
+            plotting_df_mean,
+            idata_mean,
+            idata_group=_to_idata_group(predictive_group),
         )
 
         # Flip the rt values if necessary
@@ -561,8 +599,11 @@ def plot_model_cartoon(
         # Get plotting dataframe for posterior mean
         # df by chain and sample
         idata = compute_merge_necessary_deterministics(
-            model, idata, idata_group=_to_idata_group(predictive_group)
+            model,
+            idata,
+            idata_group=_to_idata_group(predictive_group),
         )
+
         plotting_df = attach_trialwise_params_to_df(
             model,
             plotting_df,
@@ -585,6 +626,8 @@ def plot_model_cartoon(
     elif plotting_df_mean is not None:
         plotting_df = plotting_df_mean
 
+    # return plotting_df
+
     # Then, plot the posterior predictive distribution against the observed data
     # Determine whether we are producing a single plot or a grid of plots
 
@@ -598,7 +641,6 @@ def plot_model_cartoon(
             predictive_group=predictive_group,
             bins=bins,
             step=step,
-            # interval=interval,
             colors=colors,
             linestyles=linestyles_,
             linewidths=linewidths_,
@@ -632,7 +674,6 @@ def plot_model_cartoon(
             col_wrap=col_wrap,
             bins=bins,
             step=step,
-            # interval=interval,
             colors=colors,
             linestyles=linestyles_,
             linewidths=linewidths_,

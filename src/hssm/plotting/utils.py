@@ -428,11 +428,13 @@ def _use_traces_or_sample(
                 draws=n_samples,
             )
         elif predictive_group == "prior_predictive":
-            model.sample_prior_predictive(
+            idata = model.sample_prior_predictive(
                 draws=n_samples,
+                omit_offsets=False,
             )
         else:
             raise ValueError(f"Invalid predictive group: {predictive_group}")
+        # AF-TODO: 'sampled' logic needs to be re-examined
         sampled = True
 
     return cast("az.InferenceData", idata), sampled
