@@ -340,13 +340,14 @@ def plot_quantile_probability(
             predictive_group=predictive_group,
         )
     else:
+        # Note if idata is passed as None,
+        # predictive_group is ignored in _get_plotting_df
         plotting_df = _get_plotting_df(
             None,
             data,
             extra_dims=extra_dims,
             n_samples=None,
             response_str=model.response_str,
-            predictive_group=predictive_group,
         )
 
     # Flip the rt values if necessary
