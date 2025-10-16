@@ -33,11 +33,11 @@ def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 100) -> np.n
     )
 
 
-def _plot_posterior_predictive_1D(
+def _plot_predictive_1D(
     data: pd.DataFrame,
     plot_data: bool = True,
     bins: int | np.ndarray | str | None = 100,
-    range: tuple[float, float] | None = None,
+    x_range: tuple[float, float] | None = None,
     step: bool = False,
     interval: tuple[float, float] | None = None,
     colors: str | list[str] | None = None,
@@ -50,7 +50,7 @@ def _plot_posterior_predictive_1D(
 ) -> mpl.axes.Axes:
     """Plot the posterior predictive distribution against the observed data.
 
-    Check the `plot_posterior_predictive` function below for docstring.
+    Check the `plot_predictive` function below for docstring.
 
     Returns
     -------
@@ -71,7 +71,7 @@ def _plot_posterior_predictive_1D(
     styles["linewidth"] = linewidths[0] if isinstance(linewidths, list) else linewidths
 
     predicted = data.loc[data["observed"] == "predicted", "rt"]
-    bin_edges = np.histogram_bin_edges(predicted, bins=bins, range=range)  # type: ignore
+    bin_edges = np.histogram_bin_edges(predicted, bins=bins, range=x_range)  # type: ignore
 
     if "ax" in kwargs:
         ax = kwargs.pop("ax")
@@ -136,14 +136,14 @@ def _plot_posterior_predictive_1D(
     return ax
 
 
-def _plot_posterior_predictive_2D(
+def _plot_predictive_2D(
     data: pd.DataFrame,
     plot_data: bool = True,
     row: str | None = None,
     col: str | None = None,
     col_wrap: int | None = None,
     bins: int | np.ndarray | str | None = 100,
-    range: tuple[float, float] | None = None,
+    x_range: tuple[float, float] | None = None,
     step: bool = False,
     interval: tuple[float, float] | None = None,
     colors: str | list[str] | None = None,
@@ -174,10 +174,10 @@ def _plot_posterior_predictive_2D(
     )
 
     g.map_dataframe(
-        _plot_posterior_predictive_1D,
+        _plot_predictive_1D,
         plot_data=plot_data,
         bins=bins,
-        range=range,
+        x_range=x_range,
         step=step,
         interval=interval,
         colors=colors,
@@ -298,10 +298,13 @@ def _process_lines(
         )
 
 
-def plot_posterior_predictive(
+def plot_predictive(
     model,
     idata: az.InferenceData | None = None,
     data: pd.DataFrame | None = None,
+    predictive_group: Literal[
+        "posterior_predictive", "prior_predictive"
+    ] = "posterior_predictive",
     plot_data: bool = True,
     n_samples: int | float | None = 20,
     row: str | None = None,
@@ -310,7 +313,7 @@ def plot_posterior_predictive(
     groups: str | Iterable[str] | None = None,
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
     bins: int | np.ndarray | str | None = 50,
-    range: tuple[float, float] | None = None,
+    x_range: tuple[float, float] | None = None,
     step: bool = False,
     hdi: float | str | tuple[float, float] | None = None,
     colors: str | list[str] | None = None,
@@ -349,6 +352,9 @@ def plot_posterior_predictive(
         using the data stored in the `model` object. If posterior predictive samples
         exist in the `idata` object, these samples will be used for plotting, but a
         ValueError will be thrown if any of `col` or `row` is not None.
+    predictive_group : optional
+        The type of predictive distribution to plot, by default "posterior_predictive".
+        Can be "posterior_predictive" or "prior_predictive".
     plot_data : optional
         Whether to plot the observed data, by default True.
     n_samples : optional
@@ -386,7 +392,7 @@ def plot_posterior_predictive(
         - A string describing the binning strategy (passed to `np.histogram_bin_edges`).
         - A list-like defining the bin edges.
         - An integer defining the number of bins to be used.
-    range : optional
+    x_range : optional
         The lower and upper range of the bins. Lower and upper outliers are ignored.
         If not provided, range is simply the minimum and the maximum of the data, by
         default None.
@@ -471,7 +477,9 @@ def plot_posterior_predictive(
         else:
             data = model.data
 
-    idata, sampled = _use_traces_or_sample(model, data, idata, n_samples=n_samples)
+    idata, sampled = _use_traces_or_sample(
+        model, data, idata, n_samples=n_samples, predictive_group=predictive_group
+    )
 
     plotting_df = _get_plotting_df(
         idata,
@@ -479,6 +487,7 @@ def plot_posterior_predictive(
         extra_dims=extra_dims,
         n_samples=None if sampled else n_samples,
         response_str=model.response_str,
+        predictive_group=predictive_group,
     )
 
     if interval is not None:
@@ -493,11 +502,11 @@ def plot_posterior_predictive(
     # Then, plot the posterior predictive distribution against the observed data
     # Determine whether we are producing a single plot or a grid of plots
     if not extra_dims:
-        ax = _plot_posterior_predictive_1D(
+        ax = _plot_predictive_1D(
             data=plotting_df,
             plot_data=plot_data,
             bins=bins,
-            range=range,
+            x_range=x_range,
             step=step,
             interval=interval,
             colors=colors,
@@ -514,14 +523,14 @@ def plot_posterior_predictive(
     # The multiple dimensions case
     # If group is not provided, we are producing a grid of plots
     if groups is None:
-        g = _plot_posterior_predictive_2D(
+        g = _plot_predictive_2D(
             data=plotting_df,
             plot_data=plot_data,
             row=row,
             col=col,
             col_wrap=col_wrap,
             bins=bins,
-            range=range,
+            x_range=x_range,
             step=step,
             interval=interval,
             colors=colors,
@@ -553,14 +562,14 @@ def plot_posterior_predictive(
                 title,
             )
             continue
-        g = _plot_posterior_predictive_2D(
+        g = _plot_predictive_2D(
             data=df,
             plot_data=plot_data,
             row=row,
             col=col,
             col_wrap=col_wrap,
             bins=bins,
-            range=range,
+            x_range=x_range,
             step=step,
             interval=interval,
             colors=colors,

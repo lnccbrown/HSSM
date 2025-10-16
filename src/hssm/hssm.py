@@ -1131,19 +1131,19 @@ class HSSM(DataValidator):
         else:
             raise ValueError("`kind` must be either 'response' or 'response_params'.")
 
-    def plot_posterior_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
+    def plot_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
         """Produce a posterior predictive plot.
 
-        Equivalent to calling `hssm.plotting.plot_posterior_predictive()` with the
+        Equivalent to calling `hssm.plotting.plot_predictive()` with the
         model. Please see that function for
-        [full documentation][hssm.plotting.plot_posterior_predictive].
+        [full documentation][hssm.plotting.plot_predictive].
 
         Returns
         -------
         mpl.axes.Axes | sns.FacetGrid
             The matplotlib axis or seaborn FacetGrid object containing the plot.
         """
-        return plotting.plot_posterior_predictive(self, **kwargs)
+        return plotting.plot_predictive(self, **kwargs)
 
     def plot_quantile_probability(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
         """Produce a quantile probability plot.
@@ -1158,6 +1158,10 @@ class HSSM(DataValidator):
             The matplotlib axis or seaborn FacetGrid object containing the plot.
         """
         return plotting.plot_quantile_probability(self, **kwargs)
+
+    def predict(self, **kwargs) -> az.InferenceData:
+        """Generate samples from the predictive distribution."""
+        return self.model.predict(**kwargs)
 
     def sample_prior_predictive(
         self,
@@ -1227,7 +1231,10 @@ class HSSM(DataValidator):
                     name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
                 ),
             )
-        return idata
+
+        # Update self._inference_obj to match the cleaned idata
+        self._inference_obj = idata
+        return deepcopy(self._inference_obj)
 
     @property
     def pymc_model(self) -> pm.Model:

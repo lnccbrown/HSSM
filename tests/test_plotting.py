@@ -17,10 +17,10 @@ from hssm.plotting.utils import (
     _row_mask_with_error,
     _process_df_for_qp_plot,
 )
-from hssm.plotting.posterior_predictive import (
-    _plot_posterior_predictive_1D,
-    _plot_posterior_predictive_2D,
-    plot_posterior_predictive,
+from hssm.plotting.predictive import (
+    _plot_predictive_1D,
+    _plot_predictive_2D,
+    plot_predictive,
 )
 from hssm.plotting.quantile_probability import (
     _plot_quantile_probability_1D,
@@ -112,28 +112,28 @@ def test__get_plotting_df(posterior, cavanagh_test):
         _get_plotting_df(idata, data=None, extra_dims=["participant_id", "conf"])
 
 
-def test__plot_posterior_predictive_1D(cav_idata, cavanagh_test):
+def test__plot_predictive_1D(cav_idata, cavanagh_test):
     df = _get_plotting_df(
         cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
     )
     df["Response Time"] = df["rt"] * np.where(df["response"] == 0, -1, 1)
 
     _, ax1 = plt.subplots()
-    ax1 = _plot_posterior_predictive_1D(df, ax=ax1)
+    ax1 = _plot_predictive_1D(df, ax=ax1)
     assert len(ax1.get_lines()) == 2
 
     _, ax2 = plt.subplots()
-    ax2 = _plot_posterior_predictive_1D(df, plot_data=False, ax=ax2)
+    ax2 = _plot_predictive_1D(df, plot_data=False, ax=ax2)
     assert len(ax2.get_lines()) == 1
 
 
-def test__plot_posterior_predictive_2D(cav_idata, cavanagh_test):
+def test__plot_predictive_2D(cav_idata, cavanagh_test):
     df = _get_plotting_df(
         cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
     )
     df["Response Time"] = df["rt"] * np.where(df["response"] == 0, -1, 1)
 
-    g1 = _plot_posterior_predictive_2D(
+    g1 = _plot_predictive_2D(
         df,
         row="participant_id",
         col="conf",
@@ -141,7 +141,7 @@ def test__plot_posterior_predictive_2D(cav_idata, cavanagh_test):
     assert len(g1.figure.axes) == 5 * 2
     assert len(g1.figure.axes[0].get_lines()) == 2
 
-    g2 = _plot_posterior_predictive_2D(
+    g2 = _plot_predictive_2D(
         df,
         plot_data=False,
         row="participant_id",
@@ -151,7 +151,7 @@ def test__plot_posterior_predictive_2D(cav_idata, cavanagh_test):
     assert len(g2.figure.axes[0].get_lines()) == 1
 
 
-def test_plot_posterior_predictive(cav_idata, cavanagh_test):
+def test_plot_predictive(cav_idata, cavanagh_test):
     # Mock model object
     model = hssm.HSSM(
         data=cavanagh_test,
@@ -168,16 +168,16 @@ def test_plot_posterior_predictive(cav_idata, cavanagh_test):
         ],
     )  # Doesn't matter what model or data we use here
     with pytest.raises(ValueError):
-        plot_posterior_predictive(model)
+        plot_predictive(model)
 
     model._inference_obj = cav_idata.copy()
     _, ax1 = plt.subplots()
-    ax1 = plot_posterior_predictive(model, ax=ax1)  # Should work directly
+    ax1 = plot_predictive(model, ax=ax1)  # Should work directly
     assert len(ax1.get_lines()) == 2
 
     delattr(model.traces, "posterior_predictive")
     _, ax2 = plt.subplots()
-    ax2 = plot_posterior_predictive(
+    ax2 = plot_predictive(
         model, ax=ax2, n_samples=2
     )  # Should sample posterior predictive
     assert len(ax2.get_lines()) == 2
@@ -185,19 +185,17 @@ def test_plot_posterior_predictive(cav_idata, cavanagh_test):
     assert model.traces.posterior_predictive.draw.size == 2
 
     with pytest.raises(ValueError):
-        plot_posterior_predictive(model, groups="participant_id")
+        plot_predictive(model, groups="participant_id")
     with pytest.raises(ValueError):
-        plot_posterior_predictive(model, groups_order=["5", "4"])
+        plot_predictive(model, groups_order=["5", "4"])
 
-    plots = plot_posterior_predictive(
-        model, row="stim", col="participant_id", groups="conf"
-    )
+    plots = plot_predictive(model, row="stim", col="participant_id", groups="conf")
     assert len(plots) == 2
     # Lengths might defer because of subsetting the data frame
     assert len(plots[0].figure.axes) == 5
     assert len(plots[1].figure.axes) == 5 * 2
 
-    plots = plot_posterior_predictive(
+    plots = plot_predictive(
         model,
         row="stim",
         plot_data=False,
@@ -210,7 +208,7 @@ def test_plot_posterior_predictive(cav_idata, cavanagh_test):
     assert len(plots[0].figure.axes[0].get_lines()) == 1
 
     with pytest.raises(ValueError):
-        plot_posterior_predictive(
+        plot_predictive(
             model,
             row="stim",
             plot_data=False,
@@ -219,7 +217,7 @@ def test_plot_posterior_predictive(cav_idata, cavanagh_test):
             groups_order=["LC"],
         )
 
-    plots = plot_posterior_predictive(
+    plots = plot_predictive(
         model,
         row="stim",
         plot_data=False,
