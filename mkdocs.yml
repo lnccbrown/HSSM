@@ -49,6 +49,7 @@ nav:
       - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
       - Saving and loading models: tutorials/save_load_tutorial.ipynb
       - Bayesian t-test: tutorials/tutorial_bayesian_t_test.ipynb
+      - Using the do-operator: tutorials/do_operator.ipynb
       - Getting trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
       - Stim Coding: tutorials/tutorial_stim_coding.ipynb
       - P-outlier Regression: tutorials/tutorial_p_outlier_regression.ipynb
@@ -80,6 +81,7 @@ plugins:
         - tutorials/jax_callable_contribution_onnx_example.ipynb
         - tutorials/blackbox_contribution_onnx_example.ipynb
         - tutorials/compile_logp.ipynb
+        - tutorials/do_operator.ipynb
         - tutorials/save_load_tutorial.ipynb
         - tutorials/tutorial_bayesian_t_test.ipynb
         - tutorials/tutorial_trial_wise_parameters.ipynb
