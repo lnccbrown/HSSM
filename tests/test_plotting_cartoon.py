@@ -56,7 +56,7 @@ def test_plot_model_cartoon_2_choice(
             ax = hssm.plotting.plot_model_cartoon(
                 cav_model_cartoon,
                 n_samples=10,
-                n_samples_prior=100,  # AF-TODO: Low number of samples fails
+                n_samples_prior=10,  # AF-TODO: Low number of samples fails
                 bins=30,
                 col=col,
                 row=row,

@@ -1270,9 +1270,6 @@ def _add_trajectories(
         tmp_traj_choice = float(sample[i]["choices"].flatten())
         maxid = np.minimum(np.argmax(np.where(tmp_traj > -999)), t_s.shape[0])
 
-        # Identify boundary value at timepoint of crossing
-        b_tmp = b_high[maxid + n_roll] if tmp_traj_choice > 0 else b_low[maxid + n_roll]
-
         axis.plot(
             t_s[:maxid] + metadata["t"][0],  # sample.t.values[0],
             tmp_traj[:maxid],
@@ -1281,15 +1278,26 @@ def _add_trajectories(
             linewidth=linewidth,
             zorder=2000 + i,
         )
-        if highlight_rt_choice:
-            axis.scatter(
-                t_s[maxid] + metadata["t"][0],
-                b_tmp,
-                markersize_rt_choice,
-                color=markercolor_rt_choice_dict[tmp_traj_choice],
-                alpha=1,
-                marker=markertype_rt_choice,
-                zorder=2000 + i,
+
+        # Identify boundary value at timepoint of crossing
+        if (maxid + n_roll < len(b_high)) and (maxid + n_roll < len(b_low)):
+            b_tmp = (
+                b_high[maxid + n_roll] if tmp_traj_choice > 0 else b_low[maxid + n_roll]
+            )
+            if highlight_rt_choice:
+                axis.scatter(
+                    t_s[maxid] + metadata["t"][0],
+                    b_tmp,
+                    markersize_rt_choice,
+                    color=markercolor_rt_choice_dict[tmp_traj_choice],
+                    alpha=1,
+                    marker=markertype_rt_choice,
+                    zorder=2000 + i,
+                )
+        else:
+            _logger.warning(
+                "Timepoint of crossing is out of bounds for boundary values. "
+                "Skipping boundary value highlighting."
             )
 
 
