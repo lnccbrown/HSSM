@@ -1,5 +1,15 @@
 # Changelog
 
+### 0.2.11
+
+This version include the following:
+
+1. Simplification of simulator logic inside HSSM random variables (see the `ssm-simulators` `0.11.3` release as well)
+2. Plotting functions now allow `prior_predictive` plots wherever suitable.
+3. A new tutorial on using [bayeux](https://github.com/jax-ml/bayeux) for sampling
+4. Consolidated `plotting` tutorial
+5. New tutorial on how to use the `do-operator` from PyMC to control forward simulations
+
 ### 0.2.8
 
 This version of HSSM incorporated the following changes:
