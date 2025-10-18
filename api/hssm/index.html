@@ -1,0 +1,4117 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../getting_started/hierarchical_modeling/">
+      
+      
+        <link rel="next" href="../param/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>hssm.HSSM - HSSM</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../styles/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="ocean" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#hssm.HSSM" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+              <button class="md-banner__button md-icon" aria-label="Don't show this again">
+                
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              </button>
+            
+            
+<span class="show-on-small right-margin">
+  <span class="twemoji right-margin show-on-small move-down">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M214.6 470.6c-12.5 12.5-32.8 12.5-45.3 0l-160-160c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L192 402.7l137.4-137.3c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3l-160 160zm160-352-160 160c-12.5 12.5-32.8 12.5-45.3 0l-160-160c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L192 210.7 329.4 73.4c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3z"/></svg>
+  </span>
+  Navigate the site here!
+</span>
+<span class="right-margin"> v0.2.11 is released! </span>
+<span>
+  <span class="twemoji">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 3C9.23 3 6.19 5.95 6 9.66l-1.92 2.53c-.24.31 0 .81.42.81H6v3c0 1.11.89 2 2 2h1v3h7v-4.69c2.37-1.12 4-3.51 4-6.31 0-3.86-3.12-7-7-7m1 11h-2v-2h2zm1.75-5.19c-.29.4-.66.69-1.11.93-.25.16-.42.33-.51.52-.09.18-.13.43-.13.74h-2c0-.5.11-.92.31-1.18.19-.27.54-.57 1.05-.91.26-.16.47-.36.61-.59.16-.23.23-.5.23-.82 0-.3-.08-.56-.26-.75-.18-.18-.44-.28-.75-.28a1 1 0 0 0-.66.23c-.18.16-.27.39-.28.69h-1.93l-.01-.03c-.01-.79.25-1.36.77-1.77.54-.39 1.24-.59 2.11-.59.93 0 1.66.23 2.19.68.54.45.81 1.06.81 1.82 0 .5-.15.91-.44 1.31"/></svg>
+  </span>
+  Questions?
+  <a href="https://github.com/lnccbrown/HSSM/discussions">
+    Open a discussion here!
+  </a>
+</span>
+
+          </div>
+          
+            <script>var el=document.querySelector("[data-md-component=announce]");if(el){var content=el.querySelector(".md-typeset");__md_hash(content.innerHTML)===__md_get("__announce")&&(el.hidden=!0)}</script>
+          
+        </aside>
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="https://lnccbrown.github.io/HSSM/" title="HSSM" class="md-header__button md-logo" aria-label="HSSM" data-md-component="logo">
+      
+  <img src="../../images/navlogo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            HSSM
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              hssm.HSSM
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="ocean" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="ocean" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/lnccbrown/HSSM/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    lnccbrown/HSSM
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../.." class="md-tabs__link">
+          
+  
+  
+  Home
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting_started/installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  API References
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/main_tutorial/" class="md-tabs__link">
+          
+  
+  
+  Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/hssm_tutorial_workshop_1/" class="md-tabs__link">
+          
+  
+  
+  Contributed Tutorials
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../local_development/" class="md-tabs__link">
+          
+  
+  
+  Contributing
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="https://lnccbrown.github.io/HSSM/" title="HSSM" class="md-nav__button md-logo" aria-label="HSSM" data-md-component="logo">
+      
+  <img src="../../images/navlogo.png" alt="logo">
+
+    </a>
+    HSSM
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/lnccbrown/HSSM/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    lnccbrown/HSSM
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Home
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../credits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Credits
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../license/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    License
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Changelog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_1" id="__nav_2_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting HSSM
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            Getting HSSM
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Using HSSM
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            Using HSSM
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/hierarchical_modeling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Hierarchical Modeling
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    API References
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            API References
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    HSSM core classes
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            HSSM core classes
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    hssm.HSSM
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.HSSM
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.HSSM" class="md-nav__link">
+    <span class="md-ellipsis">
+      HSSM
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HSSM">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.traces" class="md-nav__link">
+    <span class="md-ellipsis">
+      traces
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.pymc_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      pymc_model
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample_posterior_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample_posterior_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample_prior_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample_prior_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.vi" class="md-nav__link">
+    <span class="md-ellipsis">
+      vi
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.find_MAP" class="md-nav__link">
+    <span class="md-ellipsis">
+      find_MAP
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.log_likelihood" class="md-nav__link">
+    <span class="md-ellipsis">
+      log_likelihood
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      summary
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_trace" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_trace
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      graph
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_quantile_probability" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_quantile_probability
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.restore_traces" class="md-nav__link">
+    <span class="md-ellipsis">
+      restore_traces
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.initial_point" class="md-nav__link">
+    <span class="md-ellipsis">
+      initial_point
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../param/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.Param
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../model_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.ModelConfig
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../prior/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.Prior
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../link/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.Link
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Useful functions
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            Useful functions
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../load_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.load_data
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../simulate_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.simulate_data
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../set_floatx/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.set_floatX
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../show_defaults/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.show_defaults
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../check_data_for_rl/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.check_data_for_rl
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Likelihoods
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            Likelihoods
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../likelihoods/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.likelihoods
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Working with distributions
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4">
+            <span class="md-nav__icon md-icon"></span>
+            Working with distributions
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../distribution_utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.distribution_utils
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_5" id="__nav_3_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Plotting
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_5">
+            <span class="md-nav__icon md-icon"></span>
+            Plotting
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plotting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    hssm.plotting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Tutorials
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Tutorials
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/main_tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Main Tutorial
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/likelihoods/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Likelihood functions in HSSM explained
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/plotting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Plotting in HSSM
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/lapse_prob_and_dist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Using lapse probabilities and distributions in HSSM
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/variational_inference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Variational Inference with HSSM
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/variational_inference_hierarchical/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Hierarchical Variational Inference
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/pymc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Using the low-level API from HSSM directly with PyMC
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/rlssm_tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tutorial for hierarchical Bayesian inference for Reinforcement Learning - Sequential Sampling Models.
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/add_custom_rlssm_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Introducing a custom Reinforcement Learning - Sequential Sampling Model (RLSSM) into HSSM
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/jax_callable_contribution_onnx_example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Construct Custom Models from simulators and JAX callables
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/blackbox_contribution_onnx_example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Custom models from onnx files
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/compile_logp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Using compiled log-likelihood functions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/save_load_tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Saving and loading models
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/tutorial_bayesian_t_test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Bayesian t-tests
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/do_operator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Using the to simulate data
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/tutorial_trial_wise_parameters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Attach trial wise parameters to idata post-hoc
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/tutorial_stim_coding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Stimulus Coding Example
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/tutorial_p_outlier_regression/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Regression on "p_outlier"
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/tutorial_bayeux/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Sampling with Bayeux
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Contributed Tutorials
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Contributed Tutorials
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/hssm_tutorial_workshop_1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    HSSM Tutorial Winterbrain 2025
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/hssm_tutorial_workshop_2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started with Drift Diffusion Models: A Python Tutorial
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/scientific_workflow_hssm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Scientific Workflow with HSSM
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/pymc_to_hssm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    HSSM MathPsych 2025
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Contributing
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../local_development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Developing locally
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CONTRIBUTING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#hssm.HSSM" class="md-nav__link">
+    <span class="md-ellipsis">
+      HSSM
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HSSM">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.traces" class="md-nav__link">
+    <span class="md-ellipsis">
+      traces
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.pymc_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      pymc_model
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample_posterior_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample_posterior_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.sample_prior_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      sample_prior_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.vi" class="md-nav__link">
+    <span class="md-ellipsis">
+      vi
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.find_MAP" class="md-nav__link">
+    <span class="md-ellipsis">
+      find_MAP
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.log_likelihood" class="md-nav__link">
+    <span class="md-ellipsis">
+      log_likelihood
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      summary
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_trace" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_trace
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      graph
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_predictive" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_predictive
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.plot_quantile_probability" class="md-nav__link">
+    <span class="md-ellipsis">
+      plot_quantile_probability
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.restore_traces" class="md-nav__link">
+    <span class="md-ellipsis">
+      restore_traces
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hssm.HSSM.initial_point" class="md-nav__link">
+    <span class="md-ellipsis">
+      initial_point
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                 
+                  
+
+
+  
+    <a href="https://github.com/lnccbrown/HSSM/edit/main/docs/api/hssm.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/lnccbrown/HSSM/raw/main/docs/api/hssm.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 18c.56 0 1 .44 1 1s-.44 1-1 1-1-.44-1-1 .44-1 1-1m0-3c-2.73 0-5.06 1.66-6 4 .94 2.34 3.27 4 6 4s5.06-1.66 6-4c-.94-2.34-3.27-4-6-4m0 6.5a2.5 2.5 0 0 1-2.5-2.5 2.5 2.5 0 0 1 2.5-2.5 2.5 2.5 0 0 1 2.5 2.5 2.5 2.5 0 0 1-2.5 2.5M9.27 20H6V4h7v5h5v4.07c.7.08 1.36.25 2 .49V8l-6-6H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h4.5a8.2 8.2 0 0 1-1.23-2"/></svg>
+    </a>
+  
+
+
+  <h1>hssm.HSSM</h1>
+
+<p>Use <code>hssm.HSSM</code> class to construct an HSSM model.</p>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="hssm.HSSM" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">hssm.HSSM</span>
+
+
+<a href="#hssm.HSSM" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">HSSM</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">data</span><span class="p">:</span> <span class="n">DataFrame</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">model</span><span class="p">:</span> <span class="n">SupportedModels</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ddm&quot;</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">choices</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">include</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">UserParam</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">model_config</span><span class="p">:</span> <span class="n">ModelConfig</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">loglik</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">PathLike</span> <span class="o">|</span> <span class="n">Callable</span> <span class="o">|</span> <span class="n">Op</span> <span class="o">|</span> <span class="nb">type</span><span class="p">[</span><span class="n">Distribution</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">loglik_kind</span><span class="p">:</span> <span class="n">LoglikKind</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">p_outlier</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="n">Prior</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">lapse</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="n">Prior</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">bmb</span><span class="o">.</span><span class="n">Prior</span><span class="p">(</span><span class="s2">&quot;Uniform&quot;</span><span class="p">,</span> <span class="n">lower</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">upper</span><span class="o">=</span><span class="mf">20.0</span><span class="p">),</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">global_formula</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">link_settings</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;log_logit&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">prior_settings</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;safe&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;safe&quot;</span><span class="p">,</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">extra_namespace</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">missing_data</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">deadline</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">loglik_missing_data</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">PathLike</span> <span class="o">|</span> <span class="n">Callable</span> <span class="o">|</span> <span class="n">Op</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">process_initvals</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="n">initval_jitter</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">INITVAL_JITTER_SETTINGS</span><span class="p">[</span><span class="s2">&quot;jitter_epsilon&quot;</span><span class="p">],</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="hssm.data_validator.DataValidator">DataValidator</span></code></p>
+
+
+        <p>The basic Hierarchical Sequential Sampling Model (HSSM) class.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>data</code></b>
+              (<code><span title="pandas.DataFrame">DataFrame</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>A pandas DataFrame with the minimum requirements of containing the data with the
+columns "rt" and "response".</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>model</code></b>
+              (<code><span title="hssm._types.SupportedModels">SupportedModels</span> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></code>, default:
+                  <code>&#39;ddm&#39;</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
+"full_ddm", "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4",
+"ddm_seq2_no_bias". If any other string is passed, the model will be considered
+custom, in which case all <code>model_config</code>, <code>loglik</code>, and <code>loglik_kind</code> have to be
+provided by the user.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>choices</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>When an <code>int</code>, the number of choices that the participants can make. If <code>2</code>, the
+choices are [-1, 1] by default. If anything greater than <code>2</code>, the choices are
+[0, 1, ..., n_choices - 1] by default. If a <code>list</code> is provided, it should be the
+list of choices that the participants can make. Defaults to <code>2</code>. If any value
+other than the choices provided is found in the "response" column of the data,
+an error will be raised.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>include</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A list of dictionaries specifying parameter specifications to include in the
+model. If left unspecified, defaults will be used for all parameter
+specifications. Defaults to None.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>model_config</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A dictionary containing the model configuration information. If None is
+provided, defaults will be used if there are any. Defaults to None.
+Fields for this <code>dict</code> are usually:</p>
+<ul>
+<li><code>"list_params"</code>: a list of parameters indicating the parameters of the model.
+    The order in which the parameters are specified in this list is important.
+    Values for each parameter will be passed to the likelihood function in this
+    order.</li>
+<li><code>"backend"</code>: Only used when <code>loglik_kind</code> is <code>approx_differentiable</code> and
+    an onnx file is supplied for the likelihood approximation network (LAN).
+    Valid values are <code>"jax"</code> or <code>"pytensor"</code>. It determines whether the LAN in
+    ONNX should be converted to <code>"jax"</code> or <code>"pytensor"</code>. If not provided,
+    <code>jax</code> will be used for maximum performance.</li>
+<li><code>"default_priors"</code>: A <code>dict</code> indicating the default priors for each parameter.</li>
+<li><code>"bounds"</code>: A <code>dict</code> indicating the boundaries for each parameter. In the case
+    of LAN, these bounds are training boundaries.</li>
+<li><code>"rv"</code>: Optional. Can be a <code>RandomVariable</code> class containing the user's own
+    <code>rng_fn</code> function for sampling from the distribution that the user is
+    supplying. If not supplied, HSSM will automatically generate a
+    <code>RandomVariable</code> using the simulator identified by <code>model</code> from the
+    <code>ssm_simulators</code> package. If <code>model</code> is not supported in <code>ssm_simulators</code>,
+    a warning will be raised letting the user know that sampling from the
+    <code>RandomVariable</code> will result in errors.</li>
+<li><code>"extra_fields"</code>: Optional. A list of strings indicating the additional
+    columns in <code>data</code> that will be passed to the likelihood function for
+    calculation. This is helpful if the likelihood function depends on data
+    other than the observed data and the parameter values.</li>
+</ul>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>loglik</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A likelihood function. Defaults to None. Requirements are:</p>
+<ol>
+<li>if <code>loglik_kind</code> is <code>"analytical"</code> or <code>"blackbox"</code>, a pm.Distribution, a
+   pytensor Op, or a Python callable can be used. Signatures are:<ul>
+<li><code>pm.Distribution</code>: needs to have parameters specified exactly as listed in
+<code>list_params</code></li>
+<li><code>pytensor.graph.Op</code> and <code>Callable</code>: needs to accept the parameters
+specified exactly as listed in <code>list_params</code></li>
+</ul>
+</li>
+<li>If <code>loglik_kind</code> is <code>"approx_differentiable"</code>, then in addition to the
+    specifications above, a <code>str</code> or <code>Pathlike</code> can also be used to specify a
+    path to an <code>onnx</code> file. If a <code>str</code> is provided, HSSM will first look locally
+    for an <code>onnx</code> file. If that is not successful, HSSM will try to download
+    that <code>onnx</code> file from Hugging Face hub.</li>
+<li>It can also be <code>None</code>, in which case a default likelihood function will be
+    used</li>
+</ol>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>loglik_kind</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A string that specifies the kind of log-likelihood function specified with
+<code>loglik</code>. Defaults to <code>None</code>. Can be one of the following:</p>
+<ul>
+<li><code>"analytical"</code>: an analytical (approximation) likelihood function. It is
+    differentiable and can be used with samplers that requires differentiation.</li>
+<li><code>"approx_differentiable"</code>: a likelihood approximation network (LAN) likelihood
+    function. It is differentiable and can be used with samplers that requires
+    differentiation.</li>
+<li><code>"blackbox"</code>: a black box likelihood function. It is typically NOT
+    differentiable.</li>
+<li><code>None</code>, in which a default will be used. For <code>ddm</code> type of models, the default
+    will be <code>analytical</code>. For other models supported, it will be
+    <code>approx_differentiable</code>. If the model is a custom one, a ValueError
+    will be raised.</li>
+</ul>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>p_outlier</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>0.05</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The fixed lapse probability or the prior distribution of the lapse probability.
+Defaults to a fixed value of 0.05. When <code>None</code>, the lapse probability will not
+be included in estimation.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>lapse</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code><span title="bambi.Prior">Prior</span>(&#39;Uniform&#39;, lower=0.0, upper=20.0)</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The lapse distribution. This argument is required only if <code>p_outlier</code> is not
+<code>None</code>. Defaults to Uniform(0.0, 10.0).</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>global_formula</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A string that specifies a regressions formula which will be used for all model
+parameters. If you specify parameter-wise regressions in addition, these will
+override the global regression for the respective parameter.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>link_settings</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>An optional string literal that indicates the link functions to use for each
+parameter. Helpful for hierarchical models where sampling might get stuck/
+very slow. Can be one of the following:</p>
+<ul>
+<li><code>"log_logit"</code>: applies log link functions to positive parameters and
+generalized logit link functions to parameters that have explicit bounds.</li>
+<li><code>None</code>: unless otherwise specified, the <code>"identity"</code> link functions will be
+used.
+The default value is <code>None</code>.</li>
+</ul>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>prior_settings</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>&#39;safe&#39;</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>An optional string literal that indicates the prior distributions to use for
+each parameter. Helpful for hierarchical models where sampling might get stuck/
+very slow. Can be one of the following:</p>
+<ul>
+<li><code>"safe"</code>: HSSM will scan all parameters in the model and apply safe priors to
+all parameters that do not have explicit bounds.</li>
+<li>None: HSSM will use bambi to provide default priors for all parameters. Not
+recommended when you are using hierarchical models.
+The default value is <code>"safe"</code>.</li>
+</ul>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>extra_namespace</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Additional user supplied variables with transformations or data to include in
+the environment where the formula is evaluated. Defaults to <code>None</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>missing_data</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Specifies whether the model should handle missing data. Can be a <code>bool</code> or a
+<code>float</code>. If <code>False</code>, and if the <code>rt</code> column contains in the data -999.0,
+the model will drop these rows and produce a warning. If <code>True</code>, the model will
+treat code -999.0 as missing data. If a <code>float</code> is provided, the model will
+treat this value as the missing data value. Defaults to <code>False</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>deadline</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Specifies whether the model should handle deadline data. Can be a <code>bool</code> or a
+<code>str</code>. If <code>False</code>, the model will not do nothing even if a deadline column is
+provided. If <code>True</code>, the model will treat the <code>deadline</code> column as deadline
+data. If a <code>str</code> is provided, the model will treat this value as the name of the
+deadline column. Defaults to <code>False</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>loglik_missing_data</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A likelihood function for missing data. Please see the <code>loglik</code> parameter to see
+how to specify the likelihood function this parameter. If nothing is provided,
+a default likelihood function will be used. This parameter is required only if
+either <code>missing_data</code> or <code>deadline</code> is not <code>False</code>. Defaults to <code>None</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>process_initvals</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If <code>True</code>, the model will process the initial values. Defaults to <code>True</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>initval_jitter</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code><span title="hssm.defaults.INITVAL_JITTER_SETTINGS">INITVAL_JITTER_SETTINGS</span>[&#39;jitter_epsilon&#39;]</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The jitter value for the initial values. Defaults to <code>0.01</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>**kwargs</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Additional arguments passed to the <code>bmb.Model</code> object.</p>
+          </div>
+        </li>
+    </ul>
+
+
+
+
+
+
+
+
+
+
+
+
+<p><span class="doc-section-title">Methods:</span></p>
+    <ul>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.sample" href="#hssm.HSSM.sample">sample</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Perform sampling using the <code>fit</code> method via bambi.Model.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.sample_posterior_predictive" href="#hssm.HSSM.sample_posterior_predictive">sample_posterior_predictive</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Perform posterior predictive sampling from the HSSM model.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.sample_prior_predictive" href="#hssm.HSSM.sample_prior_predictive">sample_prior_predictive</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Generate samples from the prior predictive distribution.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.vi" href="#hssm.HSSM.vi">vi</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Perform Variational Inference.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.find_MAP" href="#hssm.HSSM.find_MAP">find_MAP</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Perform Maximum A Posteriori estimation.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.log_likelihood" href="#hssm.HSSM.log_likelihood">log_likelihood</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Compute the log likelihood of the model.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.summary" href="#hssm.HSSM.summary">summary</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Produce a summary table with ArviZ but with additional convenience features.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.plot_trace" href="#hssm.HSSM.plot_trace">plot_trace</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Generate trace plot with ArviZ but with additional convenience features.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.graph" href="#hssm.HSSM.graph">graph</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Produce a graphviz Digraph from a built HSSM model.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.plot_predictive" href="#hssm.HSSM.plot_predictive">plot_predictive</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Produce a posterior predictive plot.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.plot_quantile_probability" href="#hssm.HSSM.plot_quantile_probability">plot_quantile_probability</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Produce a quantile probability plot.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.restore_traces" href="#hssm.HSSM.restore_traces">restore_traces</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Restore traces from an InferenceData object or a .netcdf file.</p>
+            </div>
+          </li>
+          <li class="doc-section-item field-body">
+            <b><code><a class="autorefs autorefs-internal" title="hssm.HSSM.initial_point" href="#hssm.HSSM.initial_point">initial_point</a></code></b>
+            –
+            <div class="doc-md-description">
+              <p>Compute the initial point of the model.</p>
+            </div>
+          </li>
+    </ul>
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.HSSM.traces" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">hssm.HSSM.traces</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.HSSM.traces" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">traces</span><span class="p">:</span> <span class="n">InferenceData</span> <span class="o">|</span> <span class="n">Approximation</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the trace of the model after sampling.</p>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/exceptions.html#ValueError">ValueError</a></code>
+            –
+          <div class="doc-md-description">
+            <p>If the model has not been sampled yet.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="arviz.InferenceData">InferenceData</span> | <span title="pymc.Approximation">Approximation</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The trace of the model after the last call to <code>sample()</code>.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="hssm.HSSM.pymc_model" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">hssm.HSSM.pymc_model</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#hssm.HSSM.pymc_model" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">pymc_model</span><span class="p">:</span> <span class="n">Model</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Provide access to the PyMC model.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="pymc.Model">Model</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The PyMC model built by bambi</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.sample" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.sample</span>
+
+
+<a href="#hssm.HSSM.sample" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">sample</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">sampler</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;mcmc&quot;</span><span class="p">,</span> <span class="s2">&quot;nuts_numpyro&quot;</span><span class="p">,</span> <span class="s2">&quot;nuts_blackjax&quot;</span><span class="p">,</span> <span class="s2">&quot;laplace&quot;</span><span class="p">,</span> <span class="s2">&quot;vi&quot;</span><span class="p">]</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">init</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">initvals</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">include_response_params</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">az</span><span class="o">.</span><span class="n">InferenceData</span> <span class="o">|</span> <span class="n">pm</span><span class="o">.</span><span class="n">Approximation</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Perform sampling using the <code>fit</code> method via bambi.Model.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>sampler</code></b>
+              (<code><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a>[&#39;mcmc&#39;, &#39;nuts_numpyro&#39;, &#39;nuts_blackjax&#39;, &#39;laplace&#39;, &#39;vi&#39;] | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The sampler to use. Can be one of "mcmc", "nuts_numpyro",
+"nuts_blackjax", "laplace", or "vi". If using <code>blackbox</code> likelihoods,
+this cannot be "nuts_numpyro" or "nuts_blackjax". By default it is None, and
+sampler will automatically be chosen: when the model uses the
+<code>approx_differentiable</code> likelihood, and <code>jax</code> backend, "nuts_numpyro" will
+be used. Otherwise, "mcmc" (the default PyMC NUTS sampler) will be used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>init</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Initialization method to use for the sampler. If any of the NUTS samplers
+is used, defaults to <code>"adapt_diag"</code>. Otherwise, defaults to <code>"auto"</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>initvals</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Pass initial values to the sampler. This can be a dictionary of initial
+values for parameters of the model, or a string "map" to use initialization
+at the MAP estimate. If "map" is used, the MAP estimate will be computed if
+not already attached to the base class from prior call to 'find_MAP`.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>include_response_params</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Include parameters of the response distribution in the output. These usually
+take more space than other parameters as there's one of them per
+observation. Defaults to False.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>kwargs</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Other arguments passed to bmb.Model.fit(). Please see [here]
+(https://bambinos.github.io/bambi/api_reference.html#bambi.models.Model.fit)
+for full documentation.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="arviz.InferenceData">InferenceData</span> | <span title="pymc.Approximation">Approximation</span></code>
+          –
+          <div class="doc-md-description">
+            <p>A reference to the <code>model.traces</code> object, which stores the traces of the
+last call to <code>model.sample()</code>. <code>model.traces</code> is an ArviZ <code>InferenceData</code>
+instance if <code>sampler</code> is <code>"mcmc"</code> (default), <code>"nuts_numpyro"</code>,
+<code>"nuts_blackjax"</code> or "<code>laplace"</code>, or an <code>Approximation</code> object if <code>"vi"</code>.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.sample_posterior_predictive" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.sample_posterior_predictive</span>
+
+
+<a href="#hssm.HSSM.sample_posterior_predictive" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">sample_posterior_predictive</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">idata</span><span class="p">:</span> <span class="n">InferenceData</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">data</span><span class="p">:</span> <span class="n">DataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">inplace</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">include_group_specific</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">kind</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="s2">&quot;response_params&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">draws</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">safe_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">az</span><span class="o">.</span><span class="n">InferenceData</span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Perform posterior predictive sampling from the HSSM model.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>idata</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The <code>InferenceData</code> object returned by <code>HSSM.sample()</code>. If not provided,
+the <code>InferenceData</code> from the last time <code>sample()</code> is called will be used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>data</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>An optional data frame with values for the predictors that are used to
+obtain out-of-sample predictions. If omitted, the original dataset is used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>inplace</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If <code>True</code> will modify idata in-place and append a <code>posterior_predictive</code>
+group to <code>idata</code>. Otherwise, it will return a copy of idata with the
+predictions added, by default True.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>include_group_specific</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If <code>True</code> will make predictions including the group specific effects.
+Otherwise, predictions are made with common effects only (i.e. group-
+specific are set to zero), by default True.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>kind</code></b>
+              (<code><a class="autorefs autorefs-external" title="typing.Literal" href="https://docs.python.org/3/library/typing.html#typing.Literal">Literal</a>[&#39;response&#39;, &#39;response_params&#39;]</code>, default:
+                  <code>&#39;response&#39;</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Indicates the type of prediction required. Can be <code>"response_params"</code> or
+<code>"response"</code>. The first returns draws from the posterior distribution of the
+likelihood parameters, while the latter returns the draws from the posterior
+predictive distribution (i.e. the posterior probability distribution for a
+new observation) in addition to the posterior distribution. Defaults to
+"response_params".</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>draws</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#float">float</a> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a>[<a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a>] | <span title="numpy.ndarray">ndarray</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The number of samples to draw from the posterior predictive distribution
+from each chain.
+When it's an integer &gt;= 1, the number of samples to be extracted from the
+<code>draw</code> dimension. If this integer is larger than the number of posterior
+samples in each chain, all posterior samples will be used
+in posterior predictive sampling. When a float between 0 and 1, the
+proportion of samples from the draw dimension from each chain to be used in
+posterior predictive sampling.. If this proportion is very
+small, at least one sample will be used. When None, all posterior samples
+will be used. Defaults to None.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>safe_mode</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If True, the function will split the draws into chunks of 10 to avoid memory
+issues. Defaults to True.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/exceptions.html#ValueError">ValueError</a></code>
+            –
+          <div class="doc-md-description">
+            <p>If the model has not been sampled yet and idata is not provided.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="arviz.InferenceData">InferenceData</span> | None</code>
+          –
+          <div class="doc-md-description">
+            <p>InferenceData or None</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.sample_prior_predictive" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.sample_prior_predictive</span>
+
+
+<a href="#hssm.HSSM.sample_prior_predictive" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">sample_prior_predictive</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">draws</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">500</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">var_names</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">omit_offsets</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">random_seed</span><span class="p">:</span> <span class="n">Generator</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">az</span><span class="o">.</span><span class="n">InferenceData</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Generate samples from the prior predictive distribution.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>draws</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></code>, default:
+                  <code>500</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Number of draws to sample from the prior predictive distribution. Defaults
+to 500.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>var_names</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#list">list</a>[<a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a>] | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A list of names of variables for which to compute the prior predictive
+distribution. Defaults to <code>None</code> which means both observed and unobserved
+RVs.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>omit_offsets</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Whether to omit offset terms. Defaults to <code>True</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>random_seed</code></b>
+              (<code><span title="numpy.random.Generator">Generator</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Seed for the random number generator.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="arviz.InferenceData">InferenceData</span></code>
+          –
+          <div class="doc-md-description">
+            <p><code>InferenceData</code> object with the groups <code>prior</code>, <code>prior_predictive</code> and
+<code>observed_data</code>.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.vi" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.vi</span>
+
+
+<a href="#hssm.HSSM.vi" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">vi</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;advi&quot;</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">niter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">draws</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">return_idata</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">ignore_mcmc_start_point_defaults</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="o">**</span><span class="n">vi_kwargs</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pm</span><span class="o">.</span><span class="n">Approximation</span> <span class="o">|</span> <span class="n">az</span><span class="o">.</span><span class="n">InferenceData</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Perform Variational Inference.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>niter</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></code>, default:
+                  <code>10000</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The number of iterations to run the VI algorithm. Defaults to 3000.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>method</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a></code>, default:
+                  <code>&#39;advi&#39;</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The method to use for VI. Can be one of "advi" or "fullrank_advi", "svgd",
+"asvgd".Defaults to "advi".</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>draws</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#int">int</a></code>, default:
+                  <code>1000</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The number of samples to draw from the posterior distribution.
+Defaults to 1000.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>return_idata</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If True, returns an InferenceData object. Otherwise, returns the
+approximation object directly. Defaults to True.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code>    pm.Approximation or az.InferenceData: The mean field approximation object.</code>
+          –
+          <div class="doc-md-description">
+            
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.find_MAP" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.find_MAP</span>
+
+
+<a href="#hssm.HSSM.find_MAP" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">find_MAP</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Perform Maximum A Posteriori estimation.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A dictionary containing the MAP estimates of the model parameters.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.log_likelihood" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.log_likelihood</span>
+
+
+<a href="#hssm.HSSM.log_likelihood" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">log_likelihood</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">idata</span><span class="p">:</span> <span class="n">InferenceData</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">data</span><span class="p">:</span> <span class="n">DataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">inplace</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">keep_likelihood_params</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">az</span><span class="o">.</span><span class="n">InferenceData</span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Compute the log likelihood of the model.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>idata</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>The <code>InferenceData</code> object returned by <code>HSSM.sample()</code>. If not provided,</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>data</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>A pandas DataFrame with values for the predictors that are used to obtain
+out-of-sample predictions. If omitted, the original dataset is used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>inplace</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If <code>True</code> will modify idata in-place and append a <code>log_likelihood</code> group to
+<code>idata</code>. Otherwise, it will return a copy of idata with the predictions
+added, by default True.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>keep_likelihood_params</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If <code>True</code>, the trial wise likelihood parameters that are computed
+on route to getting the log likelihood are kept in the <code>idata</code> object.
+Defaults to False. See also the method <code>add_likelihood_parameters_to_idata</code>.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="arviz.InferenceData">InferenceData</span> | None</code>
+          –
+          <div class="doc-md-description">
+            <p>InferenceData or None</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.summary" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.summary</span>
+
+
+<a href="#hssm.HSSM.summary" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">summary</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">data</span><span class="p">:</span> <span class="n">InferenceData</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">include_deterministic</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span> <span class="o">|</span> <span class="n">xr</span><span class="o">.</span><span class="n">Dataset</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Produce a summary table with ArviZ but with additional convenience features.</p>
+<p>This is a simple wrapper for the az.summary() function. By default, it
+filters out the deterministic values from the plot. Please see the
+[arviz documentation]
+(https://arviz-devs.github.io/arviz/api/generated/arviz.summary.html)
+for additional parameters that can be specified.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>data</code></b>
+              (<code><span title="arviz.InferenceData">InferenceData</span> | None</code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>An ArviZ InferenceData object. If None, the traces stored in the model will
+be used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>include_deterministic</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Whether to include deterministic variables in the plot. Defaults to False.
+Note that if include_deterministic is set to False and and <code>var_names</code> is
+provided, the <code>var_names</code> provided will be modified to also exclude the
+deterministic values. If this is not desirable, set
+<code>include_deterministic</code> to True.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="pandas.DataFrame">DataFrame</span> | <span title="xarray.Dataset">Dataset</span></code>
+          –
+          <div class="doc-md-description">
+            <p>A pandas DataFrame or xarray Dataset containing the summary statistics.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.plot_trace" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.plot_trace</span>
+
+
+<a href="#hssm.HSSM.plot_trace" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">plot_trace</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">data</span><span class="p">:</span> <span class="n">InferenceData</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">include_deterministic</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">tight_layout</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Generate trace plot with ArviZ but with additional convenience features.</p>
+<p>This is a simple wrapper for the az.plot_trace() function. By default, it
+filters out the deterministic values from the plot. Please see the
+[arviz documentation]
+(https://arviz-devs.github.io/arviz/api/generated/arviz.plot_trace.html)
+for additional parameters that can be specified.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>data</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>None</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>An ArviZ InferenceData object. If None, the traces stored in the model will
+be used.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>include_deterministic</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Whether to include deterministic variables in the plot. Defaults to False.
+Note that if include deterministic is set to False and and <code>var_names</code> is
+provided, the <code>var_names</code> provided will be modified to also exclude the
+deterministic values. If this is not desirable, set
+<code>include deterministic</code> to True.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>tight_layout</code></b>
+              (<code><span title="optional">optional</span></code>, default:
+                  <code>True</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>Whether to call plt.tight_layout() after plotting. Defaults to True.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.graph" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.graph</span>
+
+
+<a href="#hssm.HSSM.graph" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">graph</span><span class="p">(</span><span class="n">formatting</span><span class="o">=</span><span class="s1">&#39;plain&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">fmt</span><span class="o">=</span><span class="s1">&#39;png&#39;</span><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Produce a graphviz Digraph from a built HSSM model.</p>
+<p>Requires graphviz, which may be installed most easily with <code>conda install -c
+conda-forge python-graphviz</code>. Alternatively, you may install the <code>graphviz</code>
+binaries yourself, and then <code>pip install graphviz</code> to get the python bindings.
+See http://graphviz.readthedocs.io/en/stable/manual.html for more information.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>formatting</code></b>
+          –
+          <div class="doc-md-description">
+            <p>One of <code>"plain"</code> or <code>"plain_with_params"</code>. Defaults to <code>"plain"</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>name</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Name of the figure to save. Defaults to <code>None</code>, no figure is saved.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>figsize</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Maximum width and height of figure in inches. Defaults to <code>None</code>, the
+figure size is set automatically. If defined and the drawing is larger than
+the given size, the drawing is uniformly scaled down so that it fits within
+the given size.  Only works if <code>name</code> is not <code>None</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>dpi</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Point per inch of the figure to save.
+Defaults to 300. Only works if <code>name</code> is not <code>None</code>.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>fmt</code></b>
+          –
+          <div class="doc-md-description">
+            <p>Format of the figure to save.
+Defaults to <code>"png"</code>. Only works if <code>name</code> is not <code>None</code>.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="graphviz.Graph">Graph</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The graph</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.plot_predictive" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.plot_predictive</span>
+
+
+<a href="#hssm.HSSM.plot_predictive" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">plot_predictive</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">mpl</span><span class="o">.</span><span class="n">axes</span><span class="o">.</span><span class="n">Axes</span> <span class="o">|</span> <span class="n">sns</span><span class="o">.</span><span class="n">FacetGrid</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Produce a posterior predictive plot.</p>
+<p>Equivalent to calling <code>hssm.plotting.plot_predictive()</code> with the
+model. Please see that function for
+<a class="autorefs autorefs-internal" title="hssm.plotting.plot_predictive" href="../plotting/#hssm.plotting.plot_predictive">full documentation</a>.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="matplotlib.axes.Axes">Axes</span> | <span title="seaborn.FacetGrid">FacetGrid</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The matplotlib axis or seaborn FacetGrid object containing the plot.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.plot_quantile_probability" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.plot_quantile_probability</span>
+
+
+<a href="#hssm.HSSM.plot_quantile_probability" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">plot_quantile_probability</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">mpl</span><span class="o">.</span><span class="n">axes</span><span class="o">.</span><span class="n">Axes</span> <span class="o">|</span> <span class="n">sns</span><span class="o">.</span><span class="n">FacetGrid</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Produce a quantile probability plot.</p>
+<p>Equivalent to calling <code>hssm.plotting.plot_quantile_probability()</code> with the
+model. Please see that function for
+<a class="autorefs autorefs-internal" title="hssm.plotting.plot_quantile_probability" href="../plotting/#hssm.plotting.plot_quantile_probability">full documentation</a>.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="matplotlib.axes.Axes">Axes</span> | <span title="seaborn.FacetGrid">FacetGrid</span></code>
+          –
+          <div class="doc-md-description">
+            <p>The matplotlib axis or seaborn FacetGrid object containing the plot.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.restore_traces" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.restore_traces</span>
+
+
+<a href="#hssm.HSSM.restore_traces" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">restore_traces</span><span class="p">(</span><span class="n">traces</span><span class="p">:</span> <span class="n">InferenceData</span> <span class="o">|</span> <span class="n">Approximation</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">PathLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Restore traces from an InferenceData object or a .netcdf file.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>traces</code></b>
+              (<code><span title="arviz.InferenceData">InferenceData</span> | <span title="pymc.Approximation">Approximation</span> | <a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#str">str</a> | <a class="autorefs autorefs-external" title="os.PathLike" href="https://docs.python.org/3/library/os.html#os.PathLike">PathLike</a></code>)
+          –
+          <div class="doc-md-description">
+            <p>An InferenceData object or a path to a file containing the traces.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="hssm.HSSM.initial_point" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">hssm.HSSM.initial_point</span>
+
+
+<a href="#hssm.HSSM.initial_point" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">initial_point</span><span class="p">(</span><span class="n">transformed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Compute the initial point of the model.</p>
+<p>This is a slightly altered version of pm.initial_point.initial_point().</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>transformed</code></b>
+              (<code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/functions.html#bool">bool</a></code>, default:
+                  <code>False</code>
+)
+          –
+          <div class="doc-md-description">
+            <p>If True, return the initial point in transformed space.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-external" href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></code>
+          –
+          <div class="doc-md-description">
+            <p>A dictionary containing the initial point of the model parameters.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+
+<style>
+  pre {
+    font-size: 0.7rem;
+  }
+
+  .jp-OutputArea-executeResult pre {
+    font-size: 0.7rem;
+  }
+
+  .jp-xr-text-repr-fallback pre {
+    font-size: 0.7rem;
+  }
+
+  .xr-sections {
+    font-size: 0.7rem;
+  }
+
+  div .jp-RenderedText {
+    font-size: 0.7rem !important;
+  }
+
+  .jupyter-wrapper .jp-RenderedText pre {
+    font-size: 0.7rem !important;
+  }
+</style>
+
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.path", "navigation.top", "content.code.copy", "content.action.view", "content.action.edit", "header.autohide", "announce.dismiss"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
