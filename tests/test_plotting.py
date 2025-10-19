@@ -398,3 +398,32 @@ def test_plot_quantile_probability(cav_idata, cavanagh_test, predictive_style):
         predictive_style=predictive_style,
     )
     assert len(plots) == 2
+
+
+def test_plot_quantile_probability_no_predictive(cavanagh_test):
+    """Test plot_quantile_probability with only observed data (no predictive samples)."""
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        include=[
+            {
+                "name": "v",
+                "prior": {
+                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
+                },
+                "formula": "v ~ 1",
+                "link": "identity",
+            },
+        ],
+    )
+
+    # Plot with predictive_group=None to show only observed data
+    ax = plot_quantile_probability(
+        model,
+        cond="stim",
+        data=cavanagh_test,
+        predictive_group=None,  # This triggers the else branch at line 598
+    )
+
+    assert ax is not None
+    # Should only have lines for observed data, no predictive samples
+    # The exact number depends on how many quantiles and conditions there are

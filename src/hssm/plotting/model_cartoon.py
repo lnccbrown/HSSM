@@ -544,9 +544,6 @@ def plot_model_cartoon(
                 )
             )
 
-            if hasattr(idata_mean, "prior_predictive"):
-                del idata_mean["prior_predictive"]
-
             idata_mean.add_groups(prior_predictive=idata_mean_tmp.posterior_predictive)
 
         # # Get the plotting dataframe by chain and sample
