@@ -112,9 +112,6 @@ def _plot_model_cartoon_1D(
     elif plot_samples and (not plot_mean):
         data_observed = data.loc[is_predictive_samples & is_observed, :]
 
-    if plot_data and data_observed is None:
-        raise ValueError("No data to plot. Please set plot_data=False or provide data.")
-
     data_predictive = data.loc[is_predictive_samples & is_predicted, :]
 
     plot_function: PlotFunctionProtocol | None = None

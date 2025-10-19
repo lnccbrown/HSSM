@@ -145,7 +145,7 @@ def _plot_quantile_probability_1D(
     ylabel: str | None = None,
     xticklabels: Iterable["str"] | None = None,
     data_kwargs: dict[str, Any] | None = None,
-    pps_kwargs: dict[str, Any] | None = None,
+    predictive_samples_kwargs: dict[str, Any] | None = None,
     ellipse_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ) -> mpl.axes.Axes:
@@ -209,22 +209,24 @@ def _plot_quantile_probability_1D(
 
         # Plot points if requested
         if plot_points:
-            if pps_kwargs is None:
-                pps_kwargs = kwargs.copy()
+            if predictive_samples_kwargs is None:
+                predictive_samples_kwargs = kwargs.copy()
 
-            pps_kwargs_default = {
+            predictive_samples_kwargs_default = {
                 "marker": "o",
                 "alpha": 0.3,
             }
 
-            pps_kwargs = pps_kwargs_default | pps_kwargs
+            predictive_samples_kwargs = (
+                predictive_samples_kwargs_default | predictive_samples_kwargs
+            )
             ax = sns.scatterplot(
                 data=df_predictive,
                 x=x,
                 y=y,
                 hue=hue,
                 ax=ax,
-                **pps_kwargs,
+                **predictive_samples_kwargs,
             )
 
         # Plot ellipses if requested
@@ -360,7 +362,7 @@ def _plot_quantile_probability_2D(
     xticklabels: Iterable["str"] | None = None,
     grid_kwargs: dict[str, Any] | None = None,
     data_kwargs: dict[str, Any] | None = None,
-    pps_kwargs: dict[str, Any] | None = None,
+    predictive_samples_kwargs: dict[str, Any] | None = None,
     ellipse_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ) -> sns.FacetGrid:
@@ -398,7 +400,7 @@ def _plot_quantile_probability_2D(
         ylabel=ylabel,
         xticklabels=xticklabels,
         data_kwargs=data_kwargs,
-        pps_kwargs=pps_kwargs,
+        predictive_samples_kwargs=predictive_samples_kwargs,
         ellipse_kwargs=ellipse_kwargs,
         **kwargs,
     )
@@ -447,7 +449,7 @@ def plot_quantile_probability(
     xticklabels: Iterable["str"] | None = None,
     grid_kwargs: dict[str, Any] | None = None,
     data_kwargs: dict[str, Any] | None = None,
-    pps_kwargs: dict[str, Any] | None = None,
+    predictive_samples_kwargs: dict[str, Any] | None = None,
     ellipse_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ) -> sns.FacetGrid:
@@ -545,7 +547,7 @@ def plot_quantile_probability(
         Keyword arguments passed to seaborn.FacetGrid.
     data_kwargs : optional
         Keyword arguments passed to seaborn.lineplot.
-    pps_kwargs : optional
+    predictive_samples_kwargs : optional
         Keyword arguments passed to seaborn.scatterplot.
     ellipse_kwargs : optional
         Keyword arguments passed to matplotlib.patches.Ellipse. Useful for customizing
@@ -630,7 +632,7 @@ def plot_quantile_probability(
             ylabel=ylabel,
             xticklabels=xticklabels,
             data_kwargs=data_kwargs,
-            pps_kwargs=pps_kwargs,
+            predictive_samples_kwargs=predictive_samples_kwargs,
             ellipse_kwargs=ellipse_kwargs,
             **kwargs,
         )
@@ -660,7 +662,7 @@ def plot_quantile_probability(
             xticklabels=xticklabels,
             grid_kwargs=grid_kwargs,
             data_kwargs=data_kwargs,
-            pps_kwargs=pps_kwargs,
+            predictive_samples_kwargs=predictive_samples_kwargs,
             ellipse_kwargs=ellipse_kwargs,
             **kwargs,
         )
@@ -701,7 +703,7 @@ def plot_quantile_probability(
             xticklabels=xticklabels,
             grid_kwargs=grid_kwargs,
             data_kwargs=data_kwargs,
-            pps_kwargs=pps_kwargs,
+            predictive_samples_kwargs=predictive_samples_kwargs,
             ellipse_kwargs=ellipse_kwargs,
             **kwargs,
         )
