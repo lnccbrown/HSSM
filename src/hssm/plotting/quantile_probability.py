@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.patches import Ellipse
+from scipy.stats import chi2
 
 from .utils import (
     _check_groups_and_groups_order,
@@ -23,6 +25,108 @@ from .utils import (
 _logger = logging.getLogger("hssm")
 
 
+def _confidence_to_n_std(confidence: float, n_dim: int = 2) -> float:
+    """
+    Convert confidence level to number of standard deviations for an ellipse.
+
+    For a bivariate Gaussian, the ellipse at n_std standard deviations
+    contains a certain percentage of the probability mass.
+
+    Parameters
+    ----------
+    confidence : float
+        Confidence level between 0 and 1 (e.g., 0.95 for 95%)
+    n_dim : int, default=2
+        Number of dimensions (default: 2 for bivariate)
+
+    Returns
+    -------
+    float
+        Number of standard deviations
+
+    Notes
+    -----
+    The relationship is n_std = sqrt(chi2.ppf(confidence, df=n_dim))
+    """
+    if not 0 < confidence < 1:
+        raise ValueError(f"Confidence must be between 0 and 1, got {confidence}")
+
+    chi2_val = chi2.ppf(confidence, df=n_dim)
+    n_std = np.sqrt(chi2_val)
+
+    return n_std
+
+
+def _compute_ellipse_params(
+    df_group: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    confidence: float = 0.95,
+) -> dict[str, Any] | None:
+    """
+    Compute ellipse parameters from a group of points.
+
+    Parameters
+    ----------
+    df_group : pd.DataFrame
+        Group of points (single quantile + condition combo)
+    x_col : str
+        Column name for x values (proportion)
+    y_col : str
+        Column name for y values (rt)
+    confidence : float, default=0.95
+        Confidence level for ellipse
+
+    Returns
+    -------
+    dict or None
+        Dictionary with 'center', 'width', 'height', 'angle', 'n_points'
+        or None if insufficient data
+    """
+    # Need at least 3 points to compute covariance
+    if len(df_group) < 3:
+        return None
+
+    # Extract points
+    points = df_group[[x_col, y_col]].values
+
+    # Compute mean and covariance
+    mean = points.mean(axis=0)
+    cov = np.cov(points.T)
+
+    # Stabilize covariance matrix by adding a small constant to the diagonal
+    # and symmetrizing the matrix
+    cov = (cov + cov.T) / 2 + 1e-10 * np.eye(cov.shape[0])
+    eigenvalues, eigenvectors = np.linalg.eigh(cov)
+
+    # if np.any(eigenvalues <= 0):
+    #     return None
+
+    # Compute ellipse parameters
+    n_std = _confidence_to_n_std(confidence)
+    angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
+    width, height = 2 * n_std * np.sqrt(eigenvalues)
+
+    _logger.debug(
+        "Ellipse parameters: len(df_group)=%d, "
+        "mean=%s, width=%f, height=%f, angle=%f, n_points=%d",
+        len(df_group),
+        mean,
+        width,
+        height,
+        angle,
+        len(df_group),
+    )
+
+    return {
+        "center": mean,
+        "width": width,
+        "height": height,
+        "angle": angle,
+        "n_points": len(df_group),
+    }
+
+
 def _plot_quantile_probability_1D(
     data: pd.DataFrame,
     cond: str,
@@ -30,6 +134,9 @@ def _plot_quantile_probability_1D(
     y: str = "rt",
     hue: str = "quantile",
     plot_predictive: bool = True,
+    predictive_style: Literal["points", "ellipse", "both"] = "points",
+    ellipse_confidence: float = 0.95,
+    ellipse_min_points: int = 5,
     correct: str | None = None,
     q: int | Iterable[float] = 5,
     title: str | None = "Quantile Probability Plot",
@@ -37,13 +144,36 @@ def _plot_quantile_probability_1D(
     ylabel: str | None = None,
     xticklabels: Iterable["str"] | None = None,
     data_kwargs: dict[str, Any] | None = None,
-    pps_kwargs: dict[str, Any] | None = None,
+    predictive_samples_kwargs: dict[str, Any] | None = None,
+    ellipse_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ) -> mpl.axes.Axes:
     """Produce one quantile probability plot.
 
     Used internally by the functions below to produce the plot.
     See the functions below for docstrings.
+
+    Parameters
+    ----------
+    predictive_style : {'points', 'ellipse', 'both'}
+        How to plot posterior predictive samples:
+        - 'points': Traditional scatter plot (default)
+        - 'ellipse': Confidence ellipses for each quantile+condition group
+        - 'both': Both points and ellipses
+    ellipse_confidence : float, default=0.95
+        Confidence level for ellipses (0 to 1)
+    ellipse_min_points : int, default=5
+        Minimum number of points required to draw an ellipse
+    ellipse_kwargs : dict, optional
+        Additional kwargs for ellipse patches (facecolor, edgecolor, alpha, etc.)
+
+    Notes
+    -----
+    Ellipses show the bivariate confidence region for the (proportion, rt)
+    pairs within each quantile+condition group. This is useful for:
+    - Visualizing uncertainty more compactly than point clouds
+    - Showing correlation structure in the predictions
+    - Reducing visual clutter with many posterior samples
     """
     plot_data = _process_df_for_qp_plot(data, q, cond, correct)
     df_data = plot_data.loc[plot_data["observed"] == "observed", :]
@@ -59,6 +189,7 @@ def _plot_quantile_probability_1D(
 
     data_kwargs = data_kwargs_default | data_kwargs
 
+    # Plot observed data (always as line plot)
     ax = sns.lineplot(
         data=df_data,
         x=x,
@@ -71,23 +202,120 @@ def _plot_quantile_probability_1D(
     if plot_predictive:
         df_predictive = plot_data.loc[plot_data["observed"] == "predicted", :]
 
-        if pps_kwargs is None:
-            pps_kwargs = kwargs.copy()
+        # Determine if we need to plot points, ellipses, or both
+        plot_points = predictive_style in ["points", "both"]
+        plot_ellipses = predictive_style in ["ellipse", "both"]
 
-        pps_kwargs_default = {
-            "marker": "o",
-            "alpha": 0.3,
-        }
+        # Plot points if requested
+        if plot_points:
+            if predictive_samples_kwargs is None:
+                predictive_samples_kwargs = kwargs.copy()
 
-        pps_kwargs = pps_kwargs_default | pps_kwargs
-        ax = sns.scatterplot(
-            data=df_predictive,
-            x=x,
-            y=y,
-            hue="quantile",
-            ax=ax,
-            **pps_kwargs,
-        )
+            predictive_samples_kwargs_default = {
+                "marker": "o",
+                "alpha": 0.3,
+            }
+
+            predictive_samples_kwargs = (
+                predictive_samples_kwargs_default | predictive_samples_kwargs
+            )
+            ax = sns.scatterplot(
+                data=df_predictive,
+                x=x,
+                y=y,
+                hue=hue,
+                ax=ax,
+                **predictive_samples_kwargs,
+            )
+
+        # Plot ellipses if requested
+        if plot_ellipses:
+            if ellipse_kwargs is None:
+                ellipse_kwargs = {}
+
+            ellipse_kwargs_default = {
+                "facecolor": "none",
+                "linewidth": 1.5,
+                "alpha": 0.6,
+            }
+            ellipse_kwargs = ellipse_kwargs_default | ellipse_kwargs
+
+            # Get unique quantiles, conditions, and x-values
+            quantiles = df_predictive[hue].unique()
+            conditions = df_predictive[cond].unique()
+            correct_vals = df_predictive["is_correct"].unique()
+
+            # Get the color mapping from the current plot
+            # The line plot has already been created, so we can extract colors from it
+            handles, labels = ax.get_legend_handles_labels()
+            color_map = {
+                label: handle.get_color() for handle, label in zip(handles, labels)
+            }
+
+            # Group by quantile, condition, and x-value
+            for quantile in quantiles:
+                # Get color for this quantile from the existing plot
+                quantile_color = color_map.get(str(quantile), None)
+                if quantile_color is None:  # pragma: no cover
+                    _logger.warning(
+                        "Could not find color for quantile=%s in legend", quantile
+                    )
+                    continue
+
+                for cond_val in conditions:
+                    for correct_val in correct_vals:
+                        # Filter data for this specific point
+                        # (quantile, condition, x-value)
+                        mask = (
+                            (df_predictive[hue] == quantile)
+                            & (df_predictive[cond] == cond_val)
+                            & (df_predictive["is_correct"] == correct_val)
+                        )
+
+                        df_group = df_predictive[mask]
+
+                        # Skip if insufficient points
+                        if len(df_group) < ellipse_min_points:
+                            _logger.debug(
+                                "Skipping ellipse for quantile=%s, %s=%s, %s=%s: "
+                                "only %d points (need %d)",
+                                quantile,
+                                cond,
+                                cond_val,
+                                x,
+                                correct_val,
+                                len(df_group),
+                                ellipse_min_points,
+                            )
+                            continue
+
+                        # Compute ellipse parameters
+                        ellipse_params = _compute_ellipse_params(
+                            df_group, x, y, confidence=ellipse_confidence
+                        )
+
+                        if ellipse_params is None:  # pragma: no cover
+                            _logger.warning(
+                                "Could not compute ellipse for quantile=%s, "
+                                "%s=%s, %s=%s (singular covariance)",
+                                quantile,
+                                cond,
+                                cond_val,
+                                x,
+                                correct_val,
+                            )
+                            continue
+
+                        # Create ellipse patch with quantile color
+                        ellipse = Ellipse(
+                            xy=ellipse_params["center"],
+                            width=ellipse_params["width"],
+                            height=ellipse_params["height"],
+                            angle=ellipse_params["angle"],
+                            edgecolor=quantile_color,
+                            **ellipse_kwargs,
+                        )
+                        ax.add_patch(ellipse)
 
     ticks_and_labels = (
         df_data.groupby(x, observed=True)[cond].first().reset_index(x, drop=False)
@@ -122,6 +350,9 @@ def _plot_quantile_probability_2D(
     col: str | None = None,
     col_wrap: int | None = None,
     plot_predictive: bool = True,
+    predictive_style: Literal["points", "ellipse", "both"] = "points",
+    ellipse_confidence: float = 0.95,
+    ellipse_min_points: int = 5,
     correct: str | None = None,
     q: int | Iterable[float] = 5,
     title: str | None = "Quantile Probability Plot",
@@ -130,7 +361,8 @@ def _plot_quantile_probability_2D(
     xticklabels: Iterable["str"] | None = None,
     grid_kwargs: dict[str, Any] | None = None,
     data_kwargs: dict[str, Any] | None = None,
-    pps_kwargs: dict[str, Any] | None = None,
+    predictive_samples_kwargs: dict[str, Any] | None = None,
+    ellipse_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ) -> sns.FacetGrid:
     """Plot the quantile probabilities against the observed data.
@@ -157,6 +389,9 @@ def _plot_quantile_probability_2D(
         cond=cond,
         hue=hue,
         plot_predictive=plot_predictive,
+        predictive_style=predictive_style,
+        ellipse_confidence=ellipse_confidence,
+        ellipse_min_points=ellipse_min_points,
         correct=correct,
         q=q,
         title=None,
@@ -164,7 +399,8 @@ def _plot_quantile_probability_2D(
         ylabel=ylabel,
         xticklabels=xticklabels,
         data_kwargs=data_kwargs,
-        pps_kwargs=pps_kwargs,
+        predictive_samples_kwargs=predictive_samples_kwargs,
+        ellipse_kwargs=ellipse_kwargs,
         **kwargs,
     )
 
@@ -201,6 +437,9 @@ def plot_quantile_probability(
     col_wrap: int | None = None,
     groups: str | Iterable[str] | None = None,
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
+    predictive_style: Literal["points", "ellipse", "both"] = "points",
+    ellipse_confidence: float = 0.95,
+    ellipse_min_points: int = 5,
     correct: str | None = None,
     q: int | Iterable[float] = 5,
     title: str | None = "Quantile Probability Plot",
@@ -209,7 +448,8 @@ def plot_quantile_probability(
     xticklabels: Iterable["str"] | None = None,
     grid_kwargs: dict[str, Any] | None = None,
     data_kwargs: dict[str, Any] | None = None,
-    pps_kwargs: dict[str, Any] | None = None,
+    predictive_samples_kwargs: dict[str, Any] | None = None,
+    ellipse_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ) -> sns.FacetGrid:
     """Plot the quantile probabilities against the observed data.
@@ -271,6 +511,19 @@ def plot_quantile_probability(
         order in which the groups appear in the data. Only when `groups` is a string,
         this can be an iterable of strings. Otherwise, this is a dictionary mapping the
         dimension name to the order of the groups in that dimension.
+    predictive_style : {'points', 'ellipse', 'both'}, default='points'
+        How to plot posterior predictive samples:
+        - 'points': Traditional scatter plot (default)
+        - 'ellipse': Confidence ellipses for each quantile+condition group
+        - 'both': Both points and ellipses
+    ellipse_confidence : float, default=0.95
+        Confidence level for ellipses (0 to 1). Only used when predictive_style is
+        'ellipse' or 'both'. For example, 0.95 creates ellipses that
+        contain approximately 95% of the probability mass for
+        each quantile+condition group.
+    ellipse_min_points : int, default=5
+        Minimum number of points required to draw an ellipse. Groups with fewer points
+        will be skipped with a debug warning.
     correct : optional
         The column in `data` that indicates the correct responses. If None, `response`
         column from `data` indicates whether the response is correct or not. By default
@@ -293,8 +546,11 @@ def plot_quantile_probability(
         Keyword arguments passed to seaborn.FacetGrid.
     data_kwargs : optional
         Keyword arguments passed to seaborn.lineplot.
-    pps_kwargs : optional
+    predictive_samples_kwargs : optional
         Keyword arguments passed to seaborn.scatterplot.
+    ellipse_kwargs : optional
+        Keyword arguments passed to matplotlib.patches.Ellipse. Useful for customizing
+        ellipse appearance (e.g., facecolor, edgecolor, alpha, linewidth).
     kwargs : optional
         Keyword arguments passed to both seaborn.lineplot and seaborn.scatterplot.
 
@@ -365,6 +621,9 @@ def plot_quantile_probability(
             y=y,
             hue=hue,
             plot_predictive=predictive_group is not None,
+            predictive_style=predictive_style,
+            ellipse_confidence=ellipse_confidence,
+            ellipse_min_points=ellipse_min_points,
             correct=correct,
             q=q,
             title=title,
@@ -372,7 +631,8 @@ def plot_quantile_probability(
             ylabel=ylabel,
             xticklabels=xticklabels,
             data_kwargs=data_kwargs,
-            pps_kwargs=pps_kwargs,
+            predictive_samples_kwargs=predictive_samples_kwargs,
+            ellipse_kwargs=ellipse_kwargs,
             **kwargs,
         )
 
@@ -390,6 +650,9 @@ def plot_quantile_probability(
             col=col,
             col_wrap=col_wrap,
             plot_predictive=predictive_group is not None,
+            predictive_style=predictive_style,
+            ellipse_confidence=ellipse_confidence,
+            ellipse_min_points=ellipse_min_points,
             correct=correct,
             q=q,
             title=title,
@@ -398,7 +661,8 @@ def plot_quantile_probability(
             xticklabels=xticklabels,
             grid_kwargs=grid_kwargs,
             data_kwargs=data_kwargs,
-            pps_kwargs=pps_kwargs,
+            predictive_samples_kwargs=predictive_samples_kwargs,
+            ellipse_kwargs=ellipse_kwargs,
             **kwargs,
         )
 
@@ -427,6 +691,9 @@ def plot_quantile_probability(
             col=col,
             col_wrap=col_wrap,
             plot_predictive=predictive_group is not None,
+            predictive_style=predictive_style,
+            ellipse_confidence=ellipse_confidence,
+            ellipse_min_points=ellipse_min_points,
             correct=correct,
             q=q,
             title=title,
@@ -435,7 +702,8 @@ def plot_quantile_probability(
             xticklabels=xticklabels,
             grid_kwargs=grid_kwargs,
             data_kwargs=data_kwargs,
-            pps_kwargs=pps_kwargs,
+            predictive_samples_kwargs=predictive_samples_kwargs,
+            ellipse_kwargs=ellipse_kwargs,
             **kwargs,
         )
 
