@@ -95,6 +95,32 @@ def compute_v_subject_wise(
     return v
 
 
+def _validate_columns(
+    data_cols: list[str],
+    dist_params: list[str] | None = None,
+    extra_fields: list[str] | None = None,
+) -> list[str]:
+    dist_params = dist_params or []
+    extra_fields = extra_fields or []
+    all_cols = [*dist_params, *extra_fields]
+    missing_cols = set(all_cols) - set(data_cols)
+    if missing_cols:
+        raise ValueError(
+            f"The following columns are missing from data_cols: {missing_cols}"
+        )
+
+
+def _get_column_indices(
+    data_cols: list[str],
+    dist_params: list[str] | None = None,
+    extra_fields: list[str] | None = None,
+) -> list[int]:
+    col2idx = {col: idx for idx, col in enumerate(data_cols)} if data_cols else {}
+    dist_params_idxs = [col2idx[c] for c in (dist_params or [])]
+    extra_fields_idxs = [col2idx[c] for c in (extra_fields or [])]
+    return dist_params_idxs + extra_fields_idxs
+
+
 def make_rl_logp_func(
     subject_wise_func: Callable, n_participants: int, n_trials: int
 ) -> Callable:
