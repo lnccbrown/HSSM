@@ -139,6 +139,7 @@ def _plot_quantile_probability_1D(
     ellipse_min_points: int = 5,
     correct: str | None = None,
     q: int | Iterable[float] = 5,
+    quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
     ylabel: str | None = None,
@@ -175,7 +176,7 @@ def _plot_quantile_probability_1D(
     - Showing correlation structure in the predictions
     - Reducing visual clutter with many posterior samples
     """
-    plot_data = _process_df_for_qp_plot(data, q, cond, correct)
+    plot_data = _process_df_for_qp_plot(data, q, cond, correct, quantile_by)
     df_data = plot_data.loc[plot_data["observed"] == "observed", :]
 
     ax = kwargs.get("ax", plt.gca())
@@ -355,6 +356,7 @@ def _plot_quantile_probability_2D(
     ellipse_min_points: int = 5,
     correct: str | None = None,
     q: int | Iterable[float] = 5,
+    quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
     ylabel: str | None = None,
@@ -394,6 +396,7 @@ def _plot_quantile_probability_2D(
         ellipse_min_points=ellipse_min_points,
         correct=correct,
         q=q,
+        quantile_by=quantile_by,
         title=None,
         xlabel=xlabel,
         ylabel=ylabel,
@@ -442,6 +445,7 @@ def plot_quantile_probability(
     ellipse_min_points: int = 5,
     correct: str | None = None,
     q: int | Iterable[float] = 5,
+    quantile_by: list[str] | str | None = None,
     title: str | None = "Quantile Probability Plot",
     xlabel: str | None = "Proportion",
     ylabel: str | None = None,
@@ -559,6 +563,14 @@ def plot_quantile_probability(
     mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
         A seaborn FacetGrid object containing the plot.
     """
+    # AF-TODO: Should provide a few more safeguards to ensure
+    # 1. quantile_by dimension is a column(s) of strings
+    # 2. there is no overlap between quantile_by and extra_dims
+
+    # Location of those safeguards doesn't have to be directly
+    # in this function, but the logic pertains how this
+    # function is supposed to be used.
+
     if data is None:
         data = model.data
 
@@ -591,6 +603,7 @@ def plot_quantile_probability(
             idata,
             data,
             extra_dims=extra_dims,
+            quantile_by_dims=quantile_by,
             n_samples=None if sampled else n_samples,
             response_str=model.response_str,
             predictive_group=predictive_group,
@@ -602,6 +615,7 @@ def plot_quantile_probability(
             None,
             data,
             extra_dims=extra_dims,
+            quantile_by_dims=quantile_by,
             n_samples=None,
             response_str=model.response_str,
         )
@@ -626,6 +640,7 @@ def plot_quantile_probability(
             ellipse_min_points=ellipse_min_points,
             correct=correct,
             q=q,
+            quantile_by=quantile_by,
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
@@ -655,6 +670,7 @@ def plot_quantile_probability(
             ellipse_min_points=ellipse_min_points,
             correct=correct,
             q=q,
+            quantile_by=quantile_by,
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
@@ -696,6 +712,7 @@ def plot_quantile_probability(
             ellipse_min_points=ellipse_min_points,
             correct=correct,
             q=q,
+            quantile_by=quantile_by,
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
