@@ -149,7 +149,7 @@ def make_rl_logp_func(
     subject_wise_func: Callable,
     n_participants: int,
     n_trials: int,
-    data_cols: list[str] | None = None,
+    data_cols: list[str] | None = ["rt", "response"],
     dist_params: list[str] | None = None,
     extra_fields: list[str] | None = None,
 ) -> Callable:
