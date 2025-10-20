@@ -122,7 +122,12 @@ def _get_column_indices(
 
 
 def make_rl_logp_func(
-    subject_wise_func: Callable, n_participants: int, n_trials: int
+    subject_wise_func: Callable,
+    n_participants: int,
+    n_trials: int,
+    data_cols: list[str] | None = None,
+    dist_params: list[str] | None = None,
+    extra_fields: list[str] | None = None,
 ) -> Callable:
     """Create a function to compute the drift rates (v) for the RLDM model.
 
@@ -134,6 +139,12 @@ def make_rl_logp_func(
         Number of participants in the dataset.
     n_trials : int
         Number of trials per participant.
+    data_cols : list[str] | None
+        List of column names in the data array.
+    dist_params : list[str] | None
+        List of distribution parameter names required by the RL model.
+    extra_fields : list[str] | None
+        List of extra field names required by the RL model.
 
     Returns
     -------
