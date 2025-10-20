@@ -158,24 +158,23 @@ def make_rl_logp_func(
     # Vectorized version of  subject_wise_func to handle multiple subjects.
     subject_wise_vmapped = jax.vmap(subject_wise_func, in_axes=0)
 
-    def logp(*args) -> np.ndarray:
-        """Compute the log likelihood for the specified RL model.
+    def logp(data) -> np.ndarray:
+        """Compute the drift rates (v) for each trial in a reinforcement learning model.
 
-        Parameters
-        ----------
-        *args:
-            Variable number of arguments containing trial data and model parameters.
-            Arguments should be provided in the order they will be stacked, and can
-            include any combination of:
-            - rl_alpha: learning rate for the RL model.
-            - scaler: scaling factor for the drift rate.
-            - a: boundary separation.
-            - z: starting point.
-            - t: non-decision time.
-            - theta: lapse rate.
-            - feedback: feedback for each trial.
-            - any other relevant parameter as needed.
-            Each argument should be a 1D array of length (n_trials * n_participants).
+        data : np.ndarray
+            A 2D array containing trial data and model parameters for all
+            participants and trials. Each column should correspond to a specific
+            parameter or trial variable (e.g., rl_alpha, scaler, a, z, t, theta,
+            feedback). The array should have shape
+            (n_trials * n_participants, n_features).
+
+        Notes
+        -----
+        - The function internally reshapes the input data to group trials by
+          participant and applies a vectorized mapping function to compute drift
+          rates.
+        - The function assumes that `n_participants`, `n_trials`, `idxs`, and
+          `subject_wise_vmapped` are defined in the surrounding scope.
 
         Returns
         -------
@@ -185,11 +184,10 @@ def make_rl_logp_func(
         # Reshape subj_trials into a 3D array of shape
         # (n_participants, n_trials, len(args))
         # so we can act on this object with the vmapped version of the mapping function
-        subj_trials = jnp.stack((*args,), axis=1).reshape(n_participants, n_trials, -1)
+        _data = data[:, idxs]
+        subj_trials = jnp.stack(_data, axis=1).reshape(n_participants, n_trials, -1)
 
-        # Use the compute_v function to get the drift rates (v)
         drift_rates = subject_wise_vmapped(subj_trials).reshape((-1, 1))
-
         return drift_rates
 
     return logp
