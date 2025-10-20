@@ -9,7 +9,7 @@ from hssm.likelihoods.rldm_optimized_abstraction import (
     make_rl_logp_func,
     make_rldm_logp_op,
     compute_v_subject_wise,
-    _validate_columns
+    _validate_columns,
 )
 
 hssm.set_floatX("float32")
@@ -78,7 +78,9 @@ class TestValidateColumns:
         data_cols = ["rl_alpha", "scaler", "feedback"]
         extra_fields = ["response", "feedback"]
         with pytest.raises(ValueError) as exc:
-            _validate_columns(data_cols, dist_params=["rl_alpha"], extra_fields=extra_fields)
+            _validate_columns(
+                data_cols, dist_params=["rl_alpha"], extra_fields=extra_fields
+            )
         msg = str(exc.value)
         assert "response" in msg
         assert "missing" in msg.lower()
