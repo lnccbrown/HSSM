@@ -90,7 +90,6 @@ def test__get_plotting_df(posterior, cavanagh_test):
     df = _get_plotting_df(idata, cavanagh_test, extra_dims=["participant_id", "conf"])
     assert len(df) == 2500
     assert isinstance(df.index, pd.MultiIndex)
-    print(df)
     assert df.columns.to_list() == [
         "observed",
         "rt",
@@ -235,7 +234,7 @@ def test__process_df_for_qp_plot(cav_idata, cavanagh_test):
         cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
     )
 
-    processed_df = _process_df_for_qp_plot(df, 6, "conf", None)
+    processed_df = _process_df_for_qp_plot(df=df, q=6, cond="conf", correct=None)
 
     assert "conf" in processed_df.columns
     assert "is_correct" in processed_df.columns
@@ -246,6 +245,10 @@ def test__process_df_for_qp_plot(cav_idata, cavanagh_test):
         ].sum()
         == 1
     )
+
+    # Test 2: passing cond not as str
+    with pytest.raises(ValueError):
+        _process_df_for_qp_plot(df=df, q=6, cond=1, correct=None)
 
 
 def has_twin(ax):
@@ -427,3 +430,342 @@ def test_plot_quantile_probability_no_predictive(cavanagh_test):
     assert ax is not None
     # Should only have lines for observed data, no predictive samples
     # The exact number depends on how many quantiles and conditions there are
+
+
+def test__process_df_for_qp_plot_with_quantile_by(cav_idata, cavanagh_test):
+    """Test _process_df_for_qp_plot with quantile_by parameter.
+
+    This tests the functionality where quantiles are first computed for each
+    participant, then averaged across participants.
+    """
+    # Get plotting dataframe with participant_id as extra dimension
+    df = _get_plotting_df(
+        cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+    )
+
+    # Test 1: Without quantile_by (original behavior)
+    processed_df_no_grouping = _process_df_for_qp_plot(
+        df, 5, "conf", None, quantile_by=None
+    )
+
+    # Basic checks
+    assert "conf" in processed_df_no_grouping.columns
+    assert "is_correct" in processed_df_no_grouping.columns
+    assert "quantile" in processed_df_no_grouping.columns
+    assert (
+        processed_df_no_grouping["quantile"].nunique() == 3
+    )  # 5 quantiles -> 3 interior
+
+    # Test 2: With quantile_by as string (single grouping variable)
+    processed_df_single = _process_df_for_qp_plot(
+        df, 5, "conf", None, quantile_by="participant_id"
+    )
+
+    # Should have same columns as without grouping
+    assert "conf" in processed_df_single.columns
+    assert "is_correct" in processed_df_single.columns
+    assert "quantile" in processed_df_single.columns
+    assert processed_df_single["quantile"].nunique() == 3
+
+    # Should NOT have participant_id column (it was averaged out)
+    assert "participant_id" not in processed_df_single.columns
+
+    # Should have same base grouping structure
+    base_groups = ["observed", "chain", "draw", "conf", "is_correct", "quantile"]
+    assert all(col in processed_df_single.columns for col in base_groups)
+
+    # Test 3: With quantile_by as list (multiple grouping variables)
+    # Add another grouping variable to the dataframe
+    df_multi = df.copy()
+    df_multi["session"] = np.random.randint(1, 3, len(df_multi))  # Random sessions
+
+    processed_df_multi = _process_df_for_qp_plot(
+        df_multi, 5, "conf", None, quantile_by=["participant_id", "session"]
+    )
+
+    # Should NOT have the quantile_by columns
+    assert "participant_id" not in processed_df_multi.columns
+    assert "session" not in processed_df_multi.columns
+
+    # Should still have the base structure
+    assert all(col in processed_df_multi.columns for col in base_groups)
+
+    # Test 4: Verify that quantiles are actually being averaged
+    # The RT values should differ between grouped and non-grouped versions
+    # because one computes quantiles then averages them
+    assert not np.allclose(
+        processed_df_no_grouping["rt"].values,
+        processed_df_single["rt"].values,
+        rtol=0.01,
+    ), "Quantile-by grouping should produce different RT values"
+
+    # Test 5: Check that proportions still sum to 1 after grouping
+    assert np.allclose(
+        processed_df_single.groupby(["observed", "chain", "draw", "conf", "quantile"])[
+            "proportion"
+        ].sum(),
+        1.0,
+        rtol=0.01,
+    )
+
+    # Test 6: Verify shape consistency
+    # Both should have similar number of rows (grouped by same base variables)
+
+    # Might be less due to some groups having no data for certain quantiles
+    assert processed_df_single.shape[0] == processed_df_no_grouping.shape[0]
+
+
+def test_plot_quantile_probability_with_quantile_by(cav_idata, cavanagh_test):
+    """Test plot_quantile_probability with quantile_by parameter.
+
+    This tests the full plotting pipeline with the quantile_by functionality,
+    ensuring that plots can be created when quantiles are computed per-participant
+    then averaged.
+    """
+    # Mock model object
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        include=[
+            {
+                "name": "v",
+                "prior": {
+                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
+                    "theta": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
+                },
+                "formula": "v ~ theta + (1|participant_id)",
+                "link": "identity",
+            },
+        ],
+    )
+    model._inference_obj = cav_idata.copy()
+
+    # Test 1: Single plot with quantile_by as string
+    ax1 = plot_quantile_probability(
+        model,
+        cond="stim",
+        data=cavanagh_test,
+        quantile_by="participant_id",
+        n_samples=10,
+    )
+    assert ax1 is not None
+    assert has_twin(ax1)
+
+    # Test 2: Grid plot with quantile_by as string
+    g1 = plot_quantile_probability(
+        model,
+        cond="stim",
+        data=cavanagh_test,
+        col="conf",
+        quantile_by="participant_id",
+        n_samples=10,
+    )
+    assert g1 is not None
+    assert len(g1.figure.axes) > 0
+
+    # Test 3: With quantile_by as list
+    ax2 = plot_quantile_probability(
+        model,
+        cond="stim",
+        data=cavanagh_test,
+        quantile_by=["participant_id"],  # List with single item
+        n_samples=10,
+    )
+    assert ax2 is not None
+
+    # Test 4: Verify that plots with and without quantile_by both work
+    # but may produce different visualizations
+    ax_no_grouping = plot_quantile_probability(
+        model, cond="stim", data=cavanagh_test, quantile_by=None, n_samples=10
+    )
+    ax_with_grouping = plot_quantile_probability(
+        model,
+        cond="stim",
+        data=cavanagh_test,
+        quantile_by="participant_id",
+        n_samples=10,
+    )
+
+    # Both should be valid plots
+    assert ax_no_grouping is not None
+    assert ax_with_grouping is not None
+
+    # Test 5: Test with different predictive styles
+    for style in ["points", "ellipse", "both"]:
+        ax = plot_quantile_probability(
+            model,
+            cond="stim",
+            data=cavanagh_test,
+            quantile_by="participant_id",
+            predictive_style=style,
+            n_samples=10,
+        )
+        assert ax is not None
+
+
+def test__process_df_for_qp_plot_quantile_by_edge_cases(cav_idata, cavanagh_test):
+    """Test edge cases for quantile_by parameter.
+
+    Tests various edge cases and potential error conditions for the quantile_by
+    functionality.
+    """
+    df = _get_plotting_df(
+        cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+    )
+
+    # Test 1: Empty list for quantile_by (should behave like None)
+    # This might raise an error or behave like None depending on implementation
+    with pytest.raises(
+        ValueError, match="`quantile_by` must be a non-empty list of strings."
+    ):
+        _process_df_for_qp_plot(df, 5, "conf", None, quantile_by=[])
+
+    with pytest.raises(
+        ValueError, match="All elements in `quantile_by` must be strings."
+    ):
+        _process_df_for_qp_plot(df, 5, "conf", None, quantile_by=[1, 2])
+
+    with pytest.raises(
+        ValueError, match="`quantile_by` must be a string or a list of strings."
+    ):
+        _process_df_for_qp_plot(df, 5, "conf", None, quantile_by=1)
+
+    # Test 3: Verify that column name detection works regardless of number of grouping vars
+    # Add multiple extra dimensions
+    df_extra = df.copy()
+    df_extra["dim1"] = np.random.randint(1, 3, len(df_extra))
+    df_extra["dim2"] = np.random.randint(1, 3, len(df_extra))
+
+    # Test with 1 quantile_by variable
+    result1 = _process_df_for_qp_plot(
+        df_extra, 5, "conf", None, quantile_by="participant_id"
+    )
+    assert "quantile" in result1.columns
+
+    # Test with 2 quantile_by variables
+    result2 = _process_df_for_qp_plot(
+        df_extra, 5, "conf", None, quantile_by=["participant_id", "dim1"]
+    )
+    assert "quantile" in result2.columns
+
+    # Test with 3 quantile_by variables
+    result3 = _process_df_for_qp_plot(
+        df_extra, 5, "conf", None, quantile_by=["participant_id", "dim1", "dim2"]
+    )
+    assert "quantile" in result3.columns
+
+    # All should have consistent column structure
+    base_cols = [
+        "observed",
+        "chain",
+        "draw",
+        "conf",
+        "is_correct",
+        "quantile",
+        "rt",
+        "proportion",
+    ]
+    assert all(col in result1.columns for col in base_cols)
+    assert all(col in result2.columns for col in base_cols)
+    assert all(col in result3.columns for col in base_cols)
+
+
+def test__get_plotting_df_quantile_by_dims_validation(cav_idata, cavanagh_test):
+    """Test _get_plotting_df with various quantile_by_dims inputs for validation coverage."""
+
+    # Test 0: quantile_by_dims as None (should be None)
+    df_none = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=["conf"],
+        quantile_by_dims=None,  # None input
+    )
+    assert df_none is not None
+
+    # Test 1: quantile_by_dims as string (should convert to list)
+    df_string = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=["conf"],
+        quantile_by_dims="participant_id",  # String input
+    )
+    assert df_string is not None
+    assert "participant_id" in df_string.columns
+    assert "conf" in df_string.columns
+
+    # Test 2: quantile_by_dims as list (normal case)
+    df_list = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=["conf"],
+        quantile_by_dims=["participant_id"],  # List input
+    )
+    assert df_list is not None
+
+    # Test 3: Empty list should raise ValueError
+    with pytest.raises(
+        ValueError, match="`quantile_by_dims` must be a non-empty list of strings."
+    ):
+        _get_plotting_df(
+            cav_idata,
+            cavanagh_test,
+            extra_dims=["conf"],
+            quantile_by_dims=[],  # Empty list
+        )
+
+    # Test 4: List with non-string elements should raise ValueError
+    with pytest.raises(
+        ValueError, match="All elements in `quantile_by_dims` must be strings."
+    ):
+        _get_plotting_df(
+            cav_idata,
+            cavanagh_test,
+            extra_dims=["conf"],
+            quantile_by_dims=[1, 2],  # Non-string elements
+        )
+
+    # Test 5: Overlap between quantile_by_dims and extra_dims should raise ValueError
+    with pytest.raises(
+        ValueError,
+        match="`quantile_by_dims` and `extra_dims` must not have any overlap.",
+    ):
+        _get_plotting_df(
+            cav_idata,
+            cavanagh_test,
+            extra_dims=["conf", "participant_id"],
+            quantile_by_dims=["participant_id"],  # Overlaps with extra_dims
+        )
+
+
+def test__get_plotting_df_quantile_by_dims_edge_cases(cav_idata, cavanagh_test):
+    """Test additional edge cases for quantile_by_dims to ensure full coverage."""
+
+    # Test 1: quantile_by_dims provided but extra_dims is None
+    df1 = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=None,  # No extra_dims
+        quantile_by_dims=["participant_id"],
+    )
+    assert df1 is not None
+    # Since extra_dims is None, participant_id won't be in columns
+    # (it's only used for quantile computation, not added to df)
+
+    # Test 2: Both provided but NO overlap (normal successful case)
+    df2 = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=["conf"],  # Different from quantile_by_dims
+        quantile_by_dims=["participant_id"],  # No overlap
+    )
+    assert df2 is not None
+    assert "conf" in df2.columns
+    assert "participant_id" in df2.columns
+
+    # Test 3: Valid list of multiple quantile_by_dims (covers elif branch with valid list)
+    df3 = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=["conf"],
+        quantile_by_dims=["participant_id", "dbs"],  # Multiple items, all valid
+    )
+    assert df3 is not None

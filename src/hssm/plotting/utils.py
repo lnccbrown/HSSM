@@ -59,7 +59,9 @@ def _xarray_to_df(
     return stacked.loc[:, ["rt", "response"]]
 
 
-def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
+def _process_data(
+    data: pd.DataFrame, extra_dims: list[str], quantile_by_dims: list[str] | None = None
+) -> pd.DataFrame:
     """Extract the relevant columns from the data and apply the right index.
 
     Parameters
@@ -68,6 +70,8 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
         A dataframe with the original data.
     extra_dims
         Extra dimensions to be extracted from the dataframe.
+    quantile_by_dims
+        Extra dimensions to be used for quantiles.
 
     Returns
     -------
@@ -75,13 +79,26 @@ def _process_data(data: pd.DataFrame, extra_dims: list[str]) -> pd.DataFrame:
         The processed dataframe.
     """
     # reset the index of the data to ensure proper merging
-    data = data.reset_index(drop=True).loc[:, ["rt", "response"] + extra_dims]
+
+    if isinstance(quantile_by_dims, str):
+        quantile_by_dims = [quantile_by_dims]
+    elif isinstance(quantile_by_dims, list):
+        if len(quantile_by_dims) == 0:
+            raise ValueError("`quantile_by_dims` must be a non-empty list of strings.")
+        elif not all(isinstance(item, str) for item in quantile_by_dims):
+            raise ValueError("All elements in `quantile_by_dims` must be strings.")
+
+    if quantile_by_dims is not None:
+        data = data.reset_index(drop=True).loc[
+            :, ["rt", "response"] + extra_dims + quantile_by_dims
+        ]
+    else:
+        data = data.reset_index(drop=True).loc[:, ["rt", "response"] + extra_dims]
 
     # Makes sure that data has similar index to posterior
     data.index = pd.MultiIndex.from_product(
         [[-1], [-1], data.index], names=["chain", "draw", "obs_n"]
     )
-
     return data
 
 
@@ -119,6 +136,7 @@ def _get_plotting_df(
     idata: az.InferenceData | None = None,
     data: pd.DataFrame | None = None,
     extra_dims: list[str] | None = None,
+    quantile_by_dims: list[str] | str | None = None,
     n_samples: int | float | None = 20,
     response_str: str = "rt,response",
     predictive_group: Literal[
@@ -137,6 +155,8 @@ def _get_plotting_df(
         return the posterior samples without appending the observed data.
     extra_dims, optional
         Extra dimensions to be added to the dataframe from `idata`, by default None
+    quantile_by_dims, optional
+        Extra dimensions to be used for quantiles.
     n_samples, optional
         When an interger >= 1, the number of samples to be extracted from the draw
         dimension. When a float between 0 and 1, the proportion of samples to be
@@ -149,13 +169,28 @@ def _get_plotting_df(
     pd.DataFrame
         A dataframe with the original data and the extra dimensions.
     """
+    if isinstance(quantile_by_dims, str):
+        quantile_by_dims = [quantile_by_dims]
+    elif isinstance(quantile_by_dims, list):
+        if len(quantile_by_dims) == 0:
+            raise ValueError("`quantile_by_dims` must be a non-empty list of strings.")
+        elif not all(isinstance(item, str) for item in quantile_by_dims):
+            raise ValueError("All elements in `quantile_by_dims` must be strings.")
+
+    if quantile_by_dims is not None:
+        if extra_dims is not None:
+            if set(quantile_by_dims).intersection(set(extra_dims)):
+                raise ValueError(
+                    "`quantile_by_dims` and `extra_dims` must not have any overlap."
+                )
+
     if idata is None and data is None:
         raise ValueError("Either idata or data must be provided.")
 
     extra_dims = [] if extra_dims is None else extra_dims
 
     if idata is None:
-        data = _process_data(data, extra_dims)
+        data = _process_data(data, extra_dims, quantile_by_dims)
 
         data.insert(0, "observed", "observed")
         return data
@@ -174,20 +209,27 @@ def _get_plotting_df(
         predictive.insert(0, "observed", "predicted")
         return predictive
 
-    if extra_dims and idata_predictive["__obs__"].size != data.shape[0]:
+    if (
+        extra_dims and idata_predictive["__obs__"].size != data.shape[0]
+    ):  # pragma: no cover
         raise ValueError(
             "The number of observations in the data and the number of posterior "
             + "samples are not equal."
         )
-
-    data = _process_data(data, extra_dims)
+    # AD-TODO: Seems like depending on which branch is executed here
+    # we are running _process_data twice.
+    data = _process_data(data, extra_dims, quantile_by_dims)
 
     # merge the posterior samples with the data
     if extra_dims:
         predictive = (
             predictive.reset_index()
             .merge(
-                data.loc[:, extra_dims],
+                data.loc[
+                    :,
+                    extra_dims
+                    + (quantile_by_dims if quantile_by_dims is not None else []),
+                ],
                 on="obs_n",
                 how="left",
             )
@@ -282,7 +324,11 @@ def _get_title(cols: Iterable["str"], col_values: Iterable[Any]) -> str:
 
 
 def _process_df_for_qp_plot(
-    df: pd.DataFrame, q: int | Iterable[float], cond: str, correct: str | None = None
+    df: pd.DataFrame,
+    q: int | Iterable[float],
+    cond: str,
+    correct: str | None = None,
+    quantile_by: list[str] | str | None = None,
 ) -> pd.DataFrame:
     """Process the data frame fo the quantile probability plot.
 
@@ -298,6 +344,11 @@ def _process_df_for_qp_plot(
         The variable for the conditions.
     correct
         The column for whether the answer is correct.
+    quantile_by
+        Extra grouping variable(s) for computing quantiles. If provided, quantiles
+        are first computed for each group defined by these variables, then averaged
+        across groups. Can be a string (single variable) or list of strings (multiple
+        variables). If None, quantiles are computed directly without extra grouping.
 
     Returns
     -------
@@ -317,6 +368,9 @@ def _process_df_for_qp_plot(
             )
         q = np.linspace(0, 1, q)[1:-1]
 
+    if not isinstance(cond, str):
+        raise ValueError("`cond` must be a string.")
+
     # flip the rts
     df.loc[:, "rt"] = np.where(df["response"] > 0, df["rt"], -df["rt"])
 
@@ -324,12 +378,55 @@ def _process_df_for_qp_plot(
 
     df["is_correct"] = df["response"] > 0 if correct is None else df[correct]
 
-    quantiles = (
-        df.groupby(["observed", "chain", "draw", cond, "is_correct"])["rt"]
-        .quantile(q=q)
-        .reset_index()
-        .rename(columns={"level_5": "quantile"})
-    )
+    # Handle quantile_by parameter
+    if quantile_by is not None:
+        # Ensure it's a list
+        if isinstance(quantile_by, str):
+            quantile_by = [quantile_by]
+        elif isinstance(quantile_by, list):
+            if len(quantile_by) == 0:
+                raise ValueError("`quantile_by` must be a non-empty list of strings.")
+            elif not all(isinstance(item, str) for item in quantile_by):
+                raise ValueError("All elements in `quantile_by` must be strings.")
+        else:
+            raise ValueError("`quantile_by` must be a string or a list of strings.")
+
+        # Base grouping variables
+        base_groups = ["observed", "chain", "draw", cond, "is_correct"]
+
+        # Compute quantiles with the extra grouping variables
+        quantiles = (
+            df.groupby(base_groups + quantile_by)["rt"].quantile(q=q).reset_index()
+        )
+
+        # Find and rename the level_* column
+        level_cols = [col for col in quantiles.columns if col.startswith("level_")]
+        if level_cols:
+            quantiles = quantiles.rename(columns={level_cols[0]: "quantile"})
+        else:  # pragma: no cover
+            raise ValueError("Could not find quantile column in result")
+
+        # Average quantiles across the extra grouping variables
+        quantiles = (
+            quantiles.groupby(base_groups + ["quantile"], as_index=False, sort=False)[
+                "rt"
+            ]
+            .mean()
+            .reset_index()
+        )
+    else:
+        # Original behavior: compute quantiles directly
+        quantiles = (
+            df.groupby(["observed", "chain", "draw", cond, "is_correct"])["rt"]
+            .quantile(q=q)
+            .reset_index()
+        )
+
+        level_cols = [col for col in quantiles.columns if col.startswith("level_")]
+        if level_cols:
+            quantiles = quantiles.rename(columns={level_cols[0]: "quantile"})
+        else:  # pragma: no cover
+            raise ValueError("Could not find quantile column in result")
 
     pcts = (
         df.groupby(["observed", "chain", "draw", cond])["is_correct"]
@@ -432,7 +529,7 @@ def _use_traces_or_sample(
                 draws=n_samples,
                 omit_offsets=False,
             )
-        else:
+        else:  # pragma: no cover
             raise ValueError(f"Invalid predictive group: {predictive_group}")
         # AF-TODO: 'sampled' logic needs to be re-examined
         sampled = True

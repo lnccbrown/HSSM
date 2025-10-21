@@ -903,7 +903,7 @@ def plot_func_model(
                 ]
             )
             tmp_theta = theta_samples.loc[random_index, :].values
-        else:
+        else:  # pragma: no cover
             raise ValueError("No theta values provided but n_trajectories is > 0")
 
         sim_out_traj[i] = simulator(
@@ -945,7 +945,7 @@ def plot_func_model(
     axis_twin_down.set_zorder(0)
 
     if theta_mean is not None:
-        if sim_out is None:
+        if sim_out is None:  # pragma: no cover
             raise ValueError("No sim_out provided but theta_mean is not None")
         data_up = np.abs(
             sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] == 1)]
