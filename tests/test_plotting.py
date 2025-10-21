@@ -234,7 +234,7 @@ def test__process_df_for_qp_plot(cav_idata, cavanagh_test):
         cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
     )
 
-    processed_df = _process_df_for_qp_plot(df, 6, "conf", None)
+    processed_df = _process_df_for_qp_plot(df=df, q=6, cond="conf", correct=None)
 
     assert "conf" in processed_df.columns
     assert "is_correct" in processed_df.columns
@@ -245,6 +245,10 @@ def test__process_df_for_qp_plot(cav_idata, cavanagh_test):
         ].sum()
         == 1
     )
+
+    # Test 2: passing cond not as str
+    with pytest.raises(ValueError):
+        _process_df_for_qp_plot(df=df, q=6, cond=1, correct=None)
 
 
 def has_twin(ax):
@@ -663,3 +667,105 @@ def test__process_df_for_qp_plot_quantile_by_edge_cases(cav_idata, cavanagh_test
     assert all(col in result1.columns for col in base_cols)
     assert all(col in result2.columns for col in base_cols)
     assert all(col in result3.columns for col in base_cols)
+
+
+def test__get_plotting_df_quantile_by_dims_validation(cav_idata, cavanagh_test):
+    """Test _get_plotting_df with various quantile_by_dims inputs for validation coverage."""
+
+    # Test 0: quantile_by_dims as None (should be None)
+    df_none = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=["conf"],
+        quantile_by_dims=None,  # None input
+    )
+    assert df_none is not None
+
+    # Test 1: quantile_by_dims as string (should convert to list)
+    df_string = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=["conf"],
+        quantile_by_dims="participant_id",  # String input
+    )
+    assert df_string is not None
+    assert "participant_id" in df_string.columns
+    assert "conf" in df_string.columns
+
+    # Test 2: quantile_by_dims as list (normal case)
+    df_list = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=["conf"],
+        quantile_by_dims=["participant_id"],  # List input
+    )
+    assert df_list is not None
+
+    # Test 3: Empty list should raise ValueError
+    with pytest.raises(
+        ValueError, match="`quantile_by_dims` must be a non-empty list of strings."
+    ):
+        _get_plotting_df(
+            cav_idata,
+            cavanagh_test,
+            extra_dims=["conf"],
+            quantile_by_dims=[],  # Empty list
+        )
+
+    # Test 4: List with non-string elements should raise ValueError
+    with pytest.raises(
+        ValueError, match="All elements in `quantile_by_dims` must be strings."
+    ):
+        _get_plotting_df(
+            cav_idata,
+            cavanagh_test,
+            extra_dims=["conf"],
+            quantile_by_dims=[1, 2],  # Non-string elements
+        )
+
+    # Test 5: Overlap between quantile_by_dims and extra_dims should raise ValueError
+    with pytest.raises(
+        ValueError,
+        match="`quantile_by_dims` and `extra_dims` must not have any overlap.",
+    ):
+        _get_plotting_df(
+            cav_idata,
+            cavanagh_test,
+            extra_dims=["conf", "participant_id"],
+            quantile_by_dims=["participant_id"],  # Overlaps with extra_dims
+        )
+
+
+def test__get_plotting_df_quantile_by_dims_edge_cases(cav_idata, cavanagh_test):
+    """Test additional edge cases for quantile_by_dims to ensure full coverage."""
+
+    # Test 1: quantile_by_dims provided but extra_dims is None
+    df1 = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=None,  # No extra_dims
+        quantile_by_dims=["participant_id"],
+    )
+    assert df1 is not None
+    # Since extra_dims is None, participant_id won't be in columns
+    # (it's only used for quantile computation, not added to df)
+
+    # Test 2: Both provided but NO overlap (normal successful case)
+    df2 = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=["conf"],  # Different from quantile_by_dims
+        quantile_by_dims=["participant_id"],  # No overlap
+    )
+    assert df2 is not None
+    assert "conf" in df2.columns
+    assert "participant_id" in df2.columns
+
+    # Test 3: Valid list of multiple quantile_by_dims (covers elif branch with valid list)
+    df3 = _get_plotting_df(
+        cav_idata,
+        cavanagh_test,
+        extra_dims=["conf"],
+        quantile_by_dims=["participant_id", "dbs"],  # Multiple items, all valid
+    )
+    assert df3 is not None

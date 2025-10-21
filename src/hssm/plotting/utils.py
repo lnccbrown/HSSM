@@ -209,7 +209,9 @@ def _get_plotting_df(
         predictive.insert(0, "observed", "predicted")
         return predictive
 
-    if extra_dims and idata_predictive["__obs__"].size != data.shape[0]:
+    if (
+        extra_dims and idata_predictive["__obs__"].size != data.shape[0]
+    ):  # pragma: no cover
         raise ValueError(
             "The number of observations in the data and the number of posterior "
             + "samples are not equal."
@@ -401,7 +403,7 @@ def _process_df_for_qp_plot(
         level_cols = [col for col in quantiles.columns if col.startswith("level_")]
         if level_cols:
             quantiles = quantiles.rename(columns={level_cols[0]: "quantile"})
-        else:
+        else:  # pragma: no cover
             raise ValueError("Could not find quantile column in result")
 
         # Average quantiles across the extra grouping variables
@@ -423,7 +425,7 @@ def _process_df_for_qp_plot(
         level_cols = [col for col in quantiles.columns if col.startswith("level_")]
         if level_cols:
             quantiles = quantiles.rename(columns={level_cols[0]: "quantile"})
-        else:
+        else:  # pragma: no cover
             raise ValueError("Could not find quantile column in result")
 
     pcts = (
@@ -527,7 +529,7 @@ def _use_traces_or_sample(
                 draws=n_samples,
                 omit_offsets=False,
             )
-        else:
+        else:  # pragma: no cover
             raise ValueError(f"Invalid predictive group: {predictive_group}")
         # AF-TODO: 'sampled' logic needs to be re-examined
         sampled = True
