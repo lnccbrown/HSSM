@@ -14,6 +14,9 @@ import pytensor.tensor as pt
 from numpy import inf
 from pymc.distributions.dist_math import check_parameters
 
+# import gammaln and gammaincc from scipy.special
+from scipy.special import gammaincc, gammaln
+
 from ..distribution_utils.dist import make_distribution
 
 LOGP_LB = pm.floatX(-66.1)
@@ -558,4 +561,102 @@ LBA3: Type[pm.Distribution] = make_distribution(
     loglik=logp_lba3,
     list_params=lba3_params,
     bounds=lba3_bounds,
+)
+
+def logp_poisson_race(
+    data: np.ndarray,
+    r1: float,
+    r2: float,
+    k1: float,
+    k2: float,
+    t: float,
+    epsilon: float = 1e-15,
+) -> np.ndarray:
+    """Compute analytical log-likelihoods for a 2-accumulator Poisson race.
+
+    Each accumulator time follows a Gamma distribution (with continuous shape parameter)
+    with shape parameter k and rate r. The per-trial likelihood decomposes into the density 
+    of the winning accumulator evaluated at the observed decision time and the survival 
+    function of the losing accumulator at the same time.
+
+    Originally formulated in https://link.springer.com/article/10.3758/BF03212980
+    with two modifications:
+      1. We allow continuous shape parameters (k1, k2) rather than just integers.
+      2. We do not condition the underlying stimulus condition.
+
+    Parameters
+    ----------
+    data
+        2-column tensor of (response time, response). Response > 0 indicates
+        accumulator 1 (upper); otherwise accumulator 0 (lower).
+    r1, r2
+        Rates (> 0) for the two accumulators.
+    k1, k2
+        Shape parameters (> 0) for the two accumulators.
+    t
+        Non-decision time [0, inf).
+    epsilon
+        A small positive number to prevent division by zero or taking ``log(0)``.
+
+    Returns
+    -------
+    pytensor.tensor.TensorVariable
+        Per-trial log-likelihoods compatible with PyTensor graphs.
+    """
+
+    epsilon = pm.floatX(epsilon)
+    one = pm.floatX(1.0)
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+
+    rt = pt.abs(data[:, 0])
+    response = data[:, 1]
+    flip = response > 0
+
+    rt = rt - t
+    negative_rt = rt <= 0
+    rt_safe = pt.switch(negative_rt, epsilon, rt)
+    rt_safe = pt.maximum(rt_safe, epsilon)
+
+    r_c = pt.switch(flip, r2, r1)
+    r_l = pt.switch(flip, r1, r2)
+    k_c = pt.switch(flip, k2, k1)
+    k_l = pt.switch(flip, k1, k2)
+
+    log_pdf = (
+        k_c * pt.log(pt.maximum(r_c, epsilon))
+        + (k_c - 1.0) * pt.log(rt_safe)
+        - r_c * rt_safe
+        - pt.gammaln(k_c)
+    )
+
+    survival = pt.gammaincc(k_l, r_l * rt_safe)
+    survival = pt.clip(survival, epsilon, one)
+    log_survival = pt.log(survival)
+
+    logp = log_pdf + log_survival
+    logp = pt.switch(negative_rt, LOGP_LB, logp)
+
+    checked = check_parameters(logp, r1 > 0, msg="r1 > 0")
+    checked = check_parameters(checked, r2 > 0, msg="r2 > 0")
+    checked = check_parameters(checked, k1 > 0, msg="k1 > 0")
+    checked = check_parameters(checked, k2 > 0, msg="k2 > 0")
+    checked = check_parameters(checked, t >= 0, msg="t >= 0")
+    return checked
+
+# set bounds
+poisson_race_bounds = {
+    "r1": (0.0, np.inf),
+    "r2": (0.0, np.inf),
+    "k1": (1.0, np.inf),  
+    "k2": (1.0, np.inf),  
+    "t": (0.0, np.inf),
+}
+poisson_race_params = ["r1", "r2", "k1", "k2", "t"]
+
+# build distribution
+POISSON_RACE = make_distribution(
+    rv="poisson_race",
+    loglik=logp_poisson_race,
+    list_params=poisson_race_params,
+    bounds=poisson_race_bounds,
 )
