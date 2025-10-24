@@ -1,7 +1,7 @@
 """The log-likelihood function for the RLDM model."""
 
 import functools
-from typing import Callable
+from typing import Any, Callable
 
 import jax
 import jax.numpy as jnp
@@ -171,7 +171,7 @@ def _get_column_indices(
 
 
 def make_rl_logp_func(
-    subject_wise_func: Callable,
+    subject_wise_func: Callable[..., Any],
     n_participants: int,
     n_trials: int,
     data_cols: list[str] | None = ["rt", "response"],
@@ -201,7 +201,7 @@ def make_rl_logp_func(
         A function that computes drift rates (v) for all subjects given their trial data
         and RLDM parameters.
     """
-    inputs = subject_wise_func.inputs
+    inputs = subject_wise_func.inputs  # type: ignore[attr-defined]
     _validate_columns(data_cols, inputs)
     idxs = _get_column_indices(data_cols, inputs)
 
@@ -246,7 +246,10 @@ def make_rl_logp_func(
 # TODO[CP]: Adapt this function given the changes to make_rl_logp_func
 # pragma: no cover
 def make_rldm_logp_op(
-    subject_wise_func: Callable, n_participants: int, n_trials: int, n_params: int
+    subject_wise_func: Callable[..., Any],
+    n_participants: int,
+    n_trials: int,
+    n_params: int,
 ) -> Op:
     """Create a pytensor Op for the likelihood function of RLDM model.
 
