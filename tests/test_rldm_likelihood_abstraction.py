@@ -47,8 +47,6 @@ def rldm_setup(fixture_path):
         n_participants=len(subj),
         n_trials=total_trials // len(subj),
         data_cols=list(data.columns),
-        dist_params=dist_params,
-        extra_fields=extra_fields,
     )
 
     return {
