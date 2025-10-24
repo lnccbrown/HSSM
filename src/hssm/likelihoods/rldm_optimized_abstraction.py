@@ -201,8 +201,9 @@ def make_rl_logp_func(
         A function that computes drift rates (v) for all subjects given their trial data
         and RLDM parameters.
     """
-    _validate_columns(data_cols, dist_params, extra_fields)
-    idxs = _get_column_indices(data_cols, dist_params, extra_fields)
+    inputs = subject_wise_func.inputs
+    _validate_columns(data_cols, inputs)
+    idxs = _get_column_indices(data_cols, inputs)
 
     # Vectorized version of  subject_wise_func to handle multiple subjects.
     subject_wise_vmapped = jax.vmap(subject_wise_func, in_axes=0)
