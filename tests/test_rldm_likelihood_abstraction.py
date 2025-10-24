@@ -10,6 +10,7 @@ from hssm.likelihoods.rldm_optimized_abstraction import (
     make_rldm_logp_op,
     compute_v_subject_wise,
     _validate_columns,
+    annotate_function,
 )
 
 hssm.set_floatX("float32")
@@ -56,6 +57,17 @@ def rldm_setup(fixture_path):
         "logp_fn": logp_fn,
         "total_trials": total_trials,
     }
+
+
+class TestAnnotateFunction:
+    def test_decorator_adds_attributes(self):
+        @annotate_function(inputs=["input1", "input2"], outputs=["output1"], other=42)
+        def sample_function():
+            return
+
+        assert sample_function.inputs == ["input1", "input2"]
+        assert sample_function.outputs == ["output1"]
+        assert sample_function.other == 42
 
 
 class TestValidateColumns:
