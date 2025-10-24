@@ -156,8 +156,7 @@ def _validate_columns(
 
 def _get_column_indices(
     data_cols: list[str] | None,
-    dist_params: list[str] | None = None,
-    extra_fields: list[str] | None = None,
+    cols_to_look_up: list[str] | None = None,
 ) -> list[int]:
     """Return indices for required columns.
 
