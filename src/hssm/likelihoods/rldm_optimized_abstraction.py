@@ -1,5 +1,6 @@
 """The log-likelihood function for the RLDM model."""
 
+import functools
 from typing import Callable
 
 import jax
@@ -17,6 +18,32 @@ from ..distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
     model="angle.onnx",
 )
+
+
+def annotate_function(**kwargs):
+    """Attach arbitrary metadata as attributes to a function.
+
+    Parameters
+    ----------
+    **kwargs
+        Arbitrary keyword arguments to attach as attributes.
+
+    Returns
+    -------
+    Callable
+        Decorator that adds metadata attributes to the wrapped function.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **inner_kwargs):
+            return func(*args, **inner_kwargs)
+
+        for key, value in kwargs.items():
+            setattr(wrapper, key, value)
+        return wrapper
+
+    return decorator
 
 
 # Inner function to compute the drift rate and update q-values for each trial.
