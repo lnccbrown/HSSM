@@ -208,7 +208,7 @@ def make_rl_logp_func(
     # Vectorized version of  subject_wise_func to handle multiple subjects.
     subject_wise_vmapped = jax.vmap(subject_wise_func, in_axes=0)
 
-    def logp(data) -> np.ndarray:
+    def logp(data, *args) -> np.ndarray:
         """Compute the drift rates (v) for each trial in a reinforcement learning model.
 
         data : np.ndarray
