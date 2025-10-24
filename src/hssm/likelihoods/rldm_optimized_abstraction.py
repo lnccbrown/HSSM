@@ -166,9 +166,8 @@ def _get_column_indices(
     if data_cols is None:
         return []
     col2idx = {col: idx for idx, col in enumerate(data_cols)} if data_cols else {}
-    dist_params_idxs = [col2idx[c] for c in (dist_params or [])]
-    extra_fields_idxs = [col2idx[c] for c in (extra_fields or [])]
-    return dist_params_idxs + extra_fields_idxs
+    cols_to_look_up_idxs = [col2idx[c] for c in (cols_to_look_up or [])]
+    return cols_to_look_up_idxs
 
 
 def make_rl_logp_func(
