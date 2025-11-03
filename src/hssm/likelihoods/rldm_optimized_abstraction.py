@@ -238,7 +238,7 @@ def make_rl_logp_func(
         drift_rates = subject_wise_vmapped(subj_trials).reshape((-1, 1))
         return drift_rates
 
-        # TODO: reintroduce this workflow using a jax function and handling the selection
+        # TODO: reintroduce workflow using a jax function and handling the selection
         # dist_params to stack
         # create parameter arrays to be passed to the likelihood function
         # ddm_params_matrix = jnp.stack(dist_params[2:6], axis=1)
