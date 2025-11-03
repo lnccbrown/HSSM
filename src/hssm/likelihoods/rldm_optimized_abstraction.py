@@ -155,18 +155,16 @@ def _validate_columns(
 
 
 def _get_column_indices(
-    data_cols: list[str] | None,
-    cols_to_look_up: list[str] | None = None,
+    data_cols: list[str],
+    cols_to_look_up: list[str],
 ) -> list[int]:
     """Return indices for required columns.
 
     When data_cols is None, return an empty list so that callers can defer
     indexing until data is available.
     """
-    if data_cols is None:
-        return []
-    col2idx = {col: idx for idx, col in enumerate(data_cols)} if data_cols else {}
-    cols_to_look_up_idxs = [col2idx[c] for c in (cols_to_look_up or [])]
+    col2idx = {col: idx for idx, col in enumerate(data_cols)}
+    cols_to_look_up_idxs = [col2idx[c] for c in (cols_to_look_up)]
     return cols_to_look_up_idxs
 
 
