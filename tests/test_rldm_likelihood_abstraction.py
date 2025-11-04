@@ -54,7 +54,86 @@ def rldm_setup(fixture_path):
         "values": data.values,
         "logp_fn": logp_fn,
         "total_trials": total_trials,
+        "_args": [rl_alpha, scaler, a, z, t, theta],
     }
+
+
+class TestGetDataColumnsFromDataArgs:
+    def test_get_column_indices(self):
+        """Test the column indexing and data collection functionality.
+
+        This test verifies that _get_column_indices correctly maps column names to their
+        sources (either 'data' matrix or 'args' parameters) and that _collect_cols_arrays
+        properly extracts and organizes the data for further processing.
+
+        The test simulates the RLDM likelihood scenario where we need to collect:
+        - Data columns from the input data matrix (rt, response)
+        - Parameter arrays from the args list (model parameters like rl.alpha, scaler, etc.)
+        - Extra fields that are passed as additional parameters (feedback)
+        """
+        # Define the structure of available data columns
+        # These represent columns in the input data matrix (e.g., reaction time, response)
+        data_cols = ["rt", "response"]
+
+        # Define model parameters that will be passed as separate arrays
+        list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
+
+        # Define extra fields that are needed for RL computation but not core DDM params
+        extra_fields = ["feedback"]
+
+        # Combine parameters and extra fields to get the full args list structure
+        list_params_extra_fields = list_params + extra_fields
+
+        # Define which columns we want to extract for this specific computation
+        # This represents the subset needed for the RL likelihood computation
+        cols_to_look_up = ["rl.alpha", "scaler", "response", "feedback"]
+
+        # Create mock data matrix: 10 trials with 2 columns [rt=1.0, response=2.0]
+        data = np.array([1, 2]) * np.ones((10, 2))
+
+        # Create mock parameter arrays: each parameter gets a different constant value
+        # _args[0] = [3, 3, 3, ...] (rl.alpha), _args[1] = [4, 4, 4, ...] (scaler), etc.
+        _args = [
+            np.ones(10) * i for i, _ in enumerate(list_params_extra_fields, start=3)
+        ]
+
+        # Call the function under test: get indices for where to find each column
+        indices = _get_column_indices(
+            data_cols, list_params, extra_fields, cols_to_look_up
+        )
+
+        # Expected mapping: each column name maps to (source, index) tuple
+        # - "rl.alpha": found in args at index 0
+        # - "scaler": found in args at index 1
+        # - "response": found in data at column index 1
+        # - "feedback": found in args at index 6 (len(list_params) = 6)
+        expected_indices = {
+            "rl.alpha": ("args", 0),
+            "scaler": ("args", 1),
+            "response": ("data", 1),
+            "feedback": ("args", 6),
+        }
+
+        # Use the indices to collect the actual data arrays
+        collected_arrays = _collect_cols_arrays(data, _args, indices)
+        # Stack the collected arrays into a matrix for easier verification
+        stacked_arrays = np.stack(collected_arrays, axis=1)
+
+        # Verify the indices mapping is correct
+        assert indices == expected_indices
+
+        # Verify the collected data values are correct:
+        # - rl.alpha: _args[0] = [3, 3, 3, ...]
+        # - scaler: _args[1] = [4, 4, 4, ...]
+        # - response: data[:, 1] = [2, 2, 2, ...]
+        # - feedback: _args[6] = [9, 9, 9, ...]
+        expected_stacked_arrays = np.array([[3.0, 4.0, 2.0, 9.0]] * 10)
+        np.testing.assert_array_equal(expected_stacked_arrays, stacked_arrays)
+
+        with pytest.raises(ValueError, match="Column 'non_existent_param' not found"):
+            _get_column_indices(
+                data_cols, list_params, extra_fields, ["non_existent_param"]
+            )
 
 
 class TestAnnotateFunction:
