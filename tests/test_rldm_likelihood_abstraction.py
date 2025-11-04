@@ -35,7 +35,7 @@ def rldm_setup(fixture_path):
     list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
     extra_fields = ["feedback"]
 
-    compute_v_subject_wise.inputs = ["rl_alpha", "scaler", "action", "feedback"]
+    compute_v_subject_wise.inputs = ["rl.alpha", "scaler", "response", "feedback"]
     compute_v_subject_wise.outputs = ["v"]
 
     logp_fn = make_rl_logp_func(
