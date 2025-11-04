@@ -122,38 +122,6 @@ def compute_v_subject_wise(
     return v
 
 
-def _validate_columns(
-    data_cols: list[str] | None,
-    dist_params: list[str] | None = None,
-    extra_fields: list[str] | None = None,
-) -> None:
-    """Validate that required columns are present.
-
-    Parameters
-    ----------
-    data_cols
-        List of column names available in the data matrix. May be None when
-        called from higher-level factory functions before data is fully known.
-    dist_params
-        Distribution parameter names required by the RL likelihood.
-    extra_fields
-        Additional field names required by the RL likelihood.
-    """
-    dist_params = dist_params or []
-    extra_fields = extra_fields or []
-    if data_cols is None:
-        # If data_cols is None but we have required parameters, raise early.
-        if dist_params or extra_fields:
-            raise ValueError("data_cols is None but required columns were provided.")
-        return
-    all_cols = [*dist_params, *extra_fields]
-    missing_cols = set(all_cols) - set(data_cols)
-    if missing_cols:
-        raise ValueError(
-            f"The following columns are missing from data_cols: {missing_cols}"
-        )
-
-
 def _get_column_indices(
     data_cols: list[str],
     cols_to_look_up: list[str],
