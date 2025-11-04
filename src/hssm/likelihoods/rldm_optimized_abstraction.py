@@ -225,7 +225,8 @@ def make_rl_logp_func(
         # Reshape subj_trials into a 3D array of shape
         # (n_participants, n_trials, len(args))
         # so we can act on this object with the vmapped version of the mapping function
-        _data = data[:, idxs]
+        _data = _collect_cols_arrays(data, args, colidxs)
+
         subj_trials = jnp.stack(_data, axis=1).reshape(n_participants, n_trials, -1)
 
         drift_rates = subject_wise_vmapped(subj_trials).reshape((-1, 1))
