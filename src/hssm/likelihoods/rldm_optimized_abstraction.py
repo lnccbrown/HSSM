@@ -125,14 +125,29 @@ def compute_v_subject_wise(
 def _get_column_indices(
     cols_to_look_up: list[str],
     data_cols: list[str],
-    list_params: list[str],
-    extra_fields: list[str],
-) -> list[int]:
+    list_params: list[str] | None,
+    extra_fields: list[str] | None,
+) -> dict[str, tuple[str, int]]:
     """Return indices for required columns.
 
-    When data_cols is None, return an empty list so that callers can defer
-    indexing until data is available.
+    Parameters
+    ----------
+    cols_to_look_up : list[str]
+        Columns to find indices for
+    data_cols : list[str]
+        Available data columns
+    list_params : list[str] | None
+        Available list parameters
+    extra_fields : list[str] | None
+        Available extra fields
+
+    Returns
+    -------
+    dict[str, tuple[str, int]]
+        Mapping of column names to (source, index) tuples
     """
+    list_params = list_params or []
+    extra_fields = extra_fields or []
     list_params_extra_fields = list_params + extra_fields
     colidxs = {}
     for col in cols_to_look_up:
@@ -142,7 +157,8 @@ def _get_column_indices(
             colidxs[col] = ("args", list_params_extra_fields.index(col))
         else:
             raise ValueError(
-                f"Column '{col}' not found in any of `data`, `list_params`, or `extra_fields`."
+                f"Column '{col}' not found in any of `data`, `list_params`, "
+                f"or `extra_fields`."
             )
     return colidxs
 
