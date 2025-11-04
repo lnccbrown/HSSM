@@ -50,7 +50,8 @@ def rldm_setup(fixture_path):
         compute_v_subject_wise,
         n_participants=len(subj),
         n_trials=total_trials // len(subj),
-        data_cols=list(data.columns),
+        list_params=list_params,
+        extra_fields=extra_fields,
     )
 
     return {
@@ -58,7 +59,7 @@ def rldm_setup(fixture_path):
         "values": data.values,
         "logp_fn": logp_fn,
         "total_trials": total_trials,
-        "_args": [rl_alpha, scaler, a, z, t, theta],
+        "_args": [rl_alpha, scaler, a, z, t, theta, feedback],
     }
 
 
