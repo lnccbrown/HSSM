@@ -148,7 +148,6 @@ def _get_column_indices(
 
 
 def _collect_cols_arrays(data, _args, colidxs):
-    breakpoint()
     collected = []
     for col in colidxs:
         source, idx = colidxs[col]
@@ -198,7 +197,6 @@ def make_rl_logp_func(
         list_params,
         extra_fields,
     )
-    # breakpoint()
 
     # Vectorized version of  subject_wise_func to handle multiple subjects.
     subject_wise_vmapped = jax.vmap(subject_wise_func, in_axes=0)
