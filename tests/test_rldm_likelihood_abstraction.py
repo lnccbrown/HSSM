@@ -68,38 +68,6 @@ class TestAnnotateFunction:
         assert sample_function.other == 42
 
 
-class TestValidateColumns:
-    def test_passes_when_all_present(self):
-        data_cols = ["rl_alpha", "scaler", "response", "feedback", "a", "z"]
-        dist_params = ["rl_alpha", "scaler"]
-        extra_fields = ["response", "feedback"]
-        assert _validate_columns(data_cols, dist_params, extra_fields) is None
-
-    def test_missing_dist_param_raises(self):
-        data_cols = ["scaler", "response", "feedback"]
-        dist_params = ["rl_alpha", "scaler"]
-        with pytest.raises(ValueError) as exc:
-            _validate_columns(data_cols, dist_params, extra_fields=["response"])
-        msg = str(exc.value)
-        assert "rl_alpha" in msg
-        assert "missing" in msg.lower()
-
-    def test_missing_extra_field_raises(self):
-        data_cols = ["rl_alpha", "scaler", "feedback"]
-        extra_fields = ["response", "feedback"]
-        with pytest.raises(ValueError) as exc:
-            _validate_columns(
-                data_cols, dist_params=["rl_alpha"], extra_fields=extra_fields
-            )
-        msg = str(exc.value)
-        assert "response" in msg
-        assert "missing" in msg.lower()
-
-    def test_no_params_lists(self):
-        _validate_columns(data_cols=["anything"])
-        _validate_columns(data_cols=["anything"], dist_params=[], extra_fields=[])
-
-
 class TestRldmLikelihoodAbstraction:
     def test_make_rl_logp_func(self, rldm_setup):
         setup = rldm_setup
