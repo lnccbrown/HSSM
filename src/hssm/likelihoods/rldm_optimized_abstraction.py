@@ -131,9 +131,30 @@ def _get_column_indices(
     When data_cols is None, return an empty list so that callers can defer
     indexing until data is available.
     """
-    col2idx = {col: idx for idx, col in enumerate(data_cols)}
-    cols_to_look_up_idxs = [col2idx[c] for c in (cols_to_look_up)]
-    return cols_to_look_up_idxs
+    list_params_extra_fields = list_params + extra_fields
+    colidxs = {}
+    for col in cols_to_look_up:
+        if col in data_cols:
+            colidxs[col] = ("data", data_cols.index(col))
+        elif col in list_params_extra_fields:
+            colidxs[col] = ("args", list_params_extra_fields.index(col))
+        else:
+            raise ValueError(
+                f"Column '{col}' not found in any of `data`, `list_params`, or `extra_fields`."
+            )
+    return colidxs
+
+
+def _collect_cols_arrays(data, _args, colidxs):
+    breakpoint()
+    collected = []
+    for col in colidxs:
+        source, idx = colidxs[col]
+        if source == "data":
+            collected.append(data[:, idx])
+        else:
+            collected.append(_args[idx])
+    return collected
 
 
 def make_rl_logp_func(
