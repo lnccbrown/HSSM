@@ -163,7 +163,7 @@ def make_rl_logp_func(
     n_participants: int,
     n_trials: int,
     data_cols: list[str] = ["rt", "response"],
-    dist_params: list[str] | None = None,
+    list_params: list[str] | None = None,
     extra_fields: list[str] | None = None,
 ) -> Callable:
     """Create a function to compute the drift rates (v) for the RLDM model.
