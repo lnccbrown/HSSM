@@ -99,7 +99,10 @@ class TestGetDataColumnsFromDataArgs:
 
         # Call the function under test: get indices for where to find each column
         indices = _get_column_indices(
-            data_cols, list_params, extra_fields, cols_to_look_up
+            cols_to_look_up,
+            data_cols,
+            list_params,
+            extra_fields,
         )
 
         # Expected mapping: each column name maps to (source, index) tuple
@@ -132,7 +135,10 @@ class TestGetDataColumnsFromDataArgs:
 
         with pytest.raises(ValueError, match="Column 'non_existent_param' not found"):
             _get_column_indices(
-                data_cols, list_params, extra_fields, ["non_existent_param"]
+                ["non_existent_param"],
+                data_cols,
+                list_params,
+                extra_fields,
             )
 
 
