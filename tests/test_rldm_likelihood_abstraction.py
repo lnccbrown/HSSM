@@ -163,11 +163,12 @@ class TestRldmLikelihoodAbstraction:
         setup = rldm_setup
         logp_fn = setup["logp_fn"]
         data = setup["values"]
+        _args = setup["_args"]
         total_trials = setup["total_trials"]
-        drift_rates = logp_fn(data, *setup["_args"])
+        drift_rates = logp_fn(data, *_args)
         assert drift_rates.shape[0] == total_trials
         np.testing.assert_allclose(drift_rates.sum(), -141.76924, rtol=1e-2)
 
         jitted_logp = jax.jit(logp_fn)
-        jax_ll = jitted_logp(data, *setup["_args"])
+        jax_ll = jitted_logp(data, *_args)
         assert np.all(jax_ll == drift_rates)
