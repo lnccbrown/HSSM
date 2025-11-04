@@ -38,6 +38,14 @@ def rldm_setup(fixture_path):
     compute_v_subject_wise.inputs = ["rl.alpha", "scaler", "response", "feedback"]
     compute_v_subject_wise.outputs = ["v"]
 
+    rl_alpha = np.ones(total_trials) * 0.60
+    scaler = np.ones(total_trials) * 3.2
+    a = np.ones(total_trials) * 1.2
+    z = np.ones(total_trials) * 0.1
+    t = np.ones(total_trials) * 0.1
+    theta = np.ones(total_trials) * 0.1
+    feedback = data["feedback"].values  # Extract feedback from data
+
     logp_fn = make_rl_logp_func(
         compute_v_subject_wise,
         n_participants=len(subj),
