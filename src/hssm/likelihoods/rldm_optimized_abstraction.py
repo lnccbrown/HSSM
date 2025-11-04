@@ -205,11 +205,9 @@ def make_rl_logp_func(
         """Compute the drift rates (v) for each trial in a reinforcement learning model.
 
         data : np.ndarray
-            A 2D array containing trial data and model parameters for all
-            participants and trials. Each column should correspond to a specific
-            parameter or trial variable (e.g., rl_alpha, scaler, a, z, t, theta,
-            feedback). The array should have shape
-            (n_trials * n_participants, n_features).
+            A 2D array containing trial data.
+
+        args: Model parameters included in list_params and extra_fields.
 
         Notes
         -----
