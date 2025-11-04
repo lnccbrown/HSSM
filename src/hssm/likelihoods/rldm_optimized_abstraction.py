@@ -123,8 +123,10 @@ def compute_v_subject_wise(
 
 
 def _get_column_indices(
-    data_cols: list[str],
     cols_to_look_up: list[str],
+    data_cols: list[str],
+    list_params: list[str],
+    extra_fields: list[str],
 ) -> list[int]:
     """Return indices for required columns.
 
@@ -189,8 +191,14 @@ def make_rl_logp_func(
         and RLDM parameters.
     """
     inputs = subject_wise_func.inputs  # type: ignore[attr-defined]
-    _validate_columns(data_cols, inputs)
-    idxs = _get_column_indices(data_cols, inputs)
+    # _validate_columns(data_cols, inputs)
+    colidxs = _get_column_indices(
+        inputs,
+        data_cols,
+        list_params,
+        extra_fields,
+    )
+    # breakpoint()
 
     # Vectorized version of  subject_wise_func to handle multiple subjects.
     subject_wise_vmapped = jax.vmap(subject_wise_func, in_axes=0)
