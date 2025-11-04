@@ -32,14 +32,8 @@ def rldm_setup(fixture_path):
     trial = data["trial"].values
     subj = np.unique(participant_id).astype(np.int32)
     total_trials = trial.size
-
-    data["rl_alpha"] = np.ones(total_trials, dtype=np.float32) * 0.60
-    data["scaler"] = np.ones(total_trials, dtype=np.float32) * 3.2
-    data["action"] = data.response.values
-    data["feedback"] = data.pop("feedback")
-
-    dist_params = ["rl_alpha", "scaler"]
-    extra_fields = ["action", "feedback"]
+    list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
+    extra_fields = ["feedback"]
 
     compute_v_subject_wise.inputs = ["rl_alpha", "scaler", "action", "feedback"]
     compute_v_subject_wise.outputs = ["v"]
