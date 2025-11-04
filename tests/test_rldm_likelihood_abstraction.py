@@ -9,9 +9,11 @@ from hssm.likelihoods.rldm_optimized_abstraction import (
     make_rl_logp_func,
     make_rldm_logp_op,
     compute_v_subject_wise,
-    _validate_columns,
     annotate_function,
+    _get_column_indices,
+    _collect_cols_arrays,
 )
+
 
 hssm.set_floatX("float32")
 
