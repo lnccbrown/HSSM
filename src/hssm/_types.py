@@ -23,6 +23,7 @@ SupportedModels = Literal[
     "ddm_seq2_no_bias",
     "lba3",
     "lba2",
+    "exgauss",
 ]
 
 

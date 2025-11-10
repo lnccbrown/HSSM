@@ -527,6 +527,36 @@ def logp_lba3(
     checked_logp = check_parameters(logp, b > A, msg="b > A")
     return checked_logp
 
+def logp_exgauss(
+    data: np.ndarray, 
+    mu: float,
+    sigma: float,
+    tau: float,
+    p: float,
+) -> np.ndarray:
+    
+    # RT part 
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+    rt = pt.abs(data[:, 0])
+    response = data[:, 1]
+    tau_inv = 1.0 / tau 
+    sig2 = pt.sqr(sigma) 
+    z = (rt - mu - sig2 * tau_inv) / sigma 
+    cdf_gauss = 0.5 * (1 + pt.erf(z / pt.sqrt(2))) 
+    exp_component = tau_inv * pt.exp(0.5 * sig2 * tau_inv * tau_inv - tau_inv * (rt - mu))
+    log_pdf_rt = pt.log(cdf_gauss) + pt.log(exp_component) 
+
+    # Bernoulli part 
+    y = (response + 1) / 2  # map -1, 1 to 0, 1
+    log_pdf_resp = pt.log(y * (p + 1e-10) + (1 - y) * (1 - p + 1e-10))
+    checked_logp = check_parameters(log_pdf_rt + log_pdf_resp, sigma > 0, msg="sigma > 0")
+    checked_logp = check_parameters(checked_logp, tau > 0, msg="tau > 0")
+    checked_logp = check_parameters(checked_logp, p >= 0, msg="p >= 0")
+    checked_logp = check_parameters(checked_logp, p <= 1, msg="p <= 1")
+
+    return checked_logp 
+
+
 
 lba2_params = ["A", "b", "v0", "v1"]
 lba3_params = ["A", "b", "v0", "v1", "v2"]
@@ -559,3 +589,6 @@ LBA3: Type[pm.Distribution] = make_distribution(
     list_params=lba3_params,
     bounds=lba3_bounds,
 )
+
+
+    
