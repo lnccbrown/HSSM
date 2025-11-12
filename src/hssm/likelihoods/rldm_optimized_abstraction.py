@@ -239,91 +239,103 @@ def make_rl_logp_func(
     data_cols: list[str] = ["rt", "response"],
     list_params: list[str] | None = None,
     extra_fields: list[str] | None = None,
-    data=None,
-    args=None,
 ) -> Callable:
-    """Create a function to compute the drift rates (v) for the RLDM model.
+    """Create a log-likelihood function for a model with computed parameters.
+
+    This function acts as a factory to create a complete log-likelihood function
+    for models where one or more parameters of a state-space model (SSM) are
+    computed by another model (e.g., drift rates 'v' computed by a reinforcement
+    learning model).
+
+    The core `ssm_logp_func` must be annotated to specify its inputs and define
+    how to compute any parameters that are not directly supplied.
 
     Parameters
     ----------
-    subject_wise_func : Callable
-        Function that computes drift rates for a subject's trials.
     ssm_logp_func : Callable
-        Function that computes the log-likelihood for the SSM.
+        A JAX-based function that computes the log-likelihood of a state-space
+        model (e.g., `angle_logp_jax_func`). It must be decorated with
+        `@annotate_function` and have the following attributes:
+        - `.inputs` (list[str]): A list of all input parameter names that the
+          function expects (e.g., ["v", "a", "z", "t", "rt", "response"]).
+        - `.computed` (dict[str, Callable]): A dictionary mapping the names of
+          computed parameters to the functions that compute them. For example,
+          `{"v": compute_v_func}`. The computation function itself must also
+          be annotated with its own `.inputs`.
     n_participants : int
-        Number of participants in the dataset.
+        The number of participants in the dataset.
     n_trials : int
-        Number of trials per participant.
-    data_cols : list[str] | None
-        List of column names in the data array.
-    dist_params : list[str] | None
-        List of distribution parameter names required by the RL model.
-    extra_fields : list[str] | None
-        List of extra field names required by the RL model.
+        The number of trials per participant.
+    data_cols : list[str], optional
+        A list of column names expected in the `data` array that is passed to
+        the returned log-likelihood function. Defaults to `["rt", "response"]`.
+    list_params : list[str] | None, optional
+        A list of parameter names that will be passed as separate arrays in `*args`.
+        Defaults to None.
+    extra_fields : list[str] | None, optional
+        A list of additional field names (like 'feedback') that are required by
+        the computation functions and passed in `*args`. Defaults to None.
 
     Returns
     -------
     Callable
-        A function that computes drift rates (v) for all subjects given their trial data
-        and RLDM parameters.
+        A complete log-likelihood function that takes `(data, *args)` and returns
+        the log-likelihood for all trials. This function internally handles the
+        computation of parameters and passes them to the underlying `ssm_logp_func`.
     """
-    # Get column indices for SSM logp function
-    ssm_logp_func_colidxs = _get_column_indices_with_computed(
-        ssm_logp_func,
-        data_cols,
-        list_params,
-        extra_fields,
-    )
-    # breakpoint()
 
-    # def logp(data, *args) -> np.ndarray:
-    #     """Compute the drift rates (v) for each trial in a reinforcement learning model.
+    def logp(data, *args) -> np.ndarray:
+        """Compute the drift rates (v) for each trial in a reinforcement learning model.
 
-    #     data : np.ndarray
-    #         A 2D array containing trial data.
+        data : np.ndarray
+            A 2D array containing trial data.
 
-    #     args: Model parameters included in list_params and extra_fields.
+        args: Model parameters included in list_params and extra_fields.
 
-    #     Notes
-    #     -----
-    #     - The function internally reshapes the input data to group trials by
-    #       participant and applies a vectorized mapping function to compute drift
-    #       rates.
-    #     - The function assumes that `n_participants`, `n_trials`, `idxs`, and
-    #       `subject_wise_vmapped` are defined in the surrounding scope.
+        Notes
+        -----
+        - The function internally reshapes the input data to group trials by
+          participant and applies a vectorized mapping function to compute drift
+          rates.
+        - The function assumes that `n_participants`, `n_trials`, `idxs`, and
+          `subject_wise_vmapped` are defined in the surrounding scope.
 
-    #     Returns
-    #     -------
-    #     np.ndarray
-    #         The computed drift rates for each trial, reshaped as a 2D array.
-    #     """
-    # Reshape subj_trials into a 3D array of shape
-    # (n_participants, n_trials, len(args))
-    # so we can act on this object with the vmapped version of the mapping function
-    computed_colidxs1 = _get_column_indices(
-        ssm_logp_func.computed["v"].inputs, data_cols, list_params, extra_fields
-    )
-    # breakpoint()
-    computed_colidxs1_data = _collect_cols_arrays(data, args, computed_colidxs1)
-    subj_trials = jnp.stack(computed_colidxs1_data, axis=1)
-    subj_trials = subj_trials.reshape(n_participants, n_trials, -1)
-    vmapped_func = jax.vmap(ssm_logp_func.computed["v"], in_axes=0)
-    drift_rates = vmapped_func(subj_trials)
-    drift_rates = drift_rates.reshape((-1, 1))
-    # breakpoint()
+        Returns
+        -------
+        np.ndarray
+            The computed drift rates for each trial, reshaped as a 2D array.
+        """
+        # Reshape subj_trials into a 3D array of shape
+        # (n_participants, n_trials, len(args))
+        # so we can act on this object with the vmapped version of the mapping function
+        # TODO: Generalize to handle every member in computed
+        # TODO: Move to helper function.
+        # Get column indices for SSM logp function
+        ssm_logp_func_colidxs = _get_column_indices_with_computed(
+            ssm_logp_func,
+            data_cols,
+            list_params,
+            extra_fields,
+        )
+        computed_colidxs1 = _get_column_indices(
+            ssm_logp_func.computed["v"].inputs, data_cols, list_params, extra_fields
+        )
+        computed_colidxs1_data = _collect_cols_arrays(data, args, computed_colidxs1)
+        subj_trials = jnp.stack(computed_colidxs1_data, axis=1)
+        subj_trials = subj_trials.reshape(n_participants, n_trials, -1)
+        vmapped_func = jax.vmap(ssm_logp_func.computed["v"], in_axes=0)
+        computed_arg = vmapped_func(subj_trials)
+        computed_arg = computed_arg.reshape((-1, 1))
 
-    non_computed_args = _collect_cols_arrays(data, args, ssm_logp_func_colidxs.colidxs)
-    # return drift_rates
+        non_computed_args = _collect_cols_arrays(
+            data, args, ssm_logp_func_colidxs.colidxs
+        )
+        # create parameter arrays to be passed to the likelihood function
+        ddm_params_matrix = jnp.stack(non_computed_args, axis=1)
+        lan_matrix = jnp.concatenate((computed_arg, ddm_params_matrix), axis=1)
+        return ssm_logp_func(lan_matrix)
 
-    # TODO: reintroduce workflow using a jax function and handling the selection
-    # dist_params to stack
-    # create parameter arrays to be passed to the likelihood function
-    ddm_params_matrix = jnp.stack(non_computed_args, axis=1)
-    lan_matrix = jnp.concatenate((drift_rates, ddm_params_matrix), axis=1)
-    # breakpoint()
-    return ssm_logp_func(lan_matrix)
-
-    # return logp
+    return logp
 
 
 # TODO[CP]: Adapt this function given the changes to make_rl_logp_func
