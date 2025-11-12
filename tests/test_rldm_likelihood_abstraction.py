@@ -13,6 +13,7 @@ from hssm.likelihoods.rldm_optimized_abstraction import (
     _get_column_indices,
     _get_column_indices_with_computed,
     _collect_cols_arrays,
+    angle_logp_jax_func,
 )
 
 
@@ -35,9 +36,16 @@ def rldm_setup(fixture_path):
     total_trials = trial.size
     list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
     extra_fields = ["feedback"]
+    data_cols = ["rt", "response"]
 
-    compute_v_subject_wise.inputs = ["rl.alpha", "scaler", "response", "feedback"]
-    compute_v_subject_wise.outputs = ["v"]
+    compute_v_subject_wise_annotated = annotate_function(
+        inputs=["rl.alpha", "scaler", "response", "feedback"],
+        outputs=["v"],
+    )(compute_v_subject_wise)
+    ssm_logp_func = annotate_function(
+        inputs=["v", "a", "Z", "t", "theta", "rt", "response"],
+        computed={"v": compute_v_subject_wise_annotated},
+    )(angle_logp_jax_func)
 
     rl_alpha = np.ones(total_trials) * 0.60
     scaler = np.ones(total_trials) * 3.2
