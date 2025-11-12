@@ -1,6 +1,7 @@
 """The log-likelihood function for the RLDM model."""
 
 import functools
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import jax
@@ -161,6 +162,62 @@ def _get_column_indices(
                 f"or `extra_fields`."
             )
     return colidxs
+
+
+@dataclass
+class ColumnLookupResult:
+    """Result of column lookup containing indices and computed parameter info."""
+
+    colidxs: dict[str, tuple[str, int]]
+    computed: list[str]
+
+
+def _get_column_indices_with_computed(
+    func_with_inputs: Callable[..., Any],
+    data_cols: list[str],
+    list_params: list[str] | None,
+    extra_fields: list[str] | None,
+) -> ColumnLookupResult:
+    """Get column indices and identify computed parameters from function inputs.
+
+    Parameters
+    ----------
+    func_with_inputs : Callable
+        Function object with .inputs attribute containing required columns
+    data_cols : list[str]
+        Available data columns
+    list_params : list[str] | None
+        Available list parameters
+    extra_fields : list[str] | None
+        Available extra fields
+
+    Returns
+    -------
+    ColumnLookupResult
+        Object with colidxs dict and computed list
+    """
+    if not hasattr(func_with_inputs, "inputs"):
+        raise TypeError("func_with_inputs must have an 'inputs' attribute")
+    inputs = func_with_inputs.inputs
+
+    # Create sets for efficient lookup
+    inputs_set = set(inputs)
+    list_params = list_params or []
+    extra_fields = extra_fields or []
+    all_available_set = set(data_cols + list_params + extra_fields)
+
+    # Find which inputs are available and which are computed
+    found_set = inputs_set & all_available_set
+    computed_set = inputs_set - all_available_set
+
+    # Convert back to lists maintaining original order
+    found_inputs = [inp for inp in inputs if inp in found_set]
+    computed = [inp for inp in inputs if inp in computed_set]
+
+    # Get column indices for the found inputs (single call)
+    colidxs = _get_column_indices(found_inputs, data_cols, list_params, extra_fields)
+
+    return ColumnLookupResult(colidxs=colidxs, computed=computed)
 
 
 def _collect_cols_arrays(data, _args, colidxs):
