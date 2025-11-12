@@ -75,7 +75,7 @@ def compute_v_trial_wise(
     tuple
         A tuple containing the updated q-values and the computed drift rate (v).
     """
-    breakpoint()
+    # breakpoint()
     rl_alpha, scaler, action, reward = inputs
     action = jnp.astype(action, jnp.int32)
 
@@ -274,7 +274,7 @@ def make_rl_logp_func(
         list_params,
         extra_fields,
     )
-    breakpoint()
+    # breakpoint()
 
     # def logp(data, *args) -> np.ndarray:
     #     """Compute the drift rates (v) for each trial in a reinforcement learning model.
@@ -303,24 +303,24 @@ def make_rl_logp_func(
     computed_colidxs1 = _get_column_indices(
         ssm_logp_func.computed["v"].inputs, data_cols, list_params, extra_fields
     )
-    breakpoint()
+    # breakpoint()
     computed_colidxs1_data = _collect_cols_arrays(data, args, computed_colidxs1)
     subj_trials = jnp.stack(computed_colidxs1_data, axis=1)
     subj_trials = subj_trials.reshape(n_participants, n_trials, -1)
     vmapped_func = jax.vmap(ssm_logp_func.computed["v"], in_axes=0)
     drift_rates = vmapped_func(subj_trials)
     drift_rates = drift_rates.reshape((-1, 1))
-    breakpoint()
+    # breakpoint()
 
     non_computed_args = _collect_cols_arrays(data, args, ssm_logp_func_colidxs.colidxs)
-    return drift_rates
+    # return drift_rates
 
     # TODO: reintroduce workflow using a jax function and handling the selection
     # dist_params to stack
     # create parameter arrays to be passed to the likelihood function
     ddm_params_matrix = jnp.stack(non_computed_args, axis=1)
-    lan_matrix = jnp.concatenate((drift_rates, ddm_params_matrix, data), axis=1)
-    breakpoint()
+    lan_matrix = jnp.concatenate((drift_rates, ddm_params_matrix), axis=1)
+    # breakpoint()
     return ssm_logp_func(lan_matrix)
 
     # return logp
