@@ -111,12 +111,11 @@ class TestGetDataColumnsFromDataArgs:
             np.ones(10) * i for i, _ in enumerate(list_params_extra_fields, start=3)
         ]
 
+        ssm_logp_func = angle_logp_jax_func
+        ssm_logp_func.inputs = ["v", "a", "z", "t", "theta", "rt", "response"]
         # Call the function under test: get indices for where to find each column
         indices = _get_column_indices(
-            cols_to_look_up,
-            data_cols,
-            list_params,
-            extra_fields,
+            cols_to_look_up, data_cols, list_params, extra_fields
         )
 
         # Expected mapping: each column name maps to (source, index) tuple
