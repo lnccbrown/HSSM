@@ -75,6 +75,7 @@ def compute_v_trial_wise(
     tuple
         A tuple containing the updated q-values and the computed drift rate (v).
     """
+    breakpoint()
     rl_alpha, scaler, action, reward = inputs
     action = jnp.astype(action, jnp.int32)
 
@@ -232,12 +233,14 @@ def _collect_cols_arrays(data, _args, colidxs):
 
 
 def make_rl_logp_func(
-    subject_wise_func: Callable[..., Any],
+    ssm_logp_func: Callable[..., Any],
     n_participants: int,
     n_trials: int,
     data_cols: list[str] = ["rt", "response"],
     list_params: list[str] | None = None,
     extra_fields: list[str] | None = None,
+    data=None,
+    args=None,
 ) -> Callable:
     """Create a function to compute the drift rates (v) for the RLDM model.
 
@@ -245,6 +248,8 @@ def make_rl_logp_func(
     ----------
     subject_wise_func : Callable
         Function that computes drift rates for a subject's trials.
+    ssm_logp_func : Callable
+        Function that computes the log-likelihood for the SSM.
     n_participants : int
         Number of participants in the dataset.
     n_trials : int
@@ -262,57 +267,63 @@ def make_rl_logp_func(
         A function that computes drift rates (v) for all subjects given their trial data
         and RLDM parameters.
     """
-    inputs = subject_wise_func.inputs  # type: ignore[attr-defined]
-    # _validate_columns(data_cols, inputs)
-    colidxs = _get_column_indices(
-        inputs,
+    # Get column indices for SSM logp function
+    ssm_logp_func_colidxs = _get_column_indices_with_computed(
+        ssm_logp_func,
         data_cols,
         list_params,
         extra_fields,
     )
+    breakpoint()
 
-    # Vectorized version of  subject_wise_func to handle multiple subjects.
-    subject_wise_vmapped = jax.vmap(subject_wise_func, in_axes=0)
+    # def logp(data, *args) -> np.ndarray:
+    #     """Compute the drift rates (v) for each trial in a reinforcement learning model.
 
-    def logp(data, *args) -> np.ndarray:
-        """Compute the drift rates (v) for each trial in a reinforcement learning model.
+    #     data : np.ndarray
+    #         A 2D array containing trial data.
 
-        data : np.ndarray
-            A 2D array containing trial data.
+    #     args: Model parameters included in list_params and extra_fields.
 
-        args: Model parameters included in list_params and extra_fields.
+    #     Notes
+    #     -----
+    #     - The function internally reshapes the input data to group trials by
+    #       participant and applies a vectorized mapping function to compute drift
+    #       rates.
+    #     - The function assumes that `n_participants`, `n_trials`, `idxs`, and
+    #       `subject_wise_vmapped` are defined in the surrounding scope.
 
-        Notes
-        -----
-        - The function internally reshapes the input data to group trials by
-          participant and applies a vectorized mapping function to compute drift
-          rates.
-        - The function assumes that `n_participants`, `n_trials`, `idxs`, and
-          `subject_wise_vmapped` are defined in the surrounding scope.
+    #     Returns
+    #     -------
+    #     np.ndarray
+    #         The computed drift rates for each trial, reshaped as a 2D array.
+    #     """
+    # Reshape subj_trials into a 3D array of shape
+    # (n_participants, n_trials, len(args))
+    # so we can act on this object with the vmapped version of the mapping function
+    computed_colidxs1 = _get_column_indices(
+        ssm_logp_func.computed["v"].inputs, data_cols, list_params, extra_fields
+    )
+    breakpoint()
+    computed_colidxs1_data = _collect_cols_arrays(data, args, computed_colidxs1)
+    subj_trials = jnp.stack(computed_colidxs1_data, axis=1)
+    subj_trials = subj_trials.reshape(n_participants, n_trials, -1)
+    vmapped_func = jax.vmap(ssm_logp_func.computed["v"], in_axes=0)
+    drift_rates = vmapped_func(subj_trials)
+    drift_rates = drift_rates.reshape((-1, 1))
+    breakpoint()
 
-        Returns
-        -------
-        np.ndarray
-            The computed drift rates for each trial, reshaped as a 2D array.
-        """
-        # Reshape subj_trials into a 3D array of shape
-        # (n_participants, n_trials, len(args))
-        # so we can act on this object with the vmapped version of the mapping function
-        _data = _collect_cols_arrays(data, args, colidxs)
+    non_computed_args = _collect_cols_arrays(data, args, ssm_logp_func_colidxs.colidxs)
+    return drift_rates
 
-        subj_trials = jnp.stack(_data, axis=1).reshape(n_participants, n_trials, -1)
+    # TODO: reintroduce workflow using a jax function and handling the selection
+    # dist_params to stack
+    # create parameter arrays to be passed to the likelihood function
+    ddm_params_matrix = jnp.stack(non_computed_args, axis=1)
+    lan_matrix = jnp.concatenate((drift_rates, ddm_params_matrix, data), axis=1)
+    breakpoint()
+    return ssm_logp_func(lan_matrix)
 
-        drift_rates = subject_wise_vmapped(subj_trials).reshape((-1, 1))
-        return drift_rates
-
-        # TODO: reintroduce workflow using a jax function and handling the selection
-        # dist_params to stack
-        # create parameter arrays to be passed to the likelihood function
-        # ddm_params_matrix = jnp.stack(dist_params[2:6], axis=1)
-        # lan_matrix = jnp.concatenate((v, ddm_params_matrix, data), axis=1)
-        # return _logp_jax_func(lan_matrix)
-
-    return logp
+    # return logp
 
 
 # TODO[CP]: Adapt this function given the changes to make_rl_logp_func
