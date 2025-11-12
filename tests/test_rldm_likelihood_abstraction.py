@@ -11,6 +11,7 @@ from hssm.likelihoods.rldm_optimized_abstraction import (
     compute_v_subject_wise,
     annotate_function,
     _get_column_indices,
+    _get_column_indices_with_computed,
     _collect_cols_arrays,
 )
 
@@ -144,6 +145,84 @@ class TestGetDataColumnsFromDataArgs:
                 data_cols,
                 list_params,
                 extra_fields,
+            )
+
+    def test_get_column_indices_with_computed(self):
+        """Test the column indexing with computed parameters functionality.
+
+        1. Identifies which inputs from a function's .inputs attribute can be found
+           in available data sources (data_cols, list_params, extra_fields)
+        2. Marks inputs that cannot be found as "computed" parameters
+        3. Returns both the column indices for found inputs and the list of computed parameters
+        """
+        # Define the structure of available data columns and parameters
+        data_cols = ["rt", "response"]
+        list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
+        extra_fields = ["feedback"]
+
+        # Create a mock function object with .inputs attribute
+        # This simulates an SSM log-likelihood function that needs both
+        # regular parameters and computed parameters (like drift rates from RL)
+
+        class MockSSMLogpFunc:
+            inputs = ["v", "a", "Z", "t", "theta", "rt", "response"]
+
+        result = _get_column_indices_with_computed(
+            MockSSMLogpFunc(), data_cols, list_params, extra_fields
+        )
+
+        # Expected results:
+        # - "rt", "response" in data_cols
+        # - "a", "Z", "t", "theta" in list_params
+        # - "v" NOT found, should be marked as computed
+        expected_colidxs = {
+            "rt": ("data", 0),
+            "response": ("data", 1),
+            "a": ("args", 2),
+            "Z": ("args", 3),
+            "t": ("args", 4),
+            "theta": ("args", 5),
+        }
+        expected_computed = ["v"]
+
+        assert result.colidxs == expected_colidxs
+        assert result.computed == expected_computed
+
+        # Test with a function that has all parameters available (no computed)
+        class MockFuncAllFound:
+            inputs = ["rt", "response", "rl.alpha", "feedback"]
+
+        result_all_found = _get_column_indices_with_computed(
+            MockFuncAllFound(), data_cols, list_params, extra_fields
+        )
+
+        expected_colidxs_all_found = {
+            "rt": ("data", 0),
+            "response": ("data", 1),
+            "rl.alpha": ("args", 0),
+            "feedback": ("args", 6),
+        }
+
+        assert result_all_found.colidxs == expected_colidxs_all_found
+        assert result_all_found.computed == []  # No computed parameters
+
+        # Test with a function that has all computed parameters
+        class MockFuncAllComputed:
+            inputs = ["computed_param1", "computed_param2"]
+
+        result_all_computed = _get_column_indices_with_computed(
+            MockFuncAllComputed(), data_cols, list_params, extra_fields
+        )
+
+        assert result_all_computed.colidxs == {}  # No found parameters
+        assert result_all_computed.computed == ["computed_param1", "computed_param2"]
+
+        # Test with a function missing the inputs attribute
+        with pytest.raises(
+            TypeError, match="func_with_inputs must have an 'inputs' attribute"
+        ):
+            _get_column_indices_with_computed(
+                lambda x: 0, data_cols, list_params, extra_fields
             )
 
 
