@@ -7,7 +7,7 @@ import numpy as np
 import hssm
 from hssm.likelihoods.rldm_optimized_abstraction import (
     make_rl_logp_func,
-    make_rldm_logp_op,
+    # make_rldm_logp_op,
     compute_v_subject_wise,
     annotate_function,
     _get_column_indices,
