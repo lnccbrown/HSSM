@@ -56,7 +56,7 @@ def rldm_setup(fixture_path):
     feedback = data["feedback"].values  # Extract feedback from data
 
     logp_fn = make_rl_logp_func(
-        compute_v_subject_wise,
+        ssm_logp_func,
         n_participants=len(subj),
         n_trials=total_trials // len(subj),
         list_params=list_params,
