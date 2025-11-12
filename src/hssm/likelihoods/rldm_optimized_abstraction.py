@@ -2,18 +2,28 @@
 
 import functools
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.lax import scan
-from pytensor.graph import Op
 
-from hssm.distribution_utils.func_utils import make_vjp_func
-
-from ..distribution_utils.jax import make_jax_logp_ops
+# from pytensor.graph import Op
+# from hssm.distribution_utils.func_utils import make_vjp_func
+# from ..distribution_utils.jax import make_jax_logp_ops
 from ..distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
+
+
+class AnnotatedFunction(Protocol):
+    """A protocol for functions annotated with metadata."""
+
+    inputs: list[str]
+    outputs: list[str]
+    computed: dict[str, "AnnotatedFunction"]
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...  # noqa: D102
+
 
 # Obtain the angle log-likelihood function from an ONNX model.
 angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
@@ -174,7 +184,7 @@ class ColumnLookupResult:
 
 
 def _get_column_indices_with_computed(
-    func_with_inputs: Callable[..., Any],
+    func_with_inputs: AnnotatedFunction,
     data_cols: list[str],
     list_params: list[str] | None,
     extra_fields: list[str] | None,
@@ -233,7 +243,7 @@ def _collect_cols_arrays(data, _args, colidxs):
 
 
 def make_rl_logp_func(
-    ssm_logp_func: Callable[..., Any],
+    ssm_logp_func: AnnotatedFunction,
     n_participants: int,
     n_trials: int,
     data_cols: list[str] = ["rt", "response"],
@@ -340,32 +350,32 @@ def make_rl_logp_func(
 
 # TODO[CP]: Adapt this function given the changes to make_rl_logp_func
 # pragma: no cover
-def make_rldm_logp_op(
-    subject_wise_func: Callable[..., Any],
-    n_participants: int,
-    n_trials: int,
-    n_params: int,
-) -> Op:
-    """Create a pytensor Op for the likelihood function of RLDM model.
+# def make_rldm_logp_op(
+#     subject_wise_func: Callable[..., Any],
+#     n_participants: int,
+#     n_trials: int,
+#     n_params: int,
+# ) -> Op:
+#     """Create a pytensor Op for the likelihood function of RLDM model.
 
-    Parameters
-    ----------
-    n_participants : int
-        The number of participants in the dataset.
-    n_trials : int
-        The number of trials per participant.
+#     Parameters
+#     ----------
+#     n_participants : int
+#         The number of participants in the dataset.
+#     n_trials : int
+#         The number of trials per participant.
 
-    Returns
-    -------
-    Op
-        A pytensor Op that computes the log likelihood for the RLDM model.
-    """
-    logp = make_rl_logp_func(subject_wise_func, n_participants, n_trials)
-    vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
+#     Returns
+#     -------
+#     Op
+#         A pytensor Op that computes the log likelihood for the RLDM model.
+#     """
+#     logp = make_rl_logp_func(subject_wise_func, n_participants, n_trials)
+#     vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
 
-    return make_jax_logp_ops(
-        logp=jax.jit(logp),
-        logp_vjp=jax.jit(vjp_logp),
-        logp_nojit=logp,
-        n_params=n_params,  # rl_alpha, scaler, a, z, t, theta
-    )
+#     return make_jax_logp_ops(
+#         logp=jax.jit(logp),
+#         logp_vjp=jax.jit(vjp_logp),
+#         logp_nojit=logp,
+#         n_params=n_params,  # rl_alpha, scaler, a, z, t, theta
+#     )
