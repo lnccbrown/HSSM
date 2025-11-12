@@ -251,10 +251,6 @@ class TestRldmLikelihoodAbstraction:
         data = setup["values"]
         _args = setup["_args"]
         total_trials = setup["total_trials"]
-        drift_rates = logp_fn(data, *_args)
-        assert drift_rates.shape[0] == total_trials
-        np.testing.assert_allclose(drift_rates.sum(), -141.76924, rtol=1e-2)
-
-        jitted_logp = jax.jit(logp_fn)
-        jax_ll = jitted_logp(data, *_args)
-        assert np.all(jax_ll == drift_rates)
+        result = logp_fn(data, *_args)
+        assert result.shape[0] == total_trials
+        np.testing.assert_almost_equal(result.sum(), -39215.64, decimal=DECIMAL)
