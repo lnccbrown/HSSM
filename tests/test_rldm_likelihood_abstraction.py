@@ -58,6 +58,7 @@ def rldm_setup(fixture_path):
         ssm_logp_func,
         n_participants=len(subj),
         n_trials=total_trials // len(subj),
+        data_cols=data_cols,
         list_params=list_params,
         extra_fields=extra_fields,
     )
