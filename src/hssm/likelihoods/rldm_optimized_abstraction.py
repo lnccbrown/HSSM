@@ -156,7 +156,6 @@ def compute_v_trial_wise(
     tuple
         A tuple containing the updated q-values and the computed drift rate (v).
     """
-    # breakpoint()
     rl_alpha, scaler, action, reward = inputs
     action = jnp.astype(action, jnp.int32)
 
