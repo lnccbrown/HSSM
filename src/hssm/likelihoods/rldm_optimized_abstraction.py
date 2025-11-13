@@ -226,7 +226,14 @@ def _get_column_indices(
     Returns
     -------
     dict[str, tuple[str, int]]
-        Mapping of column names to (source, index) tuples
+        Mapping of column names to (source, index) tuples where source is
+        "data" for data columns or "args" for list_params/extra_fields.
+
+    See Also
+    --------
+    _get_column_indices_with_computed : Extended version that handles computed
+        parameters
+    _collect_cols_arrays : Uses these indices to extract arrays
     """
     list_params = list_params or []
     extra_fields = extra_fields or []
@@ -302,6 +309,23 @@ def _get_column_indices_with_computed(
 
 
 def _collect_cols_arrays(data, _args, colidxs):
+    """Extract arrays from data or args based on column index mappings.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        2D array containing trial data (e.g., rt, response).
+    _args : tuple
+        Model parameters and extra fields passed as separate arrays.
+    colidxs : dict[str, tuple[str, int]]
+        Mapping of column names to (source, index) tuples where source is
+        either "data" or "args".
+
+    Returns
+    -------
+    list
+        Arrays extracted from their respective sources in the order of colidxs keys.
+    """
     collected = []
     for col in colidxs:
         source, idx = colidxs[col]
