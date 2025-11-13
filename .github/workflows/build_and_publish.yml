@@ -22,6 +22,7 @@ jobs:
 
   publish:
     name: Build wheel and publish to test-PyPI, then PyPI, and publish docs
+    needs: [lint_and_typecheck, run_tests, check_notebooks]
     runs-on: ubuntu-latest
 
     strategy:
