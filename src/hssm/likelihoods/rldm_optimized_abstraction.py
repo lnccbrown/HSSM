@@ -317,7 +317,7 @@ def make_rl_logp_func(
     ssm_logp_func: AnnotatedFunction,
     n_participants: int,
     n_trials: int,
-    data_cols: list[str] = ["rt", "response"],
+    data_cols: list[str] | None = None,
     list_params: list[str] | None = None,
     extra_fields: list[str] | None = None,
 ) -> Callable:
@@ -347,7 +347,7 @@ def make_rl_logp_func(
         The number of participants in the dataset.
     n_trials : int
         The number of trials per participant.
-    data_cols : list[str], optional
+    data_cols : list[str] | None, optional
         A list of column names expected in the `data` array that is passed to
         the returned log-likelihood function. Defaults to `["rt", "response"]`.
     list_params : list[str] | None, optional
@@ -364,6 +364,9 @@ def make_rl_logp_func(
         the log-likelihood for all trials. This function internally handles the
         computation of parameters and passes them to the underlying `ssm_logp_func`.
     """
+    data_cols = data_cols or ["rt", "response"]
+    list_params = list_params or []
+    extra_fields = extra_fields or []
 
     def logp(data, *args) -> np.ndarray:
         """Compute the drift rates (v) for each trial in a reinforcement learning model.
