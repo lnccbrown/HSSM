@@ -321,48 +321,35 @@ def make_rl_logp_func(
     list_params: list[str] | None = None,
     extra_fields: list[str] | None = None,
 ) -> Callable:
-    """Create a log-likelihood function for a model with computed parameters.
+    """Create a log-likelihood function for models with computed parameters.
 
-    This function acts as a factory to create a complete log-likelihood function
-    for models where one or more parameters of a state-space model (SSM) are
-    computed by another model (e.g., drift rates 'v' computed by a reinforcement
-    learning model).
-
-    The core `ssm_logp_func` must be annotated to specify its inputs and define
-    how to compute any parameters that are not directly supplied.
+    Factory function that builds a complete log-likelihood for sequential sampling
+    models where some parameters are computed by other models (e.g., drift rates
+    computed from reinforcement learning).
 
     Parameters
     ----------
-    ssm_logp_func : Callable
-        A JAX-based function that computes the log-likelihood of a state-space
-        model (e.g., `angle_logp_jax_func`). It must be decorated with
-        `@annotate_function` and have the following attributes:
-        - `.inputs` (list[str]): A list of all input parameter names that the
-          function expects (e.g., ["v", "a", "z", "t", "rt", "response"]).
-        - `.computed` (dict[str, Callable]): A dictionary mapping the names of
-          computed parameters to the functions that compute them. For example,
-          `{"v": compute_v_func}`. The computation function itself must also
-          be annotated with its own `.inputs`.
+    ssm_logp_func : AnnotatedFunction
+        Log-likelihood function for the sequential sampling model, decorated with
+        `@annotate_function`. Must have `.inputs`, `.outputs`, and `.computed`
+        attributes specifying parameter dependencies.
     n_participants : int
-        The number of participants in the dataset.
+        Number of participants in the dataset.
     n_trials : int
-        The number of trials per participant.
+        Number of trials per participant.
     data_cols : list[str] | None, optional
-        A list of column names expected in the `data` array that is passed to
-        the returned log-likelihood function. Defaults to `["rt", "response"]`.
+        Column names in the data array. Defaults to `["rt", "response"]`.
     list_params : list[str] | None, optional
-        A list of parameter names that will be passed as separate arrays in `*args`.
-        Defaults to None.
+        Model parameter names passed as separate arrays in `*args`. Defaults to None.
     extra_fields : list[str] | None, optional
-        A list of additional field names (like 'feedback') that are required by
-        the computation functions and passed in `*args`. Defaults to None.
+        Additional fields (e.g., 'feedback') required by computation functions.
+        Defaults to None.
 
     Returns
     -------
     Callable
-        A complete log-likelihood function that takes `(data, *args)` and returns
-        the log-likelihood for all trials. This function internally handles the
-        computation of parameters and passes them to the underlying `ssm_logp_func`.
+        Log-likelihood function with signature `logp(data, *args) -> np.ndarray`.
+        Automatically computes dependent parameters and evaluates the SSM likelihood.
     """
     data_cols = data_cols or ["rt", "response"]
     list_params = list_params or []
