@@ -1,7 +1,6 @@
 from pathlib import Path
 import pytest
 
-import jax
 import numpy as np
 
 import hssm
