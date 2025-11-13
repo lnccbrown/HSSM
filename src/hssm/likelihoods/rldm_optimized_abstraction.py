@@ -76,9 +76,9 @@ class AnnotatedFunction(Protocol):
 
     Notes
     -----
-    - Functions implementing this protocol should be decorated with `@annotate_function`
-    - The decorator attaches the metadata as function attributes
-    - The protocol enables static type checking while maintaining runtime flexibility
+    The `@annotate_function` decorator dynamically attaches the `inputs`, `outputs`,
+    and `computed` attributes to functions at runtime via `setattr()`. This Protocol
+    provides a type hint interface for static type checkers.
 
     See Also
     --------
