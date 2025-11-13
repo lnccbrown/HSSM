@@ -92,6 +92,7 @@ class AnnotatedFunction(Protocol):
     outputs: list[str]
     computed: dict[str, "AnnotatedFunction"]
 
+    # Added to satisfy static type checkers
     def __call__(self, *args: Any, **kwargs: Any) -> Any: ...  # noqa: D102
 
 
