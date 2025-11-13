@@ -16,7 +16,77 @@ from ..distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 
 
 class AnnotatedFunction(Protocol):
-    """A protocol for functions annotated with metadata."""
+    """A protocol for functions annotated with metadata about their parameters.
+
+    This protocol defines the interface for functions that have been decorated with
+    the `@annotate_function` decorator. It is a key abstraction in the RLDM
+    (Reinforcement Learning Drift-Diffusion Model) likelihood system, enabling
+    automatic parameter resolution and composition of complex likelihood functions.
+
+    The protocol ensures that functions carry metadata about:
+    - Which parameters they require as inputs
+    - Which values they produce as outputs
+    - Which of their inputs need to be computed by other annotated functions
+
+    This metadata-driven approach allows `make_rl_logp_func` to automatically:
+    1. Identify which parameters come from data columns vs. model parameters
+    2. Determine which parameters need to be computed by other functions
+    3. Build a complete computational graph for the likelihood function
+
+    Attributes
+    ----------
+    inputs : list[str]
+        Names of all input parameters required by the function. These can include:
+        - Data columns (e.g., "rt", "response", "feedback")
+        - Model parameters (e.g., "rl.alpha", "scaler", "a", "z", "t")
+        - Computed parameters that will be provided by other functions (e.g., "v")
+    outputs : list[str]
+        Names of values produced by the function. For parameter computation
+        functions (e.g., `compute_v_subject_wise`), this typically contains
+        the name of the computed parameter (e.g., ["v"]). For likelihood
+        functions, this is often empty or contains ["logp"].
+    computed : dict[str, AnnotatedFunction]
+        Mapping from parameter names to the AnnotatedFunction instances that
+        compute them. For example, if drift rate "v" is computed by a
+        reinforcement learning model, this would be:
+        `{"v": compute_v_subject_wise_annotated}`.
+        This creates a dependency graph that the system uses to determine
+        the order of computation.
+
+    Examples
+    --------
+    Create an annotated computation function for drift rates:
+
+    >>> @annotate_function(
+    ...     inputs=["rl.alpha", "scaler", "response", "feedback"], outputs=["v"]
+    ... )
+    ... def compute_v_subject_wise(subj_trials):
+    ...     # Computation logic here
+    ...     return v_values
+
+    Create an annotated likelihood function that depends on computed parameters:
+
+    >>> @annotate_function(
+    ...     inputs=["v", "a", "z", "t", "theta", "rt", "response"],
+    ...     computed={"v": compute_v_subject_wise_annotated},
+    ... )
+    ... def angle_logp_func(params_matrix):
+    ...     # Likelihood computation logic here
+    ...     return logp
+
+    Notes
+    -----
+    - Functions implementing this protocol should be decorated with `@annotate_function`
+    - The decorator attaches the metadata as function attributes
+    - The protocol enables static type checking while maintaining runtime flexibility
+
+    See Also
+    --------
+    annotate_function : Decorator that creates AnnotatedFunction instances
+    make_rl_logp_func : Factory that uses AnnotatedFunction metadata to build
+        likelihoods
+    _get_column_indices_with_computed : Helper that resolves parameter sources
+    """
 
     inputs: list[str]
     outputs: list[str]
