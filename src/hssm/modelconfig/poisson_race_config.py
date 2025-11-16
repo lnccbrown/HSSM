@@ -1,5 +1,9 @@
 from .._types import DefaultConfig  # noqa: D100
-from ..likelihoods.analytical import poisson_race_bounds, poisson_race_params, logp_poisson_race
+from ..likelihoods.analytical import (
+    logp_poisson_race,
+    poisson_race_bounds,
+    poisson_race_params,
+)
 
 
 def get_poisson_race_config() -> DefaultConfig:

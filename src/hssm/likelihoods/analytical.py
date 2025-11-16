@@ -15,8 +15,6 @@ from numpy import inf
 from pymc.distributions.dist_math import check_parameters
 
 # import gammaln and gammaincc from scipy.special
-from scipy.special import gammaincc, gammaln
-
 from ..distribution_utils.dist import make_distribution
 
 LOGP_LB = pm.floatX(-66.1)
@@ -574,12 +572,13 @@ def logp_poisson_race(
 ) -> np.ndarray:
     """Compute analytical log-likelihoods for a 2-accumulator Poisson race.
 
-    Each accumulator time follows a Gamma distribution (with continuous shape parameter)
-    with shape parameter k and rate r. The per-trial likelihood decomposes into the density 
-    of the winning accumulator evaluated at the observed decision time and the survival 
-    function of the losing accumulator at the same time.
+    Each accumulator time follows a Gamma distribution (with continuous
+    shape parameter) with shape parameter k and rate r. The per-trial
+    likelihood decomposes into the density of the winning accumulator
+    evaluated at the observed decision time and the survival function of
+    the losing accumulator at the same time.
 
-    Originally formulated in https://link.springer.com/article/10.3758/BF03212980
+    Implemented as in https://link.springer.com/article/10.3758/BF03212980
     with two modifications:
       1. We allow continuous shape parameters (k1, k2) rather than just integers.
       2. We do not condition the underlying stimulus condition.
@@ -603,7 +602,6 @@ def logp_poisson_race(
     pytensor.tensor.TensorVariable
         Per-trial log-likelihoods compatible with PyTensor graphs.
     """
-
     epsilon = pm.floatX(epsilon)
     one = pm.floatX(1.0)
     data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
@@ -647,8 +645,8 @@ def logp_poisson_race(
 poisson_race_bounds = {
     "r1": (0.0, np.inf),
     "r2": (0.0, np.inf),
-    "k1": (1.0, np.inf),  
-    "k2": (1.0, np.inf),  
+    "k1": (1.0, np.inf),
+    "k2": (1.0, np.inf),
     "t": (0.0, np.inf),
 }
 poisson_race_params = ["r1", "r2", "k1", "k2", "t"]
