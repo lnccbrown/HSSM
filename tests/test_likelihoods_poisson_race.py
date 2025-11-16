@@ -93,10 +93,8 @@ def test_poisson_race_matches_exponential_case():
 def test_poisson_race_parameter_validation(poisson_race_data, param, bad_value):
     """Invalid parameter values should produce a ParameterValueError."""
     assert_parameter_value_error(
-        poisson_race_data,
-        theta_poisson_race,
-        **{param: bad_value}
-        )
+        poisson_race_data, theta_poisson_race, **{param: bad_value}
+    )
 
 
 def test_poisson_race_negative_rt_returns_logp_lb():

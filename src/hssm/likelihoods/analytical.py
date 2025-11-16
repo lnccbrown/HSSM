@@ -14,7 +14,6 @@ import pytensor.tensor as pt
 from numpy import inf
 from pymc.distributions.dist_math import check_parameters
 
-# import gammaln and gammaincc from scipy.special
 from ..distribution_utils.dist import make_distribution
 
 LOGP_LB = pm.floatX(-66.1)
@@ -561,6 +560,7 @@ LBA3: Type[pm.Distribution] = make_distribution(
     bounds=lba3_bounds,
 )
 
+
 def logp_poisson_race(
     data: np.ndarray,
     r1: float,
@@ -640,6 +640,7 @@ def logp_poisson_race(
     checked = check_parameters(checked, k2 > 0, msg="k2 > 0")
     checked = check_parameters(checked, t >= 0, msg="t >= 0")
     return checked
+
 
 # set bounds
 poisson_race_bounds = {
