@@ -23,7 +23,7 @@ DECIMAL = 2
 
 @pytest.fixture
 def fixture_path():
-    return Path(__file__).parent / "fixtures"
+    return Path(__file__).parent.parent / "fixtures"
 
 
 @pytest.fixture
