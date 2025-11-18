@@ -11,8 +11,10 @@ jobs:
     uses: ./.github/workflows/linting_and_type_checking.yml
 
   run_tests:
-    name: Run tests
+    name: Run full test suite
     uses: ./.github/workflows/run_tests.yml
+    with:
+      run_slow_tests: true
 
   check_notebooks:
     name: Check notebooks
@@ -20,6 +22,7 @@ jobs:
 
   publish:
     name: Build wheel and publish to test-PyPI, then PyPI, and publish docs
+    needs: [lint_and_typecheck, run_tests, check_notebooks]
     runs-on: ubuntu-latest
 
     strategy:

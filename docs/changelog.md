@@ -1,5 +1,15 @@
 # Changelog
 
+### 0.2.11
+
+This version include the following:
+
+1. Simplification of simulator logic inside HSSM random variables (see the `ssm-simulators` `0.11.3` release as well)
+2. Plotting functions now allow `prior_predictive` plots wherever suitable.
+3. A new tutorial on using [bayeux](https://github.com/jax-ml/bayeux) for sampling
+4. Consolidated `plotting` tutorial
+5. New tutorial on how to use the `do-operator` from PyMC to control forward simulations
+
 ### 0.2.8
 
 This version of HSSM incorporated the following changes:
@@ -98,7 +108,7 @@ be thrown.
 - Added `link_settings` and `prior_settings` arguments to `hssm.HSSM`, which allows HSSM
   to use intelligent default priors and link functions for complex hierarchical models.
 
-- Added an `hssm.plotting` submodule with `plot_posterior_predictive()` and
+- Added an `hssm.plotting` submodule with `plot_predictive()` and
   `plot_quantile_probability` for creating posterior predictive plots and quantile
   probability plots.
 

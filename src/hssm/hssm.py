@@ -28,6 +28,7 @@ import seaborn as sns
 import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
+from pymc.model.transform.conditioning import do
 from ssms.config import model_config as ssms_model_config
 
 from hssm._types import LoglikKind, SupportedModels
@@ -1131,19 +1132,19 @@ class HSSM(DataValidator):
         else:
             raise ValueError("`kind` must be either 'response' or 'response_params'.")
 
-    def plot_posterior_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
+    def plot_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
         """Produce a posterior predictive plot.
 
-        Equivalent to calling `hssm.plotting.plot_posterior_predictive()` with the
+        Equivalent to calling `hssm.plotting.plot_predictive()` with the
         model. Please see that function for
-        [full documentation][hssm.plotting.plot_posterior_predictive].
+        [full documentation][hssm.plotting.plot_predictive].
 
         Returns
         -------
         mpl.axes.Axes | sns.FacetGrid
             The matplotlib axis or seaborn FacetGrid object containing the plot.
         """
-        return plotting.plot_posterior_predictive(self, **kwargs)
+        return plotting.plot_predictive(self, **kwargs)
 
     def plot_quantile_probability(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
         """Produce a quantile probability plot.
@@ -1158,6 +1159,42 @@ class HSSM(DataValidator):
             The matplotlib axis or seaborn FacetGrid object containing the plot.
         """
         return plotting.plot_quantile_probability(self, **kwargs)
+
+    def predict(self, **kwargs) -> az.InferenceData:
+        """Generate samples from the predictive distribution."""
+        return self.model.predict(**kwargs)
+
+    def sample_do(
+        self, params: dict[str, Any], draws: int = 100, return_model=False, **kwargs
+    ) -> az.InferenceData | tuple[az.InferenceData, pm.Model]:
+        """Generate samples from the predictive distribution using the `do-operator`."""
+        do_model = do(self.pymc_model, params)
+        do_idata = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
+
+        # clean up `rt,response_mean` to `v`
+        do_idata = self._drop_parent_str_from_idata(idata=do_idata)
+
+        # rename otherwise inconsistentdims and coords
+        if "rt,response_extra_dim_0" in do_idata["prior_predictive"].dims:
+            setattr(
+                do_idata,
+                "prior_predictive",
+                do_idata["prior_predictive"].rename_dims(
+                    {"rt,response_extra_dim_0": "rt,response_dim"}
+                ),
+            )
+        if "rt,response_extra_dim_0" in do_idata["prior_predictive"].coords:
+            setattr(
+                do_idata,
+                "prior_predictive",
+                do_idata["prior_predictive"].rename_vars(
+                    name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
+                ),
+            )
+
+        if return_model:
+            return do_idata, do_model
+        return do_idata
 
     def sample_prior_predictive(
         self,
@@ -1227,7 +1264,10 @@ class HSSM(DataValidator):
                     name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
                 ),
             )
-        return idata
+
+        # Update self._inference_obj to match the cleaned idata
+        self._inference_obj = idata
+        return deepcopy(self._inference_obj)
 
     @property
     def pymc_model(self) -> pm.Model:

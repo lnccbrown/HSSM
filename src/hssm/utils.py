@@ -486,69 +486,6 @@ def _split_array(data: np.ndarray | list[int], divisor: int) -> list[np.ndarray]
     return [tmp.astype(int) for tmp in np.array_split(data, num_splits)]
 
 
-def decorate_atomic_simulator(
-    model_name: str,
-    choices: list | np.ndarray = [-1, 1],
-    obs_dim: int = 2,
-):
-    """Decorate to add attributes to simulator functions.
-
-    Parameters
-    ----------
-    model_name : str
-        Name of the model
-    choices : list
-        List of possible choices/responses
-    """
-
-    def decorator(func):
-        func.model_name = model_name
-        func.choices = choices
-        func.obs_dim = obs_dim
-        return func
-
-    return decorator
-
-
-def ssms_sim_wrapper(simulator_fun, theta, model, n_replicas, random_state, **kwargs):
-    """Wrap a ssms simulator function to match HSSM's expected interface.
-
-    Parameters
-    ----------
-    simulator_fun : callable
-        The simulator function to wrap, which should have the following interface:
-        - theta: array-like, shape (n_trials, n_parameters)
-        - model: str, name of the model to simulate
-        - n_samples: int, number of replica datasets to generate
-        - random_state: int, to be used as the random seed internally
-        - **kwargs: additional keyword arguments
-    theta : array-like
-        Model parameters, shape (n_trials, n_parameters)
-    model : str
-        Name of the model to simulate
-    n_replicas : int
-        Number of replica datasets to generate
-    random_state : int or numpy.random.Generator
-        Random seed or random number generator
-    **kwargs
-        Additional keyword arguments passed to simulator_fun
-
-    Returns
-    -------
-    array-like
-        Array of shape (n_trials, 2) containing reaction times and choices
-        stacked column-wise
-    """
-    out = simulator_fun(
-        theta=theta,
-        model=model,
-        n_samples=n_replicas,
-        random_state=random_state,
-        **kwargs,
-    )
-    return np.stack([out["rts"], out["choices"]], axis=-1).squeeze()
-
-
 def check_data_for_rl(
     data: pd.DataFrame,
     participant_id_col: str = "participant_id",
@@ -589,6 +526,38 @@ def check_data_for_rl(
     n_trials = trials_by_participant.iloc[0]
 
     return sorted_data, n_participants, n_trials
+
+
+def predictive_idata_to_dataframe(
+    idata: az.InferenceData,
+    predictive_group: Literal[
+        "posterior_predictive", "prior_predictive"
+    ] = "posterior_predictive",
+    response_str: str = "rt,response",
+    response_dim: str = "rt,response_dim",
+) -> pd.DataFrame:
+    """Convert a predictive InferenceData object to a dataframe.
+
+    Parameters
+    ----------
+    idata : az.InferenceData
+        The InferenceData object to convert.
+    predictive_group : Literal["posterior_predictive", "prior_predictive"]
+        The predictive group to convert.
+
+    Returns
+    -------
+    pd.DataFrame:
+        A dataframe with the predictive samples.
+    """
+    df = idata[predictive_group].to_dataframe().reset_index(drop=False)
+    df_wide = df.pivot_table(
+        index=["chain", "draw", "__obs__"], columns=response_dim, values=response_str
+    ).reset_index()
+
+    df_wide.columns.name = None
+    df_wide = df_wide.rename(columns={0: "rt", 1: "response"})
+    return df_wide
 
 
 class SuppressOutput:

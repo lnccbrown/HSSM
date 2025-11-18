@@ -228,3 +228,14 @@ def test_check_data_for_rl():
     assert list(sorted_data["trial"]) == [1, 2, 1, 2]
     assert n_participants == 2
     assert n_trials == 2
+
+
+def test_predictive_idata_to_dataframe(data_ddm):
+    model = hssm.HSSM(data=data_ddm)
+    sample_do = model.sample_do(params={"v": 1.0}, draws=10)
+    df = hssm.utils.predictive_idata_to_dataframe(
+        sample_do, predictive_group="prior_predictive"
+    )
+    assert df is not None
+    assert df.shape == (10 * data_ddm.shape[0], 5)
+    assert set(df.columns) == {"chain", "draw", "rt", "response", "__obs__"}

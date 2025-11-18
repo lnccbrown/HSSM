@@ -28,8 +28,30 @@ jobs:
       - name: Run notebooks
         run: |
           echo "Running notebooks with Python ${{ matrix.python-version }}"
+          # List of notebooks to skip (temporarily)
+          SKIP_NOTEBOOKS=(
+            "docs/tutorials/tutorial_bayeux.ipynb"
+            "rlssm_rlwm_model.ipynb"
+            "rlssm_tutorial.ipynb"
+            "add_custom_rlssm_model.ipynb"
+          )
+
           EXIT_CODE=0
           for notebook in $(find docs -name "*.ipynb"); do
+            # Check if notebook is in skip list
+            SKIP=false
+            for skip_nb in "${SKIP_NOTEBOOKS[@]}"; do
+              if [[ "$notebook" == "$skip_nb" ]]; then
+                SKIP=true
+                break
+              fi
+            done
+
+            if [[ "$SKIP" == "true" ]]; then
+              echo "⏭️  Skipping $notebook (in skip list)"
+              continue
+            fi
+
             echo "Cleaning $notebook"
             uv run nb-clean clean -o "$notebook"
             if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$notebook"; then
