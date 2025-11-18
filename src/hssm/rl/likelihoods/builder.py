@@ -8,11 +8,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.lax import scan
+from pytensor.graph import Op
 
-# from pytensor.graph import Op
-# from hssm.distribution_utils.func_utils import make_vjp_func
-# from ..distribution_utils.jax import make_jax_logp_ops
-from ..distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
+from hssm.distribution_utils.func_utils import make_vjp_func
+from hssm.distribution_utils.jax import make_jax_logp_ops
+from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 
 
 class AnnotatedFunction(Protocol):
@@ -434,32 +434,58 @@ def make_rl_logp_func(
 
 # TODO[CP]: Adapt this function given the changes to make_rl_logp_func
 # pragma: no cover
-# def make_rldm_logp_op(
-#     subject_wise_func: Callable[..., Any],
-#     n_participants: int,
-#     n_trials: int,
-#     n_params: int,
-# ) -> Op:
-#     """Create a pytensor Op for the likelihood function of RLDM model.
+def make_rl_logp_op(
+    ssm_logp_func: AnnotatedFunction,
+    n_participants: int,
+    n_trials: int,
+    data_cols: list[str] | None = None,
+    list_params: list[str] | None = None,
+    extra_fields: list[str] | None = None,
+) -> Op:
+    """Create a log-likelihood pytensor Op for models with computed parameters.
 
-#     Parameters
-#     ----------
-#     n_participants : int
-#         The number of participants in the dataset.
-#     n_trials : int
-#         The number of trials per participant.
+    Factory function that builds a complete log-likelihood Op for reinforcement learning
+    models where some parameters are computed by other models (e.g., drift rates
+    computed from reinforcement learning).
 
-#     Returns
-#     -------
-#     Op
-#         A pytensor Op that computes the log likelihood for the RLDM model.
-#     """
-#     logp = make_rl_logp_func(subject_wise_func, n_participants, n_trials)
-#     vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
+    Parameters
+    ----------
+    ssm_logp_func : AnnotatedFunction
+        Log-likelihood function for the sequential sampling model, decorated with
+        `@annotate_function`. It must have `.inputs`, `.outputs`, and `.computed`
+        attributes specifying parameter dependencies.
+    n_participants : int
+        Number of participants in the dataset.
+    n_trials : int
+        Number of trials per participant.
+    data_cols : list[str] | None, optional
+        Column names in the data array. Defaults to `["rt", "response"]`.
+    list_params : list[str] | None, optional
+        Model parameter names passed as separate arrays in `*args`. Defaults to None.
+    extra_fields : list[str] | None, optional
+        Additional fields (e.g., 'feedback') required by computation functions.
+        Defaults to None.
 
-#     return make_jax_logp_ops(
-#         logp=jax.jit(logp),
-#         logp_vjp=jax.jit(vjp_logp),
-#         logp_nojit=logp,
-#         n_params=n_params,  # rl_alpha, scaler, a, z, t, theta
-#     )
+    Returns
+    -------
+    Callable
+        Log-likelihood function with signature `logp(data, *args) -> np.ndarray`.
+        Automatically computes dependent parameters and evaluates the SSM likelihood.
+    """
+    logp = make_rl_logp_func(
+        ssm_logp_func,
+        n_participants,
+        n_trials,
+        data_cols,
+        list_params,
+        extra_fields,
+    )
+    n_params = len(list_params)
+    vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
+
+    return make_jax_logp_ops(
+        logp=jax.jit(logp),
+        logp_vjp=jax.jit(vjp_logp),
+        logp_nojit=logp,
+        n_params=n_params,
+    )
