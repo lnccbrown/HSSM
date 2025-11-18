@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 import hssm
-from hssm.likelihoods.rldm_optimized_abstraction import (
+from hssm.rl.likelihoods.builder import (
     make_rl_logp_func,
     # make_rldm_logp_op,
     compute_v_subject_wise,
