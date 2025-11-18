@@ -1,0 +1,14 @@
+name: Run slow tests
+
+on:
+  workflow_dispatch:  # Manual trigger
+  push:
+    branches:
+      - main
+
+jobs:
+  run_slow_tests:
+    name: Run full test suite including slow tests
+    uses: ./.github/workflows/run_tests.yml
+    with:
+      run_slow_tests: true

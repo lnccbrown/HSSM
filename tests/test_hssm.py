@@ -341,3 +341,24 @@ def test_compile_logp(cavanagh_test):
 
     out = model_1.compile_logp(model_1.initial_point(transformed=False))
     assert out is not None
+
+
+@pytest.mark.slow
+def test_sample_do(data_ddm):
+    model = HSSM(data=data_ddm)
+    sample_do = model.sample_do(params={"v": 1.0}, draws=10)
+    assert sample_do is not None
+    assert "v_mean" in sample_do.prior.data_vars
+    assert set(sample_do.prior_predictive.dims) == {
+        "chain",
+        "draw",
+        "__obs__",
+        "rt,response_dim",
+    }
+    assert set(sample_do.prior_predictive.coords) == {
+        "chain",
+        "draw",
+        "__obs__",
+        "rt,response_dim",
+    }
+    assert np.unique(sample_do.prior["v_mean"].values) == [1.0]

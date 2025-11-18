@@ -37,7 +37,7 @@ nav:
   - Tutorials:
       - Main tutorial: tutorials/main_tutorial.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
-      - Plotting in HSSM: tutorials/plotting.ipynb
+      - Plotting: tutorials/plotting.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
       - Variational Inference: tutorials/variational_inference.ipynb
       - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
@@ -49,10 +49,11 @@ nav:
       - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
       - Saving and loading models: tutorials/save_load_tutorial.ipynb
       - Bayesian t-test: tutorials/tutorial_bayesian_t_test.ipynb
-      - Model Cartoon Plots: tutorials/tutorial_model_cartoon.ipynb
+      - Using the do-operator: tutorials/do_operator.ipynb
       - Getting trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
       - Stim Coding: tutorials/tutorial_stim_coding.ipynb
       - P-outlier Regression: tutorials/tutorial_p_outlier_regression.ipynb
+      - Sampling with Bayeux: tutorials/tutorial_bayeux.ipynb
   - Contributed Tutorials:
       - Winterbrain 2025 Workshop Talk 1: tutorials/hssm_tutorial_workshop_1.ipynb
       - Winterbrain 2025 Workshop Talk 2: tutorials/hssm_tutorial_workshop_2.ipynb
@@ -80,9 +81,9 @@ plugins:
         - tutorials/jax_callable_contribution_onnx_example.ipynb
         - tutorials/blackbox_contribution_onnx_example.ipynb
         - tutorials/compile_logp.ipynb
+        - tutorials/do_operator.ipynb
         - tutorials/save_load_tutorial.ipynb
         - tutorials/tutorial_bayesian_t_test.ipynb
-        - tutorials/tutorial_model_cartoon.ipynb
         - tutorials/tutorial_trial_wise_parameters.ipynb
         - tutorials/tutorial_stim_coding.ipynb
         - tutorials/tutorial_p_outlier_regression.ipynb
@@ -95,6 +96,7 @@ plugins:
         - tutorials/scientific_workflow_hssm.ipynb
         - tutorials/pymc_to_hssm.ipynb
         - tutorials/rlssm_rlwm_model.ipynb
+        - tutorials/tutorial_bayeux.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:
