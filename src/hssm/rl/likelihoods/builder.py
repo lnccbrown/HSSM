@@ -480,7 +480,7 @@ def make_rl_logp_op(
         list_params,
         extra_fields,
     )
-    n_params = len(list_params)
+    n_params = len(list_params or [])
     vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
 
     return make_jax_logp_ops(
