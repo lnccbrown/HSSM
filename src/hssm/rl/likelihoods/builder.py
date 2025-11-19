@@ -12,7 +12,6 @@ from pytensor.graph import Op
 
 from hssm.distribution_utils.func_utils import make_vjp_func
 from hssm.distribution_utils.jax import make_jax_logp_ops
-from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 
 
 class AnnotatedFunction(Protocol):
@@ -94,12 +93,6 @@ class AnnotatedFunction(Protocol):
 
     # Added to satisfy static type checkers
     def __call__(self, *args: Any, **kwargs: Any) -> Any: ...  # noqa: D102
-
-
-# Obtain the angle log-likelihood function from an ONNX model.
-angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
-    model="angle.onnx",
-)
 
 
 def annotate_function(**kwargs):
