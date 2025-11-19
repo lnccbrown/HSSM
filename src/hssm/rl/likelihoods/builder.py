@@ -326,13 +326,11 @@ def _collect_cols_arrays(data, _args, colidxs):
     list
         Arrays extracted from their respective sources in the order of colidxs keys.
     """
-    collected = []
-    for col in colidxs:
-        source, idx = colidxs[col]
-        if source == "data":
-            collected.append(data[:, idx])
-        else:
-            collected.append(_args[idx])
+
+    def _extract_array(source, idx):
+        return data[:, idx] if source == "data" else _args[idx]
+
+    collected = [_extract_array(source, idx) for source, idx in colidxs.values()]
     return collected
 
 
