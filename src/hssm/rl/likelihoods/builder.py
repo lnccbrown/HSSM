@@ -302,7 +302,6 @@ def _get_column_indices_with_computed(
     found_inputs = [inp for inp in inputs if inp in found_set]
     computed = [inp for inp in inputs if inp in computed_set]
 
-    # Get column indices for the found inputs (single call)
     colidxs = _get_column_indices(found_inputs, data_cols, list_params, extra_fields)
 
     return ColumnLookupResult(colidxs=colidxs, computed=computed)
