@@ -12,9 +12,14 @@ from hssm.rl.likelihoods.builder import (
     _get_column_indices,
     _get_column_indices_with_computed,
     _collect_cols_arrays,
-    angle_logp_jax_func,
 )
 
+from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
+# Obtain the angle log-likelihood function from an ONNX model.
+
+angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
+    model="angle.onnx",
+)
 
 hssm.set_floatX("float32")
 
