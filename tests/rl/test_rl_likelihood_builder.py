@@ -32,6 +32,38 @@ hssm.set_floatX("float32")
 DECIMAL = 2
 
 
+class ModelConfig(NamedTuple):
+    """Model configuration constants."""
+
+    list_params: list[str]
+    extra_fields: list[str]
+    data_cols: list[str]
+
+
+class RLDMData(NamedTuple):
+    """RLDM data and metadata."""
+
+    data: np.ndarray
+    participant_id: np.ndarray
+    trial: np.ndarray
+    subj: np.ndarray
+    total_trials: int
+    n_participants: int
+    n_trials_per_participant: int
+
+
+class ParamArrays(NamedTuple):
+    """Parameter arrays for testing."""
+
+    rl_alpha: np.ndarray
+    scaler: np.ndarray
+    a: np.ndarray
+    z: np.ndarray
+    t: np.ndarray
+    theta: np.ndarray
+    feedback: np.ndarray
+
+
 class RLDMSetup(NamedTuple):
     """Named tuple for RLDM test setup data."""
 
