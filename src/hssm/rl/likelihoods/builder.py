@@ -369,25 +369,23 @@ def make_rl_logp_func(
     extra_fields = extra_fields or []
 
     def logp(data, *args) -> np.ndarray:
-        """Compute the drift rates (v) for each trial in a reinforcement learning model.
+        """Compute the log-likelihood for the RLDM model for each trial.
 
+        This function computes the full log-likelihood for a reinforcement learning
+        drift-diffusion model (RLDM). It first computes any required intermediate
+        parameters (such as drift rates) for each trial, and then evaluates the
+        sequential sampling model (SSM) likelihood using these parameters.
+        Parameters.
+        ----------
         data : np.ndarray
             A 2D array containing trial data.
-
-        args: Model parameters included in list_params and extra_fields.
-
-        Notes
-        -----
-        - The function internally reshapes the input data to group trials by
-          participant and applies a vectorized mapping function to compute drift
-          rates.
-        - The function assumes that `n_participants`, `n_trials`, `idxs`, and
-          `subject_wise_vmapped` are defined in the surrounding scope.
+        *args :
+            Model parameters included in list_params and extra_fields.
 
         Returns
         -------
         np.ndarray
-            The computed drift rates for each trial, reshaped as a 2D array.
+            The computed log-likelihoods for each trial, reshaped as a 2D array.
         """
         # Reshape subj_trials into a 3D array of shape
         # (n_participants, n_trials, len(args))
