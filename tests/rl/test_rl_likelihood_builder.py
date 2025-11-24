@@ -176,53 +176,26 @@ def rldm_setup(rldm_data, model_config, param_arrays, annotated_ssm_logp_func):
 
 class TestGetDataColumnsFromDataArgs:
     def test_get_column_indices(self):
-        """Test the column indexing and data collection functionality.
+        """Test column indexing and data collection from data matrix and args.
 
-        This test verifies that _get_column_indices correctly maps column names to their
-        sources (either 'data' matrix or 'args' parameters) and that _collect_cols_arrays
-        properly extracts and organizes the data for further processing.
-
-        The test simulates the RLDM likelihood scenario where we need to collect:
-        - Data columns from the input data matrix (rt, response)
-        - Parameter arrays from the args list (model parameters like rl.alpha, scaler, etc.)
-        - Extra fields that are passed as additional parameters (feedback)
+        Verifies _get_column_indices maps column names to their sources
+        and _collect_cols_arrays extracts the data correctly.
         """
-        # Define the structure of available data columns
-        # These represent columns in the input data matrix (e.g., reaction time, response)
         data_cols = ["rt", "response"]
-
-        # Define model parameters that will be passed as separate arrays
         list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
-
-        # Define extra fields that are needed for RL computation but not core DDM params
         extra_fields = ["feedback"]
-
-        # Combine parameters and extra fields to get the full args list structure
         list_params_extra_fields = list_params + extra_fields
-
-        # Define which columns we want to extract for this specific computation
-        # This represents the subset needed for the RL likelihood computation
         cols_to_look_up = ["rl.alpha", "scaler", "response", "feedback"]
 
-        # Create mock data matrix: 10 trials with 2 columns [rt=1.0, response=2.0]
         data = np.array([1, 2]) * np.ones((10, 2))
-
-        # Create mock parameter arrays: each parameter gets a different constant value
-        # _args[0] = [3, 3, 3, ...] (rl.alpha), _args[1] = [4, 4, 4, ...] (scaler), etc.
         _args = [
             np.ones(10) * i for i, _ in enumerate(list_params_extra_fields, start=3)
         ]
 
-        # Call the function under test: get indices for where to find each column
         indices = _get_column_indices(
             cols_to_look_up, data_cols, list_params, extra_fields
         )
 
-        # Expected mapping: each column name maps to (source, index) tuple
-        # - "rl.alpha": found in args at index 0
-        # - "scaler": found in args at index 1
-        # - "response": found in data at column index 1
-        # - "feedback": found in args at index 6 (len(list_params) = 6)
         expected_indices = {
             "rl.alpha": ("args", 0),
             "scaler": ("args", 1),
@@ -230,19 +203,10 @@ class TestGetDataColumnsFromDataArgs:
             "feedback": ("args", 6),
         }
 
-        # Use the indices to collect the actual data arrays
         collected_arrays = _collect_cols_arrays(data, _args, indices)
-        # Stack the collected arrays into a matrix for easier verification
         stacked_arrays = np.stack(collected_arrays, axis=1)
 
-        # Verify the indices mapping is correct
         assert indices == expected_indices
-
-        # Verify the collected data values are correct:
-        # - rl.alpha: _args[0] = [3, 3, 3, ...]
-        # - scaler: _args[1] = [4, 4, 4, ...]
-        # - response: data[:, 1] = [2, 2, 2, ...]
-        # - feedback: _args[6] = [9, 9, 9, ...]
         expected_stacked_arrays = np.array([[3.0, 4.0, 2.0, 9.0]] * 10)
         np.testing.assert_array_equal(expected_stacked_arrays, stacked_arrays)
 
@@ -255,21 +219,14 @@ class TestGetDataColumnsFromDataArgs:
             )
 
     def test_get_column_indices_with_computed(self):
-        """Test the column indexing with computed parameters functionality.
+        """Test column indexing that identifies computed parameters.
 
-        1. Identifies which inputs from a function's .inputs attribute can be found
-           in available data sources (data_cols, list_params, extra_fields)
-        2. Marks inputs that cannot be found as "computed" parameters
-        3. Returns both the column indices for found inputs and the list of computed parameters
+        Verifies that inputs not found in data sources are marked as computed.
         """
-        # Define the structure of available data columns and parameters
+        # Define available data columns and parameters
         data_cols = ["rt", "response"]
         list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
         extra_fields = ["feedback"]
-
-        # Create a mock function object with .inputs attribute
-        # This simulates an SSM log-likelihood function that needs both
-        # regular parameters and computed parameters (like drift rates from RL)
 
         class MockSSMLogpFunc:
             inputs = ["v", "a", "Z", "t", "theta", "rt", "response"]
@@ -278,10 +235,6 @@ class TestGetDataColumnsFromDataArgs:
             MockSSMLogpFunc(), data_cols, list_params, extra_fields
         )
 
-        # Expected results:
-        # - "rt", "response" in data_cols
-        # - "a", "Z", "t", "theta" in list_params
-        # - "v" NOT found, should be marked as computed
         expected_colidxs = {
             "rt": ("data", 0),
             "response": ("data", 1),
@@ -295,7 +248,6 @@ class TestGetDataColumnsFromDataArgs:
         assert result.colidxs == expected_colidxs
         assert result.computed == expected_computed
 
-        # Test with a function that has all parameters available (no computed)
         class MockFuncAllFound:
             inputs = ["rt", "response", "rl.alpha", "feedback"]
 
@@ -311,9 +263,8 @@ class TestGetDataColumnsFromDataArgs:
         }
 
         assert result_all_found.colidxs == expected_colidxs_all_found
-        assert result_all_found.computed == []  # No computed parameters
+        assert result_all_found.computed == []
 
-        # Test with a function that has all computed parameters
         class MockFuncAllComputed:
             inputs = ["computed_param1", "computed_param2"]
 
@@ -321,10 +272,9 @@ class TestGetDataColumnsFromDataArgs:
             MockFuncAllComputed(), data_cols, list_params, extra_fields
         )
 
-        assert result_all_computed.colidxs == {}  # No found parameters
+        assert result_all_computed.colidxs == {}
         assert result_all_computed.computed == ["computed_param1", "computed_param2"]
 
-        # Test with a function missing the inputs attribute
         with pytest.raises(
             TypeError, match="func_with_inputs must have an 'inputs' attribute"
         ):
@@ -355,10 +305,7 @@ class TestRldmLikelihoodAbstraction:
     ):
         """Test that make_rl_logp_op creates a working PyTensor Op.
 
-        This test verifies that:
-        1. The Op can be called and produces correct log-likelihood values
-        2. The Op can compute gradients with respect to parameters
-        3. The Op produces the same results as make_rl_logp_func
+        Verifies Op execution, gradient computation, and consistency with make_rl_logp_func.
         """
         # Create the Op
         logp_op = make_rl_logp_op(
@@ -381,7 +328,7 @@ class TestRldmLikelihoodAbstraction:
         result_func = rldm_setup.logp_fn(rldm_setup.values, *rldm_setup.args)
         np.testing.assert_array_almost_equal(result_eval, result_func, decimal=DECIMAL)
 
-        # Test 3: Op can compute gradients
+        # Verify gradient computation
         rl_alpha_var = pt.as_tensor_variable(param_arrays.rl_alpha.astype(np.float32))
         args_float32 = [arr.astype(np.float32) for arr in rldm_setup.args]
         args_float32[0] = rl_alpha_var  # Replace first arg with variable
@@ -396,13 +343,7 @@ class TestRldmLikelihoodAbstraction:
     def test_rl_logp_func_vjp_jitted(
         self, rldm_setup, rldm_data, model_config, param_arrays
     ):
-        """Test that the VJP of rl_logp_func can be jitted and produces correct gradients.
-
-        This test verifies that:
-        1. The VJP function can be successfully JIT-compiled
-        2. The jitted VJP produces the same results as the non-jitted version
-        3. Gradients are computed correctly with respect to parameters
-        """
+        """Test VJP JIT compilation and gradient correctness."""
         # Create VJP and jitted versions
         n_params = len(model_config.list_params)
         vjp_fn = make_vjp_func(rldm_setup.logp_fn, params_only=False, n_params=n_params)
@@ -444,11 +385,7 @@ class TestRldmLikelihoodAbstraction:
             )
 
     def test_rl_logp_func_vjp_consistency(self, rldm_setup, model_config):
-        """Test that VJP computed via make_vjp_func matches JAX's automatic differentiation.
-
-        This test verifies that the custom VJP implementation produces the same
-        gradients as JAX's built-in grad function for a subset of parameters.
-        """
+        """Test VJP consistency with JAX automatic differentiation."""
         # Create VJP function
         n_params = len(model_config.list_params)
         vjp_fn = make_vjp_func(rldm_setup.logp_fn, params_only=False, n_params=n_params)
@@ -462,13 +399,12 @@ class TestRldmLikelihoodAbstraction:
         gz = jnp.ones_like(logp_result)
         vjp_result = vjp_fn(data_values, *jax_args, gz=gz)
 
-        # Compute gradient using JAX's grad for the first parameter (rl_alpha)
         def sum_logp_first_param(first_param_val):
             return rldm_setup.logp_fn(data_values, first_param_val, *jax_args[1:]).sum()
 
         grad_first_param_jax = jax.grad(sum_logp_first_param)(jax_args[0])
 
-        # Compare: VJP result should match JAX's grad
+        # VJP result should match JAX's grad
         np.testing.assert_array_almost_equal(
             vjp_result[0],
             grad_first_param_jax,
@@ -481,23 +417,14 @@ class TestMultipleComputedParameters:
     """Test suite for models with multiple computed parameters."""
 
     def test_two_computed_parameters(self, rldm_data, model_config, param_arrays):
-        """Test model with two computed parameters (v and a).
-
-        This test verifies that the generalized implementation can handle
-        multiple computed parameters correctly, computing each independently
-        and assembling them in the correct order.
-        """
-
-        # Create a mock computation function for threshold 'a'
-        # that depends on arousal (simulated via feedback in this test)
+        """Test model with two computed parameters (v and a)."""
+        # Create computation function for threshold 'a' from arousal
         def compute_a_subject_wise(subj_trials: jnp.ndarray) -> jnp.ndarray:
-            """Compute threshold 'a' from arousal (feedback used as proxy)."""
-            # Simple computation: a = 1.0 + 0.2 * mean(feedback)
+            """Compute threshold 'a' from arousal."""
             feedback = subj_trials[:, 0]
             mean_feedback = jnp.mean(feedback)
             return jnp.ones(len(feedback)) * (1.0 + 0.2 * mean_feedback)
 
-        # Annotate the computation functions
         compute_v_annotated = annotate_function(
             inputs=["rl.alpha", "scaler", "response", "feedback"],
             outputs=["v"],
@@ -508,14 +435,11 @@ class TestMultipleComputedParameters:
             outputs=["a"],
         )(compute_a_subject_wise)
 
-        # Create SSM logp function with TWO computed parameters
         ssm_logp_func = annotate_function(
             inputs=["v", "a", "Z", "t", "theta", "rt", "response"],
             computed={"v": compute_v_annotated, "a": compute_a_annotated},
         )(angle_logp_jax_func)
 
-        # Build the log-likelihood function with adjusted list_params
-        # Note: 'a' is excluded from list_params since it's computed
         test_list_params = ["rl.alpha", "scaler", "Z", "t", "theta"]
         logp_fn = make_rl_logp_func(
             ssm_logp_func,
@@ -536,22 +460,15 @@ class TestMultipleComputedParameters:
         }
         args = [param_key_map[p] for p in test_list_params] + [param_arrays.feedback]
 
-        # Execute
         result = logp_fn(rldm_data.data.values, *args)
 
-        # Verify shape and that computation succeeded
+        # Verify shape and successful computation
         assert result.shape[0] == rldm_data.total_trials
         assert not np.isnan(result).any(), "Result contains NaN values"
         assert not np.isinf(result).any(), "Result contains infinite values"
 
     def test_parameter_ordering(self, rldm_data, model_config, param_arrays):
-        """Test that parameters are assembled in correct order.
-
-        The SSM likelihood expects parameters in a specific order.
-        This test verifies that computed and non-computed parameters
-        are interleaved correctly.
-        """
-        # Create annotated functions
+        """Test that computed and non-computed parameters are ordered correctly."""
         compute_v_annotated = annotate_function(
             inputs=["rl.alpha", "scaler", "response", "feedback"],
             outputs=["v"],
@@ -559,7 +476,7 @@ class TestMultipleComputedParameters:
 
         # Test with computed param NOT first in the input list
         ssm_logp_func = annotate_function(
-            inputs=["a", "v", "Z", "t", "theta", "rt", "response"],  # v is 2nd
+            inputs=["a", "v", "Z", "t", "theta", "rt", "response"],
             computed={"v": compute_v_annotated},
         )(angle_logp_jax_func)
 
@@ -593,19 +510,14 @@ class TestMultipleComputedParameters:
     def test_computed_params_different_inputs(
         self, rldm_data, model_config, param_arrays
     ):
-        """Test multiple computed params requiring different input sets.
-
-        This verifies that each computed parameter can have its own
-        unique set of input requirements.
-        """
+        """Test multiple computed params with different input requirements."""
 
         def compute_v_annotated_func(subj_trials: jnp.ndarray) -> jnp.ndarray:
             return compute_v_subject_wise(subj_trials)
 
         def compute_z_from_bias(subj_trials: jnp.ndarray) -> jnp.ndarray:
-            """Compute starting point z from feedback history."""
+            """Compute starting point z from feedback."""
             feedback = subj_trials[:, 0]
-            # z shifts based on recent feedback
             return 0.5 + 0.1 * (feedback - 0.5)
 
         compute_v_annotated = annotate_function(
@@ -648,15 +560,10 @@ class TestMultipleComputedParameters:
         assert not np.isnan(result).any()
 
     def test_no_computed_parameters(self, rldm_data, model_config, param_arrays):
-        """Test that the function still works with no computed parameters.
-
-        This is an edge case where the generalized code should gracefully
-        handle the absence of computed parameters.
-        """
-        # Create SSM logp function with NO computed parameters
+        """Test edge case with no computed parameters."""
         ssm_logp_func = annotate_function(
             inputs=["v", "a", "Z", "t", "theta", "rt", "response"],
-            computed={},  # Empty computed dict
+            computed={},
         )(angle_logp_jax_func)
 
         logp_fn = make_rl_logp_func(
@@ -664,7 +571,7 @@ class TestMultipleComputedParameters:
             n_participants=rldm_data.n_participants,
             n_trials=rldm_data.n_trials_per_participant,
             data_cols=model_config.data_cols,
-            list_params=["v", "a", "Z", "t", "theta"],  # All params provided
+            list_params=["v", "a", "Z", "t", "theta"],
             extra_fields=model_config.extra_fields,
         )
 
@@ -690,22 +597,16 @@ class TestMultipleComputedParameters:
         This verifies the system can handle scenarios where no parameters
         come directly from args (except for the RL/computation inputs).
         """
-
-        def compute_constant(subj_trials: jnp.ndarray, value: float) -> jnp.ndarray:
-            """Helper to create constant parameter computation."""
-            return jnp.ones(len(subj_trials)) * value
-
         # Create computation functions for all SSM parameters
         compute_v_annotated = annotate_function(
             inputs=["rl.alpha", "scaler", "response", "feedback"],
             outputs=["v"],
         )(compute_v_subject_wise)
 
-        # Note: These lambda functions need to handle the 2D input correctly
         def make_constant_computer(value):
+            """Create a function that computes constant parameter values."""
             def compute_func(subj_trials):
                 return jnp.ones(len(subj_trials)) * value
-
             return compute_func
 
         compute_a_annotated = annotate_function(inputs=["feedback"], outputs=["a"])(
