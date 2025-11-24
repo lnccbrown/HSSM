@@ -436,6 +436,9 @@ def make_rl_logp_func(
             extra_fields,
         )
 
+        # Validate that all computed parameters have compute functions
+        _validate_computed_parameters(ssm_logp_func, ssm_logp_func_colidxs.computed)
+
         # Compute all computed parameters
         def compute_parameter(param_name: str) -> tuple[str, jnp.ndarray]:
             """Compute a single parameter and return (name, values) tuple."""
