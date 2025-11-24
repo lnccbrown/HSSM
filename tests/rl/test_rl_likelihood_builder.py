@@ -82,11 +82,11 @@ def fixture_path():
 @pytest.fixture
 def model_config():
     """Shared model configuration constants."""
-    return {
-        "list_params": ["rl.alpha", "scaler", "a", "Z", "t", "theta"],
-        "extra_fields": ["feedback"],
-        "data_cols": ["rt", "response"],
-    }
+    return ModelConfig(
+        list_params=["rl.alpha", "scaler", "a", "Z", "t", "theta"],
+        extra_fields=["feedback"],
+        data_cols=["rt", "response"],
+    )
 
 
 @pytest.fixture
@@ -98,32 +98,32 @@ def rldm_data(fixture_path):
     subj = np.unique(participant_id).astype(np.int32)
     total_trials = trial.size
 
-    return {
-        "data": data,
-        "participant_id": participant_id,
-        "trial": trial,
-        "subj": subj,
-        "total_trials": total_trials,
-        "n_participants": len(subj),
-        "n_trials_per_participant": total_trials // len(subj),
-    }
+    return RLDMData(
+        data=data,
+        participant_id=participant_id,
+        trial=trial,
+        subj=subj,
+        total_trials=total_trials,
+        n_participants=len(subj),
+        n_trials_per_participant=total_trials // len(subj),
+    )
 
 
 @pytest.fixture
 def param_arrays(rldm_data):
     """Create parameter arrays for testing."""
-    total_trials = rldm_data["total_trials"]
-    feedback = rldm_data["data"]["feedback"].values
+    total_trials = rldm_data.total_trials
+    feedback = rldm_data.data["feedback"].values
 
-    return {
-        "rl_alpha": np.ones(total_trials) * 0.60,
-        "scaler": np.ones(total_trials) * 3.2,
-        "a": np.ones(total_trials) * 1.2,
-        "z": np.ones(total_trials) * 0.1,
-        "t": np.ones(total_trials) * 0.1,
-        "theta": np.ones(total_trials) * 0.1,
-        "feedback": feedback,
-    }
+    return ParamArrays(
+        rl_alpha=np.ones(total_trials) * 0.60,
+        scaler=np.ones(total_trials) * 3.2,
+        a=np.ones(total_trials) * 1.2,
+        z=np.ones(total_trials) * 0.1,
+        t=np.ones(total_trials) * 0.1,
+        theta=np.ones(total_trials) * 0.1,
+        feedback=feedback,
+    )
 
 
 @pytest.fixture
@@ -145,31 +145,31 @@ def rldm_setup(rldm_data, model_config, param_arrays, annotated_ssm_logp_func):
     """Create complete RLDM setup using shared fixtures."""
     logp_fn = make_rl_logp_func(
         annotated_ssm_logp_func,
-        n_participants=rldm_data["n_participants"],
-        n_trials=rldm_data["n_trials_per_participant"],
-        data_cols=model_config["data_cols"],
-        list_params=model_config["list_params"],
-        extra_fields=model_config["extra_fields"],
+        n_participants=rldm_data.n_participants,
+        n_trials=rldm_data.n_trials_per_participant,
+        data_cols=model_config.data_cols,
+        list_params=model_config.list_params,
+        extra_fields=model_config.extra_fields,
     )
 
-    # Map parameter names to param_arrays keys
+    # Map parameter names to param_arrays attributes
     param_key_map = {
-        "rl.alpha": "rl_alpha",
-        "scaler": "scaler",
-        "a": "a",
-        "Z": "z",
-        "t": "t",
-        "theta": "theta",
+        "rl.alpha": param_arrays.rl_alpha,
+        "scaler": param_arrays.scaler,
+        "a": param_arrays.a,
+        "Z": param_arrays.z,
+        "t": param_arrays.t,
+        "theta": param_arrays.theta,
     }
-    args = [param_arrays[param_key_map[p]] for p in model_config["list_params"]] + [
-        param_arrays["feedback"]
+    args = [param_key_map[p] for p in model_config.list_params] + [
+        param_arrays.feedback
     ]
 
     return RLDMSetup(
-        data=rldm_data["data"],
-        values=rldm_data["data"].values,
+        data=rldm_data.data,
+        values=rldm_data.data.values,
         logp_fn=logp_fn,
-        total_trials=rldm_data["total_trials"],
+        total_trials=rldm_data.total_trials,
         args=args,
     )
 
@@ -365,18 +365,18 @@ class TestRldmLikelihoodAbstraction:
         # Create the Op
         logp_op = make_rl_logp_op(
             annotated_ssm_logp_func,
-            n_participants=rldm_data["n_participants"],
-            n_trials=rldm_data["n_trials_per_participant"],
-            data_cols=model_config["data_cols"],
-            list_params=model_config["list_params"],
-            extra_fields=model_config["extra_fields"],
+            n_participants=rldm_data.n_participants,
+            n_trials=rldm_data.n_trials_per_participant,
+            data_cols=model_config.data_cols,
+            list_params=model_config.list_params,
+            extra_fields=model_config.extra_fields,
         )
 
         # Test 1: Op produces correct output
         result_op = logp_op(rldm_setup.values, *rldm_setup.args)
         result_eval = result_op.eval()
 
-        assert result_eval.shape[0] == rldm_data["total_trials"]
+        assert result_eval.shape[0] == rldm_data.total_trials
         np.testing.assert_almost_equal(result_eval.sum(), -39215.64, decimal=DECIMAL)
 
         # Test 2: Op produces same results as make_rl_logp_func
@@ -384,9 +384,7 @@ class TestRldmLikelihoodAbstraction:
         np.testing.assert_array_almost_equal(result_eval, result_func, decimal=DECIMAL)
 
         # Test 3: Op can compute gradients
-        rl_alpha_var = pt.as_tensor_variable(
-            param_arrays["rl_alpha"].astype(np.float32)
-        )
+        rl_alpha_var = pt.as_tensor_variable(param_arrays.rl_alpha.astype(np.float32))
         args_float32 = [arr.astype(np.float32) for arr in rldm_setup.args]
         args_float32[0] = rl_alpha_var  # Replace first arg with variable
 
@@ -394,7 +392,7 @@ class TestRldmLikelihoodAbstraction:
         grad_rl_alpha = pytensor.grad(logp_with_var.sum(), wrt=rl_alpha_var)
         grad_eval = grad_rl_alpha.eval()
 
-        assert grad_eval.shape == param_arrays["rl_alpha"].shape
+        assert grad_eval.shape == param_arrays.rl_alpha.shape
         assert not np.allclose(grad_eval, 0.0), "Gradient should not be all zeros"
 
     def test_rl_logp_func_vjp_jitted(
@@ -408,7 +406,7 @@ class TestRldmLikelihoodAbstraction:
         3. Gradients are computed correctly with respect to parameters
         """
         # Create VJP and jitted versions
-        n_params = len(model_config["list_params"])
+        n_params = len(model_config.list_params)
         vjp_fn = make_vjp_func(rldm_setup.logp_fn, params_only=False, n_params=n_params)
         logp_fn_jit = jax.jit(rldm_setup.logp_fn)
         vjp_fn_jit = jax.jit(vjp_fn)
@@ -432,7 +430,7 @@ class TestRldmLikelihoodAbstraction:
         assert len(vjp_result) == n_params
         assert len(vjp_result_jit) == n_params
         for i, (grad_nojit, grad_jit) in enumerate(zip(vjp_result, vjp_result_jit)):
-            param_name = model_config["list_params"][i]
+            param_name = model_config.list_params[i]
             np.testing.assert_array_almost_equal(
                 grad_nojit,
                 grad_jit,
@@ -442,7 +440,7 @@ class TestRldmLikelihoodAbstraction:
 
         # Test 3: Gradients are not all zeros
         for i, grad in enumerate(vjp_result):
-            param_name = model_config["list_params"][i]
+            param_name = model_config.list_params[i]
             assert not np.allclose(grad, 0.0), (
                 f"Gradient for {param_name} should not be all zeros"
             )
@@ -454,7 +452,7 @@ class TestRldmLikelihoodAbstraction:
         gradients as JAX's built-in grad function for a subset of parameters.
         """
         # Create VJP function
-        n_params = len(model_config["list_params"])
+        n_params = len(model_config.list_params)
         vjp_fn = make_vjp_func(rldm_setup.logp_fn, params_only=False, n_params=n_params)
 
         # Prepare JAX inputs
@@ -477,5 +475,5 @@ class TestRldmLikelihoodAbstraction:
             vjp_result[0],
             grad_first_param_jax,
             decimal=DECIMAL,
-            err_msg=f"VJP gradient for {model_config['list_params'][0]} doesn't match JAX's grad",
+            err_msg=f"VJP gradient for {model_config.list_params[0]} doesn't match JAX's grad",
         )
