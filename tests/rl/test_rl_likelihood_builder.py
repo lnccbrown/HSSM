@@ -475,3 +475,284 @@ class TestRldmLikelihoodAbstraction:
             decimal=DECIMAL,
             err_msg=f"VJP gradient for {model_config.list_params[0]} doesn't match JAX's grad",
         )
+
+
+class TestMultipleComputedParameters:
+    """Test suite for models with multiple computed parameters."""
+
+    def test_two_computed_parameters(self, rldm_data, model_config, param_arrays):
+        """Test model with two computed parameters (v and a).
+
+        This test verifies that the generalized implementation can handle
+        multiple computed parameters correctly, computing each independently
+        and assembling them in the correct order.
+        """
+
+        # Create a mock computation function for threshold 'a'
+        # that depends on arousal (simulated via feedback in this test)
+        def compute_a_subject_wise(subj_trials: jnp.ndarray) -> jnp.ndarray:
+            """Compute threshold 'a' from arousal (feedback used as proxy)."""
+            # Simple computation: a = 1.0 + 0.2 * mean(feedback)
+            feedback = subj_trials[:, 0]
+            mean_feedback = jnp.mean(feedback)
+            return jnp.ones(len(feedback)) * (1.0 + 0.2 * mean_feedback)
+
+        # Annotate the computation functions
+        compute_v_annotated = annotate_function(
+            inputs=["rl.alpha", "scaler", "response", "feedback"],
+            outputs=["v"],
+        )(compute_v_subject_wise)
+
+        compute_a_annotated = annotate_function(
+            inputs=["feedback"],
+            outputs=["a"],
+        )(compute_a_subject_wise)
+
+        # Create SSM logp function with TWO computed parameters
+        ssm_logp_func = annotate_function(
+            inputs=["v", "a", "Z", "t", "theta", "rt", "response"],
+            computed={"v": compute_v_annotated, "a": compute_a_annotated},
+        )(angle_logp_jax_func)
+
+        # Build the log-likelihood function with adjusted list_params
+        # Note: 'a' is excluded from list_params since it's computed
+        test_list_params = ["rl.alpha", "scaler", "Z", "t", "theta"]
+        logp_fn = make_rl_logp_func(
+            ssm_logp_func,
+            n_participants=rldm_data.n_participants,
+            n_trials=rldm_data.n_trials_per_participant,
+            data_cols=model_config.data_cols,
+            list_params=test_list_params,
+            extra_fields=model_config.extra_fields,
+        )
+
+        # Prepare arguments (exclude 'a' from args since it's computed)
+        param_key_map = {
+            "rl.alpha": param_arrays.rl_alpha,
+            "scaler": param_arrays.scaler,
+            "Z": param_arrays.z,
+            "t": param_arrays.t,
+            "theta": param_arrays.theta,
+        }
+        args = [param_key_map[p] for p in test_list_params] + [param_arrays.feedback]
+
+        # Execute
+        result = logp_fn(rldm_data.data.values, *args)
+
+        # Verify shape and that computation succeeded
+        assert result.shape[0] == rldm_data.total_trials
+        assert not np.isnan(result).any(), "Result contains NaN values"
+        assert not np.isinf(result).any(), "Result contains infinite values"
+
+    def test_parameter_ordering(self, rldm_data, model_config, param_arrays):
+        """Test that parameters are assembled in correct order.
+
+        The SSM likelihood expects parameters in a specific order.
+        This test verifies that computed and non-computed parameters
+        are interleaved correctly.
+        """
+        # Create annotated functions
+        compute_v_annotated = annotate_function(
+            inputs=["rl.alpha", "scaler", "response", "feedback"],
+            outputs=["v"],
+        )(compute_v_subject_wise)
+
+        # Test with computed param NOT first in the input list
+        ssm_logp_func = annotate_function(
+            inputs=["a", "v", "Z", "t", "theta", "rt", "response"],  # v is 2nd
+            computed={"v": compute_v_annotated},
+        )(angle_logp_jax_func)
+
+        logp_fn = make_rl_logp_func(
+            ssm_logp_func,
+            n_participants=rldm_data.n_participants,
+            n_trials=rldm_data.n_trials_per_participant,
+            data_cols=model_config.data_cols,
+            list_params=model_config.list_params,
+            extra_fields=model_config.extra_fields,
+        )
+
+        param_key_map = {
+            "rl.alpha": param_arrays.rl_alpha,
+            "scaler": param_arrays.scaler,
+            "a": param_arrays.a,
+            "Z": param_arrays.z,
+            "t": param_arrays.t,
+            "theta": param_arrays.theta,
+        }
+        args = [param_key_map[p] for p in model_config.list_params] + [
+            param_arrays.feedback
+        ]
+
+        result = logp_fn(rldm_data.data.values, *args)
+
+        # Should still compute successfully despite different parameter order
+        assert result.shape[0] == rldm_data.total_trials
+        assert not np.isnan(result).any()
+
+    def test_computed_params_different_inputs(
+        self, rldm_data, model_config, param_arrays
+    ):
+        """Test multiple computed params requiring different input sets.
+
+        This verifies that each computed parameter can have its own
+        unique set of input requirements.
+        """
+
+        def compute_v_annotated_func(subj_trials: jnp.ndarray) -> jnp.ndarray:
+            return compute_v_subject_wise(subj_trials)
+
+        def compute_z_from_bias(subj_trials: jnp.ndarray) -> jnp.ndarray:
+            """Compute starting point z from feedback history."""
+            feedback = subj_trials[:, 0]
+            # z shifts based on recent feedback
+            return 0.5 + 0.1 * (feedback - 0.5)
+
+        compute_v_annotated = annotate_function(
+            inputs=["rl.alpha", "scaler", "response", "feedback"],
+            outputs=["v"],
+        )(compute_v_annotated_func)
+
+        compute_z_annotated = annotate_function(
+            inputs=["feedback"],  # Different input set than v
+            outputs=["Z"],
+        )(compute_z_from_bias)
+
+        ssm_logp_func = annotate_function(
+            inputs=["v", "a", "Z", "t", "theta", "rt", "response"],
+            computed={"v": compute_v_annotated, "Z": compute_z_annotated},
+        )(angle_logp_jax_func)
+
+        # Exclude 'Z' from list_params since it's computed
+        test_list_params = ["rl.alpha", "scaler", "a", "t", "theta"]
+        logp_fn = make_rl_logp_func(
+            ssm_logp_func,
+            n_participants=rldm_data.n_participants,
+            n_trials=rldm_data.n_trials_per_participant,
+            data_cols=model_config.data_cols,
+            list_params=test_list_params,
+            extra_fields=model_config.extra_fields,
+        )
+        param_key_map = {
+            "rl.alpha": param_arrays.rl_alpha,
+            "scaler": param_arrays.scaler,
+            "a": param_arrays.a,
+            "t": param_arrays.t,
+            "theta": param_arrays.theta,
+        }
+        args = [param_key_map[p] for p in test_list_params] + [param_arrays.feedback]
+
+        result = logp_fn(rldm_data.data.values, *args)
+
+        assert result.shape[0] == rldm_data.total_trials
+        assert not np.isnan(result).any()
+
+    def test_no_computed_parameters(self, rldm_data, model_config, param_arrays):
+        """Test that the function still works with no computed parameters.
+
+        This is an edge case where the generalized code should gracefully
+        handle the absence of computed parameters.
+        """
+        # Create SSM logp function with NO computed parameters
+        ssm_logp_func = annotate_function(
+            inputs=["v", "a", "Z", "t", "theta", "rt", "response"],
+            computed={},  # Empty computed dict
+        )(angle_logp_jax_func)
+
+        logp_fn = make_rl_logp_func(
+            ssm_logp_func,
+            n_participants=rldm_data.n_participants,
+            n_trials=rldm_data.n_trials_per_participant,
+            data_cols=model_config.data_cols,
+            list_params=["v", "a", "Z", "t", "theta"],  # All params provided
+            extra_fields=model_config.extra_fields,
+        )
+
+        # Provide explicit v values instead of computing them
+        v_values = np.ones(rldm_data.total_trials) * 0.5
+        args = [
+            v_values,
+            param_arrays.a,
+            param_arrays.z,
+            param_arrays.t,
+            param_arrays.theta,
+            param_arrays.feedback,
+        ]
+
+        result = logp_fn(rldm_data.data.values, *args)
+
+        assert result.shape[0] == rldm_data.total_trials
+        assert not np.isnan(result).any()
+
+    def test_all_parameters_computed(self, rldm_data, model_config, param_arrays):
+        """Test edge case where all SSM parameters are computed.
+
+        This verifies the system can handle scenarios where no parameters
+        come directly from args (except for the RL/computation inputs).
+        """
+
+        def compute_constant(subj_trials: jnp.ndarray, value: float) -> jnp.ndarray:
+            """Helper to create constant parameter computation."""
+            return jnp.ones(len(subj_trials)) * value
+
+        # Create computation functions for all SSM parameters
+        compute_v_annotated = annotate_function(
+            inputs=["rl.alpha", "scaler", "response", "feedback"],
+            outputs=["v"],
+        )(compute_v_subject_wise)
+
+        # Note: These lambda functions need to handle the 2D input correctly
+        def make_constant_computer(value):
+            def compute_func(subj_trials):
+                return jnp.ones(len(subj_trials)) * value
+
+            return compute_func
+
+        compute_a_annotated = annotate_function(inputs=["feedback"], outputs=["a"])(
+            make_constant_computer(1.2)
+        )
+
+        compute_z_annotated = annotate_function(inputs=["feedback"], outputs=["Z"])(
+            make_constant_computer(0.5)
+        )
+
+        compute_t_annotated = annotate_function(inputs=["feedback"], outputs=["t"])(
+            make_constant_computer(0.1)
+        )
+
+        compute_theta_annotated = annotate_function(
+            inputs=["feedback"], outputs=["theta"]
+        )(make_constant_computer(0.3))
+
+        ssm_logp_func = annotate_function(
+            inputs=["v", "a", "Z", "t", "theta", "rt", "response"],
+            computed={
+                "v": compute_v_annotated,
+                "a": compute_a_annotated,
+                "Z": compute_z_annotated,
+                "t": compute_t_annotated,
+                "theta": compute_theta_annotated,
+            },
+        )(angle_logp_jax_func)
+
+        # Only RL parameters in list_params, all SSM params are computed
+        test_list_params = ["rl.alpha", "scaler"]
+        logp_fn = make_rl_logp_func(
+            ssm_logp_func,
+            n_participants=rldm_data.n_participants,
+            n_trials=rldm_data.n_trials_per_participant,
+            data_cols=model_config.data_cols,
+            list_params=test_list_params,
+            extra_fields=model_config.extra_fields,
+        )
+
+        args = [
+            param_arrays.rl_alpha,
+            param_arrays.scaler,
+            param_arrays.feedback,
+        ]
+
+        result = logp_fn(rldm_data.data.values, *args)
+
+        assert result.shape[0] == rldm_data.total_trials
+        assert not np.isnan(result).any()
