@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import NamedTuple
 import pytest
 
 import numpy as np
@@ -24,6 +25,16 @@ angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
 hssm.set_floatX("float32")
 
 DECIMAL = 2
+
+
+class RLDMSetup(NamedTuple):
+    """Named tuple for RLDM test setup data."""
+
+    data: np.ndarray
+    values: np.ndarray
+    logp_fn: callable
+    total_trials: int
+    args: list
 
 
 @pytest.fixture
@@ -68,13 +79,13 @@ def rldm_setup(fixture_path):
         extra_fields=extra_fields,
     )
 
-    return {
-        "data": data,
-        "values": data.values,
-        "logp_fn": logp_fn,
-        "total_trials": total_trials,
-        "_args": [rl_alpha, scaler, a, z, t, theta, feedback],
-    }
+    return RLDMSetup(
+        data=data,
+        values=data.values,
+        logp_fn=logp_fn,
+        total_trials=total_trials,
+        args=[rl_alpha, scaler, a, z, t, theta, feedback],
+    )
 
 
 class TestGetDataColumnsFromDataArgs:
@@ -251,11 +262,6 @@ class TestAnnotateFunction:
 
 class TestRldmLikelihoodAbstraction:
     def test_make_rl_logp_func(self, rldm_setup):
-        setup = rldm_setup
-        logp_fn = setup["logp_fn"]
-        data = setup["values"]
-        _args = setup["_args"]
-        total_trials = setup["total_trials"]
-        result = logp_fn(data, *_args)
-        assert result.shape[0] == total_trials
+        result = rldm_setup.logp_fn(rldm_setup.values, *rldm_setup.args)
+        assert result.shape[0] == rldm_setup.total_trials
         np.testing.assert_almost_equal(result.sum(), -39215.64, decimal=DECIMAL)
