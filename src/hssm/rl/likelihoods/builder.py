@@ -422,12 +422,10 @@ def make_rl_logp_func(
             return param_name, computed_values.reshape((-1, 1))
 
         computed_param_values = (
-            dict(
-                [
-                    compute_parameter(param_name)
-                    for param_name in ssm_logp_func_colidxs.computed
-                ]
-            )
+            {
+                param_name: compute_parameter(param_name)[1]
+                for param_name in ssm_logp_func_colidxs.computed
+            }
             if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed
             else {}
         )
