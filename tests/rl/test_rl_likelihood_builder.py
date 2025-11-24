@@ -7,7 +7,7 @@ import numpy as np
 import hssm
 from hssm.rl.likelihoods.builder import (
     make_rl_logp_func,
-    # make_rldm_logp_op,
+    make_rl_logp_op,
     compute_v_subject_wise,
     annotate_function,
     _get_column_indices,
@@ -43,7 +43,21 @@ def fixture_path():
 
 
 @pytest.fixture
-def rldm_setup(fixture_path):
+def annotated_ssm_logp_func():
+    """Create the annotated SSM log-likelihood function for RLDM models."""
+    compute_v_subject_wise_annotated = annotate_function(
+        inputs=["rl.alpha", "scaler", "response", "feedback"],
+        outputs=["v"],
+    )(compute_v_subject_wise)
+    ssm_logp_func = annotate_function(
+        inputs=["v", "a", "Z", "t", "theta", "rt", "response"],
+        computed={"v": compute_v_subject_wise_annotated},
+    )(angle_logp_jax_func)
+    return ssm_logp_func
+
+
+@pytest.fixture
+def rldm_setup(fixture_path, annotated_ssm_logp_func):
     data = np.load(fixture_path / "rldm_data.npy", allow_pickle=True).item()["data"]
     participant_id = data["participant_id"].values
     trial = data["trial"].values
@@ -71,7 +85,7 @@ def rldm_setup(fixture_path):
     feedback = data["feedback"].values  # Extract feedback from data
 
     logp_fn = make_rl_logp_func(
-        ssm_logp_func,
+        annotated_ssm_logp_func,
         n_participants=len(subj),
         n_trials=total_trials // len(subj),
         data_cols=data_cols,
