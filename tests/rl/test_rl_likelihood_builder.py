@@ -17,6 +17,7 @@ from hssm.rl.likelihoods.builder import (
     _get_column_indices,
     _get_column_indices_with_computed,
     _collect_cols_arrays,
+    _validate_computed_parameters,
 )
 from hssm.distribution_utils.func_utils import make_vjp_func
 
@@ -292,6 +293,130 @@ class TestAnnotateFunction:
         assert sample_function.inputs == ["input1", "input2"]
         assert sample_function.outputs == ["output1"]
         assert sample_function.other == 42
+
+
+class TestValidateComputedParameters:
+    """Tests for _validate_computed_parameters function."""
+
+    def test_no_computed_params_passes(self):
+        """Test that validation passes when there are no computed parameters."""
+
+        @annotate_function(inputs=["a", "b"], outputs=["c"])
+        def mock_func():
+            pass
+
+        # Should not raise any errors
+        _validate_computed_parameters(mock_func, [])
+
+    def test_valid_computed_params_passes(self):
+        """Test that validation passes when all computed params have functions."""
+
+        @annotate_function(inputs=["a", "b"], outputs=["c"])
+        def compute_a():
+            pass
+
+        @annotate_function(inputs=["x", "y"], outputs=["z"])
+        def compute_b():
+            pass
+
+        @annotate_function(
+            inputs=["a", "b", "rt", "response"],
+            computed={"a": compute_a, "b": compute_b},
+        )
+        def mock_ssm_func():
+            pass
+
+        # Should not raise any errors
+        _validate_computed_parameters(mock_ssm_func, ["a", "b"])
+
+    def test_missing_computed_attribute_raises(self):
+        """Test error when computed params exist but no computed attribute."""
+
+        @annotate_function(inputs=["v", "a", "z"])
+        def mock_func():
+            pass
+
+        with pytest.raises(
+            ValueError,
+            match=r"Parameters \['v'\] are not available.*no compute functions",
+        ):
+            _validate_computed_parameters(mock_func, ["v"])
+
+    def test_empty_computed_dict_raises(self):
+        """Test error when computed params exist but computed dict is empty."""
+
+        @annotate_function(inputs=["v", "a", "z"], computed={})
+        def mock_func():
+            pass
+
+        with pytest.raises(
+            ValueError,
+            match=r"Parameters \['v'\] are not available.*no compute functions",
+        ):
+            _validate_computed_parameters(mock_func, ["v"])
+
+    def test_partial_missing_compute_funcs_raises(self):
+        """Test error when some computed params lack compute functions."""
+
+        @annotate_function(inputs=["x"], outputs=["a"])
+        def compute_a():
+            pass
+
+        @annotate_function(inputs=["a", "b", "c", "rt"], computed={"a": compute_a})
+        def mock_func():
+            pass
+
+        with pytest.raises(ValueError, match=r"Parameters.*are identified as computed"):
+            _validate_computed_parameters(mock_func, ["a", "b", "c"])
+
+    def test_single_missing_compute_func_raises(self):
+        """Test error when a single computed param lacks compute function."""
+
+        @annotate_function(inputs=["v"], outputs=["a"])
+        def compute_a():
+            pass
+
+        @annotate_function(inputs=["v", "a"], computed={"a": compute_a})
+        def mock_func():
+            pass
+
+        with pytest.raises(ValueError, match=r"Parameters.*are identified as computed"):
+            _validate_computed_parameters(mock_func, ["v", "a"])
+
+    def test_integration_with_make_rl_logp_func(self, rldm_data, model_config):
+        """Test that validation is triggered in make_rl_logp_func."""
+
+        @annotate_function(
+            inputs=["v", "a", "Z", "t", "theta", "rt", "response"], computed={}
+        )
+        def mock_ssm_func(params):
+            return jnp.zeros(len(params))
+
+        # Create the logp function
+        logp_fn = make_rl_logp_func(
+            mock_ssm_func,
+            n_participants=rldm_data.n_participants,
+            n_trials=rldm_data.n_trials_per_participant,
+            data_cols=model_config.data_cols,
+            list_params=["a", "Z", "t", "theta"],
+            extra_fields=model_config.extra_fields,
+        )
+
+        # Validation happens when logp is called, not when created
+        # This should raise because 'v' is not in data/params but no compute func
+        with pytest.raises(
+            ValueError,
+            match=r"Parameters \['v'\] are not available.*no compute functions",
+        ):
+            # Create dummy data and args
+            data = rldm_data.data.values
+            a_vals = np.ones(rldm_data.total_trials)
+            z_vals = np.ones(rldm_data.total_trials) * 0.5
+            t_vals = np.ones(rldm_data.total_trials) * 0.1
+            theta_vals = np.ones(rldm_data.total_trials) * 0.3
+            feedback = rldm_data.data["feedback"].values
+
+            logp_fn(data, a_vals, z_vals, t_vals, theta_vals, feedback)
 
 
 class TestRldmLikelihoodAbstraction:
