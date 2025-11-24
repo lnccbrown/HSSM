@@ -418,6 +418,7 @@ class TestMultipleComputedParameters:
 
     def test_two_computed_parameters(self, rldm_data, model_config, param_arrays):
         """Test model with two computed parameters (v and a)."""
+
         # Create computation function for threshold 'a' from arousal
         def compute_a_subject_wise(subj_trials: jnp.ndarray) -> jnp.ndarray:
             """Compute threshold 'a' from arousal."""
@@ -605,8 +606,10 @@ class TestMultipleComputedParameters:
 
         def make_constant_computer(value):
             """Create a function that computes constant parameter values."""
+
             def compute_func(subj_trials):
                 return jnp.ones(len(subj_trials)) * value
+
             return compute_func
 
         compute_a_annotated = annotate_function(inputs=["feedback"], outputs=["a"])(
