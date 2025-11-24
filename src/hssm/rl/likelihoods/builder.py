@@ -326,6 +326,46 @@ def _collect_cols_arrays(data, _args, colidxs):
     return collected
 
 
+def _validate_computed_parameters(
+    ssm_logp_func: AnnotatedFunction,
+    computed_params: list[str],
+) -> None:
+    """Validate that all computed parameters have corresponding compute functions.
+
+    Parameters
+    ----------
+    ssm_logp_func : AnnotatedFunction
+        The SSM log-likelihood function that should contain compute functions
+        for computed parameters.
+    computed_params : list[str]
+        List of parameter names identified as computed (not available in
+        data_cols, list_params, or extra_fields).
+
+    Raises
+    ------
+    ValueError
+        If computed parameters are identified but no compute functions are
+        provided, or if some computed parameters lack compute functions.
+    """
+    if not computed_params:
+        return
+
+    if not hasattr(ssm_logp_func, "computed") or not ssm_logp_func.computed:
+        raise ValueError(
+            f"Parameters {computed_params} are not available "
+            f"in data_cols, list_params, or extra_fields, but no compute "
+            f"functions are provided in ssm_logp_func.computed"
+        )
+
+    missing_compute_funcs = set(computed_params) - set(ssm_logp_func.computed.keys())
+    if missing_compute_funcs:
+        raise ValueError(
+            f"Parameters {missing_compute_funcs} are identified as "
+            f"computed but no compute functions are provided in "
+            f"ssm_logp_func.computed"
+        )
+
+
 def make_rl_logp_func(
     ssm_logp_func: AnnotatedFunction,
     n_participants: int,
