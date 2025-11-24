@@ -391,7 +391,6 @@ def make_rl_logp_func(
         # (n_participants, n_trials, len(args))
         # so we can act on this object with the vmapped version of the mapping function
         # TODO: Generalize to handle every member in computed
-        # TODO: Move to helper function.
         # Get column indices for SSM logp function
         ssm_logp_func_colidxs = _get_column_indices_with_computed(
             ssm_logp_func,
@@ -456,9 +455,9 @@ def make_rl_logp_op(
 
     Returns
     -------
-    Callable
-        Log-likelihood function with signature `logp(data, *args) -> np.ndarray`.
-        Automatically computes dependent parameters and evaluates the SSM likelihood.
+    Op
+        A PyTensor Op that wraps the log-likelihood computation, automatically computing
+        dependent parameters and evaluating the SSM likelihood.
     """
     logp = make_rl_logp_func(
         ssm_logp_func,
