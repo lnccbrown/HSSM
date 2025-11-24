@@ -326,6 +326,46 @@ def _collect_cols_arrays(data, _args, colidxs):
     return collected
 
 
+def _validate_computed_parameters(
+    ssm_logp_func: AnnotatedFunction,
+    computed_params: list[str],
+) -> None:
+    """Validate that all computed parameters have corresponding compute functions.
+
+    Parameters
+    ----------
+    ssm_logp_func : AnnotatedFunction
+        The SSM log-likelihood function that should contain compute functions
+        for computed parameters.
+    computed_params : list[str]
+        List of parameter names identified as computed (not available in
+        data_cols, list_params, or extra_fields).
+
+    Raises
+    ------
+    ValueError
+        If computed parameters are identified but no compute functions are
+        provided, or if some computed parameters lack compute functions.
+    """
+    if not computed_params:
+        return
+
+    if not hasattr(ssm_logp_func, "computed") or not ssm_logp_func.computed:
+        raise ValueError(
+            f"Parameters {computed_params} are not available "
+            f"in data_cols, list_params, or extra_fields, but no compute "
+            f"functions are provided in ssm_logp_func.computed"
+        )
+
+    missing_compute_funcs = set(computed_params) - set(ssm_logp_func.computed.keys())
+    if missing_compute_funcs:
+        raise ValueError(
+            f"Parameters {missing_compute_funcs} are identified as "
+            f"computed but no compute functions are provided in "
+            f"ssm_logp_func.computed"
+        )
+
+
 def make_rl_logp_func(
     ssm_logp_func: AnnotatedFunction,
     n_participants: int,
@@ -387,40 +427,78 @@ def make_rl_logp_func(
         np.ndarray
             The computed log-likelihoods for each trial, reshaped as a 2D array.
         """
-        # Reshape subj_trials into a 3D array of shape
-        # (n_participants, n_trials, len(args))
-        # so we can act on this object with the vmapped version of the mapping function
-        # TODO: Generalize to handle every member in computed
         # Get column indices for SSM logp function
+        # Identifies computed vs available params
         ssm_logp_func_colidxs = _get_column_indices_with_computed(
             ssm_logp_func,
             data_cols,
             list_params,
             extra_fields,
         )
-        computed_colidxs1 = _get_column_indices(
-            ssm_logp_func.computed["v"].inputs, data_cols, list_params, extra_fields
-        )
-        computed_colidxs1_data = _collect_cols_arrays(data, args, computed_colidxs1)
-        subj_trials = jnp.stack(computed_colidxs1_data, axis=1)
-        subj_trials = subj_trials.reshape(n_participants, n_trials, -1)
-        vmapped_func = jax.vmap(ssm_logp_func.computed["v"], in_axes=0)
-        computed_arg = vmapped_func(subj_trials)
-        computed_arg = computed_arg.reshape((-1, 1))
 
+        # Validate that all computed parameters have compute functions
+        _validate_computed_parameters(ssm_logp_func, ssm_logp_func_colidxs.computed)
+
+        # Compute all computed parameters
+        def compute_parameter(param_name: str) -> tuple[str, jnp.ndarray]:
+            """Compute a single parameter and return (name, values) tuple."""
+            compute_func = ssm_logp_func.computed[param_name]
+
+            # Get column indices for inputs needed by computation function
+            compute_func_colidxs = _get_column_indices(
+                compute_func.inputs, data_cols, list_params, extra_fields
+            )
+
+            # Extract and organize data for this computation
+            compute_func_data = _collect_cols_arrays(data, args, compute_func_colidxs)
+
+            # Reshape into 3D array (n_participants, n_trials, n_inputs)
+            # to enable vmapping over participants
+            subj_trials = jnp.stack(compute_func_data, axis=1)
+            subj_trials = subj_trials.reshape(n_participants, n_trials, -1)
+
+            # Apply vmap to compute parameter values for all participants
+            vmapped_func = jax.vmap(compute_func, in_axes=0)
+            computed_values = vmapped_func(subj_trials)
+
+            # Reshape back to 2D (total_trials, 1) for concatenation
+            return param_name, computed_values.reshape((-1, 1))
+
+        computed_param_values = (
+            {
+                param_name: compute_parameter(param_name)[1]
+                for param_name in ssm_logp_func_colidxs.computed
+            }
+            if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed
+            else {}
+        )
+
+        # Extract non-computed parameters
         non_computed_args = _collect_cols_arrays(
             data, args, ssm_logp_func_colidxs.colidxs
         )
-        # create parameter arrays to be passed to the likelihood function
-        ddm_params_matrix = jnp.stack(non_computed_args, axis=1)
-        lan_matrix = jnp.concatenate((computed_arg, ddm_params_matrix), axis=1)
+
+        # Build final parameter matrix maintaining order from ssm_logp_func.inputs
+        # This ensures parameters appear in the sequence expected by the SSM likelihood
+        def get_param_array(param_name: str) -> jnp.ndarray:
+            """Get parameter array from computed values or non-computed args."""
+            if param_name in computed_param_values:
+                return computed_param_values[param_name]
+            # Use non-computed value (from data or args)
+            # Find its position in non_computed_args based on colidxs order
+            colidxs_keys = list(ssm_logp_func_colidxs.colidxs.keys())
+            idx = colidxs_keys.index(param_name)
+            return non_computed_args[idx].reshape((-1, 1))
+
+        param_arrays = [get_param_array(name) for name in ssm_logp_func.inputs]
+
+        # Stack all parameters into final matrix
+        lan_matrix = jnp.concatenate(param_arrays, axis=1)
         return ssm_logp_func(lan_matrix)
 
     return logp
 
 
-# TODO[CP]: Adapt this function given the changes to make_rl_logp_func
-# pragma: no cover
 def make_rl_logp_op(
     ssm_logp_func: AnnotatedFunction,
     n_participants: int,
