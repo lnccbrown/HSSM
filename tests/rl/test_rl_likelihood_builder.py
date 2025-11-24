@@ -48,6 +48,53 @@ def fixture_path():
 
 
 @pytest.fixture
+def model_config():
+    """Shared model configuration constants."""
+    return {
+        "list_params": ["rl.alpha", "scaler", "a", "Z", "t", "theta"],
+        "extra_fields": ["feedback"],
+        "data_cols": ["rt", "response"],
+    }
+
+
+@pytest.fixture
+def rldm_data(fixture_path):
+    """Load RLDM data and extract metadata."""
+    data = np.load(fixture_path / "rldm_data.npy", allow_pickle=True).item()["data"]
+    participant_id = data["participant_id"].values
+    trial = data["trial"].values
+    subj = np.unique(participant_id).astype(np.int32)
+    total_trials = trial.size
+
+    return {
+        "data": data,
+        "participant_id": participant_id,
+        "trial": trial,
+        "subj": subj,
+        "total_trials": total_trials,
+        "n_participants": len(subj),
+        "n_trials_per_participant": total_trials // len(subj),
+    }
+
+
+@pytest.fixture
+def param_arrays(rldm_data):
+    """Create parameter arrays for testing."""
+    total_trials = rldm_data["total_trials"]
+    feedback = rldm_data["data"]["feedback"].values
+
+    return {
+        "rl_alpha": np.ones(total_trials) * 0.60,
+        "scaler": np.ones(total_trials) * 3.2,
+        "a": np.ones(total_trials) * 1.2,
+        "z": np.ones(total_trials) * 0.1,
+        "t": np.ones(total_trials) * 0.1,
+        "theta": np.ones(total_trials) * 0.1,
+        "feedback": feedback,
+    }
+
+
+@pytest.fixture
 def annotated_ssm_logp_func():
     """Create the annotated SSM log-likelihood function for RLDM models."""
     compute_v_subject_wise_annotated = annotate_function(
@@ -62,39 +109,36 @@ def annotated_ssm_logp_func():
 
 
 @pytest.fixture
-def rldm_setup(fixture_path, annotated_ssm_logp_func):
-    data = np.load(fixture_path / "rldm_data.npy", allow_pickle=True).item()["data"]
-    participant_id = data["participant_id"].values
-    trial = data["trial"].values
-    subj = np.unique(participant_id).astype(np.int32)
-    total_trials = trial.size
-    list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
-    extra_fields = ["feedback"]
-    data_cols = ["rt", "response"]
-
-    rl_alpha = np.ones(total_trials) * 0.60
-    scaler = np.ones(total_trials) * 3.2
-    a = np.ones(total_trials) * 1.2
-    z = np.ones(total_trials) * 0.1
-    t = np.ones(total_trials) * 0.1
-    theta = np.ones(total_trials) * 0.1
-    feedback = data["feedback"].values  # Extract feedback from data
-
+def rldm_setup(rldm_data, model_config, param_arrays, annotated_ssm_logp_func):
+    """Create complete RLDM setup using shared fixtures."""
     logp_fn = make_rl_logp_func(
         annotated_ssm_logp_func,
-        n_participants=len(subj),
-        n_trials=total_trials // len(subj),
-        data_cols=data_cols,
-        list_params=list_params,
-        extra_fields=extra_fields,
+        n_participants=rldm_data["n_participants"],
+        n_trials=rldm_data["n_trials_per_participant"],
+        data_cols=model_config["data_cols"],
+        list_params=model_config["list_params"],
+        extra_fields=model_config["extra_fields"],
     )
 
+    # Map parameter names to param_arrays keys
+    param_key_map = {
+        "rl.alpha": "rl_alpha",
+        "scaler": "scaler",
+        "a": "a",
+        "Z": "z",
+        "t": "t",
+        "theta": "theta",
+    }
+    args = [param_arrays[param_key_map[p]] for p in model_config["list_params"]] + [
+        param_arrays["feedback"]
+    ]
+
     return RLDMSetup(
-        data=data,
-        values=data.values,
+        data=rldm_data["data"],
+        values=rldm_data["data"].values,
         logp_fn=logp_fn,
-        total_trials=total_trials,
-        args=[rl_alpha, scaler, a, z, t, theta, feedback],
+        total_trials=rldm_data["total_trials"],
+        args=args,
     )
 
 
@@ -276,7 +320,9 @@ class TestRldmLikelihoodAbstraction:
         assert result.shape[0] == rldm_setup.total_trials
         np.testing.assert_almost_equal(result.sum(), -39215.64, decimal=DECIMAL)
 
-    def test_make_rl_logp_op(self, rldm_setup, fixture_path, annotated_ssm_logp_func):
+    def test_make_rl_logp_op(
+        self, rldm_setup, rldm_data, model_config, param_arrays, annotated_ssm_logp_func
+    ):
         """Test that make_rl_logp_op creates a working PyTensor Op.
 
         This test verifies that:
@@ -284,40 +330,21 @@ class TestRldmLikelihoodAbstraction:
         2. The Op can compute gradients with respect to parameters
         3. The Op produces the same results as make_rl_logp_func
         """
-        # Load data and setup for the Op test
-        data = np.load(fixture_path / "rldm_data.npy", allow_pickle=True).item()["data"]
-        participant_id = data["participant_id"].values
-        trial = data["trial"].values
-        subj = np.unique(participant_id).astype(np.int32)
-        total_trials = trial.size
-        list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
-        extra_fields = ["feedback"]
-        data_cols = ["rt", "response"]
-
         # Create the Op
         logp_op = make_rl_logp_op(
             annotated_ssm_logp_func,
-            n_participants=len(subj),
-            n_trials=total_trials // len(subj),
-            data_cols=data_cols,
-            list_params=list_params,
-            extra_fields=extra_fields,
+            n_participants=rldm_data["n_participants"],
+            n_trials=rldm_data["n_trials_per_participant"],
+            data_cols=model_config["data_cols"],
+            list_params=model_config["list_params"],
+            extra_fields=model_config["extra_fields"],
         )
 
-        # Create parameter arrays
-        rl_alpha = np.ones(total_trials) * 0.60
-        scaler = np.ones(total_trials) * 3.2
-        a = np.ones(total_trials) * 1.2
-        z = np.ones(total_trials) * 0.1
-        t = np.ones(total_trials) * 0.1
-        theta = np.ones(total_trials) * 0.1
-        feedback = data["feedback"].values
-
         # Test 1: Op produces correct output
-        result_op = logp_op(data.values, rl_alpha, scaler, a, z, t, theta, feedback)
+        result_op = logp_op(rldm_setup.values, *rldm_setup.args)
         result_eval = result_op.eval()
 
-        assert result_eval.shape[0] == total_trials
+        assert result_eval.shape[0] == rldm_data["total_trials"]
         np.testing.assert_almost_equal(result_eval.sum(), -39215.64, decimal=DECIMAL)
 
         # Test 2: Op produces same results as make_rl_logp_func
@@ -325,31 +352,21 @@ class TestRldmLikelihoodAbstraction:
         np.testing.assert_array_almost_equal(result_eval, result_func, decimal=DECIMAL)
 
         # Test 3: Op can compute gradients
-        # Create a PyTensor variable for one parameter
-        rl_alpha_var = pt.as_tensor_variable(rl_alpha.astype(np.float32))
-
-        # Compute log-likelihood with the variable parameter
-        logp_with_var = logp_op(
-            data.values.astype(np.float32),
-            rl_alpha_var,
-            scaler.astype(np.float32),
-            a.astype(np.float32),
-            z.astype(np.float32),
-            t.astype(np.float32),
-            theta.astype(np.float32),
-            feedback.astype(np.float32),
+        rl_alpha_var = pt.as_tensor_variable(
+            param_arrays["rl_alpha"].astype(np.float32)
         )
+        args_float32 = [arr.astype(np.float32) for arr in rldm_setup.args]
+        args_float32[0] = rl_alpha_var  # Replace first arg with variable
 
-        # Compute gradient with respect to rl_alpha
+        logp_with_var = logp_op(rldm_setup.values.astype(np.float32), *args_float32)
         grad_rl_alpha = pytensor.grad(logp_with_var.sum(), wrt=rl_alpha_var)
         grad_eval = grad_rl_alpha.eval()
 
-        # Verify gradient has correct shape and is not all zeros
-        assert grad_eval.shape == rl_alpha.shape
+        assert grad_eval.shape == param_arrays["rl_alpha"].shape
         assert not np.allclose(grad_eval, 0.0), "Gradient should not be all zeros"
 
     def test_rl_logp_func_vjp_jitted(
-        self, rldm_setup, annotated_ssm_logp_func, fixture_path
+        self, rldm_setup, rldm_data, model_config, param_arrays
     ):
         """Test that the VJP of rl_logp_func can be jitted and produces correct gradients.
 
@@ -358,143 +375,75 @@ class TestRldmLikelihoodAbstraction:
         2. The jitted VJP produces the same results as the non-jitted version
         3. Gradients are computed correctly with respect to parameters
         """
-        # Setup
-        data = np.load(fixture_path / "rldm_data.npy", allow_pickle=True).item()["data"]
-        participant_id = data["participant_id"].values
-        trial = data["trial"].values
-        subj = np.unique(participant_id).astype(np.int32)
-        total_trials = trial.size
-        list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
-        extra_fields = ["feedback"]
-        data_cols = ["rt", "response"]
-
-        # Create the logp function
-        logp_fn = make_rl_logp_func(
-            annotated_ssm_logp_func,
-            n_participants=len(subj),
-            n_trials=total_trials // len(subj),
-            data_cols=data_cols,
-            list_params=list_params,
-            extra_fields=extra_fields,
-        )
-
-        # Create VJP function
-        n_params = len(list_params)
-        vjp_fn = make_vjp_func(logp_fn, params_only=False, n_params=n_params)
-
-        # Create jitted versions
-        logp_fn_jit = jax.jit(logp_fn)
+        # Create VJP and jitted versions
+        n_params = len(model_config["list_params"])
+        vjp_fn = make_vjp_func(rldm_setup.logp_fn, params_only=False, n_params=n_params)
+        logp_fn_jit = jax.jit(rldm_setup.logp_fn)
         vjp_fn_jit = jax.jit(vjp_fn)
 
-        # Prepare inputs
-        data_values = data.values.astype(np.float32)
-        rl_alpha = jnp.ones(total_trials, dtype=jnp.float32) * 0.60
-        scaler = jnp.ones(total_trials, dtype=jnp.float32) * 3.2
-        a = jnp.ones(total_trials, dtype=jnp.float32) * 1.2
-        z = jnp.ones(total_trials, dtype=jnp.float32) * 0.1
-        t = jnp.ones(total_trials, dtype=jnp.float32) * 0.1
-        theta = jnp.ones(total_trials, dtype=jnp.float32) * 0.1
-        feedback = data["feedback"].values.astype(np.float32)
-
-        # Compute log-likelihood
-        logp_result = logp_fn(data_values, rl_alpha, scaler, a, z, t, theta, feedback)
-        logp_result_jit = logp_fn_jit(
-            data_values, rl_alpha, scaler, a, z, t, theta, feedback
-        )
+        # Prepare JAX inputs
+        data_values = rldm_setup.values.astype(np.float32)
+        jax_args = tuple(jnp.asarray(arg, dtype=jnp.float32) for arg in rldm_setup.args)
 
         # Test 1: Jitted logp produces same results as non-jitted
+        logp_result = rldm_setup.logp_fn(data_values, *jax_args)
+        logp_result_jit = logp_fn_jit(data_values, *jax_args)
         np.testing.assert_array_almost_equal(
             logp_result, logp_result_jit, decimal=DECIMAL
         )
 
-        # Compute VJPs
-        gz = jnp.ones_like(logp_result)
-        vjp_result = vjp_fn(
-            data_values, rl_alpha, scaler, a, z, t, theta, feedback, gz=gz
-        )
-        vjp_result_jit = vjp_fn_jit(
-            data_values, rl_alpha, scaler, a, z, t, theta, feedback, gz=gz
-        )
-
         # Test 2: Jitted VJP produces same results as non-jitted VJP
+        gz = jnp.ones_like(logp_result)
+        vjp_result = vjp_fn(data_values, *jax_args, gz=gz)
+        vjp_result_jit = vjp_fn_jit(data_values, *jax_args, gz=gz)
+
         assert len(vjp_result) == n_params
         assert len(vjp_result_jit) == n_params
         for i, (grad_nojit, grad_jit) in enumerate(zip(vjp_result, vjp_result_jit)):
+            param_name = model_config["list_params"][i]
             np.testing.assert_array_almost_equal(
                 grad_nojit,
                 grad_jit,
                 decimal=DECIMAL,
-                err_msg=f"Gradient mismatch for parameter {i} ({list_params[i]})",
+                err_msg=f"Gradient mismatch for parameter {i} ({param_name})",
             )
 
         # Test 3: Gradients are not all zeros
         for i, grad in enumerate(vjp_result):
+            param_name = model_config["list_params"][i]
             assert not np.allclose(grad, 0.0), (
-                f"Gradient for {list_params[i]} should not be all zeros"
+                f"Gradient for {param_name} should not be all zeros"
             )
 
-    def test_rl_logp_func_vjp_consistency(
-        self, rldm_setup, annotated_ssm_logp_func, fixture_path
-    ):
+    def test_rl_logp_func_vjp_consistency(self, rldm_setup, model_config):
         """Test that VJP computed via make_vjp_func matches JAX's automatic differentiation.
 
         This test verifies that the custom VJP implementation produces the same
         gradients as JAX's built-in grad function for a subset of parameters.
         """
-        # Setup
-        data = np.load(fixture_path / "rldm_data.npy", allow_pickle=True).item()["data"]
-        participant_id = data["participant_id"].values
-        trial = data["trial"].values
-        subj = np.unique(participant_id).astype(np.int32)
-        total_trials = trial.size
-        list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
-        extra_fields = ["feedback"]
-        data_cols = ["rt", "response"]
-
-        # Create the logp function
-        logp_fn = make_rl_logp_func(
-            annotated_ssm_logp_func,
-            n_participants=len(subj),
-            n_trials=total_trials // len(subj),
-            data_cols=data_cols,
-            list_params=list_params,
-            extra_fields=extra_fields,
-        )
-
         # Create VJP function
-        n_params = len(list_params)
-        vjp_fn = make_vjp_func(logp_fn, params_only=False, n_params=n_params)
+        n_params = len(model_config["list_params"])
+        vjp_fn = make_vjp_func(rldm_setup.logp_fn, params_only=False, n_params=n_params)
 
-        # Prepare inputs
-        data_values = data.values.astype(np.float32)
-        rl_alpha = jnp.ones(total_trials, dtype=jnp.float32) * 0.60
-        scaler = jnp.ones(total_trials, dtype=jnp.float32) * 3.2
-        a = jnp.ones(total_trials, dtype=jnp.float32) * 1.2
-        z = jnp.ones(total_trials, dtype=jnp.float32) * 0.1
-        t = jnp.ones(total_trials, dtype=jnp.float32) * 0.1
-        theta = jnp.ones(total_trials, dtype=jnp.float32) * 0.1
-        feedback = data["feedback"].values.astype(np.float32)
+        # Prepare JAX inputs
+        data_values = rldm_setup.values.astype(np.float32)
+        jax_args = tuple(jnp.asarray(arg, dtype=jnp.float32) for arg in rldm_setup.args)
 
         # Compute VJP using make_vjp_func
-        logp_result = logp_fn(data_values, rl_alpha, scaler, a, z, t, theta, feedback)
+        logp_result = rldm_setup.logp_fn(data_values, *jax_args)
         gz = jnp.ones_like(logp_result)
-        vjp_result = vjp_fn(
-            data_values, rl_alpha, scaler, a, z, t, theta, feedback, gz=gz
-        )
+        vjp_result = vjp_fn(data_values, *jax_args, gz=gz)
 
         # Compute gradient using JAX's grad for the first parameter (rl_alpha)
-        def sum_logp_rl_alpha(rl_alpha_val):
-            return logp_fn(
-                data_values, rl_alpha_val, scaler, a, z, t, theta, feedback
-            ).sum()
+        def sum_logp_first_param(first_param_val):
+            return rldm_setup.logp_fn(data_values, first_param_val, *jax_args[1:]).sum()
 
-        grad_rl_alpha_jax = jax.grad(sum_logp_rl_alpha)(rl_alpha)
+        grad_first_param_jax = jax.grad(sum_logp_first_param)(jax_args[0])
 
         # Compare: VJP result should match JAX's grad
-        # vjp_result[0] corresponds to gradient w.r.t. rl_alpha
         np.testing.assert_array_almost_equal(
             vjp_result[0],
-            grad_rl_alpha_jax,
+            grad_first_param_jax,
             decimal=DECIMAL,
-            err_msg="VJP gradient for rl.alpha doesn't match JAX's grad",
+            err_msg=f"VJP gradient for {model_config['list_params'][0]} doesn't match JAX's grad",
         )
