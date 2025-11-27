@@ -210,6 +210,7 @@ def generate_prior(
     return prior
 
 
+# AF-TODO: Docstring could benefit from some more details here.
 def get_default_prior(
     term_type: str,
     param: str | None,
@@ -266,7 +267,7 @@ def get_default_prior(
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
     elif term_type == "group_specific":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
-    elif term_type == "group_intercept_with_common":
+    elif term_type in ["group_intercept_with_common", "group_specific_with_common"]:
         prior = generate_prior("Normal", mu=0.0, sigma="Weibull")
     else:
         raise ValueError("Unrecognized term type.")
@@ -294,7 +295,7 @@ def get_hddm_default_prior(
             prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
         else:
             prior = generate_prior(HDDM_SETTINGS_GROUP[param], bounds=None)
-    elif term_type == "group_intercept_with_common":
+    elif term_type in ["group_intercept_with_common", "group_specific_with_common"]:
         prior = generate_prior("Normal", mu=0.0, sigma="Weibull", bounds=None)
     elif term_type == "group_specific":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)

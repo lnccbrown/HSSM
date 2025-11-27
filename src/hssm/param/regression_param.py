@@ -258,9 +258,10 @@ class RegressionParam(Param):
                         else:
                             # treat the term as any other group-specific term
                             _logger.warning(
-                                f"No common intercept. Bounds for parameter {self.name}"
+                                "No common intercept. Bounds for parameter %s"
                                 " is not applied due to a current limitation of Bambi."
-                                " This will change in the future."
+                                " This will change in the future.",
+                                self.name,
                             )
                             safe_priors[name] = get_prior(
                                 "group_intercept",
@@ -269,9 +270,18 @@ class RegressionParam(Param):
                                 link=self.link,
                             )
                     else:
-                        safe_priors[name] = get_prior(
-                            "group_specific", self.name, bounds=None, link=self.link
-                        )
+                        has_common = dm.common is not None and name in dm.common.terms
+                        if has_common:
+                            safe_priors[name] = get_prior(
+                                "group_specific_with_common",
+                                self.name,
+                                bounds=None,
+                                link=self.link,
+                            )
+                        else:
+                            safe_priors[name] = get_prior(
+                                "group_specific", self.name, bounds=None, link=self.link
+                            )
         if self.prior is not None:
             self.prior = cast("dict[str, Any]", self.prior)
             safe_priors.update(self.prior)
