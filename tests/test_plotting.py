@@ -81,7 +81,7 @@ class TestPlotting:
         """Test _get_posterior_samples."""
         if expected == "error":
             with pytest.raises(ValueError):
-                df = _xarray_to_df(posterior, n_samples=n_samples)
+                _xarray_to_df(posterior, n_samples=n_samples)
         else:
             df = _xarray_to_df(posterior, n_samples=n_samples)
             if n_samples and n_samples > posterior.draw.size:
