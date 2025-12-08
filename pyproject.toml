@@ -197,6 +197,11 @@ convention = "numpy"
 
 [tool.mypy]
 ignore_missing_imports = true
+exclude = ["pytensor"]
+
+[[tool.mypy.overrides]]
+module = "pytensor.*"
+ignore_errors = true
 
 [tool.pytest]
 
