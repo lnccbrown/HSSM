@@ -206,6 +206,10 @@ module = "pytensor.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
+# TODO [CP]: Tighten types in `src/hssm/plotting/model_cartoon.py` and
+# `src/hssm/likelihoods/blackbox.py` (e.g., annotate bins as floats and
+# add explicit types for temporary variables like `zeros`). Once fixed,
+# remove this override to re-enable strict checking for these modules.
 module = ["hssm.plotting.model_cartoon", "hssm.likelihoods.blackbox"]
 ignore_errors = true
 
