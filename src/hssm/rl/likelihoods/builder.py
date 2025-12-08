@@ -415,7 +415,8 @@ def make_rl_logp_func(
         drift-diffusion model (RLDM). It first computes any required intermediate
         parameters (such as drift rates) for each trial, and then evaluates the
         sequential sampling model (SSM) likelihood using these parameters.
-        Parameters.
+
+        Parameters
         ----------
         data : np.ndarray
             A 2D array containing trial data.
