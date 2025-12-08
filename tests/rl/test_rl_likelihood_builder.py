@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, Callable
 import pytest
 
 import numpy as np
@@ -70,7 +70,7 @@ class RLDMSetup(NamedTuple):
 
     data: np.ndarray
     values: np.ndarray
-    logp_fn: callable
+    logp_fn: Callable
     total_trials: int
     args: list
 
