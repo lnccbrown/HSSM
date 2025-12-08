@@ -419,7 +419,7 @@ def make_rl_logp_func(
     return logp
 
 
-# TODO[CP]: Adapt this function given the changes to make_rl_logp_func
+# TODO[CP]: Adapt this function given the changes to make_rl_logp_func (#857)
 # pragma: no cover
 def make_rl_logp_op(
     ssm_logp_func: AnnotatedFunction,
