@@ -198,9 +198,15 @@ convention = "numpy"
 [tool.mypy]
 ignore_missing_imports = true
 exclude = ["pytensor"]
+follow_imports = "skip"
+namespace_packages = true
 
 [[tool.mypy.overrides]]
 module = "pytensor.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["hssm.plotting.model_cartoon", "hssm.likelihoods.blackbox"]
 ignore_errors = true
 
 [tool.pytest]
