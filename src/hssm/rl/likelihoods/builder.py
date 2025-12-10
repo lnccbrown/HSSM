@@ -335,7 +335,7 @@ def _validate_computed_parameters(
     missing_compute_funcs = set(computed_params) - set(ssm_logp_func.computed.keys())
     if missing_compute_funcs:
         raise ValueError(
-            f"Parameters {missing_compute_funcs} are identified as "
+            f"Parameters {sorted(missing_compute_funcs)} are identified as "
             f"computed but no compute functions are provided in "
             f"ssm_logp_func.computed"
         )
