@@ -600,6 +600,7 @@ class SuppressOutput:
         self._null_file.close()
         logging.disable(logging.NOTSET)  # Re-enable logging
 
+
 def annotate_function(**kwargs):
     """Attach arbitrary metadata as attributes to a function.
 
