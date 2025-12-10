@@ -367,7 +367,7 @@ def make_rl_logp_func(
         # Reshape subj_trials into a 3D array of shape
         # (n_participants, n_trials, len(args))
         # so we can act on this object with the vmapped version of the mapping function
-        # TODO: Generalize to handle every member in computed
+        # TODO: Generalize to handle every member in computed (PR #857)
         # Get column indices for SSM logp function
         ssm_logp_func_colidxs = _get_column_indices_with_computed(
             ssm_logp_func,
