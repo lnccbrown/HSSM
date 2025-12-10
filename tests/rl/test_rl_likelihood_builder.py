@@ -344,7 +344,7 @@ class TestAnnotateFunction:
         assert sample_function.other == 42
 
 
-class TestRldmLikelihoodAbstraction:
+class TestRldmLikelihoodBuilder:
     def test_make_rl_logp_func(self, rldm_setup):
         result = rldm_setup.logp_fn(rldm_setup.values, *rldm_setup.args)
         assert result.shape[0] == rldm_setup.total_trials
