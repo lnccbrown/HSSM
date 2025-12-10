@@ -2,7 +2,8 @@ import numpy as np
 import jax.numpy as jnp
 import pytest
 
-from hssm.rl.likelihoods.builder import annotate_function, make_rl_logp_func
+from hssm.rl.likelihoods.builder import make_rl_logp_func
+from hssm.utils import annotate_function
 
 
 @annotate_function(
