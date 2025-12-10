@@ -13,12 +13,12 @@ from hssm.rl.likelihoods.builder import (
     make_rl_logp_func,
     make_rl_logp_op,
     compute_v_subject_wise,
-    annotate_function,
     _get_column_indices,
     _get_column_indices_with_computed,
     _collect_cols_arrays,
     _validate_computed_parameters,
 )
+from hssm.utils import annotate_function
 from hssm.distribution_utils.func_utils import make_vjp_func
 
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
@@ -419,7 +419,7 @@ class TestValidateComputedParameters:
             logp_fn(data, a_vals, z_vals, t_vals, theta_vals, feedback)
 
 
-class TestRldmLikelihoodAbstraction:
+class TestRldmLikelihoodBuilder:
     def test_make_rl_logp_func(self, rldm_setup):
         result = rldm_setup.logp_fn(rldm_setup.values, *rldm_setup.args)
         assert result.shape[0] == rldm_setup.total_trials

@@ -1,6 +1,5 @@
 """The log-likelihood function for the RLDM model."""
 
-import functools
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
@@ -17,10 +16,11 @@ from hssm.distribution_utils.jax import make_jax_logp_ops
 class AnnotatedFunction(Protocol):
     """A protocol for functions annotated with metadata about their parameters.
 
-    This protocol defines the interface for functions that have been decorated with
-    the `@annotate_function` decorator. It is a key abstraction in the RLDM
-    (Reinforcement Learning Drift-Diffusion Model) likelihood system, enabling
-    automatic parameter resolution and composition of complex likelihood functions.
+    This protocol defines the interface for functions that have been annotated with
+    the `hssm.rl.likelihoods.utils.annotate_function` decorator. It is a key abstraction
+    in the RLDM (Reinforcement Learning Drift-Diffusion Model) likelihood system,
+    enabling automatic parameter resolution and composition of complex likelihood
+    functions.
 
     The protocol ensures that functions carry metadata about:
     - Which parameters they require as inputs
@@ -81,7 +81,8 @@ class AnnotatedFunction(Protocol):
 
     See Also
     --------
-    annotate_function : Decorator that creates AnnotatedFunction instances
+    hssm.rl.likelihoods.utils.annotate_function : Decorator that creates
+        AnnotatedFunction instances
     make_rl_logp_func : Factory that uses AnnotatedFunction metadata to build
         likelihoods
     _get_column_indices_with_computed : Helper that resolves parameter sources
@@ -93,32 +94,6 @@ class AnnotatedFunction(Protocol):
 
     # Added to satisfy static type checkers
     def __call__(self, *args: Any, **kwargs: Any) -> Any: ...  # noqa: D102
-
-
-def annotate_function(**kwargs):
-    """Attach arbitrary metadata as attributes to a function.
-
-    Parameters
-    ----------
-    **kwargs
-        Arbitrary keyword arguments to attach as attributes.
-
-    Returns
-    -------
-    Callable
-        Decorator that adds metadata attributes to the wrapped function.
-    """
-
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        def wrapper(*args, **inner_kwargs):
-            return func(*args, **inner_kwargs)
-
-        for key, value in kwargs.items():
-            setattr(wrapper, key, value)
-        return wrapper
-
-    return decorator
 
 
 # Inner function to compute the drift rate and update q-values for each trial.
@@ -383,9 +358,9 @@ def make_rl_logp_func(
     Parameters
     ----------
     ssm_logp_func : AnnotatedFunction
-        Log-likelihood function for the sequential sampling model, decorated with
-        `@annotate_function`. Must have `.inputs`, `.outputs`, and `.computed`
-        attributes specifying parameter dependencies.
+        A non-jitted JAX log-likelihood function for the sequential sampling model,
+        decorated with `@annotate_function`. It must have `.inputs`, `.outputs`, and
+        `.computed` attributes specifying parameter dependencies.
     n_participants : int
         Number of participants in the dataset.
     n_trials : int
@@ -407,6 +382,8 @@ def make_rl_logp_func(
     data_cols = data_cols or ["rt", "response"]
     list_params = list_params or []
     extra_fields = extra_fields or []
+
+    vmapped_func = jax.vmap(ssm_logp_func.computed["v"], in_axes=0)
 
     def logp(data, *args) -> np.ndarray:
         """Compute the log-likelihood for the RLDM model for each trial.
@@ -517,9 +494,9 @@ def make_rl_logp_op(
     Parameters
     ----------
     ssm_logp_func : AnnotatedFunction
-        Log-likelihood function for the sequential sampling model, decorated with
-        `@annotate_function`. It must have `.inputs`, `.outputs`, and `.computed`
-        attributes specifying parameter dependencies.
+        A non-jitted JAX log-likelihood function for the sequential sampling model,
+        decorated with `@annotate_function`. It must have `.inputs`, `.outputs`, and
+        `.computed` attributes specifying parameter dependencies.
     n_participants : int
         Number of participants in the dataset.
     n_trials : int
