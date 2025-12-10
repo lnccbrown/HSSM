@@ -24,7 +24,6 @@ from ssms.hssm_support import (
 from ssms.hssm_support import rng_fn as ssms_rng_fn
 
 from .._types import LogLikeFunc, LoglikKind, SupportedModels
-from ..config import Config
 from .blackbox import make_blackbox_op
 from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
@@ -543,7 +542,6 @@ def make_distribution_for_supported_model(
     backend: Literal["pytensor", "jax", "other"] = "pytensor",
     reg_params: list[str] | None = None,
     lapse: bmb.Prior | None = None,
-    extra_fields: list[str] | None = None,
 ):
     """Make a pm.Distribution class for a supported model.
 
@@ -565,32 +563,35 @@ def make_distribution_for_supported_model(
         parameters are assumed.
     lapse : optional
         A bmb.Prior object representing the lapse distribution.
-    extra_fields : optional
-        A list of extra fields to be passed to the likelihood function.
     """
     supported_models = get_args(SupportedModels)
     if model not in supported_models:
-        raise ValueError(
-            f"model_name must be one of {supported_models}, but got {model}."
-        )
+        raise ValueError(f"`model` must be one of {supported_models}, but got {model}.")
 
     # Build loglik callable
+    # Lazy import to avoid circular imports
+    from ..config import Config
+
     config = Config.from_defaults(model, loglik_kind)
+    params_is_reg = (
+        None
+        if reg_params is None
+        else [param in reg_params for param in config.list_params]
+    )
     likelihood_callable = make_likelihood_callable(
-        loglik=model,
+        loglik=config.loglik,
         loglik_kind=loglik_kind,
         backend=backend,
-        params_is_reg=[param in reg_params for param in config.list_params],
+        params_is_reg=params_is_reg,
     )
 
-    # Build pm.Distribution
+    # Build pm.Distribution\
     return make_distribution(
         rv=model,
         loglik=likelihood_callable,
         list_params=config.list_params,
         bounds=config.bounds,
         lapse=lapse,
-        extra_fields=extra_fields or config.extra_fields,
     )
 
 

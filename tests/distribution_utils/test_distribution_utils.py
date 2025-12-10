@@ -9,8 +9,9 @@ import hssm
 from hssm import distribution_utils
 from hssm.distribution_utils.dist import (
     apply_param_bounds_to_loglik,
-    make_distribution,
     ensure_positive_ndt,
+    make_distribution,
+    make_distribution_for_supported_model,
     _create_arg_arrays,
     _extract_size,
     _get_p_outlier,
@@ -169,6 +170,22 @@ def test_make_distribution():
         * scalar_in_bound
         * random_vector[~out_of_bound_indices],
     )
+
+
+@pytest.mark.slow
+def test_make_distribution_for_supported_model():
+    data = np.zeros((10, 2))
+    data[:, 0] = np.random.normal(size=10)
+
+    Dist = make_distribution_for_supported_model("ddm")
+
+    np.testing.assert_array_equal(
+        Dist.logp(data, 0.5, 1.0, 0.5, 0.3).eval(),
+        DDM.logp(data, 0.5, 1.0, 0.5, 0.3).eval(),
+    )
+
+    with pytest.raises(ValueError, match="`model` must be one of"):
+        make_distribution_for_supported_model("unsupported_model")
 
 
 @pytest.mark.slow
