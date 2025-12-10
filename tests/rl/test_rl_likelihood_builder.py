@@ -17,7 +17,7 @@ from hssm.rl.likelihoods.builder import (
     _get_column_indices_with_computed,
     _collect_cols_arrays,
 )
-from hssm.rl.likelihoods.utils import annotate_function
+from hssm.utils import annotate_function
 from hssm.distribution_utils.func_utils import make_vjp_func
 
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
