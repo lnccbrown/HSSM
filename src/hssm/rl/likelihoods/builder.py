@@ -318,9 +318,9 @@ def make_rl_logp_func(
     Parameters
     ----------
     ssm_logp_func : AnnotatedFunction
-        Log-likelihood function for the sequential sampling model, decorated with
-        `@annotate_function`. Must have `.inputs`, `.outputs`, and `.computed`
-        attributes specifying parameter dependencies.
+        A non-jitted JAX log-likelihood function for the sequential sampling model,
+        decorated with `@annotate_function`. It must have `.inputs`, `.outputs`, and
+        `.computed` attributes specifying parameter dependencies.
     n_participants : int
         Number of participants in the dataset.
     n_trials : int
