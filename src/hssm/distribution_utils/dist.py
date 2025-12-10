@@ -542,7 +542,7 @@ def make_distribution_for_supported_model(
     backend: Literal["pytensor", "jax", "other"] = "pytensor",
     reg_params: list[str] | None = None,
     lapse: bmb.Prior | None = None,
-):
+) -> type[pm.Distribution]:
     """Make a pm.Distribution class for a supported model.
 
     This is a convenience function that makes it easy to create a pm.Distribution
@@ -550,7 +550,7 @@ def make_distribution_for_supported_model(
 
     Parameters
     ----------
-    model_name
+    model
         The name of the supported model.
     loglik_kind: optional
         The kind of the log-likelihood for the model. Must be one of "analytical",
@@ -585,7 +585,7 @@ def make_distribution_for_supported_model(
         params_is_reg=params_is_reg,
     )
 
-    # Build pm.Distribution\
+    # Build pm.Distribution
     return make_distribution(
         rv=model,
         loglik=likelihood_callable,
