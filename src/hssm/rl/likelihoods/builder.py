@@ -343,6 +343,8 @@ def make_rl_logp_func(
     list_params = list_params or []
     extra_fields = extra_fields or []
 
+    vmapped_func = jax.vmap(ssm_logp_func.computed["v"], in_axes=0)
+
     def logp(data, *args) -> np.ndarray:
         """Compute the log-likelihood for the RLDM model for each trial.
 
@@ -379,7 +381,6 @@ def make_rl_logp_func(
         computed_colidxs1_data = _collect_cols_arrays(data, args, computed_colidxs1)
         subj_trials = jnp.stack(computed_colidxs1_data, axis=1)
         subj_trials = subj_trials.reshape(n_participants, n_trials, -1)
-        vmapped_func = jax.vmap(ssm_logp_func.computed["v"], in_axes=0)
         computed_arg = vmapped_func(subj_trials)
         computed_arg = computed_arg.reshape((-1, 1))
 
