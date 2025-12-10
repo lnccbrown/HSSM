@@ -111,7 +111,7 @@ class Config(BaseModelConfig):
                     loglik_config = default_config["likelihoods"][kind]
 
                     return Config(
-                        model_name,
+                        model_name=model_name,
                         loglik_kind=kind,
                         response=default_config["response"],
                         choices=default_config["choices"],
@@ -139,7 +139,7 @@ class Config(BaseModelConfig):
                 if loglik_kind in default_config["likelihoods"]:
                     loglik_config = default_config["likelihoods"][loglik_kind]
                     return Config(
-                        model_name,
+                        model_name=model_name,
                         loglik_kind=loglik_kind,
                         response=default_config["response"],
                         choices=default_config["choices"],
@@ -148,7 +148,7 @@ class Config(BaseModelConfig):
                         **loglik_config,
                     )
                 return Config(
-                    model_name,
+                    model_name=model_name,
                     loglik_kind=loglik_kind,
                     response=default_config["response"],
                     choices=default_config["choices"],
@@ -156,7 +156,11 @@ class Config(BaseModelConfig):
                     description=default_config["description"],
                 )
 
-            return Config(model_name, loglik_kind, response=["rt", "response"])
+            return Config(
+                model_name=model_name,
+                loglik_kind=loglik_kind,
+                response=["rt", "response"],
+            )
 
     def update_loglik(self, loglik: Any | None) -> None:
         """Update the log-likelihood function from user input.
