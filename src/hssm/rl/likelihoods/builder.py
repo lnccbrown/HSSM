@@ -375,11 +375,11 @@ def make_rl_logp_func(
             list_params,
             extra_fields,
         )
-        computed_colidxs1 = _get_column_indices(
+        ssm_logp_input_indices = _get_column_indices(
             ssm_logp_func.computed["v"].inputs, data_cols, list_params, extra_fields
         )
-        computed_colidxs1_data = _collect_cols_arrays(data, args, computed_colidxs1)
-        subj_trials = jnp.stack(computed_colidxs1_data, axis=1)
+        ssm_logp_data = _collect_cols_arrays(data, args, ssm_logp_input_indices)
+        subj_trials = jnp.stack(ssm_logp_data, axis=1)
         subj_trials = subj_trials.reshape(n_participants, n_trials, -1)
         computed_arg = vmapped_func(subj_trials)
         computed_arg = computed_arg.reshape((-1, 1))
