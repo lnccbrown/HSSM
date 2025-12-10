@@ -383,7 +383,31 @@ def make_rl_logp_func(
     list_params = list_params or []
     extra_fields = extra_fields or []
 
-    vmapped_func = jax.vmap(ssm_logp_func.computed["v"], in_axes=0)
+    def compute_parameter(
+        param_name: str, data: np.ndarray, args: tuple
+    ) -> tuple[str, jnp.ndarray]:
+        """Compute a single parameter and return (name, values) tuple."""
+        compute_func = ssm_logp_func.computed[param_name]
+
+        # Get column indices for inputs needed by computation function
+        ssm_logp_input_indices = _get_column_indices(
+            compute_func.inputs, data_cols, list_params, extra_fields
+        )
+
+        # Extract and organize data for this computation
+        ssm_logp_data = _collect_cols_arrays(data, args, ssm_logp_input_indices)
+
+        # Reshape into 3D array (n_participants, n_trials, n_inputs)
+        # to enable vmapping over participants
+        subj_trials = jnp.stack(ssm_logp_data, axis=1)
+        subj_trials = subj_trials.reshape(n_participants, n_trials, -1)
+
+        # Apply vmap to compute parameter values for all participants
+        vmapped_func = jax.vmap(compute_func, in_axes=0)
+        computed_values = vmapped_func(subj_trials)
+
+        # Reshape back to 2D (total_trials, 1) for concatenation
+        return param_name, computed_values.reshape((-1, 1))
 
     def logp(data, *args) -> np.ndarray:
         """Compute the log-likelihood for the RLDM model for each trial.
@@ -417,34 +441,9 @@ def make_rl_logp_func(
         # Validate that all computed parameters have compute functions
         _validate_computed_parameters(ssm_logp_func, ssm_logp_func_colidxs.computed)
 
-        # Compute all computed parameters
-        def compute_parameter(param_name: str) -> tuple[str, jnp.ndarray]:
-            """Compute a single parameter and return (name, values) tuple."""
-            compute_func = ssm_logp_func.computed[param_name]
-
-            # Get column indices for inputs needed by computation function
-            compute_func_colidxs = _get_column_indices(
-                compute_func.inputs, data_cols, list_params, extra_fields
-            )
-
-            # Extract and organize data for this computation
-            compute_func_data = _collect_cols_arrays(data, args, compute_func_colidxs)
-
-            # Reshape into 3D array (n_participants, n_trials, n_inputs)
-            # to enable vmapping over participants
-            subj_trials = jnp.stack(compute_func_data, axis=1)
-            subj_trials = subj_trials.reshape(n_participants, n_trials, -1)
-
-            # Apply vmap to compute parameter values for all participants
-            vmapped_func = jax.vmap(compute_func, in_axes=0)
-            computed_values = vmapped_func(subj_trials)
-
-            # Reshape back to 2D (total_trials, 1) for concatenation
-            return param_name, computed_values.reshape((-1, 1))
-
         computed_param_values = (
             {
-                param_name: compute_parameter(param_name)[1]
+                param_name: compute_parameter(param_name, data, args)[1]
                 for param_name in ssm_logp_func_colidxs.computed
             }
             if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed
