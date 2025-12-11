@@ -1,7 +1,8 @@
 """The log-likelihood function for the RLDM model."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 import jax
 import jax.numpy as jnp
