@@ -410,8 +410,8 @@ def make_rl_logp_func(
 
     def compute_parameter(
         param_name: str, data: np.ndarray, args: tuple
-    ) -> tuple[str, jnp.ndarray]:
-        """Compute a single parameter and return (name, values) tuple."""
+    ) -> jnp.ndarray:
+        """Compute a single parameter."""
         compute_func = ssm_logp_func.computed[param_name]
         vmapped_func = vmapped_compute_funcs[param_name]
 
@@ -422,7 +422,7 @@ def make_rl_logp_func(
         computed_values = vmapped_func(subj_trials)
 
         # Reshape back to 2D (total_trials, 1) for concatenation
-        return param_name, computed_values.reshape((-1, 1))
+        return computed_values.reshape((-1, 1))
 
     def logp(data, *args) -> np.ndarray:
         """Compute the log-likelihood for the RLDM model for each trial.
@@ -458,7 +458,7 @@ def make_rl_logp_func(
 
         computed_param_values = (
             {
-                param_name: compute_parameter(param_name, data, args)[1]
+                param_name: compute_parameter(param_name, data, args)
                 for param_name in ssm_logp_func_colidxs.computed
             }
             if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed
