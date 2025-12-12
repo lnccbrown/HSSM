@@ -288,7 +288,9 @@ class RLSSMConfig(BaseModelConfig):
             - params_default (optional): Default parameter values
             - bounds (optional): Parameter bounds
             - response (optional): Response column names
-            - data (optional): Alias for response column names
+            - data (optional): Alternative key for response column names.
+              If both 'data' and 'response' are provided, 'data' takes
+              precedence.
             - choices (optional): Valid choice values
             - learning_process (optional): Learning process functions
 
