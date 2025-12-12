@@ -425,7 +425,9 @@ class RLSSMConfig(BaseModelConfig):
             list_params=self.list_params,
             description=self.description,
             bounds=self.bounds,
-            default_priors=default_priors,
+            default_priors=cast(
+                "dict[str, float | dict[str, Any] | Any | None]", default_priors
+            ),
             extra_fields=self.extra_fields,
             backend=self.backend or "jax",  # RLSSM typically uses JAX
             loglik=self.loglik,
