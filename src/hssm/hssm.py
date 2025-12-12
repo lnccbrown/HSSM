@@ -845,7 +845,11 @@ class HSSM(DataValidator):
                 if key_ in [var_.name for var_ in self.pymc_model.deterministics]
             )
         )
-        vars_to_keep_clean = [var_ for var_ in vars_to_keep if "_mean" not in var_]
+        vars_to_keep_clean = [
+            var_
+            for var_ in vars_to_keep
+            if isinstance(var_, str) and "_mean" not in var_
+        ]
 
         setattr(
             idata,
