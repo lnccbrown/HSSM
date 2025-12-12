@@ -331,10 +331,7 @@ class RLSSMConfig(BaseModelConfig):
         if self.choices is None:
             raise ValueError("Please provide `choices` via `model_config`.")
         if self.decision_process is None:
-            raise ValueError(
-                "Please specify a `decision_process` (decision model) "
-                "via `model_config`."
-            )
+            raise ValueError("Please specify a `decision_process`.")
 
         # Validate parameter count consistency
         if self.n_params is not None and len(self.list_params) != self.n_params:
