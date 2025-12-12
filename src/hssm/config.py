@@ -218,11 +218,13 @@ class Config(BaseModelConfig):
     def validate(self) -> None:
         """Ensure that mandatory fields are not None."""
         if self.response is None:
-            raise ValueError("Please provide `response` via `model_config`.")
+            raise ValueError(
+                "Please provide `response` columns (e.g., via the `response` or `data` field)."
+            )
         if self.list_params is None:
-            raise ValueError("Please provide `list_params` via `model_config`.")
+            raise ValueError("Please provide `list_params`.")
         if self.choices is None:
-            raise ValueError("Please provide `choices` via `model_config`.")
+            raise ValueError("Please provide `choices`.")
         if self.loglik is None:
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
