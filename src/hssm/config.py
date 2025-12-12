@@ -264,9 +264,6 @@ class RLSSMConfig(BaseModelConfig):
     decision_model: str | None = None  # e.g., "LAN"
     lan_model: str | None = None  # e.g., "angle", "dev_lba_angle_3_v2"
 
-    # Private field to store 'data' parameter passed to __init__
-    _data_param: list[str] | None = field(default=None, init=False, repr=False)
-
     @classmethod
     def from_rlssm_dict(cls, model_name: str, config_dict: dict[str, Any]):
         """Create RLSSMConfig from rlssm_model_config_list style dictionary.
