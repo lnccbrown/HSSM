@@ -414,7 +414,7 @@ def _validate_data_shape(
     if data.ndim != 2:
         raise ValueError(
             f"Data array must be 2D, but got shape {data.shape} with "
-            f"{data.ndim} dimensions."
+            f"{'dimension' if data.ndim == 1 else 'dimensions'}."
         )
 
     if data.shape[1] != len(data_cols):
