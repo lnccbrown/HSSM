@@ -478,7 +478,7 @@ class TestValidateDataShape:
 
         with pytest.raises(
             ValueError,
-            match=r"Data array must be 2D, but got shape \(100,\) with 1 dimensions",
+            match=r"Data array must be 2D, but got shape \(100,\) with 1 dimension",
         ):
             _validate_data_shape(data, data_cols)
 
