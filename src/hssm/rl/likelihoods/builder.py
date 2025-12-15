@@ -216,7 +216,7 @@ def _get_column_indices(
         else:
             raise ValueError(
                 f"Column '{col}' not found in any of `data`, `list_params`, "
-                f"or `extra_fields`."
+                "or `extra_fields`."
             )
     return colidxs
 
@@ -329,8 +329,8 @@ def _validate_computed_parameters(
     if not hasattr(ssm_logp_func, "computed") or not ssm_logp_func.computed:
         raise ValueError(
             f"Parameters {computed_params} are not available "
-            f"in data_cols, list_params, or extra_fields, but no compute "
-            f"functions are provided in ssm_logp_func.computed"
+            "in data_cols, list_params, or extra_fields, but no compute "
+            "functions are provided in ssm_logp_func.computed"
         )
 
     missing_compute_funcs = set(computed_params) - ssm_logp_func.computed.keys()
