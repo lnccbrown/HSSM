@@ -11,4 +11,5 @@ __all__ = [
     "logp_ddm_bbox",
     "logp_ddm_sdv_bbox",
     "logp_full_ddm",
+    "logp_poisson_race",
 ]
