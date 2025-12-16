@@ -23,6 +23,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "absl-py>=2.3.1",
     "arviz>=0.22.0",
     "bambi>=0.15.0, <0.16.0",
     "cloudpickle>=3.0.0",
@@ -197,21 +198,6 @@ convention = "numpy"
 
 [tool.mypy]
 ignore_missing_imports = true
-exclude = ["pytensor"]
-follow_imports = "skip"
-namespace_packages = true
-
-[[tool.mypy.overrides]]
-module = "pytensor.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-# TODO [CP]: Tighten types in `src/hssm/plotting/model_cartoon.py` and
-# `src/hssm/likelihoods/blackbox.py` (e.g., annotate bins as floats and
-# add explicit types for temporary variables like `zeros`). Once fixed,
-# remove this override to re-enable strict checking for these modules.
-module = ["hssm.plotting.model_cartoon", "hssm.likelihoods.blackbox"]
-ignore_errors = true
 
 [tool.pytest]
 
