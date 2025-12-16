@@ -3,6 +3,7 @@
 # This is necessary to enable forward looking
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
@@ -24,22 +25,52 @@ ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
 
 
 @dataclass
-class Config:
-    """Config class that stores the configurations for models."""
+class BaseModelConfig(ABC):
+    """Base configuration class for all model types."""
 
-    model_name: SupportedModels | str
-    loglik_kind: LoglikKind
+    # Core identification
+    model_name: str
+    description: str | None = None
+
+    # Data specification
     response: list[str] | None = None
     choices: list[int] | None = None
+
+    # Parameter specification
     list_params: list[str] | None = None
-    description: str | None = None
+    bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+
+    # Likelihood configuration
     loglik: LogLik | None = None
     backend: Literal["jax", "pytensor"] | None = None
-    rv: RandomVariable | None = None
+
+    # Additional data requirements
     extra_fields: list[str] | None = None
+
+    @abstractmethod
+    def validate(self) -> None:
+        """Validate configuration. Must be implemented by subclasses."""
+        ...
+
+    @abstractmethod
+    def get_defaults(self, param: str) -> Any:
+        """Get default values for a parameter. Must be implemented by subclasses."""
+        ...
+
+
+@dataclass
+class Config(BaseModelConfig):
+    """Config class that stores the configurations for models."""
+
+    loglik_kind: LoglikKind = field(default=None)  # type: ignore
+    rv: RandomVariable | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
-    bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+
+    def __post_init__(self):
+        """Validate that loglik_kind is provided."""
+        if self.loglik_kind is None:
+            raise ValueError("loglik_kind is required for Config")
 
     @classmethod
     def from_defaults(
@@ -80,7 +111,7 @@ class Config:
                     loglik_config = default_config["likelihoods"][kind]
 
                     return Config(
-                        model_name,
+                        model_name=model_name,
                         loglik_kind=kind,
                         response=default_config["response"],
                         choices=default_config["choices"],
@@ -108,7 +139,7 @@ class Config:
                 if loglik_kind in default_config["likelihoods"]:
                     loglik_config = default_config["likelihoods"][loglik_kind]
                     return Config(
-                        model_name,
+                        model_name=model_name,
                         loglik_kind=loglik_kind,
                         response=default_config["response"],
                         choices=default_config["choices"],
@@ -117,7 +148,7 @@ class Config:
                         **loglik_config,
                     )
                 return Config(
-                    model_name,
+                    model_name=model_name,
                     loglik_kind=loglik_kind,
                     response=default_config["response"],
                     choices=default_config["choices"],
@@ -125,7 +156,11 @@ class Config:
                     description=default_config["description"],
                 )
 
-            return Config(model_name, loglik_kind, response=["rt", "response"])
+            return Config(
+                model_name=model_name,
+                loglik_kind=loglik_kind,
+                response=["rt", "response"],
+            )
 
     def update_loglik(self, loglik: Any | None) -> None:
         """Update the log-likelihood function from user input.
