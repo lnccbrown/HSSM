@@ -594,8 +594,8 @@ class HSSM(DataValidator):
             `approx_differentiable` likelihood, and `jax` backend, "numpyro" will
             be used. Otherwise, "pymc" (the default PyMC NUTS sampler) will be used.
 
-            Note that the old sampler names such as "pymc", "nuts_numpyro",
-            "nuts_blackjax" will be deprecated in future releases. A DeprecationWarning
+            Note that the old sampler names such as "mcmc", "nuts_numpyro",
+            "nuts_blackjax" will be deprecated and removed in future releases. A warning
             will be raised if any of these old names are used.
         init: optional
             Initialization method to use for the sampler. If any of the NUTS samplers
@@ -719,8 +719,8 @@ class HSSM(DataValidator):
 
         if sampler != "pymc" and "step" in kwargs:
             raise ValueError(
-                "`step` samplers (enabled by the `step` argument) are only supported",
-                " by the `pymc` sampler.",
+                "`step` samplers (enabled by the `step` argument) are only supported "
+                "by the `pymc` sampler."
             )
 
         if self._inference_obj is not None:
