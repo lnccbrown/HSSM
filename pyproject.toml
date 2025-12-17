@@ -1,6 +1,6 @@
 [project]
 name = "HSSM"
-version = "0.2.11"
+version = "0.2.12"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
@@ -28,7 +28,7 @@ dependencies = [
     "arviz>=0.22.0",
     "bambi>=0.16.0, <0.17.0",
     "cloudpickle>=3.0.0",
-    "hddm-wfpt>=0.1.5",
+    "hddm-wfpt>=0.1.6",
     "huggingface-hub>=0.34.0",
     "jaxonnxruntime>=0.3.0",
     "numpyro>=0.19",
