@@ -5,7 +5,7 @@ on:
   workflow_call:
     inputs:
       run_slow_tests:
-        description: 'Whether to run slow tests'
+        description: "Whether to run slow tests"
         required: false
         default: false
         type: boolean
@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
