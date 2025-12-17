@@ -101,7 +101,7 @@ features:
 
 JAX-based sampling is done through `numpyro` and `blackjax`. `numpyro` is installed as
 a dependency by default. You need to have `blackjax` installed if you want to use the
-`nuts_blackjax` sampler.
+`blackjax` sampler.
 
 ```bash
 pip install blackjax

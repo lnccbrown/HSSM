@@ -41,7 +41,7 @@ def test_save_load_vi_mcmc(basic_hssm_model):
     tmp_folder_name = "models_pytest"
     tmp_model_name = "hssm_model_pytest"
     # Sample to attach vi and mcmc traces to model
-    basic_hssm_model.sample(sampler="nuts_numpyro", tune=100, draws=100, chains=2)
+    basic_hssm_model.sample(sampler="numpyro", tune=100, draws=100, chains=2)
 
     # 1
     # Save model and mcmc traces, no vi
