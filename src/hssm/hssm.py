@@ -594,7 +594,7 @@ class HSSM(DataValidator):
             `approx_differentiable` likelihood, and `jax` backend, "numpyro" will
             be used. Otherwise, "pymc" (the default PyMC NUTS sampler) will be used.
 
-            Note that the old sampler names such as "pymc", "numpyro",
+            Note that the old sampler names such as "pymc", "nuts_numpyro",
             "nuts_blackjax" will be deprecated in future releases. A DeprecationWarning
             will be raised if any of these old names are used.
         init: optional
@@ -620,7 +620,7 @@ class HSSM(DataValidator):
             A reference to the `model.traces` object, which stores the traces of the
             last call to `model.sample()`. `model.traces` is an ArviZ `InferenceData`
             instance if `sampler` is `"pymc"` (default), `"numpyro"`,
-            `"nuts_blackjax"` or "`laplace"`, or an `Approximation` object if `"vi"`.
+            `"blackjax"` or "`laplace".
         """
         # If initvals are None (default)
         # we skip processing initvals here.
