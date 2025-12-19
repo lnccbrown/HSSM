@@ -2,16 +2,19 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax import Array
 from jax.lax import scan
-from pytensor.graph import Op
 
 from hssm.distribution_utils.func_utils import make_vjp_func
 from hssm.distribution_utils.jax import make_jax_logp_ops
+
+if TYPE_CHECKING:
+    from pytensor.graph import Op
 
 
 class AnnotatedFunction(Protocol):
@@ -424,7 +427,7 @@ def make_rl_logp_func(
         # Reshape back to 2D (total_trials, 1) for concatenation
         return computed_values.reshape((-1, 1))
 
-    def logp(data, *args) -> np.ndarray:
+    def logp(data, *args) -> Array:
         """Compute the log-likelihood for the RLDM model for each trial.
 
         This function computes the full log-likelihood for a reinforcement learning
@@ -472,7 +475,7 @@ def make_rl_logp_func(
 
         # Build final parameter matrix maintaining order from ssm_logp_func.inputs
         # This ensures parameters appear in the sequence expected by the SSM likelihood
-        def get_param_array(param_name: str) -> jnp.ndarray:
+        def get_param_array(param_name: str) -> Array | np.ndarray:
             """Get parameter array from computed values or non-computed args."""
             if param_name in computed_param_values:
                 return computed_param_values[param_name]
@@ -498,7 +501,7 @@ def make_rl_logp_op(
     data_cols: list[str] | None = None,
     list_params: list[str] | None = None,
     extra_fields: list[str] | None = None,
-) -> Op:
+) -> "Op":
     """Create a log-likelihood pytensor Op for models with computed parameters.
 
     Factory function that builds a complete log-likelihood Op for reinforcement learning
