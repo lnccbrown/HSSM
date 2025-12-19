@@ -279,7 +279,9 @@ def _get_column_indices_with_computed(
     return ColumnLookupResult(colidxs=colidxs, computed=computed)
 
 
-def _collect_cols_arrays(data, _args, colidxs):
+def _collect_cols_arrays(
+    data: np.ndarray, _args: tuple, colidxs: dict[str, tuple[str, int]]
+) -> list[np.ndarray]:
     """Extract arrays from data or args based on column index mappings.
 
     Parameters
@@ -298,7 +300,7 @@ def _collect_cols_arrays(data, _args, colidxs):
         Arrays extracted from their respective sources in the order of colidxs keys.
     """
 
-    def _extract_array(source, idx):
+    def _extract_array(source: str, idx: int) -> np.ndarray:
         return data[:, idx] if source == "data" else _args[idx]
 
     collected = [_extract_array(source, idx) for source, idx in colidxs.values()]
