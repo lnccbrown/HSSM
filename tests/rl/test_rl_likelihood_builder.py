@@ -17,6 +17,11 @@ from hssm.rl.likelihoods.builder import (
     _get_column_indices_with_computed,
     _collect_cols_arrays,
     _validate_computed_parameters,
+    _validate_data_shape,
+    _validate_args_length,
+    _validate_uniform_trials,
+    _validate_args_array_shapes,
+    _validate_inputs,
 )
 from hssm.utils import annotate_function
 from hssm.distribution_utils.func_utils import make_vjp_func
@@ -168,7 +173,7 @@ def rldm_setup(rldm_data, model_config, param_arrays, annotated_ssm_logp_func):
 
     return RLDMSetup(
         data=rldm_data.data,
-        values=rldm_data.data.values,
+        values=rldm_data.data[model_config.data_cols].values,
         logp_fn=logp_fn,
         total_trials=rldm_data.total_trials,
         args=args,
@@ -181,6 +186,12 @@ class TestGetDataColumnsFromDataArgs:
 
         Verifies _get_column_indices maps column names to their sources
         and _collect_cols_arrays extracts the data correctly.
+
+        This test verifies the ordering contract: data_cols, list_params, and
+        extra_fields together form the complete ordered column metadata where:
+        - data_cols items are in data[:, 0:len(data_cols)]
+        - list_params items are in args[0:len(list_params)]
+        - extra_fields items are in args[len(list_params):len(list_params)+len(extra_fields)]
         """
         data_cols = ["rt", "response"]
         list_params = ["rl.alpha", "scaler", "a", "Z", "t", "theta"]
@@ -188,7 +199,19 @@ class TestGetDataColumnsFromDataArgs:
         list_params_extra_fields = list_params + extra_fields
         cols_to_look_up = ["rl.alpha", "scaler", "response", "feedback"]
 
+        # Create test data where:
+        # - data[:, 0] = 1.0 (rt)
+        # - data[:, 1] = 2.0 (response)
         data = np.array([1, 2]) * np.ones((10, 2))
+
+        # Create args where:
+        # - args[0] = 3.0 (rl.alpha)
+        # - args[1] = 4.0 (scaler)
+        # - args[2] = 5.0 (a)
+        # - args[3] = 6.0 (Z)
+        # - args[4] = 7.0 (t)
+        # - args[5] = 8.0 (theta)
+        # - args[6] = 9.0 (feedback)
         _args = [
             np.ones(10) * i for i, _ in enumerate(list_params_extra_fields, start=3)
         ]
@@ -197,6 +220,11 @@ class TestGetDataColumnsFromDataArgs:
             cols_to_look_up, data_cols, list_params, extra_fields
         )
 
+        # Verify the ordering contract:
+        # - rl.alpha is list_params[0] -> args[0]
+        # - scaler is list_params[1] -> args[1]
+        # - response is data_cols[1] -> data[:, 1]
+        # - feedback is extra_fields[0] -> args[6] (after 6 list_params)
         expected_indices = {
             "rl.alpha": ("args", 0),
             "scaler": ("args", 1),
@@ -208,6 +236,7 @@ class TestGetDataColumnsFromDataArgs:
         stacked_arrays = np.stack(collected_arrays, axis=1)
 
         assert indices == expected_indices
+        # Collected arrays should be [3.0, 4.0, 2.0, 9.0] based on the indices
         expected_stacked_arrays = np.array([[3.0, 4.0, 2.0, 9.0]] * 10)
         np.testing.assert_array_equal(expected_stacked_arrays, stacked_arrays)
 
@@ -409,7 +438,8 @@ class TestValidateComputedParameters:
             match=r"Parameters \['v'\] are not available.*no compute functions",
         ):
             # Create dummy data and args
-            data = rldm_data.data.values
+            # Extract only the data_cols from the dataframe
+            data = rldm_data.data[model_config.data_cols].values
             a_vals = np.ones(rldm_data.total_trials)
             z_vals = np.ones(rldm_data.total_trials) * 0.5
             t_vals = np.ones(rldm_data.total_trials) * 0.1
@@ -419,11 +449,302 @@ class TestValidateComputedParameters:
             logp_fn(data, a_vals, z_vals, t_vals, theta_vals, feedback)
 
 
+class TestValidateDataShape:
+    """Tests for _validate_data_shape function."""
+
+    def test_valid_data_shape_passes(self):
+        """Test that validation passes with correct data shape."""
+        data = np.ones((100, 2))
+        data_cols = ["rt", "response"]
+
+        # Should not raise
+        _validate_data_shape(data, data_cols)
+
+    def test_wrong_number_of_columns_raises(self):
+        """Test error when data has wrong number of columns."""
+        data = np.ones((100, 3))  # 3 columns instead of 2
+        data_cols = ["rt", "response"]
+
+        with pytest.raises(
+            ValueError,
+            match=r"Data array has 3 columns but 2 columns were specified",
+        ):
+            _validate_data_shape(data, data_cols)
+
+    def test_1d_data_raises(self):
+        """Test error when data is 1D instead of 2D."""
+        data = np.ones(100)
+        data_cols = ["rt", "response"]
+
+        with pytest.raises(
+            ValueError,
+            match=r"Data array must be 2D, but got shape \(100,\) with 1 dimension",
+        ):
+            _validate_data_shape(data, data_cols)
+
+    def test_3d_data_raises(self):
+        """Test error when data is 3D instead of 2D."""
+        data = np.ones((10, 2, 5))
+        data_cols = ["rt", "response"]
+
+        with pytest.raises(
+            ValueError,
+            match=r"Data array must be 2D.*3 dimensions",
+        ):
+            _validate_data_shape(data, data_cols)
+
+
+class TestValidateArgsLength:
+    """Tests for _validate_args_length function."""
+
+    def test_correct_args_length_passes(self):
+        """Test that validation passes with correct number of args."""
+        args = (np.ones(10), np.ones(10), np.ones(10))
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        # Should not raise
+        _validate_args_length(args, list_params, extra_fields)
+
+    def test_too_few_args_raises(self):
+        """Test error when too few args are provided."""
+        args = (np.ones(10), np.ones(10))
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        with pytest.raises(
+            ValueError,
+            match=r"Expected 3 argument arrays.*but got 2",
+        ):
+            _validate_args_length(args, list_params, extra_fields)
+
+    def test_too_many_args_raises(self):
+        """Test error when too many args are provided."""
+        args = (np.ones(10), np.ones(10), np.ones(10), np.ones(10))
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        with pytest.raises(
+            ValueError,
+            match=r"Expected 3 argument arrays.*but got 4",
+        ):
+            _validate_args_length(args, list_params, extra_fields)
+
+    def test_empty_lists_passes(self):
+        """Test with empty list_params and extra_fields."""
+        args = ()
+        list_params = []
+        extra_fields = []
+
+        # Should not raise
+        _validate_args_length(args, list_params, extra_fields)
+
+
+class TestValidateUniformTrials:
+    """Tests for _validate_uniform_trials function."""
+
+    def test_uniform_trials_passes(self):
+        """Test that validation passes when trials are uniform."""
+        data = np.ones((100, 2))  # 10 participants * 10 trials
+        n_participants = 10
+        n_trials = 10
+
+        # Should not raise
+        _validate_uniform_trials(data, n_participants, n_trials)
+
+    def test_non_uniform_trials_too_many_raises(self):
+        """Test error when data has too many trials."""
+        data = np.ones((105, 2))  # 5 extra trials
+        n_participants = 10
+        n_trials = 10
+
+        with pytest.raises(
+            ValueError,
+            match=r"Data has 105 total trials.*expected 100 trials.*"
+            r"All participants must have the same number of trials",
+        ):
+            _validate_uniform_trials(data, n_participants, n_trials)
+
+    def test_non_uniform_trials_too_few_raises(self):
+        """Test error when data has too few trials."""
+        data = np.ones((95, 2))  # 5 missing trials
+        n_participants = 10
+        n_trials = 10
+
+        with pytest.raises(
+            ValueError,
+            match=r"Data has 95 total trials.*expected 100 trials",
+        ):
+            _validate_uniform_trials(data, n_participants, n_trials)
+
+
+class TestValidateArgsArrayShapes:
+    """Tests for _validate_args_array_shapes function."""
+
+    def test_correct_array_shapes_passes(self):
+        """Test that validation passes when all arrays have correct length."""
+        args = (np.ones(100), np.ones(100), np.ones(100))
+        expected_length = 100
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        # Should not raise
+        _validate_args_array_shapes(args, expected_length, list_params, extra_fields)
+
+    def test_wrong_length_first_arg_raises(self):
+        """Test error when first arg has wrong length."""
+        args = (np.ones(90), np.ones(100), np.ones(100))
+        expected_length = 100
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        with pytest.raises(
+            ValueError,
+            match=r"Argument 0 \('a'\) has length 90, but expected 100",
+        ):
+            _validate_args_array_shapes(
+                args, expected_length, list_params, extra_fields
+            )
+
+    def test_wrong_length_last_arg_raises(self):
+        """Test error when last arg has wrong length."""
+        args = (np.ones(100), np.ones(100), np.ones(110))
+        expected_length = 100
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        with pytest.raises(
+            ValueError,
+            match=r"Argument 2 \('c'\) has length 110, but expected 100",
+        ):
+            _validate_args_array_shapes(
+                args, expected_length, list_params, extra_fields
+            )
+
+    def test_non_array_arg_raises(self):
+        """Test error when arg is not array-like."""
+        args = (np.ones(100), "not_an_array", np.ones(100))
+        expected_length = 100
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        with pytest.raises(
+            ValueError,
+            match=r"Argument 1 \('b'\) is not an array-like object",
+        ):
+            _validate_args_array_shapes(
+                args, expected_length, list_params, extra_fields
+            )
+
+
+class TestValidateInputs:
+    """Tests for _validate_inputs master function."""
+
+    def test_all_valid_inputs_pass(self):
+        """Test that validation passes when all inputs are correct."""
+        data = np.ones((100, 2))
+        args = (np.ones(100), np.ones(100), np.ones(100))
+        n_participants = 10
+        n_trials = 10
+        data_cols = ["rt", "response"]
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        # Should not raise
+        _validate_inputs(
+            data, args, n_participants, n_trials, data_cols, list_params, extra_fields
+        )
+
+    def test_invalid_data_shape_raises(self):
+        """Test that data shape error is caught."""
+        data = np.ones((100, 3))  # Wrong number of columns
+        args = (np.ones(100), np.ones(100), np.ones(100))
+        n_participants = 10
+        n_trials = 10
+        data_cols = ["rt", "response"]
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        with pytest.raises(ValueError, match=r"Data array has 3 columns"):
+            _validate_inputs(
+                data,
+                args,
+                n_participants,
+                n_trials,
+                data_cols,
+                list_params,
+                extra_fields,
+            )
+
+    def test_invalid_args_length_raises(self):
+        """Test that args length error is caught."""
+        data = np.ones((100, 2))
+        args = (np.ones(100), np.ones(100))  # Too few args
+        n_participants = 10
+        n_trials = 10
+        data_cols = ["rt", "response"]
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        with pytest.raises(ValueError, match=r"Expected 3 argument arrays"):
+            _validate_inputs(
+                data,
+                args,
+                n_participants,
+                n_trials,
+                data_cols,
+                list_params,
+                extra_fields,
+            )
+
+    def test_non_uniform_trials_raises(self):
+        """Test that uniform trials error is caught."""
+        data = np.ones((105, 2))  # Too many trials
+        args = (np.ones(105), np.ones(105), np.ones(105))
+        n_participants = 10
+        n_trials = 10
+        data_cols = ["rt", "response"]
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        with pytest.raises(ValueError, match=r"expected 100 trials"):
+            _validate_inputs(
+                data,
+                args,
+                n_participants,
+                n_trials,
+                data_cols,
+                list_params,
+                extra_fields,
+            )
+
+    def test_mismatched_array_length_raises(self):
+        """Test that array length mismatch is caught."""
+        data = np.ones((100, 2))
+        args = (np.ones(100), np.ones(90), np.ones(100))  # Middle arg wrong length
+        n_participants = 10
+        n_trials = 10
+        data_cols = ["rt", "response"]
+        list_params = ["a", "b"]
+        extra_fields = ["c"]
+
+        with pytest.raises(ValueError, match=r"Argument 1.*has length 90"):
+            _validate_inputs(
+                data,
+                args,
+                n_participants,
+                n_trials,
+                data_cols,
+                list_params,
+                extra_fields,
+            )
+
+
 class TestRldmLikelihoodBuilder:
     def test_make_rl_logp_func(self, rldm_setup):
         result = rldm_setup.logp_fn(rldm_setup.values, *rldm_setup.args)
         assert result.shape[0] == rldm_setup.total_trials
-        np.testing.assert_almost_equal(result.sum(), -39215.64, decimal=DECIMAL)
+        np.testing.assert_almost_equal(result.sum(), -6879.15, decimal=DECIMAL)
 
     def test_make_rl_logp_op(
         self, rldm_setup, rldm_data, model_config, param_arrays, annotated_ssm_logp_func
@@ -447,7 +768,7 @@ class TestRldmLikelihoodBuilder:
         result_eval = result_op.eval()
 
         assert result_eval.shape[0] == rldm_data.total_trials
-        np.testing.assert_almost_equal(result_eval.sum(), -39215.64, decimal=DECIMAL)
+        np.testing.assert_almost_equal(result_eval.sum(), -6879.15, decimal=DECIMAL)
 
         # Test 2: Op produces same results as make_rl_logp_func
         result_func = rldm_setup.logp_fn(rldm_setup.values, *rldm_setup.args)
@@ -586,7 +907,9 @@ class TestMultipleComputedParameters:
         }
         args = [param_key_map[p] for p in test_list_params] + [param_arrays.feedback]
 
-        result = logp_fn(rldm_data.data.values, *args)
+        # Extract only data_cols from the dataframe
+        data = rldm_data.data[model_config.data_cols].values
+        result = logp_fn(data, *args)
 
         # Verify shape and successful computation
         assert result.shape[0] == rldm_data.total_trials
@@ -627,7 +950,9 @@ class TestMultipleComputedParameters:
             param_arrays.feedback
         ]
 
-        result = logp_fn(rldm_data.data.values, *args)
+        # Extract only data_cols from the dataframe
+        data = rldm_data.data[model_config.data_cols].values
+        result = logp_fn(data, *args)
 
         # Should still compute successfully despite different parameter order
         assert result.shape[0] == rldm_data.total_trials
@@ -680,7 +1005,9 @@ class TestMultipleComputedParameters:
         }
         args = [param_key_map[p] for p in test_list_params] + [param_arrays.feedback]
 
-        result = logp_fn(rldm_data.data.values, *args)
+        # Extract only data_cols from the dataframe
+        data = rldm_data.data[model_config.data_cols].values
+        result = logp_fn(data, *args)
 
         assert result.shape[0] == rldm_data.total_trials
         assert not np.isnan(result).any()
@@ -712,7 +1039,9 @@ class TestMultipleComputedParameters:
             param_arrays.feedback,
         ]
 
-        result = logp_fn(rldm_data.data.values, *args)
+        # Extract only data_cols from the dataframe
+        data = rldm_data.data[model_config.data_cols].values
+        result = logp_fn(data, *args)
 
         assert result.shape[0] == rldm_data.total_trials
         assert not np.isnan(result).any()
@@ -781,7 +1110,9 @@ class TestMultipleComputedParameters:
             param_arrays.feedback,
         ]
 
-        result = logp_fn(rldm_data.data.values, *args)
+        # Extract only data_cols from the dataframe
+        data = rldm_data.data[model_config.data_cols].values
+        result = logp_fn(data, *args)
 
         assert result.shape[0] == rldm_data.total_trials
         assert not np.isnan(result).any()
