@@ -69,13 +69,20 @@ def test_poisson_race_matches_exponential_case():
 
     logp = logp_poisson_race(data, **theta).eval()
 
-    expected = []
-    for rt, response in data:
-        winner_rate = theta["r2"] if response > 0 else theta["r1"]
-        loser_rate = theta["r1"] if response > 0 else theta["r2"]
+    def _compute_exponential_logp(rt, response, winner_rate, loser_rate):
         log_pdf = np.log(winner_rate) - winner_rate * rt
         log_survival = -loser_rate * rt
-        expected.append(log_pdf + log_survival)
+        return log_pdf + log_survival 
+    
+    expected = [
+        _compute_exponential_logp(
+            rt,
+            response,
+            theta["r2"] if response > 0 else theta["r1"],
+            theta["r1"] if response > 0 else theta["r2"],
+        )
+        for rt, response in data
+    ]
 
     np.testing.assert_allclose(np.asarray(logp), expected, atol=1e-6)
 
