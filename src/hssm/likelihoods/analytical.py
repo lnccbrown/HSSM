@@ -646,8 +646,8 @@ def logp_poisson_race(
 poisson_race_bounds = {
     "r1": (0.0, np.inf),
     "r2": (0.0, np.inf),
-    "k1": (1.0, np.inf),
-    "k2": (1.0, np.inf),
+    "k1": (0.0, np.inf),
+    "k2": (0.0, np.inf),
     "t": (0.0, np.inf),
 }
 poisson_race_params = ["r1", "r2", "k1", "k2", "t"]
