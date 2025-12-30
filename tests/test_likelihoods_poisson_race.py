@@ -72,8 +72,8 @@ def test_poisson_race_matches_exponential_case():
     def _compute_exponential_logp(rt, response, winner_rate, loser_rate):
         log_pdf = np.log(winner_rate) - winner_rate * rt
         log_survival = -loser_rate * rt
-        return log_pdf + log_survival 
-    
+        return log_pdf + log_survival
+
     expected = [
         _compute_exponential_logp(
             rt,
