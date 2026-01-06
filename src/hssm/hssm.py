@@ -627,15 +627,15 @@ class HSSM(DataValidator):
         if sampler in _new_sampler_mapping:
             _logger.warning(
                 f"Sampler '{sampler}' is deprecated. "
-                + "Please use the new sampler names: "
-                + "'pymc', 'numpyro', 'blackjax', 'nutpie', or 'laplace'."
+                "Please use the new sampler names: "
+                "'pymc', 'numpyro', 'blackjax', 'nutpie', or 'laplace'."
             )
             sampler = _new_sampler_mapping[sampler]  # type: ignore
 
         if sampler == "vi":
             raise ValueError(
                 "VI is not supported via the sample() method. "
-                + "Please use the vi() method instead."
+                "Please use the vi() method instead."
             )
 
         if initvals is not None:
