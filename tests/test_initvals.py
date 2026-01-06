@@ -8,28 +8,28 @@ logger = logging.getLogger("hssm")
 
 parameter_names = "loglik_kind, model, sampler, initvals"
 parameter_grid = [
-    ("approx_differentiable", "ddm", "nuts_numpyro", "map"),
-    ("analytical", "ddm", "nuts_numpyro", "map"),
-    ("approx_differentiable", "angle", "nuts_numpyro", "map"),
+    ("approx_differentiable", "ddm", "numpyro", "map"),
+    ("analytical", "ddm", "numpyro", "map"),
+    ("approx_differentiable", "angle", "numpyro", "map"),
     (
         "approx_differentiable",
         "ddm",
-        "mcmc",
+        "pymc",
         "map",
     ),
-    ("analytical", "ddm", "mcmc", "map"),
+    ("analytical", "ddm", "pymc", "map"),
     (
         "approx_differentiable",
         "angle",
-        "mcmc",
+        "pymc",
         "map",
     ),
-    ("approx_differentiable", "ddm", "nuts_numpyro", "initial_point"),
-    ("analytical", "ddm", "nuts_numpyro", "initial_point"),
-    ("approx_differentiable", "angle", "nuts_numpyro", "initial_point"),
-    ("approx_differentiable", "ddm", "mcmc", "initial_point"),
-    ("analytical", "ddm", "mcmc", "initial_point"),
-    ("approx_differentiable", "angle", "mcmc", "initial_point"),
+    ("approx_differentiable", "ddm", "numpyro", "initial_point"),
+    ("analytical", "ddm", "numpyro", "initial_point"),
+    ("approx_differentiable", "angle", "numpyro", "initial_point"),
+    ("approx_differentiable", "ddm", "pymc", "initial_point"),
+    ("analytical", "ddm", "pymc", "initial_point"),
+    ("approx_differentiable", "angle", "pymc", "initial_point"),
 ]
 
 
