@@ -259,13 +259,19 @@ class RLSSMConfig(BaseModelConfig):
     decision_process: str | ModelConfig | None = None
     learning_process: dict[str, Any] = field(default_factory=dict)
 
-    # Number of parameters (for validation)
-    n_params: int | None = None
-    n_extra_fields: int | None = None
-
     # Additional metadata for RLSSM models
     decision_model: str | None = None  # e.g., "LAN"
     lan_model: str | None = None  # e.g., "angle", "dev_lba_angle_3_v2"
+
+    @property
+    def n_params(self) -> int | None:
+        """Return the number of parameters."""
+        return len(self.list_params) if self.list_params else None
+
+    @property
+    def n_extra_fields(self) -> int | None:
+        """Return the number of extra fields."""
+        return len(self.extra_fields) if self.extra_fields else None
 
     @classmethod
     def from_rlssm_dict(cls, model_name: str, config_dict: dict[str, Any]):
@@ -310,8 +316,6 @@ class RLSSMConfig(BaseModelConfig):
             list_params=config_dict.get("list_params"),
             extra_fields=config_dict.get("extra_fields"),
             params_default=config_dict.get("params_default", []),
-            n_params=config_dict.get("n_params"),
-            n_extra_fields=config_dict.get("n_extra_fields"),
             decision_process=config_dict.get("decision_model"),
             decision_model=config_dict.get("decision_model"),
             lan_model=config_dict.get("LAN"),
@@ -338,28 +342,11 @@ class RLSSMConfig(BaseModelConfig):
         if self.decision_process is None:
             raise ValueError("Please specify a `decision_process`.")
 
-        # Validate parameter count consistency
-        if self.n_params is not None and len(self.list_params) != self.n_params:
-            raise ValueError(
-                f"list_params length ({len(self.list_params)}) doesn't match "
-                f"n_params ({self.n_params})"
-            )
-
+        # Validate parameter defaults consistency
         if self.params_default and len(self.params_default) != len(self.list_params):
             raise ValueError(
                 f"params_default length ({len(self.params_default)}) doesn't match "
                 f"list_params length ({len(self.list_params)})"
-            )
-
-        # Validate extra fields consistency
-        if (
-            self.n_extra_fields is not None
-            and self.extra_fields is not None
-            and len(self.extra_fields) != self.n_extra_fields
-        ):
-            raise ValueError(
-                f"extra_fields length ({len(self.extra_fields)}) doesn't match "
-                f"n_extra_fields ({self.n_extra_fields})"
             )
 
     def get_defaults(
