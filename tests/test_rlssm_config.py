@@ -18,8 +18,6 @@ def test_rlssm_config_basic_creation():
         decision_process="LAN",
         response=["rt", "response"],
         choices=[0, 1],
-        n_params=3,
-        n_extra_fields=2,
         extra_fields=["feedback", "trial_id"],
     )
 
@@ -112,8 +110,6 @@ def test_rlssm_config_validate_success():
         decision_process="LAN",
         response=["rt", "response"],
         choices=[0, 1],
-        n_params=2,
-        n_extra_fields=1,
         extra_fields=["feedback"],
     )
 
@@ -177,24 +173,6 @@ def test_rlssm_config_validate_missing_decision_process():
         config.validate()
 
 
-def test_rlssm_config_validate_n_params_mismatch():
-    """Test validation fails when n_params doesn't match list_params length."""
-    config = RLSSMConfig(
-        model_name="test_model",
-        list_params=["alpha", "beta"],
-        params_default=[0.5, 0.3],
-        decision_process="LAN",
-        response=["rt", "response"],
-        choices=[0, 1],
-        n_params=3,  # Mismatch: list_params has 2, n_params is 3
-    )
-
-    with pytest.raises(
-        ValueError, match="list_params length \\(2\\) doesn't match n_params \\(3\\)"
-    ):
-        config.validate()
-
-
 def test_rlssm_config_validate_params_default_mismatch():
     """Test validation fails when params_default length doesn't match list_params."""
     config = RLSSMConfig(
@@ -209,25 +187,6 @@ def test_rlssm_config_validate_params_default_mismatch():
     with pytest.raises(
         ValueError,
         match="params_default length \\(1\\) doesn't match list_params length \\(2\\)",
-    ):
-        config.validate()
-
-
-def test_rlssm_config_validate_extra_fields_mismatch():
-    """Test validation fails when extra_fields length doesn't match n_extra_fields."""
-    config = RLSSMConfig(
-        model_name="test_model",
-        list_params=["alpha", "beta"],
-        decision_process="LAN",
-        response=["rt", "response"],
-        choices=[0, 1],
-        n_extra_fields=2,
-        extra_fields=["feedback"],  # Mismatch: only 1 field, expecting 2
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="extra_fields length \\(1\\) doesn't match n_extra_fields \\(2\\)",
     ):
         config.validate()
 
