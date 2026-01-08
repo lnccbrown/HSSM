@@ -264,6 +264,11 @@ class RLSSMConfig(BaseModelConfig):
     decision_model: str | None = None  # e.g., "LAN"
     lan_model: str | None = None  # e.g., "angle", "dev_lba_angle_3_v2"
 
+    def __post_init__(self):
+        """Set default loglik_kind for RLSSM models if not provided."""
+        if self.loglik_kind is None:
+            self.loglik_kind = "approx_differentiable"
+
     @property
     def n_params(self) -> int | None:
         """Return the number of parameters."""
