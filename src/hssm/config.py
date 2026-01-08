@@ -395,13 +395,24 @@ class RLSSMConfig(BaseModelConfig):
         The transformation converts params_default list to default_priors dict,
         mapping parameter names to their default values.
         """
+        # Validate parameter defaults consistency before conversion
+        if self.params_default and self.list_params:
+            if len(self.params_default) != len(self.list_params):
+                raise ValueError(
+                    f"params_default length ({len(self.params_default)}) doesn't "
+                    f"match list_params length ({len(self.list_params)}). "
+                    "This would result in silent data loss during conversion."
+                )
+
         # Transform params_default list to default_priors dict
-        default_priors = {}
-        if self.list_params and self.params_default:
-            default_priors = {
+        default_priors = (
+            {
                 param: default
                 for param, default in zip(self.list_params, self.params_default)
             }
+            if self.list_params and self.params_default
+            else {}
+        )
 
         return Config(
             model_name=self.model_name,
