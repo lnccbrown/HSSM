@@ -218,7 +218,7 @@ class Config(BaseModelConfig):
     def validate(self) -> None:
         """Ensure that mandatory fields are not None."""
         if self.response is None:
-            raise ValueError("Please provide `response` columns ")
+            raise ValueError("Please provide `response` columns in the configuration.")
         if self.list_params is None:
             raise ValueError("Please provide `list_params`.")
         if self.choices is None:
