@@ -343,11 +343,12 @@ class RLSSMConfig(BaseModelConfig):
             raise ValueError("Please specify a `decision_process`.")
 
         # Validate parameter defaults consistency
-        if self.params_default and len(self.params_default) != len(self.list_params):
-            raise ValueError(
-                f"params_default length ({len(self.params_default)}) doesn't match "
-                f"list_params length ({len(self.list_params)})"
-            )
+        if self.params_default and self.list_params:
+            if len(self.params_default) != len(self.list_params):
+                raise ValueError(
+                    f"params_default length ({len(self.params_default)}) doesn't "
+                    f"match list_params length ({len(self.list_params)})"
+                )
 
     def get_defaults(
         self, param: str
