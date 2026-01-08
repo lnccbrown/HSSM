@@ -260,6 +260,7 @@ class RLSSMConfig(BaseModelConfig):
     learning_process: dict[str, Any] = field(default_factory=dict)
 
     # Additional metadata for RLSSM models
+    # (as suggested in Krishn's original config design)
     decision_model: str | None = None  # e.g., "LAN"
     lan_model: str | None = None  # e.g., "angle", "dev_lba_angle_3_v2"
 
