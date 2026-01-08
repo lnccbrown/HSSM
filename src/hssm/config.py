@@ -42,6 +42,7 @@ class BaseModelConfig(ABC):
 
     # Likelihood configuration
     loglik: LogLik | None = None
+    loglik_kind: LoglikKind | None = None
     backend: Literal["jax", "pytensor"] | None = None
 
     # Additional data requirements
@@ -62,7 +63,6 @@ class BaseModelConfig(ABC):
 class Config(BaseModelConfig):
     """Config class that stores the configurations for models."""
 
-    loglik_kind: LoglikKind = field(default=None)  # type: ignore
     rv: RandomVariable | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
@@ -300,6 +300,9 @@ class RLSSMConfig(BaseModelConfig):
               precedence.
             - choices (optional): Valid choice values
             - learning_process (optional): Learning process functions
+            - loglik_kind (optional): Type of likelihood computation
+              ("analytical", "approx_differentiable", "blackbox").
+              Defaults to "approx_differentiable".
 
         Returns
         -------
@@ -324,6 +327,7 @@ class RLSSMConfig(BaseModelConfig):
             bounds=config_dict.get("bounds", {}),
             response=response_value,
             choices=config_dict.get("choices", [0, 1]),
+            loglik_kind=config_dict.get("loglik_kind", "approx_differentiable"),
         )
 
     def validate(self) -> None:
@@ -406,7 +410,7 @@ class RLSSMConfig(BaseModelConfig):
 
         return Config(
             model_name=self.model_name,
-            loglik_kind="approx_differentiable",  # RLSSM models use approx_diff
+            loglik_kind=self.loglik_kind,
             response=self.response,
             choices=self.choices,
             list_params=self.list_params,
