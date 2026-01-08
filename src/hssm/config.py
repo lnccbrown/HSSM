@@ -291,8 +291,6 @@ class RLSSMConfig(BaseModelConfig):
             Dictionary containing model configuration. Expected keys:
             - name: Model name
             - description: Model description
-            - n_params: Number of parameters
-            - n_extra_fields: Number of extra data fields
             - list_params: List of parameter names
             - extra_fields: List of extra field names from data
             - decision_model: Name of decision model (e.g., "LAN")
