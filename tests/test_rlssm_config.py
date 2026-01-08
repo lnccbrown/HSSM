@@ -338,6 +338,25 @@ def test_rlssm_config_to_config_no_defaults():
     assert config.default_priors == {}
 
 
+def test_rlssm_config_to_config_mismatched_defaults_length():
+    """Test that to_config raises error if params_default length doesn't match list_params."""
+    rlssm_config = RLSSMConfig(
+        model_name="test_model",
+        list_params=["alpha", "beta", "gamma"],
+        params_default=[0.5, 0.3],  # Only 2 values for 3 params
+        decision_process="LAN",
+        response=["rt", "response"],
+        choices=[0, 1],
+    )
+
+    # Should raise ValueError to prevent silent truncation by zip
+    with pytest.raises(
+        ValueError,
+        match=r"params_default length \(2\) doesn't match list_params length \(3\)",
+    ):
+        rlssm_config.to_config()
+
+
 def test_rlssm_config_learning_process():
     """Test learning_process field can be set."""
     config = RLSSMConfig(
