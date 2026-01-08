@@ -38,8 +38,6 @@ def test_rlssm_config_from_rlssm_dict():
     config_dict = {
         "name": "rlwm",
         "description": "Reinforcement Learning Working Memory model",
-        "n_params": 5,
-        "n_extra_fields": 3,
         "list_params": ["alpha", "beta", "gamma", "v", "a"],
         "extra_fields": ["feedback", "trial_id", "block"],
         "decision_model": "LAN",
@@ -86,7 +84,6 @@ def test_rlssm_config_from_rlssm_dict_with_defaults():
     config_dict = {
         "name": "minimal_rlssm",
         "description": "Minimal RLSSM model",
-        "n_params": 2,
         "list_params": ["alpha", "beta"],
         "decision_model": "LAN",
     }
