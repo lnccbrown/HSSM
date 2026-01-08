@@ -300,9 +300,6 @@ class RLSSMConfig(BaseModelConfig):
             - params_default (optional): Default parameter values
             - bounds (optional): Parameter bounds
             - response (optional): Response column names
-            - data (optional): Alternative key for response column names.
-              If both 'data' and 'response' are provided, 'data' takes
-              precedence.
             - choices (optional): Valid choice values
             - learning_process (optional): Learning process functions
             - loglik_kind (optional): Type of likelihood computation
@@ -314,11 +311,6 @@ class RLSSMConfig(BaseModelConfig):
         RLSSMConfig
             Configured RLSSM model configuration object.
         """
-        # Support both 'response' and 'data' keys, with 'data' taking precedence
-        response_value = config_dict.get(
-            "data", config_dict.get("response", ["rt", "response"])
-        )
-
         return cls(
             model_name=model_name,
             description=config_dict.get("description"),
@@ -330,7 +322,7 @@ class RLSSMConfig(BaseModelConfig):
             lan_model=config_dict.get("LAN"),
             learning_process=config_dict.get("learning_process", {}),
             bounds=config_dict.get("bounds", {}),
-            response=response_value,
+            response=config_dict.get("response", ["rt", "response"]),
             choices=config_dict.get("choices", [0, 1]),
             loglik_kind=config_dict.get("loglik_kind", "approx_differentiable"),
         )
@@ -428,31 +420,6 @@ class RLSSMConfig(BaseModelConfig):
             backend=self.backend or "jax",  # RLSSM typically uses JAX
             loglik=self.loglik,
         )
-
-    @property
-    def data(self) -> list[str] | None:
-        """Alias for response field for RLSSM-style naming.
-
-        This property allows using 'data' as an alternative name for 'response',
-        which may be more intuitive in RLSSM contexts.
-
-        Returns
-        -------
-        list[str] | None
-            The response column names.
-        """
-        return self.response
-
-    @data.setter
-    def data(self, value: list[str] | None) -> None:
-        """Set response field via data alias.
-
-        Parameters
-        ----------
-        value
-            The response column names to set.
-        """
-        self.response = value
 
 
 @dataclass
