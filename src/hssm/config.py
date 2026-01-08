@@ -336,11 +336,11 @@ class RLSSMConfig(BaseModelConfig):
             If required fields are missing or inconsistent.
         """
         if self.response is None:
-            raise ValueError("Please provide `response` columns via `model_config`.")
+            raise ValueError("Please provide `response` columns in the configuration.")
         if self.list_params is None:
-            raise ValueError("Please provide `list_params` via `model_config`.")
+            raise ValueError("Please provide `list_params` in the configuration.")
         if self.choices is None:
-            raise ValueError("Please provide `choices` via `model_config`.")
+            raise ValueError("Please provide `choices` in the configuration.")
         if self.decision_process is None:
             raise ValueError("Please specify a `decision_process`.")
 
