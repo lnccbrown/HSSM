@@ -10,11 +10,12 @@ _parse_bambi().
 """
 
 import contextlib
+import functools
 import itertools
 import logging
 import os
 from copy import deepcopy
-from typing import Any, Literal, cast
+from typing import Any, Callable, Literal, cast
 
 import arviz as az
 import bambi as bmb
@@ -598,3 +599,29 @@ class SuppressOutput:
         self._stderr_context.__exit__(exc_type, exc_value, traceback)
         self._null_file.close()
         logging.disable(logging.NOTSET)  # Re-enable logging
+
+
+def annotate_function(**kwargs):
+    """Attach arbitrary metadata as attributes to a function.
+
+    Parameters
+    ----------
+    **kwargs
+        Arbitrary keyword arguments to attach as attributes.
+
+    Returns
+    -------
+    Callable
+        Decorator that adds metadata attributes to the wrapped function.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **inner_kwargs):
+            return func(*args, **inner_kwargs)
+
+        for key, value in kwargs.items():
+            setattr(wrapper, key, value)
+        return wrapper
+
+    return decorator
