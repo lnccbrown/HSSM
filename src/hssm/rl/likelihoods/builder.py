@@ -17,6 +17,58 @@ if TYPE_CHECKING:
     from pytensor.graph import Op
 
 
+@dataclass(frozen=True)
+class TDLearningTrialData:
+    """Structure for temporal difference learning trial data.
+
+    This dataclass explicitly defines the inputs required for a single trial
+    in a TD learning process, making the expected structure clear and preventing
+    errors from magic array indices.
+
+    Attributes
+    ----------
+    learning_rate : float
+        The learning rate (alpha) for updating Q-values.
+    transform_params : jnp.ndarray
+        Additional parameters needed to transform Q-values into the target
+        SSM parameter (e.g., scaler for drift rate).
+    action : int
+        The action/choice taken on this trial (0-indexed).
+    reward : float
+        The reward/feedback received on this trial.
+    """
+
+    learning_rate: float
+    transform_params: jnp.ndarray
+    action: int
+    reward: float
+
+    @classmethod
+    def from_array(
+        cls, arr: jnp.ndarray, n_transform_params: int
+    ) -> "TDLearningTrialData":
+        """Create TDLearningTrialData from a flat array.
+
+        Parameters
+        ----------
+        arr : jnp.ndarray
+            Flat array with structure: [learning_rate, transform_params..., action, reward]
+        n_transform_params : int
+            Number of transformation parameters in the array.
+
+        Returns
+        -------
+        TDLearningTrialData
+            Structured trial data.
+        """
+        return cls(
+            learning_rate=arr[0],
+            transform_params=arr[1 : 1 + n_transform_params],
+            action=jnp.astype(arr[-2], jnp.int32),
+            reward=arr[-1],
+        )
+
+
 class AnnotatedFunction(Protocol):
     """A protocol for functions annotated with metadata about their parameters.
 
@@ -100,80 +152,182 @@ class AnnotatedFunction(Protocol):
     def __call__(self, *args: Any, **kwargs: Any) -> Any: ...  # noqa: D102
 
 
-# Inner function to compute the drift rate and update q-values for each trial.
-# This function is used with `jax.lax.scan` to process each trial in the RLDM model.
-def compute_v_trial_wise(
-    q_val: jnp.ndarray, inputs: jnp.ndarray
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Compute the drift rate and updates the q-values for each trial.
+def make_td_learning_update(
+    param_transform_fn: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray],
+    n_transform_params: int = 1,
+) -> Callable[[jnp.ndarray, jnp.ndarray], tuple[jnp.ndarray, jnp.ndarray]]:
+    """Create a trial-wise TD learning update function for computing parameters.
 
-    This function is used with `jax.lax.scan` to process each trial. It takes the
-    current q-values and the RL parameters (rl_alpha, scaler), action (response),
-    and reward (feedback) for the current trial, computes the drift rate, and
-    updates the q-values. The q_values are updated in each iteration and carried
-    forward to the next one.
+    Factory function that creates a TD (temporal difference) learning update function
+    which can compute any SSM parameter from q-values. The returned function updates
+    q-values according to TD learning rules and computes a parameter by applying a
+    transformation to the q-values.
 
     Parameters
     ----------
-    q_val
-        A length-2 jnp array containing the current q-values for the two alternatives.
-        These values are updated in each iteration and carried forward to the next
-        trial.
-    inputs
-        A 2D jnp array containing the RL parameters (rl_alpha, scaler),
-        action (response), and reward (feedback) for the current trial.
+    param_transform_fn : Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
+        Function that transforms q-values and additional parameters into the target
+        SSM parameter. Should have signature: (q_values, transform_params) -> computed_param,
+        where q_values is an array of q-values for each alternative and transform_params
+        contains any additional parameters needed (e.g., scaler for drift rate).
+    n_transform_params : int, optional
+        Number of transformation parameters required by param_transform_fn.
+        Default is 1.
 
     Returns
     -------
-    tuple
-        A tuple containing the updated q-values and the computed drift rate (v).
+    Callable
+        A function with signature (q_val, inputs_array) -> (updated_q_val, computed_param)
+        suitable for use with jax.lax.scan. The inputs_array should have structure:
+        [learning_rate, transform_param_1, ..., transform_param_n, action, reward].
+
+    Examples
+    --------
+    Create a drift rate computation function:
+
+    >>> def drift_transform(q_values, transform_params):
+    ...     scaler = transform_params[0]
+    ...     return (q_values[1] - q_values[0]) * scaler
+    >>> td_drift_update = make_td_learning_update(drift_transform, n_transform_params=1)
     """
-    rl_alpha, scaler, action, reward = inputs
-    action = jnp.astype(action, jnp.int32)
 
-    # drift rate on each trial depends on difference in expected rewards for
-    # the two alternatives:
-    # drift rate = (q_up - q_low) * scaler where
-    # the scaler parameter describes the weight to put on the difference in
-    # q-values.
-    computed_v = (q_val[1] - q_val[0]) * scaler
+    def td_learning_update(
+        q_values: jnp.ndarray, inputs_array: jnp.ndarray
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Update q-values via TD learning and compute a parameter.
 
-    # compute the reward prediction error
-    delta_RL = reward - q_val[action]
+        This function is used with `jax.lax.scan` to process each trial. It takes the
+        current q-values and trial inputs, applies TD learning to update q-values,
+        and computes a parameter using the provided transformation function.
 
-    # update the q-values using the RL learning rule (here, simple TD rule)
-    q_val = q_val.at[action].set(q_val[action] + rl_alpha * delta_RL)
+        Parameters
+        ----------
+        q_values
+            Array containing current q-values for all alternatives.
+            These values are updated and carried forward to the next trial.
+        inputs_array
+            Flat array with structure: [learning_rate, transform_params..., action, reward]
 
-    return q_val, computed_v
+        Returns
+        -------
+        tuple
+            A tuple containing the updated q-values and the computed parameter.
+        """
+        # Parse the input array into a structured format
+        trial_data = TDLearningTrialData.from_array(inputs_array, n_transform_params)
+
+        # Compute the parameter using the transformation function
+        computed_param = param_transform_fn(q_values, trial_data.transform_params)
+
+        # Compute the reward prediction error (TD error)
+        prediction_error = trial_data.reward - q_values[trial_data.action]
+
+        # Update the q-values using the TD learning rule
+        updated_q_values = q_values.at[trial_data.action].set(
+            q_values[trial_data.action] + trial_data.learning_rate * prediction_error
+        )
+
+        return updated_q_values, computed_param
+
+    return td_learning_update
 
 
-# This function computes the drift rates (v) for each subject by processing
-# their trials one by one. It uses `jax.lax.scan` to efficiently iterate over
-# the trials and compute the drift rates based on the RL parameters, actions,
-# and rewards for each trial.
-def compute_v_subject_wise(
-    subj_trials: jnp.ndarray,
+def _drift_transform(
+    q_values: jnp.ndarray, transform_params: jnp.ndarray
 ) -> jnp.ndarray:
-    """Compute the drift rates (v) for a given subject.
+    """Transform q-values into drift rate.
+
+    Computes drift rate as the scaled difference between q-values for the two
+    alternatives: drift = (q_upper - q_lower) * scaler.
 
     Parameters
     ----------
-    subj_trials:
-        A jnp array of dimension (n_trials, 4) containing rl_alpha, scaler,
-        action (response), and reward (feedback) for each trial of the subject.
+    q_values
+        Array containing q-values for all alternatives. For binary choice,
+        this is a length-2 array [q_lower, q_upper].
+    transform_params
+        Array containing transformation parameters. For drift rate, this is
+        [scaler], where scaler weights the q-value difference.
 
     Returns
     -------
     jnp.ndarray
-        The computed drift rates (v) for the RLDM model for the given subject.
+        The computed drift rate (scalar as array).
     """
-    _, v = scan(
-        compute_v_trial_wise,
-        jnp.ones(2) * 0.5,  # initial q-values for the two alternatives
-        subj_trials,
-    )
+    scaler = transform_params[0]
+    return (q_values[1] - q_values[0]) * scaler
 
-    return v
+
+# Create the specific drift rate computation function
+_td_drift_trial_update = make_td_learning_update(_drift_transform, n_transform_params=1)
+
+
+def make_td_learning_subject_update(
+    trial_update_fn: Callable[
+        [jnp.ndarray, jnp.ndarray], tuple[jnp.ndarray, jnp.ndarray]
+    ],
+    initial_q_value: float = 0.5,
+    n_alternatives: int = 2,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Create a subject-wise TD learning update function.
+
+    Factory function that creates a subject-wise parameter computation function by
+    wrapping a trial-wise update function with jax.lax.scan. The returned function
+    processes all trials for a subject sequentially, maintaining q-value state across
+    trials.
+
+    Parameters
+    ----------
+    trial_update_fn : Callable
+        A trial-wise update function created by make_td_learning_update, with
+        signature: (q_val, inputs) -> (updated_q_val, computed_param).
+    initial_q_value : float, optional
+        Initial value for q-values. Default is 0.5.
+    n_alternatives : int, optional
+        Number of alternatives for q-learning. Default is 2.
+
+    Returns
+    -------
+    Callable
+        A function with signature (subj_trials) -> computed_params that processes
+        all trials for a subject and returns the computed parameter values.
+
+    Examples
+    --------
+    Create a subject-wise drift rate computation function:
+
+    >>> td_drift_trial = make_td_learning_update(drift_transform, n_transform_inputs=1)
+    >>> compute_drift_subject = make_td_learning_subject_update(td_drift_trial)
+    >>> drift_rates = compute_drift_subject(subject_trial_data)
+    """
+
+    def td_learning_subject_update(subj_trials: jnp.ndarray) -> jnp.ndarray:
+        """Compute parameters for all trials of a subject using TD learning.
+
+        Parameters
+        ----------
+        subj_trials
+            A 2D array of shape (n_trials, n_inputs) containing trial data.
+            The structure depends on the trial_update_fn requirements.
+
+        Returns
+        -------
+        jnp.ndarray
+            Array of computed parameter values for each trial.
+        """
+        # Create initial q-values with the same dtype as the input data
+        initial_q = jnp.full(n_alternatives, initial_q_value, dtype=subj_trials.dtype)
+        _, computed_params = scan(trial_update_fn, initial_q, subj_trials)
+        return computed_params
+
+    return td_learning_subject_update
+
+
+# Create the specific drift rate computation function for subjects
+compute_drift_subject_wise = make_td_learning_subject_update(_td_drift_trial_update)
+
+# Backwards compatibility alias
+compute_v_subject_wise = compute_drift_subject_wise
 
 
 def _get_column_indices(
