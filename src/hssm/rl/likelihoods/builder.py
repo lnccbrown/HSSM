@@ -641,14 +641,24 @@ def make_rl_logp_func(
     def _prepare_subj_trials(
         compute_func: AnnotatedFunction, data: np.ndarray, args: tuple
     ) -> jnp.ndarray:
-        """Extract and reshape data for a computation function."""
+        """Extract and reshape data for a computation function.
+
+        The column order in the returned array is guaranteed to match the order
+        specified in compute_func.inputs, as:
+        1. _get_column_indices iterates compute_func.inputs preserving order
+        2. _collect_cols_arrays extracts arrays in colidxs.keys() order (dict
+           insertion order is preserved in Python 3.7+)
+        3. Stack and reshape maintain this ordering
+        """
         # Get column indices for inputs needed by computation function
         colidxs = _get_column_indices(
             compute_func.inputs, data_cols, list_params, extra_fields
         )
         # Extract and organize data for this computation
+        # cols_data order matches compute_func.inputs order
         cols_data = _collect_cols_arrays(data, args, colidxs)
-        # Reshape into 3D array (n_participants, n_trials, n_inputs)
+        # Stack along axis=1 to create (n_total_trials, n_inputs) array, preserving
+        # column order from compute_func.inputs
         subj_trials = jnp.stack(cols_data, axis=1)
         return subj_trials.reshape(n_participants, n_trials, -1)
 
