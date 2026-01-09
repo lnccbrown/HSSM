@@ -1,4 +1,38 @@
-"""The log-likelihood function for the RLDM model."""
+"""The log-likelihood function for the RLDM model.
+
+Column Ordering Contract
+------------------------
+The builder functions (`make_rl_logp_func` and `make_rl_logp_op`) require that data
+and parameter arrays follow a strict ordering contract:
+
+1. **data_cols**: Column names in the data array, in exact order
+   - data[:, i] corresponds to data_cols[i]
+   - Example: if data_cols=["rt", "response"], then:
+     * data[:, 0] contains rt values
+     * data[:, 1] contains response values
+
+2. **list_params**: Model parameter names in *args, in exact order
+   - args[i] corresponds to list_params[i]
+   - Example: if list_params=["a", "z", "t"], then:
+     * args[0] contains 'a' values
+     * args[1] contains 'z' values
+     * args[2] contains 't' values
+
+3. **extra_fields**: Additional field names in *args after list_params, in exact order
+   - args[len(list_params) + i] corresponds to extra_fields[i]
+   - Example: if list_params=["a", "z"] and extra_fields=["feedback", "stimulus"]:
+     * args[0] = 'a' (list_params[0])
+     * args[1] = 'z' (list_params[1])
+     * args[2] = 'feedback' (extra_fields[0])
+     * args[3] = 'stimulus' (extra_fields[1])
+
+Together, data_cols + list_params + extra_fields form the complete ordered column
+metadata that the builder uses to look up available data sources and map them to
+function inputs.
+
+This ordering is validated at runtime by `_validate_inputs` and its component
+validation functions.
+"""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -184,22 +218,39 @@ def _get_column_indices(
 ) -> dict[str, tuple[str, int]]:
     """Return indices for required columns.
 
+    This function implements the column ordering contract defined at module level,
+    mapping column names to their sources and indices in either the data array or
+    the args tuple.
+
     Parameters
     ----------
     cols_to_look_up : list[str]
         Columns to find indices for
     data_cols : list[str]
-        Available data columns
+        Available data columns (data[:, i] maps to data_cols[i])
     list_params : list[str] | None
-        Available list parameters
+        Available list parameters (args[i] maps to list_params[i])
     extra_fields : list[str] | None
-        Available extra fields
+        Available extra fields (args[len(list_params)+i] maps to extra_fields[i])
 
     Returns
     -------
     dict[str, tuple[str, int]]
         Mapping of column names to (source, index) tuples where source is
         "data" for data columns or "args" for list_params/extra_fields.
+        The index specifies position in either data array or args tuple.
+
+    Raises
+    ------
+    ValueError
+        If any column in cols_to_look_up is not found in data_cols, list_params,
+        or extra_fields.
+
+    Notes
+    -----
+    This function enforces the column ordering contract where data_cols,
+    list_params, and extra_fields together form the complete ordered metadata
+    for available data sources. See module docstring for full contract details.
 
     See Also
     --------
@@ -347,6 +398,180 @@ def _validate_computed_parameters(
         )
 
 
+def _validate_data_shape(
+    data: np.ndarray,
+    data_cols: list[str],
+) -> None:
+    """Validate that data array has correct number of columns.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Data array to validate.
+    data_cols : list[str]
+        Expected column names.
+
+    Raises
+    ------
+    ValueError
+        If data doesn't have expected number of columns or is not 2D.
+    """
+    if data.ndim != 2:
+        raise ValueError(
+            f"Data array must be 2D, but got shape {data.shape} with "
+            f"{data.ndim} {'dimension' if data.ndim == 1 else 'dimensions'}."
+        )
+
+    if data.shape[1] != len(data_cols):
+        raise ValueError(
+            f"Data array has {data.shape[1]} columns but {len(data_cols)} "
+            f"columns were specified in data_cols: {data_cols}."
+        )
+
+
+def _validate_args_length(
+    args: tuple,
+    list_params: list[str],
+    extra_fields: list[str],
+) -> None:
+    """Validate that args tuple has correct number of elements.
+
+    Parameters
+    ----------
+    args : tuple
+        Arguments tuple containing parameter arrays.
+    list_params : list[str]
+        Expected list parameters.
+    extra_fields : list[str]
+        Expected extra fields.
+
+    Raises
+    ------
+    ValueError
+        If args doesn't have expected number of elements.
+    """
+    expected_n_args = len(list_params) + len(extra_fields)
+    if len(args) != expected_n_args:
+        raise ValueError(
+            f"Expected {expected_n_args} argument arrays "
+            f"({len(list_params)} list_params + {len(extra_fields)} extra_fields), "
+            f"but got {len(args)}."
+        )
+
+
+def _validate_uniform_trials(
+    data: np.ndarray,
+    n_participants: int,
+    n_trials: int,
+) -> None:
+    """Validate that all participants have the same number of trials.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Data array containing all trials.
+    n_participants : int
+        Number of participants.
+    n_trials : int
+        Expected number of trials per participant.
+
+    Raises
+    ------
+    ValueError
+        If total number of trials doesn't match n_participants * n_trials.
+    """
+    total_trials = data.shape[0]
+    expected_trials = n_participants * n_trials
+
+    if total_trials != expected_trials:
+        raise ValueError(
+            f"Data has {total_trials} total trials, but with {n_participants} "
+            f"participants and {n_trials} trials per participant, expected "
+            f"{expected_trials} trials. All participants must have the same "
+            "number of trials."
+        )
+
+
+def _validate_args_array_shapes(
+    args: tuple,
+    expected_length: int,
+    list_params: list[str],
+    extra_fields: list[str],
+) -> None:
+    """Validate that all arrays in args have the same length.
+
+    Parameters
+    ----------
+    args : tuple
+        Argument arrays to validate.
+    expected_length : int
+        Expected length for all arrays.
+    list_params : list[str]
+        Names of list parameters for error messages.
+    extra_fields : list[str]
+        Names of extra fields for error messages.
+
+    Raises
+    ------
+    ValueError
+        If any array in args has incorrect length.
+    """
+    all_params = list_params + extra_fields
+    for i, (arg, param_name) in enumerate(zip(args, all_params)):
+        if not hasattr(arg, "shape") or not hasattr(arg, "__len__"):
+            raise ValueError(
+                f"Argument {i} ('{param_name}') is not an array-like object."
+            )
+
+        if len(arg) != expected_length:
+            raise ValueError(
+                f"Argument {i} ('{param_name}') has length {len(arg)}, "
+                f"but expected {expected_length} (matching data.shape[0])."
+            )
+
+
+def _validate_inputs(
+    data: np.ndarray,
+    args: tuple,
+    n_participants: int,
+    n_trials: int,
+    data_cols: list[str],
+    list_params: list[str],
+    extra_fields: list[str],
+) -> None:
+    """Validate all inputs to the log-likelihood function.
+
+    Performs comprehensive validation of data array and parameter arrays
+    to ensure they have correct shapes and sizes before likelihood computation.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Data array containing trial data.
+    args : tuple
+        Argument arrays containing parameter values.
+    n_participants : int
+        Number of participants.
+    n_trials : int
+        Number of trials per participant.
+    data_cols : list[str]
+        Expected data column names.
+    list_params : list[str]
+        Expected list parameter names.
+    extra_fields : list[str]
+        Expected extra field names.
+
+    Raises
+    ------
+    ValueError
+        If any validation check fails.
+    """
+    _validate_data_shape(data, data_cols)
+    _validate_args_length(args, list_params, extra_fields)
+    _validate_uniform_trials(data, n_participants, n_trials)
+    _validate_args_array_shapes(args, data.shape[0], list_params, extra_fields)
+
+
 def make_rl_logp_func(
     ssm_logp_func: AnnotatedFunction,
     n_participants: int,
@@ -372,11 +597,25 @@ def make_rl_logp_func(
     n_trials : int
         Number of trials per participant.
     data_cols : list[str] | None, optional
-        Column names in the data array. Defaults to `["rt", "response"]`.
+        Column names in the data array, in the exact order they appear as columns
+        in the `data` array passed to the returned logp function. For example, if
+        `data_cols=["rt", "response"]`, then the data array must have exactly 2
+        columns where column 0 contains rt values and column 1 contains response
+        values. Defaults to `["rt", "response"]`.
     list_params : list[str] | None, optional
-        Model parameter names passed as separate arrays in `*args`. Defaults to None.
+        Model parameter names passed as separate arrays in `*args`, in the exact
+        order they appear in the `*args` tuple. For example, if
+        `list_params=["a", "z", "t"]`, then args[0] contains 'a' values,
+        args[1] contains 'z' values, and args[2] contains 't' values.
+        Together with `data_cols` and `extra_fields`, these form the complete
+        ordered column metadata for looking up available data. Defaults to None.
     extra_fields : list[str] | None, optional
-        Additional fields (e.g., 'feedback') required by computation functions.
+        Additional fields (e.g., 'feedback') required by computation functions,
+        passed as separate arrays in `*args` after list_params, in the exact order
+        they appear. For example, if `list_params=["a", "z"]` and
+        `extra_fields=["feedback", "stimulus"]`, then args[0]='a', args[1]='z',
+        args[2]='feedback', args[3]='stimulus'. Together with `data_cols` and
+        `list_params`, these form the complete ordered column metadata.
         Defaults to None.
 
     Returns
@@ -440,15 +679,25 @@ def make_rl_logp_func(
         Parameters
         ----------
         data : np.ndarray
-            A 2D array containing trial data.
+            A 2D array of shape (n_total_trials, n_data_cols) containing trial data.
+            Columns must be in the exact order specified in data_cols. For example,
+            if data_cols=["rt", "response"], then data[:, 0] contains rt values and
+            data[:, 1] contains response values.
         *args :
-            Model parameters included in list_params and extra_fields.
+            Model parameters and extra fields as separate arrays, in the order:
+            first all list_params arrays, then all extra_fields arrays. Each array
+            must have length n_total_trials.
 
         Returns
         -------
         np.ndarray
             The computed log-likelihoods for each trial, reshaped as a 2D array.
         """
+        # Validate inputs
+        _validate_inputs(
+            data, args, n_participants, n_trials, data_cols, list_params, extra_fields
+        )
+
         # Get column indices for SSM logp function
         # Identifies computed vs available params
         ssm_logp_func_colidxs = _get_column_indices_with_computed(
@@ -521,11 +770,25 @@ def make_rl_logp_op(
     n_trials : int
         Number of trials per participant.
     data_cols : list[str] | None, optional
-        Column names in the data array. Defaults to `["rt", "response"]`.
+        Column names in the data array, in the exact order they appear as columns
+        in the `data` array passed to the returned logp function. For example, if
+        `data_cols=["rt", "response"]`, then the data array must have exactly 2
+        columns where column 0 contains rt values and column 1 contains response
+        values. Defaults to `["rt", "response"]`.
     list_params : list[str] | None, optional
-        Model parameter names passed as separate arrays in `*args`. Defaults to None.
+        Model parameter names passed as separate arrays in `*args`, in the exact
+        order they appear in the `*args` tuple. For example, if
+        `list_params=["a", "z", "t"]`, then args[0] contains 'a' values,
+        args[1] contains 'z' values, and args[2] contains 't' values.
+        Together with `data_cols` and `extra_fields`, these form the complete
+        ordered column metadata for looking up available data. Defaults to None.
     extra_fields : list[str] | None, optional
-        Additional fields (e.g., 'feedback') required by computation functions.
+        Additional fields (e.g., 'feedback') required by computation functions,
+        passed as separate arrays in `*args` after list_params, in the exact order
+        they appear. For example, if `list_params=["a", "z"]` and
+        `extra_fields=["feedback", "stimulus"]`, then args[0]='a', args[1]='z',
+        args[2]='feedback', args[3]='stimulus'. Together with `data_cols` and
+        `list_params`, these form the complete ordered column metadata.
         Defaults to None.
 
     Returns
