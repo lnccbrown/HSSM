@@ -289,7 +289,6 @@ class RLSSMConfig(BaseModelConfig):
             - description: Model description
             - list_params: List of parameter names
             - extra_fields: List of extra field names from data
-            - decision_model: Name of decision model (e.g., "LAN")
             - LAN: Specific LAN model variant
             - params_default (optional): Default parameter values
             - bounds (optional): Parameter bounds
