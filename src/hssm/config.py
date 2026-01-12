@@ -258,7 +258,6 @@ class RLSSMConfig(BaseModelConfig):
 
     # Additional metadata for RLSSM models
     # (as suggested in Krishn's original config design)
-    decision_model: str | None = None  # e.g., "LAN"
     lan_model: str | None = None  # e.g., "angle", "dev_lba_angle_3_v2"
 
     def __post_init__(self):
@@ -313,7 +312,6 @@ class RLSSMConfig(BaseModelConfig):
             extra_fields=config_dict.get("extra_fields"),
             params_default=config_dict.get("params_default", []),
             decision_process=config_dict.get("decision_model"),
-            decision_model=config_dict.get("decision_model"),
             lan_model=config_dict.get("LAN"),
             learning_process=config_dict.get("learning_process", {}),
             bounds=config_dict.get("bounds", {}),

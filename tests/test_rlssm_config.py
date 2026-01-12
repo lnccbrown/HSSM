@@ -64,7 +64,6 @@ def test_rlssm_config_from_rlssm_dict():
     assert config.list_params == ["alpha", "beta", "gamma", "v", "a"]
     assert config.extra_fields == ["feedback", "trial_id", "block"]
     assert config.decision_process == "LAN"
-    assert config.decision_model == "LAN"
     assert config.lan_model == "angle"
     assert config.params_default == [0.5, 0.3, 0.2, 1.0, 1.5]
     assert config.bounds == {
