@@ -29,8 +29,8 @@ class DataValidatorMixin:
     def __init__(
         self,
         data: pd.DataFrame,
-        response: list[str] = ["rt", "response"],
-        choices: list[int] = [0, 1],
+        response: list[str] | None = ["rt", "response"],
+        choices: list[int] | None = [0, 1],
         n_choices: int = 2,
         extra_fields: list[str] | None = None,
         deadline: bool = False,
