@@ -12,7 +12,7 @@ _logger = logging.getLogger("hssm")
 
 
 class DataValidatorMixin:
-    """Mixin class providing validation and preprocessing methods for HSSM behavioral models.
+    """Mixin providing validation and preprocessing methods for HSSM behavioral models.
 
     This class expects subclasses to define the following attributes:
     - data: pd.DataFrame
