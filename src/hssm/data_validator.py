@@ -26,6 +26,32 @@ class DataValidatorMixin:
     - missing_data_value: float
     """
 
+    def __init__(
+        self,
+        data,
+        response=["rt", "response"],
+        choices=[0, 1],
+        n_choices=2,
+        extra_fields=None,
+        deadline=False,
+        deadline_name="deadline",
+        missing_data=False,
+        missing_data_value=-999.0,
+    ):
+        """Initialize the DataValidatorMixin.
+
+        Init method kept for testing purposes.
+        """
+        self.data = data
+        self.response = response
+        self.choices = choices
+        self.n_choices = n_choices
+        self.extra_fields = extra_fields
+        self.deadline = deadline
+        self.deadline_name = deadline_name
+        self.missing_data = missing_data
+        self.missing_data_value = missing_data_value
+
     @staticmethod
     def check_fields(a, b):
         """Check if all fields in a are in b."""
