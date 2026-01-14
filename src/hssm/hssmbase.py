@@ -331,13 +331,10 @@ class HSSM(DataValidator):
         self.model_config = self._build_model_config(
             model, loglik_kind, model_config, choices
         )
-
-        # Update loglik with user-provided value
         self.model_config.update_loglik(loglik)
-        # Ensure that all required fields are valid
         self.model_config.validate()
 
-        # Set up shortcuts so old code will work
+        # ===== Set up shortcuts so old code will work ======
         self.response = self.model_config.response
         self.list_params = self.model_config.list_params
         self.choices = self.model_config.choices
