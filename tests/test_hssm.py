@@ -194,7 +194,7 @@ def test_sample_prior_predictive(data_ddm_reg):
             dict(name="a", formula="a ~ (1|subject_id) + y"),
         ],
     )
-    prior_predictive_6 = model_regression_random_effect.sample_prior_predictive(
+    model_regression_random_effect.sample_prior_predictive(
         draws=10
     )
 
