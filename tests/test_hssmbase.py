@@ -160,12 +160,12 @@ def test_sample_prior_predictive(data_ddm_reg):
     model_regression = HSSM(
         data=data_ddm_reg, include=[dict(name="v", formula="v ~ 1 + x")]
     )
-    prior_predictive_3 = model_regression.sample_prior_predictive(draws=10)
+    model_regression.sample_prior_predictive(draws=10)
 
     model_regression_a = HSSM(
         data=data_ddm_reg, include=[dict(name="a", formula="a ~ 1 + x")]
     )
-    prior_predictive_4 = model_regression_a.sample_prior_predictive(draws=10)
+    model_regression_a.sample_prior_predictive(draws=10)
 
     model_regression_multi = HSSM(
         data=data_ddm_reg,
