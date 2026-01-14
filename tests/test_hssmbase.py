@@ -156,10 +156,8 @@ def test_sample_prior_predictive(data_ddm_reg):
     model_no_regression = HSSM(data=data_ddm_reg)
     rng = np.random.default_rng()
 
-    prior_predictive_1 = model_no_regression.sample_prior_predictive(draws=10)
-    prior_predictive_2 = model_no_regression.sample_prior_predictive(
-        draws=10, random_seed=rng
-    )
+    model_no_regression.sample_prior_predictive(draws=10)
+    model_no_regression.sample_prior_predictive(draws=10, random_seed=rng)
 
     model_regression = HSSM(
         data=data_ddm_reg, include=[dict(name="v", formula="v ~ 1 + x")]
