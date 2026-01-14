@@ -8,7 +8,6 @@ This file defines the entry class HSSM.
 
 import datetime
 import logging
-import typing
 from copy import deepcopy
 from inspect import isclass, signature
 from os import PathLike
@@ -588,7 +587,7 @@ class HSSM(DataValidatorMixin):
         # Handle default config (no model_config provided)
         else:
             # For supported models, defaults already have choices
-            if model in typing.get_args(SupportedModels):
+            if model in get_args(SupportedModels):
                 if choices is not None:
                     _logger.info(
                         "Model string is in SupportedModels."
