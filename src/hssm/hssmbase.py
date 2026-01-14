@@ -329,43 +329,52 @@ class HSSM(DataValidator):
 
         # ===== Construct a model_config from defaults and user inputs =====
         self.model_config = Config.from_defaults(model, loglik_kind)
-        # Update defaults with user-provided config, if any
-        if model_config is not None:
-            if isinstance(model_config, dict):
-                if "choices" not in model_config:
-                    if choices is not None:
-                        model_config["choices"] = choices
-                else:
-                    if choices is not None:
-                        _logger.info(
-                            "choices list provided in both model_config and "
-                            "as an argument directly."
-                            " Using the one provided in model_config. \n"
-                            "We recommend providing choices in model_config."
-                        )
-            elif isinstance(model_config, ModelConfig):
-                if model_config.choices is None:
-                    if choices is not None:
-                        model_config.choices = choices
-                else:
-                    if choices is not None:
-                        _logger.info(
-                            "choices list provided in both model_config and "
-                            "as an argument directly."
-                            " Using the one provided in model_config. \n"
-                            "We recommend providing choices in model_config."
-                        )
 
-            self.model_config.update_config(
+        # Handle user-provided model_config
+        if model_config is not None:
+            # Check if choices already exists in the provided config
+            has_choices = (
+                isinstance(model_config, dict)
+                and "choices" in model_config
+                or isinstance(model_config, ModelConfig)
+                and model_config.choices is not None
+            )
+
+            # Handle choices conflict or missing choices
+            if choices is not None:
+                if has_choices:
+                    _logger.info(
+                        "choices list provided in both model_config and "
+                        "as an argument directly."
+                        " Using the one provided in model_config. \n"
+                        "We recommend providing choices in model_config."
+                    )
+                else:
+                    # Add choices to the provided config
+                    if isinstance(model_config, dict):
+                        model_config["choices"] = choices
+                    else:  # ModelConfig instance
+                        model_config.choices = choices
+
+            # Convert dict to ModelConfig if needed and update
+            final_config = (
                 model_config
                 if isinstance(model_config, ModelConfig)
-                else ModelConfig(**model_config)  # also serves as dict validation
+                else ModelConfig(**model_config)
             )
+            self.model_config.update_config(final_config)
+
+        # Handle default config (no model_config provided)
         else:
-            # Model config is not provided, but at this point was constructed from
-            # defaults.
-            if model not in typing.get_args(SupportedModels):
-                # TODO: ideally use self.supported_models above but mypy doesn't like it
+            # For supported models, defaults already have choices
+            if model in typing.get_args(SupportedModels):
+                if choices is not None:
+                    _logger.info(
+                        "Model string is in SupportedModels."
+                        " Ignoring choices arguments."
+                    )
+            # For custom models, try to get choices
+            else:
                 if choices is not None:
                     self.model_config.update_choices(choices)
                 elif model in ssms_model_config:
@@ -378,16 +387,6 @@ class HSSM(DataValidator):
                         "Using choices, from ssm-simulators configs: %s",
                         model,
                         ssms_model_config[model]["choices"],
-                    )
-            else:
-                # Model config already constructed from defaults, and model string is
-                # in SupportedModels. So we are guaranteed that choices are in
-                # self.model_config already.
-
-                if choices is not None:
-                    _logger.info(
-                        "Model string is in SupportedModels."
-                        " Ignoring choices arguments."
                     )
 
         # Update loglik with user-provided value
