@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 import hssm
-from hssm.hssmbase import HSSM
+from hssm.base import HSSM
 from hssm.likelihoods import DDM, logp_ddm
 from copy import deepcopy
 
