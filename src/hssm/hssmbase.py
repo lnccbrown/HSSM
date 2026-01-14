@@ -327,7 +327,7 @@ class HSSM(DataValidator):
         self._initvals: dict[str, Any] = {}
         self.initval_jitter = initval_jitter
 
-        # Construct a model_config from defaults
+        # ===== Construct a model_config from defaults and user inputs =====
         self.model_config = Config.from_defaults(model, loglik_kind)
         # Update defaults with user-provided config, if any
         if model_config is not None:
