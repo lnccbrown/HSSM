@@ -176,7 +176,7 @@ def test_sample_prior_predictive(data_ddm_reg):
             dict(name="a", formula="a ~ 1 + y"),
         ],
     )
-    prior_predictive_5 = model_regression_multi.sample_prior_predictive(draws=10)
+    model_regression_multi.sample_prior_predictive(draws=10)
 
     data_ddm_reg.loc[:, "subject_id"] = np.arange(10)
 
