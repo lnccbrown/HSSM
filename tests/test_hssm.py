@@ -86,25 +86,23 @@ def test_custom_model(data_ddm):
     with pytest.raises(
         ValueError, match="When using a custom model, please provide a `loglik_kind.`"
     ):
-        model = HSSM(data=data_ddm, model="custom")
+        HSSM(data=data_ddm, model="custom")
 
     with pytest.raises(
         ValueError, match="Please provide `list_params` via `model_config`."
     ):
-        model = HSSM(data=data_ddm, model="custom", loglik_kind="analytical")
+        HSSM(data=data_ddm, model="custom", loglik_kind="analytical")
 
     with pytest.raises(
         ValueError, match="Please provide `list_params` via `model_config`."
     ):
-        model = HSSM(
-            data=data_ddm, model="custom", loglik=DDM, loglik_kind="analytical"
-        )
+        HSSM(data=data_ddm, model="custom", loglik=DDM, loglik_kind="analytical")
 
     with pytest.raises(
         ValueError,
         match="Please provide `list_params` via `model_config`.",
     ):
-        model = HSSM(
+        HSSM(
             data=data_ddm,
             model="custom",
             loglik=DDM,
@@ -112,7 +110,7 @@ def test_custom_model(data_ddm):
             model_config={},
         )
 
-    model = HSSM(
+    HSSM(
         data=data_ddm,
         model="custom",
         model_config={
@@ -194,9 +192,7 @@ def test_sample_prior_predictive(data_ddm_reg):
             dict(name="a", formula="a ~ (1|subject_id) + y"),
         ],
     )
-    model_regression_random_effect.sample_prior_predictive(
-        draws=10
-    )
+    model_regression_random_effect.sample_prior_predictive(draws=10)
 
 
 @pytest.mark.slow
