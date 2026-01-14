@@ -13,7 +13,7 @@ def cpn():
 
 pattern = r"Field\(s\) `.*` not found in data\."
 
-# The DataValidator class is tested in the test_data_validator.py file, so this file
+# The DataValidatorMixin is tested in the test_data_validator.py file, so this file
 # can probably be removed in the future. CP
 
 
