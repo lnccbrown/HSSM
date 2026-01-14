@@ -1,4 +1,3 @@
-import bambi as bmb
 import numpy as np
 import pytest
 
