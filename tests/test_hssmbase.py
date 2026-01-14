@@ -107,7 +107,7 @@ def test_custom_model(data_ddm):
             model_config={},
         )
 
-    HSSM(
+    model = HSSM(
         data=data_ddm,
         model="custom",
         model_config={
