@@ -328,7 +328,7 @@ class HSSM(DataValidator):
         self.initval_jitter = initval_jitter
 
         # ===== Construct a model_config from defaults and user inputs =====
-        self.model_config = self._build_model_config(
+        self.model_config: Config = self._build_model_config(
             model, loglik_kind, model_config, choices
         )
         self.model_config.update_loglik(loglik)
@@ -346,6 +346,12 @@ class HSSM(DataValidator):
         if self.choices is None:
             raise ValueError(
                 "`choices` must be provided either in `model_config` or as an argument."
+            )
+
+        # Avoid mypy error later (None.append). Should list_params be Optional?
+        if self.list_params is None:
+            raise ValueError(
+                "`list_params` must be provided in the model configuration."
             )
 
         self.n_choices = len(self.choices)
