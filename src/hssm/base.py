@@ -269,6 +269,8 @@ class HSSMBase(DataValidatorMixin):
         The jitter value for the initial values.
     """
 
+    config_class = Config
+
     def __init__(
         self,
         data: pd.DataFrame,
@@ -482,8 +484,9 @@ class HSSMBase(DataValidatorMixin):
         )
         _logger.info("Model initialized successfully.")
 
-    @staticmethod
+    @classmethod
     def _build_model_config(
+        cls,
         model: SupportedModels | str,
         loglik_kind: LoglikKind | None,
         model_config: ModelConfig | dict | None,
@@ -508,7 +511,7 @@ class HSSMBase(DataValidatorMixin):
             A complete ModelConfig object with choices and other settings applied.
         """
         # Start with defaults
-        config = Config.from_defaults(model, loglik_kind)
+        config = cls.config_class.from_defaults(model, loglik_kind)
 
         # Handle user-provided model_config
         if model_config is not None:
