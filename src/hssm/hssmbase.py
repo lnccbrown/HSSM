@@ -300,13 +300,9 @@ class HSSM(DataValidator):
         # so that we can easily define some
         # methods that need to access these
         # arguments (context: pickling / save - load).
-
+        # assert False, "Temporary prevent instantiation of HSSM class."
         # Define a dict with all call arguments:
-        self._init_args = {
-            k: v for k, v in locals().items() if k not in ["self", "kwargs"]
-        }
-        if kwargs:
-            self._init_args.update(kwargs)
+        self._init_args = self._get_init_args(locals(), kwargs)
 
         self.data = data.copy()
         self._inference_obj: az.InferenceData | None = None
@@ -542,6 +538,31 @@ class HSSM(DataValidator):
             {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
         )
         _logger.info("Model initialized successfully.")
+
+    @staticmethod
+    def _get_init_args(
+        locals_dict: dict[str, Any], kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Extract initialization arguments from locals and kwargs.
+
+        Parameters
+        ----------
+        locals_dict : dict[str, Any]
+            The locals() dictionary from __init__.
+        kwargs : dict[str, Any]
+            Additional keyword arguments passed to __init__.
+
+        Returns
+        -------
+        dict[str, Any]
+            A dictionary containing all initialization arguments, excluding 'self'.
+        """
+        init_args = {
+            k: v for k, v in locals_dict.items() if k not in ["self", "kwargs"]
+        }
+        if kwargs:
+            init_args.update(kwargs)
+        return init_args
 
     @classproperty
     def supported_models(cls) -> tuple[SupportedModels, ...]:
