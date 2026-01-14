@@ -1670,7 +1670,7 @@ class HSSMBase(DataValidatorMixin):
     @classmethod
     def load_model(
         cls, path: Union[str, Path]
-    ) -> Union["HSSM", dict[str, Optional[az.InferenceData]]]:
+    ) -> Union["HSSMBase", dict[str, Optional[az.InferenceData]]]:
         """Load a HSSM model instance and its inference results from disk.
 
         Parameters
@@ -1681,7 +1681,7 @@ class HSSMBase(DataValidatorMixin):
 
         Returns
         -------
-        HSSM
+        HSSMBase
             The loaded HSSM model instance with inference results attached if available.
         """
         # Convert path to Path object
@@ -1798,7 +1798,7 @@ class HSSMBase(DataValidatorMixin):
             A dictionary containing the constructor arguments under the key
             'constructor_args'.
         """
-        new_instance = HSSM(**state["constructor_args"])
+        new_instance = HSSMBase(**state["constructor_args"])
         self.__dict__ = new_instance.__dict__
 
     def __repr__(self) -> str:
