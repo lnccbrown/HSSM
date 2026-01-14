@@ -76,7 +76,7 @@ class classproperty:
     properties that need to perform some computation or access class-level data.
 
     This implementation is provided for compatibility with Python versions 3.10 through
-    3.12, as one cannot combine the @property and @classmethod decorators is across all
+    3.12, as one cannot combine the @property and @classmethod decorators across all
     these versions.
 
     Example
