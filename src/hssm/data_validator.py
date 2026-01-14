@@ -182,7 +182,7 @@ class DataValidatorMixin:
         new_data
             A DataFrame containing new data for update.
         """
-        if not new_data:
+        if new_data is None:
             new_data = self.data
 
         # The attribute 'model_distribution' is not defined in
