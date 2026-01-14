@@ -32,7 +32,7 @@ from pymc.model.transform.conditioning import do
 from ssms.config import model_config as ssms_model_config
 
 from hssm._types import LoglikKind, SupportedModels
-from hssm.data_validator import DataValidator
+from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
     INITVAL_SETTINGS,
@@ -97,7 +97,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSM(DataValidator):
+class HSSM(DataValidatorMixin):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters

@@ -32,7 +32,7 @@ from pymc.model.transform.conditioning import do
 from ssms.config import model_config as ssms_model_config
 
 from hssm._types import LoglikKind, SupportedModels
-from hssm.data_validator import DataValidator
+from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
     INITVAL_SETTINGS,
@@ -97,7 +97,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSM(DataValidator):
+class HSSM(DataValidatorMixin):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
@@ -355,7 +355,6 @@ class HSSM(DataValidator):
             )
 
         self.n_choices = len(self.choices)
-        self._pre_check_data_sanity()
 
         # Process missing data setting
         # AF-TODO: Could be a function in data validator?
@@ -413,7 +412,11 @@ class HSSM(DataValidator):
         )
 
         if self.deadline:
-            self.response.append(self.deadline_name)
+            if self.response is not None:  # Avoid mypy error
+                self.response.append(self.deadline_name)
+
+        # Run pre-check data sanity validation now that all attributes are set
+        self._pre_check_data_sanity()
 
         # Process lapse distribution
         self.has_lapse = p_outlier is not None and p_outlier != 0
@@ -423,7 +426,7 @@ class HSSM(DataValidator):
 
         # Process all parameters
         self.params = Params.from_user_specs(
-            model=self,
+            model=self,  # type: ignore[arg-type]
             include=[] if include is None else include,
             kwargs=kwargs,
             p_outlier=p_outlier,
@@ -432,7 +435,7 @@ class HSSM(DataValidator):
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
-        self.formula, self.priors, self.link = self.params.parse_bambi(model=self)
+        self.formula, self.priors, self.link = self.params.parse_bambi(model=self)  # type: ignore[arg-type]
 
         # For parameters that have a regression backend, apply bounds at the likelihood
         # level to ensure that the samples that are out of bounds
@@ -519,7 +522,7 @@ class HSSM(DataValidator):
         loglik_kind: LoglikKind | None,
         model_config: ModelConfig | dict | None,
         choices: list[int] | None,
-    ) -> ModelConfig:
+    ) -> Config:
         """Build a ModelConfig object from defaults and user inputs.
 
         Parameters
@@ -2030,6 +2033,9 @@ class HSSM(DataValidator):
         if self.extra_fields is not None:
             params_is_reg += [True for _ in self.extra_fields]
 
+        # Assert that loglik is not None (mypy)
+        # avoiding extra indentation level
+        assert self.loglik is not None, "loglik should be set by model configuration"
         if self.loglik_kind == "approx_differentiable":
             if self.model_config.backend == "jax":
                 likelihood_callable = make_likelihood_callable(
@@ -2097,6 +2103,8 @@ class HSSM(DataValidator):
             )
 
         self.data = _rearrange_data(self.data)
+        # Assertion added for mypy type checking
+        assert self.list_params is not None, "list_params should have been validated"
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
             loglik=self.loglik,
