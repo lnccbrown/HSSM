@@ -28,15 +28,15 @@ class DataValidatorMixin:
 
     def __init__(
         self,
-        data,
-        response=["rt", "response"],
-        choices=[0, 1],
-        n_choices=2,
-        extra_fields=None,
-        deadline=False,
-        deadline_name="deadline",
-        missing_data=False,
-        missing_data_value=-999.0,
+        data: pd.DataFrame,
+        response: list[str] = ["rt", "response"],
+        choices: list[int] = [0, 1],
+        n_choices: int = 2,
+        extra_fields: list[str] | None = None,
+        deadline: bool = False,
+        deadline_name: str = "deadline",
+        missing_data: bool = False,
+        missing_data_value: float = -999.0,
     ):
         """Initialize the DataValidatorMixin.
 
@@ -190,9 +190,10 @@ class DataValidatorMixin:
         # (e.g., HSSM).
         # The 'type: ignore[attr-defined]' comment tells mypy to ignore the missing
         # attribute error here and avoid moving this method to the HSSM class.
-        self.model_distribution.extra_fields = [  # type: ignore[attr-defined]
-            new_data[field].values for field in self.extra_fields
-        ]
+        if self.extra_fields is not None:
+            self.model_distribution.extra_fields = [  # type: ignore[attr-defined]
+                new_data[field].values for field in self.extra_fields
+            ]
 
     @staticmethod
     def _set_missing_data_and_deadline(

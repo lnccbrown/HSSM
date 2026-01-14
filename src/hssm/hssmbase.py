@@ -1375,11 +1375,15 @@ class HSSM(DataValidatorMixin):
     @property
     def response_c(self) -> str:
         """Return the response variable names in c() format."""
+        if self.response is None:
+            return "c()"
         return f"c({', '.join(self.response)})"
 
     @property
     def response_str(self) -> str:
         """Return the response variable names in string format."""
+        if self.response is None:
+            return ""
         return ",".join(self.response)
 
     # NOTE: can't annotate return type because the graphviz dependency is optional
