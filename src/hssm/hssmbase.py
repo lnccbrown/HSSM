@@ -304,24 +304,28 @@ class HSSM(DataValidator):
         # Define a dict with all call arguments:
         self._init_args = self._get_init_args(locals(), kwargs)
 
+        # ===== Input Data & Configuration =====
         self.data = data.copy()
-        self._inference_obj: az.InferenceData | None = None
-        self._initvals: dict[str, Any] = {}
-        self.initval_jitter = initval_jitter
-        self._inference_obj_vi: pm.Approximation | None = None
-        self._vi_approx = None
-        self._map_dict = None
         self.global_formula = global_formula
-
         self.link_settings = link_settings
         self.prior_settings = prior_settings
-
         self.missing_data_value = -999.0
 
+        # Set up additional namespace for formula evaluation
         additional_namespace = transformations_namespace.copy()
         if extra_namespace is not None:
             additional_namespace.update(extra_namespace)
         self.additional_namespace = additional_namespace
+
+        # ===== Inference Results (initialized to None/empty) =====
+        self._inference_obj: az.InferenceData | None = None
+        self._inference_obj_vi: pm.Approximation | None = None
+        self._vi_approx = None
+        self._map_dict = None
+
+        # ===== Initial Values Configuration =====
+        self._initvals: dict[str, Any] = {}
+        self.initval_jitter = initval_jitter
 
         # Construct a model_config from defaults
         self.model_config = Config.from_defaults(model, loglik_kind)
