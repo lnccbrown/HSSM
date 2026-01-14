@@ -96,7 +96,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSM(DataValidatorMixin):
+class HSSMBase(DataValidatorMixin):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
