@@ -69,9 +69,9 @@ param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
 def test_transform_params_general(data_ddm_reg, include, should_raise_exception):
     if should_raise_exception:
         with pytest.raises(Exception):
-            HSSM(data=data_ddm_reg, include=include)
+            HSSMBase(data=data_ddm_reg, include=include)
     else:
-        model = HSSM(data=data_ddm_reg, include=include)
+        model = HSSMBase(data=data_ddm_reg, include=include)
         # Check model properties using a loop
         param_names = ["v", "a", "z", "t", "p_outlier"]
         model_param_names = list(model.params.keys())
@@ -83,23 +83,23 @@ def test_custom_model(data_ddm):
     with pytest.raises(
         ValueError, match="When using a custom model, please provide a `loglik_kind.`"
     ):
-        HSSM(data=data_ddm, model="custom")
+        HSSMBase(data=data_ddm, model="custom")
 
     with pytest.raises(
         ValueError, match="Please provide `list_params` via `model_config`."
     ):
-        HSSM(data=data_ddm, model="custom", loglik_kind="analytical")
+        HSSMBase(data=data_ddm, model="custom", loglik_kind="analytical")
 
     with pytest.raises(
         ValueError, match="Please provide `list_params` via `model_config`."
     ):
-        HSSM(data=data_ddm, model="custom", loglik=DDM, loglik_kind="analytical")
+        HSSMBase(data=data_ddm, model="custom", loglik=DDM, loglik_kind="analytical")
 
     with pytest.raises(
         ValueError,
         match="Please provide `list_params` via `model_config`.",
     ):
-        HSSM(
+        HSSMBase(
             data=data_ddm,
             model="custom",
             loglik=DDM,
@@ -107,7 +107,7 @@ def test_custom_model(data_ddm):
             model_config={},
         )
 
-    model = HSSM(
+    model = HSSMBase(
         data=data_ddm,
         model="custom",
         model_config={
@@ -130,12 +130,12 @@ def test_custom_model(data_ddm):
 
 
 def test_model_definition_outside_include(data_ddm):
-    model_with_one_param_fixed = HSSM(data_ddm, a=0.5)
+    model_with_one_param_fixed = HSSMBase(data_ddm, a=0.5)
 
     assert "a" in model_with_one_param_fixed.params
     assert model_with_one_param_fixed.params["a"].prior == 0.5
 
-    model_with_one_param = HSSM(
+    model_with_one_param = HSSMBase(
         data_ddm, a={"prior": {"name": "Normal", "mu": 0.5, "sigma": 0.1}}
     )
 
@@ -145,29 +145,29 @@ def test_model_definition_outside_include(data_ddm):
     with pytest.raises(
         ValueError, match="Parameter `a` specified in both `include` and `kwargs`."
     ):
-        HSSM(data_ddm, include=[{"name": "a", "prior": 0.5}], a=0.5)
+        HSSMBase(data_ddm, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
 
 def test_sample_prior_predictive(data_ddm_reg):
     data_ddm_reg = data_ddm_reg.iloc[:10, :]
 
-    model_no_regression = HSSM(data=data_ddm_reg)
+    model_no_regression = HSSMBase(data=data_ddm_reg)
     rng = np.random.default_rng()
 
     model_no_regression.sample_prior_predictive(draws=10)
     model_no_regression.sample_prior_predictive(draws=10, random_seed=rng)
 
-    model_regression = HSSM(
+    model_regression = HSSMBase(
         data=data_ddm_reg, include=[dict(name="v", formula="v ~ 1 + x")]
     )
     model_regression.sample_prior_predictive(draws=10)
 
-    model_regression_a = HSSM(
+    model_regression_a = HSSMBase(
         data=data_ddm_reg, include=[dict(name="a", formula="a ~ 1 + x")]
     )
     model_regression_a.sample_prior_predictive(draws=10)
 
-    model_regression_multi = HSSM(
+    model_regression_multi = HSSMBase(
         data=data_ddm_reg,
         include=[
             dict(name="v", formula="v ~ 1 + x"),
@@ -178,7 +178,7 @@ def test_sample_prior_predictive(data_ddm_reg):
 
     data_ddm_reg.loc[:, "subject_id"] = np.arange(10)
 
-    model_regression_random_effect = HSSM(
+    model_regression_random_effect = HSSMBase(
         data=data_ddm_reg,
         include=[
             dict(name="v", formula="v ~ (1|subject_id) + x"),
@@ -203,7 +203,7 @@ def test_override_default_link(caplog, data_ddm_reg):
     param_z = param_v | dict(name="z", formula="z ~ 1 + x + y", bounds=(0, 1))
     param_t = param_v | dict(name="t", formula="t ~ 1 + x + y", bounds=(0.1, np.inf))
 
-    model = HSSM(
+    model = HSSMBase(
         data=data_ddm_reg,
         include=[param_v, param_a, param_z, param_t],
         link_settings="log_logit",
@@ -219,7 +219,7 @@ def test_override_default_link(caplog, data_ddm_reg):
 
 
 def test_resampling(data_ddm):
-    model = HSSM(data=data_ddm)
+    model = HSSMBase(data=data_ddm)
     sample_1 = model.sample(draws=10, chains=1, tune=0)
     assert sample_1 is model.traces
 
@@ -231,7 +231,7 @@ def test_resampling(data_ddm):
 
 def test_add_likelihood_parameters_to_data(data_ddm):
     """Test if the likelihood parameters are added to the InferenceData object."""
-    model = HSSM(data=data_ddm)
+    model = HSSMBase(data=data_ddm)
     sample_1 = model.sample(draws=10, chains=1, tune=10)
     sample_1_copy = deepcopy(sample_1)
     model.add_likelihood_parameters_to_idata(inplace=True)
@@ -266,7 +266,7 @@ def test_add_likelihood_parameters_to_data(data_ddm):
 # Setting any parameter to a fixed value should work:
 def test_model_creation_constant_parameter(data_ddm):
     for param_name in ["v", "a", "z", "t"]:
-        model = HSSM(data=data_ddm, **{param_name: 1.0})
+        model = HSSMBase(data=data_ddm, **{param_name: 1.0})
         assert model._parent != param_name
         assert model.params[param_name].prior == 1.0
 
@@ -277,7 +277,7 @@ def test_model_creation_constant_parameter(data_ddm):
     [("v", "Normal"), ("a", "Gamma"), ("z", "Beta"), ("t", "Gamma")],
 )
 def test_model_creation_single_regression(data_ddm_reg, param_name, dist_name):
-    model = HSSM(
+    model = HSSMBase(
         data=data_ddm_reg,
         include=[{"name": param_name, "formula": f"{param_name} ~ 1 + x"}],
     )
@@ -288,12 +288,12 @@ def test_model_creation_single_regression(data_ddm_reg, param_name, dist_name):
 # Setting all parameters to fixed values should throw an error:
 def test_model_creation_all_parameters_constant(data_ddm):
     with pytest.raises(ValueError):
-        HSSM(data=data_ddm, v=1.0, a=1.0, z=1.0, t=1.0)
+        HSSMBase(data=data_ddm, v=1.0, a=1.0, z=1.0, t=1.0)
 
 
 # Prior settings
 def test_prior_settings_basic(cavanagh_test):
-    model_1 = HSSM(
+    model_1 = HSSMBase(
         data=cavanagh_test,
         global_formula="y ~ 1 + (1|participant_id)",
         prior_settings=None,
@@ -303,7 +303,7 @@ def test_prior_settings_basic(cavanagh_test):
         "Default prior doesn't yield Nonetype for 'v'!"
     )
 
-    model_2 = HSSM(
+    model_2 = HSSMBase(
         data=cavanagh_test,
         global_formula="y ~ 1 + (1|participant_id)",
         prior_settings="safe",
@@ -315,7 +315,7 @@ def test_prior_settings_basic(cavanagh_test):
 
 
 def test_compile_logp(cavanagh_test):
-    model_1 = HSSM(
+    model_1 = HSSMBase(
         data=cavanagh_test,
         global_formula="y ~ 1 + (1|participant_id)",
         prior_settings=None,
@@ -326,7 +326,7 @@ def test_compile_logp(cavanagh_test):
 
 
 def test_sample_do(data_ddm):
-    model = HSSM(data=data_ddm)
+    model = HSSMBase(data=data_ddm)
     sample_do = model.sample_do(params={"v": 1.0}, draws=10)
     assert sample_do is not None
     assert "v_mean" in sample_do.prior.data_vars
