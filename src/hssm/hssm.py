@@ -1186,7 +1186,7 @@ class HSSM(DataValidatorMixin):
         # clean up `rt,response_mean` to `v`
         do_idata = self._drop_parent_str_from_idata(idata=do_idata)
 
-        # rename otherwise inconsistentdims and coords
+        # rename otherwise inconsistent dims and coords
         if "rt,response_extra_dim_0" in do_idata["prior_predictive"].dims:
             setattr(
                 do_idata,
@@ -1259,7 +1259,7 @@ class HSSM(DataValidatorMixin):
         # clean up `rt,response_mean` to `v`
         idata = self._drop_parent_str_from_idata(idata=self._inference_obj)
 
-        # rename otherwise inconsistentdims and coords
+        # rename otherwise inconsistent dims and coords
         if "rt,response_extra_dim_0" in idata["prior_predictive"].dims:
             setattr(
                 idata,
