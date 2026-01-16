@@ -256,10 +256,6 @@ class RLSSMConfig(BaseModelConfig):
     decision_process: str | ModelConfig | None = None
     learning_process: dict[str, Any] = field(default_factory=dict)
 
-    # Additional metadata for RLSSM models
-    # (as suggested in Krishn's original config design)
-    lan_model: str | None = None  # e.g., "angle", "dev_lba_angle_3_v2"
-
     def __post_init__(self):
         """Set default loglik_kind for RLSSM models if not provided."""
         if self.loglik_kind is None:
@@ -311,7 +307,6 @@ class RLSSMConfig(BaseModelConfig):
             extra_fields=config_dict.get("extra_fields"),
             params_default=config_dict.get("params_default", []),
             decision_process=config_dict.get("decision_model"),
-            lan_model=config_dict.get("LAN"),
             learning_process=config_dict.get("learning_process", {}),
             bounds=config_dict.get("bounds", {}),
             response=config_dict.get("response", ["rt", "response"]),
