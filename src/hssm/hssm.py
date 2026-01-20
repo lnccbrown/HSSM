@@ -32,7 +32,7 @@ from pymc.model.transform.conditioning import do
 from ssms.config import model_config as ssms_model_config
 
 from hssm._types import LoglikKind, SupportedModels
-from hssm.data_validator import DataValidator
+from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
     INITVAL_SETTINGS,
@@ -97,7 +97,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSM(DataValidator):
+class HSSM(DataValidatorMixin):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
@@ -1186,7 +1186,7 @@ class HSSM(DataValidator):
         # clean up `rt,response_mean` to `v`
         do_idata = self._drop_parent_str_from_idata(idata=do_idata)
 
-        # rename otherwise inconsistentdims and coords
+        # rename otherwise inconsistent dims and coords
         if "rt,response_extra_dim_0" in do_idata["prior_predictive"].dims:
             setattr(
                 do_idata,
@@ -1259,7 +1259,7 @@ class HSSM(DataValidator):
         # clean up `rt,response_mean` to `v`
         idata = self._drop_parent_str_from_idata(idata=self._inference_obj)
 
-        # rename otherwise inconsistentdims and coords
+        # rename otherwise inconsistent dims and coords
         if "rt,response_extra_dim_0" in idata["prior_predictive"].dims:
             setattr(
                 idata,
@@ -1309,11 +1309,15 @@ class HSSM(DataValidator):
     @property
     def response_c(self) -> str:
         """Return the response variable names in c() format."""
+        if self.response is None:
+            return "c()"
         return f"c({', '.join(self.response)})"
 
     @property
     def response_str(self) -> str:
         """Return the response variable names in string format."""
+        if self.response is None:
+            return ""
         return ",".join(self.response)
 
     # NOTE: can't annotate return type because the graphviz dependency is optional

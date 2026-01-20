@@ -11,21 +11,37 @@ from hssm.defaults import MissingDataNetwork  # noqa: F401
 _logger = logging.getLogger("hssm")
 
 
-class DataValidator:
-    """Class for validating and preprocessing behavioral data for HSSM models."""
+class DataValidatorMixin:
+    """Mixin providing validation and preprocessing methods for HSSM behavioral models.
+
+    This class expects subclasses to define the following attributes:
+    - data: pd.DataFrame
+    - response: list[str]
+    - choices: list[int]
+    - n_choices: int
+    - extra_fields: list[str] | None
+    - deadline: bool
+    - deadline_name: str
+    - missing_data: bool
+    - missing_data_value: float
+    """
 
     def __init__(
         self,
-        data,
-        response=["rt", "response"],
-        choices=[0, 1],
-        n_choices=2,
-        extra_fields=None,
-        deadline=False,
-        deadline_name="deadline",
-        missing_data=False,
-        missing_data_value=-999.0,
+        data: pd.DataFrame,
+        response: list[str] | None = ["rt", "response"],
+        choices: list[int] | None = [0, 1],
+        n_choices: int = 2,
+        extra_fields: list[str] | None = None,
+        deadline: bool = False,
+        deadline_name: str = "deadline",
+        missing_data: bool = False,
+        missing_data_value: float = -999.0,
     ):
+        """Initialize the DataValidatorMixin.
+
+        Init method kept for testing purposes.
+        """
         self.data = data
         self.response = response
         self.choices = choices
@@ -50,13 +66,13 @@ class DataValidator:
 
         data = data if data is not None else self.data
 
-        DataValidator.check_fields(self.extra_fields, data.columns)
+        DataValidatorMixin.check_fields(self.extra_fields, data.columns)
 
         return True
 
     def _pre_check_data_sanity(self):
         """Check if the data is clean enough for the model."""
-        DataValidator.check_fields(self.response, self.data.columns)
+        DataValidatorMixin.check_fields(self.response, self.data.columns)
         self._check_extra_fields()
 
     def _post_check_data_sanity(self):
@@ -166,16 +182,18 @@ class DataValidator:
         new_data
             A DataFrame containing new data for update.
         """
-        if not new_data:
+        if new_data is None:
             new_data = self.data
 
-        # The attribute 'model_distribution' is not defined in DataValidator itself,
-        # but is expected to exist in subclasses (e.g., HSSM).
+        # The attribute 'model_distribution' is not defined in
+        # DataValidatorMixin itself, but is expected to exist in subclasses
+        # (e.g., HSSM).
         # The 'type: ignore[attr-defined]' comment tells mypy to ignore the missing
         # attribute error here and avoid moving this method to the HSSM class.
-        self.model_distribution.extra_fields = [  # type: ignore[attr-defined]
-            new_data[field].values for field in self.extra_fields
-        ]
+        if self.extra_fields is not None:
+            self.model_distribution.extra_fields = [  # type: ignore[attr-defined]
+                new_data[field].values for field in self.extra_fields
+            ]
 
     @staticmethod
     def _set_missing_data_and_deadline(
