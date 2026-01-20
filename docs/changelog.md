@@ -5,7 +5,7 @@
 This version includes the following changes:
 
 1. Compatibility with Python 3.13 and Bambi 0.17.1+.
-2. A new `make_distribution_for_supported_model` convenient function for creating `pm.Distribution`.
+2. A new `make_distribution_for_supported_model` convenience function for creating `pm.Distribution`.
 3. Bug fix for default prior assignment.
 4. Initial private implementations of RLSSM features.
 5. Added disaggregation of quantile computation by grouping of choice.
