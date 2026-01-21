@@ -13,7 +13,10 @@ import pytensor
 import pytensor.tensor as pt
 from numpy import inf
 from pymc.distributions.dist_math import check_parameters
+import jax.numpy as jnp
+from jax import vmap, scipy
 
+from ..distribution_utils import jax
 from ..distribution_utils.dist import make_distribution
 
 LOGP_LB = pm.floatX(-66.1)
@@ -407,6 +410,108 @@ DDM_SDV: Type[pm.Distribution] = make_distribution(
     loglik=logp_ddm_sdv,
     list_params=ddm_sdv_params,
     bounds=ddm_sdv_bounds,
+)
+
+
+# Racing Diffusion Model (RDM)
+
+# density function for the standard normal distribution
+def _jax_normpdf(x):
+    return (1.0 / jnp.sqrt(2 * jnp.pi)) * jnp.exp(-0.5 * x**2)
+
+# cumulative distribution function for the standard normal distribution
+def _jax_normcdf(x):
+    return (1.0 / 2) * (1.0 + scipy.special.erf(x / jnp.sqrt(2.0)))
+
+def _jax_rdm_tpdf(t, b, v, A):
+    alpha = (b - A - t * v) / (jnp.sqrt(t))
+    beta = (b - t * v) / (jnp.sqrt(t))
+
+    f = 1/A * (
+        -v * _jax_normcdf(alpha)
+        + (1 / jnp.sqrt(t)) * _jax_normpdf(alpha)
+        + v * _jax_normcdf(beta)
+        - (1 / jnp.sqrt(t)) * _jax_normpdf(beta)
+    )
+
+    return f
+
+def _jax_rdm_tcdf(t, b, v, A):
+    alpha_1  = jnp.sqrt(2) * (v * t - b) / jnp.sqrt(2*t)
+    alpha_2  = jnp.sqrt(2) * (v * t - b + A) / jnp.sqrt(2*t)
+
+    beta_1 = jnp.sqrt(2) * (- v * t - b) / jnp.sqrt(2*t)
+    beta_2 = jnp.sqrt(2) * (- v * t - b + A) / jnp.sqrt(2*t)
+
+    F = (
+        1/(2 * v * A) * (_jax_normcdf(alpha_2) - _jax_normcdf(alpha_1))
+        + jnp.sqrt(t)/A * (alpha_2 * _jax_normcdf(alpha_2) - alpha_1 * _jax_normcdf(alpha_1))
+        - 1/(2 * v * A) * (jnp.exp(2 * v * (b - A)) * _jax_normcdf(beta_2) - jnp.exp(2 * v * b) * _jax_normcdf(beta_1))
+        + jnp.sqrt(t)/A * (_jax_normpdf(alpha_2) - _jax_normpdf(alpha_1))
+    )
+    
+    return F
+
+
+def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2):
+    __min = jnp.exp(LOGP_LB)
+    __max = jnp.exp(-LOGP_LB)
+
+    # 1. Calculate PDFs and CDFs for all accumulators
+    # We use vmap to apply our single-accumulator functions across the drift vector
+    v_vector = jnp.array([v0, v1, v2])
+    all_pdfs = vmap(lambda v: _jax_rdm_tpdf(t, b, v, A))(v_vector)
+    all_cdfs = vmap(lambda v: _jax_rdm_tcdf(t, b, v, A))(v_vector)
+
+    # 2. Extract components for the winner
+    pdf_winner = all_pdfs[ch]
+    
+    # 3. Calculate the product of survivor functions for the losers
+    # We mask the winner out of the CDF array
+    mask = jnp.arange(len(v_vector)) != ch
+    survivors_losers = 1.0 - all_cdfs
+    
+    # The defective likelihood: Winner PDF * Product of Loser Survivors
+    likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0))
+    
+    # Return log-likelihood with a floor for numerical stability
+    return jnp.log(jnp.clip(likelihood, __min, __max)) 
+
+
+def logp_rdm3(
+    data: np.ndarray,
+    A: float,
+    b: float,
+    v0: float,
+    v1: float,
+    v2: float,
+) -> np.ndarray:
+    """Compute the log-likelihood of the RDM model with 3 drift rates."""
+    data = jnp.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+    rt = jnp.abs(data[:, 0])
+    response = data[:, 1]
+    #response_int = jnp.cast(response, "int32")
+    response_int = response.astype(jnp.int_)
+    logp = _jax_rdm3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
+    #checked_logp = check_parameters(logp, b > A, msg="b > A")
+    return logp
+
+
+rdm3_params = ["A", "b", "v0", "v1", "v2"]
+
+rdm3_bounds = {
+    "A": (0.0, inf),
+    "b": (0.1, inf),
+    "v0": (0.0, inf),
+    "v1": (0.0, inf),
+    "v2": (0.0, inf),
+}
+
+RDM3: Type[pm.Distribution] = make_distribution(
+    rv="rdm3",
+    loglik=logp_rdm3,
+    list_params=rdm3_params,
+    bounds=rdm3_bounds,
 )
 
 
