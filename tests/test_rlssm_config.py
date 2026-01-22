@@ -15,7 +15,7 @@ def test_rlssm_config_basic_creation():
         description="Test RLSSM model",
         list_params=["alpha", "beta", "gamma"],
         params_default=[0.5, 0.3, 0.2],
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
         extra_fields=["feedback", "trial_id"],
@@ -25,7 +25,7 @@ def test_rlssm_config_basic_creation():
     assert config.description == "Test RLSSM model"
     assert config.list_params == ["alpha", "beta", "gamma"]
     assert config.params_default == [0.5, 0.3, 0.2]
-    assert config.decision_process == "LAN"
+    assert config.decision_process == "ddm"
     assert config.response == ["rt", "response"]
     assert config.choices == [0, 1]
     assert config.n_params == 3
@@ -40,7 +40,7 @@ def test_rlssm_config_from_rlssm_dict():
         "description": "Reinforcement Learning Working Memory model",
         "list_params": ["alpha", "beta", "gamma", "v", "a"],
         "extra_fields": ["feedback", "trial_id", "block"],
-        "decision_model": "LAN",
+        "decision_model": "ddm",
         "LAN": "angle",
         "params_default": [0.5, 0.3, 0.2, 1.0, 1.5],
         "bounds": {
@@ -63,7 +63,7 @@ def test_rlssm_config_from_rlssm_dict():
     assert config.n_extra_fields == 3
     assert config.list_params == ["alpha", "beta", "gamma", "v", "a"]
     assert config.extra_fields == ["feedback", "trial_id", "block"]
-    assert config.decision_process == "LAN"
+    assert config.decision_process == "ddm"
     assert config.params_default == [0.5, 0.3, 0.2, 1.0, 1.5]
     assert config.bounds == {
         "alpha": (0.0, 1.0),
@@ -83,7 +83,7 @@ def test_rlssm_config_from_rlssm_dict_with_defaults():
         "name": "minimal_rlssm",
         "description": "Minimal RLSSM model",
         "list_params": ["alpha", "beta"],
-        "decision_model": "LAN",
+        "decision_model": "ddm",
     }
 
     config = RLSSMConfig.from_rlssm_dict("minimal_rlssm", config_dict)
@@ -102,7 +102,7 @@ def test_rlssm_config_validate_success():
         model_name="test_model",
         list_params=["alpha", "beta"],
         params_default=[0.5, 0.3],
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
         extra_fields=["feedback"],
@@ -117,7 +117,7 @@ def test_rlssm_config_validate_missing_response():
     config = RLSSMConfig(
         model_name="test_model",
         list_params=["alpha"],
-        decision_process="LAN",
+        decision_process="ddm",
         choices=[0, 1],
     )
     config.response = None
@@ -130,7 +130,7 @@ def test_rlssm_config_validate_missing_list_params():
     """Test validation fails when list_params is missing."""
     config = RLSSMConfig(
         model_name="test_model",
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
     )
@@ -145,7 +145,7 @@ def test_rlssm_config_validate_missing_choices():
     config = RLSSMConfig(
         model_name="test_model",
         list_params=["alpha"],
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
     )
     config.choices = None
@@ -174,7 +174,7 @@ def test_rlssm_config_validate_params_default_mismatch():
         model_name="test_model",
         list_params=["alpha", "beta"],
         params_default=[0.5],  # Mismatch: only 1 default for 2 params
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
     )
@@ -197,7 +197,7 @@ def test_rlssm_config_get_defaults_with_values():
             "beta": (0.0, 1.0),
             "gamma": (0.0, 1.0),
         },
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
     )
@@ -220,7 +220,7 @@ def test_rlssm_config_get_defaults_missing_param():
         list_params=["alpha", "beta"],
         params_default=[0.5, 0.3],
         bounds={"alpha": (0.0, 1.0)},
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
     )
@@ -237,7 +237,7 @@ def test_rlssm_config_get_defaults_no_defaults():
         model_name="test_model",
         list_params=["alpha", "beta"],
         bounds={"alpha": (0.0, 1.0)},
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
     )
@@ -261,7 +261,7 @@ def test_rlssm_config_to_config():
             "v": (-3.0, 3.0),
             "a": (0.3, 2.5),
         },
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
         extra_fields=["feedback"],
@@ -306,7 +306,7 @@ def test_rlssm_config_to_config_defaults_backend():
         model_name="test_model",
         list_params=["alpha"],
         params_default=[0.5],
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
     )
@@ -322,7 +322,7 @@ def test_rlssm_config_to_config_no_defaults():
     rlssm_config = RLSSMConfig(
         model_name="test_model",
         list_params=["alpha", "beta"],
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
     )
@@ -339,7 +339,7 @@ def test_rlssm_config_to_config_mismatched_defaults_length():
         model_name="test_model",
         list_params=["alpha", "beta", "gamma"],
         params_default=[0.5, 0.3],  # Only 2 values for 3 params
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
     )
@@ -357,7 +357,7 @@ def test_rlssm_config_learning_process():
     config = RLSSMConfig(
         model_name="test_model",
         list_params=["alpha"],
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
         learning_process={"v": lambda x: x * 2, "a": lambda x: x + 1},
@@ -374,7 +374,7 @@ def test_rlssm_config_immutable_defaults():
     config1 = RLSSMConfig(
         model_name="model1",
         list_params=["alpha"],
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
     )
@@ -382,7 +382,7 @@ def test_rlssm_config_immutable_defaults():
     config2 = RLSSMConfig(
         model_name="model2",
         list_params=["beta"],
-        decision_process="LAN",
+        decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
     )
