@@ -65,3 +65,35 @@ class TestMissingDataMixinOld:
         # All other rts should be less than their deadline
         assert all(model.data.loc[1:, "rt"] < model.data.loc[1:, "deadline"])
 
+    @pytest.mark.parametrize(
+        "missing_data,expected_missing,expected_value",
+        [
+            (True, True, -999.0),
+            (-999.0, True, -999.0),
+        ],
+    )
+    def test_process_missing_data_handles_bool_and_float(
+        self, basic_data, missing_data, expected_missing, expected_value
+    ):
+        """
+        Test that _process_missing_data_and_deadline correctly interprets the
+        'missing_data' argument when given as a boolean or a float value.
+
+        Parameters:
+            missing_data: bool or float
+                If True, missing data handling is enabled with default value -999.0.
+                If a float (e.g., -999.0), that value is used for missing data.
+            expected_missing: bool
+                Expected value for model.missing_data after processing.
+            expected_value: float
+                Expected value for model.missing_data_value after processing.
+        """
+
+        model = DummyModel(basic_data)
+        model._process_missing_data_and_deadline(
+            missing_data=missing_data,
+            deadline=False,
+            loglik_missing_data=None,
+        )
+        assert model.missing_data == expected_missing
+        assert model.missing_data_value == expected_value
