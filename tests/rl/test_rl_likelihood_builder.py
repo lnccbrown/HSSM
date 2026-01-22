@@ -12,7 +12,6 @@ import hssm
 from hssm.rl.likelihoods.builder import (
     make_rl_logp_func,
     make_rl_logp_op,
-    compute_v_subject_wise,
     _get_column_indices,
     _get_column_indices_with_computed,
     _collect_cols_arrays,
@@ -23,6 +22,7 @@ from hssm.rl.likelihoods.builder import (
     _validate_args_array_shapes,
     _validate_inputs,
 )
+from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
 from hssm.distribution_utils.func_utils import make_vjp_func
 
