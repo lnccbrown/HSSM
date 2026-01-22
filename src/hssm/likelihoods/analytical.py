@@ -599,8 +599,12 @@ def logp_poisson_race(
 
     Returns
     -------
-    pytensor.tensor.TensorVariable
-        Per-trial log-likelihoods compatible with PyTensor graphs.
+    np.ndarray
+        Per-trial log-likelihoods (shape: ``(n_trials,)``).
+
+        Note that this function constructs a symbolic PyTensor graph; when used
+        inside a PyMC/PyTensor model the returned object is a symbolic tensor,
+        and evaluating/compiling the graph yields an ndarray.
     """
     epsilon = pm.floatX(epsilon)
     one = pm.floatX(1.0)
