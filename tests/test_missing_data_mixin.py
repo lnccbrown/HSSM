@@ -113,3 +113,11 @@ class TestMissingDataMixinOld:
             assert model.missing_data is False
             assert model.missing_data_value == -999.0
             assert any("Dropping those rows" in str(warn.message) for warn in w)
+
+    @pytest.mark.parametrize("missing_data", [123.45, "badtype"])
+    def test_process_missing_data_errors(self, basic_data, missing_data):
+        model = DummyModel(basic_data)
+        with pytest.raises(ValueError):
+            model._process_missing_data_and_deadline(
+                missing_data=missing_data, deadline=False, loglik_missing_data=None
+            )
