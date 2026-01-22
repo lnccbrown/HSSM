@@ -97,3 +97,19 @@ class TestMissingDataMixinOld:
         )
         assert model.missing_data == expected_missing
         assert model.missing_data_value == expected_value
+
+    def test_missing_data_false_drops_rows_and_warns(self, basic_data):
+        import warnings
+
+        model = DummyModel(basic_data)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            model._process_missing_data_and_deadline(
+                missing_data=False,
+                deadline=False,
+                loglik_missing_data=None,
+            )
+            assert not (model.data.rt == -999.0).any()
+            assert model.missing_data is False
+            assert model.missing_data_value == -999.0
+            assert any("Dropping those rows" in str(warn.message) for warn in w)
