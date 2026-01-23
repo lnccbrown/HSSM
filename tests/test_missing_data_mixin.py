@@ -121,3 +121,48 @@ class TestMissingDataMixinOld:
             model._process_missing_data_and_deadline(
                 missing_data=missing_data, deadline=False, loglik_missing_data=None
             )
+
+    def test_deadline_str_sets_name(self, basic_data):
+        # Add a deadline_col to the data
+        data = basic_data
+        data = data.assign(deadline_col=[2.0, 2.0, 2.0])
+        model = DummyModel(data)
+        model._process_missing_data_and_deadline(
+            missing_data=False,
+            deadline="deadline_col",
+            loglik_missing_data=None,
+        )
+        assert model.deadline is True
+        assert model.deadline_name == "deadline_col"
+        assert "deadline_col" in model.response
+
+    def test_deadline_bool_sets_name(self, basic_data):
+        # Add a deadline column to the data
+        data = basic_data
+        data = data.assign(deadline=[2.0, 2.0, 2.0])
+        model = DummyModel(data)
+        model._process_missing_data_and_deadline(
+            missing_data=False,
+            deadline=True,
+            loglik_missing_data=None,
+        )
+        assert model.deadline is True
+        assert model.deadline_name == "deadline"
+
+    @pytest.mark.parametrize(
+        "missing_data,deadline,loglik_missing_data",
+        [
+            (False, False, lambda x: x),
+        ],
+    )
+    def test_loglik_missing_data_error(
+        self, basic_data, missing_data, deadline, loglik_missing_data
+    ):
+        model = DummyModel(basic_data)
+        with pytest.raises(ValueError):
+            model._process_missing_data_and_deadline(
+                missing_data=missing_data,
+                deadline=deadline,
+                loglik_missing_data=loglik_missing_data,
+            )
+
