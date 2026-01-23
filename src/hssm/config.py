@@ -20,6 +20,9 @@ from .register import register_model
 if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
 
+# ====== Centralized RLSSM defaults =====
+DEFAULT_RLSSM_RESPONSE = ["rt", "response"]
+DEFAULT_RLSSM_CHOICES = [0, 1]
 
 ParamSpec = Union[float, dict[str, Any], Prior, None]
 
@@ -159,7 +162,7 @@ class Config(BaseModelConfig):
             return Config(
                 model_name=model_name,
                 loglik_kind=loglik_kind,
-                response=["rt", "response"],
+                response=DEFAULT_RLSSM_RESPONSE,
             )
 
     def update_loglik(self, loglik: Any | None) -> None:
@@ -315,8 +318,8 @@ class RLSSMConfig(BaseModelConfig):
             decision_process=config_dict.get("decision_model"),
             learning_process=config_dict.get("learning_process", {}),
             bounds=config_dict.get("bounds", {}),
-            response=config_dict.get("response", ["rt", "response"]),
-            choices=config_dict.get("choices", [0, 1]),
+            response=config_dict.get("response", DEFAULT_RLSSM_RESPONSE),
+            choices=config_dict.get("choices", DEFAULT_RLSSM_CHOICES),
             loglik_kind=config_dict.get("loglik_kind", "approx_differentiable"),
             decision_process_loglik_kind=config_dict["decision_process_loglik_kind"],
             learning_process_loglik_kind=config_dict.get(
