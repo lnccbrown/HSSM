@@ -8,7 +8,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
-import bambi as bmb
+from bambi import Prior
 
 from ._types import LogLik, LoglikKind, SupportedModels
 from .defaults import (
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
 
 
-ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
+ParamSpec = Union[float, dict[str, Any], Prior, None]
 
 
 @dataclass
