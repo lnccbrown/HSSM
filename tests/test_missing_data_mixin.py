@@ -166,3 +166,80 @@ class TestMissingDataMixinOld:
                 loglik_missing_data=loglik_missing_data,
             )
 
+
+# --- 2. Additional tests for new features and edge cases in MissingDataMixin ---
+class TestMissingDataMixinNew:
+    def test_missing_data_value_custom(self, basic_data):
+        model = DummyModel(basic_data)
+        custom_missing = -123.0
+        # Add a row with custom missing value
+        model.data.loc[len(model.data)] = [custom_missing, 1]
+        model._process_missing_data_and_deadline(
+            missing_data=custom_missing,
+            deadline=False,
+            loglik_missing_data=None,
+        )
+        assert model.missing_data is True
+        assert model.missing_data_value == custom_missing
+        # After processing, custom missing values are replaced with -999.0
+        assert (model.data.rt == -999.0).any()
+
+    def test_deadline_column_added_once(self, basic_data):
+        # Add a deadline_col to the data
+        data = basic_data
+        data = data.assign(deadline_col=[2.0, 2.0, 2.0])
+        model = DummyModel(data)
+        # Add deadline_col to response already
+        model.response.append("deadline_col")
+        model._process_missing_data_and_deadline(
+            missing_data=False,
+            deadline="deadline_col",
+            loglik_missing_data=None,
+        )
+        # Should not duplicate
+        assert model.response.count("deadline_col") == 1
+
+    def test_missing_data_and_deadline_together(self, basic_data):
+        # Add a deadline column to the data
+        data = basic_data
+        data = data.assign(deadline=[2.0, 2.0, 2.0])
+        model = DummyModel(data)
+        # Should set both flags
+        model._process_missing_data_and_deadline(
+            missing_data=True,
+            deadline=True,
+            loglik_missing_data=None,
+        )
+        assert model.missing_data is True
+        assert model.deadline is True
+        assert model.deadline_name == "deadline"
+
+    def test_handle_missing_data_and_deadline_called(self, basic_data, mocker):
+        """
+        Test that the mixin calls the _handle_missing_data_and_deadline method
+        on the model instance. This verifies the mixin pattern: the mixin expects
+        the consuming class to provide this method, and calls it as part of its logic.
+        """
+        model = DummyModel(basic_data)
+        spy = mocker.spy(model, "_handle_missing_data_and_deadline")
+        model._process_missing_data_and_deadline(
+            missing_data=True,
+            deadline=False,
+            loglik_missing_data=None,
+        )
+        assert spy.call_count == 1
+
+    def test_set_missing_data_and_deadline_called(self, basic_data, mocker):
+        """
+        Test that the mixin calls the _set_missing_data_and_deadline method
+        on the model instance. This verifies the mixin pattern: the mixin expects
+        the consuming class to provide this method, and calls it as part of its logic.
+        """
+        model = DummyModel(basic_data)
+        spy = mocker.spy(model, "_set_missing_data_and_deadline")
+        model._process_missing_data_and_deadline(
+            missing_data=True,
+            deadline=False,
+            loglik_missing_data=None,
+        )
+        assert spy.call_count == 1
