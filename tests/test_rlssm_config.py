@@ -41,7 +41,6 @@ def test_rlssm_config_from_rlssm_dict():
         "list_params": ["alpha", "beta", "gamma", "v", "a"],
         "extra_fields": ["feedback", "trial_id", "block"],
         "decision_model": "ddm",
-        "LAN": "angle",
         "params_default": [0.5, 0.3, 0.2, 1.0, 1.5],
         "bounds": {
             "alpha": (0.0, 1.0),
