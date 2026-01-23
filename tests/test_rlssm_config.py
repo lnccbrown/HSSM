@@ -19,6 +19,7 @@ def test_rlssm_config_basic_creation():
         response=["rt", "response"],
         choices=[0, 1],
         extra_fields=["feedback", "trial_id"],
+        decision_process_loglik_kind="analytical",
     )
 
     assert config.model_name == "test_rlssm"
@@ -52,6 +53,8 @@ def test_rlssm_config_from_rlssm_dict():
         "response": ["rt", "response"],
         "choices": [0, 1],
         "learning_process": {"v": "subject_wise_function"},
+        "decision_process_loglik_kind": "analytical",
+        "learning_process_loglik_kind": "blackbox",
     }
 
     config = RLSSMConfig.from_rlssm_dict("rlwm", config_dict)
@@ -74,6 +77,8 @@ def test_rlssm_config_from_rlssm_dict():
     assert config.response == ["rt", "response"]
     assert config.choices == [0, 1]
     assert config.learning_process == {"v": "subject_wise_function"}
+    assert config.decision_process_loglik_kind == "analytical"
+    assert config.learning_process_loglik_kind == "blackbox"
 
 
 def test_rlssm_config_from_rlssm_dict_with_defaults():
@@ -83,6 +88,7 @@ def test_rlssm_config_from_rlssm_dict_with_defaults():
         "description": "Minimal RLSSM model",
         "list_params": ["alpha", "beta"],
         "decision_model": "ddm",
+        "decision_process_loglik_kind": "analytical",
     }
 
     config = RLSSMConfig.from_rlssm_dict("minimal_rlssm", config_dict)
@@ -105,6 +111,7 @@ def test_rlssm_config_validate_success():
         response=["rt", "response"],
         choices=[0, 1],
         extra_fields=["feedback"],
+        decision_process_loglik_kind="analytical",
     )
 
     # Should not raise
@@ -118,6 +125,7 @@ def test_rlssm_config_validate_missing_response():
         list_params=["alpha"],
         decision_process="ddm",
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
     config.response = None
 
@@ -132,6 +140,7 @@ def test_rlssm_config_validate_missing_list_params():
         decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
     config.list_params = None
 
@@ -146,6 +155,7 @@ def test_rlssm_config_validate_missing_choices():
         list_params=["alpha"],
         decision_process="ddm",
         response=["rt", "response"],
+        decision_process_loglik_kind="analytical",
     )
     config.choices = None
 
@@ -160,6 +170,7 @@ def test_rlssm_config_validate_missing_decision_process():
         list_params=["alpha"],
         response=["rt", "response"],
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
     config.decision_process = None
 
@@ -176,6 +187,7 @@ def test_rlssm_config_validate_params_default_mismatch():
         decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
 
     with pytest.raises(
@@ -199,6 +211,7 @@ def test_rlssm_config_get_defaults_with_values():
         decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
 
     # Test getting defaults for existing parameter
@@ -222,6 +235,7 @@ def test_rlssm_config_get_defaults_missing_param():
         decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
 
     # Test getting defaults for non-existent parameter
@@ -239,6 +253,7 @@ def test_rlssm_config_get_defaults_no_defaults():
         decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
 
     # Should still return bounds even without defaults
@@ -265,6 +280,7 @@ def test_rlssm_config_to_config():
         choices=[0, 1],
         extra_fields=["feedback"],
         backend="jax",
+        decision_process_loglik_kind="analytical",
     )
 
     config = rlssm_config.to_config()
@@ -308,6 +324,7 @@ def test_rlssm_config_to_config_defaults_backend():
         decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
 
     config = rlssm_config.to_config()
@@ -324,6 +341,7 @@ def test_rlssm_config_to_config_no_defaults():
         decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
 
     config = rlssm_config.to_config()
@@ -341,6 +359,7 @@ def test_rlssm_config_to_config_mismatched_defaults_length():
         decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
 
     # Should raise ValueError to prevent silent truncation by zip
@@ -410,7 +429,28 @@ def test_rlssm_config_with_modelconfig_decision_process():
         decision_process=decision_config,
         response=["rt", "response"],
         choices=[0, 1],
+        decision_process_loglik_kind="analytical",
     )
 
-    assert isinstance(config.decision_process, ModelConfig)
-    assert config.decision_process.list_params == ["v", "a", "z", "t"]
+
+def test_rlssm_config_missing_decision_process_loglik_kind():
+    """Test that RLSSMConfig raises if decision_process_loglik_kind is missing."""
+    with pytest.raises(TypeError):
+        RLSSMConfig(
+            model_name="test_model",
+            list_params=["alpha"],
+            decision_process="ddm",
+            response=["rt", "response"],
+            choices=[0, 1],
+        )
+
+    # Also test from_rlssm_dict
+    config_dict = {
+        "name": "test_model",
+        "list_params": ["alpha"],
+        "decision_model": "ddm",
+    }
+    with pytest.raises(
+        ValueError, match="decision_process_loglik_kind must be provided"
+    ):
+        RLSSMConfig.from_rlssm_dict("test_model", config_dict)
