@@ -250,9 +250,13 @@ class RLSSMConfig(BaseModelConfig):
     """
 
     # RLSSM-specific: parameter defaults as list (matches list_params order)
-    params_default: list[float] = field(default_factory=list)
 
-    # RLSSM-specific: hierarchical structure
+    # Required keyword-only field
+    decision_process_loglik_kind: str = field(kw_only=True)
+    # Optional keyword-only field
+    learning_process_loglik_kind: str | None = field(default=None, kw_only=True)
+    # Optional fields (with defaults)
+    params_default: list[float] = field(default_factory=list)
     decision_process: str | ModelConfig | None = None
     learning_process: dict[str, Any] = field(default_factory=dict)
 
@@ -300,6 +304,8 @@ class RLSSMConfig(BaseModelConfig):
         RLSSMConfig
             Configured RLSSM model configuration object.
         """
+        if "decision_process_loglik_kind" not in config_dict:
+            raise ValueError("decision_process_loglik_kind must be provided")
         return cls(
             model_name=model_name,
             description=config_dict.get("description"),
@@ -312,6 +318,10 @@ class RLSSMConfig(BaseModelConfig):
             response=config_dict.get("response", ["rt", "response"]),
             choices=config_dict.get("choices", [0, 1]),
             loglik_kind=config_dict.get("loglik_kind", "approx_differentiable"),
+            decision_process_loglik_kind=config_dict["decision_process_loglik_kind"],
+            learning_process_loglik_kind=config_dict.get(
+                "learning_process_loglik_kind"
+            ),
         )
 
     def validate(self) -> None:
