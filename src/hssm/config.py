@@ -275,24 +275,24 @@ class RLSSMConfig(BaseModelConfig):
 
     @classmethod
     def from_rlssm_dict(cls, model_name: str, config_dict: dict[str, Any]):
-        """Create RLSSMConfig from rlssm_model_config_list style dictionary.
+        """
+        Create RLSSMConfig from a configuration dictionary.
 
         Parameters
         ----------
-        model_name
+        model_name : str
             The name of the RLSSM model.
-        config_dict
+        config_dict : dict[str, Any]
             Dictionary containing model configuration. Expected keys:
-            - name: Model name
-            - description: Model description
-            - list_params: List of parameter names
-            - extra_fields: List of extra field names from data
-            - LAN: Specific LAN model variant
-            - params_default (optional): Default parameter values
-            - bounds (optional): Parameter bounds
-            - response (optional): Response column names
-            - choices (optional): Valid choice values
-            - learning_process (optional): Learning process functions (required)
+                - description: Model description (optional)
+                - list_params: List of parameter names (required)
+                - extra_fields: List of extra field names from data (optional)
+                - params_default: Default parameter values (required)
+                - bounds: Parameter bounds (optional)
+                - response: Response column names (required)
+                - choices: Valid choice values (required)
+                - decision_process: Decision process specification (required)
+                - learning_process: Learning process functions (required)
                 - decision_process_loglik_kind: Likelihood kind for decision process
                   (required)
                 - learning_process_loglik_kind: Likelihood kind for learning process
