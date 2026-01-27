@@ -147,6 +147,7 @@ def test_model_definition_outside_include(data_ddm):
     ):
         HSSMBase(data_ddm, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
+
 @pytest.mark.xfail(reason="Broken in CI.")
 def test_sample_prior_predictive(data_ddm_reg):
     data_ddm_reg = data_ddm_reg.iloc[:10, :]
