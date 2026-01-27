@@ -572,10 +572,10 @@ def logp_poisson_race(
 ) -> np.ndarray:
     """Compute analytical log-likelihoods for a 2-accumulator Poisson race.
 
-    Each accumulator time follows a Gamma distribution with continuous 
-    shape parameter k and rate r. The per-trial likelihood decomposes 
-    into the density of the winning accumulator evaluated at the observed 
-    decision time and the survival function of the losing accumulator 
+    Each accumulator time follows a Gamma distribution with continuous
+    shape parameter k and rate r. The per-trial likelihood decomposes
+    into the density of the winning accumulator evaluated at the observed
+    decision time and the survival function of the losing accumulator
     at the same time.
 
     Implemented as in https://link.springer.com/article/10.3758/BF03212980
@@ -624,7 +624,7 @@ def logp_poisson_race(
     k_l = pt.switch(flip, k1, k2)
 
     r_c_safe = pt.maximum(r_c, epsilon)
-    
+
     log_pdf = (
         k_c * pt.log(r_c_safe)
         + (k_c - 1.0) * pt.log(rt_safe)
