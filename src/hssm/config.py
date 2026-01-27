@@ -292,10 +292,11 @@ class RLSSMConfig(BaseModelConfig):
             - bounds (optional): Parameter bounds
             - response (optional): Response column names
             - choices (optional): Valid choice values
-            - learning_process (optional): Learning process functions
-            - loglik_kind (optional): Type of likelihood computation
-              ("analytical", "approx_differentiable", "blackbox").
-              Defaults to "approx_differentiable".
+            - learning_process (optional): Learning process functions (required)
+                - decision_process_loglik_kind: Likelihood kind for decision process
+                  (required)
+                - learning_process_loglik_kind: Likelihood kind for learning process
+                  (required)
 
         Returns
         -------
