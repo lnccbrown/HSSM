@@ -119,6 +119,36 @@ class TestRLSSMConfigValidation:
         with pytest.raises(ValueError, match=error_msg):
             config.validate()
 
+    @pytest.mark.parametrize(
+        "missing_field",
+        [
+            "model_name",
+            "params_default",
+            "decision_process",
+            "decision_process_loglik_kind",
+            "learning_process_loglik_kind",
+            "learning_process",
+        ],
+    )
+    def test_constructor_missing_required_field(self, missing_field):
+        # Provide all required fields, then remove one
+        kwargs = dict(
+            model_name="test_model",
+            list_params=["alpha"],
+            params_default=[0.0],
+            decision_process="ddm",
+            response=["rt", "response"],
+            choices=[0, 1],
+            decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
+            learning_process={},
+        )
+
+        kwargs.pop(missing_field)
+
+        with pytest.raises(TypeError):
+            RLSSMConfig(**kwargs)
+
     def test_validate_success(self):
         config = RLSSMConfig(
             model_name="test_model",
