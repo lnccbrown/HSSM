@@ -1,5 +1,7 @@
 import copy
 
+import pytest
+
 
 @pytest.fixture
 def valid_rlssmconfig_kwargs():
@@ -121,7 +123,9 @@ class TestRLSSMConfigValidation:
             ("decision_process", None, "Please specify a `decision_process"),
         ],
     )
-    def test_validate_missing_fields(self, field, value, error_msg):
+    def test_validate_missing_fields(
+        self, field, value, error_msg, valid_rlssmconfig_kwargs
+    ):
         # All required fields provided, then set one to None
         config = RLSSMConfig(**kwargs)
         setattr(config, field, value)
@@ -139,36 +143,17 @@ class TestRLSSMConfigValidation:
             "learning_process",
         ],
     )
-    def test_constructor_missing_required_field(self, missing_field):
+    def test_constructor_missing_required_field(
+        self, missing_field, valid_rlssmconfig_kwargs
+    ):
         # Provide all required fields, then remove one
-        kwargs = dict(
-            model_name="test_model",
-            list_params=["alpha"],
-            params_default=[0.0],
-            decision_process="ddm",
-            response=["rt", "response"],
-            choices=[0, 1],
-            decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
-            learning_process={},
-        )
-
+        kwargs = valid_rlssmconfig_kwargs
         kwargs.pop(missing_field)
-
         with pytest.raises(TypeError):
             RLSSMConfig(**kwargs)
 
-    def test_validate_success(self):
-        config = RLSSMConfig(
-            model_name="test_model",
-            list_params=["alpha", "beta"],
-            params_default=[0.5, 0.3],
-            decision_process="ddm",
-            response=["rt", "response"],
-            choices=[0, 1],
-            extra_fields=["feedback"],
-            decision_process_loglik_kind="analytical",
-        )
+    def test_validate_success(self, valid_rlssmconfig_kwargs):
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
         config.validate()
 
     def test_validate_params_default_mismatch(self):
