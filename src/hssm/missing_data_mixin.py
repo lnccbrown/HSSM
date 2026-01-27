@@ -205,6 +205,6 @@ class MissingDataMixin:
             self.missing_data, self.deadline, self.data
         )
 
-        if self.deadline and self.response is not None:  # Avoid mypy error
-            if self.deadline_name not in self.response:
-                self.response.append(self.deadline_name)
+        if self.deadline and self.response is not None:  # type: ignore[attr-defined]
+            if self.deadline_name not in self.response:  # type: ignore[attr-defined]
+                self.response.append(self.deadline_name)  # type: ignore[attr-defined]
