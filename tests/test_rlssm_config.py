@@ -141,7 +141,7 @@ class TestRLSSMConfigValidation:
         )
         with pytest.raises(
             ValueError,
-            match="params_default length \(1\) doesn't match list_params length \(2\)",
+            match=r"params_default length \(1\) doesn't match list_params length \(2\)",
         ):
             config.validate()
 
