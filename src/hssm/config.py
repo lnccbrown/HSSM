@@ -24,6 +24,22 @@ if TYPE_CHECKING:
 DEFAULT_RLSSM_RESPONSE = ["rt", "response"]
 DEFAULT_RLSSM_CHOICES = [0, 1]
 
+RLSSM_REQUIRED_FIELDS = (
+    "model_name",
+    "description",
+    "list_params",
+    "bounds",
+    "params_default",
+    "data",
+    "choices",
+    "decision_process",
+    "learning_process",
+    "response",
+    "decision_process_loglik_kind",
+    "learning_process_loglik_kind",
+    "extra_fields",
+)
+
 ParamSpec = Union[float, dict[str, Any], Prior, None]
 
 
@@ -303,23 +319,24 @@ class RLSSMConfig(BaseModelConfig):
         RLSSMConfig
             Configured RLSSM model configuration object.
         """
-        if "decision_process_loglik_kind" not in config_dict:
-            raise ValueError("decision_process_loglik_kind must be provided")
+        # Check for required fields and raise explicit errors if missing
+        for field_name in RLSSM_REQUIRED_FIELDS:
+            if field_name not in config_dict or config_dict[field_name] is None:
+                raise ValueError(f"{field_name} must be provided in config_dict")
+
         return cls(
             model_name=model_name,
             description=config_dict.get("description"),
-            list_params=config_dict.get("list_params"),
+            list_params=config_dict["list_params"],
             extra_fields=config_dict.get("extra_fields"),
-            params_default=config_dict.get("params_default", []),
-            decision_process=config_dict.get("decision_process"),
-            learning_process=config_dict.get("learning_process", {}),
+            params_default=config_dict["params_default"],
+            decision_process=config_dict["decision_process"],
+            learning_process=config_dict["learning_process"],
             bounds=config_dict.get("bounds", {}),
-            response=config_dict.get("response", DEFAULT_RLSSM_RESPONSE),
-            choices=config_dict.get("choices", DEFAULT_RLSSM_CHOICES),
+            response=config_dict["response"],
+            choices=config_dict["choices"],
             decision_process_loglik_kind=config_dict["decision_process_loglik_kind"],
-            learning_process_loglik_kind=config_dict.get(
-                "learning_process_loglik_kind"
-            ),
+            learning_process_loglik_kind=config_dict["learning_process_loglik_kind"],
         )
 
     def validate(self) -> None:

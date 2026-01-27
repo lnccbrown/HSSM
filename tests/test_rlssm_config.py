@@ -45,6 +45,7 @@ class TestRLSSMConfigCreation:
             (
                 "rlwm",
                 {
+                    "model_name": "rlwm",
                     "name": "rlwm",
                     "description": "Reinforcement Learning Working Memory model",
                     "list_params": ["alpha", "beta", "gamma", "v", "a"],
@@ -63,6 +64,7 @@ class TestRLSSMConfigCreation:
                     "learning_process": {"v": "subject_wise_function"},
                     "decision_process_loglik_kind": "analytical",
                     "learning_process_loglik_kind": "blackbox",
+                    "data": {},
                 },
                 "rlwm",
                 [0.5, 0.3, 0.2, 1.0, 1.5],
@@ -80,11 +82,20 @@ class TestRLSSMConfigCreation:
             (
                 "minimal_rlssm",
                 {
+                    "model_name": "minimal_rlssm",
                     "name": "minimal_rlssm",
                     "description": "Minimal RLSSM model",
                     "list_params": ["alpha", "beta"],
+                    "params_default": [],
                     "decision_process": "ddm",
+                    "learning_process": {},
+                    "bounds": {},
+                    "response": ["rt", "response"],
+                    "choices": [0, 1],
                     "decision_process_loglik_kind": "analytical",
+                    "learning_process_loglik_kind": "blackbox",
+                    "extra_fields": [],
+                    "data": {},
                 },
                 "minimal_rlssm",
                 [],
@@ -408,12 +419,19 @@ class TestRLSSMConfigEdgeCases:
     def test_from_rlssm_dict_missing_required(self):
         # Should raise ValueError if decision_process_loglik_kind is missing
         config_dict = {
+            "model_name": "test_model",
             "name": "test_model",
             "list_params": ["alpha"],
-            "decision_process": "ddm",
             "params_default": [0.0],
-            "learning_process_loglik_kind": "blackbox",
+            "decision_process": "ddm",
             "learning_process": {},
+            "learning_process_loglik_kind": "blackbox",
+            "response": ["rt", "response"],
+            "choices": [0, 1],
+            "description": "desc",
+            "bounds": {},
+            "data": {},
+            "extra_fields": [],
         }
         with pytest.raises(
             ValueError, match="decision_process_loglik_kind must be provided"
@@ -430,9 +448,18 @@ class TestRLSSMConfigEdgeCases:
                 choices=[0, 1],
             )
         config_dict = {
-            "name": "test_model",
+            "model_name": "test_model",
+            "description": "desc",
             "list_params": ["alpha"],
+            "params_default": [0.0],
+            "bounds": {},
+            "data": {},
             "decision_process": "ddm",
+            "learning_process": {},
+            "learning_process_loglik_kind": "blackbox",
+            "response": ["rt", "response"],
+            "choices": [0, 1],
+            "extra_fields": [],
         }
         with pytest.raises(
             ValueError, match="decision_process_loglik_kind must be provided"
