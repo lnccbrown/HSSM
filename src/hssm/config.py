@@ -252,16 +252,11 @@ class RLSSMConfig(BaseModelConfig):
     learning processes with sequential sampling decision models (RLSSM).
     """
 
-    # RLSSM-specific: parameter defaults as list (matches list_params order)
-
-    # Required keyword-only field
     decision_process_loglik_kind: str = field(kw_only=True)
-    # Optional keyword-only field
-    learning_process_loglik_kind: str | None = field(default=None, kw_only=True)
-    # Optional fields (with defaults)
-    params_default: list[float] = field(default_factory=list)
-    decision_process: str | ModelConfig | None = None
-    learning_process: dict[str, Any] = field(default_factory=dict)
+    learning_process_loglik_kind: str = field(kw_only=True)
+    params_default: list[float] = field(kw_only=True)
+    decision_process: str | ModelConfig = field(kw_only=True)
+    learning_process: dict[str, Any] = field(kw_only=True)
 
     def __post_init__(self):
         """Set default loglik_kind for RLSSM models if not provided."""
@@ -320,7 +315,6 @@ class RLSSMConfig(BaseModelConfig):
             bounds=config_dict.get("bounds", {}),
             response=config_dict.get("response", DEFAULT_RLSSM_RESPONSE),
             choices=config_dict.get("choices", DEFAULT_RLSSM_CHOICES),
-            loglik_kind=config_dict.get("loglik_kind", "approx_differentiable"),
             decision_process_loglik_kind=config_dict["decision_process_loglik_kind"],
             learning_process_loglik_kind=config_dict.get(
                 "learning_process_loglik_kind"
