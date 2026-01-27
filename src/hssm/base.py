@@ -45,6 +45,7 @@ from hssm.distribution_utils import (
     make_likelihood_callable,
     make_missing_data_callable,
 )
+from hssm.missing_data_mixin import MissingDataMixin
 from hssm.utils import (
     _compute_log_likelihood,
     _get_alias_dict,
@@ -96,7 +97,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSMBase(DataValidatorMixin):
+class HSSMBase(DataValidatorMixin, MissingDataMixin):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
