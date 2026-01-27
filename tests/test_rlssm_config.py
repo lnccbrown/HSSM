@@ -2,6 +2,8 @@ import copy
 
 import pytest
 
+from hssm.config import ModelConfig
+
 
 @pytest.fixture
 def valid_rlssmconfig_kwargs():
@@ -127,7 +129,7 @@ class TestRLSSMConfigValidation:
         self, field, value, error_msg, valid_rlssmconfig_kwargs
     ):
         # All required fields provided, then set one to None
-        config = RLSSMConfig(**kwargs)
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
         setattr(config, field, value)
         with pytest.raises(ValueError, match=error_msg):
             config.validate()
@@ -165,6 +167,8 @@ class TestRLSSMConfigValidation:
             response=["rt", "response"],
             choices=[0, 1],
             decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
+            learning_process={},
         )
         with pytest.raises(
             ValueError,
@@ -207,6 +211,8 @@ class TestRLSSMConfigDefaults:
             response=["rt", "response"],
             choices=[0, 1],
             decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
+            learning_process={},
         )
         default_val, bounds_val = config.get_defaults(param)
         assert default_val == expected_default
@@ -248,6 +254,8 @@ class TestRLSSMConfigConversion:
             choices=[0, 1],
             backend=backend,
             decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
+            learning_process={},
         )
         if raises:
             with pytest.raises(raises):
@@ -275,6 +283,8 @@ class TestRLSSMConfigConversion:
             extra_fields=["feedback"],
             backend="jax",
             decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
+            learning_process={},
         )
         config = rlssm_config.to_config()
         assert isinstance(config, Config)
@@ -308,6 +318,8 @@ class TestRLSSMConfigConversion:
             response=["rt", "response"],
             choices=[0, 1],
             decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
+            learning_process={},
         )
         config = rlssm_config.to_config()
         assert config.backend == "jax"
@@ -316,10 +328,13 @@ class TestRLSSMConfigConversion:
         rlssm_config = RLSSMConfig(
             model_name="test_model",
             list_params=["alpha", "beta"],
+            params_default=[],
             decision_process="ddm",
             response=["rt", "response"],
             choices=[0, 1],
             decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
+            learning_process={},
         )
         config = rlssm_config.to_config()
         assert config.default_priors == {}
@@ -333,6 +348,8 @@ class TestRLSSMConfigConversion:
             response=["rt", "response"],
             choices=[0, 1],
             decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
+            learning_process={},
         )
         with pytest.raises(
             ValueError,
@@ -346,11 +363,13 @@ class TestRLSSMConfigLearningProcess:
         config = RLSSMConfig(
             model_name="test_model",
             list_params=["alpha"],
+            params_default=[0.0],
             decision_process="ddm",
             response=["rt", "response"],
             choices=[0, 1],
             learning_process={"v": v_func, "a": a_func},
             decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
         )
         assert "v" in config.learning_process
         assert "a" in config.learning_process
@@ -361,20 +380,24 @@ class TestRLSSMConfigLearningProcess:
         config1 = RLSSMConfig(
             model_name="model1",
             list_params=["alpha"],
+            params_default=[0.0],
             decision_process="ddm",
             response=["rt", "response"],
             choices=[0, 1],
             learning_process={"v": v_func},
             decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
         )
         config2 = RLSSMConfig(
             model_name="model2",
             list_params=["beta"],
+            params_default=[0.0],
             decision_process="ddm",
             response=["rt", "response"],
             choices=[0, 1],
             learning_process={"a": a_func},
             decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
         )
         config1.learning_process["v"] = "function1"
         assert "v" not in config2.learning_process
@@ -382,22 +405,20 @@ class TestRLSSMConfigLearningProcess:
 
 
 class TestRLSSMConfigEdgeCases:
-    def test_with_modelconfig_decision_process(self):
-        from hssm.config import ModelConfig
-
-        decision_config = ModelConfig(
-            response=["rt", "response"],
-            list_params=["v", "a", "z", "t"],
-            choices=[0, 1],
-        )
-        config = RLSSMConfig(
-            model_name="test_model",
-            list_params=["alpha"],
-            decision_process=decision_config,
-            response=["rt", "response"],
-            choices=[0, 1],
-            decision_process_loglik_kind="analytical",
-        )
+    def test_from_rlssm_dict_missing_required(self):
+        # Should raise ValueError if decision_process_loglik_kind is missing
+        config_dict = {
+            "name": "test_model",
+            "list_params": ["alpha"],
+            "decision_process": "ddm",
+            "params_default": [0.0],
+            "learning_process_loglik_kind": "blackbox",
+            "learning_process": {},
+        }
+        with pytest.raises(
+            ValueError, match="decision_process_loglik_kind must be provided"
+        ):
+            RLSSMConfig.from_rlssm_dict("test_model", config_dict)
 
     def test_missing_decision_process_loglik_kind(self):
         with pytest.raises(TypeError):
@@ -417,3 +438,21 @@ class TestRLSSMConfigEdgeCases:
             ValueError, match="decision_process_loglik_kind must be provided"
         ):
             RLSSMConfig.from_rlssm_dict("test_model", config_dict)
+
+    def test_with_modelconfig_decision_process(self):
+        decision_config = ModelConfig(
+            response=["rt", "response"],
+            list_params=["v", "a", "z", "t"],
+            choices=[0, 1],
+        )
+        config = RLSSMConfig(
+            model_name="test_model",
+            list_params=["alpha"],
+            params_default=[0.0],
+            decision_process=decision_config,
+            response=["rt", "response"],
+            choices=[0, 1],
+            decision_process_loglik_kind="analytical",
+            learning_process_loglik_kind="blackbox",
+            learning_process={},
+        )
