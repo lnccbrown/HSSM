@@ -123,17 +123,7 @@ class TestRLSSMConfigValidation:
     )
     def test_validate_missing_fields(self, field, value, error_msg):
         # All required fields provided, then set one to None
-        config = RLSSMConfig(
-            model_name="test_model",
-            list_params=["alpha"],
-            params_default=[0.0],
-            decision_process="ddm",
-            response=["rt", "response"],
-            choices=[0, 1],
-            decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
-            learning_process={},
-        )
+        config = RLSSMConfig(**kwargs)
         setattr(config, field, value)
         with pytest.raises(ValueError, match=error_msg):
             config.validate()
