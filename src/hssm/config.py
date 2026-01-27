@@ -315,7 +315,7 @@ class RLSSMConfig(BaseModelConfig):
             list_params=config_dict.get("list_params"),
             extra_fields=config_dict.get("extra_fields"),
             params_default=config_dict.get("params_default", []),
-            decision_process=config_dict.get("decision_model"),
+            decision_process=config_dict.get("decision_process"),
             learning_process=config_dict.get("learning_process", {}),
             bounds=config_dict.get("bounds", {}),
             response=config_dict.get("response", DEFAULT_RLSSM_RESPONSE),

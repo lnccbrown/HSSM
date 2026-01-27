@@ -26,7 +26,7 @@ class TestRLSSMConfigCreation:
                     "description": "Reinforcement Learning Working Memory model",
                     "list_params": ["alpha", "beta", "gamma", "v", "a"],
                     "extra_fields": ["feedback", "trial_id", "block"],
-                    "decision_model": "ddm",
+                    "decision_process": "ddm",
                     "params_default": [0.5, 0.3, 0.2, 1.0, 1.5],
                     "bounds": {
                         "alpha": (0.0, 1.0),
@@ -60,7 +60,7 @@ class TestRLSSMConfigCreation:
                     "name": "minimal_rlssm",
                     "description": "Minimal RLSSM model",
                     "list_params": ["alpha", "beta"],
-                    "decision_model": "ddm",
+                    "decision_process": "ddm",
                     "decision_process_loglik_kind": "analytical",
                 },
                 "minimal_rlssm",
@@ -384,7 +384,7 @@ class TestRLSSMConfigEdgeCases:
         config_dict = {
             "name": "test_model",
             "list_params": ["alpha"],
-            "decision_model": "ddm",
+            "decision_process": "ddm",
         }
         with pytest.raises(
             ValueError, match="decision_process_loglik_kind must be provided"
