@@ -1,3 +1,22 @@
+import copy
+
+
+@pytest.fixture
+def valid_rlssmconfig_kwargs():
+    return dict(
+        model_name="test_model",
+        list_params=["alpha", "beta"],
+        params_default=[0.5, 0.3],
+        decision_process="ddm",
+        response=["rt", "response"],
+        choices=[0, 1],
+        extra_fields=["feedback"],
+        decision_process_loglik_kind="analytical",
+        learning_process_loglik_kind="blackbox",
+        learning_process={},
+    )
+
+
 """Tests for RLSSMConfig class."""
 
 import pytest
