@@ -404,12 +404,9 @@ class HSSM(DataValidatorMixin):
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
 
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )
-
         self.n_choices = len(self.choices)
+
+        self._validate_choices()
         self._pre_check_data_sanity()
 
         # Process missing data setting

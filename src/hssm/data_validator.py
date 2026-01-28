@@ -233,3 +233,14 @@ class DataValidatorMixin:
             #         "no missing data and/or no rts exceeding the deadline."
             #     )
         return network
+
+    def _validate_choices(self):
+        """
+        Ensure that `choices` is provided (not None).
+
+        Raises ValueError if choices is None.
+        """
+        if self.choices is None:
+            raise ValueError(
+                "`choices` must be provided either in `model_config` or as an argument."
+            )
