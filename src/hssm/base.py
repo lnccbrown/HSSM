@@ -345,7 +345,7 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
                 "`list_params` must be provided in the model configuration."
             )
 
-        self.n_choices = len(self.choices)
+        self.n_choices = len(self.choices)  # type: ignore[arg-type]
 
         # Process missing data setting
         # AF-TODO: Could be a function in data validator?
