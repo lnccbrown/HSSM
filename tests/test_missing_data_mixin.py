@@ -199,13 +199,13 @@ class TestMissingDataMixinNew:
         dummy_model.data = data
         # Add deadline_col to response already
         dummy_model.response.append("deadline_col")
-        dummy_model._process_missing_data_and_deadline(
-            missing_data=False,
-            deadline="deadline_col",
-            loglik_missing_data=None,
-        )
-        # Should not duplicate
-        assert dummy_model.response.count("deadline_col") == 1
+        # Should raise ValueError due to -999.0 in rt when missing_data=False
+        with pytest.raises(ValueError, match="Missing data provided as False"):
+            dummy_model._process_missing_data_and_deadline(
+                missing_data=False,
+                deadline="deadline_col",
+                loglik_missing_data=None,
+            )
 
     def test_missing_data_and_deadline_together(self, dummy_model_with_deadline):
         # Should set both flags

@@ -1,7 +1,5 @@
 """Mixin module for handling missing data and deadline logic in HSSM models."""
 
-import warnings
-
 import numpy as np
 import pandas as pd
 
@@ -156,26 +154,19 @@ class MissingDataMixin:
                 self.missing_data = True
                 self.missing_data_value = missing_data
         elif isinstance(missing_data, bool):
-            if missing_data:
-                if not (self.data.rt == -999.0).any():
-                    raise ValueError(
-                        "missing_data argument is provided as True, "
-                        " so RTs of -999.0 are treated as missing. \n"
-                        "However, you have no RTs of -999.0 in your dataset!"
-                    )
-                self.missing_data = True
-                self.missing_data_value = -999.0
+            if missing_data and (not (self.data.rt == -999.0).any()):
+                raise ValueError(
+                    "missing_data argument is provided as True, "
+                    " so RTs of -999.0 are treated as missing. \n"
+                    "However, you have no RTs of -999.0 in your dataset!"
+                )
+            elif (not missing_data) and (self.data.rt == -999.0).any():
+                raise ValueError(
+                    "Missing data provided as False. \n"
+                    "However, you have RTs of -999.0 in your dataset!"
+                )
             else:
-                if (self.data.rt == -999.0).any():
-                    warnings.warn(
-                        "missing_data is False, but -999.0 found in rt column."
-                        "Dropping those rows.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                    self.data = self.data[self.data.rt != -999.0].reset_index(drop=True)
-                self.missing_data = False
-                self.missing_data_value = -999.0
+                self.missing_data = missing_data
         else:
             raise ValueError(
                 "missing_data argument must be a bool or a float! \n"
