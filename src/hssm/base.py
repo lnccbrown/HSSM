@@ -337,10 +337,7 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
 
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )
+        self._validate_choices()
 
         # Avoid mypy error later (None.append). Should list_params be Optional?
         if self.list_params is None:
