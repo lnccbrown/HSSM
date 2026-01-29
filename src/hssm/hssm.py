@@ -403,6 +403,7 @@ class HSSM(DataValidatorMixin):
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
+        self.is_choice_only: bool = self.model_config.is_choice_only
 
         if self.choices is None:
             raise ValueError(
