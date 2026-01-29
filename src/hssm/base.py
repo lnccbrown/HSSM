@@ -347,64 +347,12 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
 
         self.n_choices = len(self.choices)  # type: ignore[arg-type]
 
-        # Process missing data setting
-        # AF-TODO: Could be a function in data validator?
-        if isinstance(missing_data, float):
-            if not ((self.data.rt == missing_data).any()):
-                raise ValueError(
-                    f"missing_data argument is provided as a float {missing_data}, "
-                    f"However, you have no RTs of {missing_data} in your dataset!"
-                )
-            else:
-                self.missing_data = True
-                self.missing_data_value = missing_data
-        elif isinstance(missing_data, bool):
-            if missing_data and (not (self.data.rt == -999.0).any()):
-                raise ValueError(
-                    "missing_data argument is provided as True, "
-                    " so RTs of -999.0 are treated as missing. \n"
-                    "However, you have no RTs of -999.0 in your dataset!"
-                )
-            elif (not missing_data) and (self.data.rt == -999.0).any():
-                # self.missing_data = True
-                raise ValueError(
-                    "Missing data provided as False. \n"
-                    "However, you have RTs of -999.0 in your dataset!"
-                )
-            else:
-                self.missing_data = missing_data
-        else:
-            raise ValueError(
-                "missing_data argument must be a bool or a float! \n"
-                f"You provided: {type(missing_data)}"
-            )
-
-        if isinstance(deadline, str):
-            self.deadline = True
-            self.deadline_name = deadline
-        else:
-            self.deadline = deadline
-            self.deadline_name = "deadline"
-
-        if (
-            not self.missing_data and not self.deadline
-        ) and loglik_missing_data is not None:
-            raise ValueError(
-                "You have specified a loglik_missing_data function, but you have not "
-                + "set the missing_data or deadline flag to True."
-            )
-        self.loglik_missing_data = loglik_missing_data
-
-        # Update data based on missing_data and deadline
-        self._handle_missing_data_and_deadline()
-        # Set self.missing_data_network based on `missing_data` and `deadline`
-        self.missing_data_network = self._set_missing_data_and_deadline(
-            self.missing_data, self.deadline, self.data
+        # Use the MissingDataMixin logic for missing data and deadline handling
+        self._process_missing_data_and_deadline(
+            missing_data=missing_data,
+            deadline=deadline,
+            loglik_missing_data=loglik_missing_data,
         )
-
-        if self.deadline:
-            if self.response is not None:  # Avoid mypy error
-                self.response.append(self.deadline_name)
 
         # Run pre-check data sanity validation now that all attributes are set
         self._pre_check_data_sanity()
