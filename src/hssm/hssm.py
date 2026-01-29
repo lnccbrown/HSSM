@@ -43,6 +43,7 @@ from hssm.distribution_utils import (
     assemble_callables,
     make_distribution,
     make_family,
+    make_hssm_rv,
     make_likelihood_callable,
     make_missing_data_callable,
 )
@@ -403,7 +404,11 @@ class HSSM(DataValidatorMixin):
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
-        self.is_choice_only: bool = self.model_config.is_choice_only
+
+        # Has to identify choice-only model this way because self.response
+        # may be modified later to include deadline column.
+        self.response = cast("list[str]", self.response)
+        self.is_choice_only: bool = len(self.response) == 1
 
         if self.choices is None:
             raise ValueError(
@@ -1309,9 +1314,15 @@ class HSSM(DataValidatorMixin):
 
     @property
     def response_c(self) -> str:
-        """Return the response variable names in c() format."""
+        """Return the response variable names in c() format.
+
+        New in 0.2.12: when model is choice-only and has deadline, the response
+        is not in the form of c(...).
+        """
         if self.response is None:
-            return "c()"
+            raise ValueError("Response is not defined.")
+        if self.is_choice_only and not self.deadline:
+            return self.response[0]
         return f"c({', '.join(self.response)})"
 
     @property
@@ -2035,6 +2046,31 @@ class HSSM(DataValidatorMixin):
                 "Missing data (rt == %s) will be on top, "
                 "observed datapoints follow.",
                 self.missing_data_value,
+            )
+
+        if self.is_choice_only and self.model_config.rv is None:
+            _logger.warning(
+                "You are building a choice-only model without specifying "
+                "a RandomVariable class. Using a dummy simulator function. "
+                "Simulating data from this model will result in an error."
+            )
+
+            def dummy_simulator_func(*args, **kwargs):
+                raise NotImplementedError(
+                    "You are trying to simulate data from a choice-only model "
+                    "without specifying a RandomVariable class. Please specify "
+                    "a RandomVariable class via the `model_config.rv` argument."
+                )
+
+            setattr(dummy_simulator_func, "model_name", self.model_name)
+            setattr(dummy_simulator_func, "choices", self.choices)
+            setattr(dummy_simulator_func, "obs_dim", 1)
+
+            self.model_config.rv = make_hssm_rv(
+                dummy_simulator_func,
+                list_params=self.list_params,
+                lapse=self.lapse,
+                is_choice_only=True,
             )
 
         self.data = _rearrange_data(self.data)

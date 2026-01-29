@@ -191,6 +191,7 @@ def make_hssm_rv(
     simulator_fun: Callable | str,
     list_params: list[str],
     lapse: bmb.Prior | None = None,
+    is_choice_only: bool = False,
 ) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
@@ -202,6 +203,8 @@ def make_hssm_rv(
         A list of str of all parameters for this `RandomVariable`.
     lapse : optional
         A bmb.Prior object representing the lapse distribution.
+    is_choice_only : bool
+        Whether the model is a choice-only model. This parameter overrides
 
     Returns
     -------
@@ -225,7 +228,12 @@ def make_hssm_rv(
         # parameter is a scalar. The string to the right of the
         # `->` sign describes the output signature, which is `(2)`, which means the
         # random variable is a length-2 array.
-        signature: str = f"{','.join(['()'] * len(list_params))}->({obs_dim_int})"
+
+        # Override the output from ssm_simulator based on whether the model is
+        # choice-only.
+        output = "()" if is_choice_only else f"({obs_dim_int})"
+        signature: str = f"{','.join(['()'] * len(list_params))}->{output}"
+
         dtype: str = "floatX"
         _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
         _list_params = list_params
