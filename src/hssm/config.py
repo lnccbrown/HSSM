@@ -245,7 +245,7 @@ class Config(BaseModelConfig):
         """Check if the model is a choice-only model."""
         if self.response is None:
             raise ValueError("Response is not defined in the configuration.")
-        return "rt" not in self.response
+        return len(self.response) == 1
 
 
 @dataclass
