@@ -7,7 +7,9 @@ Tests for MissingDataMixin
 
 import pytest
 import pandas as pd
+
 from hssm.missing_data_mixin import MissingDataMixin
+from hssm.defaults import MissingDataNetwork
 
 
 class DummyModel(MissingDataMixin):
@@ -82,6 +84,98 @@ class TestMissingDataMixinOld:
 
 # --- 2. Additional tests for new features and edge cases in MissingDataMixin ---
 class TestMissingDataMixinNew:
+    def test_missing_data_network_set(self, dummy_model):
+        # missing_data True, deadline False
+        dummy_model._process_missing_data_and_deadline(
+            missing_data=True, deadline=False, loglik_missing_data=None
+        )
+        assert dummy_model.missing_data_network == MissingDataNetwork.CPN
+
+        # missing_data True, deadline True
+        dummy_model.data["deadline"] = 2.0
+        dummy_model._process_missing_data_and_deadline(
+            missing_data=True, deadline=True, loglik_missing_data=None
+        )
+        assert dummy_model.missing_data_network == MissingDataNetwork.OPN
+
+        # missing_data False, deadline False (should raise ValueError due to -999.0 present)
+        with pytest.raises(ValueError, match="Missing data provided as False"):
+            dummy_model._process_missing_data_and_deadline(
+                missing_data=False, deadline=False, loglik_missing_data=None
+            )
+
+    def test_response_appended_with_deadline_name(self, dummy_model):
+        # Should append deadline_name to response if not present
+        dummy_model.data["deadline"] = 2.0
+        dummy_model.response = ["response"]
+        dummy_model._process_missing_data_and_deadline(
+            missing_data=True, deadline="deadline", loglik_missing_data=None
+        )
+        assert "deadline" in dummy_model.response
+
+    def test_data_mutation_missing_data_false(self, dummy_model):
+        # Should drop rows with -999.0 if missing_data is False
+        n_before = len(dummy_model.data)
+        dummy_model._process_missing_data_and_deadline(
+            missing_data=False, deadline=False, loglik_missing_data=None
+        )
+        n_after = len(dummy_model.data)
+        assert n_after < n_before
+        assert not (-999.0 in dummy_model.data.rt.values)
+
+    def test_data_mutation_missing_data_true(self, dummy_model):
+        # Should replace -999.0 with -999.0 (idempotent) if missing_data is True
+        dummy_model._process_missing_data_and_deadline(
+            missing_data=True, deadline=False, loglik_missing_data=None
+        )
+        assert -999.0 in dummy_model.data.rt.values
+
+    def test_data_mutation_deadline(self, dummy_model):
+        # Should set rt to -999.0 if above deadline
+        # Set up so that the second RT is above its deadline
+        dummy_model.data["rt"] = [1.0, 3.0, -999.0]  # 3.0 > 2.5
+        dummy_model.data["deadline"] = [1.5, 2.5, 2.5]
+        dummy_model._process_missing_data_and_deadline(
+            missing_data=True, deadline="deadline", loglik_missing_data=None
+        )
+        # The first row rt=1.0 < 1.5, so not -999.0; second should be -999.0; third is already -999.0
+        assert dummy_model.data.rt.iloc[0] == 1.0
+        assert dummy_model.data.rt.iloc[1] == -999.0
+        assert dummy_model.data.rt.iloc[2] == -999.0
+
+    def test_loglik_missing_data_error(self, dummy_model):
+        # Should raise if loglik_missing_data is set but both missing_data and deadline are False
+        dummy_model.data.rt = [1.0, 2.0, 3.0]  # No -999.0 present
+        with pytest.raises(
+            ValueError,
+            match="loglik_missing_data function, but you have not set the missing_data or deadline flag to True",
+        ):
+            dummy_model._process_missing_data_and_deadline(
+                missing_data=False, deadline=False, loglik_missing_data=lambda x: x
+            )
+
+    def test_process_missing_data_and_deadline_updates_attributes(self, dummy_model):
+        """
+        Test that _process_missing_data_and_deadline updates missing_data, deadline, deadline_name, and loglik_missing_data.
+        """
+
+        # Set up a custom loglik function
+        def custom_loglik(x):
+            return x
+
+        # Add a custom_deadline column to the data to satisfy the mixin's requirements
+        dummy_model.data["custom_deadline"] = 2.0
+        # Call with missing_data True, deadline as string, and custom loglik
+        dummy_model._process_missing_data_and_deadline(
+            missing_data=True,
+            deadline="custom_deadline",
+            loglik_missing_data=custom_loglik,
+        )
+        assert dummy_model.missing_data is True
+        assert dummy_model.deadline is True
+        assert dummy_model.deadline_name == "custom_deadline"
+        assert dummy_model.loglik_missing_data is custom_loglik
+
     def test_missing_data_value_custom(self, dummy_model):
         custom_missing = -123.0
         # Add a row with custom missing value
