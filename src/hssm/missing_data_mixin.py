@@ -86,7 +86,6 @@ class MissingDataMixin:
         missing_data: bool, deadline: bool, data: pd.DataFrame
     ) -> MissingDataNetwork:
         """Set missing data and deadline."""
-        network = MissingDataNetwork.NONE
         if not missing_data:
             return MissingDataNetwork.NONE
         network = MissingDataNetwork.OPN if deadline else MissingDataNetwork.CPN
