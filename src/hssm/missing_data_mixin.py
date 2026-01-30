@@ -88,11 +88,8 @@ class MissingDataMixin:
         """Set missing data and deadline."""
         network = MissingDataNetwork.NONE
         if not missing_data:
-            return network
-        if missing_data and not deadline:
-            network = MissingDataNetwork.CPN
-        elif missing_data and deadline:
-            network = MissingDataNetwork.OPN
+            return MissingDataNetwork.NONE
+        network = MissingDataNetwork.OPN if deadline else MissingDataNetwork.CPN
         # AF-TODO: GONOGO case not yet correctly implemented
         # else:
         #     # TODO: This won't behave as expected yet, GONOGO needs to be split
