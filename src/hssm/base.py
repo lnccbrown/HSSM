@@ -311,24 +311,26 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
             additional_namespace.update(extra_namespace)
         self.additional_namespace = additional_namespace
 
-        # ===== Inference Results (initialized to None/empty) =====
+        # region ===== Inference Results (initialized to None/empty) =====
         self._inference_obj: az.InferenceData | None = None
         self._inference_obj_vi: pm.Approximation | None = None
         self._vi_approx = None
         self._map_dict = None
+        # endregion
 
         # ===== Initial Values Configuration =====
         self._initvals: dict[str, Any] = {}
         self.initval_jitter = initval_jitter
 
-        # ===== Construct a model_config from defaults and user inputs =====
+        # region ===== Construct a model_config from defaults and user inputs =====
         self.model_config: Config = self._build_model_config(
             model, loglik_kind, model_config, choices
         )
         self.model_config.update_loglik(loglik)
         self.model_config.validate()
+        # endregion
 
-        # ===== Set up shortcuts so old code will work ======
+        # region ===== Set up shortcuts so old code will work ======
         self.response = self.model_config.response
         self.list_params = self.model_config.list_params
         self.choices = self.model_config.choices
@@ -336,18 +338,19 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
+        # endregion
 
         self._validate_choices()
 
-        # Avoid mypy error later (None.append). Should list_params be Optional?
+        # region Avoid mypy error later (None.append). Should list_params be Optional?
         if self.list_params is None:
             raise ValueError(
                 "`list_params` must be provided in the model configuration."
             )
+        # endregion
 
         self.n_choices = len(self.choices)  # type: ignore[arg-type]
 
-        # Use the MissingDataMixin logic for missing data and deadline handling
         self._process_missing_data_and_deadline(
             missing_data=missing_data,
             deadline=deadline,
