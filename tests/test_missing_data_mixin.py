@@ -1,10 +1,3 @@
-"""
-Tests for MissingDataMixin
--------------------------
-1. Old tests migrated from test_data_validator.py that belong to missing data/deadline logic.
-2. Additional tests for new features and edge cases in MissingDataMixin.
-"""
-
 import pytest
 import pandas as pd
 
@@ -31,7 +24,7 @@ class DummyModel(MissingDataMixin):
         self.deadline = False
 
 
-# --- Fixtures ---
+# region ===== Fixtures =====
 @pytest.fixture
 def basic_data():
     return pd.DataFrame({"rt": [1.0, 2.0, -999.0], "response": [1, -1, 1]})
@@ -42,49 +35,47 @@ def dummy_model(basic_data):
     return DummyModel(basic_data)
 
 
-# Fixture for DummyModel with a deadline column
 @pytest.fixture
 def dummy_model_with_deadline(basic_data):
     data = basic_data.assign(deadline=[2.0, 2.0, 2.0])
     return DummyModel(data)
 
 
-# --- 1. Old tests migrated from test_data_validator.py ---
+# Indirect fixture dispatcher for parameterized model selection
+@pytest.fixture
+def model(request):
+    return request.getfixturevalue(request.param)
+
+
+# endregion
+
+
 class TestMissingDataMixinOld:
-    def test_missing_data_false_raises_valueerror(
-        self, dummy_model, basic_data, dummy_model_with_deadline
-    ):
+    @pytest.mark.parametrize(
+        "model, deadline",
+        [
+            ("dummy_model", False),
+            ("dummy_model_with_deadline", True),
+            ("dummy_model_with_deadline", "deadline"),
+        ],
+        indirect=["model"],
+    )
+    def test_missing_data_false_raises_valueerror(self, model, deadline):
         """
         Should raise ValueError if missing_data=False and -999.0 is present in rt column.
         Covers all cases where deadline is False, True, or a string.
         """
-        # deadline=False
         with pytest.raises(ValueError, match="Missing data provided as False"):
-            dummy_model._process_missing_data_and_deadline(
+            model._process_missing_data_and_deadline(
                 missing_data=False,
-                deadline=False,
-                loglik_missing_data=None,
-            )
-        # deadline=True
-        with pytest.raises(ValueError, match="Missing data provided as False"):
-            dummy_model_with_deadline._process_missing_data_and_deadline(
-                missing_data=False,
-                deadline=True,
-                loglik_missing_data=None,
-            )
-        # deadline as string
-        dummy_model.data = basic_data.assign(deadline_col=[2.0, 2.0, 2.0])
-        with pytest.raises(ValueError, match="Missing data provided as False"):
-            dummy_model._process_missing_data_and_deadline(
-                missing_data=False,
-                deadline="deadline_col",
+                deadline=deadline,
                 loglik_missing_data=None,
             )
 
 
 # --- 2. Additional tests for new features and edge cases in MissingDataMixin ---
 class TestMissingDataMixinNew:
-    def test_missing_data_network_set(self, dummy_model):
+    def test_set_missing_data_network_set(self, dummy_model):
         # missing_data True, deadline False
         dummy_model._process_missing_data_and_deadline(
             missing_data=True, deadline=False, loglik_missing_data=None
@@ -113,24 +104,21 @@ class TestMissingDataMixinNew:
         )
         assert "deadline" in dummy_model.response
 
-    def test_data_mutation_missing_data_false(self, dummy_model):
-        # Should drop rows with -999.0 if missing_data is False
-        n_before = len(dummy_model.data)
-        dummy_model._process_missing_data_and_deadline(
-            missing_data=False, deadline=False, loglik_missing_data=None
-        )
-        n_after = len(dummy_model.data)
-        assert n_after < n_before
-        assert not (-999.0 in dummy_model.data.rt.values)
+    def test_error_on_missing_data_false_with_missing(self, dummy_model):
+        # Should raise ValueError if missing_data is False and -999.0 is present
+        with pytest.raises(ValueError, match="Missing data provided as False"):
+            dummy_model._process_missing_data_and_deadline(
+                missing_data=False, deadline=False, loglik_missing_data=None
+            )
 
-    def test_data_mutation_missing_data_true(self, dummy_model):
-        # Should replace -999.0 with -999.0 (idempotent) if missing_data is True
+    def test_missing_data_true_retains_missing_marker(self, dummy_model):
+        # Should retain -999.0 as missing marker if missing_data is True
         dummy_model._process_missing_data_and_deadline(
             missing_data=True, deadline=False, loglik_missing_data=None
         )
         assert -999.0 in dummy_model.data.rt.values
 
-    def test_data_mutation_deadline(self, dummy_model):
+    def test_deadline_sets_rt_to_missing_marker(self, dummy_model):
         # Should set rt to -999.0 if above deadline
         # Set up so that the second RT is above its deadline
         dummy_model.data["rt"] = [1.0, 3.0, -999.0]  # 3.0 > 2.5
@@ -222,13 +210,11 @@ class TestMissingDataMixinNew:
         # Call with no arguments, as expected by the mixin stub
         dummy_model._handle_missing_data_and_deadline()
 
-    def test_set_missing_data_and_deadline_direct(self, dummy_model):
-        """
-        Directly test the _set_missing_data_and_deadline method for coverage.
-        """
-        # Call with only the required arguments (data is now internal)
-        dummy_model._set_missing_data_and_deadline(
-            missing_data=True,
-            deadline=False,
-            data=dummy_model.data,
-        )
+    def test_set_missing_data_and_deadline_edge_case(self, dummy_model):
+        all_missing = pd.DataFrame({"rt": [-999.0]})
+        with pytest.raises(ValueError, match="no valid data in your dataset"):
+            dummy_model._set_missing_data_and_deadline(
+                missing_data=True,
+                deadline=False,
+                data=all_missing,
+            )
