@@ -357,14 +357,14 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
             loglik_missing_data=loglik_missing_data,
         )
 
-        # Run pre-check data sanity validation now that all attributes are set
         self._pre_check_data_sanity()
 
-        # Process lapse distribution
+        # region ===== Process lapse distribution =====
         self.has_lapse = p_outlier is not None and p_outlier != 0
         self._check_lapse(lapse)
         if self.has_lapse and self.list_params[-1] != "p_outlier":
             self.list_params.append("p_outlier")
+        # endregion
 
         # Process all parameters
         self.params = Params.from_user_specs(
@@ -373,7 +373,6 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
             kwargs=kwargs,
             p_outlier=p_outlier,
         )
-
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
@@ -418,6 +417,7 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
         self.set_alias(self._aliases)
         self.model.build()
 
+        # region ===== Init vals and jitters =====
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
         if self.initval_jitter > 0:
@@ -425,6 +425,7 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
                 jitter_epsilon=self.initval_jitter,
                 vector_only=True,
             )
+        # endregion
 
         # Make sure we reset rvs_to_initial_values --> Only None's
         # Otherwise PyMC barks at us when asking to compute likelihoods
