@@ -21,8 +21,9 @@ if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
 
 # ====== Centralized RLSSM defaults =====
-DEFAULT_RLSSM_RESPONSE = ["rt", "response"]
-DEFAULT_RLSSM_CHOICES = [0, 1]
+DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
+DEFAULT_RLSSM_OBSERVED_DATA = ["rt", "response"]
+DEFAULT_SSM_CHOICES = [0, 1]
 
 RLSSM_REQUIRED_FIELDS = (
     "model_name",
@@ -52,8 +53,8 @@ class BaseModelConfig(ABC):
     description: str | None = None
 
     # Data specification
-    response: list[str] | None = None
-    choices: list[int] | None = None
+    response: list[str] | None = DEFAULT_SSM_OBSERVED_DATA
+    choices: list[int] | None = DEFAULT_SSM_CHOICES
 
     # Parameter specification
     list_params: list[str] | None = None
@@ -178,7 +179,7 @@ class Config(BaseModelConfig):
             return Config(
                 model_name=model_name,
                 loglik_kind=loglik_kind,
-                response=DEFAULT_RLSSM_RESPONSE,
+                response=DEFAULT_RLSSM_OBSERVED_DATA,
             )
 
     def update_loglik(self, loglik: Any | None) -> None:
