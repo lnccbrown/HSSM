@@ -8,7 +8,7 @@ generation ops.
 import logging
 from collections.abc import Callable
 from os import PathLike
-from typing import Any, Literal, Protocol, Type, cast
+from typing import Any, Literal, Protocol, cast, get_args
 
 import bambi as bmb
 import numpy as np
@@ -23,7 +23,7 @@ from ssms.hssm_support import (
 )
 from ssms.hssm_support import rng_fn as ssms_rng_fn
 
-from .._types import LogLikeFunc
+from .._types import LogLikeFunc, LoglikKind, SupportedModels
 from .blackbox import make_blackbox_op
 from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
@@ -191,7 +191,7 @@ def make_hssm_rv(
     simulator_fun: Callable | str,
     list_params: list[str],
     lapse: bmb.Prior | None = None,
-) -> Type[RandomVariable]:
+) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
     Parameters
@@ -205,7 +205,7 @@ def make_hssm_rv(
 
     Returns
     -------
-    Type[RandomVariable]
+    type[RandomVariable]
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
     simulator_fun_internal = get_simulator_fun_internal(simulator_fun)
@@ -381,13 +381,13 @@ def _apply_lapse_model(
 
 
 def make_distribution(
-    rv: str | Type[RandomVariable] | RandomVariable | Callable[..., Any],
+    rv: str | type[RandomVariable] | RandomVariable | Callable[..., Any],
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     bounds: dict | None = None,
     lapse: bmb.Prior | None = None,
     extra_fields: list[np.ndarray] | None = None,
-) -> Type[pm.Distribution]:
+) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
     Constructs a `pymc.Distribution` from a log-likelihood function and a
@@ -423,7 +423,7 @@ def make_distribution(
 
     Returns
     -------
-    Type[pm.Distribution]
+    type[pm.Distribution]
         A pymc.Distribution that uses the log-likelihood function.
     """
     if isinstance(rv, type) and issubclass(rv, RandomVariable):
@@ -536,8 +536,67 @@ def make_distribution(
     return HSSMDistribution
 
 
+def make_distribution_for_supported_model(
+    model: SupportedModels,
+    loglik_kind: LoglikKind = "analytical",
+    backend: Literal["pytensor", "jax", "other"] = "pytensor",
+    reg_params: list[str] | None = None,
+    lapse: bmb.Prior | None = None,
+) -> type[pm.Distribution]:
+    """Make a pm.Distribution class for a supported model.
+
+    This is a convenience function that makes it easy to create a pm.Distribution
+    class that can be used for PyMC modeling.
+
+    Parameters
+    ----------
+    model
+        The name of the supported model.
+    loglik_kind: optional
+        The kind of the log-likelihood for the model. Must be one of "analytical",
+        "approx_differentiable", or "blackbox". Defaults to "analytical".
+    backend : optional
+        The backend to use for the log-likelihood function. Must be one of "pytensor",
+        "jax", or "other". Defaults to "pytensor".
+    reg_params: optional
+        A list of regression parameters, if any. If not specified, no regression
+        parameters are assumed.
+    lapse : optional
+        A bmb.Prior object representing the lapse distribution.
+    """
+    supported_models = get_args(SupportedModels)
+    if model not in supported_models:
+        raise ValueError(f"`model` must be one of {supported_models}, but got {model}.")
+
+    # Build loglik callable
+    # Lazy import to avoid circular imports
+    from ..config import Config
+
+    config = Config.from_defaults(model, loglik_kind)
+    params_is_reg = (
+        None
+        if reg_params is None
+        else [param in reg_params for param in config.list_params]
+    )
+    likelihood_callable = make_likelihood_callable(
+        loglik=config.loglik,
+        loglik_kind=loglik_kind,
+        backend=backend,
+        params_is_reg=params_is_reg,
+    )
+
+    # Build pm.Distribution
+    return make_distribution(
+        rv=model,
+        loglik=likelihood_callable,
+        list_params=config.list_params,
+        bounds=config.bounds,
+        lapse=lapse,
+    )
+
+
 def make_family(
-    dist: Type[pm.Distribution],
+    dist: type[pm.Distribution],
     list_params: list[str],
     link: str | dict[str, bmb.families.Link],
     parent: str = "v",

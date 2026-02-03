@@ -4,7 +4,7 @@ from typing import Callable
 import pytest
 import pandas as pd
 import numpy as np
-from hssm.data_validator import DataValidator
+from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import MissingDataNetwork
 
 
@@ -48,8 +48,8 @@ def base_data_nan_missing():
 
 def dv_instance(
     data_factory: Callable = _base_data, deadline: bool = True
-) -> DataValidator:
-    return DataValidator(
+) -> DataValidatorMixin:
+    return DataValidatorMixin(
         data=data_factory(),
         extra_fields=["extra"],
         deadline=deadline,
@@ -57,13 +57,13 @@ def dv_instance(
 
 
 def test_constructor(base_data):
-    dv = DataValidator(
+    dv = DataValidatorMixin(
         data=base_data,
         extra_fields=["extra"],
         deadline=True,
     )
 
-    assert isinstance(dv, DataValidator)
+    assert isinstance(dv, DataValidatorMixin)
     assert dv.data.equals(_base_data())
     assert dv.response == ["rt", "response"]
     assert dv.choices == [0, 1]
@@ -109,7 +109,7 @@ def test_post_check_data_sanity_valid(base_data):
     ):
         dv_instance_no_missing._post_check_data_sanity()
 
-    dv_instance_no_missing = DataValidator(
+    dv_instance_no_missing = DataValidatorMixin(
         data=base_data,
         deadline=False,
         missing_data=False,
@@ -133,7 +133,7 @@ def test_post_check_data_sanity_valid(base_data):
 def test_handle_missing_data_and_deadline_deadline_column_missing(base_data):
     # Should raise ValueError if deadline is True but deadline_name column is missing
     data = base_data.drop(columns=["deadline"])
-    dv = DataValidator(
+    dv = DataValidatorMixin(
         data=data,
         deadline=True,
     )
@@ -144,7 +144,7 @@ def test_handle_missing_data_and_deadline_deadline_column_missing(base_data):
 def test_handle_missing_data_and_deadline_deadline_applied(base_data):
     # Should set rt to -999.0 where rt >= deadline
     base_data.loc[0, "rt"] = 2.0  # Exceeds deadline
-    dv = DataValidator(
+    dv = DataValidatorMixin(
         data=base_data,
         deadline=True,
     )
@@ -154,7 +154,7 @@ def test_handle_missing_data_and_deadline_deadline_applied(base_data):
 
 
 def test_update_extra_fields(monkeypatch):
-    # Create a DataValidator with extra_fields
+    # Create a DataValidatorMixin with extra_fields
     data = pd.DataFrame(
         {
             "rt": [0.5, 0.7],
@@ -164,7 +164,7 @@ def test_update_extra_fields(monkeypatch):
             "extra2": [100, 200],
         }
     )
-    dv = DataValidator(
+    dv = DataValidatorMixin(
         data=data,
         extra_fields=["extra", "extra2"],
     )
@@ -189,24 +189,24 @@ def test_set_missing_data_and_deadline():
     # No missing data and no deadline
     data = pd.DataFrame({"rt": [0.5, 0.7]})
     assert (
-        DataValidator._set_missing_data_and_deadline(False, False, data)
+        DataValidatorMixin._set_missing_data_and_deadline(False, False, data)
         == MissingDataNetwork.NONE
     )
     # Missing data but no deadline
     data = pd.DataFrame({"rt": [0.5, -999.0]})
     assert (
-        DataValidator._set_missing_data_and_deadline(True, False, data)
+        DataValidatorMixin._set_missing_data_and_deadline(True, False, data)
         == MissingDataNetwork.CPN
     )
     assert (
-        DataValidator._set_missing_data_and_deadline(True, True, data)
+        DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
         == MissingDataNetwork.OPN
     )
     # AF-TODO: I think GONOGO as a network category can go,
     # but needs a little more thought, out of scope for PR,
     # during which this was commented out.
     # assert (
-    #     DataValidator._set_missing_data_and_deadline(True, True, data)
+    #     DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
     #     == MissingDataNetwork.GONOGO
     # )
 
@@ -219,7 +219,7 @@ def test_set_missing_data_and_deadline_all_missing():
         match="`missing_data` is set to True, but you have no valid data in your "
         "dataset.",
     ):
-        DataValidator._set_missing_data_and_deadline(True, False, data)
+        DataValidatorMixin._set_missing_data_and_deadline(True, False, data)
 
     # opn
     with pytest.raises(
@@ -227,7 +227,7 @@ def test_set_missing_data_and_deadline_all_missing():
         match="`missing_data` is set to True, but you have no valid data in your "
         "dataset.",
     ):
-        DataValidator._set_missing_data_and_deadline(True, True, data)
+        DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
 
     # AF-TODO: GONOGO case not yet correctly implemented
     # gonogo
@@ -237,4 +237,4 @@ def test_set_missing_data_and_deadline_all_missing():
     #     match="`missing_data` is set to True, but you have no valid data in your "
     #     + "dataset.",
     # ):
-    #     DataValidator._set_missing_data_and_deadline(True, True, data)
+    #     DataValidatorMixin._set_missing_data_and_deadline(True, True, data)

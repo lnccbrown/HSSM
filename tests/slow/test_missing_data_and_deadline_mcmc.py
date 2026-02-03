@@ -66,25 +66,25 @@ def opn(fixture_path):
 PARAMETER_NAMES = "loglik_kind,backend,sampler,step,expected"
 PARAMETER_GRID = [
     ("analytical", None, None, None, True),  # Defaults should work
-    ("analytical", None, "mcmc", None, True),
-    ("analytical", None, "mcmc", "slice", True),
-    ("analytical", None, "nuts_numpyro", None, True),
-    ("analytical", None, "nuts_numpyro", "slice", ValueError),
+    ("analytical", None, "pymc", None, True),
+    ("analytical", None, "pymc", "slice", True),
+    ("analytical", None, "numpyro", None, True),
+    ("analytical", None, "numpyro", "slice", ValueError),
     ("approx_differentiable", "pytensor", None, None, True),  # Defaults should work
-    ("approx_differentiable", "pytensor", "mcmc", None, True),
-    ("approx_differentiable", "pytensor", "mcmc", "slice", True),
-    ("approx_differentiable", "pytensor", "nuts_numpyro", None, True),
-    ("approx_differentiable", "pytensor", "nuts_numpyro", "slice", ValueError),
+    ("approx_differentiable", "pytensor", "pymc", None, True),
+    ("approx_differentiable", "pytensor", "pymc", "slice", True),
+    ("approx_differentiable", "pytensor", "numpyro", None, True),
+    ("approx_differentiable", "pytensor", "numpyro", "slice", ValueError),
     ("approx_differentiable", "jax", None, None, True),  # Defaults should work
-    ("approx_differentiable", "jax", "mcmc", None, True),
-    ("approx_differentiable", "jax", "mcmc", "slice", True),
-    ("approx_differentiable", "jax", "nuts_numpyro", None, True),
-    ("approx_differentiable", "jax", "nuts_numpyro", "slice", ValueError),
+    ("approx_differentiable", "jax", "pymc", None, True),
+    ("approx_differentiable", "jax", "pymc", "slice", True),
+    ("approx_differentiable", "jax", "numpyro", None, True),
+    ("approx_differentiable", "jax", "numpyro", "slice", ValueError),
     ("blackbox", None, None, None, True),  # Defaults should work
-    ("blackbox", None, "mcmc", None, True),
-    ("blackbox", None, "mcmc", "slice", True),
-    ("blackbox", None, "nuts_numpyro", None, ValueError),
-    ("blackbox", None, "nuts_numpyro", "slice", ValueError),
+    ("blackbox", None, "pymc", None, True),
+    ("blackbox", None, "pymc", "slice", True),
+    ("blackbox", None, "numpyro", None, ValueError),
+    ("blackbox", None, "numpyro", "slice", ValueError),
 ]
 
 

@@ -32,7 +32,7 @@ from pymc.model.transform.conditioning import do
 from ssms.config import model_config as ssms_model_config
 
 from hssm._types import LoglikKind, SupportedModels
-from hssm.data_validator import DataValidator
+from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
     INITVAL_SETTINGS,
@@ -60,6 +60,13 @@ from .param import Params
 from .param import UserParam as Param
 
 _logger = logging.getLogger("hssm")
+
+# NOTE: Temporary mapping from old sampler names to new ones in bambi 0.16.0
+_new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
+    "mcmc": "pymc",
+    "nuts_numpyro": "numpyro",
+    "nuts_blackjax": "blackjax",
+}
 
 
 class classproperty:
@@ -90,7 +97,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSM(DataValidator):
+class HSSM(DataValidatorMixin):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
@@ -568,9 +575,8 @@ class HSSM(DataValidator):
 
     def sample(
         self,
-        sampler: (
-            Literal["mcmc", "nuts_numpyro", "nuts_blackjax", "laplace", "vi"] | None
-        ) = None,
+        sampler: Literal["pymc", "numpyro", "blackjax", "nutpie", "laplace"]
+        | None = None,
         init: str | None = None,
         initvals: str | dict | None = None,
         include_response_params: bool = False,
@@ -580,13 +586,17 @@ class HSSM(DataValidator):
 
         Parameters
         ----------
-        sampler
-            The sampler to use. Can be one of "mcmc", "nuts_numpyro",
-            "nuts_blackjax", "laplace", or "vi". If using `blackbox` likelihoods,
-            this cannot be "nuts_numpyro" or "nuts_blackjax". By default it is None, and
-            sampler will automatically be chosen: when the model uses the
-            `approx_differentiable` likelihood, and `jax` backend, "nuts_numpyro" will
-            be used. Otherwise, "mcmc" (the default PyMC NUTS sampler) will be used.
+        sampler: optional
+            The sampler to use. Can be one of "pymc", "numpyro",
+            "blackjax", "nutpie", or "laplace". If using `blackbox` likelihoods,
+            this cannot be "numpyro", "blackjax", or "nutpie". By default it is None,
+            and sampler will automatically be chosen: when the model uses the
+            `approx_differentiable` likelihood, and `jax` backend, "numpyro" will
+            be used. Otherwise, "pymc" (the default PyMC NUTS sampler) will be used.
+
+            Note that the old sampler names such as "mcmc", "nuts_numpyro",
+            "nuts_blackjax" will be deprecated and removed in future releases. A warning
+            will be raised if any of these old names are used.
         init: optional
             Initialization method to use for the sampler. If any of the NUTS samplers
             is used, defaults to `"adapt_diag"`. Otherwise, defaults to `"auto"`.
@@ -609,11 +619,25 @@ class HSSM(DataValidator):
         az.InferenceData | pm.Approximation
             A reference to the `model.traces` object, which stores the traces of the
             last call to `model.sample()`. `model.traces` is an ArviZ `InferenceData`
-            instance if `sampler` is `"mcmc"` (default), `"nuts_numpyro"`,
-            `"nuts_blackjax"` or "`laplace"`, or an `Approximation` object if `"vi"`.
+            instance if `sampler` is `"pymc"` (default), `"numpyro"`,
+            `"blackjax"` or "`laplace".
         """
         # If initvals are None (default)
         # we skip processing initvals here.
+        if sampler in _new_sampler_mapping:
+            _logger.warning(
+                f"Sampler '{sampler}' is deprecated. "
+                "Please use the new sampler names: "
+                "'pymc', 'numpyro', 'blackjax', 'nutpie', or 'laplace'."
+            )
+            sampler = _new_sampler_mapping[sampler]  # type: ignore
+
+        if sampler == "vi":
+            raise ValueError(
+                "VI is not supported via the sample() method. "
+                "Please use the vi() method instead."
+            )
+
         if initvals is not None:
             if isinstance(initvals, dict):
                 kwargs["initvals"] = initvals
@@ -644,28 +668,12 @@ class HSSM(DataValidator):
                 self.loglik_kind == "approx_differentiable"
                 and self.model_config.backend == "jax"
             ):
-                sampler = "nuts_numpyro"
+                sampler = "numpyro"
             else:
-                sampler = "mcmc"
-
-        # supported_samplers = [
-        #     "mcmc",
-        #     "nuts_numpyro",
-        #     "nuts_blackjax",
-        #     "laplace",
-        # ]  # "vi"]
-
-        # if sampler not in supported_samplers:
-        # if sampler == "vi":
-        #     raise ValueError(
-        #         "For variational inference, please use the `vi()` method instead."
-        #     )
-        # raise ValueError(
-        #     f"Unsupported sampler '{sampler}', must be one of {supported_samplers}"
-        # )
+                sampler = "pymc"
 
         if self.loglik_kind == "blackbox":
-            if sampler in ["nuts_blackjax", "nuts_numpyro"]:
+            if sampler in ["blackjax", "numpyro", "nutpie"]:
                 raise ValueError(
                     f"{sampler} sampler does not work with blackbox likelihoods."
                 )
@@ -676,27 +684,27 @@ class HSSM(DataValidator):
         if (
             self.loglik_kind == "approx_differentiable"
             and self.model_config.backend == "jax"
-            and sampler == "mcmc"
+            and sampler == "pymc"
             and kwargs.get("cores", None) != 1
         ):
             _logger.warning(
                 "Parallel sampling might not work with `jax` backend and the PyMC NUTS "
-                + "sampler on some platforms. Please consider using `nuts_numpyro` or "
-                + "`nuts_blackjax` sampler if that is a problem."
+                + "sampler on some platforms. Please consider using `numpyro`, "
+                + "`blackjax`, or `nutpie` sampler if that is a problem."
             )
 
         if self._check_extra_fields():
             self._update_extra_fields()
 
         if init is None:
-            if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]:
+            if sampler in ["pymc", "numpyro", "blackjax", "nutpie"]:
                 init = "adapt_diag"
             else:
                 init = "auto"
 
         # If sampler is finally `numpyro` make sure
         # the jitter argument is set to False
-        if sampler == "nuts_numpyro":
+        if sampler == "numpyro":
             if "nuts_sampler_kwargs" in kwargs:
                 if kwargs["nuts_sampler_kwargs"].get("jitter"):
                     _logger.warning(
@@ -709,18 +717,18 @@ class HSSM(DataValidator):
             else:
                 kwargs["nuts_sampler_kwargs"] = {"jitter": False}
 
+        if sampler != "pymc" and "step" in kwargs:
+            raise ValueError(
+                "`step` samplers (enabled by the `step` argument) are only supported "
+                "by the `pymc` sampler."
+            )
+
         if self._inference_obj is not None:
             _logger.warning(
                 "The model has already been sampled. Overwriting the previous "
                 + "inference object. Any previous reference to the inference object "
                 + "will still point to the old object."
             )
-
-        if "nuts_sampler" not in kwargs:
-            if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]:
-                kwargs["nuts_sampler"] = (
-                    "pymc" if sampler == "mcmc" else sampler.split("_")[1]
-                )
 
         # Define whether likelihood should be computed
         compute_likelihood = True
@@ -731,8 +739,8 @@ class HSSM(DataValidator):
         omit_offsets = kwargs.pop("omit_offsets", False)
         self._inference_obj = self.model.fit(
             inference_method=(
-                "mcmc"
-                if sampler in ["mcmc", "nuts_numpyro", "nuts_blackjax"]
+                "pymc"
+                if sampler in ["pymc", "numpyro", "blackjax", "nutpie"]
                 else sampler
             ),
             init=init,
@@ -1178,7 +1186,7 @@ class HSSM(DataValidator):
         # clean up `rt,response_mean` to `v`
         do_idata = self._drop_parent_str_from_idata(idata=do_idata)
 
-        # rename otherwise inconsistentdims and coords
+        # rename otherwise inconsistent dims and coords
         if "rt,response_extra_dim_0" in do_idata["prior_predictive"].dims:
             setattr(
                 do_idata,
@@ -1251,7 +1259,7 @@ class HSSM(DataValidator):
         # clean up `rt,response_mean` to `v`
         idata = self._drop_parent_str_from_idata(idata=self._inference_obj)
 
-        # rename otherwise inconsistentdims and coords
+        # rename otherwise inconsistent dims and coords
         if "rt,response_extra_dim_0" in idata["prior_predictive"].dims:
             setattr(
                 idata,
@@ -1301,11 +1309,15 @@ class HSSM(DataValidator):
     @property
     def response_c(self) -> str:
         """Return the response variable names in c() format."""
+        if self.response is None:
+            return "c()"
         return f"c({', '.join(self.response)})"
 
     @property
     def response_str(self) -> str:
         """Return the response variable names in string format."""
+        if self.response is None:
+            return ""
         return ",".join(self.response)
 
     # NOTE: can't annotate return type because the graphviz dependency is optional
