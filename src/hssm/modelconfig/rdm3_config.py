@@ -1,8 +1,8 @@
 from .._types import DefaultConfig  # noqa: D100
 from ..likelihoods.analytical import (
+    logp_rdm3,
     rdm3_bounds,
     rdm3_params,
-    logp_rdm3,
 )
 
 
