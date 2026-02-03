@@ -53,8 +53,8 @@ class BaseModelConfig(ABC):
     description: str | None = None
 
     # Data specification
-    response: list[str] | None = DEFAULT_SSM_OBSERVED_DATA
-    choices: list[int] | None = DEFAULT_SSM_CHOICES
+    response: tuple[str, ...] | None = DEFAULT_SSM_OBSERVED_DATA
+    choices: tuple[int, ...] | None = DEFAULT_SSM_CHOICES
 
     # Parameter specification
     list_params: list[str] | None = None
@@ -133,8 +133,8 @@ class Config(BaseModelConfig):
                     return Config(
                         model_name=model_name,
                         loglik_kind=kind,
-                        response=default_config["response"],
-                        choices=default_config["choices"],
+                        response=tuple(default_config["response"]),
+                        choices=tuple(default_config["choices"]),
                         list_params=default_config["list_params"],
                         description=default_config["description"],
                         **loglik_config,
@@ -161,8 +161,8 @@ class Config(BaseModelConfig):
                     return Config(
                         model_name=model_name,
                         loglik_kind=loglik_kind,
-                        response=default_config["response"],
-                        choices=default_config["choices"],
+                        response=tuple(default_config["response"]),
+                        choices=tuple(default_config["choices"]),
                         list_params=default_config["list_params"],
                         description=default_config["description"],
                         **loglik_config,
@@ -170,8 +170,8 @@ class Config(BaseModelConfig):
                 return Config(
                     model_name=model_name,
                     loglik_kind=loglik_kind,
-                    response=default_config["response"],
-                    choices=default_config["choices"],
+                    response=tuple(default_config["response"]),
+                    choices=tuple(default_config["choices"]),
                     list_params=default_config["list_params"],
                     description=default_config["description"],
                 )
@@ -195,13 +195,13 @@ class Config(BaseModelConfig):
 
         self.loglik = loglik
 
-    def update_choices(self, choices: list[int] | None) -> None:
+    def update_choices(self, choices: tuple[int, ...] | None) -> None:
         """Update the choices from user input.
 
         Parameters
         ----------
-        choices : list[int]
-            A list of choices.
+        choices : tuple[int, ...]
+            A tuple of choices.
         """
         if choices is None:
             return
@@ -451,9 +451,9 @@ class RLSSMConfig(BaseModelConfig):
 class ModelConfig:
     """Representation for model_config provided by the user."""
 
-    response: list[str] | None = None
+    response: tuple[str, ...] | None = None
     list_params: list[str] | None = None
-    choices: list[int] | None = None
+    choices: tuple[int, ...] | None = None
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     backend: Literal["jax", "pytensor"] | None = None
