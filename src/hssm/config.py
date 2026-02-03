@@ -21,9 +21,9 @@ if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
 
 # ====== Centralized RLSSM defaults =====
-DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
-DEFAULT_RLSSM_OBSERVED_DATA = ["rt", "response"]
-DEFAULT_SSM_CHOICES = [0, 1]
+DEFAULT_SSM_OBSERVED_DATA = ("rt", "response")
+DEFAULT_RLSSM_OBSERVED_DATA = ("rt", "response")
+DEFAULT_SSM_CHOICES = (0, 1)
 
 RLSSM_REQUIRED_FIELDS = (
     "model_name",
