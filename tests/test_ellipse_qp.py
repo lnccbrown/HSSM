@@ -1,14 +1,13 @@
 """Quick test of the ellipse plotting functionality for quantile probability plots."""
 
+import tempfile
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import pytest
 
-# Import the helper functions
-import sys
-
-sys.path.insert(0, "src")
 
 from hssm.plotting.quantile_probability import (
     _confidence_to_n_std,
@@ -182,8 +181,10 @@ def test_ellipse_visual():
         ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("test_ellipse_output.png", dpi=100, bbox_inches="tight")
-    print("  ✓ Visual test saved to test_ellipse_output.png")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / "test_ellipse_output.png"
+        plt.savefig(output_path, dpi=100, bbox_inches="tight")
+        print(f"  ✓ Visual test saved to {output_path}")
     plt.close()
 
 
