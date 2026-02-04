@@ -5,8 +5,8 @@ from hssm.config import Config, RLSSMConfig
 from hssm.config import ModelConfig
 
 # Define constants for repeated data structures
-DEFAULT_RESPONSE = ["rt", "response"]
-DEFAULT_CHOICES = [0, 1]
+DEFAULT_RESPONSE = ("rt", "response")
+DEFAULT_CHOICES = (0, 1)
 DEFAULT_BOUNDS = {
     "alpha": (0.0, 1.0),
     "beta": (0.0, 1.0),
@@ -21,28 +21,31 @@ def create_config_dict(
     model_name,
     list_params,
     params_default,
-    bounds,
-    response,
-    choices,
-    extra_fields,
-    learning_process,
+    bounds=DEFAULT_BOUNDS,
+    response=DEFAULT_RESPONSE,
+    choices=DEFAULT_CHOICES,
+    extra_fields=[],
+    learning_process={},
+    decision_process="ddm",
+    decision_process_loglik_kind="analytical",
+    learning_process_loglik_kind="blackbox",
 ):
-    return {
-        "model_name": model_name,
-        "name": model_name,
-        "description": f"{model_name} model",
-        "list_params": list_params,
-        "params_default": params_default,
-        "bounds": bounds,
-        "response": response,
-        "choices": choices,
-        "extra_fields": extra_fields,
-        "learning_process": learning_process,
-        "decision_process": "ddm",
-        "decision_process_loglik_kind": "analytical",
-        "learning_process_loglik_kind": "blackbox",
-        "data": {},
-    }
+    return dict(
+        model_name=model_name,
+        name=model_name,
+        description=f"{model_name} model",
+        list_params=list_params,
+        params_default=params_default,
+        bounds=bounds,
+        response=response,
+        choices=choices,
+        extra_fields=extra_fields,
+        learning_process=learning_process,
+        decision_process=decision_process,
+        decision_process_loglik_kind=decision_process_loglik_kind,
+        learning_process_loglik_kind=learning_process_loglik_kind,
+        data={},
+    )
 
 
 # region fixtures and helpers
