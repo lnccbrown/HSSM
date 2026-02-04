@@ -45,6 +45,7 @@ from hssm.distribution_utils import (
     make_likelihood_callable,
     make_missing_data_callable,
 )
+from hssm.missing_data_mixin import MissingDataMixin
 from hssm.utils import (
     _compute_log_likelihood,
     _get_alias_dict,
@@ -96,7 +97,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSMBase(DataValidatorMixin):
+class HSSMBase(DataValidatorMixin, MissingDataMixin):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
@@ -310,24 +311,26 @@ class HSSMBase(DataValidatorMixin):
             additional_namespace.update(extra_namespace)
         self.additional_namespace = additional_namespace
 
-        # ===== Inference Results (initialized to None/empty) =====
+        # region ===== Inference Results (initialized to None/empty) =====
         self._inference_obj: az.InferenceData | None = None
         self._inference_obj_vi: pm.Approximation | None = None
         self._vi_approx = None
         self._map_dict = None
+        # endregion
 
         # ===== Initial Values Configuration =====
         self._initvals: dict[str, Any] = {}
         self.initval_jitter = initval_jitter
 
-        # ===== Construct a model_config from defaults and user inputs =====
+        # region ===== Construct a model_config from defaults and user inputs =====
         self.model_config: Config = self._build_model_config(
             model, loglik_kind, model_config, choices
         )
         self.model_config.update_loglik(loglik)
         self.model_config.validate()
+        # endregion
 
-        # ===== Set up shortcuts so old code will work ======
+        # region ===== Set up shortcuts so old code will work ======
         self.response = self.model_config.response
         self.list_params = self.model_config.list_params
         self.choices = self.model_config.choices
@@ -335,87 +338,33 @@ class HSSMBase(DataValidatorMixin):
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
+        # endregion
 
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )
+        self._validate_choices()
 
-        # Avoid mypy error later (None.append). Should list_params be Optional?
+        # region Avoid mypy error later (None.append). Should list_params be Optional?
         if self.list_params is None:
             raise ValueError(
                 "`list_params` must be provided in the model configuration."
             )
+        # endregion
 
-        self.n_choices = len(self.choices)
+        self.n_choices = len(self.choices)  # type: ignore[arg-type]
 
-        # Process missing data setting
-        # AF-TODO: Could be a function in data validator?
-        if isinstance(missing_data, float):
-            if not ((self.data.rt == missing_data).any()):
-                raise ValueError(
-                    f"missing_data argument is provided as a float {missing_data}, "
-                    f"However, you have no RTs of {missing_data} in your dataset!"
-                )
-            else:
-                self.missing_data = True
-                self.missing_data_value = missing_data
-        elif isinstance(missing_data, bool):
-            if missing_data and (not (self.data.rt == -999.0).any()):
-                raise ValueError(
-                    "missing_data argument is provided as True, "
-                    " so RTs of -999.0 are treated as missing. \n"
-                    "However, you have no RTs of -999.0 in your dataset!"
-                )
-            elif (not missing_data) and (self.data.rt == -999.0).any():
-                # self.missing_data = True
-                raise ValueError(
-                    "Missing data provided as False. \n"
-                    "However, you have RTs of -999.0 in your dataset!"
-                )
-            else:
-                self.missing_data = missing_data
-        else:
-            raise ValueError(
-                "missing_data argument must be a bool or a float! \n"
-                f"You provided: {type(missing_data)}"
-            )
-
-        if isinstance(deadline, str):
-            self.deadline = True
-            self.deadline_name = deadline
-        else:
-            self.deadline = deadline
-            self.deadline_name = "deadline"
-
-        if (
-            not self.missing_data and not self.deadline
-        ) and loglik_missing_data is not None:
-            raise ValueError(
-                "You have specified a loglik_missing_data function, but you have not "
-                + "set the missing_data or deadline flag to True."
-            )
-        self.loglik_missing_data = loglik_missing_data
-
-        # Update data based on missing_data and deadline
-        self._handle_missing_data_and_deadline()
-        # Set self.missing_data_network based on `missing_data` and `deadline`
-        self.missing_data_network = self._set_missing_data_and_deadline(
-            self.missing_data, self.deadline, self.data
+        self._process_missing_data_and_deadline(
+            missing_data=missing_data,
+            deadline=deadline,
+            loglik_missing_data=loglik_missing_data,
         )
 
-        if self.deadline:
-            if self.response is not None:  # Avoid mypy error
-                self.response.append(self.deadline_name)
-
-        # Run pre-check data sanity validation now that all attributes are set
         self._pre_check_data_sanity()
 
-        # Process lapse distribution
+        # region ===== Process lapse distribution =====
         self.has_lapse = p_outlier is not None and p_outlier != 0
         self._check_lapse(lapse)
         if self.has_lapse and self.list_params[-1] != "p_outlier":
             self.list_params.append("p_outlier")
+        # endregion
 
         # Process all parameters
         self.params = Params.from_user_specs(
@@ -424,7 +373,6 @@ class HSSMBase(DataValidatorMixin):
             kwargs=kwargs,
             p_outlier=p_outlier,
         )
-
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
@@ -469,6 +417,7 @@ class HSSMBase(DataValidatorMixin):
         self.set_alias(self._aliases)
         self.model.build()
 
+        # region ===== Init vals and jitters =====
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
         if self.initval_jitter > 0:
@@ -476,6 +425,7 @@ class HSSMBase(DataValidatorMixin):
                 jitter_epsilon=self.initval_jitter,
                 vector_only=True,
             )
+        # endregion
 
         # Make sure we reset rvs_to_initial_values --> Only None's
         # Otherwise PyMC barks at us when asking to compute likelihoods
