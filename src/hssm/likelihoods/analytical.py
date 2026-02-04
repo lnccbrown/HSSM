@@ -473,20 +473,26 @@ def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2):
 
     # 1. Calculate PDFs and CDFs for all accumulators
     # We use vmap to apply our single-accumulator functions across the drift vector
-    v_vector = jnp.array([v0, v1, v2])
+    #v_vector = jnp.array([v0, v1, v2])
+    v_vector = jnp.stack(jnp.broadcast_arrays(v0, v1, v2))
     all_pdfs = vmap(lambda v: _jax_rdm_tpdf(t, b, v, A))(v_vector)
     all_cdfs = vmap(lambda v: _jax_rdm_tcdf(t, b, v, A))(v_vector)
 
     # 2. Extract components for the winner
-    pdf_winner = all_pdfs[ch]
+    #pdf_winner = all_pdfs[ch]
+    idx = jnp.arange(ch.shape[0])
+    pdf_winner = all_pdfs[ch, idx]
 
     # 3. Calculate the product of survivor functions for the losers
     # We mask the winner out of the CDF array
-    mask = jnp.arange(len(v_vector)) != ch
+    # mask = jnp.arange(len(v_vector)) != ch
+    # survivors_losers = 1.0 - all_cdfs
+    mask = jnp.arange(len(v_vector))[:, None] != ch
     survivors_losers = 1.0 - all_cdfs
 
     # The defective likelihood: Winner PDF * Product of Loser Survivors
-    likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0))
+    #likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0))
+    likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0), axis=0)
 
     # Return log-likelihood with a floor for numerical stability
     return jnp.log(jnp.clip(likelihood, __min, __max))
@@ -499,19 +505,32 @@ def logp_rdm3(
     v0: float,
     v1: float,
     v2: float,
+    t: float,
 ) -> np.ndarray:
     """Compute the log-likelihood of the RDM model with 3 drift rates."""
     data_reshaped = jnp.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
     rt = jnp.abs(data_reshaped[:, 0])
+    rt = rt - t
     response = data_reshaped[:, 1]
     # response_int = jnp.cast(response, "int32")
     response_int = response.astype(jnp.int_)
     logp = _jax_rdm3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
-    # checked_logp = check_parameters(logp, b > A, msg="b > A")
+    #checked_logp = jax_check_parameters(logp, b > A, msg="b > A")
     return logp
 
 
-rdm3_params = ["A", "b", "v0", "v1", "v2"]
+# implement a JAX version of pymc's check_parameters
+def jax_check_parameters(logp, condition, msg="Condition failed"):
+    """Check parameters for validity in JAX."""
+    def true_fn():
+        return logp
+
+    def false_fn():
+        raise pm.logprob.utils.ParameterValueError(msg)
+
+    return jnp.where(condition, true_fn(), false_fn())
+
+rdm3_params = ["A", "b", "v0", "v1", "v2", "t"]
 
 rdm3_bounds = {
     "A": (0.0, inf),
@@ -519,6 +538,7 @@ rdm3_bounds = {
     "v0": (0.0, inf),
     "v1": (0.0, inf),
     "v2": (0.0, inf),
+    "t": (0.0, inf),
 }
 
 RDM3: Type[pm.Distribution] = make_distribution(
