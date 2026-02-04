@@ -29,7 +29,7 @@ def pytensor_gemm(a, b, c=0.0, alpha=1.0, beta=1.0, transA=0, transB=0):  # pyli
 
 
 pt_onnx_ops = {
-    "Add": lambda a, b: onnx_add(a, b),
+    "Add": onnx_add,
     "Constant": lambda value: [value],
     "MatMul": lambda x, y: [pt.dot(x, y)],
     "Relu": lambda x: [pt.math.max(x, 0)],
