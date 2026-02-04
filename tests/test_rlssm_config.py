@@ -501,7 +501,7 @@ class TestRLSSMConfigEdgeCases:
             list_params=["v", "a", "z", "t"],
             choices=[0, 1],
         )
-        config = RLSSMConfig(
+        RLSSMConfig(
             model_name="test_model",
             list_params=["alpha"],
             params_default=[0.0],
