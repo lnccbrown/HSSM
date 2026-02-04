@@ -2,6 +2,8 @@ import copy
 
 import pytest
 
+import hssm
+from hssm.config import Config, RLSSMConfig
 from hssm.config import ModelConfig
 
 
@@ -20,12 +22,6 @@ def valid_rlssmconfig_kwargs():
         learning_process={},
     )
 
-
-"""Tests for RLSSMConfig class."""
-
-import pytest
-import hssm
-from hssm.config import Config, RLSSMConfig
 
 hssm.set_floatX("float32")
 
