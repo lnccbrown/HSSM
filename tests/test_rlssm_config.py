@@ -1,12 +1,51 @@
-import copy
-
 import pytest
 
 import hssm
 from hssm.config import Config, RLSSMConfig
 from hssm.config import ModelConfig
 
+# Define constants for repeated data structures
+DEFAULT_RESPONSE = ["rt", "response"]
+DEFAULT_CHOICES = [0, 1]
+DEFAULT_BOUNDS = {
+    "alpha": (0.0, 1.0),
+    "beta": (0.0, 1.0),
+    "gamma": (0.0, 1.0),
+    "v": (-3.0, 3.0),
+    "a": (0.3, 2.5),
+}
 
+
+# Helper function to create a config dictionary
+def create_config_dict(
+    model_name,
+    list_params,
+    params_default,
+    bounds,
+    response,
+    choices,
+    extra_fields,
+    learning_process,
+):
+    return {
+        "model_name": model_name,
+        "name": model_name,
+        "description": f"{model_name} model",
+        "list_params": list_params,
+        "params_default": params_default,
+        "bounds": bounds,
+        "response": response,
+        "choices": choices,
+        "extra_fields": extra_fields,
+        "learning_process": learning_process,
+        "decision_process": "ddm",
+        "decision_process_loglik_kind": "analytical",
+        "learning_process_loglik_kind": "blackbox",
+        "data": {},
+    }
+
+
+# region fixtures and helpers
 @pytest.fixture
 def valid_rlssmconfig_kwargs():
     return dict(
@@ -34,72 +73,66 @@ def a_func(x):
     return x + 1
 
 
+# endregion
+
+
 class TestRLSSMConfigCreation:
+    rlwm_config = create_config_dict(
+        model_name="rlwm",
+        list_params=["alpha", "beta", "gamma", "v", "a"],
+        params_default=[0.5, 0.3, 0.2, 1.0, 1.5],
+        bounds=DEFAULT_BOUNDS,
+        response=DEFAULT_RESPONSE,
+        choices=DEFAULT_CHOICES,
+        extra_fields=["feedback", "trial_id", "block"],
+        learning_process={"v": "subject_wise_function"},
+    )
+
+    minimal_rlssm_config = create_config_dict(
+        model_name="minimal_rlssm",
+        list_params=["alpha", "beta"],
+        params_default=[],
+        bounds={},
+        response=DEFAULT_RESPONSE,
+        choices=DEFAULT_CHOICES,
+        extra_fields=[],
+        learning_process={},
+    )
+
+    testcase1 = (
+        "rlwm",
+        rlwm_config,
+        "rlwm",
+        [0.5, 0.3, 0.2, 1.0, 1.5],
+        DEFAULT_BOUNDS,
+        DEFAULT_RESPONSE,
+        DEFAULT_CHOICES,
+        {"v": "subject_wise_function"},
+    )
+
+    testcase2 = (
+        "minimal_rlssm",
+        minimal_rlssm_config,
+        "minimal_rlssm",
+        [],
+        {},
+        DEFAULT_RESPONSE,
+        DEFAULT_CHOICES,
+        {},
+    )
+    testcase_params = (
+        "model_name, config_dict, expected_model_name,"
+        " expected_params_default, expected_bounds, expected_response, "
+        "expected_choices, expected_learning_process"
+    )
+
     @pytest.mark.parametrize(
-        "model_name, config_dict, expected_model_name, expected_params_default, expected_bounds, expected_response, expected_choices, expected_learning_process",
+        testcase_params,
         [
-            (
-                "rlwm",
-                {
-                    "model_name": "rlwm",
-                    "name": "rlwm",
-                    "description": "Reinforcement Learning Working Memory model",
-                    "list_params": ["alpha", "beta", "gamma", "v", "a"],
-                    "extra_fields": ["feedback", "trial_id", "block"],
-                    "decision_process": "ddm",
-                    "params_default": [0.5, 0.3, 0.2, 1.0, 1.5],
-                    "bounds": {
-                        "alpha": (0.0, 1.0),
-                        "beta": (0.0, 1.0),
-                        "gamma": (0.0, 1.0),
-                        "v": (-3.0, 3.0),
-                        "a": (0.3, 2.5),
-                    },
-                    "response": ["rt", "response"],
-                    "choices": [0, 1],
-                    "learning_process": {"v": "subject_wise_function"},
-                    "decision_process_loglik_kind": "analytical",
-                    "learning_process_loglik_kind": "blackbox",
-                    "data": {},
-                },
-                "rlwm",
-                [0.5, 0.3, 0.2, 1.0, 1.5],
-                {
-                    "alpha": (0.0, 1.0),
-                    "beta": (0.0, 1.0),
-                    "gamma": (0.0, 1.0),
-                    "v": (-3.0, 3.0),
-                    "a": (0.3, 2.5),
-                },
-                ["rt", "response"],
-                [0, 1],
-                {"v": "subject_wise_function"},
-            ),
-            (
-                "minimal_rlssm",
-                {
-                    "model_name": "minimal_rlssm",
-                    "name": "minimal_rlssm",
-                    "description": "Minimal RLSSM model",
-                    "list_params": ["alpha", "beta"],
-                    "params_default": [],
-                    "decision_process": "ddm",
-                    "learning_process": {},
-                    "bounds": {},
-                    "response": ["rt", "response"],
-                    "choices": [0, 1],
-                    "decision_process_loglik_kind": "analytical",
-                    "learning_process_loglik_kind": "blackbox",
-                    "extra_fields": [],
-                    "data": {},
-                },
-                "minimal_rlssm",
-                [],
-                {},
-                ["rt", "response"],
-                [0, 1],
-                {},
-            ),
+            # Test case for RLWM model
+            testcase1,
+            # Test case for minimal RLSSM model
+            testcase2,
         ],
     )
     def test_from_rlssm_dict_cases(
