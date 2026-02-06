@@ -303,9 +303,9 @@ class RLSSMConfig(BaseModelConfig):
             Dictionary containing model configuration. Expected keys:
                 - description: Model description (optional)
                 - list_params: List of parameter names (required)
-                - extra_fields: List of extra field names from data (optional)
+                - extra_fields: List of extra field names from data (required)
                 - params_default: Default parameter values (required)
-                - bounds: Parameter bounds (optional)
+                - bounds: Parameter bounds (required)
                 - response: Response column names (required)
                 - choices: Valid choice values (required)
                 - decision_process: Decision process specification (required)
