@@ -334,7 +334,7 @@ class HSSM(DataValidatorMixin):
             if isinstance(model_config, dict):
                 if "choices" not in model_config:
                     if choices is not None:
-                        model_config["choices"] = choices
+                        model_config["choices"] = tuple(choices)
                 else:
                     if choices is not None:
                         _logger.info(
@@ -346,7 +346,7 @@ class HSSM(DataValidatorMixin):
             elif isinstance(model_config, ModelConfig):
                 if model_config.choices is None:
                     if choices is not None:
-                        model_config.choices = choices
+                        model_config.choices = tuple(choices)
                 else:
                     if choices is not None:
                         _logger.info(
@@ -601,7 +601,7 @@ class HSSM(DataValidatorMixin):
             Pass initial values to the sampler. This can be a dictionary of initial
             values for parameters of the model, or a string "map" to use initialization
             at the MAP estimate. If "map" is used, the MAP estimate will be computed if
-            not already attached to the base class from prior call to 'find_MAP`.
+            not already attached to the base class from prior call to 'find_MAP'.
         include_response_params: optional
             Include parameters of the response distribution in the output. These usually
             take more space than other parameters as there's one of them per
