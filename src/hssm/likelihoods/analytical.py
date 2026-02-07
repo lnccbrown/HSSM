@@ -581,7 +581,7 @@ def logp_poisson_race(
     Implemented as in https://link.springer.com/article/10.3758/BF03212980
     with two modifications:
       1. We allow continuous shape parameters (k1, k2) rather than just integers.
-      2. We do not condition the underlying stimulus condition.
+      2. We do not condition on the underlying stimulus condition.
 
     Parameters
     ----------
