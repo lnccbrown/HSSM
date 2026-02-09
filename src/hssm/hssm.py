@@ -1242,7 +1242,7 @@ class HSSM(DataValidatorMixin):
         # mean prior here (which adds deterministics that
         # could be recomputed elsewhere)
         prior_predictive.add_groups(posterior=prior_predictive.prior)
-        self.model.predict(prior_predictive, kind="mean", inplace=True)
+        self.model.predict(prior_predictive, kind="response_params", inplace=True)
 
         # clean
         setattr(prior_predictive, "prior", prior_predictive["posterior"])
