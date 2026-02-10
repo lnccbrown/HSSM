@@ -39,8 +39,8 @@ class Param:
         Whether the parameter is a regression.
     is_fixed
         Whether the parameter is fixed.
-    is_vector
-        Whether the parameter is a vector parameter.
+    is_trialwise
+        Whether the parameter varies across observations.
     is_parent
         Whether the parameter is a parent parameter.
 
@@ -124,11 +124,9 @@ class Param:
         self._parent = value
 
     @property
-    def is_vector(self) -> bool:
-        """Whether the parameter is a vector parameter."""
-        return (
-            self.is_parent or self.is_regression or isinstance(self.prior, np.ndarray)
-        )
+    def is_trialwise(self) -> bool:
+        """Whether the parameter varies across observations."""
+        return self.is_regression or isinstance(self.prior, np.ndarray)
 
     def fill_defaults(
         self,

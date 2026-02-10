@@ -387,6 +387,7 @@ def make_distribution(
     bounds: dict | None = None,
     lapse: bmb.Prior | None = None,
     extra_fields: list[np.ndarray] | None = None,
+    fixed_params: dict[str, np.ndarray] | None = None,
 ) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -451,6 +452,15 @@ def make_distribution(
     # if isinstance(rv, str) else rv
     extra_fields = [] if extra_fields is None else extra_fields
 
+    # Pre-build PyTensor tensors for fixed-vector params. These replace the
+    # scalar constants that Bambi provides, at the correct positions in the
+    # dist_params list inside logp().
+    _fixed_param_substitutions: dict[int, pt.TensorVariable] = {}
+    if fixed_params:
+        for name, vector in fixed_params.items():
+            idx = list_params.index(name)
+            _fixed_param_substitutions[idx] = pt.as_tensor_variable(pm.floatX(vector))
+
     if lapse is not None:
         if list_params[-1] != "p_outlier":
             list_params.append("p_outlier")
@@ -500,6 +510,13 @@ def make_distribution(
             tensor
                 Log probability
             """
+            # Substitute fixed-vector params for Bambi's scalar constants
+            if _fixed_param_substitutions:
+                dist_params = tuple(
+                    _fixed_param_substitutions.get(i, p)
+                    for i, p in enumerate(dist_params)
+                )
+
             # AF-TODO: Apply clipping here
             if list_params[-1] == "p_outlier":
                 p_outlier = dist_params[-1]

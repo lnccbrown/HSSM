@@ -257,13 +257,17 @@ def log_likelihood(
         for key_, val in shape_dict.items()
     }
 
-    # Compile likelihood function
+    # Compile likelihood function.
+    # on_unused_input="ignore" is needed because fixed-vector parameters
+    # are substituted with constants inside HSSMDistribution.logp(), making
+    # the corresponding input variable unused in the compiled graph.
     if not response_term.is_constrained:
         rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
         logp_compiled = pm.compile(
             [val for key_, val in pt_dict.items()],
             rv_logp,
             allow_input_downcast=True,
+            on_unused_input="ignore",
         )
     else:
         # Bounds are scalars, we can safely pick them from the first row
@@ -279,7 +283,10 @@ def log_likelihood(
             y_values,
         )
         logp_compiled = pm.compile(
-            [val for key_, val in pt_dict.items()], rv_logp, allow_input_downcast=True
+            [val for key_, val in pt_dict.items()],
+            rv_logp,
+            allow_input_downcast=True,
+            on_unused_input="ignore",
         )
 
     # Loop through chain and draws
