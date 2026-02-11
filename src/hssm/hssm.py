@@ -266,6 +266,11 @@ class HSSM(HSSMBase):
                 "list_params has not been set. "
                 "This should have been validated during model initialization."
             )
+        if self.loglik_kind is None:
+            raise ValueError(
+                "Likelihood kind (loglik_kind) has not been set. "
+                "This should have been configured during model initialization."
+            )
 
         params_is_reg = [
             param.is_vector
