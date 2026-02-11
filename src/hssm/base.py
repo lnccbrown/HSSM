@@ -351,13 +351,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         self.n_choices = len(self.choices)  # type: ignore[arg-type]
 
+        self._pre_check_data_sanity()
+
         self._process_missing_data_and_deadline(
             missing_data=missing_data,
             deadline=deadline,
             loglik_missing_data=loglik_missing_data,
         )
-
-        self._pre_check_data_sanity()
 
         # region ===== Process lapse distribution =====
         self.has_lapse = p_outlier is not None and p_outlier != 0
