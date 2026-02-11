@@ -256,8 +256,16 @@ class HSSM(HSSMBase):
             return self.loglik
 
         # Type narrowing: loglik and list_params should be set by this point
-        assert self.loglik is not None, "loglik should be set by model_config"
-        assert self.list_params is not None, "list_params validated in __init__"
+        if self.loglik is None:
+            raise ValueError(
+                "Likelihood function (loglik) has not been set. "
+                "This should have been configured during model initialization."
+            )
+        if self.list_params is None:
+            raise ValueError(
+                "list_params has not been set. "
+                "This should have been validated during model initialization."
+            )
 
         params_is_reg = [
             param.is_vector
