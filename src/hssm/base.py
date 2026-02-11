@@ -8,8 +8,8 @@ This file defines the entry class HSSM.
 
 import datetime
 import logging
+from abc import ABC, abstractmethod
 from copy import deepcopy
-from inspect import isclass, signature
 from os import PathLike
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, Union, cast, get_args
@@ -97,7 +97,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSMBase(DataValidatorMixin, MissingDataMixin):
+class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
@@ -1932,114 +1932,14 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
                 + "parameter is not None"
             )
 
+    @abstractmethod
     def _make_model_distribution(self) -> type[pm.Distribution]:
-        """Make a pm.Distribution for the model."""
-        ### Logic for different types of likelihoods:
-        # -`analytical` and `blackbox`:
-        #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
-        #     function).
-        # - `approx_differentiable`:
-        #     In addition to `pm.Distribution` and any arbitrary function, it can also
-        #     be an str (which we will download from hugging face) or a Pathlike
-        #     which we will download and make a distribution.
+        """Make a pm.Distribution for the model.
 
-        # If user has already provided a log-likelihood function as a distribution
-        # Use it directly as the distribution
-        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
-            return self.loglik
-
-        params_is_reg = [
-            param.is_vector
-            for param_name, param in self.params.items()
-            if param_name != "p_outlier"
-        ]
-        if self.extra_fields is not None:
-            params_is_reg += [True for _ in self.extra_fields]
-
-        # Assert that loglik is not None (mypy)
-        # avoiding extra indentation level
-        assert self.loglik is not None, "loglik should be set by model configuration"
-        if self.loglik_kind == "approx_differentiable":
-            if self.model_config.backend == "jax":
-                likelihood_callable = make_likelihood_callable(
-                    loglik=self.loglik,
-                    loglik_kind="approx_differentiable",
-                    backend="jax",
-                    params_is_reg=params_is_reg,
-                )
-            else:
-                likelihood_callable = make_likelihood_callable(
-                    loglik=self.loglik,
-                    loglik_kind="approx_differentiable",
-                    backend=self.model_config.backend,
-                )
-        else:
-            likelihood_callable = make_likelihood_callable(
-                loglik=self.loglik,
-                loglik_kind=self.loglik_kind,
-                backend=self.model_config.backend,
-            )
-
-        self.loglik = likelihood_callable
-
-        # Make the callable for missing data
-        # And assemble it with the callable for the likelihood
-        if self.missing_data_network != MissingDataNetwork.NONE:
-            if self.missing_data_network == MissingDataNetwork.OPN:
-                params_only = False
-            elif self.missing_data_network == MissingDataNetwork.CPN:
-                params_only = True
-            else:
-                params_only = None
-
-            if self.loglik_missing_data is None:
-                self.loglik_missing_data = (
-                    self.model_name
-                    + missing_data_networks_suffix[self.missing_data_network]
-                    + ".onnx"
-                )
-
-            backend_tmp: Literal["pytensor", "jax", "other"] | None = (
-                "jax"
-                if self.model_config.backend != "pytensor"
-                else self.model_config.backend
-            )
-            missing_data_callable = make_missing_data_callable(
-                self.loglik_missing_data, backend_tmp, params_is_reg, params_only
-            )
-
-            self.loglik_missing_data = missing_data_callable
-
-            self.loglik = assemble_callables(
-                self.loglik,
-                self.loglik_missing_data,
-                params_only,
-                has_deadline=self.deadline,
-            )
-
-        if self.missing_data:
-            _logger.info(
-                "Re-arranging data to separate missing and observed datapoints. "
-                "Missing data (rt == %s) will be on top, "
-                "observed datapoints follow.",
-                self.missing_data_value,
-            )
-
-        self.data = _rearrange_data(self.data)
-        # Assertion added for mypy type checking
-        assert self.list_params is not None, "list_params should have been validated"
-        return make_distribution(
-            rv=self.model_config.rv or self.model_name,
-            loglik=self.loglik,
-            list_params=self.list_params,
-            bounds=self.bounds,
-            lapse=self.lapse,
-            extra_fields=(
-                None
-                if not self.extra_fields
-                else [deepcopy(self.data[field].values) for field in self.extra_fields]
-            ),
-        )
+        This method must be implemented by subclasses to create the appropriate
+        distribution for the specific model type.
+        """
+        ...
 
     def _get_deterministic_var_names(self, idata) -> list[str]:
         """Filter out the deterministic variables in var_names."""
