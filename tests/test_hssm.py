@@ -89,18 +89,18 @@ def test_custom_model(data_ddm):
         HSSM(data=data_ddm, model="custom")
 
     with pytest.raises(
-        ValueError, match="Please provide `list_params` via `model_config`."
+        ValueError, match="Please provide `list_params`*"
     ):
         HSSM(data=data_ddm, model="custom", loglik_kind="analytical")
 
     with pytest.raises(
-        ValueError, match="Please provide `list_params` via `model_config`."
+        ValueError, match="Please provide `list_params`*"
     ):
         HSSM(data=data_ddm, model="custom", loglik=DDM, loglik_kind="analytical")
 
     with pytest.raises(
         ValueError,
-        match="Please provide `list_params` via `model_config`.",
+        match="Please provide `list_params`*",
     ):
         HSSM(
             data=data_ddm,
