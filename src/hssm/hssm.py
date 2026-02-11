@@ -241,7 +241,7 @@ class HSSM(HSSMBase):
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
-        ### Logic for different types of likelihoods:
+        # == Logic for different types of likelihoods:
         # -`analytical` and `blackbox`:
         #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
         #     function).
