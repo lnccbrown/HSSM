@@ -324,9 +324,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # endregion
 
         # region ===== Set up shortcuts so old code will work ======
-        self.response = self.model_config.response
+        self.response = (
+            list(self.model_config.response)
+            if self.model_config.response is not None
+            else None
+        )
         self.list_params = self.model_config.list_params
-        self.choices = self.model_config.choices
+        self.choices = (
+            list(self.model_config.choices)
+            if self.model_config.choices is not None
+            else None
+        )
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
@@ -532,14 +540,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A tuple containing all supported model names.
         """
         return get_args(SupportedModels)
-
-    @classmethod
-    def _store_init_args(cls, *args, **kwargs):
-        """Store initialization arguments using signature binding."""
-        sig = signature(cls.__init__)
-        bound_args = sig.bind(*args, **kwargs)
-        bound_args.apply_defaults()
-        return {k: v for k, v in bound_args.arguments.items() if k != "self"}
 
     def find_MAP(self, **kwargs):
         """Perform Maximum A Posteriori estimation.
