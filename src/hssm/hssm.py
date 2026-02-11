@@ -32,7 +32,7 @@ from pymc.model.transform.conditioning import do
 from ssms.config import model_config as ssms_model_config
 
 from hssm._types import LoglikKind, SupportedModels
-from hssm.data_validator import DataValidatorMixin
+from hssm.base import HSSMBase
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
     INITVAL_SETTINGS,
@@ -46,7 +46,6 @@ from hssm.distribution_utils import (
     make_likelihood_callable,
     make_missing_data_callable,
 )
-from hssm.missing_data_mixin import MissingDataMixin
 from hssm.utils import (
     _compute_log_likelihood,
     _get_alias_dict,
@@ -98,7 +97,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSM(DataValidatorMixin, MissingDataMixin):
+class HSSM(HSSMBase):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
