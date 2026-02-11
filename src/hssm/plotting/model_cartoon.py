@@ -1266,6 +1266,8 @@ def _add_trajectories(
 
     b_h_init = b_high[0]
     b_l_init = b_low[0]
+    # .item() extracts a Python scalar; required since NumPy >= 1.25 deprecated
+    # implicit ndim>0-to-scalar conversion inside int()/float().
     n_roll = int((sample[0]["metadata"]["t"][0] / delta_t_graph + 1).item())
     b_high = np.roll(b_high, n_roll)
     b_high[:n_roll] = b_h_init
@@ -1454,6 +1456,7 @@ def _add_model_cartoon_to_ax(
 
     # Push boundary forward to accomodate non-decision time
     # Initial boundary value applied from t = 0 to t = t_ndt
+    # .item(): NumPy >= 1.25 deprecated implicit ndim>0-to-scalar conversion.
     n_roll = int((sample["metadata"]["t"][0] / delta_t_graph + 1).item())
     b_high = np.roll(b_high, n_roll)
     b_high[:n_roll] = b_h_init
@@ -1974,6 +1977,7 @@ def _add_trajectories_n(
     # Make bounds
     b = np.maximum(sample[0]["metadata"]["boundary"], 0)
     b_init = b[0]
+    # .item(): NumPy >= 1.25 deprecated implicit ndim>0-to-scalar conversion.
     n_roll = int((sample[0]["metadata"]["t"][0] / delta_t_graph + 1).item())
     b = np.roll(b, n_roll)
     b[:n_roll] = b_init
@@ -2079,6 +2083,7 @@ def _add_model_n_cartoon_to_ax(
     """
     b = np.maximum(sample["metadata"]["boundary"], 0)
     b_init = b[0]
+    # .item(): NumPy >= 1.25 deprecated implicit ndim>0-to-scalar conversion.
     n_roll = int((sample["metadata"]["t"][0] / delta_t_graph + 1).item())
     b = np.roll(b, n_roll)
     b[:n_roll] = b_init

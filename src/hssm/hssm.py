@@ -465,7 +465,8 @@ class HSSM(DataValidatorMixin):
         )
 
         if self.deadline:
-            self.response.append(self.deadline_name)
+            # self.response is a tuple (from Config); use concatenation.
+            self.response = (*self.response, self.deadline_name)
 
         # Process lapse distribution
         self.has_lapse = p_outlier is not None and p_outlier != 0
@@ -574,7 +575,15 @@ class HSSM(DataValidatorMixin):
                     del dims_dict[det.name]
 
     def _validate_fixed_vectors(self) -> None:
-        """Validate that fixed-vector parameters have the correct length."""
+        """Validate that fixed-vector parameters have the correct length.
+
+        Fixed-vector parameters (``prior=np.ndarray``) bypass Bambi's formula
+        system entirely --- they are passed as a scalar ``0.0`` placeholder to
+        Bambi, and the real vector is substituted inside
+        ``HSSMDistribution.logp()`` (see ``dist.py``).  Because this
+        substitution is invisible to Bambi, we must validate the vector length
+        against ``len(self.data)`` up front to catch shape mismatches early.
+        """
         for name, param in self.params.items():
             if isinstance(param.prior, np.ndarray):
                 if len(param.prior) != len(self.data):
@@ -1285,6 +1294,7 @@ class HSSM(DataValidatorMixin):
         # mean prior here (which adds deterministics that
         # could be recomputed elsewhere)
         prior_predictive.add_groups(posterior=prior_predictive.prior)
+        # Bambi >= 0.17 renamed kind="mean" to kind="response_params".
         self.model.predict(prior_predictive, kind="response_params", inplace=True)
 
         # clean
@@ -2002,11 +2012,20 @@ class HSSM(DataValidatorMixin):
         if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
             return self.loglik
 
-        params_is_trialwise = [
+        # params_is_trialwise_base: one entry per model param (excluding
+        # p_outlier). Used for graph-level broadcasting in logp() and
+        # make_distribution, where dist_params does not include extra_fields.
+        params_is_trialwise_base = [
             param.is_trialwise
             for param_name, param in self.params.items()
             if param_name != "p_outlier"
         ]
+
+        # params_is_trialwise: extends the base list with extra_fields
+        # (always trialwise). Used for vmap construction in
+        # make_likelihood_callable and for assemble_callables, where
+        # dist_params includes extra_fields flattened in.
+        params_is_trialwise = list(params_is_trialwise_base)
         if self.extra_fields is not None:
             params_is_trialwise += [True for _ in self.extra_fields]
 
@@ -2066,6 +2085,7 @@ class HSSM(DataValidatorMixin):
                 self.loglik_missing_data,
                 params_only,
                 has_deadline=self.deadline,
+                params_is_trialwise=params_is_trialwise,
             )
 
         if self.missing_data:
@@ -2079,7 +2099,7 @@ class HSSM(DataValidatorMixin):
         self.data = _rearrange_data(self.data)
 
         # Collect fixed-vector params to substitute in the distribution logp
-        fixed_params = {
+        fixed_vector_params = {
             name: param.prior
             for name, param in self.params.items()
             if isinstance(param.prior, np.ndarray)
@@ -2096,7 +2116,8 @@ class HSSM(DataValidatorMixin):
                 if not self.extra_fields
                 else [deepcopy(self.data[field].values) for field in self.extra_fields]
             ),
-            fixed_params=fixed_params if fixed_params else None,
+            fixed_vector_params=fixed_vector_params if fixed_vector_params else None,
+            params_is_trialwise=params_is_trialwise_base,
         )
 
     def _get_deterministic_var_names(self, idata) -> list[str]:
