@@ -1753,7 +1753,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A dictionary containing the constructor arguments under the key
             'constructor_args'.
         """
-        new_instance = HSSMBase(**state["constructor_args"])
+        new_instance = self.__class__(**state["constructor_args"])
         self.__dict__ = new_instance.__dict__
 
     def __repr__(self) -> str:
