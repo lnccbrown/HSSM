@@ -32,6 +32,7 @@ dependencies = [
     "hddm-wfpt>=0.1.6",
     "huggingface-hub>=0.34.0",
     "jaxonnxruntime>=0.3.0",
+    "marimo>=0.18.3",
     "numpyro>=0.19",
     "onnx>=1.16.0",
     "pymc>=5.26.0",
