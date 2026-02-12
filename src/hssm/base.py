@@ -291,6 +291,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
+
+        # ===== init args for save/load models =====
+        self._init_args = {
+            k: v for k, v in locals().items() if k not in ["self", "kwargs"]
+        }
+        if kwargs:
+            self._init_args.update(kwargs)
+        # endregion
+
         # ===== Input Data & Configuration =====
         self.data = data.copy()
         self.global_formula = global_formula
