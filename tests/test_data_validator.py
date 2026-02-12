@@ -65,7 +65,7 @@ def test_constructor(base_data):
 
     assert isinstance(dv, DataValidatorMixin)
     assert dv.data.equals(_base_data())
-    assert dv.response == ["rt", "response"]
+    assert dv.response == ("rt", "response")
     assert dv.choices == [0, 1]
     assert dv.n_choices == 2
     assert dv.extra_fields == ["extra"]

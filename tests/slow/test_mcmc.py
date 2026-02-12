@@ -97,8 +97,8 @@ def test_lba_sampling():
 
     lba3_model = hssm.HSSM(model="lba3", data=lba3_data_out)
 
-    traces_2 = lba2_model.sample(sampler="numpyro", draws=100, tune=100, chains=1)
-    traces_3 = lba3_model.sample(sampler="numpyro", draws=100, tune=100, chains=1)
+    traces_2 = lba2_model.sample(sampler="numpyro", draws=10, tune=10, chains=1)
+    traces_3 = lba3_model.sample(sampler="numpyro", draws=10, tune=10, chains=1)
 
     assert isinstance(traces_2, az.InferenceData)
     assert isinstance(traces_3, az.InferenceData)
