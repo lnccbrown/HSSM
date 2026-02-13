@@ -1,6 +1,8 @@
+import numpy as np
 import pytest
 
 from hssm.modelconfig import get_default_model_config
+from hssm.modelconfig._softmax_inv_temperature import inv_softmax_temperature
 import hssm
 
 
@@ -108,3 +110,74 @@ def test_load_all_supported_model_configs(model):
 def test_get_default_model_config_invalid():
     with pytest.raises(ValueError):
         get_default_model_config("invalid_model")
+
+
+def test_get_inv_softmax_temperature_config_default():
+    """Test get_inv_softmax_temperature_config with default n_logits=2."""
+    config = inv_softmax_temperature()
+
+    assert config["response"] == ["response"]
+    assert config["choices"] == [-1, 1]
+    assert config["list_params"] == ["beta", "logit1"]
+    assert (
+        config["description"] == "The Inverse Softmax Temperature Model with 2 logits"
+    )
+
+    likelihoods = config["likelihoods"]
+    lk_analytical = likelihoods["analytical"]
+
+    assert lk_analytical["backend"] is None
+    assert lk_analytical["extra_fields"] is None
+
+    # Test bounds
+    assert lk_analytical["bounds"]["beta"] == (0.0, np.inf)
+    assert lk_analytical["bounds"]["logit1"] == (-np.inf, np.inf)
+
+    # Test default priors
+    assert lk_analytical["default_priors"]["beta"] == {
+        "name": "HalfNormal",
+        "mu": 0.0,
+        "sigma": 1.0,
+    }
+    assert lk_analytical["default_priors"]["logit1"] == {
+        "name": "Normal",
+        "mu": 0.0,
+        "sigma": 1.0,
+    }
+
+
+def test_get_inv_softmax_temperature_config_3_logits():
+    """Test get_inv_softmax_temperature_config with n_logits=3."""
+    config = inv_softmax_temperature(n_logits=3)
+
+    assert config["response"] == ["response"]
+    assert config["choices"] == [0, 1, 2]
+    assert config["list_params"] == ["beta", "logit1", "logit2"]
+    assert (
+        config["description"] == "The Inverse Softmax Temperature Model with 3 logits"
+    )
+
+    likelihoods = config["likelihoods"]
+    lk_analytical = likelihoods["analytical"]
+
+    # Test bounds
+    assert lk_analytical["bounds"]["beta"] == (0.0, np.inf)
+    assert lk_analytical["bounds"]["logit1"] == (-np.inf, np.inf)
+    assert lk_analytical["bounds"]["logit2"] == (-np.inf, np.inf)
+
+    # Test default priors
+    assert lk_analytical["default_priors"]["beta"] == {
+        "name": "HalfNormal",
+        "mu": 0.0,
+        "sigma": 1.0,
+    }
+    assert lk_analytical["default_priors"]["logit1"] == {
+        "name": "Normal",
+        "mu": 0.0,
+        "sigma": 1.0,
+    }
+    assert lk_analytical["default_priors"]["logit2"] == {
+        "name": "Normal",
+        "mu": 0.0,
+        "sigma": 1.0,
+    }
