@@ -114,8 +114,8 @@ def test_get_default_model_config_invalid():
         get_default_model_config("invalid_model")
 
 
-def test_inv_softmax_temperature_default():
-    """Test inv_softmax_temperature with default n_logits=2."""
+def test_softmax_inv_temperature_default():
+    """Test softmax_inv_temperature with default n_logits=2."""
     config = softmax_inv_temperature_config()
 
     assert config["response"] == ["response"]
@@ -148,8 +148,8 @@ def test_inv_softmax_temperature_default():
     }
 
 
-def test_inv_softmax_temperature_3_logits():
-    """Test inv_softmax_temperature with n_logits=3."""
+def test_softmax_inv_temperature_3_logits():
+    """Test softmax_inv_temperature with n_logits=3."""
     config = softmax_inv_temperature_config(n_logits=3)
 
     assert config["response"] == ["response"]
