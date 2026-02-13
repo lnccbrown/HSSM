@@ -2,7 +2,9 @@ import numpy as np
 import pytest
 
 from hssm.modelconfig import get_default_model_config
-from hssm.modelconfig._softmax_inv_temperature import inv_softmax_temperature
+from hssm.modelconfig._softmax_inv_temperature_config import (
+    softmax_inv_temperature_config,
+)
 import hssm
 
 
@@ -114,7 +116,7 @@ def test_get_default_model_config_invalid():
 
 def test_inv_softmax_temperature_default():
     """Test inv_softmax_temperature with default n_logits=2."""
-    config = inv_softmax_temperature()
+    config = softmax_inv_temperature_config()
 
     assert config["response"] == ["response"]
     assert config["choices"] == [-1, 1]
@@ -148,7 +150,7 @@ def test_inv_softmax_temperature_default():
 
 def test_inv_softmax_temperature_3_logits():
     """Test inv_softmax_temperature with n_logits=3."""
-    config = inv_softmax_temperature(n_logits=3)
+    config = softmax_inv_temperature_config(n_logits=3)
 
     assert config["response"] == ["response"]
     assert config["choices"] == [0, 1, 2]

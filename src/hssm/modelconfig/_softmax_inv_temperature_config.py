@@ -6,7 +6,7 @@ from .._types import DefaultConfig, ParamSpec
 from ..likelihoods.analytical import softmax_inv_temperature
 
 
-def inv_softmax_temperature(n_logits: int = 2) -> DefaultConfig:
+def softmax_inv_temperature_config(n_logits: int = 2) -> DefaultConfig:
     """
     Get the default config for the Inverse Softmax Temperature Model.
 
@@ -17,6 +17,9 @@ def inv_softmax_temperature(n_logits: int = 2) -> DefaultConfig:
         Inverse Softmax Temperature Model, including response variables, model
         parameters, choices, description, and likelihood specifications.
     """
+    if n_logits < 2:
+        raise ValueError("n_logits must be at least 2.")
+
     bounds = {"beta": (0.0, np.inf)}
     bounds.update({f"logit{i}": (-np.inf, np.inf) for i in range(1, n_logits)})
     default_priors: dict[str, ParamSpec] = {
