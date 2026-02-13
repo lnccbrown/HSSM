@@ -326,8 +326,8 @@ class RLSSMConfig(BaseModelConfig):
                 raise ValueError(f"{field_name} must be provided in config_dict")
 
         return cls(
-            model_name=model_name,
-            description=config_dict.get("description"),
+            model_name=config_dict.get("model_name", model_name),
+            description=config_dict["description"],
             list_params=config_dict["list_params"],
             extra_fields=config_dict.get("extra_fields"),
             params_default=config_dict["params_default"],
