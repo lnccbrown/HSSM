@@ -397,7 +397,7 @@ class HSSM(DataValidatorMixin):
         self.model_config.validate()
 
         # Set up shortcuts so old code will work
-        self.response = self.model_config.response
+        self.response = self.model_config.response[:]
         self.list_params = self.model_config.list_params
         self.choices = self.model_config.choices
         self.model_name = self.model_config.model_name
@@ -405,10 +405,8 @@ class HSSM(DataValidatorMixin):
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
 
-        # Has to identify choice-only model this way because self.response
-        # may be modified later to include deadline column.
         self.response = cast("list[str]", self.response)
-        self.is_choice_only: bool = len(self.response) == 1
+        self.is_choice_only: bool = self.model_config.is_choice_only
 
         if self.choices is None:
             raise ValueError(
