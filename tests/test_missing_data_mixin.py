@@ -50,7 +50,7 @@ def model(request):
 # endregion
 
 
-class TestMissingDataMixinOld:
+class TestProcessMissingDataAndDeadline:
     @pytest.mark.parametrize(
         "model, deadline",
         [
