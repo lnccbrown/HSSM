@@ -85,4 +85,8 @@ explorations/
 *.nbconvert.ipynb
 pypi-token
 pre-commit
+
+# AI slops
 .github/copilot-instructions.md
+CLAUDE.md
+.claude/
