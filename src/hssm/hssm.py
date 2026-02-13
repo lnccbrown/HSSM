@@ -466,7 +466,7 @@ class HSSM(DataValidatorMixin):
 
         if self.deadline:
             # self.response is a tuple (from Config); use concatenation.
-            self.response = (*self.response, self.deadline_name)
+            self.response.append(self.deadline_name)
 
         # Process lapse distribution
         self.has_lapse = p_outlier is not None and p_outlier != 0
