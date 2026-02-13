@@ -339,11 +339,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else None
         )
         self.list_params = self.model_config.list_params
-        self.choices = (
-            list(self.model_config.choices)
-            if self.model_config.choices is not None
-            else None
-        )
+        self.choices = list(self.model_config.choices)
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
