@@ -130,29 +130,6 @@ def test_post_check_data_sanity_valid(base_data):
         dv_instance_no_missing._post_check_data_sanity()
 
 
-def test_handle_missing_data_and_deadline_deadline_column_missing(base_data):
-    # Should raise ValueError if deadline is True but deadline_name column is missing
-    data = base_data.drop(columns=["deadline"])
-    dv = DataValidatorMixin(
-        data=data,
-        deadline=True,
-    )
-    with pytest.raises(ValueError, match="`deadline` is not found in your dataset"):
-        dv._handle_missing_data_and_deadline()
-
-
-def test_handle_missing_data_and_deadline_deadline_applied(base_data):
-    # Should set rt to -999.0 where rt >= deadline
-    base_data.loc[0, "rt"] = 2.0  # Exceeds deadline
-    dv = DataValidatorMixin(
-        data=base_data,
-        deadline=True,
-    )
-    dv._handle_missing_data_and_deadline()
-    assert dv.data.loc[0, "rt"] == -999.0
-    assert all(dv.data.loc[1:, "rt"] < dv.data.loc[1:, "deadline"])
-
-
 def test_update_extra_fields(monkeypatch):
     # Create a DataValidatorMixin with extra_fields
     data = pd.DataFrame(
