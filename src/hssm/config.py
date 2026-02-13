@@ -53,9 +53,7 @@ class BaseModelConfig(ABC):
     description: str | None = None
 
     # Data specification
-    response: list[str] | None = field(
-        default_factory=lambda: DEFAULT_SSM_OBSERVED_DATA.copy()
-    )
+    response: list[str] | None = field(default_factory=DEFAULT_SSM_OBSERVED_DATA.copy)
     choices: tuple[int, ...] | None = DEFAULT_SSM_CHOICES
 
     # Parameter specification
