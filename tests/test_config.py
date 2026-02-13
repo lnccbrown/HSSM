@@ -12,7 +12,7 @@ def test_from_defaults():
     config1 = Config.from_defaults("ddm", "analytical")
 
     assert config1.model_name == "ddm"
-    assert config1.response == ("rt", "response")
+    assert config1.response == ["rt", "response"]
     assert config1.list_params == ["v", "a", "z", "t"]
     assert config1.loglik_kind == "analytical"
     assert config1.loglik is not None
