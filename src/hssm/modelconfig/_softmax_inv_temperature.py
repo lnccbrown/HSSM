@@ -6,16 +6,16 @@ from .._types import DefaultConfig, ParamSpec
 from ..likelihoods.analytical import softmax_inv_temperature
 
 
-def get_inv_softmax_temperature_config(n_logits: int = 2) -> DefaultConfig:
+def inv_softmax_temperature(n_logits: int = 2) -> DefaultConfig:
     """
-    Get the default config for the Inverse Softmax Temperature Model with 2 logits.
+    Get the default config for the Inverse Softmax Temperature Model.
 
     Returns
     -------
     DefaultConfig
-        A dictionary containing the default configuration settings for the DDM,
-        including response variables, model parameters, choices, description,
-        and likelihood specifications.
+        A dictionary containing the default configuration settings for the
+        Inverse Softmax Temperature Model, including response variables, model
+        parameters, choices, description, and likelihood specifications.
     """
     bounds = {"beta": (0.0, np.inf)}
     bounds.update({f"logit{i}": (-np.inf, np.inf) for i in range(1, n_logits)})
@@ -33,7 +33,7 @@ def get_inv_softmax_temperature_config(n_logits: int = 2) -> DefaultConfig:
         "response": ["response"],
         "list_params": ["beta"] + [f"logit{i}" for i in range(1, n_logits)],
         "choices": [-1, 1] if n_logits == 2 else list(range(n_logits)),
-        "description": "The Inverse Softmax Temperature Model",
+        "description": f"The Inverse Softmax Temperature Model with {n_logits} logits",
         "likelihoods": {
             "analytical": {
                 "loglik": softmax_inv_temperature,
