@@ -31,7 +31,6 @@ RLSSM_REQUIRED_FIELDS = (
     "list_params",
     "bounds",
     "params_default",
-    "data",
     "choices",
     "decision_process",
     "learning_process",
