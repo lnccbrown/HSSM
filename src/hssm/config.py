@@ -21,8 +21,8 @@ if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
 
 # ====== Centralized RLSSM defaults =====
-DEFAULT_SSM_OBSERVED_DATA = ("rt", "response")
-DEFAULT_RLSSM_OBSERVED_DATA = ("rt", "response")
+DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
+DEFAULT_RLSSM_OBSERVED_DATA = ["rt", "response"]
 DEFAULT_SSM_CHOICES = (0, 1)
 
 RLSSM_REQUIRED_FIELDS = (
@@ -52,7 +52,7 @@ class BaseModelConfig(ABC):
     description: str | None = None
 
     # Data specification
-    response: tuple[str, ...] | None = DEFAULT_SSM_OBSERVED_DATA
+    response: list[str] | None = field(default_factory=DEFAULT_SSM_OBSERVED_DATA.copy)
     choices: tuple[int, ...] | None = DEFAULT_SSM_CHOICES
 
     # Parameter specification
@@ -132,7 +132,7 @@ class Config(BaseModelConfig):
                     return Config(
                         model_name=model_name,
                         loglik_kind=kind,
-                        response=tuple(default_config["response"]),
+                        response=list(default_config["response"]),
                         choices=tuple(default_config["choices"]),
                         list_params=default_config["list_params"],
                         description=default_config["description"],
@@ -160,7 +160,7 @@ class Config(BaseModelConfig):
                     return Config(
                         model_name=model_name,
                         loglik_kind=loglik_kind,
-                        response=tuple(default_config["response"]),
+                        response=list(default_config["response"]),
                         choices=tuple(default_config["choices"]),
                         list_params=default_config["list_params"],
                         description=default_config["description"],
@@ -169,7 +169,7 @@ class Config(BaseModelConfig):
                 return Config(
                     model_name=model_name,
                     loglik_kind=loglik_kind,
-                    response=tuple(default_config["response"]),
+                    response=list(default_config["response"]),
                     choices=tuple(default_config["choices"]),
                     list_params=default_config["list_params"],
                     description=default_config["description"],

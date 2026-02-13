@@ -49,8 +49,8 @@ class RegressionParam(Param):
         Whether the parameter is a regression.
     is_fixed
         Whether the parameter is fixed.
-    is_vector
-        Whether the parameter is a vector parameter.
+    is_trialwise
+        Whether the parameter varies across observations.
     is_parent
         Whether the parameter is a parent parameter.
 
