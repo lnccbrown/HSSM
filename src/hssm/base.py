@@ -333,7 +333,7 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
         # region ===== Set up shortcuts so old code will work ======
         self.response = self.model_config.response
         self.list_params = self.model_config.list_params
-        self.choices = self.model_config.choices
+        self.choices = list(self.model_config.choices)
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
