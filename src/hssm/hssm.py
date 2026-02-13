@@ -335,7 +335,7 @@ class HSSM(DataValidatorMixin):
             if isinstance(model_config, dict):
                 if "choices" not in model_config:
                     if choices is not None:
-                        model_config["choices"] = choices
+                        model_config["choices"] = tuple(choices)
                 else:
                     if choices is not None:
                         _logger.info(
@@ -347,7 +347,7 @@ class HSSM(DataValidatorMixin):
             elif isinstance(model_config, ModelConfig):
                 if model_config.choices is None:
                     if choices is not None:
-                        model_config.choices = choices
+                        model_config.choices = tuple(choices)
                 else:
                     if choices is not None:
                         _logger.info(
@@ -414,6 +414,8 @@ class HSSM(DataValidatorMixin):
             )
 
         self.n_choices = len(self.choices)
+
+        self._validate_choices()
         self._pre_check_data_sanity()
 
         # Process missing data setting
@@ -472,6 +474,7 @@ class HSSM(DataValidatorMixin):
         )
 
         if self.deadline:
+            # self.response is a tuple (from Config); use concatenation.
             self.response.append(self.deadline_name)
 
         # Process lapse distribution
@@ -491,6 +494,7 @@ class HSSM(DataValidatorMixin):
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
+        self._validate_fixed_vectors()
         self.formula, self.priors, self.link = self.params.parse_bambi(model=self)
 
         # For parameters that have a regression backend, apply bounds at the likelihood
@@ -532,6 +536,13 @@ class HSSM(DataValidatorMixin):
         self.set_alias(self._aliases)
         self.model.build()
 
+        # Bambi >= 0.17 declares dims=("__obs__",) for intercept-only
+        # deterministics that actually have shape (1,). This causes an
+        # xarray CoordinateValidationError during pm.sample() when ArviZ
+        # tries to create a DataArray with mismatched dimension sizes.
+        # Fix by removing the dims declaration for these deterministics.
+        self._fix_scalar_deterministic_dims()
+
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
         if self.initval_jitter > 0:
@@ -546,6 +557,49 @@ class HSSM(DataValidatorMixin):
             {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
         )
         _logger.info("Model initialized successfully.")
+
+    def _fix_scalar_deterministic_dims(self) -> None:
+        """Fix dims metadata for scalar deterministics.
+
+        Bambi >= 0.17 returns shape ``(1,)`` for intercept-only
+        deterministics but still declares ``dims=("__obs__",)``. This causes
+        an xarray ``CoordinateValidationError`` during ``pm.sample()`` because
+        the ``__obs__`` coordinate has ``n_obs`` entries. Removing the dims
+        declaration for these variables lets ArviZ handle them as
+        un-dimensioned arrays, avoiding the conflict.
+        """
+        n_obs = len(self.data)
+        dims_dict = self.pymc_model.named_vars_to_dims
+        for det in self.pymc_model.deterministics:
+            if det.name not in dims_dict:
+                continue
+            dims = dims_dict[det.name]
+            if "__obs__" in dims:
+                # Check static shape: if it doesn't match n_obs, remove dims
+                try:
+                    shape_0 = det.type.shape[0]
+                except (IndexError, TypeError):
+                    continue
+                if shape_0 is not None and shape_0 != n_obs:
+                    del dims_dict[det.name]
+
+    def _validate_fixed_vectors(self) -> None:
+        """Validate that fixed-vector parameters have the correct length.
+
+        Fixed-vector parameters (``prior=np.ndarray``) bypass Bambi's formula
+        system entirely --- they are passed as a scalar ``0.0`` placeholder to
+        Bambi, and the real vector is substituted inside
+        ``HSSMDistribution.logp()`` (see ``dist.py``).  Because this
+        substitution is invisible to Bambi, we must validate the vector length
+        against ``len(self.data)`` up front to catch shape mismatches early.
+        """
+        for name, param in self.params.items():
+            if isinstance(param.prior, np.ndarray):
+                if len(param.prior) != len(self.data):
+                    raise ValueError(
+                        f"Fixed vector for parameter '{name}' has length "
+                        f"{len(param.prior)}, but data has {len(self.data)} rows."
+                    )
 
     @classproperty
     def supported_models(cls) -> tuple[SupportedModels, ...]:
@@ -608,7 +662,7 @@ class HSSM(DataValidatorMixin):
             Pass initial values to the sampler. This can be a dictionary of initial
             values for parameters of the model, or a string "map" to use initialization
             at the MAP estimate. If "map" is used, the MAP estimate will be computed if
-            not already attached to the base class from prior call to 'find_MAP`.
+            not already attached to the base class from prior call to 'find_MAP'.
         include_response_params: optional
             Include parameters of the response distribution in the output. These usually
             take more space than other parameters as there's one of them per
@@ -1249,7 +1303,8 @@ class HSSM(DataValidatorMixin):
         # mean prior here (which adds deterministics that
         # could be recomputed elsewhere)
         prior_predictive.add_groups(posterior=prior_predictive.prior)
-        self.model.predict(prior_predictive, kind="mean", inplace=True)
+        # Bambi >= 0.17 renamed kind="mean" to kind="response_params".
+        self.model.predict(prior_predictive, kind="response_params", inplace=True)
 
         # clean
         setattr(prior_predictive, "prior", prior_predictive["posterior"])
@@ -1972,13 +2027,22 @@ class HSSM(DataValidatorMixin):
         if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
             return self.loglik
 
-        params_is_reg = [
-            param.is_vector
+        # params_is_trialwise_base: one entry per model param (excluding
+        # p_outlier). Used for graph-level broadcasting in logp() and
+        # make_distribution, where dist_params does not include extra_fields.
+        params_is_trialwise_base = [
+            param.is_trialwise
             for param_name, param in self.params.items()
             if param_name != "p_outlier"
         ]
+
+        # params_is_trialwise: extends the base list with extra_fields
+        # (always trialwise). Used for vmap construction in
+        # make_likelihood_callable and for assemble_callables, where
+        # dist_params includes extra_fields flattened in.
+        params_is_trialwise = list(params_is_trialwise_base)
         if self.extra_fields is not None:
-            params_is_reg += [True for _ in self.extra_fields]
+            params_is_trialwise += [True for _ in self.extra_fields]
 
         if self.loglik_kind == "approx_differentiable":
             if self.model_config.backend == "jax":
@@ -1986,7 +2050,7 @@ class HSSM(DataValidatorMixin):
                     loglik=self.loglik,
                     loglik_kind="approx_differentiable",
                     backend="jax",
-                    params_is_reg=params_is_reg,
+                    params_is_reg=params_is_trialwise,
                 )
             else:
                 likelihood_callable = make_likelihood_callable(
@@ -2026,7 +2090,7 @@ class HSSM(DataValidatorMixin):
                 else self.model_config.backend
             )
             missing_data_callable = make_missing_data_callable(
-                self.loglik_missing_data, backend_tmp, params_is_reg, params_only
+                self.loglik_missing_data, backend_tmp, params_is_trialwise, params_only
             )
 
             self.loglik_missing_data = missing_data_callable
@@ -2036,6 +2100,7 @@ class HSSM(DataValidatorMixin):
                 self.loglik_missing_data,
                 params_only,
                 has_deadline=self.deadline,
+                params_is_trialwise=params_is_trialwise,
             )
 
         if self.missing_data:
@@ -2072,6 +2137,14 @@ class HSSM(DataValidatorMixin):
             )
 
         self.data = _rearrange_data(self.data)
+
+        # Collect fixed-vector params to substitute in the distribution logp
+        fixed_vector_params = {
+            name: param.prior
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        }
+
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
             loglik=self.loglik,
@@ -2083,6 +2156,8 @@ class HSSM(DataValidatorMixin):
                 if not self.extra_fields
                 else [deepcopy(self.data[field].values) for field in self.extra_fields]
             ),
+            fixed_vector_params=fixed_vector_params if fixed_vector_params else None,
+            params_is_trialwise=params_is_trialwise_base,
         )
 
     def _get_deterministic_var_names(self, idata) -> list[str]:

@@ -8,7 +8,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
-import bambi as bmb
+from bambi import Prior
 
 from ._types import LogLik, LoglikKind, SupportedModels
 from .defaults import (
@@ -20,8 +20,28 @@ from .register import register_model
 if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
 
+# ====== Centralized RLSSM defaults =====
+DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
+DEFAULT_RLSSM_OBSERVED_DATA = ["rt", "response"]
+DEFAULT_SSM_CHOICES = (0, 1)
 
-ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
+RLSSM_REQUIRED_FIELDS = (
+    "model_name",
+    "description",
+    "list_params",
+    "bounds",
+    "params_default",
+    "data",
+    "choices",
+    "decision_process",
+    "learning_process",
+    "response",
+    "decision_process_loglik_kind",
+    "learning_process_loglik_kind",
+    "extra_fields",
+)
+
+ParamSpec = Union[float, dict[str, Any], Prior, None]
 
 
 @dataclass
@@ -33,8 +53,8 @@ class BaseModelConfig(ABC):
     description: str | None = None
 
     # Data specification
-    response: list[str] | None = None
-    choices: list[int] | None = None
+    response: list[str] | None = field(default_factory=DEFAULT_SSM_OBSERVED_DATA.copy)
+    choices: tuple[int, ...] | None = DEFAULT_SSM_CHOICES
 
     # Parameter specification
     list_params: list[str] | None = None
@@ -42,6 +62,7 @@ class BaseModelConfig(ABC):
 
     # Likelihood configuration
     loglik: LogLik | None = None
+    loglik_kind: LoglikKind | None = None
     backend: Literal["jax", "pytensor"] | None = None
 
     # Additional data requirements
@@ -62,7 +83,6 @@ class BaseModelConfig(ABC):
 class Config(BaseModelConfig):
     """Config class that stores the configurations for models."""
 
-    loglik_kind: LoglikKind = field(default=None)  # type: ignore
     rv: RandomVariable | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
@@ -113,8 +133,8 @@ class Config(BaseModelConfig):
                     return Config(
                         model_name=model_name,
                         loglik_kind=kind,
-                        response=default_config["response"],
-                        choices=default_config["choices"],
+                        response=list(default_config["response"]),
+                        choices=tuple(default_config["choices"]),
                         list_params=default_config["list_params"],
                         description=default_config["description"],
                         **loglik_config,
@@ -141,8 +161,8 @@ class Config(BaseModelConfig):
                     return Config(
                         model_name=model_name,
                         loglik_kind=loglik_kind,
-                        response=default_config["response"],
-                        choices=default_config["choices"],
+                        response=list(default_config["response"]),
+                        choices=tuple(default_config["choices"]),
                         list_params=default_config["list_params"],
                         description=default_config["description"],
                         **loglik_config,
@@ -150,8 +170,8 @@ class Config(BaseModelConfig):
                 return Config(
                     model_name=model_name,
                     loglik_kind=loglik_kind,
-                    response=default_config["response"],
-                    choices=default_config["choices"],
+                    response=list(default_config["response"]),
+                    choices=tuple(default_config["choices"]),
                     list_params=default_config["list_params"],
                     description=default_config["description"],
                 )
@@ -159,7 +179,7 @@ class Config(BaseModelConfig):
             return Config(
                 model_name=model_name,
                 loglik_kind=loglik_kind,
-                response=["rt", "response"],
+                response=DEFAULT_RLSSM_OBSERVED_DATA,
             )
 
     def update_loglik(self, loglik: Any | None) -> None:
@@ -175,13 +195,13 @@ class Config(BaseModelConfig):
 
         self.loglik = loglik
 
-    def update_choices(self, choices: list[int] | None) -> None:
+    def update_choices(self, choices: tuple[int, ...] | None) -> None:
         """Update the choices from user input.
 
         Parameters
         ----------
-        choices : list[int]
-            A list of choices.
+        choices : tuple[int, ...]
+            A tuple of choices.
         """
         if choices is None:
             return
@@ -218,11 +238,11 @@ class Config(BaseModelConfig):
     def validate(self) -> None:
         """Ensure that mandatory fields are not None."""
         if self.response is None:
-            raise ValueError("Please provide `response` via `model_config`.")
+            raise ValueError("Please provide `response` columns in the configuration.")
         if self.list_params is None:
-            raise ValueError("Please provide `list_params` via `model_config`.")
+            raise ValueError("Please provide `list_params`.")
         if self.choices is None:
-            raise ValueError("Please provide `choices` via `model_config`.")
+            raise ValueError("Please provide `choices`.")
         if self.loglik is None:
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
@@ -249,12 +269,198 @@ class Config(BaseModelConfig):
 
 
 @dataclass
+class RLSSMConfig(BaseModelConfig):
+    """Config for reinforcement learning + sequential sampling models.
+
+    This configuration class is designed for models that combine reinforcement
+    learning processes with sequential sampling decision models (RLSSM).
+    """
+
+    decision_process_loglik_kind: str = field(kw_only=True)
+    learning_process_loglik_kind: str = field(kw_only=True)
+    params_default: list[float] = field(kw_only=True)
+    decision_process: str | ModelConfig = field(kw_only=True)
+    learning_process: dict[str, Any] = field(kw_only=True)
+
+    def __post_init__(self):
+        """Set default loglik_kind for RLSSM models if not provided."""
+        if self.loglik_kind is None:
+            self.loglik_kind = "approx_differentiable"
+
+    @property
+    def n_params(self) -> int | None:
+        """Return the number of parameters."""
+        return len(self.list_params) if self.list_params else None
+
+    @property
+    def n_extra_fields(self) -> int | None:
+        """Return the number of extra fields."""
+        return len(self.extra_fields) if self.extra_fields else None
+
+    @classmethod
+    def from_rlssm_dict(cls, model_name: str, config_dict: dict[str, Any]):
+        """
+        Create RLSSMConfig from a configuration dictionary.
+
+        Parameters
+        ----------
+        model_name : str
+            The name of the RLSSM model.
+        config_dict : dict[str, Any]
+            Dictionary containing model configuration. Expected keys:
+                - description: Model description (optional)
+                - list_params: List of parameter names (required)
+                - extra_fields: List of extra field names from data (required)
+                - params_default: Default parameter values (required)
+                - bounds: Parameter bounds (required)
+                - response: Response column names (required)
+                - choices: Valid choice values (required)
+                - decision_process: Decision process specification (required)
+                - learning_process: Learning process functions (required)
+                - decision_process_loglik_kind: Likelihood kind for decision process
+                  (required)
+                - learning_process_loglik_kind: Likelihood kind for learning process
+                  (required)
+
+        Returns
+        -------
+        RLSSMConfig
+            Configured RLSSM model configuration object.
+        """
+        # Check for required fields and raise explicit errors if missing
+        for field_name in RLSSM_REQUIRED_FIELDS:
+            if field_name not in config_dict or config_dict[field_name] is None:
+                raise ValueError(f"{field_name} must be provided in config_dict")
+
+        return cls(
+            model_name=model_name,
+            description=config_dict.get("description"),
+            list_params=config_dict["list_params"],
+            extra_fields=config_dict.get("extra_fields"),
+            params_default=config_dict["params_default"],
+            decision_process=config_dict["decision_process"],
+            learning_process=config_dict["learning_process"],
+            bounds=config_dict.get("bounds", {}),
+            response=config_dict["response"],
+            choices=config_dict["choices"],
+            decision_process_loglik_kind=config_dict["decision_process_loglik_kind"],
+            learning_process_loglik_kind=config_dict["learning_process_loglik_kind"],
+        )
+
+    def validate(self) -> None:
+        """Validate RLSSM configuration.
+
+        Raises
+        ------
+        ValueError
+            If required fields are missing or inconsistent.
+        """
+        if self.response is None:
+            raise ValueError("Please provide `response` columns in the configuration.")
+        if self.list_params is None:
+            raise ValueError("Please provide `list_params` in the configuration.")
+        if self.choices is None:
+            raise ValueError("Please provide `choices` in the configuration.")
+        if self.decision_process is None:
+            raise ValueError("Please specify a `decision_process`.")
+
+        # Validate parameter defaults consistency
+        if self.params_default and self.list_params:
+            if len(self.params_default) != len(self.list_params):
+                raise ValueError(
+                    f"params_default length ({len(self.params_default)}) doesn't "
+                    f"match list_params length ({len(self.list_params)})"
+                )
+
+    def get_defaults(
+        self, param: str
+    ) -> tuple[float | None, tuple[float, float] | None]:
+        """Return default value and bounds for a parameter.
+
+        Parameters
+        ----------
+        param
+            The name of the parameter.
+
+        Returns
+        -------
+        tuple
+            A tuple of (default_value, bounds) where:
+            - default_value is a float or None if not found
+            - bounds is a tuple (lower, upper) or None if not found
+        """
+        # Try to find the parameter in list_params and get its default value
+        default_val = None
+        if self.list_params is not None:
+            try:
+                param_idx = self.list_params.index(param)
+                if self.params_default and param_idx < len(self.params_default):
+                    default_val = self.params_default[param_idx]
+            except ValueError:
+                # Parameter not in list_params
+                pass
+
+        return default_val, self.bounds.get(param)
+
+    def to_config(self) -> Config:
+        """Convert to standard Config for compatibility with HSSM.
+
+        This method transforms the RLSSM configuration into a standard Config
+        object that can be used with the existing HSSM infrastructure.
+
+        Returns
+        -------
+        Config
+            A Config object with RLSSM parameters mapped to standard format.
+
+        Notes
+        -----
+        The transformation converts params_default list to default_priors dict,
+        mapping parameter names to their default values.
+        """
+        # Validate parameter defaults consistency before conversion
+        if self.params_default and self.list_params:
+            if len(self.params_default) != len(self.list_params):
+                raise ValueError(
+                    f"params_default length ({len(self.params_default)}) doesn't "
+                    f"match list_params length ({len(self.list_params)}). "
+                    "This would result in silent data loss during conversion."
+                )
+
+        # Transform params_default list to default_priors dict
+        default_priors = (
+            {
+                param: default
+                for param, default in zip(self.list_params, self.params_default)
+            }
+            if self.list_params and self.params_default
+            else {}
+        )
+
+        return Config(
+            model_name=self.model_name,
+            loglik_kind=self.loglik_kind,
+            response=self.response,
+            choices=self.choices,
+            list_params=self.list_params,
+            description=self.description,
+            bounds=self.bounds,
+            default_priors=cast(
+                "dict[str, float | dict[str, Any] | Any | None]", default_priors
+            ),
+            extra_fields=self.extra_fields,
+            backend=self.backend or "jax",  # RLSSM typically uses JAX
+            loglik=self.loglik,
+        )
+
+
+@dataclass
 class ModelConfig:
     """Representation for model_config provided by the user."""
 
     response: list[str] | None = None
     list_params: list[str] | None = None
-    choices: list[int] | None = None
+    choices: tuple[int, ...] | None = None
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     backend: Literal["jax", "pytensor"] | None = None

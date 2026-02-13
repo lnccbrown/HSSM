@@ -395,6 +395,8 @@ def make_distribution(
     bounds: dict | None = None,
     lapse: bmb.Prior | None = None,
     extra_fields: list[np.ndarray] | None = None,
+    fixed_vector_params: dict[str, np.ndarray] | None = None,
+    params_is_trialwise: list[bool] | None = None,
 ) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -428,6 +430,21 @@ def make_distribution(
     extra_fields : optional
         An optional list of arrays that are stored in the class created and will be
         used in likelihood calculation. Defaults to None.
+    fixed_vector_params : optional
+        A dictionary mapping parameter names to their fixed ``np.ndarray``
+        values.  These parameters are removed from Bayesian estimation:
+        Bambi receives a scalar ``0.0`` placeholder, and the real vector is
+        injected as a constant PyTensor tensor inside
+        ``HSSMDistribution.logp()``, replacing the placeholder at the
+        correct position in ``dist_params``.  Defaults to ``None``
+        (no fixed-vector parameters).
+    params_is_trialwise : optional
+        A list of booleans, one per parameter in ``list_params`` (plus extra
+        fields), indicating whether each parameter is trial-wise (i.e. should
+        be broadcast to ``(n_obs,)`` in the symbolic graph).  This ensures
+        that vmapped JAX log-likelihoods receive consistently shaped inputs,
+        regardless of whether Bambi produces ``(1,)`` or ``(n_obs,)`` tensors.
+        When ``None``, no graph-level broadcasting is applied.
 
     Returns
     -------
@@ -458,6 +475,15 @@ def make_distribution(
     # random_variable = make_ssm_rv(rv, list_params, lapse)
     # if isinstance(rv, str) else rv
     extra_fields = [] if extra_fields is None else extra_fields
+
+    # Pre-build PyTensor tensors for fixed-vector params. These replace the
+    # scalar constants that Bambi provides, at the correct positions in the
+    # dist_params list inside logp().
+    _fixed_vector_substitutions: dict[int, pt.TensorVariable] = {}
+    if fixed_vector_params:
+        for name, vector in fixed_vector_params.items():
+            idx = list_params.index(name)
+            _fixed_vector_substitutions[idx] = pt.as_tensor_variable(pm.floatX(vector))
 
     if lapse is not None:
         if list_params[-1] != "p_outlier":
@@ -508,11 +534,36 @@ def make_distribution(
             tensor
                 Log probability
             """
-            # AF-TODO: Apply clipping here
+            # Substitute fixed-vector params for Bambi's scalar constants
+            if _fixed_vector_substitutions:
+                dist_params = tuple(
+                    _fixed_vector_substitutions.get(i, p)
+                    for i, p in enumerate(dist_params)
+                )
+
+            # Extract p_outlier before broadcasting (params_is_trialwise
+            # excludes p_outlier, so we must strip it first to align indices).
+            p_outlier = None
             if list_params[-1] == "p_outlier":
                 p_outlier = dist_params[-1]
                 dist_params = dist_params[:-1]
 
+            # Graph-level broadcast: ensure trialwise params have shape
+            # (n_obs,).  Bambi >= 0.17 produces (1,)-shaped tensors for
+            # intercept-only parent parameters.  The vmapped JAX
+            # log-likelihoods require all mapped inputs to share the same
+            # batch dimension.  Broadcasting here — in the symbolic graph
+            # — lets PyTensor handle gradient reduction for broadcast
+            # dimensions automatically, keeping the JAX Ops simple.
+            if params_is_trialwise is not None:
+                n_obs = data.shape[0]
+                dist_params = tuple(
+                    pt.broadcast_to(p, (n_obs,)) if params_is_trialwise[i] else p
+                    for i, p in enumerate(dist_params)
+                )
+
+            # AF-TODO: Apply clipping here
+            if p_outlier is not None:
                 if not callable(lapse_func):
                     raise ValueError(
                         "lapse_func is not defined. "
@@ -705,11 +756,12 @@ def make_likelihood_callable(
                         + "and `backend` to `jax` and supplied a jax callable, "
                         + "but did not set `params_is_reg`."
                     )
+                _params_only = False if params_only is None else params_only
                 logp_funcs = make_jax_logp_funcs_from_callable(
                     cast("Callable[..., Any]", loglik),
                     vmap=True,
                     params_is_reg=params_is_reg,
-                    params_only=False if params_only is None else params_only,
+                    params_only=_params_only,
                 )
                 lan_logp_jax = make_jax_logp_ops(*logp_funcs)
                 return lan_logp_jax
@@ -742,10 +794,11 @@ def make_likelihood_callable(
                 + "and `backend` to `jax` but did not provide `params_is_reg`."
             )
 
+        _params_only = False if params_only is None else params_only
         logp, logp_grad, logp_nojit = make_jax_logp_funcs_from_onnx(
             onnx_model,
             params_is_reg,
-            params_only=False if params_only is None else params_only,
+            params_only=_params_only,
         )
 
         lan_logp_jax = make_jax_logp_ops(logp, logp_grad, logp_nojit)
@@ -794,6 +847,7 @@ def assemble_callables(
     missing_data_callable: pytensor.graph.Op | Callable,
     params_only: bool | None,
     has_deadline: bool,
+    params_is_trialwise: list[bool] | None = None,
 ) -> Callable:
     """Assemble the likelihood callables into a single callable.
 
@@ -807,6 +861,12 @@ def assemble_callables(
         Whether the missing data likelihood is takes its first argument as the data.
     has_deadline
         Whether the model has a deadline.
+    params_is_trialwise : optional
+        A list of booleans, one per entry in ``dist_params`` (model params +
+        extra fields, excluding p_outlier), indicating whether each input is
+        trial-wise.  Trialwise inputs are broadcast to ``(n_obs,)`` after
+        squeezing; non-trialwise inputs are simply squeezed to scalars.
+        When ``None``, all inputs are squeezed without broadcasting.
     """
 
     def likelihood_callable(data, *dist_params):
@@ -814,11 +874,27 @@ def assemble_callables(
         # Assuming the first column of the data is always rt
         data = pt.as_tensor_variable(data)
 
-        # New in PyMC 5.16+: PyMC uses the signature of the RandomVariable to determine
-        # the dimensions of the inputs to the likelihood function. It automatically adds
-        # one additional dimension to our input variable if it is a scalar. We need to
-        # squeeze this dimension out.
-        dist_params = [pt.squeeze(param) for param in dist_params]
+        # New in PyMC 5.16+: PyMC uses the signature of the RandomVariable to
+        # determine the dimensions of the inputs to the likelihood function.
+        # It automatically adds one additional dimension to our input variable
+        # if it is a scalar. We need to squeeze this dimension out.
+        #
+        # For trialwise params we additionally broadcast to (n_obs,) so that
+        # the vmapped JAX Ops always receive consistently sized arrays on
+        # mapped axes. This also handles Bambi >= 0.17 intercept-only (1,)
+        # shapes and the missing-data path where pt.squeeze can produce ()
+        # scalars. Broadcasting in the symbolic graph lets PyTensor handle
+        # gradient reduction automatically.
+        n_obs = data.shape[0]
+        if params_is_trialwise is not None:
+            dist_params = [
+                pt.broadcast_to(pt.squeeze(param), (n_obs,))
+                if params_is_trialwise[i]
+                else pt.squeeze(param)
+                for i, param in enumerate(dist_params)
+            ]
+        else:
+            dist_params = [pt.squeeze(param) for param in dist_params]
 
         # AF-TODO: This part actually overrides what
         #          is treated as missing to always be -999.0

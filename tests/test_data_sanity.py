@@ -70,7 +70,7 @@ def test_missing_responses(data_ddm, caplog):
 
     with pytest.warns(
         UserWarning,
-        match=r"You set choices to be \[-1, 1\], but \[-1\] are missing from your dataset\.",
+        match=r"You set choices to be \(-1, 1\), but \[-1\] are missing from your dataset\.",
     ):
         hssm.HSSM(data=data_ddm_miscoded, model="ddm")
 

@@ -238,3 +238,18 @@ def test_set_missing_data_and_deadline_all_missing():
     #     + "dataset.",
     # ):
     #     DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
+
+
+def test_validate_choices():
+    # ====== Valid choices =====
+    dv = DataValidatorMixin(
+        data=_base_data(),
+        choices=[0, 1],
+        n_choices=2,
+    )
+    dv._validate_choices()  # Should not raise an exception
+
+    # ===== Invalid choices =====
+    dv.choices = None
+    with pytest.raises(ValueError, match="`choices` must be provided*."):
+        dv._validate_choices()
