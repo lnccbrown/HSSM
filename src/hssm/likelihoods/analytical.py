@@ -587,7 +587,10 @@ def logp_poisson_race(
     ----------
     data
         2-column tensor of (response time, response). Response > 0 indicates
-        accumulator 1 (upper); otherwise accumulator 0 (lower).
+        accumulator 2 (the second accumulator, parameters ``r2``/``k2``);
+        otherwise accumulator 1 (the first accumulator, ``r1``/``k1``).
+        This matches simulators that encode choices as ``-1`` for winner index 0
+        and ``+1`` for winner index 1.
     r1, r2
         Rates (> 0) for the two accumulators.
     k1, k2
