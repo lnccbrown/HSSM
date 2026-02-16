@@ -52,6 +52,12 @@ def simulate_data(
     if model not in model_config:
         raise ValueError(f"model must be one of {list(model_config.keys())}.")
 
+    # The analytical Poisson-race likelihood assumes exact race finishing times.
+    # ssms defaults to smooth_unif=True; override to False unless the caller
+    # explicitly requests otherwise.
+    if model == "poisson_race" and "smooth_unif" not in kwargs:
+        kwargs["smooth_unif"] = False
+
     sims = simulator(
         theta,
         model=model,
