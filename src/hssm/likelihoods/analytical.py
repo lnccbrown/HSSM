@@ -652,7 +652,13 @@ def logp_poisson_race(
 
 # set bounds
 poisson_race_params = ["r1", "r2", "k1", "k2", "t"]
-poisson_race_bounds = {param: (0.0, np.inf) for param in poisson_race_params}
+poisson_race_bounds = {
+    "r1": (np.finfo(float).eps, np.inf),
+    "r2": (np.finfo(float).eps, np.inf),
+    "k1": (np.finfo(float).eps, np.inf),
+    "k2": (np.finfo(float).eps, np.inf),
+    "t": (0.0, np.inf),
+}
 
 # build distribution
 POISSON_RACE = make_distribution(
