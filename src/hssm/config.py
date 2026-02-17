@@ -216,7 +216,7 @@ class Config(BaseModelConfig):
             User specified ModelConfig used update self.
         """
         if user_config.response is not None:
-            self.response = user_config.response
+            self.response = list(user_config.response)  # type: ignore[assignment]
         if user_config.list_params is not None:
             self.list_params = user_config.list_params
         if user_config.choices is not None:

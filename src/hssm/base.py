@@ -291,7 +291,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
-
         # ===== init args for save/load models =====
         self._init_args = {
             k: v for k, v in locals().items() if k not in ["self", "kwargs"]
@@ -339,7 +338,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else None
         )
         self.list_params = self.model_config.list_params
-        self.choices = list(self.model_config.choices)
+        self.choices = self.model_config.choices  # type: ignore[assignment]
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
