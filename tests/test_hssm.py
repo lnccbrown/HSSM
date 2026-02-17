@@ -96,7 +96,7 @@ def test_custom_model(data_ddm):
 
     with pytest.raises(
         ValueError,
-        match="Please provide `list_params`*",
+        match=r"^Please provide `list_params`",
     ):
         HSSM(
             data=data_ddm,
