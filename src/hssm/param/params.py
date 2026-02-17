@@ -213,7 +213,7 @@ def collect_user_params(
         user_param = UserParam.from_dict(param) if isinstance(param, dict) else param
         if user_param.name is None:
             raise ValueError("Parameter name must be specified.")
-        if user_param.name not in model.list_params:  # type: ignore
+        if user_param.name not in model.list_params:
             raise ValueError(
                 f"Parameter {user_param.name} not found in list_params."
                 " This implies that the parameter is not valid for the chosen model."
@@ -229,7 +229,7 @@ def collect_user_params(
     # If any of the keys is found in `list_params` it is a parameter specification.
     # We add the parameter specification to `user_params` and remove it from
     # `kwargs`
-    for param_name in model.list_params:  # type: ignore
+    for param_name in model.list_params:
         # Update user_params only if param_name is in kwargs
         # and not already in user_params
         if param_name in kwargs:
@@ -272,7 +272,7 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
         and model.loglik_kind != "approx_differentiable"
     )
 
-    for name in model.list_params:  # type: ignore
+    for name in model.list_params:
         if name in user_params:
             param = make_param_from_user_param(model, name, user_params[name])
         else:
@@ -359,10 +359,6 @@ def make_param_from_defaults(model: HSSM, name: str) -> Param:
             link_settings=model.link_settings,
         )
     else:
-        param = DefaultParam.from_defaults(
-            name,
-            default_prior,
-            default_bounds,  # type: ignore
-        )
+        param = DefaultParam.from_defaults(name, default_prior, default_bounds)
 
     return param
