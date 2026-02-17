@@ -111,7 +111,7 @@ class SimpleParam(Param):
 
     def fill_defaults(
         self,
-        prior: dict[str, Any] | bmb.Prior | None = None,
+        prior: dict[str, Any] | None = None,
         bounds: tuple[float, float] | None = None,
         **kwargs,
     ) -> None:
@@ -208,10 +208,7 @@ class DefaultParam(SimpleParam):
 
     @classmethod
     def from_defaults(
-        cls,
-        name: str,
-        prior: float | dict[str, Any] | bmb.Prior,
-        bounds: tuple[float, float],
+        cls, name: str, prior: dict[str, Any], bounds: tuple[int, int]
     ) -> "DefaultParam":
         """Create a DefaultParam object from default values.
 
@@ -251,7 +248,7 @@ class DefaultParam(SimpleParam):
 
     def fill_defaults(
         self,
-        prior: dict[str, Any] | bmb.Prior | None = None,
+        prior: dict[str, Any] | None = None,
         bounds: tuple[float, float] | None = None,
         **kwargs,
     ) -> None:
