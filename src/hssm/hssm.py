@@ -1662,11 +1662,8 @@ class HSSM(DataValidatorMixin):
 
         if model_name is None:
             # Get date string format as suffix to model name
-            model_name = (
-                self.model_name
-                + "_"
-                + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-            )
+            timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+            model_name = f"{self.model_name}_{timestamp}"
 
         # check if folder by name model_name exists
         model_name = model_name.replace(" ", "_")
