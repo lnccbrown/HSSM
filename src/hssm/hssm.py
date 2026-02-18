@@ -1667,7 +1667,7 @@ class HSSM(DataValidatorMixin):
 
         # Sanitize model_name and construct full path
         model_name = model_name.replace(" ", "_")
-        model_path = Path(base_path).joinpath(model_name)
+        model_path = base_path / model_name
         model_path.mkdir(parents=True, exist_ok=True)
 
         # Save model to pickle file
