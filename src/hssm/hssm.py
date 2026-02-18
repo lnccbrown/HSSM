@@ -9,7 +9,8 @@ This file defines the entry class HSSM.
 import logging
 from copy import deepcopy
 from inspect import isclass
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
+from typing import cast as typing_cast
 
 import numpy as np
 import pymc as pm
@@ -29,6 +30,11 @@ from hssm.utils import (
 )
 
 from .base import HSSMBase
+
+if TYPE_CHECKING:
+    from os import PathLike
+
+    from pytensor.graph.op import Op
 
 _logger = logging.getLogger("hssm")
 
@@ -257,6 +263,15 @@ class HSSM(HSSMBase):
         if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
             return self.loglik
 
+        # At this point, loglik should not be a type[Distribution] and should be set
+
+        assert self.loglik is not None, "loglik should be set"
+        assert self.loglik_kind is not None, "loglik_kind should be set"
+        assert not (isclass(self.loglik) and issubclass(self.loglik, pm.Distribution))
+        loglik_callable = typing_cast(
+            "Op | Callable[..., Any] | PathLike | str", self.loglik
+        )
+
         # params_is_trialwise_base: one entry per model param (excluding
         # p_outlier). Used for graph-level broadcasting in logp() and
         # make_distribution, where dist_params does not include extra_fields.
@@ -277,20 +292,20 @@ class HSSM(HSSMBase):
         if self.loglik_kind == "approx_differentiable":
             if self.model_config.backend == "jax":
                 likelihood_callable = make_likelihood_callable(
-                    loglik=self.loglik,
+                    loglik=loglik_callable,
                     loglik_kind="approx_differentiable",
                     backend="jax",
                     params_is_reg=params_is_trialwise,
                 )
             else:
                 likelihood_callable = make_likelihood_callable(
-                    loglik=self.loglik,
+                    loglik=loglik_callable,
                     loglik_kind="approx_differentiable",
                     backend=self.model_config.backend,
                 )
         else:
             likelihood_callable = make_likelihood_callable(
-                loglik=self.loglik,
+                loglik=loglik_callable,
                 loglik_kind=self.loglik_kind,
                 backend=self.model_config.backend,
             )
@@ -350,6 +365,7 @@ class HSSM(HSSMBase):
             if isinstance(param.prior, np.ndarray)
         }
 
+        assert self.list_params is not None, "list_params should be set"
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
             loglik=self.loglik,

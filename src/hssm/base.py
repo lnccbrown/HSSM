@@ -1692,7 +1692,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     @classmethod
     def load_model(
         cls, path: Union[str, Path]
-    ) -> Union["HSSM", dict[str, Optional[az.InferenceData]]]:
+    ) -> Union["HSSMBase", dict[str, Optional[az.InferenceData]]]:
         """Load a HSSM model instance and its inference results from disk.
 
         Parameters
@@ -1811,7 +1811,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         """Set the state of the model when unpickling.
 
         This method is called when unpickling the model. It creates a new instance
-        of HSSM using the constructor arguments stored in the state dictionary,
+        using the constructor arguments stored in the state dictionary,
         and copies its attributes to the current instance.
 
         Parameters
@@ -1820,7 +1820,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A dictionary containing the constructor arguments under the key
             'constructor_args'.
         """
-        new_instance = HSSM(**state["constructor_args"])
+        new_instance = self.__class__(**state["constructor_args"])
         self.__dict__ = new_instance.__dict__
 
     def __repr__(self) -> str:
