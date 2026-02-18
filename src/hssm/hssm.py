@@ -1665,7 +1665,7 @@ class HSSM(DataValidatorMixin):
             timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
             model_name = f"{self.model_name}_{timestamp}"
 
-        # check if folder by name model_name exists
+        # Sanitize model_name and construct full path
         model_name = model_name.replace(" ", "_")
         model_path = Path(base_path).joinpath(model_name)
         model_path.mkdir(parents=True, exist_ok=True)
