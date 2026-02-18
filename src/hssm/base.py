@@ -1300,7 +1300,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # could be recomputed elsewhere)
         prior_predictive.add_groups(posterior=prior_predictive.prior)
         # Bambi >= 0.17 renamed kind="mean" to kind="response_params".
-        # Bambi >= 0.17 renamed kind="mean" to kind="response_params".
         self.model.predict(prior_predictive, kind="response_params", inplace=True)
 
         # clean
