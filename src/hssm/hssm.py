@@ -1632,18 +1632,19 @@ class HSSM(DataValidatorMixin):
 
         Parameters
         ----------
-        model : HSSM
-            The HSSM model instance to save
         model_name : str | None
             Name to use for the saved model files.
             If None, will use model.model_name with timestamp
         allow_absolute_base_path : bool
-            Whether to allow absolute paths for base_path
+            Whether to allow absolute paths for base_path.
+            Defaults to False for safety.
         base_path : str | Path
             Base directory to save model files in.
-            Must be relative path if allow_absolute_base_path=False
-        save_idata_only: bool = False,
-            Whether to save the model class instance itself
+            Must be relative path if allow_absolute_base_path=False.
+            Defaults to "hssm_models".
+        save_idata_only : bool
+            If True, only saves inference data (traces), not the model pickle.
+            Defaults to False (saves both model and traces).
 
         Raises
         ------
