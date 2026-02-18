@@ -1,5 +1,5 @@
 import numpy as np
-
+import pytest
 
 import hssm
 
@@ -18,7 +18,7 @@ def compare_hssm_class_attributes(model_a, model_b):
         tmp_.name for tmp_ in model_b.pymc_model.basic_RVs
     ], "Basic RVs not the same"
 
-
+@pytest.mark.slow
 def test_save_load_model_only(basic_hssm_model, tmp_path):
     tmp_model_name = "hssm_model_pytest"
     basic_hssm_model.save_model(
@@ -27,7 +27,7 @@ def test_save_load_model_only(basic_hssm_model, tmp_path):
     loaded_model = hssm.HSSM.load_model(path=tmp_path / tmp_model_name)
     compare_hssm_class_attributes(basic_hssm_model, loaded_model)
 
-
+@pytest.mark.slow
 def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
     # Sample to attach vi and mcmc traces to model
     # Using minimal parameters since we only need traces to exist, not be accurate
