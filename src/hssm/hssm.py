@@ -1651,13 +1651,14 @@ class HSSM(DataValidatorMixin):
         ValueError
             If base_path is absolute and allow_absolute_base_path=False
         """
-        # check if base_path is absolute
-        if not allow_absolute_base_path:
-            if str(base_path).startswith("/"):
-                raise ValueError(
-                    "base_path must be a relative path"
-                    " if allow_absolute_base_path is False"
-                )
+        # Convert to Path object for cross-platform compatibility
+        base_path = Path(base_path)
+
+        # Check if base_path is absolute (works on all platforms)
+        if not allow_absolute_base_path and base_path.is_absolute():
+            raise ValueError(
+                "base_path must be a relative path if allow_absolute_base_path is False"
+            )
 
         if model_name is None:
             # Get date string format as suffix to model name
