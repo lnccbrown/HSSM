@@ -111,7 +111,7 @@ class RegressionParam(Param):
 
     def fill_defaults(
         self,
-        prior: dict[str, Any] | None = None,
+        prior: float | np.ndarray | dict[str, Any] | bmb.Prior | None = None,
         bounds: tuple[float, float] | None = None,
         **kwargs,
     ) -> None:

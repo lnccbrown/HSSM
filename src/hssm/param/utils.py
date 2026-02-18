@@ -26,7 +26,7 @@ def _make_default_prior(bounds: tuple[float, float] | None) -> bmb.Prior:
         A bmb.Prior object representing the default prior for the provided bounds.
     """
     if bounds is None:
-        raise ValueError("Parameter unspecified.")
+        raise ValueError("Bounds parameter unspecified.")
     lower, upper = bounds
     if np.isinf(lower) and np.isinf(upper):
         prior = bmb.Prior("Normal", mu=0.0, sigma=2.0)

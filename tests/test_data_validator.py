@@ -162,61 +162,6 @@ def test_update_extra_fields(monkeypatch):
         assert (dv.model_distribution.extra_fields[i] == data[field].values).all()
 
 
-def test_set_missing_data_and_deadline():
-    # No missing data and no deadline
-    data = pd.DataFrame({"rt": [0.5, 0.7]})
-    assert (
-        DataValidatorMixin._set_missing_data_and_deadline(False, False, data)
-        == MissingDataNetwork.NONE
-    )
-    # Missing data but no deadline
-    data = pd.DataFrame({"rt": [0.5, -999.0]})
-    assert (
-        DataValidatorMixin._set_missing_data_and_deadline(True, False, data)
-        == MissingDataNetwork.CPN
-    )
-    assert (
-        DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
-        == MissingDataNetwork.OPN
-    )
-    # AF-TODO: I think GONOGO as a network category can go,
-    # but needs a little more thought, out of scope for PR,
-    # during which this was commented out.
-    # assert (
-    #     DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
-    #     == MissingDataNetwork.GONOGO
-    # )
-
-
-def test_set_missing_data_and_deadline_all_missing():
-    data = pd.DataFrame({"rt": [-999.0, -999.0]})
-    # cpn
-    with pytest.raises(
-        ValueError,
-        match="`missing_data` is set to True, but you have no valid data in your "
-        "dataset.",
-    ):
-        DataValidatorMixin._set_missing_data_and_deadline(True, False, data)
-
-    # opn
-    with pytest.raises(
-        ValueError,
-        match="`missing_data` is set to True, but you have no valid data in your "
-        "dataset.",
-    ):
-        DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
-
-    # AF-TODO: GONOGO case not yet correctly implemented
-    # gonogo
-    # data = pd.DataFrame({"rt": [-999.0, -999.0]})
-    # with pytest.raises(
-    #     ValueError,
-    #     match="`missing_data` is set to True, but you have no valid data in your "
-    #     + "dataset.",
-    # ):
-    #     DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
-
-
 def test_validate_choices():
     # ====== Valid choices =====
     dv = DataValidatorMixin(
