@@ -473,13 +473,13 @@ def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2):
 
     # 1. Calculate PDFs and CDFs for all accumulators
     # We use vmap to apply our single-accumulator functions across the drift vector
-    #v_vector = jnp.array([v0, v1, v2])
+    # v_vector = jnp.array([v0, v1, v2])
     v_vector = jnp.stack(jnp.broadcast_arrays(v0, v1, v2))
     all_pdfs = vmap(lambda v: _jax_rdm_tpdf(t, b, v, A))(v_vector)
     all_cdfs = vmap(lambda v: _jax_rdm_tcdf(t, b, v, A))(v_vector)
 
     # 2. Extract components for the winner
-    #pdf_winner = all_pdfs[ch]
+    # pdf_winner = all_pdfs[ch]
     idx = jnp.arange(ch.shape[0])
     pdf_winner = all_pdfs[ch, idx]
 
@@ -491,7 +491,7 @@ def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2):
     survivors_losers = 1.0 - all_cdfs
 
     # The defective likelihood: Winner PDF * Product of Loser Survivors
-    #likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0))
+    # likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0))
     likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0), axis=0)
 
     # Return log-likelihood with a floor for numerical stability
@@ -518,16 +518,18 @@ def logp_rdm3(
     checked_logp = jax_check_parameters(logp, b > A, msg="b > A")
     return checked_logp
 
+
 def jax_check_parameters(logp, condition, msg="Condition failed"):
     """Check parameters for validity in JAX.
 
     Equivalent to pymc.check_parameters with can_be_replaced_by_ninf=True.
-    
-    Note: We do not print the message here because side-effects in JAX 
+
+    Note: We do not print the message here because side-effects in JAX
     (like printing) can be problematic during JIT compilation and sampling.
     Returning -inf effectively rejects the sample.
     """
     return jnp.where(condition, logp, -np.inf)
+
 
 rdm3_params = ["A", "b", "v0", "v1", "v2", "t"]
 

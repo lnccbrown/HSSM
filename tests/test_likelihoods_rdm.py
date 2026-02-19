@@ -69,7 +69,6 @@ def test_racing_diffusion(logp_func, model, theta):
         out_base = logp_func(data_out.values, **theta)
         assert np.allclose(out_vec, out_base, atol=CLOSE_TOLERANCE)
 
-
     # Test A > b leads to -inf
     A_values = [np.full(size, 0.6), 0.6]
     b_values = [np.full(size, 0.5), 0.5]
