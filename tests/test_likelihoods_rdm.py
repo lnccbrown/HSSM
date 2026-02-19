@@ -70,9 +70,21 @@ def test_racing_diffusion(logp_func, model, theta):
         assert np.allclose(out_vec, out_base, atol=CLOSE_TOLERANCE)
 
 
-    # Test A > b leads to error
-    # A_values = [np.full(size, 0.6), 0.6]
-    # b_values = [np.full(size, 0.5), 0.5]
+    # Test A > b leads to -inf
+    A_values = [np.full(size, 0.6), 0.6]
+    b_values = [np.full(size, 0.5), 0.5]
 
-    # for A, b in product(A_values, b_values):
-    #     assert_parameter_value_error(logp_func, data_out, A, b, theta)
+    for A, b in product(A_values, b_values):
+        # We wrap in try-except because depending on PyMC version or context,
+        # it might raise ParameterValueError or return -inf.
+        try:
+            res = logp_func(
+                data_out.values,
+                A=A,
+                b=b,
+                **filter_theta(theta, ["A", "b"]),
+            )
+            # If no error is raised, we expect -inf
+            assert np.isneginf(res).all()
+        except pm.logprob.utils.ParameterValueError:
+            pass

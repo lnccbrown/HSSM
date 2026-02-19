@@ -515,20 +515,19 @@ def logp_rdm3(
     # response_int = jnp.cast(response, "int32")
     response_int = response.astype(jnp.int_)
     logp = _jax_rdm3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
-    #checked_logp = jax_check_parameters(logp, b > A, msg="b > A")
-    return logp
+    checked_logp = jax_check_parameters(logp, b > A, msg="b > A")
+    return checked_logp
 
-
-# implement a JAX version of pymc's check_parameters
 def jax_check_parameters(logp, condition, msg="Condition failed"):
-    """Check parameters for validity in JAX."""
-    def true_fn():
-        return logp
+    """Check parameters for validity in JAX.
 
-    def false_fn():
-        raise pm.logprob.utils.ParameterValueError(msg)
-
-    return jnp.where(condition, true_fn(), false_fn())
+    Equivalent to pymc.check_parameters with can_be_replaced_by_ninf=True.
+    
+    Note: We do not print the message here because side-effects in JAX 
+    (like printing) can be problematic during JIT compilation and sampling.
+    Returning -inf effectively rejects the sample.
+    """
+    return jnp.where(condition, logp, -np.inf)
 
 rdm3_params = ["A", "b", "v0", "v1", "v2", "t"]
 
