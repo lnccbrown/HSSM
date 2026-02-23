@@ -36,7 +36,7 @@ dependencies = [
     "onnx>=1.16.0",
     "pymc>=5.26.0",
     "seaborn>=0.13.2",
-    "ssm-simulators>=0.11.3",
+    "ssm-simulators==0.12.0b1",
     "tqdm>=4.66.0",
 ]
 
