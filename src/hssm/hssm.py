@@ -420,35 +420,41 @@ class HSSM(DataValidatorMixin):
 
         # Process missing data setting
         # AF-TODO: Could be a function in data validator?
-        if isinstance(missing_data, float):
-            if not ((self.data.rt == missing_data).any()):
-                raise ValueError(
-                    f"missing_data argument is provided as a float {missing_data}, "
-                    f"However, you have no RTs of {missing_data} in your dataset!"
-                )
+        if self.is_choice_only and missing_data:
+            raise ValueError("Choice-only models cannot have missing data.")
+
+        if not self.is_choice_only:
+            if isinstance(missing_data, float):
+                if not ((self.data.rt == missing_data).any()):
+                    raise ValueError(
+                        f"missing_data argument is provided as a float {missing_data}, "
+                        f"However, you have no RTs of {missing_data} in your dataset!"
+                    )
+                else:
+                    self.missing_data = True
+                    self.missing_data_value = missing_data
+            elif isinstance(missing_data, bool):
+                if missing_data and (not (self.data.rt == -999.0).any()):
+                    raise ValueError(
+                        "missing_data argument is provided as True, "
+                        " so RTs of -999.0 are treated as missing. \n"
+                        "However, you have no RTs of -999.0 in your dataset!"
+                    )
+                elif (not missing_data) and (self.data.rt == -999.0).any():
+                    # self.missing_data = True
+                    raise ValueError(
+                        "Missing data provided as False. \n"
+                        "However, you have RTs of -999.0 in your dataset!"
+                    )
+                else:
+                    self.missing_data = missing_data
             else:
-                self.missing_data = True
-                self.missing_data_value = missing_data
-        elif isinstance(missing_data, bool):
-            if missing_data and (not (self.data.rt == -999.0).any()):
                 raise ValueError(
-                    "missing_data argument is provided as True, "
-                    " so RTs of -999.0 are treated as missing. \n"
-                    "However, you have no RTs of -999.0 in your dataset!"
+                    "missing_data argument must be a bool or a float! \n"
+                    f"You provided: {type(missing_data)}"
                 )
-            elif (not missing_data) and (self.data.rt == -999.0).any():
-                # self.missing_data = True
-                raise ValueError(
-                    "Missing data provided as False. \n"
-                    "However, you have RTs of -999.0 in your dataset!"
-                )
-            else:
-                self.missing_data = missing_data
         else:
-            raise ValueError(
-                "missing_data argument must be a bool or a float! \n"
-                f"You provided: {type(missing_data)}"
-            )
+            self.missing_data = False
 
         if isinstance(deadline, str):
             self.deadline = True
@@ -510,7 +516,8 @@ class HSSM(DataValidatorMixin):
         self.p_outlier = self.params.get("p_outlier")
         self.lapse = lapse if self.has_lapse else None
 
-        self._post_check_data_sanity()
+        if not self.is_choice_only:
+            self._post_check_data_sanity()
 
         self.model_distribution = self._make_model_distribution()
 
