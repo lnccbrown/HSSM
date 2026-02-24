@@ -3,10 +3,10 @@
 import logging
 import warnings
 
-import numpy as np  # noqa: F401
-import pandas as pd  # noqa: F401
+import numpy as np
+import pandas as pd
 
-from hssm.defaults import MissingDataNetwork  # noqa: F401
+from hssm.defaults import MissingDataNetwork
 
 _logger = logging.getLogger("hssm")
 
@@ -26,31 +26,16 @@ class DataValidatorMixin:
     - missing_data_value: float
     """
 
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        response: list[str] | None = ["rt", "response"],
-        choices: list[int] | None = [0, 1],
-        n_choices: int = 2,
-        extra_fields: list[str] | None = None,
-        deadline: bool = False,
-        deadline_name: str = "deadline",
-        missing_data: bool = False,
-        missing_data_value: float = -999.0,
-    ):
-        """Initialize the DataValidatorMixin.
-
-        Init method kept for testing purposes.
-        """
-        self.data = data
-        self.response = response
-        self.choices = choices
-        self.n_choices = n_choices
-        self.extra_fields = extra_fields
-        self.deadline = deadline
-        self.deadline_name = deadline_name
-        self.missing_data = missing_data
-        self.missing_data_value = missing_data_value
+    data: pd.DataFrame
+    response: list[str]
+    choices: list[int]
+    n_choices: int
+    extra_fields: list[str] | None
+    deadline: bool
+    deadline_name: str
+    missing_data: bool
+    missing_data_value: float
+    is_choice_only: bool
 
     @staticmethod
     def check_fields(a, b):
@@ -131,6 +116,10 @@ class DataValidatorMixin:
     def _handle_missing_data_and_deadline(self):
         """Handle missing data and deadline."""
         if not self.missing_data and not self.deadline:
+            # In the case of choice only model, we don't need to do anything with the
+            # data.
+            if self.is_choice_only:
+                return
             # In the case where missing_data is set to False, we need to drop the
             # cases where rt = na_value
             if pd.isna(self.missing_data_value):
