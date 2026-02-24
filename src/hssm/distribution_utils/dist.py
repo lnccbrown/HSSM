@@ -569,7 +569,9 @@ def make_distribution(
                         "lapse_func is not defined. "
                         "Make sure lapse is properly initialized."
                     )
-                lapse_logp = lapse_func(data[:, 0].eval())
+                data_for_lapse = data[:, 0] if data.ndim > 1 else data
+                lapse_logp = lapse_func(data_for_lapse.eval())
+
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
                 # Ensure that non-decision time is always smaller than rt.
