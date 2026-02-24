@@ -397,6 +397,7 @@ def make_distribution(
     extra_fields: list[np.ndarray] | None = None,
     fixed_vector_params: dict[str, np.ndarray] | None = None,
     params_is_trialwise: list[bool] | None = None,
+    is_choice_only: bool = False,
 ) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -445,6 +446,8 @@ def make_distribution(
         that vmapped JAX log-likelihoods receive consistently shaped inputs,
         regardless of whether Bambi produces ``(1,)`` or ``(n_obs,)`` tensors.
         When ``None``, no graph-level broadcasting is applied.
+    is_choice_only : optional
+        Whether the model is a choice-only model.
 
     Returns
     -------
@@ -569,14 +572,15 @@ def make_distribution(
                         "lapse_func is not defined. "
                         "Make sure lapse is properly initialized."
                     )
-                data_for_lapse = data[:, 0] if data.ndim > 1 else data
+                data_for_lapse = data if is_choice_only else data[:, 0]
                 lapse_logp = lapse_func(data_for_lapse.eval())
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
                 # Ensure that non-decision time is always smaller than rt.
                 # Assuming that the non-decision time parameter is always named "t".
-                logp = ensure_positive_ndt(data, logp, list_params, dist_params)
+                if not is_choice_only:
+                    logp = ensure_positive_ndt(data, logp, list_params, dist_params)
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)
                     + p_outlier * pt.exp(lapse_logp)
@@ -585,7 +589,8 @@ def make_distribution(
             else:
                 logp = loglik(data, *dist_params, *extra_fields)
                 # Ensure that non-decision time is always smaller than rt.
-                logp = ensure_positive_ndt(data, logp, list_params, dist_params)
+                if not is_choice_only:
+                    logp = ensure_positive_ndt(data, logp, list_params, dist_params)
 
             if bounds is not None:
                 logp = apply_param_bounds_to_loglik(
@@ -603,6 +608,7 @@ def make_distribution_for_supported_model(
     backend: Literal["pytensor", "jax", "other"] = "pytensor",
     reg_params: list[str] | None = None,
     lapse: bmb.Prior | None = None,
+    is_choice_only: bool = False,
 ) -> type[pm.Distribution]:
     """Make a pm.Distribution class for a supported model.
 
@@ -624,6 +630,8 @@ def make_distribution_for_supported_model(
         parameters are assumed.
     lapse : optional
         A bmb.Prior object representing the lapse distribution.
+    is_choice_only : optional
+        Whether the model is a choice-only model.
     """
     supported_models = get_args(SupportedModels)
     if model not in supported_models:
@@ -653,6 +661,7 @@ def make_distribution_for_supported_model(
         list_params=config.list_params,
         bounds=config.bounds,
         lapse=lapse,
+        is_choice_only=is_choice_only,
     )
 
 

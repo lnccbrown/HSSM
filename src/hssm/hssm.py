@@ -2165,6 +2165,7 @@ class HSSM(DataValidatorMixin):
             ),
             fixed_vector_params=fixed_vector_params if fixed_vector_params else None,
             params_is_trialwise=params_is_trialwise_base,
+            is_choice_only=self.is_choice_only,
         )
 
     def _get_deterministic_var_names(self, idata) -> list[str]:
