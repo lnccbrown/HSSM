@@ -658,7 +658,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             Pass initial values to the sampler. This can be a dictionary of initial
             values for parameters of the model, or a string "map" to use initialization
             at the MAP estimate. If "map" is used, the MAP estimate will be computed if
-            not already attached to the base class from prior call to 'find_MAP'.
+            not already attached to the base class from prior call to `find_MAP`.
         include_response_params: optional
             Include parameters of the response distribution in the output. These usually
             take more space than other parameters as there's one of them per
@@ -1702,8 +1702,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        HSSM
-            The loaded HSSM model instance with inference results attached if available.
+        HSSMBase or dict[str, az.InferenceData | None]
+            The loaded model instance (with inference results attached if available),
+            or a dictionary of traces-only InferenceData objects when no model.pkl is found.
         """
         # Convert path to Path object
         path = Path(path)
