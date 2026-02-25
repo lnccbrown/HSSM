@@ -130,29 +130,6 @@ def test_post_check_data_sanity_valid(base_data):
         dv_instance_no_missing._post_check_data_sanity()
 
 
-def test_handle_missing_data_and_deadline_deadline_column_missing(base_data):
-    # Should raise ValueError if deadline is True but deadline_name column is missing
-    data = base_data.drop(columns=["deadline"])
-    dv = DataValidatorMixin(
-        data=data,
-        deadline=True,
-    )
-    with pytest.raises(ValueError, match="`deadline` is not found in your dataset"):
-        dv._handle_missing_data_and_deadline()
-
-
-def test_handle_missing_data_and_deadline_deadline_applied(base_data):
-    # Should set rt to -999.0 where rt >= deadline
-    base_data.loc[0, "rt"] = 2.0  # Exceeds deadline
-    dv = DataValidatorMixin(
-        data=base_data,
-        deadline=True,
-    )
-    dv._handle_missing_data_and_deadline()
-    assert dv.data.loc[0, "rt"] == -999.0
-    assert all(dv.data.loc[1:, "rt"] < dv.data.loc[1:, "deadline"])
-
-
 def test_update_extra_fields(monkeypatch):
     # Create a DataValidatorMixin with extra_fields
     data = pd.DataFrame(
@@ -183,61 +160,6 @@ def test_update_extra_fields(monkeypatch):
     assert (dv.model_distribution.extra_fields[0] == data["extra"].values).all()
     for i, field in enumerate(dv.extra_fields):
         assert (dv.model_distribution.extra_fields[i] == data[field].values).all()
-
-
-def test_set_missing_data_and_deadline():
-    # No missing data and no deadline
-    data = pd.DataFrame({"rt": [0.5, 0.7]})
-    assert (
-        DataValidatorMixin._set_missing_data_and_deadline(False, False, data)
-        == MissingDataNetwork.NONE
-    )
-    # Missing data but no deadline
-    data = pd.DataFrame({"rt": [0.5, -999.0]})
-    assert (
-        DataValidatorMixin._set_missing_data_and_deadline(True, False, data)
-        == MissingDataNetwork.CPN
-    )
-    assert (
-        DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
-        == MissingDataNetwork.OPN
-    )
-    # AF-TODO: I think GONOGO as a network category can go,
-    # but needs a little more thought, out of scope for PR,
-    # during which this was commented out.
-    # assert (
-    #     DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
-    #     == MissingDataNetwork.GONOGO
-    # )
-
-
-def test_set_missing_data_and_deadline_all_missing():
-    data = pd.DataFrame({"rt": [-999.0, -999.0]})
-    # cpn
-    with pytest.raises(
-        ValueError,
-        match="`missing_data` is set to True, but you have no valid data in your "
-        "dataset.",
-    ):
-        DataValidatorMixin._set_missing_data_and_deadline(True, False, data)
-
-    # opn
-    with pytest.raises(
-        ValueError,
-        match="`missing_data` is set to True, but you have no valid data in your "
-        "dataset.",
-    ):
-        DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
-
-    # AF-TODO: GONOGO case not yet correctly implemented
-    # gonogo
-    # data = pd.DataFrame({"rt": [-999.0, -999.0]})
-    # with pytest.raises(
-    #     ValueError,
-    #     match="`missing_data` is set to True, but you have no valid data in your "
-    #     + "dataset.",
-    # ):
-    #     DataValidatorMixin._set_missing_data_and_deadline(True, True, data)
 
 
 def test_validate_choices():

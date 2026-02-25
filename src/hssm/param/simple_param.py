@@ -111,7 +111,7 @@ class SimpleParam(Param):
 
     def fill_defaults(
         self,
-        prior: dict[str, Any] | None = None,
+        prior: float | np.ndarray | dict[str, Any] | bmb.Prior | None = None,
         bounds: tuple[float, float] | None = None,
         **kwargs,
     ) -> None:
@@ -201,14 +201,17 @@ class DefaultParam(SimpleParam):
     def __init__(
         self,
         name: str,
-        prior: float | np.ndarray | dict[str, Any] | bmb.Prior,
-        bounds: tuple[float, float],
+        prior: float | np.ndarray | dict[str, Any] | bmb.Prior | None,
+        bounds: tuple[float, float] | None,
     ) -> None:
         super().__init__(name, prior=prior, bounds=bounds)
 
     @classmethod
     def from_defaults(
-        cls, name: str, prior: dict[str, Any], bounds: tuple[int, int]
+        cls,
+        name: str,
+        prior: float | np.ndarray | dict[str, Any] | bmb.Prior | None,
+        bounds: tuple[float, float] | None,
     ) -> "DefaultParam":
         """Create a DefaultParam object from default values.
 
@@ -248,7 +251,7 @@ class DefaultParam(SimpleParam):
 
     def fill_defaults(
         self,
-        prior: dict[str, Any] | None = None,
+        prior: float | np.ndarray | dict[str, Any] | bmb.Prior | None = None,
         bounds: tuple[float, float] | None = None,
         **kwargs,
     ) -> None:

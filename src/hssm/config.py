@@ -31,7 +31,6 @@ RLSSM_REQUIRED_FIELDS = (
     "list_params",
     "bounds",
     "params_default",
-    "data",
     "choices",
     "decision_process",
     "learning_process",
@@ -217,7 +216,7 @@ class Config(BaseModelConfig):
             User specified ModelConfig used update self.
         """
         if user_config.response is not None:
-            self.response = user_config.response
+            self.response = list(user_config.response)  # type: ignore[assignment]
         if user_config.list_params is not None:
             self.list_params = user_config.list_params
         if user_config.choices is not None:
@@ -326,8 +325,8 @@ class RLSSMConfig(BaseModelConfig):
                 raise ValueError(f"{field_name} must be provided in config_dict")
 
         return cls(
-            model_name=model_name,
-            description=config_dict.get("description"),
+            model_name=config_dict["model_name"],
+            description=config_dict["description"],
             list_params=config_dict["list_params"],
             extra_fields=config_dict.get("extra_fields"),
             params_default=config_dict["params_default"],
@@ -451,7 +450,7 @@ class RLSSMConfig(BaseModelConfig):
 class ModelConfig:
     """Representation for model_config provided by the user."""
 
-    response: list[str] | None = None
+    response: tuple[str, ...] | None = None
     list_params: list[str] | None = None
     choices: tuple[int, ...] | None = None
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
