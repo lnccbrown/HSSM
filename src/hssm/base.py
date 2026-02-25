@@ -8,8 +8,9 @@ This file defines the entry class HSSM.
 
 import datetime
 import logging
+from abc import ABC, abstractmethod
 from copy import deepcopy
-from inspect import isclass, signature
+from inspect import signature
 from os import PathLike
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, Union, cast, get_args
@@ -35,22 +36,15 @@ from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
     INITVAL_SETTINGS,
-    MissingDataNetwork,
-    missing_data_networks_suffix,
 )
 from hssm.distribution_utils import (
-    assemble_callables,
-    make_distribution,
     make_family,
-    make_likelihood_callable,
-    make_missing_data_callable,
 )
 from hssm.missing_data_mixin import MissingDataMixin
 from hssm.utils import (
     _compute_log_likelihood,
     _get_alias_dict,
     _print_prior,
-    _rearrange_data,
     _split_array,
 )
 
@@ -97,7 +91,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSMBase(DataValidatorMixin, MissingDataMixin):
+class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
@@ -298,6 +292,14 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
+        # ===== init args for save/load models =====
+        self._init_args = {
+            k: v for k, v in locals().items() if k not in ["self", "kwargs"]
+        }
+        if kwargs:
+            self._init_args.update(kwargs)
+        # endregion
+
         # ===== Input Data & Configuration =====
         self.data = data.copy()
         self.global_formula = global_formula
@@ -331,9 +333,13 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
         # endregion
 
         # region ===== Set up shortcuts so old code will work ======
-        self.response = self.model_config.response
+        self.response = (
+            list(self.model_config.response)
+            if self.model_config.response is not None
+            else None
+        )
         self.list_params = self.model_config.list_params
-        self.choices = list(self.model_config.choices)
+        self.choices = self.model_config.choices  # type: ignore[assignment]
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
@@ -351,13 +357,13 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
 
         self.n_choices = len(self.choices)  # type: ignore[arg-type]
 
+        self._pre_check_data_sanity()
+
         self._process_missing_data_and_deadline(
             missing_data=missing_data,
             deadline=deadline,
             loglik_missing_data=loglik_missing_data,
         )
-
-        self._pre_check_data_sanity()
 
         # region ===== Process lapse distribution =====
         self.has_lapse = p_outlier is not None and p_outlier != 0
@@ -376,6 +382,7 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
+        self._validate_fixed_vectors()
         self.formula, self.priors, self.link = self.params.parse_bambi(model=self)  # type: ignore[arg-type]
 
         # For parameters that have a regression backend, apply bounds at the likelihood
@@ -417,6 +424,15 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
         self.set_alias(self._aliases)
         self.model.build()
 
+        # region ===== Fix scalar deterministic dims for bambi >= 0.17 =====
+        # Bambi >= 0.17 declares dims=("__obs__",) for intercept-only
+        # deterministics that actually have shape (1,). This causes an
+        # xarray CoordinateValidationError during pm.sample() when ArviZ
+        # tries to create a DataArray with mismatched dimension sizes.
+        # Fix by removing the dims declaration for these deterministics.
+        self._fix_scalar_deterministic_dims()
+        # endregion
+
         # region ===== Init vals and jitters =====
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
@@ -433,6 +449,58 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
             {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
         )
         _logger.info("Model initialized successfully.")
+
+    @abstractmethod
+    def _make_model_distribution(self) -> type[pm.Distribution]:
+        """Make a pm.Distribution for the model.
+
+        This method must be implemented by subclasses to create the appropriate
+        distribution for the specific model type.
+        """
+        ...
+
+    def _fix_scalar_deterministic_dims(self) -> None:
+        """Fix dims metadata for scalar deterministics.
+
+        Bambi >= 0.17 returns shape ``(1,)`` for intercept-only
+        deterministics but still declares ``dims=("__obs__",)``. This causes
+        an xarray ``CoordinateValidationError`` during ``pm.sample()`` because
+        the ``__obs__`` coordinate has ``n_obs`` entries. Removing the dims
+        declaration for these variables lets ArviZ handle them as
+        un-dimensioned arrays, avoiding the conflict.
+        """
+        n_obs = len(self.data)
+        dims_dict = self.pymc_model.named_vars_to_dims
+        for det in self.pymc_model.deterministics:
+            if det.name not in dims_dict:
+                continue
+            dims = dims_dict[det.name]
+            if "__obs__" in dims:
+                # Check static shape: if it doesn't match n_obs, remove dims
+                try:
+                    shape_0 = det.type.shape[0]
+                except (IndexError, TypeError):
+                    continue
+                if shape_0 is not None and shape_0 != n_obs:
+                    del dims_dict[det.name]
+
+    def _validate_fixed_vectors(self) -> None:
+        """Validate that fixed-vector parameters have the correct length.
+
+        Fixed-vector parameters (``prior=np.ndarray``) bypass Bambi's formula
+        system entirely --- they are passed as a scalar ``0.0`` placeholder to
+        Bambi, and the real vector is substituted inside
+        ``HSSMDistribution.logp()`` (see ``dist.py``).  Because this
+        substitution is invisible to Bambi, we must validate the vector length
+        against ``len(self.data)`` up front to catch shape mismatches early.
+        """
+        for name, param in self.params.items():
+            if isinstance(param.prior, np.ndarray):
+                if len(param.prior) != len(self.data):
+                    raise ValueError(
+                        f"Fixed vector for parameter '{name}' has length "
+                        f"{len(param.prior)}, but data has {len(self.data)} rows."
+                    )
 
     @classmethod
     def _build_model_config(
@@ -457,8 +525,8 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        ModelConfig
-            A complete ModelConfig object with choices and other settings applied.
+        Config
+            A complete Config object with choices and other settings applied.
         """
         # Start with defaults
         config = cls.config_class.from_defaults(model, loglik_kind)
@@ -590,7 +658,7 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
             Pass initial values to the sampler. This can be a dictionary of initial
             values for parameters of the model, or a string "map" to use initialization
             at the MAP estimate. If "map" is used, the MAP estimate will be computed if
-            not already attached to the base class from prior call to 'find_MAP`.
+            not already attached to the base class from prior call to `find_MAP`.
         include_response_params: optional
             Include parameters of the response distribution in the output. These usually
             take more space than other parameters as there's one of them per
@@ -1231,7 +1299,8 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
         # mean prior here (which adds deterministics that
         # could be recomputed elsewhere)
         prior_predictive.add_groups(posterior=prior_predictive.prior)
-        self.model.predict(prior_predictive, kind="mean", inplace=True)
+        # Bambi >= 0.17 renamed kind="mean" to kind="response_params".
+        self.model.predict(prior_predictive, kind="response_params", inplace=True)
 
         # clean
         setattr(prior_predictive, "prior", prior_predictive["posterior"])
@@ -1568,41 +1637,40 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
 
         Parameters
         ----------
-        model : HSSM
-            The HSSM model instance to save
         model_name : str | None
             Name to use for the saved model files.
             If None, will use model.model_name with timestamp
         allow_absolute_base_path : bool
-            Whether to allow absolute paths for base_path
+            Whether to allow absolute paths for base_path.
+            Defaults to False for safety.
         base_path : str | Path
             Base directory to save model files in.
-            Must be relative path if allow_absolute_base_path=False
-        save_idata_only: bool = False,
-            Whether to save the model class instance itself
+            Must be relative path if allow_absolute_base_path=False.
+            Defaults to "hssm_models".
+        save_idata_only : bool
+            If True, only saves inference data (traces), not the model pickle.
+            Defaults to False (saves both model and traces).
 
         Raises
         ------
         ValueError
             If base_path is absolute and allow_absolute_base_path=False
         """
-        # check if base_path is absolute
-        if not allow_absolute_base_path:
-            if str(base_path).startswith("/"):
-                raise ValueError(
-                    "base_path must be a relative path"
-                    " if allow_absolute_base_path is False"
-                )
+        # Convert to Path object for cross-platform compatibility
+        base_path = Path(base_path)
+
+        # Check if base_path is absolute (works on all platforms)
+        if not allow_absolute_base_path and base_path.is_absolute():
+            raise ValueError(
+                "base_path must be a relative path if allow_absolute_base_path is False"
+            )
 
         if model_name is None:
             # Get date string format as suffix to model name
-            model_name = (
-                self.model_name
-                + "_"
-                + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-            )
+            timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+            model_name = f"{self.model_name}_{timestamp}"
 
-        # check if folder by name model_name exists
+        # Sanitize model_name and construct full path
         model_name = model_name.replace(" ", "_")
         model_path = Path(base_path).joinpath(model_name)
         model_path.mkdir(parents=True, exist_ok=True)
@@ -1634,8 +1702,10 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        HSSMBase
-            The loaded HSSM model instance with inference results attached if available.
+        HSSMBase or dict[str, az.InferenceData | None]
+            The loaded model instance (with inference results attached if available),
+            or a dictionary of traces-only InferenceData objects when no model.pkl is
+            found.
         """
         # Convert path to Path object
         path = Path(path)
@@ -1742,7 +1812,7 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
         """Set the state of the model when unpickling.
 
         This method is called when unpickling the model. It creates a new instance
-        of HSSM using the constructor arguments stored in the state dictionary,
+        using the constructor arguments stored in the state dictionary,
         and copies its attributes to the current instance.
 
         Parameters
@@ -1751,7 +1821,7 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
             A dictionary containing the constructor arguments under the key
             'constructor_args'.
         """
-        new_instance = HSSMBase(**state["constructor_args"])
+        new_instance = self.__class__(**state["constructor_args"])
         self.__dict__ = new_instance.__dict__
 
     def __repr__(self) -> str:
@@ -1931,115 +2001,6 @@ class HSSMBase(DataValidatorMixin, MissingDataMixin):
                 + "We automatically append it to `list_params` when `p_outlier` "
                 + "parameter is not None"
             )
-
-    def _make_model_distribution(self) -> type[pm.Distribution]:
-        """Make a pm.Distribution for the model."""
-        ### Logic for different types of likelihoods:
-        # -`analytical` and `blackbox`:
-        #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
-        #     function).
-        # - `approx_differentiable`:
-        #     In addition to `pm.Distribution` and any arbitrary function, it can also
-        #     be an str (which we will download from hugging face) or a Pathlike
-        #     which we will download and make a distribution.
-
-        # If user has already provided a log-likelihood function as a distribution
-        # Use it directly as the distribution
-        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
-            return self.loglik
-
-        params_is_reg = [
-            param.is_vector
-            for param_name, param in self.params.items()
-            if param_name != "p_outlier"
-        ]
-        if self.extra_fields is not None:
-            params_is_reg += [True for _ in self.extra_fields]
-
-        # Assert that loglik is not None (mypy)
-        # avoiding extra indentation level
-        assert self.loglik is not None, "loglik should be set by model configuration"
-        if self.loglik_kind == "approx_differentiable":
-            if self.model_config.backend == "jax":
-                likelihood_callable = make_likelihood_callable(
-                    loglik=self.loglik,
-                    loglik_kind="approx_differentiable",
-                    backend="jax",
-                    params_is_reg=params_is_reg,
-                )
-            else:
-                likelihood_callable = make_likelihood_callable(
-                    loglik=self.loglik,
-                    loglik_kind="approx_differentiable",
-                    backend=self.model_config.backend,
-                )
-        else:
-            likelihood_callable = make_likelihood_callable(
-                loglik=self.loglik,
-                loglik_kind=self.loglik_kind,
-                backend=self.model_config.backend,
-            )
-
-        self.loglik = likelihood_callable
-
-        # Make the callable for missing data
-        # And assemble it with the callable for the likelihood
-        if self.missing_data_network != MissingDataNetwork.NONE:
-            if self.missing_data_network == MissingDataNetwork.OPN:
-                params_only = False
-            elif self.missing_data_network == MissingDataNetwork.CPN:
-                params_only = True
-            else:
-                params_only = None
-
-            if self.loglik_missing_data is None:
-                self.loglik_missing_data = (
-                    self.model_name
-                    + missing_data_networks_suffix[self.missing_data_network]
-                    + ".onnx"
-                )
-
-            backend_tmp: Literal["pytensor", "jax", "other"] | None = (
-                "jax"
-                if self.model_config.backend != "pytensor"
-                else self.model_config.backend
-            )
-            missing_data_callable = make_missing_data_callable(
-                self.loglik_missing_data, backend_tmp, params_is_reg, params_only
-            )
-
-            self.loglik_missing_data = missing_data_callable
-
-            self.loglik = assemble_callables(
-                self.loglik,
-                self.loglik_missing_data,
-                params_only,
-                has_deadline=self.deadline,
-            )
-
-        if self.missing_data:
-            _logger.info(
-                "Re-arranging data to separate missing and observed datapoints. "
-                "Missing data (rt == %s) will be on top, "
-                "observed datapoints follow.",
-                self.missing_data_value,
-            )
-
-        self.data = _rearrange_data(self.data)
-        # Assertion added for mypy type checking
-        assert self.list_params is not None, "list_params should have been validated"
-        return make_distribution(
-            rv=self.model_config.rv or self.model_name,
-            loglik=self.loglik,
-            list_params=self.list_params,
-            bounds=self.bounds,
-            lapse=self.lapse,
-            extra_fields=(
-                None
-                if not self.extra_fields
-                else [deepcopy(self.data[field].values) for field in self.extra_fields]
-            ),
-        )
 
     def _get_deterministic_var_names(self, idata) -> list[str]:
         """Filter out the deterministic variables in var_names."""

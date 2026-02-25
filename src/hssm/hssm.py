@@ -9,11 +9,12 @@ This file defines the entry class HSSM.
 import logging
 from copy import deepcopy
 from inspect import isclass
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
+from typing import cast as typing_cast
 
+import numpy as np
 import pymc as pm
 
-from hssm.base import HSSMBase
 from hssm.defaults import (
     MissingDataNetwork,
     missing_data_networks_suffix,
@@ -27,6 +28,13 @@ from hssm.distribution_utils import (
 from hssm.utils import (
     _rearrange_data,
 )
+
+from .base import HSSMBase
+
+if TYPE_CHECKING:
+    from os import PathLike
+
+    from pytensor.graph.op import Op
 
 _logger = logging.getLogger("hssm")
 
@@ -241,7 +249,7 @@ class HSSM(HSSMBase):
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
-        # == Logic for different types of likelihoods:
+        ### Logic for different types of likelihoods:
         # -`analytical` and `blackbox`:
         #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
         #     function).
@@ -255,48 +263,49 @@ class HSSM(HSSMBase):
         if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
             return self.loglik
 
-        # Type narrowing: loglik and list_params should be set by this point
-        if self.loglik is None:
-            raise ValueError(
-                "Likelihood function (loglik) has not been set. "
-                "This should have been configured during model initialization."
-            )
-        if self.list_params is None:
-            raise ValueError(
-                "list_params has not been set. "
-                "This should have been validated during model initialization."
-            )
-        if self.loglik_kind is None:
-            raise ValueError(
-                "Likelihood kind (loglik_kind) has not been set. "
-                "This should have been configured during model initialization."
-            )
+        # At this point, loglik should not be a type[Distribution] and should be set
 
-        params_is_reg = [
-            param.is_vector
+        assert self.loglik is not None, "loglik should be set"
+        assert self.loglik_kind is not None, "loglik_kind should be set"
+        assert not (isclass(self.loglik) and issubclass(self.loglik, pm.Distribution))
+        loglik_callable = typing_cast(
+            "Op | Callable[..., Any] | PathLike | str", self.loglik
+        )
+
+        # params_is_trialwise_base: one entry per model param (excluding
+        # p_outlier). Used for graph-level broadcasting in logp() and
+        # make_distribution, where dist_params does not include extra_fields.
+        params_is_trialwise_base = [
+            param.is_trialwise
             for param_name, param in self.params.items()
             if param_name != "p_outlier"
         ]
+
+        # params_is_trialwise: extends the base list with extra_fields
+        # (always trialwise). Used for vmap construction in
+        # make_likelihood_callable and for assemble_callables, where
+        # dist_params includes extra_fields flattened in.
+        params_is_trialwise = list(params_is_trialwise_base)
         if self.extra_fields is not None:
-            params_is_reg += [True for _ in self.extra_fields]
+            params_is_trialwise += [True for _ in self.extra_fields]
 
         if self.loglik_kind == "approx_differentiable":
             if self.model_config.backend == "jax":
                 likelihood_callable = make_likelihood_callable(
-                    loglik=self.loglik,
+                    loglik=loglik_callable,
                     loglik_kind="approx_differentiable",
                     backend="jax",
-                    params_is_reg=params_is_reg,
+                    params_is_reg=params_is_trialwise,
                 )
             else:
                 likelihood_callable = make_likelihood_callable(
-                    loglik=self.loglik,
+                    loglik=loglik_callable,
                     loglik_kind="approx_differentiable",
                     backend=self.model_config.backend,
                 )
         else:
             likelihood_callable = make_likelihood_callable(
-                loglik=self.loglik,
+                loglik=loglik_callable,
                 loglik_kind=self.loglik_kind,
                 backend=self.model_config.backend,
             )
@@ -326,7 +335,7 @@ class HSSM(HSSMBase):
                 else self.model_config.backend
             )
             missing_data_callable = make_missing_data_callable(
-                self.loglik_missing_data, backend_tmp, params_is_reg, params_only
+                self.loglik_missing_data, backend_tmp, params_is_trialwise, params_only
             )
 
             self.loglik_missing_data = missing_data_callable
@@ -336,6 +345,7 @@ class HSSM(HSSMBase):
                 self.loglik_missing_data,
                 params_only,
                 has_deadline=self.deadline,
+                params_is_trialwise=params_is_trialwise,
             )
 
         if self.missing_data:
@@ -347,6 +357,15 @@ class HSSM(HSSMBase):
             )
 
         self.data = _rearrange_data(self.data)
+
+        # Collect fixed-vector params to substitute in the distribution logp
+        fixed_vector_params = {
+            name: param.prior
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        }
+
+        assert self.list_params is not None, "list_params should be set"
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
             loglik=self.loglik,
@@ -358,4 +377,6 @@ class HSSM(HSSMBase):
                 if not self.extra_fields
                 else [deepcopy(self.data[field].values) for field in self.extra_fields]
             ),
+            fixed_vector_params=fixed_vector_params if fixed_vector_params else None,
+            params_is_trialwise=params_is_trialwise_base,
         )

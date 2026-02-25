@@ -4,6 +4,7 @@ import pytest
 
 from hssm import Prior
 from hssm.param.simple_param import DefaultParam
+from hssm.param.utils import _make_default_prior
 
 
 def test_from_defaults():
@@ -40,3 +41,7 @@ def test_make_default_prior(bounds, prior):
     assert param.prior.name == prior.pop("name")
     for key, value in prior.items():
         assert param.prior.args[key] == value
+
+
+def test_make_default_prior_no_bounds():
+    pytest.raises(ValueError, _make_default_prior, None)
