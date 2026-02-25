@@ -238,6 +238,3 @@ url = "https://pypi.org/simple/"
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
-
-[tool.uv.sources]
-ssm-simulators = { path = "../ssm-simulators" }
