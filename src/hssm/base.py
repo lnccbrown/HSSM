@@ -1704,7 +1704,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         -------
         HSSMBase or dict[str, az.InferenceData | None]
             The loaded model instance (with inference results attached if available),
-            or a dictionary of traces-only InferenceData objects when no model.pkl is found.
+            or a dictionary of traces-only InferenceData objects when no model.pkl is
+            found.
         """
         # Convert path to Path object
         path = Path(path)
