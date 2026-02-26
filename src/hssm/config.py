@@ -260,6 +260,16 @@ class Config(BaseModelConfig):
         """
         return self.default_priors.get(param), self.bounds.get(param)
 
+    @property
+    def is_choice_only(self) -> bool:
+        """Check if the model is a choice-only model."""
+        # Treat both None and an empty list as invalid configurations.
+        if not self.response:
+            raise ValueError(
+                "Please provide at least one `response` column in the configuration."
+            )
+        return len(self.response) == 1
+
 
 @dataclass
 class RLSSMConfig(BaseModelConfig):
