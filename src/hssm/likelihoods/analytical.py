@@ -5,8 +5,6 @@ of the WFPT distribution here:
 https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b.
 """
 
-from typing import Type
-
 import numpy as np
 import pymc as pm
 import pytensor
@@ -395,14 +393,14 @@ ddm_sdv_bounds = ddm_bounds | {"sv": (0.0, inf)}
 ddm_params = ["v", "a", "z", "t"]
 ddm_sdv_params = ddm_params + ["sv"]
 
-DDM: Type[pm.Distribution] = make_distribution(
+DDM: type[pm.Distribution] = make_distribution(
     rv="ddm",
     loglik=logp_ddm,
     list_params=ddm_params,
     bounds=ddm_bounds,
 )
 
-DDM_SDV: Type[pm.Distribution] = make_distribution(
+DDM_SDV: type[pm.Distribution] = make_distribution(
     rv="ddm_sdv",
     loglik=logp_ddm_sdv,
     list_params=ddm_sdv_params,
@@ -546,16 +544,52 @@ lba3_bounds = {
     "v2": (0.0, inf),
 }
 
-LBA2: Type[pm.Distribution] = make_distribution(
+LBA2: type[pm.Distribution] = make_distribution(
     rv="lba2",
     loglik=logp_lba2,
     list_params=lba2_params,
     bounds=lba2_bounds,
 )
 
-LBA3: Type[pm.Distribution] = make_distribution(
+LBA3: type[pm.Distribution] = make_distribution(
     rv="lba3",
     loglik=logp_lba3,
     list_params=lba3_params,
     bounds=lba3_bounds,
 )
+
+
+def softmax_inv_temperature(data: np.ndarray, beta: np.ndarray, *logits):
+    """Compute the log-likelihood of the Inverse Softmax Temperature Model.
+
+    Parameters
+    ----------
+    data
+        1D array of responses (choices).
+    beta
+        A scaler for the softmax temperature (0, inf).
+    *logits
+        Logits for each choice excluding logit0.
+
+    Returns
+    -------
+    pt.TensorVariable
+        The log likelihood of the Inverse Softmax Temperature Model.
+    """
+    choices = pt.where(data < 1, 0.0, data).astype("int32")
+    zeros = pt.zeros_like(data, dtype=pytensor.config.floatX)
+
+    logits_stacked = pt.stack(
+        [
+            zeros,  # logit0 is always 0
+            *(logit + zeros for logit in logits),
+        ],
+    )
+
+    logits_scaled = logits_stacked * beta
+    choice_logits = logits_scaled[choices, pt.arange(data.shape[0])]
+    log_prob_choices = choice_logits - pt.logsumexp(
+        logits_scaled, axis=0, keepdims=False
+    )
+
+    return pt.exp(log_prob_choices)
