@@ -592,4 +592,4 @@ def softmax_inv_temperature(data: np.ndarray, beta: np.ndarray, *logits):
         logits_scaled, axis=0, keepdims=False
     )
 
-    return pt.exp(log_prob_choices)
+    return log_prob_choices
