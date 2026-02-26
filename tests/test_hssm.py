@@ -439,3 +439,26 @@ def test_sample_do(data_ddm):
         "rt,response_dim",
     }
     assert np.unique(sample_do.prior["v_mean"].values) == [1.0]
+
+
+def test_is_choice_only_and_deadline(data_ddm):
+    config_choice_only = {"response": ["response"]}
+
+    model = HSSM(data=data_ddm, model="ddm", model_config=config_choice_only)
+    assert model.model_config.is_choice_only
+    assert model.response_c == "response"
+    assert model.response_str == "response"
+
+    data_deadline = data_ddm.copy()
+    data_deadline["deadline"] = 0
+
+    model_with_deadline = HSSM(
+        data=data_deadline, model="ddm", model_config=config_choice_only, deadline=True
+    )
+
+    assert model_with_deadline.is_choice_only
+    assert model_with_deadline.deadline
+    assert model_with_deadline.response is not None
+    assert len(model_with_deadline.response) == 2
+    assert model_with_deadline.response_c == "c(response, deadline)"
+    assert model_with_deadline.response_str == "response,deadline"

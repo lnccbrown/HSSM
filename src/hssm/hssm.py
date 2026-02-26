@@ -43,6 +43,7 @@ from hssm.distribution_utils import (
     assemble_callables,
     make_distribution,
     make_family,
+    make_hssm_rv,
     make_likelihood_callable,
     make_missing_data_callable,
 )
@@ -396,13 +397,21 @@ class HSSM(DataValidatorMixin):
         self.model_config.validate()
 
         # Set up shortcuts so old code will work
-        self.response = self.model_config.response
+        self.response = self.model_config.response[:]
         self.list_params = self.model_config.list_params
         self.choices = self.model_config.choices
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
+
+        self.response = cast("list[str]", self.response)
+        self.is_choice_only: bool = self.model_config.is_choice_only
+
+        if self.choices is None:
+            raise ValueError(
+                "`choices` must be provided either in `model_config` or as an argument."
+            )
 
         self.n_choices = len(self.choices)
 
@@ -411,35 +420,41 @@ class HSSM(DataValidatorMixin):
 
         # Process missing data setting
         # AF-TODO: Could be a function in data validator?
-        if isinstance(missing_data, float):
-            if not ((self.data.rt == missing_data).any()):
-                raise ValueError(
-                    f"missing_data argument is provided as a float {missing_data}, "
-                    f"However, you have no RTs of {missing_data} in your dataset!"
-                )
+        if self.is_choice_only and missing_data:
+            raise ValueError("Choice-only models cannot have missing data.")
+
+        if not self.is_choice_only:
+            if isinstance(missing_data, float):
+                if not ((self.data.rt == missing_data).any()):
+                    raise ValueError(
+                        f"missing_data argument is provided as a float {missing_data}, "
+                        f"However, you have no RTs of {missing_data} in your dataset!"
+                    )
+                else:
+                    self.missing_data = True
+                    self.missing_data_value = missing_data
+            elif isinstance(missing_data, bool):
+                if missing_data and (not (self.data.rt == -999.0).any()):
+                    raise ValueError(
+                        "missing_data argument is provided as True, "
+                        " so RTs of -999.0 are treated as missing. \n"
+                        "However, you have no RTs of -999.0 in your dataset!"
+                    )
+                elif (not missing_data) and (self.data.rt == -999.0).any():
+                    # self.missing_data = True
+                    raise ValueError(
+                        "Missing data provided as False. \n"
+                        "However, you have RTs of -999.0 in your dataset!"
+                    )
+                else:
+                    self.missing_data = missing_data
             else:
-                self.missing_data = True
-                self.missing_data_value = missing_data
-        elif isinstance(missing_data, bool):
-            if missing_data and (not (self.data.rt == -999.0).any()):
                 raise ValueError(
-                    "missing_data argument is provided as True, "
-                    " so RTs of -999.0 are treated as missing. \n"
-                    "However, you have no RTs of -999.0 in your dataset!"
+                    "missing_data argument must be a bool or a float! \n"
+                    f"You provided: {type(missing_data)}"
                 )
-            elif (not missing_data) and (self.data.rt == -999.0).any():
-                # self.missing_data = True
-                raise ValueError(
-                    "Missing data provided as False. \n"
-                    "However, you have RTs of -999.0 in your dataset!"
-                )
-            else:
-                self.missing_data = missing_data
         else:
-            raise ValueError(
-                "missing_data argument must be a bool or a float! \n"
-                f"You provided: {type(missing_data)}"
-            )
+            self.missing_data = False
 
         if isinstance(deadline, str):
             self.deadline = True
@@ -501,7 +516,8 @@ class HSSM(DataValidatorMixin):
         self.p_outlier = self.params.get("p_outlier")
         self.lapse = lapse if self.has_lapse else None
 
-        self._post_check_data_sanity()
+        if not self.is_choice_only:
+            self._post_check_data_sanity()
 
         self.model_distribution = self._make_model_distribution()
 
@@ -1358,9 +1374,15 @@ class HSSM(DataValidatorMixin):
 
     @property
     def response_c(self) -> str:
-        """Return the response variable names in c() format."""
+        """Return the response variable names in c() format.
+
+        New in 0.2.12: when model is choice-only and has deadline, the response
+        is not in the form of c(...).
+        """
         if self.response is None:
-            return "c()"
+            raise ValueError("Response is not defined.")
+        if self.is_choice_only and not self.deadline:
+            return self.response[0]
         return f"c({', '.join(self.response)})"
 
     @property
@@ -2096,6 +2118,31 @@ class HSSM(DataValidatorMixin):
                 self.missing_data_value,
             )
 
+        if self.is_choice_only and self.model_config.rv is None:
+            _logger.warning(
+                "You are building a choice-only model without specifying "
+                "a RandomVariable class. Using a dummy simulator function. "
+                "Simulating data from this model will result in an error."
+            )
+
+            def dummy_simulator_func(*args, **kwargs):
+                raise NotImplementedError(
+                    "You are trying to simulate data from a choice-only model "
+                    "without specifying a RandomVariable class. Please specify "
+                    "a RandomVariable class via the `model_config.rv` argument."
+                )
+
+            setattr(dummy_simulator_func, "model_name", self.model_name)
+            setattr(dummy_simulator_func, "choices", self.choices)
+            setattr(dummy_simulator_func, "obs_dim", 1)
+
+            self.model_config.rv = make_hssm_rv(
+                dummy_simulator_func,
+                list_params=self.list_params,
+                lapse=self.lapse,
+                is_choice_only=True,
+            )
+
         self.data = _rearrange_data(self.data)
 
         # Collect fixed-vector params to substitute in the distribution logp
@@ -2118,6 +2165,7 @@ class HSSM(DataValidatorMixin):
             ),
             fixed_vector_params=fixed_vector_params if fixed_vector_params else None,
             params_is_trialwise=params_is_trialwise_base,
+            is_choice_only=self.is_choice_only,
         )
 
     def _get_deterministic_var_names(self, idata) -> list[str]:
