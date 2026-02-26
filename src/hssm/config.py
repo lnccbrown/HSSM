@@ -263,8 +263,11 @@ class Config(BaseModelConfig):
     @property
     def is_choice_only(self) -> bool:
         """Check if the model is a choice-only model."""
-        if self.response is None:
-            raise ValueError("Response is not defined in the configuration.")
+        # Treat both None and an empty list as invalid configurations.
+        if not self.response:
+            raise ValueError(
+                "Please provide at least one `response` column in the configuration."
+            )
         return len(self.response) == 1
 
 
