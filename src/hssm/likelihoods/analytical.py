@@ -567,7 +567,7 @@ def softmax_inv_temperature(data: np.ndarray, beta: np.ndarray, *logits):
     data
         1D array of responses (choices).
     beta
-        A scaler for the softmax temperature (0, inf).
+        A scalar for the softmax temperature (0, inf).
     *logits
         Logits for each choice excluding logit0.
 
