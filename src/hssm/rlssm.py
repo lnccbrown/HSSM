@@ -86,6 +86,9 @@ class RLSSM(HSSMBase):
             else RLSSMConfig(**model_config)
         )
 
+        if loglik_kind is not None:
+            config.loglik_kind = loglik_kind
+
         if choices is not None and config.choices is None:
             config.choices = tuple(choices)
 
@@ -112,6 +115,7 @@ class RLSSM(HSSMBase):
             if name != "p_outlier"
         ]
         params_is_trialwise = params_is_trialwise_base + [True for _ in extra_fields]
+        rl_list_params = [name for name in self.list_params if name != "p_outlier"]
 
         # Resolve participant/trial counts for the RL builder
         if "participant_id" not in extra_fields:
@@ -200,7 +204,7 @@ class RLSSM(HSSMBase):
                     n_participants,
                     n_trials,
                     data_cols=data_cols,
-                    list_params=self.list_params,
+                    list_params=rl_list_params,
                     extra_fields=extra_fields,
                 ),
             )
@@ -212,7 +216,7 @@ class RLSSM(HSSMBase):
                     n_participants,
                     n_trials,
                     data_cols=data_cols,
-                    list_params=self.list_params,
+                    list_params=rl_list_params,
                     extra_fields=extra_fields,
                 ),
             )
