@@ -322,7 +322,7 @@ def _validate_computed_parameters(
 
 
 def _validate_data_shape(
-    data: np.ndarray,
+    data: np.ndarray | Array,
     data_cols: list[str],
 ) -> None:
     """Validate that data array has correct number of columns.
@@ -339,6 +339,9 @@ def _validate_data_shape(
     ValueError
         If data doesn't have expected number of columns or is not 2D.
     """
+    if not isinstance(data, np.ndarray):
+        return
+
     if data.ndim != 2:
         raise ValueError(
             f"Data array must be 2D, but got shape {data.shape} with "
@@ -383,7 +386,7 @@ def _validate_args_length(
 
 
 def _validate_uniform_trials(
-    data: np.ndarray,
+    data: np.ndarray | Array,
     n_participants: int,
     n_trials: int,
 ) -> None:
@@ -403,6 +406,9 @@ def _validate_uniform_trials(
     ValueError
         If total number of trials doesn't match n_participants * n_trials.
     """
+    if not isinstance(data, np.ndarray):
+        return
+
     total_trials = data.shape[0]
     expected_trials = n_participants * n_trials
 
@@ -454,7 +460,7 @@ def _validate_args_array_shapes(
 
 
 def _validate_inputs(
-    data: np.ndarray,
+    data: np.ndarray | Array,
     args: tuple,
     n_participants: int,
     n_trials: int,
@@ -489,6 +495,9 @@ def _validate_inputs(
     ValueError
         If any validation check fails.
     """
+    if not isinstance(data, np.ndarray):
+        return
+
     _validate_data_shape(data, data_cols)
     _validate_args_length(args, list_params, extra_fields)
     _validate_uniform_trials(data, n_participants, n_trials)
