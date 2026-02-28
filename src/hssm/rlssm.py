@@ -184,8 +184,8 @@ class RLSSM(HSSMBase):
         if not hasattr(ssm_loglik, "inputs"):
             raise ValueError(
                 "RLSSM requires the decision-process log-likelihood to declare `inputs`"
-                "(e.g., with annotate_function). Please annotate the logp function with"
-                " an ordered list of expected columns including any computed parameters."
+                "(e.g., annotate_function). Please annotate the logp function with "
+                "an ordered list of expected columns including any computed parameters."
             )
 
         setattr(ssm_loglik, "computed", computed_map)
