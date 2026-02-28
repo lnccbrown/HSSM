@@ -36,7 +36,7 @@ validation functions.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 import jax
 import jax.numpy as jnp
@@ -50,6 +50,8 @@ from hssm.distribution_utils.jax import make_jax_logp_ops
 
 if TYPE_CHECKING:
     from pytensor.graph import Op
+
+    from hssm._types import LogLikeGrad
 
 
 class AnnotatedFunction(Protocol):
@@ -600,12 +602,15 @@ def make_rl_logp_func(
         # Use jnp operations (not np) so this works during JAX tracing (e.g.
         # when make_vjp_func calls jax.vjp to compute gradients).
         n_total = n_participants * n_trials
-        cols_data = [
-            jnp.broadcast_to(jnp.asarray(arr).reshape(-1), (n_total,))
-            if arr.size == 1
-            else arr
-            for arr in cols_data
-        ]
+        cols_data = cast(
+            "list[np.ndarray]",
+            [
+                jnp.broadcast_to(jnp.asarray(arr).reshape(-1), (n_total,))
+                if arr.size == 1
+                else arr
+                for arr in cols_data
+            ],
+        )
         # Stack along axis=1 to create (n_total_trials, n_inputs) array, preserving
         # column order from compute_func.inputs
         subj_trials = jnp.stack(cols_data, axis=1)
@@ -803,7 +808,7 @@ def make_rl_logp_op(
 
     return make_jax_logp_ops(
         logp=logp_compiled,
-        logp_vjp=vjp_compiled,
+        logp_vjp=cast("LogLikeGrad", vjp_compiled),
         logp_nojit=logp_nojit,
         n_params=n_params,
     )
