@@ -47,6 +47,7 @@ repository = "https://github.com/lnccbrown/HSSM"
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.5.2"]
+bayesflow = ["bayesflow", "keras"]
 
 [dependency-groups]
 dev = [
