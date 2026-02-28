@@ -45,6 +45,7 @@ nav:
       - Reinforcement Learning - Sequential Sampling Models (RLSSM): tutorials/rlssm_tutorial.ipynb
       - Add custom RLSSM models: tutorials/add_custom_rlssm_model.ipynb
       - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
+      - BayesFlow LRE Integration: tutorials/bayesflow_lre_integration.ipynb
       - Custom models from onnx files: tutorials/blackbox_contribution_onnx_example.ipynb
       - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
       - Saving and loading models: tutorials/save_load_tutorial.ipynb
@@ -97,6 +98,7 @@ plugins:
         - tutorials/pymc_to_hssm.ipynb
         - tutorials/rlssm_rlwm_model.ipynb
         - tutorials/tutorial_bayeux.ipynb
+        - tutorials/bayesflow_lre_integration.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:
