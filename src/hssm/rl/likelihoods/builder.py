@@ -595,6 +595,17 @@ def make_rl_logp_func(
         # Extract and organize data for this computation
         # cols_data order matches compute_func.inputs order
         cols_data = _collect_cols_arrays(data, args, colidxs)
+        # Broadcast singleton (scalar/global) parameter arrays to full trial
+        # count so they can be stacked with per-trial data columns.
+        # Use jnp operations (not np) so this works during JAX tracing (e.g.
+        # when make_vjp_func calls jax.vjp to compute gradients).
+        n_total = n_participants * n_trials
+        cols_data = [
+            jnp.broadcast_to(jnp.asarray(arr).reshape(-1), (n_total,))
+            if arr.size == 1
+            else arr
+            for arr in cols_data
+        ]
         # Stack along axis=1 to create (n_total_trials, n_inputs) array, preserving
         # column order from compute_func.inputs
         subj_trials = jnp.stack(cols_data, axis=1)
@@ -779,8 +790,12 @@ def make_rl_logp_op(
         def logp_numpy(data: Any, *args: Any) -> np.ndarray:
             return np.asarray(logp(data, *args))
 
-        def vjp_numpy(*args: Any, gz: Any | None = None) -> np.ndarray:
-            return np.asarray(vjp_logp(*args, gz=gz))
+        def vjp_numpy(*args: Any, gz: Any | None = None) -> tuple:
+            # Return a tuple of individual numpy arrays so LANLogpVJPOp.perform
+            # can iterate over them. Avoid np.asarray on the whole result,
+            # which fails when gradient arrays have inhomogeneous shapes (e.g.
+            # scalar global params vs trialwise params of different lengths).
+            return tuple(np.asarray(r) for r in vjp_logp(*args, gz=gz))
 
         logp_compiled = logp_numpy
         vjp_compiled = vjp_numpy

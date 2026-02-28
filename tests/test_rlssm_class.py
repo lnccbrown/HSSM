@@ -265,3 +265,31 @@ class TestRLSSMSampling:
 
         assert idata.posterior.data_vars
         assert "a" in idata.posterior.data_vars
+
+    @pytest.mark.slow
+    def test_rlssm_sampling_with_learning_process(
+        self, dummy_data: pd.DataFrame, rlssm_config: RLSSMConfig
+    ):
+        """Integration test: learning_process computes v; no v column in data.
+
+        Exercises the core RLSSM path where computed parameters are produced
+        from ``learning_process`` under the default JAX backend, catching
+        backend-compatibility issues in the computed-parameter pipeline.
+        """
+        config_jax = replace(
+            rlssm_config,
+            loglik_kind="analytical",
+        )
+
+        model = RLSSM(
+            data=dummy_data,
+            model="dummy_rlssm",
+            model_config=config_jax,
+            loglik=decision_logp,
+            loglik_kind="analytical",
+        )
+
+        idata = model.sample(draws=5, tune=0, chains=1, cores=1)
+
+        assert idata.posterior.data_vars
+        assert "a" in idata.posterior.data_vars
