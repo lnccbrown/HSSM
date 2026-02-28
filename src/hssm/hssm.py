@@ -787,11 +787,7 @@ class HSSM(DataValidatorMixin):
 
         omit_offsets = kwargs.pop("omit_offsets", False)
         self._inference_obj = self.model.fit(
-            inference_method=(
-                "pymc"
-                if sampler in ["pymc", "numpyro", "blackjax", "nutpie"]
-                else sampler
-            ),
+            inference_method=sampler,
             init=init,
             include_response_params=include_response_params,
             omit_offsets=omit_offsets,
