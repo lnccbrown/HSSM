@@ -36,12 +36,14 @@ validation functions.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytensor.tensor as pt
 from jax import Array
+from pytensor.tensor import TensorVariable
 
 from hssm.distribution_utils.func_utils import make_vjp_func
 from hssm.distribution_utils.jax import make_jax_logp_ops
@@ -497,6 +499,10 @@ def _validate_inputs(
     """
     if not isinstance(data, np.ndarray):
         return
+    if any(not isinstance(arg, np.ndarray) for arg in args):
+        return
+    if any(arg.size == 1 for arg in args if isinstance(arg, np.ndarray)):
+        return
 
     _validate_data_shape(data, data_cols)
     _validate_args_length(args, list_params, extra_fields)
@@ -680,8 +686,15 @@ def make_rl_logp_func(
 
         param_arrays = [get_param_array(name) for name in ssm_logp_func.inputs]
 
-        # Stack all parameters into final matrix
-        lan_matrix = jnp.concatenate(param_arrays, axis=1)
+        # Stack all parameters into final matrix; handle PyTensor symbolic args.
+        if any(isinstance(arr, TensorVariable) for arr in param_arrays):
+            param_arrays_pt = [
+                arr if isinstance(arr, TensorVariable) else pt.as_tensor_variable(arr)
+                for arr in param_arrays
+            ]
+            lan_matrix = pt.concatenate(param_arrays_pt, axis=1)
+        else:
+            lan_matrix = jnp.concatenate(param_arrays, axis=1)
         return ssm_logp_func(lan_matrix)
 
     return logp
@@ -694,6 +707,7 @@ def make_rl_logp_op(
     data_cols: list[str] | None = None,
     list_params: list[str] | None = None,
     extra_fields: list[str] | None = None,
+    backend: Literal["pytensor", "jax", "other"] | None = None,
 ) -> "Op":
     """Create a log-likelihood pytensor Op for models with computed parameters.
 
@@ -750,9 +764,31 @@ def make_rl_logp_op(
     n_params = len(list_params or [])
     vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
 
+    # Avoid JAX tracers when running under PyTensor by skipping jitting for
+    # non-pytensor backends (default None treated as JAX here).
+    jit_enabled = backend == "pytensor"
+    logp_compiled: Callable[..., Any]
+    vjp_compiled: Callable[..., Any]
+    logp_nojit: Callable[..., Any]
+    if jit_enabled:
+        logp_compiled = jax.jit(logp)
+        vjp_compiled = jax.jit(vjp_logp)
+        logp_nojit = logp
+    else:
+
+        def logp_numpy(data: Any, *args: Any) -> np.ndarray:
+            return np.asarray(logp(data, *args))
+
+        def vjp_numpy(*args: Any, gz: Any | None = None) -> np.ndarray:
+            return np.asarray(vjp_logp(*args, gz=gz))
+
+        logp_compiled = logp_numpy
+        vjp_compiled = vjp_numpy
+        logp_nojit = logp_numpy
+
     return make_jax_logp_ops(
-        logp=jax.jit(logp),
-        logp_vjp=jax.jit(vjp_logp),
-        logp_nojit=logp,
+        logp=logp_compiled,
+        logp_vjp=vjp_compiled,
+        logp_nojit=logp_nojit,
         n_params=n_params,
     )
