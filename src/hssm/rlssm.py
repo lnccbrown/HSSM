@@ -156,7 +156,7 @@ class RLSSM(HSSMBase):
                     )
                 computed_map[param_name] = func
 
-        has_learning_process = bool(computed_map)
+        has_computed_params = bool(computed_map)
 
         # When learning_process has compute functions the inner SSM logp is
         # called with concrete numpy/JAX arrays inside Op.perform.  In that
@@ -165,7 +165,7 @@ class RLSSM(HSSMBase):
         # callable directly; make_rl_logp_op will handle all necessary wrapping.
         # For the no-learning-process case keep the full make_likelihood_callable
         # pipeline unchanged.
-        if has_learning_process:
+        if has_computed_params:
             ssm_loglik = loglik_callable
             if loglik_inputs is not None and not hasattr(ssm_loglik, "inputs"):
                 setattr(ssm_loglik, "inputs", loglik_inputs)
