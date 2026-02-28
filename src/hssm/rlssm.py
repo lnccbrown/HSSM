@@ -167,30 +167,25 @@ class RLSSM(HSSMBase):
         # pipeline unchanged.
         if has_computed_params:
             ssm_loglik = loglik_callable
-            if loglik_inputs is not None and not hasattr(ssm_loglik, "inputs"):
-                setattr(ssm_loglik, "inputs", loglik_inputs)
         else:
-            likelihood_callable = make_likelihood_callable(
+            ssm_loglik = make_likelihood_callable(
                 loglik=loglik_callable,
                 loglik_kind=self.loglik_kind or "approx_differentiable",
                 backend=rl_config.backend or "jax",
                 params_is_reg=params_is_trialwise,
             )
             # Propagate metadata lost by wrapping (e.g., jax vmapping)
-            if loglik_inputs is not None and not hasattr(likelihood_callable, "inputs"):
-                setattr(likelihood_callable, "inputs", loglik_inputs)
-            if loglik_computed is not None and not hasattr(
-                likelihood_callable, "computed"
-            ):
-                setattr(likelihood_callable, "computed", loglik_computed)
-            ssm_loglik = likelihood_callable
+            if loglik_inputs is not None and not hasattr(ssm_loglik, "inputs"):
+                setattr(ssm_loglik, "inputs", loglik_inputs)
+            if loglik_computed is not None and not hasattr(ssm_loglik, "computed"):
+                setattr(ssm_loglik, "computed", loglik_computed)
 
         # Ensure the decision-process logp exposes required metadata
         if not hasattr(ssm_loglik, "inputs"):
             raise ValueError(
                 "RLSSM requires the decision-process log-likelihood to declare `inputs`"
                 "(e.g., with annotate_function). Please annotate the logp function with"
-                "an ordered list of expected columns including any computed parameters."
+                " an ordered list of expected columns including any computed parameters."
             )
 
         setattr(ssm_loglik, "computed", computed_map)
@@ -219,7 +214,7 @@ class RLSSM(HSSMBase):
         # that would cause jnp.stack/jnp.concatenate to fail.
         annotated_loglik = typing_cast("AnnotatedFunction", ssm_loglik)
 
-        if rl_config.backend == "pytensor" or has_learning_process:
+        if rl_config.backend == "pytensor" or has_computed_params:
             self.loglik = typing_cast(
                 "Op",
                 make_rl_logp_op(
