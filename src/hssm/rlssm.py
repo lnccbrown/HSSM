@@ -138,28 +138,10 @@ class RLSSM(HSSMBase):
         )
         loglik_inputs = getattr(loglik_callable, "inputs", None)
         loglik_computed = getattr(loglik_callable, "computed", None)
-        likelihood_callable = make_likelihood_callable(
-            loglik=loglik_callable,
-            loglik_kind=self.loglik_kind or "approx_differentiable",
-            backend=rl_config.backend or "jax",
-            params_is_reg=params_is_trialwise,
-        )
-        # Propagate metadata lost by wrapping (e.g., jax vmapping)
-        if loglik_inputs is not None and not hasattr(likelihood_callable, "inputs"):
-            setattr(likelihood_callable, "inputs", loglik_inputs)
-        if loglik_computed is not None and not hasattr(likelihood_callable, "computed"):
-            setattr(likelihood_callable, "computed", loglik_computed)
 
-        # Ensure the decision-process logp exposes required metadata
-        if not hasattr(likelihood_callable, "inputs"):
-            raise ValueError(
-                "RLSSM requires the decision-process log-likelihood to declare `inputs`"
-                "(e.g., with annotate_function). Please annotate the logp function with"
-                "an ordered list of expected columns including any computed parameters."
-            )
-
-        # Build/extend computed mapping from learning_process
-        computed_map = getattr(likelihood_callable, "computed", {}) or {}
+        # Build/extend computed mapping from learning_process first, so we can
+        # decide whether the raw callable or a wrapped Op is needed below.
+        computed_map: dict = loglik_computed or {}
         if rl_config.learning_process:
             for param_name, compute_func in rl_config.learning_process.items():
                 # Fill in outputs default if absent
@@ -174,9 +156,41 @@ class RLSSM(HSSMBase):
                     )
                 computed_map[param_name] = func
 
-        setattr(likelihood_callable, "computed", computed_map)
+        has_computed_params = bool(computed_map)
 
-        if not getattr(likelihood_callable, "inputs", None):
+        # When learning_process has compute functions the inner SSM logp is
+        # called with concrete numpy/JAX arrays inside Op.perform.  In that
+        # context a wrapped JAX Op (as produced by make_likelihood_callable for
+        # the "jax" backend) cannot accept JAX arrays as inputs.  Use the raw
+        # callable directly; make_rl_logp_op will handle all necessary wrapping.
+        # For the no-learning-process case keep the full make_likelihood_callable
+        # pipeline unchanged.
+        if has_computed_params:
+            ssm_loglik = loglik_callable
+        else:
+            ssm_loglik = make_likelihood_callable(
+                loglik=loglik_callable,
+                loglik_kind=self.loglik_kind or "approx_differentiable",
+                backend=rl_config.backend or "jax",
+                params_is_reg=params_is_trialwise,
+            )
+            # Propagate metadata lost by wrapping (e.g., jax vmapping)
+            if loglik_inputs is not None and not hasattr(ssm_loglik, "inputs"):
+                setattr(ssm_loglik, "inputs", loglik_inputs)
+            if loglik_computed is not None and not hasattr(ssm_loglik, "computed"):
+                setattr(ssm_loglik, "computed", loglik_computed)
+
+        # Ensure the decision-process logp exposes required metadata
+        if not hasattr(ssm_loglik, "inputs"):
+            raise ValueError(
+                "RLSSM requires the decision-process log-likelihood to declare `inputs`"
+                "(e.g., annotate_function). Please annotate the logp function with "
+                "an ordered list of expected columns including any computed parameters."
+            )
+
+        setattr(ssm_loglik, "computed", computed_map)
+
+        if not getattr(ssm_loglik, "inputs", None):
             raise ValueError(
                 "Decision-process log-likelihood must define a non-empty `inputs` list."
             )
@@ -185,7 +199,7 @@ class RLSSM(HSSMBase):
         missing_in_inputs = [
             name
             for name in computed_map
-            if name not in likelihood_callable.inputs  # type: ignore[attr-defined]
+            if name not in ssm_loglik.inputs  # type: ignore[attr-defined]
         ]
         if missing_in_inputs:
             raise ValueError(
@@ -193,11 +207,14 @@ class RLSSM(HSSMBase):
                 f" `inputs`: missing {', '.join(missing_in_inputs)}"
             )
 
-        # Build RL-aware logp; only wrap in a PyTensor Op
-        # for the explicit pytensor backend.
-        annotated_loglik = typing_cast("AnnotatedFunction", likelihood_callable)
+        # Build RL-aware logp.  Wrap in a PyTensor Op when using the explicit
+        # pytensor backend OR when learning_process has compute functions.
+        # Op wrapping ensures that the JAX compute functions receive concrete
+        # numpy arrays (via Op.perform) rather than symbolic PyTensor tensors
+        # that would cause jnp.stack/jnp.concatenate to fail.
+        annotated_loglik = typing_cast("AnnotatedFunction", ssm_loglik)
 
-        if rl_config.backend == "pytensor":
+        if rl_config.backend == "pytensor" or has_computed_params:
             self.loglik = typing_cast(
                 "Op",
                 make_rl_logp_op(
