@@ -184,20 +184,21 @@ class RLSSM(HSSMBase):
         # Ensure computed params appear in the decision logp inputs
         missing_in_inputs = [
             name
-            for name in computed_map.keys()
+            for name in computed_map
             if name not in likelihood_callable.inputs  # type: ignore[attr-defined]
         ]
         if missing_in_inputs:
             raise ValueError(
                 "Computed parameters must be included in the decision log-likelihood"
-                " `inputs`: missing {missing_in_inputs}"
+                f" `inputs`: missing {', '.join(missing_in_inputs)}"
             )
 
-        # Build RL-aware logp (pytensor Op for sampling, python callable otherwise)
+        # Build RL-aware logp; only wrap in a PyTensor Op
+        # for the explicit pytensor backend.
         annotated_loglik = typing_cast("AnnotatedFunction", likelihood_callable)
 
-        self.loglik = (
-            typing_cast(
+        if rl_config.backend == "pytensor":
+            self.loglik = typing_cast(
                 "Op",
                 make_rl_logp_op(
                     annotated_loglik,
@@ -206,10 +207,11 @@ class RLSSM(HSSMBase):
                     data_cols=data_cols,
                     list_params=rl_list_params,
                     extra_fields=extra_fields,
+                    backend=rl_config.backend,
                 ),
             )
-            if rl_config.backend == "pytensor"
-            else typing_cast(
+        else:
+            self.loglik = typing_cast(
                 "AnnotatedFunction",
                 make_rl_logp_func(
                     annotated_loglik,
@@ -220,7 +222,6 @@ class RLSSM(HSSMBase):
                     extra_fields=extra_fields,
                 ),
             )
-        )
 
         # Optional missing-data / deadline composition (reuses HSSM logic)
         if self.missing_data_network != MissingDataNetwork.NONE:
