@@ -236,3 +236,32 @@ class TestRLSSMSampling:
 
         assert idata.posterior.data_vars
         assert "a" in idata.posterior.data_vars
+
+    @pytest.mark.slow
+    def test_rlssm_sampling_jax_backend(
+        self, dummy_data: pd.DataFrame, rlssm_config: RLSSMConfig
+    ):
+        """Sampling works with the default (JAX) backend path."""
+        data_with_v = dummy_data.copy()
+        data_with_v["v"] = 0.1
+
+        config_jax = replace(
+            rlssm_config,
+            backend=None,
+            learning_process={},
+            extra_fields=["participant_id", "feedback", "trial_id", "v"],
+            loglik_kind="analytical",
+        )
+
+        model = RLSSM(
+            data=data_with_v,
+            model="dummy_rlssm",
+            model_config=config_jax,
+            loglik=decision_logp,
+            loglik_kind="analytical",
+        )
+
+        idata = model.sample(draws=5, tune=0, chains=1, cores=1)
+
+        assert idata.posterior.data_vars
+        assert "a" in idata.posterior.data_vars
