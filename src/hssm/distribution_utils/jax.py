@@ -61,15 +61,24 @@ def make_jax_logp_ops(
                 A list of parameters used in the likelihood computation. The parameters
                 can be a mix of scalars and arrays.
             """
-            inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
+            # PyTensor cannot take JAX DeviceArray directly; coerce to numpy first.
+            safe_params = [
+                np.asarray(dist_param)
+                if isinstance(dist_param, jnp.ndarray)
+                else dist_param
+                for dist_param in dist_params
+            ]
+            inputs = [pt.as_tensor_variable(dist_param) for dist_param in safe_params]
             self.is_scalars_only = all(inp.ndim == 0 for inp in inputs)
             # params_only means calculate gradients only with respect to the
             # parameters, not the data.
             self.is_params_only = data is not None
             self.n_params = n_params
 
+            safe_data = np.asarray(data) if isinstance(data, jnp.ndarray) else data
+
             if self.is_params_only:
-                inputs = [pt.as_tensor_variable(data)] + inputs
+                inputs = [pt.as_tensor_variable(safe_data)] + inputs
 
             outputs = [pt.vector()]
 
@@ -91,7 +100,9 @@ def make_jax_logp_ops(
                 the Op.
             """
             result = logp(*inputs)
-            output_storage[0][0] = np.asarray(result, dtype=node.outputs[0].dtype)
+            # Ensure a 1D numeric array even if the backend returns nested sequences
+            result_array = np.asarray(result, dtype=node.outputs[0].dtype).reshape(-1)
+            output_storage[0][0] = result_array
 
         def grad(self, inputs, output_gradients):
             """Perform the pytensor.grad() operation.
@@ -150,11 +161,19 @@ def make_jax_logp_ops(
             """
             self.is_params_only = data is not None
             self.is_scalars_only = gz is None
-            inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
+            safe_params = [
+                np.asarray(dist_param)
+                if isinstance(dist_param, jnp.ndarray)
+                else dist_param
+                for dist_param in dist_params
+            ]
+            inputs = [pt.as_tensor_variable(dist_param) for dist_param in safe_params]
             if self.is_params_only:
-                inputs = [pt.as_tensor_variable(data)] + inputs
+                safe_data = np.asarray(data) if isinstance(data, jnp.ndarray) else data
+                inputs = [pt.as_tensor_variable(safe_data)] + inputs
             if not self.is_scalars_only:
-                inputs += [pt.as_tensor_variable(gz)]
+                safe_gz = np.asarray(gz) if isinstance(gz, jnp.ndarray) else gz
+                inputs += [pt.as_tensor_variable(safe_gz)]
 
             if self.is_params_only:
                 outputs = [inp.type() for inp in inputs[1:-1]]

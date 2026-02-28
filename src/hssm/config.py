@@ -77,6 +77,18 @@ class BaseModelConfig(ABC):
         """Get default values for a parameter. Must be implemented by subclasses."""
         ...
 
+    def update_loglik(self, loglik: Any | None) -> None:
+        """Update the log-likelihood function from user input.
+
+        Shared hook so subclasses can accept a custom log-likelihood after
+        construction; leaving it unset would cause validation to fail when the
+        model is built.
+        """
+        if loglik is None:
+            return
+
+        self.loglik = loglik
+
 
 @dataclass
 class Config(BaseModelConfig):
@@ -180,19 +192,6 @@ class Config(BaseModelConfig):
                 loglik_kind=loglik_kind,
                 response=DEFAULT_RLSSM_OBSERVED_DATA,
             )
-
-    def update_loglik(self, loglik: Any | None) -> None:
-        """Update the log-likelihood function from user input.
-
-        Parameters
-        ----------
-        loglik : optional
-            A user-defined log-likelihood function.
-        """
-        if loglik is None:
-            return
-
-        self.loglik = loglik
 
     def update_choices(self, choices: tuple[int, ...] | None) -> None:
         """Update the choices from user input.

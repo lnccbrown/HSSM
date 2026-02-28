@@ -36,18 +36,22 @@ validation functions.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytensor.tensor as pt
 from jax import Array
+from pytensor.tensor import TensorVariable
 
 from hssm.distribution_utils.func_utils import make_vjp_func
 from hssm.distribution_utils.jax import make_jax_logp_ops
 
 if TYPE_CHECKING:
     from pytensor.graph import Op
+
+    from hssm._types import LogLikeGrad
 
 
 class AnnotatedFunction(Protocol):
@@ -322,7 +326,7 @@ def _validate_computed_parameters(
 
 
 def _validate_data_shape(
-    data: np.ndarray,
+    data: np.ndarray | Array,
     data_cols: list[str],
 ) -> None:
     """Validate that data array has correct number of columns.
@@ -339,6 +343,9 @@ def _validate_data_shape(
     ValueError
         If data doesn't have expected number of columns or is not 2D.
     """
+    if not isinstance(data, np.ndarray):
+        return
+
     if data.ndim != 2:
         raise ValueError(
             f"Data array must be 2D, but got shape {data.shape} with "
@@ -383,7 +390,7 @@ def _validate_args_length(
 
 
 def _validate_uniform_trials(
-    data: np.ndarray,
+    data: np.ndarray | Array,
     n_participants: int,
     n_trials: int,
 ) -> None:
@@ -403,6 +410,9 @@ def _validate_uniform_trials(
     ValueError
         If total number of trials doesn't match n_participants * n_trials.
     """
+    if not isinstance(data, np.ndarray):
+        return
+
     total_trials = data.shape[0]
     expected_trials = n_participants * n_trials
 
@@ -454,7 +464,7 @@ def _validate_args_array_shapes(
 
 
 def _validate_inputs(
-    data: np.ndarray,
+    data: np.ndarray | Array,
     args: tuple,
     n_participants: int,
     n_trials: int,
@@ -489,6 +499,13 @@ def _validate_inputs(
     ValueError
         If any validation check fails.
     """
+    if not isinstance(data, np.ndarray):
+        return
+    if any(not isinstance(arg, np.ndarray) for arg in args):
+        return
+    if any(arg.size == 1 for arg in args if isinstance(arg, np.ndarray)):
+        return
+
     _validate_data_shape(data, data_cols)
     _validate_args_length(args, list_params, extra_fields)
     _validate_uniform_trials(data, n_participants, n_trials)
@@ -580,6 +597,20 @@ def make_rl_logp_func(
         # Extract and organize data for this computation
         # cols_data order matches compute_func.inputs order
         cols_data = _collect_cols_arrays(data, args, colidxs)
+        # Broadcast singleton (scalar/global) parameter arrays to full trial
+        # count so they can be stacked with per-trial data columns.
+        # Use jnp operations (not np) so this works during JAX tracing (e.g.
+        # when make_vjp_func calls jax.vjp to compute gradients).
+        n_total = n_participants * n_trials
+        cols_data = cast(
+            "list[np.ndarray]",
+            [
+                jnp.broadcast_to(jnp.asarray(arr).reshape(-1), (n_total,))
+                if arr.size == 1
+                else arr
+                for arr in cols_data
+            ],
+        )
         # Stack along axis=1 to create (n_total_trials, n_inputs) array, preserving
         # column order from compute_func.inputs
         subj_trials = jnp.stack(cols_data, axis=1)
@@ -671,8 +702,15 @@ def make_rl_logp_func(
 
         param_arrays = [get_param_array(name) for name in ssm_logp_func.inputs]
 
-        # Stack all parameters into final matrix
-        lan_matrix = jnp.concatenate(param_arrays, axis=1)
+        # Stack all parameters into final matrix; handle PyTensor symbolic args.
+        if any(isinstance(arr, TensorVariable) for arr in param_arrays):
+            param_arrays_pt = [
+                arr if isinstance(arr, TensorVariable) else pt.as_tensor_variable(arr)
+                for arr in param_arrays
+            ]
+            lan_matrix = pt.concatenate(param_arrays_pt, axis=1)
+        else:
+            lan_matrix = jnp.concatenate(param_arrays, axis=1)
         return ssm_logp_func(lan_matrix)
 
     return logp
@@ -685,6 +723,7 @@ def make_rl_logp_op(
     data_cols: list[str] | None = None,
     list_params: list[str] | None = None,
     extra_fields: list[str] | None = None,
+    backend: Literal["pytensor", "jax", "other"] | None = None,
 ) -> "Op":
     """Create a log-likelihood pytensor Op for models with computed parameters.
 
@@ -741,9 +780,35 @@ def make_rl_logp_op(
     n_params = len(list_params or [])
     vjp_logp = make_vjp_func(logp, params_only=False, n_params=n_params)
 
+    # Avoid JAX tracers when running under PyTensor by skipping jitting for
+    # non-pytensor backends (default None treated as JAX here).
+    jit_enabled = backend == "pytensor"
+    logp_compiled: Callable[..., Any]
+    vjp_compiled: Callable[..., Any]
+    logp_nojit: Callable[..., Any]
+    if jit_enabled:
+        logp_compiled = jax.jit(logp)
+        vjp_compiled = jax.jit(vjp_logp)
+        logp_nojit = logp
+    else:
+
+        def logp_numpy(data: Any, *args: Any) -> np.ndarray:
+            return np.asarray(logp(data, *args))
+
+        def vjp_numpy(*args: Any, gz: Any | None = None) -> tuple:
+            # Return a tuple of individual numpy arrays so LANLogpVJPOp.perform
+            # can iterate over them. Avoid np.asarray on the whole result,
+            # which fails when gradient arrays have inhomogeneous shapes (e.g.
+            # scalar global params vs trialwise params of different lengths).
+            return tuple(np.asarray(r) for r in vjp_logp(*args, gz=gz))
+
+        logp_compiled = logp_numpy
+        vjp_compiled = vjp_numpy
+        logp_nojit = logp_numpy
+
     return make_jax_logp_ops(
-        logp=jax.jit(logp),
-        logp_vjp=jax.jit(vjp_logp),
-        logp_nojit=logp,
+        logp=logp_compiled,
+        logp_vjp=cast("LogLikeGrad", vjp_compiled),
+        logp_nojit=logp_nojit,
         n_params=n_params,
     )
