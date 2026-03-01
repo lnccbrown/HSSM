@@ -631,7 +631,7 @@ def logp_poisson_race(
     log_pdf = (
         k_c * pt.log(r_c_safe)
         + (k_c - 1.0) * pt.log(rt_safe)
-        - r_c * rt
+        - r_c * rt_safe
         - pt.gammaln(k_c)
     )
 
@@ -651,7 +651,6 @@ def logp_poisson_race(
 
 
 # set bounds
-poisson_race_params = ["r1", "r2", "k1", "k2", "t"]
 poisson_race_bounds = {
     "r1": (np.finfo(float).eps, np.inf),
     "r2": (np.finfo(float).eps, np.inf),
@@ -659,6 +658,7 @@ poisson_race_bounds = {
     "k2": (np.finfo(float).eps, np.inf),
     "t": (0.0, np.inf),
 }
+poisson_race_params = list(poisson_race_bounds)
 
 # build distribution
 POISSON_RACE = make_distribution(
