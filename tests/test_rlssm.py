@@ -5,6 +5,8 @@ config validation, param keys, balanced-panel enforcement, the no-lapse
 variant, bambi / PyMC model construction, and a sampling smoke test.
 """
 
+from pathlib import Path
+
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
@@ -53,7 +55,9 @@ def _dummy_ssm_logp(lan_matrix: jnp.ndarray) -> jnp.ndarray:
 @pytest.fixture(scope="module")
 def rldm_data() -> pd.DataFrame:
     """Load the RLDM fixture dataset (balanced panel)."""
-    raw = np.load("tests/fixtures/rldm_data.npy", allow_pickle=True).item()
+    raw = np.load(
+        Path(__file__).parent / "fixtures" / "rldm_data.npy", allow_pickle=True
+    ).item()
     return pd.DataFrame(raw["data"])
 
 
