@@ -123,6 +123,16 @@ def test_rlssm_unbalanced_raises(
         RLSSM(data=unbalanced, rlssm_config=rlssm_config)
 
 
+def test_rlssm_nan_participant_id_raises(
+    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
+) -> None:
+    """NaN in participant_id column should raise ValueError before groupby silently drops rows."""
+    nan_data = rldm_data.copy()
+    nan_data.loc[nan_data.index[0], "participant_id"] = float("nan")
+    with pytest.raises(ValueError, match="NaN"):
+        RLSSM(data=nan_data, rlssm_config=rlssm_config)
+
+
 def test_rlssm_missing_ssm_logp_func_raises(
     rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
 ) -> None:
@@ -143,6 +153,29 @@ def test_rlssm_missing_ssm_logp_func_raises(
         # ssm_logp_func intentionally omitted → defaults to None
     )
     with pytest.raises(ValueError, match="ssm_logp_func"):
+        RLSSM(data=rldm_data, rlssm_config=bad_config)
+
+
+def test_rlssm_unannotated_ssm_logp_func_raises(
+    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
+) -> None:
+    """A plain callable without @annotate_function attrs should raise ValueError."""
+    bad_config = RLSSMConfig(
+        model_name="rldm_bad",
+        loglik_kind="approx_differentiable",
+        decision_process="angle",
+        decision_process_loglik_kind="approx_differentiable",
+        learning_process_loglik_kind="blackbox",
+        list_params=rlssm_config.list_params,
+        params_default=rlssm_config.params_default,
+        bounds=rlssm_config.bounds,
+        learning_process=rlssm_config.learning_process,
+        response=list(rlssm_config.response),
+        choices=list(rlssm_config.choices),
+        extra_fields=list(rlssm_config.extra_fields),
+        ssm_logp_func=lambda x: x,  # callable but no .inputs/.outputs/.computed
+    )
+    with pytest.raises(ValueError, match="annotate_function"):
         RLSSM(data=rldm_data, rlssm_config=bad_config)
 
 
