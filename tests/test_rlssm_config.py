@@ -154,7 +154,7 @@ class TestRLSSMConfigCreation:
         expected_choices,
         expected_learning_process,
     ):
-        config = RLSSMConfig.from_rlssm_dict(model_name, config_dict)
+        config = RLSSMConfig.from_rlssm_dict(config_dict)
         assert config.model_name == expected_model_name
         assert config.params_default == expected_params_default
         assert config.bounds == expected_bounds
@@ -484,7 +484,7 @@ class TestRLSSMConfigEdgeCases:
         with pytest.raises(
             ValueError, match="decision_process_loglik_kind must be provided"
         ):
-            RLSSMConfig.from_rlssm_dict("test_model", config_dict)
+            RLSSMConfig.from_rlssm_dict(config_dict)
 
     def test_missing_decision_process_loglik_kind(self):
         with pytest.raises(TypeError):
@@ -512,7 +512,7 @@ class TestRLSSMConfigEdgeCases:
         with pytest.raises(
             ValueError, match="decision_process_loglik_kind must be provided"
         ):
-            RLSSMConfig.from_rlssm_dict("test_model", config_dict)
+            RLSSMConfig.from_rlssm_dict(config_dict)
 
     def test_with_modelconfig_decision_process(self):
         decision_config = ModelConfig(

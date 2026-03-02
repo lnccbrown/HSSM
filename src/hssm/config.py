@@ -300,16 +300,15 @@ class RLSSMConfig(BaseModelConfig):
         return len(self.extra_fields) if self.extra_fields else None
 
     @classmethod
-    def from_rlssm_dict(cls, model_name: str, config_dict: dict[str, Any]):
+    def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> "RLSSMConfig":
         """
         Create RLSSMConfig from a configuration dictionary.
 
         Parameters
         ----------
-        model_name : str
-            The name of the RLSSM model.
         config_dict : dict[str, Any]
             Dictionary containing model configuration. Expected keys:
+                - model_name: Model identifier (required)
                 - description: Model description (optional)
                 - list_params: List of parameter names (required)
                 - extra_fields: List of extra field names from data (required)
