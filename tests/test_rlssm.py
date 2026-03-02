@@ -230,6 +230,19 @@ def test_rlssm_params_is_trialwise_aligned(
             assert is_tw, f"{name} must be trialwise"
 
 
+def test_rlssm_get_prefix(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
+    """_get_prefix must use token-based matching, not substring search.
+
+    - 'rl_alpha_Intercept' → 'rl_alpha'  (underscore-containing RL param)
+    - 'p_outlier_log__'   → 'p_outlier'  (lapse param via token loop, not substring)
+    - 'a_Intercept'       → 'a'           (single-token standard param)
+    """
+    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    assert model._get_prefix("rl_alpha_Intercept") == "rl_alpha"
+    assert model._get_prefix("p_outlier_log__") == "p_outlier"
+    assert model._get_prefix("a_Intercept") == "a"
+
+
 def test_rlssm_no_lapse(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
     """Setting p_outlier=None should remove p_outlier from params."""
     model = RLSSM(data=rldm_data, rlssm_config=rlssm_config, p_outlier=None)
