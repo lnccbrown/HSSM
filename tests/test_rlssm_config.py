@@ -51,6 +51,9 @@ def create_config_dict(
 # region fixtures and helpers
 @pytest.fixture
 def valid_rlssmconfig_kwargs():
+    def _dummy_ssm_logp_func(x):
+        return x
+
     return dict(
         model_name="test_model",
         list_params=["alpha", "beta"],
@@ -62,6 +65,7 @@ def valid_rlssmconfig_kwargs():
         decision_process_loglik_kind="analytical",
         learning_process_loglik_kind="blackbox",
         learning_process={},
+        ssm_logp_func=_dummy_ssm_logp_func,
     )
 
 
@@ -166,6 +170,7 @@ class TestRLSSMConfigValidation:
             ("list_params", None, "Please provide `list_params"),
             ("choices", None, "Please provide `choices"),
             ("decision_process", None, "Please specify a `decision_process"),
+            ("ssm_logp_func", None, "Please provide `ssm_logp_func"),
         ],
     )
     def test_validate_missing_fields(
@@ -212,6 +217,7 @@ class TestRLSSMConfigValidation:
             decision_process_loglik_kind="analytical",
             learning_process_loglik_kind="blackbox",
             learning_process={},
+            ssm_logp_func=lambda x: x,
         )
         with pytest.raises(
             ValueError,

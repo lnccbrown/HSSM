@@ -266,6 +266,12 @@ class RLSSMConfig(BaseModelConfig):
 
     This configuration class is designed for models that combine reinforcement
     learning processes with sequential sampling decision models (RLSSM).
+
+    The ``ssm_logp_func`` field holds the fully annotated JAX SSM log-likelihood
+    function (an :class:`AnnotatedFunction`) that is passed directly to
+    ``make_rl_logp_op``.  It supersedes the ``loglik`` / ``loglik_kind`` workflow
+    used by :class:`HSSM`: the Op is built from ``ssm_logp_func`` and therefore
+    no ``loglik`` callable needs to be provided.
     """
 
     decision_process_loglik_kind: str = field(kw_only=True)
@@ -273,6 +279,10 @@ class RLSSMConfig(BaseModelConfig):
     params_default: list[float] = field(kw_only=True)
     decision_process: str | ModelConfig = field(kw_only=True)
     learning_process: dict[str, Any] = field(kw_only=True)
+    # The fully annotated SSM log-likelihood function used by make_rl_logp_op.
+    # Type is Any to avoid a hard dependency on the AnnotatedFunction Protocol at
+    # import time; validated at runtime in validate().
+    ssm_logp_func: Any = field(default=None, kw_only=True)
 
     def __post_init__(self):
         """Set default loglik_kind for RLSSM models if not provided."""
@@ -332,6 +342,7 @@ class RLSSMConfig(BaseModelConfig):
             params_default=config_dict["params_default"],
             decision_process=config_dict["decision_process"],
             learning_process=config_dict["learning_process"],
+            ssm_logp_func=config_dict.get("ssm_logp_func"),
             bounds=config_dict.get("bounds", {}),
             response=config_dict["response"],
             choices=config_dict["choices"],
@@ -355,6 +366,11 @@ class RLSSMConfig(BaseModelConfig):
             raise ValueError("Please provide `choices` in the configuration.")
         if self.decision_process is None:
             raise ValueError("Please specify a `decision_process`.")
+        if self.ssm_logp_func is None:
+            raise ValueError(
+                "Please provide `ssm_logp_func`: the fully annotated JAX SSM "
+                "log-likelihood function required by `make_rl_logp_op`."
+            )
 
         # Validate parameter defaults consistency
         if self.params_default and self.list_params:
