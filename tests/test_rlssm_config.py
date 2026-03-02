@@ -1,8 +1,8 @@
 import pytest
 
 import hssm
-from hssm.config import Config, RLSSMConfig
-from hssm.config import ModelConfig
+from hssm.config import Config, ModelConfig, RLSSMConfig
+from hssm.utils import annotate_function
 
 # Define constants for repeated data structures
 DEFAULT_RESPONSE = ("rt", "response")
@@ -51,6 +51,7 @@ def create_config_dict(
 # region fixtures and helpers
 @pytest.fixture
 def valid_rlssmconfig_kwargs():
+    @annotate_function(inputs=["v", "rt", "response"], outputs=["logp"], computed={})
     def _dummy_ssm_logp_func(x):
         return x
 
@@ -206,22 +207,31 @@ class TestRLSSMConfigValidation:
         config = RLSSMConfig(**valid_rlssmconfig_kwargs)
         config.validate()
 
-    def test_validate_params_default_mismatch(self):
+    def test_validate_params_default_mismatch(self, valid_rlssmconfig_kwargs):
         config = RLSSMConfig(
-            model_name="test_model",
-            list_params=["alpha", "beta"],
-            params_default=[0.5],
-            decision_process="ddm",
-            response=["rt", "response"],
-            choices=[0, 1],
-            decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
-            learning_process={},
-            ssm_logp_func=lambda x: x,
+            **{
+                **valid_rlssmconfig_kwargs,
+                "params_default": [0.5],  # length 1, but list_params has 2 entries
+            }
         )
         with pytest.raises(
             ValueError,
             match=r"params_default length \(1\) doesn't match list_params length \(2\)",
+        ):
+            config.validate()
+
+    def test_validate_ssm_logp_func_not_callable(self, valid_rlssmconfig_kwargs):
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        config.ssm_logp_func = "not_a_callable"
+        with pytest.raises(ValueError, match="must be a callable"):
+            config.validate()
+
+    def test_validate_ssm_logp_func_missing_annotations(self, valid_rlssmconfig_kwargs):
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        # Replace with a plain callable that lacks @annotate_function attributes
+        config.ssm_logp_func = lambda x: x
+        with pytest.raises(
+            ValueError, match="must be decorated with `@annotate_function`"
         ):
             config.validate()
 
