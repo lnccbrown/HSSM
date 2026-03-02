@@ -39,6 +39,13 @@ def validate_balanced_panel(
             "`participant_col`."
         )
 
+    n_null = data[participant_col].isna().sum()
+    if n_null > 0:
+        raise ValueError(
+            f"Column '{participant_col}' contains {n_null} NaN value(s). "
+            "All rows must have a valid participant identifier."
+        )
+
     counts = data.groupby(participant_col).size()
     if counts.nunique() != 1:
         raise ValueError(
