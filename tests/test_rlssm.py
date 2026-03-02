@@ -5,19 +5,19 @@ config validation, param keys, balanced-panel enforcement, the no-lapse
 variant, bambi / PyMC model construction, and a sampling smoke test.
 """
 
+from collections.abc import Generator
 from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+import pytensor
 import pytest
 
 import hssm
 from hssm import RLSSM, RLSSMConfig
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
-
-hssm.set_floatX("float32", update_jax=True)
 
 # ---------------------------------------------------------------------------
 # Module-level annotated helpers (shared by all tests)
@@ -50,6 +50,17 @@ def _dummy_ssm_logp(lan_matrix: jnp.ndarray) -> jnp.ndarray:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _set_floatx_float32() -> Generator[None, None, None]:
+    """Ensure float32 is used for this module's tests, then restore previous setting."""
+    prev_floatx = pytensor.config.floatX
+    hssm.set_floatX("float32", update_jax=True)
+    try:
+        yield
+    finally:
+        hssm.set_floatX(prev_floatx, update_jax=True)
 
 
 @pytest.fixture(scope="module")
