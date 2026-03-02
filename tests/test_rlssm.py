@@ -179,6 +179,22 @@ def test_rlssm_unannotated_ssm_logp_func_raises(
         RLSSM(data=rldm_data, rlssm_config=bad_config)
 
 
+def test_rlssm_missing_data_raises(
+    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
+) -> None:
+    """Passing missing_data!=False should raise ValueError with 'missing_data' in msg."""
+    with pytest.raises(ValueError, match="missing_data"):
+        RLSSM(data=rldm_data, rlssm_config=rlssm_config, missing_data=True)
+
+
+def test_rlssm_deadline_raises(
+    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
+) -> None:
+    """Passing deadline!=False should raise ValueError with 'deadline' in msg."""
+    with pytest.raises(ValueError, match="deadline"):
+        RLSSM(data=rldm_data, rlssm_config=rlssm_config, deadline=True)
+
+
 # ---------------------------------------------------------------------------
 # Model-structure tests
 # ---------------------------------------------------------------------------
