@@ -30,12 +30,10 @@ if TYPE_CHECKING:
 from hssm.config import ModelConfig, RLSSMConfig
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
-    MissingDataNetwork,
 )
 from hssm.distribution_utils import make_distribution
 from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
-from hssm.utils import _rearrange_data
 
 from ..base import HSSMBase
 
@@ -131,6 +129,27 @@ class RLSSM(HSSMBase):
         # Validate config (ensures ssm_logp_func is present, etc.)
         rlssm_config.validate()
 
+        # RLSSM reshapes rows into (n_participants, n_trials, ...) by position,
+        # so _rearrange_data (which moves missing/deadline rows to the front)
+        # would scramble per-participant trial sequences and corrupt RL dynamics.
+        # Raise early so the user gets a clear message before model construction.
+        if missing_data is not False:
+            raise ValueError(
+                "RLSSM does not support `missing_data` handling. "
+                "The RL log-likelihood Op relies on strict row order to recover "
+                "per-participant trial sequences; rearranging rows for missing RT "
+                "values would corrupt the RL learning dynamics. "
+                "Please remove missing trials from the data before passing it to RLSSM."
+            )
+        if deadline is not False:
+            raise ValueError(
+                "RLSSM does not support `deadline` handling. "
+                "The RL log-likelihood Op relies on strict row order to recover "
+                "per-participant trial sequences; rearranging rows for deadline "
+                "trials would corrupt the RL learning dynamics. Please remove "
+                "deadline trials from the data before passing it to RLSSM."
+            )
+
         # Infer panel structure and validate balance BEFORE calling super so any
         # error surfaces before the expensive model-build steps.
         n_participants, n_trials = validate_balanced_panel(data, participant_col)
@@ -224,26 +243,9 @@ class RLSSM(HSSMBase):
         - Gradient computation via its embedded VJP.
 
         Missing-data network assembly (OPN / CPN) is not yet supported for
-        RLSSM and logs a warning if requested.
+        RLSSM and ``missing_data`` / ``deadline`` are rejected in ``__init__``
+        before this method is ever reached.
         """
-        # Warn if a missing-data network was requested; not supported yet.
-        if self.missing_data_network != MissingDataNetwork.NONE:
-            _logger.warning(
-                "Missing-data network assembly (OPN/CPN) is not yet supported "
-                "for RLSSM. The missing_data_network setting will be ignored."
-            )
-
-        if self.missing_data:
-            _logger.info(
-                "Re-arranging data to separate missing and observed datapoints. "
-                "Missing data (rt == %s) will be on top, "
-                "observed datapoints follow.",
-                self.missing_data_value,
-            )
-
-        # Rearrange data so missing rows come first (no-op when missing_data=False).
-        self.data = _rearrange_data(self.data)
-
         # All RLSSM parameters are treated as trialwise: the Op expects arrays of
         # length n_total_trials for every parameter, and make_distribution.logp
         # broadcasts scalar / (1,)-shaped tensors up to (n_obs,) accordingly.
