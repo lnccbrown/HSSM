@@ -18,11 +18,14 @@ The key difference from :class:`HSSM` is the likelihood:
 
 import logging
 from copy import deepcopy
-from typing import Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
 import pandas as pd
 import pymc as pm
+
+if TYPE_CHECKING:
+    from pytensor.graph import Op
 
 from hssm.config import ModelConfig, RLSSMConfig
 from hssm.defaults import (
@@ -255,9 +258,13 @@ class RLSSM(HSSMBase):
         )
 
         assert self.list_params is not None, "list_params should be set"
+        # self.loglik was set to the pytensor Op built in __init__; cast to
+        # narrow the inherited union type so make_distribution's type-checker
+        # accepts it without a runtime penalty.
+        loglik_op = cast("Callable[..., Any] | Op", self.loglik)
         return make_distribution(
             rv=self.model_name,
-            loglik=self.loglik,
+            loglik=loglik_op,
             list_params=self.list_params,
             bounds=self.bounds,
             lapse=self.lapse,
