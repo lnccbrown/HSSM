@@ -17,7 +17,6 @@ The key difference from :class:`HSSM` is the likelihood:
 """
 
 import logging
-from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
@@ -256,7 +255,7 @@ class RLSSM(HSSMBase):
         extra_fields_data = (
             None
             if not self.extra_fields
-            else [deepcopy(self.data[field].values) for field in self.extra_fields]
+            else [self.data[field].to_numpy(copy=True) for field in self.extra_fields]
         )
 
         # self.loglik was set to the pytensor Op built in __init__; cast to

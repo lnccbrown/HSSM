@@ -246,6 +246,39 @@ def test_rlssm_model_built(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -
     assert "v" not in model.params
 
 
+def test_rlssm_extra_fields_are_copies(
+    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
+) -> None:
+    """extra_fields passed to make_distribution must be independent numpy copies.
+
+    to_numpy(copy=True) should return a new buffer; if it returned a view,
+    in-place mutations of the DataFrame would silently corrupt the distribution.
+    """
+    from unittest.mock import patch
+
+    from hssm.distribution_utils import make_distribution as real_make_distribution
+
+    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    captured: dict = {}
+
+    def capturing_make_distribution(*args, **kwargs):
+        captured["extra_fields"] = kwargs.get("extra_fields")
+        return real_make_distribution(*args, **kwargs)
+
+    with patch(
+        "hssm.rl.rlssm.make_distribution", side_effect=capturing_make_distribution
+    ):
+        model._make_model_distribution()
+
+    assert captured.get("extra_fields") is not None
+    for field_name, arr in zip(rlssm_config.extra_fields, captured["extra_fields"]):
+        original = model.data[field_name].to_numpy()
+        assert not np.shares_memory(arr, original), (
+            f"extra_fields['{field_name}'] shares memory with the DataFrame — "
+            "it is a view, not a copy"
+        )
+
+
 def test_rlssm_pymc_model(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
     """pymc_model should be accessible after model construction."""
     model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
