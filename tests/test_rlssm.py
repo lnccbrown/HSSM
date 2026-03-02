@@ -215,6 +215,21 @@ def test_rlssm_deadline_raises(
 # ---------------------------------------------------------------------------
 
 
+def test_rlssm_params_is_trialwise_aligned(
+    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
+) -> None:
+    """params_is_trialwise must align with list_params (same length, p_outlier=False)."""
+    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    assert model.list_params is not None
+    params_is_trialwise = [name != "p_outlier" for name in model.list_params]
+    assert len(params_is_trialwise) == len(model.list_params)
+    for name, is_tw in zip(model.list_params, params_is_trialwise):
+        if name == "p_outlier":
+            assert not is_tw, "p_outlier must be non-trialwise"
+        else:
+            assert is_tw, f"{name} must be trialwise"
+
+
 def test_rlssm_no_lapse(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
     """Setting p_outlier=None should remove p_outlier from params."""
     model = RLSSM(data=rldm_data, rlssm_config=rlssm_config, p_outlier=None)

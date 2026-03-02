@@ -246,12 +246,12 @@ class RLSSM(HSSMBase):
         RLSSM and ``missing_data`` / ``deadline`` are rejected in ``__init__``
         before this method is ever reached.
         """
-        # All RLSSM parameters are treated as trialwise: the Op expects arrays of
-        # length n_total_trials for every parameter, and make_distribution.logp
-        # broadcasts scalar / (1,)-shaped tensors up to (n_obs,) accordingly.
-        params_is_trialwise = [
-            True for param_name in self.params if param_name != "p_outlier"
-        ]
+        # Build params_is_trialwise in the same order as self.list_params so the
+        # length always matches the list_params= argument passed to make_distribution.
+        # p_outlier is a scalar mixture weight (not trialwise); every other RLSSM
+        # parameter is trialwise (the Op receives one value per trial).
+        assert self.list_params is not None, "list_params should be set by HSSMBase"
+        params_is_trialwise = [name != "p_outlier" for name in self.list_params]
 
         extra_fields_data = (
             None
