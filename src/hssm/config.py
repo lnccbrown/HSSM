@@ -371,6 +371,27 @@ class RLSSMConfig(BaseModelConfig):
                 "Please provide `ssm_logp_func`: the fully annotated JAX SSM "
                 "log-likelihood function required by `make_rl_logp_op`."
             )
+        if not callable(self.ssm_logp_func):
+            raise ValueError(
+                "`ssm_logp_func` must be a callable, "
+                f"but got {type(self.ssm_logp_func)!r}."
+            )
+        missing_attrs = [
+            attr
+            for attr in ("inputs", "outputs", "computed")
+            if not hasattr(self.ssm_logp_func, attr)
+        ]
+        if missing_attrs:
+            raise ValueError(
+                "`ssm_logp_func` must be decorated with `@annotate_function` "
+                "so that it carries the attributes required by `make_rl_logp_op`. "
+                f"Missing attribute(s): {missing_attrs}. "
+                "Decorate the function like:\n\n"
+                "    @annotate_function(\n"
+                "        inputs=[...], outputs=[...], computed={...}\n"
+                "    )\n"
+                "    def my_ssm_logp(lan_matrix): ..."
+            )
 
         # Validate parameter defaults consistency
         if self.params_default and self.list_params:
