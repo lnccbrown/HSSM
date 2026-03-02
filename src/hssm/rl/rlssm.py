@@ -276,17 +276,17 @@ class RLSSM(HSSMBase):
         """Resolve parameter prefix, handling underscore-containing RL param names.
 
         The base-class implementation splits ``name_str`` on the first ``_`` and
-        returns that single token as the parameter name.  This breaks for RL
-        parameters whose names contain underscores (e.g. ``rl_alpha``), because
-        ``"rl_alpha_Intercept".split("_")[0]`` yields ``"rl"``, which is absent
-        from ``self.params``.
+        returns that single token (e.g. ``"rl_alpha_Intercept" → "rl"``), which
+        breaks for RL parameters whose names contain underscores.  It also uses a
+        substring check (``"p_outlier" in name_str``) for the lapse parameter,
+        which would misfire for any parameter whose name merely *contains* that
+        substring.
 
-        This override tries successively longer underscore-joined prefixes until
-        it finds one present in ``self.params``, falling back to the base-class
-        behaviour when no match is found.
+        This override replaces both heuristics with a single longest-prefix-first
+        token search: split on ``_``, then try joining 1…N tokens (longest first)
+        until a candidate is found in ``self.params``.  This is both correct for
+        multi-token RL param names and collision-free for ``p_outlier``.
         """
-        if "p_outlier" in name_str:
-            return "p_outlier"
         if "_" in name_str:
             parts = name_str.split("_")
             for i in range(len(parts), 0, -1):
