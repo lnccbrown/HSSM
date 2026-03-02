@@ -190,10 +190,10 @@ class RLSSM(HSSMBase):
 
         # Build a ModelConfig so HSSMBase._build_model_config can apply the
         # RLSSM-specific fields (response, list_params, choices, bounds, …).
-        # default_priors is left as None so that the prior_settings="safe"
-        # mechanism in HSSMBase assigns sensible priors from bounds. Using
-        # params_default (scalar floats) here would fix every parameter as a
-        # constant, which is incorrect.
+        # default_priors is an empty dict (no parameter-specific priors pre-set)
+        # so that the prior_settings="safe" mechanism in HSSMBase assigns
+        # sensible priors from bounds. Populating it with params_default scalar
+        # floats would fix every parameter as a constant, which is incorrect.
         mc = ModelConfig(
             response=(tuple(rlssm_config.response) if rlssm_config.response else None),
             list_params=list_params,
@@ -259,7 +259,6 @@ class RLSSM(HSSMBase):
             else [deepcopy(self.data[field].values) for field in self.extra_fields]
         )
 
-        assert self.list_params is not None, "list_params should be set"
         # self.loglik was set to the pytensor Op built in __init__; cast to
         # narrow the inherited union type so make_distribution's type-checker
         # accepts it without a runtime penalty.
