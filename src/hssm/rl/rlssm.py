@@ -142,41 +142,41 @@ class RLSSM(HSSMBase):
         data_cols: list[str] = (
             list(rlssm_config.response) if rlssm_config.response else ["rt", "response"]
         )
-        list_params: list[str] = rlssm_config.list_params or []
+        list_params: list[str] = (
+            list(rlssm_config.list_params) if rlssm_config.list_params else []
+        )
         extra_fields: list[str] = rlssm_config.extra_fields or []
 
         # Build the differentiable pytensor Op from the annotated SSM function.
         # This Op supersedes the loglik/loglik_kind workflow: it is passed as
         # `loglik` to HSSMBase so Config.validate() is satisfied, and
         # _make_model_distribution() uses it directly without any further wrapping.
+        #
+        # Pass copies of list_params / extra_fields so the closure inside
+        # make_rl_logp_func captures its own isolated list objects.  HSSMBase will
+        # later append "p_outlier" to self.list_params (which is the SAME list
+        # object as `list_params` above), and that mutation must NOT be visible to
+        # the Op's _validate_args_length check at sampling time.
         loglik_op = make_rl_logp_op(
             ssm_logp_func=rlssm_config.ssm_logp_func,
             n_participants=n_participants,
             n_trials=n_trials,
-            data_cols=data_cols,
-            list_params=list_params,
-            extra_fields=extra_fields,
-        )
-
-        # Build default_priors from params_default for HSSMBase
-        default_priors: dict[str, Any] = (
-            {
-                param: default
-                for param, default in zip(
-                    rlssm_config.list_params, rlssm_config.params_default
-                )
-            }
-            if rlssm_config.list_params and rlssm_config.params_default
-            else {}
+            data_cols=list(data_cols),
+            list_params=list(list_params),
+            extra_fields=list(extra_fields),
         )
 
         # Build a ModelConfig so HSSMBase._build_model_config can apply the
         # RLSSM-specific fields (response, list_params, choices, bounds, …).
+        # default_priors is left as None so that the prior_settings="safe"
+        # mechanism in HSSMBase assigns sensible priors from bounds. Using
+        # params_default (scalar floats) here would fix every parameter as a
+        # constant, which is incorrect.
         mc = ModelConfig(
             response=(tuple(rlssm_config.response) if rlssm_config.response else None),
             list_params=list_params,
             choices=(tuple(rlssm_config.choices) if rlssm_config.choices else None),
-            default_priors=default_priors,
+            default_priors={},
             bounds=rlssm_config.bounds or {},
             extra_fields=extra_fields if extra_fields else None,
             backend="jax",  # RLSSM always uses the JAX backend
@@ -264,3 +264,26 @@ class RLSSM(HSSMBase):
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
         )
+
+    def _get_prefix(self, name_str: str) -> str:
+        """Resolve parameter prefix, handling underscore-containing RL param names.
+
+        The base-class implementation splits ``name_str`` on the first ``_`` and
+        returns that single token as the parameter name.  This breaks for RL
+        parameters whose names contain underscores (e.g. ``rl_alpha``), because
+        ``"rl_alpha_Intercept".split("_")[0]`` yields ``"rl"``, which is absent
+        from ``self.params``.
+
+        This override tries successively longer underscore-joined prefixes until
+        it finds one present in ``self.params``, falling back to the base-class
+        behaviour when no match is found.
+        """
+        if "p_outlier" in name_str:
+            return "p_outlier"
+        if "_" in name_str:
+            parts = name_str.split("_")
+            for i in range(len(parts), 0, -1):
+                candidate = "_".join(parts[:i])
+                if candidate in self.params:
+                    return candidate
+        return super()._get_prefix(name_str)
