@@ -79,6 +79,9 @@ site/
 /test_notebooks
 /test_workshop
 
+# hssm paper
+hssm_paper/
+
 *.so
 .python-version
 uv.lock
