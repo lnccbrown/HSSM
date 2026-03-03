@@ -16,6 +16,13 @@ DEFAULT_BOUNDS = {
 }
 
 
+# Module-level annotated dummy used wherever from_rlssm_dict needs a valid
+# ssm_logp_func but the test is not about ssm_logp_func itself.
+@annotate_function(inputs=["v", "rt", "response"], outputs=["logp"], computed={})
+def _module_dummy_ssm_logp(x):
+    return x
+
+
 # Helper function to create a config dictionary
 def create_config_dict(
     model_name,
@@ -29,6 +36,7 @@ def create_config_dict(
     decision_process="ddm",
     decision_process_loglik_kind="analytical",
     learning_process_loglik_kind="blackbox",
+    ssm_logp_func=_module_dummy_ssm_logp,
 ):
     return dict(
         model_name=model_name,
@@ -44,6 +52,7 @@ def create_config_dict(
         decision_process=decision_process,
         decision_process_loglik_kind=decision_process_loglik_kind,
         learning_process_loglik_kind=learning_process_loglik_kind,
+        ssm_logp_func=ssm_logp_func,
         data={},
     )
 
@@ -480,10 +489,32 @@ class TestRLSSMConfigEdgeCases:
             "bounds": {},
             "data": {},
             "extra_fields": [],
+            "ssm_logp_func": _module_dummy_ssm_logp,
         }
         with pytest.raises(
             ValueError, match="decision_process_loglik_kind must be provided"
         ):
+            RLSSMConfig.from_rlssm_dict(config_dict)
+
+    def test_from_rlssm_dict_missing_ssm_logp_func(self):
+        # Should raise ValueError at construction time if ssm_logp_func is missing
+        config_dict = {
+            "model_name": "test_model",
+            "name": "test_model",
+            "list_params": ["alpha"],
+            "params_default": [0.0],
+            "decision_process": "ddm",
+            "learning_process": {},
+            "learning_process_loglik_kind": "blackbox",
+            "decision_process_loglik_kind": "analytical",
+            "response": ["rt", "response"],
+            "choices": [0, 1],
+            "description": "desc",
+            "bounds": {},
+            "data": {},
+            "extra_fields": [],
+        }
+        with pytest.raises(ValueError, match="ssm_logp_func must be provided"):
             RLSSMConfig.from_rlssm_dict(config_dict)
 
     def test_missing_decision_process_loglik_kind(self):
@@ -508,6 +539,7 @@ class TestRLSSMConfigEdgeCases:
             "response": ["rt", "response"],
             "choices": [0, 1],
             "extra_fields": [],
+            "ssm_logp_func": _module_dummy_ssm_logp,
         }
         with pytest.raises(
             ValueError, match="decision_process_loglik_kind must be provided"
