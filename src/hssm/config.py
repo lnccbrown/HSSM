@@ -309,7 +309,7 @@ class RLSSMConfig(BaseModelConfig):
         config_dict : dict[str, Any]
             Dictionary containing model configuration. Expected keys:
                 - model_name: Model identifier (required)
-                - description: Model description (optional)
+                - description: Model description (required)
                 - list_params: List of parameter names (required)
                 - extra_fields: List of extra field names from data (required)
                 - params_default: Default parameter values (required)
