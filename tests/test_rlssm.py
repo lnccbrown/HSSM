@@ -34,7 +34,7 @@ _compute_v_annotated = annotate_function(
 # Annotated SSM log-likelihood function (simplified for testing).
 # It receives a 2-D lan_matrix whose columns correspond to
 #   [v, a, z, t, theta, rt, response]
-# and returns per-trial log-probabilities of shape (n_total_trials, 1).
+# and returns per-trial log-probabilities of shape (n_total_trials,).
 @annotate_function(
     inputs=["v", "a", "z", "t", "theta", "rt", "response"],
     outputs=["logp"],
