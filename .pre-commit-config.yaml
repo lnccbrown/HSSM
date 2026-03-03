@@ -11,7 +11,6 @@ repos:
         args: [--fix, --exit-non-zero-on-fix]
         exclude: ^tests/
       - id: ruff-format
-        exclude: ^tests/
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1 # Use the sha / tag you want to point at
     hooks:
