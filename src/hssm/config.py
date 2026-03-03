@@ -38,6 +38,7 @@ RLSSM_REQUIRED_FIELDS = (
     "decision_process_loglik_kind",
     "learning_process_loglik_kind",
     "extra_fields",
+    "ssm_logp_func",
 )
 
 ParamSpec = Union[float, dict[str, Any], Prior, None]
@@ -341,7 +342,7 @@ class RLSSMConfig(BaseModelConfig):
             params_default=config_dict["params_default"],
             decision_process=config_dict["decision_process"],
             learning_process=config_dict["learning_process"],
-            ssm_logp_func=config_dict.get("ssm_logp_func"),
+            ssm_logp_func=config_dict["ssm_logp_func"],
             bounds=config_dict.get("bounds", {}),
             response=config_dict["response"],
             choices=config_dict["choices"],
