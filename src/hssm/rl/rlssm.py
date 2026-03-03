@@ -16,7 +16,6 @@ The key difference from :class:`HSSM` is the likelihood:
     standard ``loglik`` / ``loglik_kind`` wrapping pipeline.
 """
 
-import logging
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
@@ -35,8 +34,6 @@ from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase
-
-_logger = logging.getLogger("hssm")
 
 
 class RLSSM(HSSMBase):
