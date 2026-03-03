@@ -86,21 +86,19 @@ def test_custom_model(data_ddm):
     with pytest.raises(
         ValueError, match="When using a custom model, please provide a `loglik_kind.`"
     ):
-        model = HSSM(data=data_ddm, model="custom")
+        HSSM(data=data_ddm, model="custom")
 
-    with pytest.raises(ValueError, match="Please provide `list_params`"):
-        model = HSSM(data=data_ddm, model="custom", loglik_kind="analytical")
+    with pytest.raises(ValueError, match=r"^Please provide `list_params`"):
+        HSSM(data=data_ddm, model="custom", loglik_kind="analytical")
 
-    with pytest.raises(ValueError, match="Please provide `list_params`"):
-        model = HSSM(
-            data=data_ddm, model="custom", loglik=DDM, loglik_kind="analytical"
-        )
+    with pytest.raises(ValueError, match=r"^Please provide `list_params`"):
+        HSSM(data=data_ddm, model="custom", loglik=DDM, loglik_kind="analytical")
 
     with pytest.raises(
         ValueError,
-        match="Please provide `list_params`",
+        match=r"^Please provide `list_params`",
     ):
-        model = HSSM(
+        HSSM(
             data=data_ddm,
             model="custom",
             loglik=DDM,
@@ -165,12 +163,12 @@ def test_sample_prior_predictive(data_ddm_reg):
     model_regression = HSSM(
         data=data_ddm_reg, include=[dict(name="v", formula="v ~ 1 + x")]
     )
-    prior_predictive_3 = model_regression.sample_prior_predictive(draws=10)
+    model_regression.sample_prior_predictive(draws=10)
 
     model_regression_a = HSSM(
         data=data_ddm_reg, include=[dict(name="a", formula="a ~ 1 + x")]
     )
-    prior_predictive_4 = model_regression_a.sample_prior_predictive(draws=10)
+    model_regression_a.sample_prior_predictive(draws=10)
 
     model_regression_multi = HSSM(
         data=data_ddm_reg,
@@ -179,7 +177,7 @@ def test_sample_prior_predictive(data_ddm_reg):
             dict(name="a", formula="a ~ 1 + y"),
         ],
     )
-    prior_predictive_5 = model_regression_multi.sample_prior_predictive(draws=10)
+    model_regression_multi.sample_prior_predictive(draws=10)
 
     data_ddm_reg.loc[:, "subject_id"] = np.arange(10)
 
@@ -190,9 +188,7 @@ def test_sample_prior_predictive(data_ddm_reg):
             dict(name="a", formula="a ~ (1|subject_id) + y"),
         ],
     )
-    prior_predictive_6 = model_regression_random_effect.sample_prior_predictive(
-        draws=10
-    )
+    model_regression_random_effect.sample_prior_predictive(draws=10)
 
 
 @pytest.mark.slow
