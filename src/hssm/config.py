@@ -482,6 +482,27 @@ class RLSSMConfig(BaseModelConfig):
             loglik=self.loglik,
         )
 
+    def to_model_config(self) -> "ModelConfig":
+        """Build a :class:`ModelConfig` from this :class:`RLSSMConfig`.
+
+        All fields are sourced from ``self``; the backend is fixed to ``"jax"``
+        because RLSSM exclusively uses the JAX backend.
+
+        ``default_priors`` is intentionally left empty so the
+        ``prior_settings="safe"`` mechanism in :class:`~hssm.base.HSSMBase`
+        assigns sensible priors from bounds rather than fixing every parameter
+        to a constant scalar.
+        """
+        return ModelConfig(
+            response=tuple(self.response),  # type: ignore[arg-type]
+            list_params=list(self.list_params),  # type: ignore[arg-type]
+            choices=tuple(self.choices),  # type: ignore[arg-type]
+            default_priors={},
+            bounds=self.bounds,
+            extra_fields=self.extra_fields,
+            backend="jax",
+        )
+
 
 @dataclass
 class ModelConfig:
