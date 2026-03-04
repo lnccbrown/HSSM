@@ -1,8 +1,8 @@
 import pytest
 
 import hssm
-from hssm.config import Config, RLSSMConfig
-from hssm.config import ModelConfig
+from hssm.config import Config, ModelConfig, RLSSMConfig
+from hssm.utils import annotate_function
 
 # Define constants for repeated data structures
 DEFAULT_RESPONSE = ("rt", "response")
@@ -14,6 +14,13 @@ DEFAULT_BOUNDS = {
     "v": (-3.0, 3.0),
     "a": (0.3, 2.5),
 }
+
+
+# Module-level annotated dummy used wherever from_rlssm_dict needs a valid
+# ssm_logp_func but the test is not about ssm_logp_func itself.
+@annotate_function(inputs=["v", "rt", "response"], outputs=["logp"], computed={})
+def _module_dummy_ssm_logp(x):
+    return x
 
 
 # Helper function to create a config dictionary
@@ -29,6 +36,7 @@ def create_config_dict(
     decision_process="ddm",
     decision_process_loglik_kind="analytical",
     learning_process_loglik_kind="blackbox",
+    ssm_logp_func=_module_dummy_ssm_logp,
 ):
     return dict(
         model_name=model_name,
@@ -44,6 +52,7 @@ def create_config_dict(
         decision_process=decision_process,
         decision_process_loglik_kind=decision_process_loglik_kind,
         learning_process_loglik_kind=learning_process_loglik_kind,
+        ssm_logp_func=ssm_logp_func,
         data={},
     )
 
@@ -51,6 +60,10 @@ def create_config_dict(
 # region fixtures and helpers
 @pytest.fixture
 def valid_rlssmconfig_kwargs():
+    @annotate_function(inputs=["v", "rt", "response"], outputs=["logp"], computed={})
+    def _dummy_ssm_logp_func(x):
+        return x
+
     return dict(
         model_name="test_model",
         list_params=["alpha", "beta"],
@@ -62,6 +75,7 @@ def valid_rlssmconfig_kwargs():
         decision_process_loglik_kind="analytical",
         learning_process_loglik_kind="blackbox",
         learning_process={},
+        ssm_logp_func=_dummy_ssm_logp_func,
     )
 
 
@@ -149,7 +163,7 @@ class TestRLSSMConfigCreation:
         expected_choices,
         expected_learning_process,
     ):
-        config = RLSSMConfig.from_rlssm_dict(model_name, config_dict)
+        config = RLSSMConfig.from_rlssm_dict(config_dict)
         assert config.model_name == expected_model_name
         assert config.params_default == expected_params_default
         assert config.bounds == expected_bounds
@@ -166,6 +180,7 @@ class TestRLSSMConfigValidation:
             ("list_params", None, "Please provide `list_params"),
             ("choices", None, "Please provide `choices"),
             ("decision_process", None, "Please specify a `decision_process"),
+            ("ssm_logp_func", None, "Please provide `ssm_logp_func"),
         ],
     )
     def test_validate_missing_fields(
@@ -201,21 +216,31 @@ class TestRLSSMConfigValidation:
         config = RLSSMConfig(**valid_rlssmconfig_kwargs)
         config.validate()
 
-    def test_validate_params_default_mismatch(self):
+    def test_validate_params_default_mismatch(self, valid_rlssmconfig_kwargs):
         config = RLSSMConfig(
-            model_name="test_model",
-            list_params=["alpha", "beta"],
-            params_default=[0.5],
-            decision_process="ddm",
-            response=["rt", "response"],
-            choices=[0, 1],
-            decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
-            learning_process={},
+            **{
+                **valid_rlssmconfig_kwargs,
+                "params_default": [0.5],  # length 1, but list_params has 2 entries
+            }
         )
         with pytest.raises(
             ValueError,
             match=r"params_default length \(1\) doesn't match list_params length \(2\)",
+        ):
+            config.validate()
+
+    def test_validate_ssm_logp_func_not_callable(self, valid_rlssmconfig_kwargs):
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        config.ssm_logp_func = "not_a_callable"
+        with pytest.raises(ValueError, match="must be a callable"):
+            config.validate()
+
+    def test_validate_ssm_logp_func_missing_annotations(self, valid_rlssmconfig_kwargs):
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        # Replace with a plain callable that lacks @annotate_function attributes
+        config.ssm_logp_func = lambda x: x
+        with pytest.raises(
+            ValueError, match="must be decorated with `@annotate_function`"
         ):
             config.validate()
 
@@ -464,11 +489,33 @@ class TestRLSSMConfigEdgeCases:
             "bounds": {},
             "data": {},
             "extra_fields": [],
+            "ssm_logp_func": _module_dummy_ssm_logp,
         }
         with pytest.raises(
             ValueError, match="decision_process_loglik_kind must be provided"
         ):
-            RLSSMConfig.from_rlssm_dict("test_model", config_dict)
+            RLSSMConfig.from_rlssm_dict(config_dict)
+
+    def test_from_rlssm_dict_missing_ssm_logp_func(self):
+        # Should raise ValueError at construction time if ssm_logp_func is missing
+        config_dict = {
+            "model_name": "test_model",
+            "name": "test_model",
+            "list_params": ["alpha"],
+            "params_default": [0.0],
+            "decision_process": "ddm",
+            "learning_process": {},
+            "learning_process_loglik_kind": "blackbox",
+            "decision_process_loglik_kind": "analytical",
+            "response": ["rt", "response"],
+            "choices": [0, 1],
+            "description": "desc",
+            "bounds": {},
+            "data": {},
+            "extra_fields": [],
+        }
+        with pytest.raises(ValueError, match="ssm_logp_func must be provided"):
+            RLSSMConfig.from_rlssm_dict(config_dict)
 
     def test_missing_decision_process_loglik_kind(self):
         with pytest.raises(TypeError):
@@ -492,11 +539,12 @@ class TestRLSSMConfigEdgeCases:
             "response": ["rt", "response"],
             "choices": [0, 1],
             "extra_fields": [],
+            "ssm_logp_func": _module_dummy_ssm_logp,
         }
         with pytest.raises(
             ValueError, match="decision_process_loglik_kind must be provided"
         ):
-            RLSSMConfig.from_rlssm_dict("test_model", config_dict)
+            RLSSMConfig.from_rlssm_dict(config_dict)
 
     def test_with_modelconfig_decision_process(self):
         decision_config = ModelConfig(
