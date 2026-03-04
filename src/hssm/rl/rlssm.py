@@ -25,7 +25,7 @@ import pymc as pm
 if TYPE_CHECKING:
     from pytensor.graph import Op
 
-from hssm.config import ModelConfig, RLSSMConfig
+from hssm.config import RLSSMConfig
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
 )
@@ -156,54 +156,31 @@ class RLSSM(HSSMBase):
         self._n_participants = n_participants
         self._n_trials = n_trials
 
-        # Determine data / param column names for the Op
-        data_cols: list[str] = (
-            list(rlssm_config.response) if rlssm_config.response else ["rt", "response"]
-        )
-        list_params: list[str] = (
-            list(rlssm_config.list_params) if rlssm_config.list_params else []
-        )
-        extra_fields: list[str] = rlssm_config.extra_fields or []
-
         # Build the differentiable pytensor Op from the annotated SSM function.
         # This Op supersedes the loglik/loglik_kind workflow: it is passed as
         # `loglik` to HSSMBase so Config.validate() is satisfied, and
         # _make_model_distribution() uses it directly without any further wrapping.
         #
-        # Pass copies of list_params / extra_fields so the closure inside
-        # make_rl_logp_func captures its own isolated list objects.  HSSMBase will
-        # later append "p_outlier" to self.list_params (which is the SAME list
-        # object as `list_params` above), and that mutation must NOT be visible to
-        # the Op's _validate_args_length check at sampling time.
+        # Fresh list() copies are passed to make_rl_logp_op so the closure inside
+        # captures its own isolated list objects.  HSSMBase will later append
+        # "p_outlier" to self.list_params, and that mutation must NOT be visible
+        # to the Op's _validate_args_length check at sampling time.
         loglik_op = make_rl_logp_op(
             ssm_logp_func=rlssm_config.ssm_logp_func,
             n_participants=n_participants,
             n_trials=n_trials,
-            data_cols=list(data_cols),
-            list_params=list(list_params),
-            extra_fields=list(extra_fields),
+            data_cols=list(rlssm_config.response),  # type: ignore[arg-type]
+            list_params=list(rlssm_config.list_params),  # type: ignore[arg-type]
+            extra_fields=list(rlssm_config.extra_fields or []),
         )
 
-        # Build a ModelConfig so HSSMBase._build_model_config can apply the
-        # RLSSM-specific fields (response, list_params, choices, bounds, …).
-        # default_priors is an empty dict (no parameter-specific priors pre-set)
-        # so that the prior_settings="safe" mechanism in HSSMBase assigns
-        # sensible priors from bounds. Populating it with params_default scalar
-        # floats would fix every parameter as a constant, which is incorrect.
-        mc = ModelConfig(
-            response=(tuple(rlssm_config.response) if rlssm_config.response else None),
-            list_params=list_params,
-            choices=(tuple(rlssm_config.choices) if rlssm_config.choices else None),
-            default_priors={},
-            bounds=rlssm_config.bounds or {},
-            extra_fields=extra_fields if extra_fields else None,
-            backend="jax",  # RLSSM always uses the JAX backend
-        )
+        # Delegate ModelConfig construction to RLSSMConfig, which already owns
+        # all the required fields (response, list_params, choices, bounds, …).
+        mc = rlssm_config.to_model_config()
 
         super().__init__(
             data=data,
             model=rlssm_config.model_name,
-            choices=list(rlssm_config.choices) if rlssm_config.choices else None,
             include=include,
             model_config=mc,
             # Pass the Op as loglik so Config.validate() is satisfied.
