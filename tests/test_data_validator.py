@@ -8,6 +8,30 @@ from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import MissingDataNetwork
 
 
+class DataValidatorTester(DataValidatorMixin):
+    """A concrete class for testing DataValidatorMixin."""
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        extra_fields: list[str] | None = None,
+        deadline: bool = False,
+        missing_data: bool = False,
+        choices: list[int] | None = None,
+        n_choices: int | None = None,
+    ):
+        self.data = data
+        self.response = ["rt", "response"]
+        self.choices = choices if choices is not None else [0, 1]
+        self.n_choices = n_choices if n_choices is not None else len(self.choices)
+        self.extra_fields = extra_fields
+        self.deadline = deadline
+        self.deadline_name = "deadline"
+        self.missing_data = missing_data
+        self.missing_data_value = -999.0
+        self.is_choice_only = False
+
+
 def _base_data():
     return pd.DataFrame(
         {
@@ -48,8 +72,8 @@ def base_data_nan_missing():
 
 def dv_instance(
     data_factory: Callable = _base_data, deadline: bool = True
-) -> DataValidatorMixin:
-    return DataValidatorMixin(
+) -> DataValidatorTester:
+    return DataValidatorTester(
         data=data_factory(),
         extra_fields=["extra"],
         deadline=deadline,
@@ -57,13 +81,12 @@ def dv_instance(
 
 
 def test_constructor(base_data):
-    dv = DataValidatorMixin(
+    dv = DataValidatorTester(
         data=base_data,
         extra_fields=["extra"],
         deadline=True,
     )
 
-    assert isinstance(dv, DataValidatorMixin)
     assert dv.data.equals(_base_data())
     assert dv.response == ["rt", "response"]
     assert dv.choices == [0, 1]
@@ -109,7 +132,7 @@ def test_post_check_data_sanity_valid(base_data):
     ):
         dv_instance_no_missing._post_check_data_sanity()
 
-    dv_instance_no_missing = DataValidatorMixin(
+    dv_instance_no_missing = DataValidatorTester(
         data=base_data,
         deadline=False,
         missing_data=False,
@@ -133,7 +156,7 @@ def test_post_check_data_sanity_valid(base_data):
 def test_handle_missing_data_and_deadline_deadline_column_missing(base_data):
     # Should raise ValueError if deadline is True but deadline_name column is missing
     data = base_data.drop(columns=["deadline"])
-    dv = DataValidatorMixin(
+    dv = DataValidatorTester(
         data=data,
         deadline=True,
     )
@@ -144,7 +167,7 @@ def test_handle_missing_data_and_deadline_deadline_column_missing(base_data):
 def test_handle_missing_data_and_deadline_deadline_applied(base_data):
     # Should set rt to -999.0 where rt >= deadline
     base_data.loc[0, "rt"] = 2.0  # Exceeds deadline
-    dv = DataValidatorMixin(
+    dv = DataValidatorTester(
         data=base_data,
         deadline=True,
     )
@@ -154,7 +177,7 @@ def test_handle_missing_data_and_deadline_deadline_applied(base_data):
 
 
 def test_update_extra_fields(monkeypatch):
-    # Create a DataValidatorMixin with extra_fields
+    # Create a DataValidatorTester with extra_fields
     data = pd.DataFrame(
         {
             "rt": [0.5, 0.7],
@@ -164,16 +187,16 @@ def test_update_extra_fields(monkeypatch):
             "extra2": [100, 200],
         }
     )
-    dv = DataValidatorMixin(
+    dv = DataValidatorTester(
         data=data,
         extra_fields=["extra", "extra2"],
     )
 
     # Mock the model_distribution attribute
     class DummyModelDist:
-        pass
+        extra_fields: list
 
-    dv.model_distribution = DummyModelDist()
+    dv.model_distribution = DummyModelDist()  # type: ignore[assignment]
 
     # Call the method
     dv._update_extra_fields()
@@ -181,7 +204,7 @@ def test_update_extra_fields(monkeypatch):
     # Check that extra_fields were updated correctly
     assert len(dv.model_distribution.extra_fields) == 2
     assert (dv.model_distribution.extra_fields[0] == data["extra"].values).all()
-    for i, field in enumerate(dv.extra_fields):
+    for i, field in enumerate(dv.extra_fields):  # type: ignore[union-attr]
         assert (dv.model_distribution.extra_fields[i] == data[field].values).all()
 
 
@@ -242,7 +265,7 @@ def test_set_missing_data_and_deadline_all_missing():
 
 def test_validate_choices():
     # ====== Valid choices =====
-    dv = DataValidatorMixin(
+    dv = DataValidatorTester(
         data=_base_data(),
         choices=[0, 1],
         n_choices=2,
@@ -250,6 +273,6 @@ def test_validate_choices():
     dv._validate_choices()  # Should not raise an exception
 
     # ===== Invalid choices =====
-    dv.choices = None
+    dv.choices = None  # type: ignore[assignment]
     with pytest.raises(ValueError, match="`choices` must be provided*."):
         dv._validate_choices()

@@ -24,6 +24,7 @@ SupportedModels = Literal[
     "lba3",
     "lba2",
     "rdm3",
+    "poisson_race",
 ]
 
 
