@@ -30,7 +30,7 @@ def softmax_inv_temperature_config(n_choices: int = 2) -> DefaultConfig:
     bounds.update({f"logit{i}": (-np.inf, np.inf) for i in range(1, n_choices)})
     default_priors: dict[str, ParamSpec] = {
         "beta": {
-            "name": "gamma",
+            "name": "Gamma",
             "alpha": 2.0,
             "beta": 0.5,
         },

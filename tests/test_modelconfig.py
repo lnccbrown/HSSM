@@ -115,15 +115,13 @@ def test_get_default_model_config_invalid():
 
 
 def test_softmax_inv_temperature_default():
-    """Test softmax_inv_temperature with default n_logits=2."""
+    """Test softmax_inv_temperature with default n_choices=2."""
     config = softmax_inv_temperature_config()
 
     assert config["response"] == ["response"]
     assert config["choices"] == [-1, 1]
     assert config["list_params"] == ["beta", "logit1"]
-    assert (
-        config["description"] == "The Inverse Softmax Temperature Model with 2 logits"
-    )
+    assert config["description"] == "The Softmax Inv. Temperature Model with 2 choices"
 
     likelihoods = config["likelihoods"]
     lk_analytical = likelihoods["analytical"]
@@ -137,9 +135,9 @@ def test_softmax_inv_temperature_default():
 
     # Test default priors
     assert lk_analytical["default_priors"]["beta"] == {
-        "name": "HalfNormal",
-        "mu": 0.0,
-        "sigma": 1.0,
+        "name": "Gamma",
+        "alpha": 2.0,
+        "beta": 0.5,
     }
     assert lk_analytical["default_priors"]["logit1"] == {
         "name": "Normal",
@@ -148,16 +146,14 @@ def test_softmax_inv_temperature_default():
     }
 
 
-def test_softmax_inv_temperature_3_logits():
-    """Test softmax_inv_temperature with n_logits=3."""
-    config = softmax_inv_temperature_config(n_logits=3)
+def test_softmax_inv_temperature_3_choices():
+    """Test softmax_inv_temperature with n_choices=3."""
+    config = softmax_inv_temperature_config(n_choices=3)
 
     assert config["response"] == ["response"]
     assert config["choices"] == [0, 1, 2]
     assert config["list_params"] == ["beta", "logit1", "logit2"]
-    assert (
-        config["description"] == "The Inverse Softmax Temperature Model with 3 logits"
-    )
+    assert config["description"] == "The Softmax Inv. Temperature Model with 3 choices"
 
     likelihoods = config["likelihoods"]
     lk_analytical = likelihoods["analytical"]
@@ -169,9 +165,9 @@ def test_softmax_inv_temperature_3_logits():
 
     # Test default priors
     assert lk_analytical["default_priors"]["beta"] == {
-        "name": "HalfNormal",
-        "mu": 0.0,
-        "sigma": 1.0,
+        "name": "Gamma",
+        "alpha": 2.0,
+        "beta": 0.5,
     }
     assert lk_analytical["default_priors"]["logit1"] == {
         "name": "Normal",
