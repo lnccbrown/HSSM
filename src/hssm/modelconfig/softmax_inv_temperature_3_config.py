@@ -15,4 +15,4 @@ def get_softmax_inv_temperature_3_config() -> DefaultConfig:
         Inverse Softmax Temperature Model with 3 logits, including response variables,
         model parameters, choices, description, and likelihood specifications.
     """
-    return softmax_inv_temperature_config(n_logits=3)
+    return softmax_inv_temperature_config(n_choices=3)
