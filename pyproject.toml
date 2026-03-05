@@ -70,7 +70,6 @@ dev = [
     "pyarrow>=20.0.0",
     "lanfactory>=0.5.3",
     "HSSM[test]",
-    "pytest-cov>=7.0.0",
 ]
 
 test = [

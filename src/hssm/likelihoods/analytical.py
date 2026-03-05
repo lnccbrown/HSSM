@@ -12,7 +12,9 @@ import numpy as np
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
-from jax import scipy, vmap
+from jax import debug as jax_debug
+from jax import lax, vmap
+from jax.scipy.stats import norm
 from numpy import inf
 from pymc.distributions.dist_math import check_parameters
 
@@ -412,90 +414,75 @@ DDM_SDV: Type[pm.Distribution] = make_distribution(
 )
 
 
+LOGP_MIN = jnp.exp(LOGP_LB)
+LOGP_MAX = jnp.exp(-LOGP_LB)
+
+
 # Racing Diffusion Model (RDM)
 
 
-# density function for the standard normal distribution
-def _jax_normpdf(x):
-    return (1.0 / jnp.sqrt(2 * jnp.pi)) * jnp.exp(-0.5 * x**2)
+def _jax_rdm_tpdf(t, b, v, A, eps_t: float = 1e-8):
+    """RDM first-passage-time density for a single accumulator."""
+    t_eff = jnp.maximum(t, eps_t)
+    sqrt_t = jnp.sqrt(t_eff)
 
+    alpha = (b - A - t_eff * v) / sqrt_t
+    beta = (b - t_eff * v) / sqrt_t
 
-# cumulative distribution function for the standard normal distribution
-def _jax_normcdf(x):
-    return (1.0 / 2) * (1.0 + scipy.special.erf(x / jnp.sqrt(2.0)))
-
-
-def _jax_rdm_tpdf(t, b, v, A):
-    alpha = (b - A - t * v) / (jnp.sqrt(t))
-    beta = (b - t * v) / (jnp.sqrt(t))
-
-    f = (
-        1
+    return (
+        1.0
         / A
         * (
-            -v * _jax_normcdf(alpha)
-            + (1 / jnp.sqrt(t)) * _jax_normpdf(alpha)
-            + v * _jax_normcdf(beta)
-            - (1 / jnp.sqrt(t)) * _jax_normpdf(beta)
+            -v * norm.cdf(alpha)
+            + (1.0 / sqrt_t) * norm.pdf(alpha)
+            + v * norm.cdf(beta)
+            - (1.0 / sqrt_t) * norm.pdf(beta)
         )
     )
 
-    return f
 
+def _jax_rdm_tcdf(t, b, v, A, eps_t: float = 1e-8, eps_v: float = 1e-6):
+    """RDM first-passage-time CDF for a single accumulator."""
+    t_eff = jnp.maximum(t, eps_t)
+    sqrt_t = jnp.sqrt(t_eff)
+    v_eff = jnp.maximum(jnp.abs(v), eps_v) * jnp.sign(jnp.where(v == 0.0, 1.0, v))
 
-def _jax_rdm_tcdf(t, b, v, A):
-    alpha_1 = jnp.sqrt(2) * (v * t - b) / jnp.sqrt(2 * t)
-    alpha_2 = jnp.sqrt(2) * (v * t - b + A) / jnp.sqrt(2 * t)
+    alpha_1 = jnp.sqrt(2.0) * (v_eff * t_eff - b) / jnp.sqrt(2.0 * t_eff)
+    alpha_2 = jnp.sqrt(2.0) * (v_eff * t_eff - b + A) / jnp.sqrt(2.0 * t_eff)
 
-    beta_1 = jnp.sqrt(2) * (-v * t - b) / jnp.sqrt(2 * t)
-    beta_2 = jnp.sqrt(2) * (-v * t - b + A) / jnp.sqrt(2 * t)
+    beta_1 = jnp.sqrt(2.0) * (-v_eff * t_eff - b) / jnp.sqrt(2.0 * t_eff)
+    beta_2 = jnp.sqrt(2.0) * (-v_eff * t_eff - b + A) / jnp.sqrt(2.0 * t_eff)
 
+    coeff = 1.0 / (2.0 * v_eff * A)
     F = (
-        1 / (2 * v * A) * (_jax_normcdf(alpha_2) - _jax_normcdf(alpha_1))
-        + jnp.sqrt(t)
-        / A
-        * (alpha_2 * _jax_normcdf(alpha_2) - alpha_1 * _jax_normcdf(alpha_1))
-        - 1
-        / (2 * v * A)
+        coeff * (norm.cdf(alpha_2) - norm.cdf(alpha_1))
+        + sqrt_t / A * (alpha_2 * norm.cdf(alpha_2) - alpha_1 * norm.cdf(alpha_1))
+        - coeff
         * (
-            jnp.exp(2 * v * (b - A)) * _jax_normcdf(beta_2)
-            - jnp.exp(2 * v * b) * _jax_normcdf(beta_1)
+            jnp.exp(2.0 * v_eff * (b - A)) * norm.cdf(beta_2)
+            - jnp.exp(2.0 * v_eff * b) * norm.cdf(beta_1)
         )
-        + jnp.sqrt(t) / A * (_jax_normpdf(alpha_2) - _jax_normpdf(alpha_1))
+        + sqrt_t / A * (norm.pdf(alpha_2) - norm.pdf(alpha_1))
     )
 
     return F
 
 
 def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2):
-    __min = jnp.exp(LOGP_LB)
-    __max = jnp.exp(-LOGP_LB)
-
-    # 1. Calculate PDFs and CDFs for all accumulators
-    # We use vmap to apply our single-accumulator functions across the drift vector
-    # v_vector = jnp.array([v0, v1, v2])
+    """Log-likelihood for 3-choice RDM at JAX level."""
     v_vector = jnp.stack(jnp.broadcast_arrays(v0, v1, v2))
     all_pdfs = vmap(lambda v: _jax_rdm_tpdf(t, b, v, A))(v_vector)
     all_cdfs = vmap(lambda v: _jax_rdm_tcdf(t, b, v, A))(v_vector)
 
-    # 2. Extract components for the winner
-    # pdf_winner = all_pdfs[ch]
     idx = jnp.arange(ch.shape[0])
     pdf_winner = all_pdfs[ch, idx]
 
-    # 3. Calculate the product of survivor functions for the losers
-    # We mask the winner out of the CDF array
-    # mask = jnp.arange(len(v_vector)) != ch
-    # survivors_losers = 1.0 - all_cdfs
     mask = jnp.arange(len(v_vector))[:, None] != ch
     survivors_losers = 1.0 - all_cdfs
 
-    # The defective likelihood: Winner PDF * Product of Loser Survivors
-    # likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0))
     likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0), axis=0)
 
-    # Return log-likelihood with a floor for numerical stability
-    return jnp.log(jnp.clip(likelihood, __min, __max))
+    return jnp.log(jnp.clip(likelihood, LOGP_MIN, LOGP_MAX))
 
 
 def logp_rdm3(
@@ -512,11 +499,12 @@ def logp_rdm3(
     rt = jnp.abs(data_reshaped[:, 0])
     rt = rt - t
     response = data_reshaped[:, 1]
-    # response_int = jnp.cast(response, "int32")
     response_int = response.astype(jnp.int_)
+
     logp = _jax_rdm3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
-    checked_logp = jax_check_parameters(logp, b > A, msg="b > A")
-    return checked_logp
+    logp = jax_check_parameters(logp, b > A, msg="b > A")
+    logp = jax_check_parameters(logp, rt > 0.0, msg="rt > 0 after non-decision time")
+    return logp
 
 
 def jax_check_parameters(logp, condition, msg="Condition failed"):
@@ -524,10 +512,21 @@ def jax_check_parameters(logp, condition, msg="Condition failed"):
 
     Equivalent to pymc.check_parameters with can_be_replaced_by_ninf=True.
 
-    Note: We do not print the message here because side-effects in JAX
-    (like printing) can be problematic during JIT compilation and sampling.
-    Returning -inf effectively rejects the sample.
+    Note: This uses `jax.debug.print`, which is safe to use under JAX
+    transformations but may produce repeated messages if called inside vmapped
+    or jitted code. Returning -inf effectively rejects the sample.
     """
+    violations = jnp.logical_not(condition)
+
+    def _print_message(_):
+        jax_debug.print(
+            "jax_check_parameters: {msg}, {n_violations} violations",
+            msg=msg,
+            n_violations=jnp.sum(violations),
+        )
+
+    lax.cond(jnp.any(violations), _print_message, lambda _: None, operand=None)
+
     return jnp.where(condition, logp, -np.inf)
 
 
@@ -536,9 +535,9 @@ rdm3_params = ["A", "b", "v0", "v1", "v2", "t"]
 rdm3_bounds = {
     "A": (0.0, inf),
     "b": (0.1, inf),
-    "v0": (0.0, inf),
-    "v1": (0.0, inf),
-    "v2": (0.0, inf),
+    "v0": (0.001, inf),
+    "v1": (0.001, inf),
+    "v2": (0.001, inf),
     "t": (0.0, inf),
 }
 
