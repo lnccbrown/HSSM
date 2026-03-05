@@ -787,7 +787,11 @@ class HSSM(DataValidatorMixin):
 
         omit_offsets = kwargs.pop("omit_offsets", False)
         self._inference_obj = self.model.fit(
-            inference_method=sampler,
+            inference_method=(
+                "pymc"
+                if sampler in ["pymc", "numpyro", "blackjax", "nutpie"]
+                else sampler
+            ),
             init=init,
             include_response_params=include_response_params,
             omit_offsets=omit_offsets,
@@ -1628,42 +1632,43 @@ class HSSM(DataValidatorMixin):
 
         Parameters
         ----------
+        model : HSSM
+            The HSSM model instance to save
         model_name : str | None
             Name to use for the saved model files.
             If None, will use model.model_name with timestamp
         allow_absolute_base_path : bool
-            Whether to allow absolute paths for base_path.
-            Defaults to False for safety.
+            Whether to allow absolute paths for base_path
         base_path : str | Path
             Base directory to save model files in.
-            Must be relative path if allow_absolute_base_path=False.
-            Defaults to "hssm_models".
-        save_idata_only : bool
-            If True, only saves inference data (traces), not the model pickle.
-            Defaults to False (saves both model and traces).
+            Must be relative path if allow_absolute_base_path=False
+        save_idata_only: bool = False,
+            Whether to save the model class instance itself
 
         Raises
         ------
         ValueError
             If base_path is absolute and allow_absolute_base_path=False
         """
-        # Convert to Path object for cross-platform compatibility
-        base_path = Path(base_path)
-
-        # Check if base_path is absolute (works on all platforms)
-        if not allow_absolute_base_path and base_path.is_absolute():
-            raise ValueError(
-                "base_path must be a relative path if allow_absolute_base_path is False"
-            )
+        # check if base_path is absolute
+        if not allow_absolute_base_path:
+            if str(base_path).startswith("/"):
+                raise ValueError(
+                    "base_path must be a relative path"
+                    " if allow_absolute_base_path is False"
+                )
 
         if model_name is None:
             # Get date string format as suffix to model name
-            timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-            model_name = f"{self.model_name}_{timestamp}"
+            model_name = (
+                self.model_name
+                + "_"
+                + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+            )
 
-        # Sanitize model_name and construct full path
+        # check if folder by name model_name exists
         model_name = model_name.replace(" ", "_")
-        model_path = base_path / model_name
+        model_path = Path(base_path).joinpath(model_name)
         model_path.mkdir(parents=True, exist_ok=True)
 
         # Save model to pickle file

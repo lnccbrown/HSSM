@@ -1,13 +1,6 @@
 """Likelihood functions and distributions that use them."""
 
-from .analytical import (
-    DDM,
-    DDM_SDV,
-    POISSON_RACE,
-    logp_ddm,
-    logp_ddm_sdv,
-    logp_poisson_race,
-)
+from .analytical import DDM, DDM_SDV, logp_ddm, logp_ddm_sdv
 from .blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox, logp_full_ddm
 
 __all__ = [
@@ -18,6 +11,4 @@ __all__ = [
     "logp_ddm_bbox",
     "logp_ddm_sdv_bbox",
     "logp_full_ddm",
-    "logp_poisson_race",
-    "POISSON_RACE",
 ]

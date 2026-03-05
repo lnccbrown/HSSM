@@ -43,12 +43,6 @@ def vectorize_param(theta, param, size):
 
     Returns:
     dict: A new dictionary with the specified parameter vectorized.
-
-    Examples:
-    --------
-    >>> theta = {"v0": 1.0, "v1": 1.2, "v2": 1.4, "b": 2.0, "A": 1.0, "t": 0.0}
-    >>> vectorize_param(theta, "v0", 3)
-    {'v0': array([1., 1., 1.]), 'v1': 1.2, 'v2': 1.4, 'b': 2.0, 'A': 1.0, 't': 0.0}
     """
     return {k: (np.full(size, v) if k == param else v) for k, v in theta.items()}
 

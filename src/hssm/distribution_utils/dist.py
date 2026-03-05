@@ -719,15 +719,8 @@ def make_likelihood_callable(
         A list of boolean values indicating whether the parameters are regression
         parameters. Defaults to None.
     params_only : Optional
-        Controls the expected signature of the ``loglik`` callable.
-        If False (the default when None), the callable signature is
-        ``f(data, *params)``, where ``data`` is a 2-column array of
-        [rt, choice].  This is the standard case for LANs and other
-        likelihoods that condition on observed data.
-        If True, the callable signature is ``f(*params)`` with no data
-        argument.  This is used for Choice Probability Networks (CPNs)
-        and Outcome Probability Networks (OPNs).
-        Defaults to None (treated as False).
+        Whether the missing data likelihood is takes its first argument as the data.
+        Defaults to None.
     """
     if isinstance(loglik, pytensor.graph.Op):
         return loglik

@@ -12,9 +12,7 @@ import numpy as np
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
-from jax import debug as jax_debug
-from jax import lax, vmap
-from jax.scipy.stats import norm
+from jax import scipy, vmap
 from numpy import inf
 from pymc.distributions.dist_math import check_parameters
 
@@ -414,75 +412,90 @@ DDM_SDV: Type[pm.Distribution] = make_distribution(
 )
 
 
-LOGP_MIN = jnp.exp(LOGP_LB)
-LOGP_MAX = jnp.exp(-LOGP_LB)
-
-
 # Racing Diffusion Model (RDM)
 
 
-def _jax_rdm_tpdf(t, b, v, A, eps_t: float = 1e-8):
-    """RDM first-passage-time density for a single accumulator."""
-    t_eff = jnp.maximum(t, eps_t)
-    sqrt_t = jnp.sqrt(t_eff)
+# density function for the standard normal distribution
+def _jax_normpdf(x):
+    return (1.0 / jnp.sqrt(2 * jnp.pi)) * jnp.exp(-0.5 * x**2)
 
-    alpha = (b - A - t_eff * v) / sqrt_t
-    beta = (b - t_eff * v) / sqrt_t
 
-    return (
-        1.0
+# cumulative distribution function for the standard normal distribution
+def _jax_normcdf(x):
+    return (1.0 / 2) * (1.0 + scipy.special.erf(x / jnp.sqrt(2.0)))
+
+
+def _jax_rdm_tpdf(t, b, v, A):
+    alpha = (b - A - t * v) / (jnp.sqrt(t))
+    beta = (b - t * v) / (jnp.sqrt(t))
+
+    f = (
+        1
         / A
         * (
-            -v * norm.cdf(alpha)
-            + (1.0 / sqrt_t) * norm.pdf(alpha)
-            + v * norm.cdf(beta)
-            - (1.0 / sqrt_t) * norm.pdf(beta)
+            -v * _jax_normcdf(alpha)
+            + (1 / jnp.sqrt(t)) * _jax_normpdf(alpha)
+            + v * _jax_normcdf(beta)
+            - (1 / jnp.sqrt(t)) * _jax_normpdf(beta)
         )
     )
 
+    return f
 
-def _jax_rdm_tcdf(t, b, v, A, eps_t: float = 1e-8, eps_v: float = 1e-6):
-    """RDM first-passage-time CDF for a single accumulator."""
-    t_eff = jnp.maximum(t, eps_t)
-    sqrt_t = jnp.sqrt(t_eff)
-    v_eff = jnp.maximum(jnp.abs(v), eps_v) * jnp.sign(jnp.where(v == 0.0, 1.0, v))
 
-    alpha_1 = jnp.sqrt(2.0) * (v_eff * t_eff - b) / jnp.sqrt(2.0 * t_eff)
-    alpha_2 = jnp.sqrt(2.0) * (v_eff * t_eff - b + A) / jnp.sqrt(2.0 * t_eff)
+def _jax_rdm_tcdf(t, b, v, A):
+    alpha_1 = jnp.sqrt(2) * (v * t - b) / jnp.sqrt(2 * t)
+    alpha_2 = jnp.sqrt(2) * (v * t - b + A) / jnp.sqrt(2 * t)
 
-    beta_1 = jnp.sqrt(2.0) * (-v_eff * t_eff - b) / jnp.sqrt(2.0 * t_eff)
-    beta_2 = jnp.sqrt(2.0) * (-v_eff * t_eff - b + A) / jnp.sqrt(2.0 * t_eff)
+    beta_1 = jnp.sqrt(2) * (-v * t - b) / jnp.sqrt(2 * t)
+    beta_2 = jnp.sqrt(2) * (-v * t - b + A) / jnp.sqrt(2 * t)
 
-    coeff = 1.0 / (2.0 * v_eff * A)
     F = (
-        coeff * (norm.cdf(alpha_2) - norm.cdf(alpha_1))
-        + sqrt_t / A * (alpha_2 * norm.cdf(alpha_2) - alpha_1 * norm.cdf(alpha_1))
-        - coeff
+        1 / (2 * v * A) * (_jax_normcdf(alpha_2) - _jax_normcdf(alpha_1))
+        + jnp.sqrt(t)
+        / A
+        * (alpha_2 * _jax_normcdf(alpha_2) - alpha_1 * _jax_normcdf(alpha_1))
+        - 1
+        / (2 * v * A)
         * (
-            jnp.exp(2.0 * v_eff * (b - A)) * norm.cdf(beta_2)
-            - jnp.exp(2.0 * v_eff * b) * norm.cdf(beta_1)
+            jnp.exp(2 * v * (b - A)) * _jax_normcdf(beta_2)
+            - jnp.exp(2 * v * b) * _jax_normcdf(beta_1)
         )
-        + sqrt_t / A * (norm.pdf(alpha_2) - norm.pdf(alpha_1))
+        + jnp.sqrt(t) / A * (_jax_normpdf(alpha_2) - _jax_normpdf(alpha_1))
     )
 
     return F
 
 
 def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2):
-    """Log-likelihood for 3-choice RDM at JAX level."""
+    __min = jnp.exp(LOGP_LB)
+    __max = jnp.exp(-LOGP_LB)
+
+    # 1. Calculate PDFs and CDFs for all accumulators
+    # We use vmap to apply our single-accumulator functions across the drift vector
+    # v_vector = jnp.array([v0, v1, v2])
     v_vector = jnp.stack(jnp.broadcast_arrays(v0, v1, v2))
     all_pdfs = vmap(lambda v: _jax_rdm_tpdf(t, b, v, A))(v_vector)
     all_cdfs = vmap(lambda v: _jax_rdm_tcdf(t, b, v, A))(v_vector)
 
+    # 2. Extract components for the winner
+    # pdf_winner = all_pdfs[ch]
     idx = jnp.arange(ch.shape[0])
     pdf_winner = all_pdfs[ch, idx]
 
+    # 3. Calculate the product of survivor functions for the losers
+    # We mask the winner out of the CDF array
+    # mask = jnp.arange(len(v_vector)) != ch
+    # survivors_losers = 1.0 - all_cdfs
     mask = jnp.arange(len(v_vector))[:, None] != ch
     survivors_losers = 1.0 - all_cdfs
 
+    # The defective likelihood: Winner PDF * Product of Loser Survivors
+    # likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0))
     likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0), axis=0)
 
-    return jnp.log(jnp.clip(likelihood, LOGP_MIN, LOGP_MAX))
+    # Return log-likelihood with a floor for numerical stability
+    return jnp.log(jnp.clip(likelihood, __min, __max))
 
 
 def logp_rdm3(
@@ -499,12 +512,11 @@ def logp_rdm3(
     rt = jnp.abs(data_reshaped[:, 0])
     rt = rt - t
     response = data_reshaped[:, 1]
+    # response_int = jnp.cast(response, "int32")
     response_int = response.astype(jnp.int_)
-
     logp = _jax_rdm3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
-    logp = jax_check_parameters(logp, b > A, msg="b > A")
-    logp = jax_check_parameters(logp, rt > 0.0, msg="rt > 0 after non-decision time")
-    return logp
+    checked_logp = jax_check_parameters(logp, b > A, msg="b > A")
+    return checked_logp
 
 
 def jax_check_parameters(logp, condition, msg="Condition failed"):
@@ -512,21 +524,10 @@ def jax_check_parameters(logp, condition, msg="Condition failed"):
 
     Equivalent to pymc.check_parameters with can_be_replaced_by_ninf=True.
 
-    Note: This uses `jax.debug.print`, which is safe to use under JAX
-    transformations but may produce repeated messages if called inside vmapped
-    or jitted code. Returning -inf effectively rejects the sample.
+    Note: We do not print the message here because side-effects in JAX
+    (like printing) can be problematic during JIT compilation and sampling.
+    Returning -inf effectively rejects the sample.
     """
-    violations = jnp.logical_not(condition)
-
-    def _print_message(_):
-        jax_debug.print(
-            "jax_check_parameters: {msg}, {n_violations} violations",
-            msg=msg,
-            n_violations=jnp.sum(violations),
-        )
-
-    lax.cond(jnp.any(violations), _print_message, lambda _: None, operand=None)
-
     return jnp.where(condition, logp, -np.inf)
 
 
@@ -535,9 +536,9 @@ rdm3_params = ["A", "b", "v0", "v1", "v2", "t"]
 rdm3_bounds = {
     "A": (0.0, inf),
     "b": (0.1, inf),
-    "v0": (0.001, inf),
-    "v1": (0.001, inf),
-    "v2": (0.001, inf),
+    "v0": (0.0, inf),
+    "v1": (0.0, inf),
+    "v2": (0.0, inf),
     "t": (0.0, inf),
 }
 
@@ -697,112 +698,4 @@ LBA3: Type[pm.Distribution] = make_distribution(
     loglik=logp_lba3,
     list_params=lba3_params,
     bounds=lba3_bounds,
-)
-
-
-def logp_poisson_race(
-    data: np.ndarray,
-    r1: float,
-    r2: float,
-    k1: float,
-    k2: float,
-    t: float,
-    epsilon: float = 1e-15,
-) -> np.ndarray:
-    """Compute analytical log-likelihoods for a 2-accumulator Poisson race.
-
-    Each accumulator time follows a Gamma distribution with continuous
-    shape parameter k and rate r. The per-trial likelihood decomposes
-    into the density of the winning accumulator evaluated at the observed
-    decision time and the survival function of the losing accumulator
-    at the same time.
-
-    Implemented as in https://link.springer.com/article/10.3758/BF03212980
-    with two modifications:
-      1. We allow continuous shape parameters (k1, k2) rather than just integers.
-      2. We do not condition on the underlying stimulus condition.
-
-    Parameters
-    ----------
-    data
-        2-column tensor of (response time, response). Response > 0 indicates
-        accumulator 2 (the second accumulator, parameters ``r2``/``k2``);
-        otherwise accumulator 1 (the first accumulator, ``r1``/``k1``).
-        This matches simulators that encode choices as ``-1`` for winner index 0
-        and ``+1`` for winner index 1.
-    r1, r2
-        Rates (> 0) for the two accumulators.
-    k1, k2
-        Shape parameters (> 0) for the two accumulators.
-    t
-        Non-decision time [0, inf).
-    epsilon
-        A small positive number to prevent division by zero or taking ``log(0)``.
-
-    Returns
-    -------
-    np.ndarray
-        Per-trial log-likelihoods (shape: ``(n_trials,)``).
-
-        Note that this function constructs a symbolic PyTensor graph; when used
-        inside a PyMC/PyTensor model the returned object is a symbolic tensor,
-        and evaluating/compiling the graph yields an ndarray.
-    """
-    epsilon = pm.floatX(epsilon)
-    one = pm.floatX(1.0)
-    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
-
-    rt = pt.abs(data[:, 0])
-    response = data[:, 1]
-    flip = response > 0
-
-    rt = rt - t
-    negative_rt = rt <= 0
-    rt_safe = pt.maximum(rt, epsilon)
-
-    r_c = pt.switch(flip, r2, r1)
-    r_l = pt.switch(flip, r1, r2)
-    k_c = pt.switch(flip, k2, k1)
-    k_l = pt.switch(flip, k1, k2)
-
-    r_c_safe = pt.maximum(r_c, epsilon)
-
-    log_pdf = (
-        k_c * pt.log(r_c_safe)
-        + (k_c - 1.0) * pt.log(rt_safe)
-        - r_c * rt_safe
-        - pt.gammaln(k_c)
-    )
-
-    survival = pt.gammaincc(k_l, r_l * rt_safe)
-    survival = pt.clip(survival, epsilon, one)
-    log_survival = pt.log(survival)
-
-    logp = log_pdf + log_survival
-    logp = pt.switch(negative_rt, LOGP_LB, logp)
-
-    checked = check_parameters(logp, r1 > 0, msg="r1 > 0")
-    checked = check_parameters(checked, r2 > 0, msg="r2 > 0")
-    checked = check_parameters(checked, k1 > 0, msg="k1 > 0")
-    checked = check_parameters(checked, k2 > 0, msg="k2 > 0")
-    checked = check_parameters(checked, t >= 0, msg="t >= 0")
-    return checked
-
-
-# set bounds
-poisson_race_bounds = {
-    "r1": (np.finfo(float).eps, np.inf),
-    "r2": (np.finfo(float).eps, np.inf),
-    "k1": (np.finfo(float).eps, np.inf),
-    "k2": (np.finfo(float).eps, np.inf),
-    "t": (0.0, np.inf),
-}
-poisson_race_params = list(poisson_race_bounds)
-
-# build distribution
-POISSON_RACE = make_distribution(
-    rv="poisson_race",
-    loglik=logp_poisson_race,
-    list_params=poisson_race_params,
-    bounds=poisson_race_bounds,
 )

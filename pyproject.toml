@@ -47,7 +47,6 @@ repository = "https://github.com/lnccbrown/HSSM"
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.5.2"]
-bayesflow = ["bayesflow", "keras>=3"]
 
 [dependency-groups]
 dev = [
@@ -71,6 +70,7 @@ dev = [
     "pyarrow>=20.0.0",
     "lanfactory>=0.5.3",
     "HSSM[test]",
+    "pytest-cov>=7.0.0",
 ]
 
 test = [
