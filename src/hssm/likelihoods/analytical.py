@@ -840,39 +840,3 @@ def softmax_inv_temperature(data: np.ndarray, beta: np.ndarray, *logits):
     )
 
     return log_prob_choices
-
-
-def softmax_inv_temperature(data: np.ndarray, beta: np.ndarray, *logits):
-    """Compute the log-likelihood of the Inverse Softmax Temperature Model.
-
-    Parameters
-    ----------
-    data
-        1D array of responses (choices).
-    beta
-        A scalar for the softmax temperature (0, inf).
-    *logits
-        Logits for each choice excluding logit0.
-
-    Returns
-    -------
-    pt.TensorVariable
-        The log likelihood of the Inverse Softmax Temperature Model.
-    """
-    choices = pt.where(data < 1, 0.0, data).astype("int32")
-    zeros = pt.zeros_like(data, dtype=pytensor.config.floatX)
-
-    logits_stacked = pt.stack(
-        [
-            zeros,  # logit0 is always 0
-            *(logit + zeros for logit in logits),
-        ],
-    )
-
-    logits_scaled = logits_stacked * beta
-    choice_logits = logits_scaled[choices, pt.arange(data.shape[0])]
-    log_prob_choices = choice_logits - pt.logsumexp(
-        logits_scaled, axis=0, keepdims=False
-    )
-
-    return log_prob_choices
