@@ -21,17 +21,6 @@ def filter_theta(theta, exclude_keys=["A", "b"]):
     return {k: v for k, v in theta.items() if k not in exclude_keys}
 
 
-def assert_parameter_value_error(logp_func, data_out, A, b, theta):
-    """Helper function to assert ParameterValueError for given parameters."""
-    with pytest.raises(pm.logprob.utils.ParameterValueError):
-        logp_func(
-            data_out.values,
-            A=A,
-            b=b,
-            **filter_theta(theta, ["A", "b"]),
-        )
-
-
 def vectorize_param(theta, param, size):
     """
     Vectorize a specific parameter in the theta dictionary.

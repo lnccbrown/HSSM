@@ -505,7 +505,7 @@ def logp_rdm3(
     return logp
 
 
-def jax_check_parameters(logp, condition, msg="Condition failed"):
+def jax_check_parameters(logp, condition, msg="Condition failed", print_msg=False):
     """Check parameters for validity in JAX.
 
     Equivalent to pymc.check_parameters with can_be_replaced_by_ninf=True.
@@ -516,16 +516,18 @@ def jax_check_parameters(logp, condition, msg="Condition failed"):
     """
     violations = jnp.logical_not(condition)
 
-    def _print_message(_):
-        jax_debug.print(
-            "jax_check_parameters: {msg}, {n_violations} violations",
-            msg=msg,
-            n_violations=jnp.sum(violations),
-        )
+    if print_msg:
 
-    lax.cond(jnp.any(violations), _print_message, lambda _: None, operand=None)
+        def _print_message(_):
+            jax_debug.print(
+                "jax_check_parameters: {msg}, {n_violations} violations",
+                msg=msg,
+                n_violations=jnp.sum(violations),
+            )
 
-    return jnp.where(condition, logp, -np.inf)
+        lax.cond(jnp.any(violations), _print_message, lambda _: None, operand=None)
+
+    return jnp.where(condition, logp, -jnp.inf)
 
 
 rdm3_params = ["A", "b", "v0", "v1", "v2", "t"]
