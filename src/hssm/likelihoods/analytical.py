@@ -7,10 +7,14 @@ https://gist.github.com/sammosummo/c1be633a74937efaca5215da776f194b.
 
 from typing import Type
 
+import jax.numpy as jnp
 import numpy as np
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
+from jax import debug as jax_debug
+from jax import lax, vmap
+from jax.scipy.stats import norm
 from numpy import inf
 from pymc.distributions.dist_math import check_parameters
 
@@ -407,6 +411,141 @@ DDM_SDV: Type[pm.Distribution] = make_distribution(
     loglik=logp_ddm_sdv,
     list_params=ddm_sdv_params,
     bounds=ddm_sdv_bounds,
+)
+
+
+LOGP_MIN = jnp.exp(LOGP_LB)
+LOGP_MAX = jnp.exp(-LOGP_LB)
+
+
+# Racing Diffusion Model (RDM)
+def _jax_rdm_tpdf(t, b, v, A, eps_t: float = 1e-8):
+    """RDM first-passage-time density for a single accumulator."""
+    t_eff = jnp.maximum(t, eps_t)
+    sqrt_t = jnp.sqrt(t_eff)
+
+    alpha = (b - A - t_eff * v) / sqrt_t
+    beta = (b - t_eff * v) / sqrt_t
+
+    return (
+        1.0
+        / A
+        * (
+            -v * norm.cdf(alpha)
+            + (1.0 / sqrt_t) * norm.pdf(alpha)
+            + v * norm.cdf(beta)
+            - (1.0 / sqrt_t) * norm.pdf(beta)
+        )
+    )
+
+
+def _jax_rdm_tcdf(t, b, v, A, eps_t: float = 1e-8, eps_v: float = 1e-6):
+    """RDM first-passage-time CDF for a single accumulator."""
+    t_eff = jnp.maximum(t, eps_t)
+    sqrt_t = jnp.sqrt(t_eff)
+    v_eff = jnp.maximum(jnp.abs(v), eps_v) * jnp.sign(jnp.where(v == 0.0, 1.0, v))
+
+    alpha_1 = jnp.sqrt(2.0) * (v_eff * t_eff - b) / jnp.sqrt(2.0 * t_eff)
+    alpha_2 = jnp.sqrt(2.0) * (v_eff * t_eff - b + A) / jnp.sqrt(2.0 * t_eff)
+
+    beta_1 = jnp.sqrt(2.0) * (-v_eff * t_eff - b) / jnp.sqrt(2.0 * t_eff)
+    beta_2 = jnp.sqrt(2.0) * (-v_eff * t_eff - b + A) / jnp.sqrt(2.0 * t_eff)
+
+    coeff = 1.0 / (2.0 * v_eff * A)
+    F = (
+        coeff * (norm.cdf(alpha_2) - norm.cdf(alpha_1))
+        + sqrt_t / A * (alpha_2 * norm.cdf(alpha_2) - alpha_1 * norm.cdf(alpha_1))
+        - coeff
+        * (
+            jnp.exp(2.0 * v_eff * (b - A)) * norm.cdf(beta_2)
+            - jnp.exp(2.0 * v_eff * b) * norm.cdf(beta_1)
+        )
+        + sqrt_t / A * (norm.pdf(alpha_2) - norm.pdf(alpha_1))
+    )
+
+    return F
+
+
+def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2):
+    """Log-likelihood for 3-choice RDM at JAX level."""
+    v_vector = jnp.stack(jnp.broadcast_arrays(v0, v1, v2))
+    all_pdfs = vmap(lambda v: _jax_rdm_tpdf(t, b, v, A))(v_vector)
+    all_cdfs = vmap(lambda v: _jax_rdm_tcdf(t, b, v, A))(v_vector)
+
+    idx = jnp.arange(ch.shape[0])
+    pdf_winner = all_pdfs[ch, idx]
+
+    mask = jnp.arange(len(v_vector))[:, None] != ch
+    survivors_losers = 1.0 - all_cdfs
+
+    likelihood = pdf_winner * jnp.prod(jnp.where(mask, survivors_losers, 1.0), axis=0)
+
+    return jnp.log(jnp.clip(likelihood, LOGP_MIN, LOGP_MAX))
+
+
+def logp_rdm3(
+    data: np.ndarray,
+    A: float,
+    b: float,
+    v0: float,
+    v1: float,
+    v2: float,
+    t: float,
+) -> np.ndarray:
+    """Compute the log-likelihood of the RDM model with 3 drift rates."""
+    data_reshaped = jnp.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+    rt = jnp.abs(data_reshaped[:, 0])
+    rt = rt - t
+    response = data_reshaped[:, 1]
+    response_int = response.astype(jnp.int_)
+
+    logp = _jax_rdm3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
+    logp = jax_check_parameters(logp, b > A, msg="b > A")
+    logp = jax_check_parameters(logp, rt > 0.0, msg="rt > 0 after non-decision time")
+    return logp
+
+
+def jax_check_parameters(logp, condition, msg="Condition failed", print_msg=False):
+    """Check parameters for validity in JAX.
+
+    Equivalent to pymc.check_parameters with can_be_replaced_by_ninf=True.
+
+    Note: This uses `jax.debug.print`, which is safe to use under JAX
+    transformations but may produce repeated messages if called inside vmapped
+    or jitted code. Returning -inf effectively rejects the sample.
+    """
+    violations = jnp.logical_not(condition)
+
+    if print_msg:
+
+        def _print_message(_):
+            jax_debug.print(
+                "jax_check_parameters: {msg}, {n_violations} violations",
+                msg=msg,
+                n_violations=jnp.sum(violations),
+            )
+
+        lax.cond(jnp.any(violations), _print_message, lambda _: None, operand=None)
+
+    return jnp.where(condition, logp, -jnp.inf)
+
+
+rdm3_params = ["A", "b", "v0", "v1", "v2", "t"]
+
+rdm3_bounds = {
+    "A": (0.0, inf),
+    "b": (0.1, inf),
+    "v0": (0.001, inf),
+    "v1": (0.001, inf),
+    "v2": (0.001, inf),
+    "t": (0.0, inf),
+}
+
+RDM3: Type[pm.Distribution] = make_distribution(
+    rv="racing_diffusion_3",
+    loglik=logp_rdm3,
+    list_params=rdm3_params,
+    bounds=rdm3_bounds,
 )
 
 
