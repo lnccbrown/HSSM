@@ -25,6 +25,8 @@ SupportedModels = Literal[
     "lba2",
     "racing_diffusion_3",
     "poisson_race",
+    "softmax_inv_temperature_2",
+    "softmax_inv_temperature_3",
 ]
 
 
