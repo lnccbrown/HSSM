@@ -142,7 +142,7 @@ def test_poisson_race_t_equals_zero():
 class TestPoissonRaceSimulator:
     """Tests for the smooth_unif override in simulate_data for poisson_race."""
 
-    _theta = {"r0": 2.5, "r1": 3.0, "k0": 1.3, "k1": 1.5, "t": 0.2}
+    _theta = {"r1": 2.5, "r2": 3.0, "k1": 1.3, "k2": 1.5, "t": 0.2}
 
     def test_smooth_unif_defaults_to_false(self):
         """simulate_data should set smooth_unif=False for poisson_race by default."""
