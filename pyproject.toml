@@ -34,6 +34,7 @@ dependencies = [
     "jaxonnxruntime>=0.3.0",
     "numpyro>=0.19",
     "onnx>=1.16.0",
+    "pandas>=2.2,<3",
     "pymc>=5.26.0",
     "seaborn>=0.13.2",
     "ssm-simulators>=0.12.0",
