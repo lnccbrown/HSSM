@@ -28,5 +28,7 @@ runs:
 
     - name: Install hssm
       if: steps.cache.outputs.cache-hit != 'true'
-      run: uv sync --group test --no-extra cuda12 --no-extra bayesflow
+      run: |
+        uv venv
+        uv pip install -e .[test]
       shell: bash
