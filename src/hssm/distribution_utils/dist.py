@@ -393,7 +393,7 @@ def make_distribution(
     loglik: LogLikeFunc | pytensor.graph.Op,
     list_params: list[str],
     bounds: dict | None = None,
-    lapse: bmb.Prior | None = None,
+    lapse: float | bmb.Prior | None = None,
     extra_fields: list[np.ndarray] | None = None,
     fixed_vector_params: dict[str, np.ndarray] | None = None,
     params_is_trialwise: list[bool] | None = None,
@@ -427,7 +427,7 @@ def make_distribution(
         A dictionary with parameters as keys (a string) and its boundaries as values.
         Example: {"parameter": (lower_boundary, upper_boundary)}.
     lapse : optional
-        A bmb.Prior object representing the lapse distribution.
+        A float or bmb.Prior object representing the lapse distribution.
     extra_fields : optional
         An optional list of arrays that are stored in the class created and will be
         used in likelihood calculation. Defaults to None.
@@ -492,15 +492,18 @@ def make_distribution(
         if list_params[-1] != "p_outlier":
             list_params.append("p_outlier")
 
-        data_vector = pt.dvector()
-        lapse_logp = pm.logp(
-            get_distribution_from_prior(lapse).dist(**lapse.args),
-            data_vector,
-        )
-        lapse_func = pytensor.function(
-            [data_vector],
-            lapse_logp,
-        )
+        if isinstance(lapse, float):
+            lapse_func = lambda data: np.full_like(data, lapse)
+        else:
+            data_vector = pt.dvector()
+            lapse_logp = pm.logp(
+                get_distribution_from_prior(lapse).dist(**lapse.args),
+                data_vector,
+            )
+            lapse_func = pytensor.function(
+                [data_vector],
+                lapse_logp,
+            )
     else:
         lapse_func = None
 
