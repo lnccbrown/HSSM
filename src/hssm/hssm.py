@@ -423,7 +423,7 @@ class HSSM(DataValidatorMixin):
         # Process missing data setting
         # AF-TODO: Could be a function in data validator?
         # TODO: Move to the MissingDataMixin class when we have it
-        if self.is_choice_only and missing_data:
+        if self.is_choice_only and missing_data is not False:
             raise ValueError("Choice-only models cannot have missing data.")
 
         if not self.is_choice_only:
