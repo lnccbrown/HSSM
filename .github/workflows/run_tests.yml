@@ -32,12 +32,12 @@ jobs:
 
       - name: Run fast tests
         if: ${{ !inputs.run_slow_tests }}
-        run: uv run pytest -m "not slow"
+        run: uv run pytest -m "not slow" --no-sync
         env:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
 
       - name: Run all tests
         if: ${{ inputs.run_slow_tests }}
-        run: uv run pytest
+        run: uv run pytest --no-sync
         env:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
