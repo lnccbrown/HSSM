@@ -204,7 +204,7 @@ def make_hssm_rv(
     lapse : optional
         A bmb.Prior object representing the lapse distribution.
     is_choice_only : bool
-        Whether the model is a choice-only model. This parameter overrides
+        Whether the model is a choice-only model.
 
     Returns
     -------
