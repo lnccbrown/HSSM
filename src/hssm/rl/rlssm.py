@@ -36,7 +36,7 @@ from hssm.rl.utils import validate_balanced_panel
 from ..base import HSSMBase
 
 
-class RLSSM(HSSMBase):
+class RLSSM(HSSMBase, RLSSMConfig):
     """Reinforcement Learning Sequential Sampling Model.
 
     Combines a reinforcement learning (RL) process with a sequential sampling

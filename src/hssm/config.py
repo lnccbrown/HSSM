@@ -54,7 +54,7 @@ class BaseModelConfig(ABC):
 
     # Data specification
     response: list[str] | None = field(default_factory=DEFAULT_SSM_OBSERVED_DATA.copy)
-    choices: tuple[int, ...] | None = DEFAULT_SSM_CHOICES
+    choices: list[int] | tuple[int, ...] | None = DEFAULT_SSM_CHOICES
 
     # Parameter specification
     list_params: list[str] | None = None
@@ -67,6 +67,16 @@ class BaseModelConfig(ABC):
 
     # Additional data requirements
     extra_fields: list[str] | None = None
+
+    @classmethod
+    @abstractmethod
+    def get_config_class(cls) -> type["BaseModelConfig"]:
+        """Return the config class for this model type.
+
+        This enables polymorphic config resolution without circular imports.
+        Each subclass returns itself as the config class.
+        """
+        ...
 
     @abstractmethod
     def validate(self) -> None:
@@ -91,6 +101,11 @@ class Config(BaseModelConfig):
         """Validate that loglik_kind is provided."""
         if self.loglik_kind is None:
             raise ValueError("loglik_kind is required for Config")
+
+    @classmethod
+    def get_config_class(cls) -> type["Config"]:
+        """Return Config as the config class for HSSM models."""
+        return Config
 
     @classmethod
     def from_defaults(
@@ -289,6 +304,18 @@ class RLSSMConfig(BaseModelConfig):
         """Set default loglik_kind for RLSSM models if not provided."""
         if self.loglik_kind is None:
             self.loglik_kind = "approx_differentiable"
+
+    @classmethod
+    def get_config_class(cls) -> type["RLSSMConfig"]:
+        """Return RLSSMConfig as the config class for RLSSM models."""
+        return RLSSMConfig
+
+    @classmethod
+    def from_defaults(
+        cls, model_name: SupportedModels | str, loglik_kind: LoglikKind | None
+    ) -> Config:
+        """Return the shared Config defaults (delegated to :class:`Config`)."""
+        return Config.from_defaults(model_name, loglik_kind)
 
     @property
     def n_params(self) -> int | None:
