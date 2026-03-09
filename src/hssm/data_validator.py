@@ -17,7 +17,7 @@ class DataValidatorMixin:
     This class expects subclasses to define the following attributes:
     - data: pd.DataFrame
     - response: list[str]
-    - choices: list[int]
+    - choices: list[int] | tuple[int, ...]
     - n_choices: int
     - extra_fields: list[str] | None
     - deadline: bool
@@ -30,7 +30,7 @@ class DataValidatorMixin:
         self,
         data: pd.DataFrame,
         response: list[str] | None = ["rt", "response"],
-        choices: list[int] | None = [0, 1],
+        choices: tuple[int, ...] | None = (0, 1),
         n_choices: int = 2,
         extra_fields: list[str] | None = None,
         deadline: bool = False,
