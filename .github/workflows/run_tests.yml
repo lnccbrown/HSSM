@@ -32,7 +32,7 @@ jobs:
 
       - name: Run fast tests
         if: ${{ !inputs.run_slow_tests }}
-        run: uv run pytest -m "not slow" --no-sync
+        run: uv run pytest -m "not slow" --no-sync --no-extra bayesflow --no-extra cuda12
         env:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
 
