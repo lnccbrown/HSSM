@@ -489,8 +489,6 @@ class HSSM(DataValidatorMixin):
         # Process lapse distribution
         self.has_lapse = p_outlier is not None and p_outlier != 0
         self._check_lapse(lapse)
-        if self.has_lapse and self.list_params[-1] != "p_outlier":
-            self.list_params.append("p_outlier")
 
         # Process all parameters
         self.params = Params.from_user_specs(
@@ -517,7 +515,6 @@ class HSSM(DataValidatorMixin):
 
         # Set p_outlier and lapse
         self.p_outlier = self.params.get("p_outlier")
-        self.lapse = lapse if self.has_lapse else None
 
         self._post_check_data_sanity()
 
@@ -1999,12 +1996,13 @@ class HSSM(DataValidatorMixin):
     def _check_lapse(self, lapse):
         """Determine if p_outlier and lapse is specified correctly."""
         # Basically, avoid situations where only one of them is specified.
-        if "p_outlier" in self.list_params and self.list_params[-1] != "p_outlier":
-            raise ValueError(
-                "Please do not include 'p_outlier' in `list_params`. "
-                + "We automatically append it to `list_params` when `p_outlier` "
-                + "parameter is not None"
-            )
+        if self.list_params[-1] != "p_outlier":
+            if "p_outlier" in self.list_params:
+                raise ValueError(
+                    "Please do not include 'p_outlier' in `list_params`. "
+                    + "We automatically append it to `list_params` when `p_outlier` "
+                    + "parameter is not None"
+                )
         if self.has_lapse:
             if lapse is None:
                 if self.is_choice_only:
@@ -2013,6 +2011,8 @@ class HSSM(DataValidatorMixin):
                     self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
             else:
                 self.lapse = lapse
+
+            self.list_params.append("p_outlier")
             return
 
         if lapse is not None:
@@ -2021,6 +2021,7 @@ class HSSM(DataValidatorMixin):
                 + "distribution, but `p_outlier` is set to either 0 or None. "
                 + "Your lapse distribution will be ignored."
             )
+        self.lapse = None
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
