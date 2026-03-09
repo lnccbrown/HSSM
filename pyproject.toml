@@ -59,6 +59,7 @@ dev = [
     "pytest-rerunfailures>=15.0",
     "ruff>=0.15.0",
     "pre-commit>=4.1.0",
+    "onnxruntime>=1.17.1",
 ]
 
 notebook = [
@@ -69,7 +70,6 @@ notebook = [
     "jupyterlab>=4.2.4",
     "mistune>=3.0.2",
     "nbconvert>=7.16.5",
-    "onnxruntime>=1.17.1",
     "nb-clean>=4.0.1",
     "nbval>=0.11.0",
     "ptpython>=3.0.29",
