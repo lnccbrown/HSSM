@@ -28,7 +28,5 @@ runs:
 
     - name: Install hssm
       if: steps.cache.outputs.cache-hit != 'true'
-      run: |
-        uv venv
-        uv pip install -e .[test]
+      run: uv sync
       shell: bash
