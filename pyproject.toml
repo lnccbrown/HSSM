@@ -72,7 +72,6 @@ notebook = [
     "onnxruntime>=1.17.1",
     "nb-clean>=4.0.1",
     "nbval>=0.11.0",
-    "pre-commit>=2.20.0",
     "ptpython>=3.0.29",
     "pyarrow>=20.0.0",
     "lanfactory>=0.5.3",
