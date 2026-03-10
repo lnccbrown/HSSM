@@ -25,8 +25,17 @@ def get_rdm3_config() -> DefaultConfig:
         "likelihoods": {
             "analytical": {
                 "loglik": logp_rdm3,
-                "backend": None,
-                "default_priors": {},
+                "backend": "jax",
+                "default_priors": {
+                    "A": {
+                        "name": "HalfNormal",
+                        "sigma": 0.5,
+                    },
+                    "t": {
+                        "name": "HalfNormal",
+                        "sigma": 0.3,
+                    },
+                },
                 "bounds": rdm3_bounds,
                 "extra_fields": None,
             }

@@ -489,6 +489,7 @@ def logp_rdm3(
     v1: float,
     v2: float,
     t: float,
+    epsilon: float = 1e-10,
 ) -> np.ndarray:
     """Compute the log-likelihood of the RDM model with 3 drift rates."""
     data_reshaped = jnp.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
@@ -497,9 +498,13 @@ def logp_rdm3(
     response = data_reshaped[:, 1]
     response_int = response.astype(jnp.int_)
 
-    logp = _jax_rdm3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
+    negative_rt = rt <= 0.0
+    rt_safe = jnp.where(negative_rt, epsilon, rt)
+
+    logp = _jax_rdm3_ll(rt_safe, response_int, A, b, v0, v1, v2)
+    logp = jnp.where(negative_rt, float(LOGP_LB), logp)
+    logp = logp.squeeze()
     logp = jax_check_parameters(logp, b > A, msg="b > A")
-    logp = jax_check_parameters(logp, rt > 0.0, msg="rt > 0 after non-decision time")
     return logp
 
 
