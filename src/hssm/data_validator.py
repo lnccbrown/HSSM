@@ -50,6 +50,8 @@ class DataValidatorMixin:
 
     def _post_check_data_sanity(self):
         """Check if the data is clean enough for the model."""
+        if self.is_choice_only:
+            return
         if self.deadline or self.missing_data:
             if -999.0 not in self.data["rt"].unique():
                 raise ValueError(
@@ -106,9 +108,8 @@ class DataValidatorMixin:
         if not self.missing_data and not self.deadline:
             # In the case of choice only model, we don't need to do anything with the
             # data.
-            # TODO: commented out for now for tests to pass
-            # if self.is_choice_only:
-            #     return
+            if self.is_choice_only:
+                return
             # In the case where missing_data is set to False, we need to drop the
             # cases where rt = na_value
             if pd.isna(self.missing_data_value):
