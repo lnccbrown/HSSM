@@ -140,7 +140,7 @@ def test_post_check_data_sanity_valid(base_data):
         n_choices=3,
     )
 
-    invalid_response = random.choice(range(2, 100))
+    invalid_response = random.choice(range(3, 100))
     dv_instance_no_missing.data.iloc[0, 1] = invalid_response
     with pytest.raises(ValueError, match=f"Invalid responses found in your dataset: "):
         dv_instance_no_missing._post_check_data_sanity()
