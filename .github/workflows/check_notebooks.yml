@@ -54,7 +54,7 @@ jobs:
 
             echo "Cleaning $notebook"
             uv run nb-clean clean -o "$notebook"
-            if ! uv run jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$notebook"; then
+            if ! uv run --group notebook jupyter nbconvert --ExecutePreprocessor.timeout=10000 --to notebook --execute "$notebook"; then
               echo "::error::Failed to execute notebook: $notebook"
               EXIT_CODE=1
             fi
