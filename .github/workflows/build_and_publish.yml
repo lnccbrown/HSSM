@@ -51,4 +51,4 @@ jobs:
           uv publish --token ${{ secrets.PYPI_TOKEN }}
 
       - name: Build and publish docs
-        run: uv run mkdocs gh-deploy --force
+        run: uv run --group notebook --group docs mkdocs gh-deploy --force
