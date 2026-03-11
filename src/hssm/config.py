@@ -74,16 +74,6 @@ class BaseModelConfig(ABC):
     # Additional data requirements
     extra_fields: list[str] | None = None
 
-    @classmethod
-    @abstractmethod
-    def get_config_class(cls) -> type["BaseModelConfig"]:
-        """Return the config class for this model type.
-
-        This enables polymorphic config resolution without circular imports.
-        Each subclass returns itself as the config class.
-        """
-        ...
-
     @abstractmethod
     def validate(self) -> None:
         """Validate configuration. Must be implemented by subclasses."""
@@ -104,27 +94,6 @@ class BaseModelConfig(ABC):
         """Return the number of extra fields."""
         return len(self.extra_fields) if self.extra_fields else None
 
-    @classmethod
-    @abstractmethod
-    def _build_model_config(
-        cls,
-        model: "SupportedModels | str",
-        loglik_kind: "LoglikKind | None",
-        model_config: "ModelConfig | dict | None",
-        choices: "list[int] | None",
-        loglik: Any = None,
-    ) -> "BaseModelConfig":
-        """Build and return a fully validated config for this model family.
-
-        Family builders are responsible for:
-
-        - Resolving defaults via ``from_defaults``,
-        - Normalizing user overrides (dict or typed config) into the family type,
-        - Applying choices/loglik precedence rules,
-        - Calling ``validate()`` before returning.
-        """
-        ...
-
 
 @dataclass
 class Config(BaseModelConfig):
@@ -138,11 +107,6 @@ class Config(BaseModelConfig):
         """Validate that loglik_kind is provided."""
         if self.loglik_kind is None:
             raise ValueError("loglik_kind is required for Config")
-
-    @classmethod
-    def get_config_class(cls) -> type["Config"]:
-        """Return Config as the config class for HSSM models."""
-        return Config
 
     @classmethod
     def from_defaults(
@@ -417,32 +381,6 @@ class RLSSMConfig(BaseModelConfig):
             self.loglik_kind = "approx_differentiable"
 
     @classmethod
-    def get_config_class(cls) -> type["RLSSMConfig"]:
-        """Return RLSSMConfig as the config class for RLSSM models."""
-        return RLSSMConfig
-
-    @classmethod
-    def _build_model_config(
-        cls,
-        model: "SupportedModels | str",
-        loglik_kind: "LoglikKind | None",
-        model_config: "ModelConfig | dict | None",
-        choices: "list[int] | None",
-        loglik: Any = None,
-    ) -> "Config":
-        """Build a validated Config for RLSSM by delegating to Config's builder.
-
-        RLSSM constructs and validates the full RLSSMConfig in its own
-        ``__init__`` before calling ``HSSMBase.__init__``. The model_config
-        passed here is a ModelConfig derived from
-        ``RLSSMConfig.to_model_config()``, so this method delegates directly
-        to ``Config._build_model_config`` for normalization.
-        """
-        return Config._build_model_config(
-            model, loglik_kind, model_config, choices, loglik
-        )
-
-    @classmethod
     def from_defaults(
         cls, model_name: SupportedModels | str, loglik_kind: LoglikKind | None
     ) -> Config:
@@ -580,7 +518,7 @@ class RLSSMConfig(BaseModelConfig):
 
         return default_val, self.bounds.get(param)
 
-    def to_config(self) -> Config:
+    def to_config(self) -> "Config":
         """Convert to standard Config for compatibility with HSSM.
 
         This method transforms the RLSSM configuration into a standard Config
@@ -650,6 +588,34 @@ class RLSSMConfig(BaseModelConfig):
             bounds=self.bounds,
             extra_fields=self.extra_fields,
             backend="jax",
+        )
+
+    def _build_model_config(self, loglik_op: Any) -> "Config":
+        """Build a validated :class:`Config` for use by :class:`~hssm.rl.rlssm.RLSSM`.
+
+        Converts this :class:`RLSSMConfig` to a :class:`ModelConfig`, then
+        delegates to :meth:`Config._build_model_config` using the pre-built
+        differentiable Op as ``loglik``.
+
+        Parameters
+        ----------
+        loglik_op
+            The differentiable pytensor Op produced by
+            :func:`~hssm.rl.likelihoods.builder.make_rl_logp_op`.
+
+        Returns
+        -------
+        Config
+            A fully validated :class:`Config` ready to pass to
+            :meth:`~hssm.base.HSSMBase.__init__`.
+        """
+        mc = self.to_model_config()
+        return Config._build_model_config(
+            self.model_name,
+            "approx_differentiable",
+            mc,
+            None,
+            loglik_op,
         )
 
 
