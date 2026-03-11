@@ -440,7 +440,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def choices(self, value):
         """Set the model_config.choices value (deprecated)."""
         self._deprecation_warn("choices")
-        self.model_config.choices = value
+        self.model_config.choices = tuple(value) if value is not None else None
 
     @property
     def model_name(self):
