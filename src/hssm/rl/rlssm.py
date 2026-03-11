@@ -36,7 +36,7 @@ from hssm.rl.utils import validate_balanced_panel
 from ..base import HSSMBase
 
 
-class RLSSM(HSSMBase, RLSSMConfig):
+class RLSSM(HSSMBase):
     """Reinforcement Learning Sequential Sampling Model.
 
     Combines a reinforcement learning (RL) process with a sequential sampling
@@ -122,6 +122,9 @@ class RLSSM(HSSMBase, RLSSMConfig):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs: Any,
     ) -> None:
+        # ===== save/load serialisation =====
+        self._init_args = self._store_init_args(locals(), kwargs)
+
         # Validate config (ensures ssm_logp_func is present, etc.)
         rlssm_config.validate()
 
@@ -174,20 +177,15 @@ class RLSSM(HSSMBase, RLSSMConfig):
             extra_fields=list(rlssm_config.extra_fields or []),
         )
 
-        # Delegate ModelConfig construction to RLSSMConfig, which already owns
-        # all the required fields (response, list_params, choices, bounds, …).
-        mc = rlssm_config.to_model_config()
+        # Build a typed Config instance via RLSSMConfig's own factory method.
+        # The differentiable Op is passed so Config.validate() is satisfied;
+        # loglik_kind="approx_differentiable" reflects that the Op has gradients.
+        config = rlssm_config._build_model_config(loglik_op)
 
         super().__init__(
             data=data,
-            model=rlssm_config.model_name,
+            model_config=config,
             include=include,
-            model_config=mc,
-            # Pass the Op as loglik so Config.validate() is satisfied.
-            # loglik_kind="approx_differentiable" reflects that the Op is
-            # differentiable (gradients flow through its VJP).
-            loglik=loglik_op,
-            loglik_kind="approx_differentiable",
             p_outlier=p_outlier,
             lapse=lapse,
             link_settings=link_settings,
