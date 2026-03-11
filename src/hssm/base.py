@@ -237,6 +237,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.prior_settings = prior_settings
         self.missing_data_value = -999.0
 
+        # Store a safe default for the constructor-arguments snapshot so that
+        # pickling / save-load cannot raise AttributeError if a subclass forgets
+        # to call `_store_init_args(locals(), kwargs)` early.  Subclasses are
+        # still expected to overwrite this with the real snapshot.
+        self._init_args: dict[str, Any] = {}
+
         # Set up additional namespace for formula evaluation
         additional_namespace = transformations_namespace.copy()
         if extra_namespace is not None:
@@ -1764,6 +1770,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A dictionary containing the constructor arguments
             under the key 'constructor_args'.
         """
+        # Provide a clear error when the initialization snapshot is missing or
+        # empty. This makes the contract explicit and avoids an AttributeError
+        # that is easy to miss for subclasses that forget to capture init args.
+        if not hasattr(self, "_init_args") or not self._init_args:
+            raise RuntimeError(
+                "Model state missing initialization snapshot; ensure subclasses "
+                "call _store_init_args(locals(), kwargs) early in __init__"
+            )
+
         state = {"constructor_args": self._init_args}
         return state
 
