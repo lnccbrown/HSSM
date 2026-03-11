@@ -216,7 +216,7 @@ class Config(BaseModelConfig):
 
         Parameters
         ----------
-        choices : tuple[int, ...]
+        choices : tuple[int, ...] | None
             A tuple of choices.
         """
         if choices is None:
@@ -282,7 +282,7 @@ class Config(BaseModelConfig):
         model: SupportedModels | str,
         loglik_kind: LoglikKind | None,
         model_config: ModelConfig | dict | None,
-        choices: list[int] | None,
+        choices: list[int] | tuple[int, ...] | None,
         loglik: Any = None,
     ) -> Config:
         """Build and return a validated Config for standard HSSM models.
