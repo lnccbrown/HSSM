@@ -279,12 +279,12 @@ class Config(BaseModelConfig):
     @classmethod
     def _build_model_config(
         cls,
-        model: "SupportedModels | str",
-        loglik_kind: "LoglikKind | None",
-        model_config: "ModelConfig | dict | None",
-        choices: "list[int] | None",
+        model: SupportedModels | str,
+        loglik_kind: LoglikKind | None,
+        model_config: ModelConfig | dict | None,
+        choices: list[int] | None,
         loglik: Any = None,
-    ) -> "Config":
+    ) -> Config:
         """Build and return a validated Config for standard HSSM models.
 
         Resolves defaults, normalizes dict/ModelConfig overrides, applies
@@ -388,7 +388,7 @@ class RLSSMConfig(BaseModelConfig):
         return Config.from_defaults(model_name, loglik_kind)
 
     @classmethod
-    def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> "RLSSMConfig":
+    def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> RLSSMConfig:
         """
         Create RLSSMConfig from a configuration dictionary.
 
@@ -518,7 +518,7 @@ class RLSSMConfig(BaseModelConfig):
 
         return default_val, self.bounds.get(param)
 
-    def to_config(self) -> "Config":
+    def to_config(self) -> Config:
         """Convert to standard Config for compatibility with HSSM.
 
         This method transforms the RLSSM configuration into a standard Config
@@ -569,7 +569,7 @@ class RLSSMConfig(BaseModelConfig):
             loglik=self.loglik,
         )
 
-    def to_model_config(self) -> "ModelConfig":
+    def to_model_config(self) -> ModelConfig:
         """Build a :class:`ModelConfig` from this :class:`RLSSMConfig`.
 
         All fields are sourced from ``self``; the backend is fixed to ``"jax"``
@@ -590,7 +590,7 @@ class RLSSMConfig(BaseModelConfig):
             backend="jax",
         )
 
-    def _build_model_config(self, loglik_op: Any) -> "Config":
+    def _build_model_config(self, loglik_op: Any) -> Config:
         """Build a validated :class:`Config` for use by :class:`~hssm.rl.rlssm.RLSSM`.
 
         Converts this :class:`RLSSMConfig` to a :class:`ModelConfig`, then
