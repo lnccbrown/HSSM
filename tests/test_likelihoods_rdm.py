@@ -9,7 +9,7 @@ import pytest
 import hssm
 
 # pylint: disable=C0413
-from hssm.likelihoods.analytical import logp_rdm3
+from hssm.likelihoods.analytical import LOGP_LB, logp_rdm3
 
 hssm.set_floatX("float32")
 
@@ -82,3 +82,21 @@ def test_racing_diffusion(logp_func, model, theta):
             assert np.isneginf(res).all()
         except pm.logprob.utils.ParameterValueError:
             pass
+
+
+def test_rdm3_negative_rt_returns_logp_lb_and_is_finite():
+    """Trials with rt <= t should return LOGP_LB and remain finite."""
+    data = np.array(
+        [
+            (0.02, 0.0),
+            (0.60, 1.0),
+        ],
+        dtype="float32",
+    )
+    theta = dict(v0=1.0, v1=1.2, v2=1.4, b=2.0, A=1.0, t=0.05)
+
+    logp = np.asarray(logp_rdm3(data, **theta))
+
+    assert np.isclose(logp[0], LOGP_LB)
+    assert np.all(np.isfinite(logp))
+    assert not np.any(np.isnan(logp))
