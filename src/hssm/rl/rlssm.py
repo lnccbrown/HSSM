@@ -96,11 +96,11 @@ class RLSSM(HSSMBase, RLSSMConfig):
 
     Attributes
     ----------
-    _rlssm_config : RLSSMConfig
+    config : RLSSMConfig
         The RLSSM configuration object.
-    _n_participants : int
+    n_participants : int
         Number of participants inferred from *data*.
-    _n_trials : int
+    n_trials : int
         Number of trials per participant inferred from *data*.
     """
 
@@ -152,9 +152,9 @@ class RLSSM(HSSMBase, RLSSMConfig):
 
         # Store RL-specific state on self BEFORE super().__init__() so that
         # _make_model_distribution() (called from super) can access them.
-        self._rlssm_config = rlssm_config
-        self._n_participants = n_participants
-        self._n_trials = n_trials
+        self.config = rlssm_config
+        self.n_participants = n_participants
+        self.n_trials = n_trials
 
         # Build the differentiable pytensor Op from the annotated SSM function.
         # This Op supersedes the loglik/loglik_kind workflow: it is passed as
@@ -208,7 +208,7 @@ class RLSSM(HSSMBase, RLSSMConfig):
         through :func:`~hssm.distribution_utils.make_likelihood_callable`.
         Instead it uses ``self.loglik`` directly — the differentiable pytensor
         ``Op`` built in :meth:`__init__` from
-        ``self._rlssm_config.ssm_logp_func``.
+        ``self.config.ssm_logp_func``.
 
         The Op already handles:
         - The RL learning rule (computing trial-wise intermediate parameters).
