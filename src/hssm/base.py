@@ -11,7 +11,6 @@ import logging
 import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from inspect import signature
 from os import PathLike
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, Union, cast, get_args
@@ -31,7 +30,7 @@ from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
 
-from hssm._types import LoglikKind, SupportedModels
+from hssm._types import SupportedModels
 from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
@@ -49,7 +48,7 @@ from hssm.utils import (
 )
 
 from . import plotting
-from .config import BaseModelConfig, ModelConfig
+from .config import BaseModelConfig
 from .param import Params
 from .param import UserParam as Param
 
@@ -116,65 +115,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
-    model_config : optional
-        A dictionary containing the model configuration information. If None is
-        provided, defaults will be used if there are any. Defaults to None.
-        Fields for this `dict` are usually:
-
-        - `"list_params"`: a list of parameters indicating the parameters of the model.
-            The order in which the parameters are specified in this list is important.
-            Values for each parameter will be passed to the likelihood function in this
-            order.
-        - `"backend"`: Only used when `loglik_kind` is `approx_differentiable` and
-            an onnx file is supplied for the likelihood approximation network (LAN).
-            Valid values are `"jax"` or `"pytensor"`. It determines whether the LAN in
-            ONNX should be converted to `"jax"` or `"pytensor"`. If not provided,
-            `jax` will be used for maximum performance.
-        - `"default_priors"`: A `dict` indicating the default priors for each parameter.
-        - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
-            of LAN, these bounds are training boundaries.
-        - `"rv"`: Optional. Can be a `RandomVariable` class containing the user's own
-            `rng_fn` function for sampling from the distribution that the user is
-            supplying. If not supplied, HSSM will automatically generate a
-            `RandomVariable` using the simulator identified by `model` from the
-            `ssm_simulators` package. If `model` is not supported in `ssm_simulators`,
-            a warning will be raised letting the user know that sampling from the
-            `RandomVariable` will result in errors.
-        - `"extra_fields"`: Optional. A list of strings indicating the additional
-            columns in `data` that will be passed to the likelihood function for
-            calculation. This is helpful if the likelihood function depends on data
-            other than the observed data and the parameter values.
-    loglik : optional
-        A likelihood function. Defaults to None. Requirements are:
-
-        1. if `loglik_kind` is `"analytical"` or `"blackbox"`, a pm.Distribution, a
-           pytensor Op, or a Python callable can be used. Signatures are:
-            - `pm.Distribution`: needs to have parameters specified exactly as listed in
-            `list_params`
-            - `pytensor.graph.Op` and `Callable`: needs to accept the parameters
-            specified exactly as listed in `list_params`
-        2. If `loglik_kind` is `"approx_differentiable"`, then in addition to the
-            specifications above, a `str` or `Pathlike` can also be used to specify a
-            path to an `onnx` file. If a `str` is provided, HSSM will first look locally
-            for an `onnx` file. If that is not successful, HSSM will try to download
-            that `onnx` file from Hugging Face hub.
-        3. It can also be `None`, in which case a default likelihood function will be
-            used
-    loglik_kind : optional
-        A string that specifies the kind of log-likelihood function specified with
-        `loglik`. Defaults to `None`. Can be one of the following:
-
-        - `"analytical"`: an analytical (approximation) likelihood function. It is
-            differentiable and can be used with samplers that requires differentiation.
-        - `"approx_differentiable"`: a likelihood approximation network (LAN) likelihood
-            function. It is differentiable and can be used with samplers that requires
-            differentiation.
-        - `"blackbox"`: a black box likelihood function. It is typically NOT
-            differentiable.
-        - `None`, in which a default will be used. For `ddm` type of models, the default
-            will be `analytical`. For other models supported, it will be
-            `approx_differentiable`. If the model is a custom one, a ValueError
-            will be raised.
+    model_config
+        A fully-initialised :class:`~hssm.config.BaseModelConfig` instance
+        (e.g. :class:`~hssm.config.Config` or
+        :class:`~hssm.config.RLSSMConfig`) produced by the subclass before
+        calling ``super().__init__``.  All likelihood, parameter, and data
+        information is drawn from this object.
     p_outlier : optional
         The fixed lapse probability or the prior distribution of the lapse probability.
         Defaults to a fixed value of 0.05. When `None`, the lapse probability will not
@@ -267,14 +213,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def __init__(
         self,
         data: pd.DataFrame,
-        model: SupportedModels | str = "ddm",
-        choices: list[int] | None = None,
+        model_config: BaseModelConfig,
         include: list[dict[str, Any] | Param] | None = None,
-        model_config: ModelConfig | dict | None = None,
-        loglik: (
-            str | PathLike | Callable | pytensor.graph.Op | type[pm.Distribution] | None
-        ) = None,
-        loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
         global_formula: str | None = None,
@@ -290,14 +230,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
-        # ===== init args for save/load models =====
-        self._init_args = {
-            k: v for k, v in locals().items() if k not in ["self", "kwargs"]
-        }
-        if kwargs:
-            self._init_args.update(kwargs)
-        # endregion
-
         # ===== Input Data & Configuration =====
         self.data = data.copy()
         self.global_formula = global_formula
@@ -322,13 +254,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self._initvals: dict[str, Any] = {}
         self.initval_jitter = initval_jitter
 
-        # region ===== Construct a model_config from defaults and user inputs =====
-        # Delegate to the config-family builder (Config, RLSSMConfig, etc.) via MRO.
-        self.model_config: BaseModelConfig = (
-            self.get_config_class()._build_model_config(  # type: ignore[attr-defined]
-                model, loglik_kind, model_config, choices, loglik
-            )
-        )
+        # region ===== Store the pre-built config =====
+        self.model_config: BaseModelConfig = model_config
         # endregion
 
         # Previously scalar shortcuts (e.g. `self.list_params`) were set here.
@@ -620,13 +547,33 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         """
         return get_args(SupportedModels)
 
-    @classmethod
-    def _store_init_args(cls, *args, **kwargs):
-        """Store initialization arguments using signature binding."""
-        sig = signature(cls.__init__)
-        bound_args = sig.bind(*args, **kwargs)
-        bound_args.apply_defaults()
-        return {k: v for k, v in bound_args.arguments.items() if k != "self"}
+    @staticmethod
+    def _store_init_args(
+        local_vars: dict[str, Any], extra_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Capture subclass ``__init__`` arguments for save/load serialisation.
+
+        Call this at the very start of a subclass ``__init__`` before any local
+        variables are assigned, passing ``locals()`` and the ``**kwargs`` dict::
+
+            self._init_args = self._store_init_args(locals(), kwargs)
+
+        Parameters
+        ----------
+        local_vars
+            The ``locals()`` snapshot from the subclass ``__init__``.
+        extra_kwargs
+            The ``**kwargs`` dict captured by the subclass ``__init__``.
+
+        Returns
+        -------
+        dict[str, Any]
+            A mapping of parameter names to their values, suitable for
+            reconstructing the instance via ``cls(**init_args)``.
+        """
+        result = {k: v for k, v in local_vars.items() if k not in ("self", "kwargs")}
+        result.update(extra_kwargs)
+        return result
 
     def find_MAP(self, **kwargs):
         """Perform Maximum A Posteriori estimation.
