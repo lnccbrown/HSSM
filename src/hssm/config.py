@@ -20,6 +20,12 @@ from .register import register_model
 if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
 
+import logging
+
+from ssms.config import model_config as ssms_model_config
+
+_logger = logging.getLogger("hssm")
+
 # ====== Centralized RLSSM defaults =====
 DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
 DEFAULT_RLSSM_OBSERVED_DATA = ["rt", "response"]
@@ -86,6 +92,27 @@ class BaseModelConfig(ABC):
     @abstractmethod
     def get_defaults(self, param: str) -> Any:
         """Get default values for a parameter. Must be implemented by subclasses."""
+        ...
+
+    @classmethod
+    @abstractmethod
+    def _build_model_config(
+        cls,
+        model: "SupportedModels | str",
+        loglik_kind: "LoglikKind | None",
+        model_config: "ModelConfig | dict | None",
+        choices: "list[int] | None",
+        loglik: Any = None,
+    ) -> "BaseModelConfig":
+        """Build and return a fully validated config for this model family.
+
+        Family builders are responsible for:
+
+        - Resolving defaults via ``from_defaults``,
+        - Normalizing user overrides (dict or typed config) into the family type,
+        - Applying choices/loglik precedence rules,
+        - Calling ``validate()`` before returning.
+        """
         ...
 
 
@@ -275,6 +302,80 @@ class Config(BaseModelConfig):
         """
         return self.default_priors.get(param), self.bounds.get(param)
 
+    @classmethod
+    def _build_model_config(
+        cls,
+        model: "SupportedModels | str",
+        loglik_kind: "LoglikKind | None",
+        model_config: "ModelConfig | dict | None",
+        choices: "list[int] | None",
+        loglik: Any = None,
+    ) -> "Config":
+        """Build and return a validated Config for standard HSSM models.
+
+        Resolves defaults, normalizes dict/ModelConfig overrides, applies
+        choices and loglik precedence rules, then validates before returning.
+        """
+        config = cls.from_defaults(model, loglik_kind)
+
+        if model_config is not None:
+            has_choices = (
+                isinstance(model_config, dict)
+                and "choices" in model_config
+                or isinstance(model_config, ModelConfig)
+                and model_config.choices is not None
+            )
+            if choices is not None:
+                if has_choices:
+                    _logger.info(
+                        "choices list provided in both model_config and "
+                        "as an argument directly."
+                        " Using the one provided in model_config. \n"
+                        "We recommend providing choices in model_config."
+                    )
+                else:
+                    if isinstance(model_config, dict):
+                        model_config = {**model_config, "choices": choices}
+                    else:
+                        model_config_dict = {
+                            k: getattr(model_config, k)
+                            for k in model_config.__dataclass_fields__
+                            if getattr(model_config, k) is not None
+                        }
+                        model_config_dict["choices"] = choices
+                        model_config = model_config_dict
+
+            final_config = (
+                model_config
+                if isinstance(model_config, ModelConfig)
+                else ModelConfig(**model_config)
+            )
+            config.update_config(final_config)
+
+        else:
+            if model in get_args(SupportedModels):
+                if choices is not None:
+                    _logger.info(
+                        "Model string is in SupportedModels."
+                        " Ignoring choices arguments."
+                    )
+            else:
+                if choices is not None:
+                    config.update_choices(choices)
+                elif model in ssms_model_config:
+                    config.update_choices(ssms_model_config[model]["choices"])
+                    _logger.info(
+                        "choices argument passed as None, "
+                        "but found %s in ssms-simulators. "
+                        "Using choices, from ssm-simulators configs: %s",
+                        model,
+                        ssms_model_config[model]["choices"],
+                    )
+
+        config.update_loglik(loglik)
+        config.validate()
+        return config
+
 
 @dataclass
 class RLSSMConfig(BaseModelConfig):
@@ -309,6 +410,27 @@ class RLSSMConfig(BaseModelConfig):
     def get_config_class(cls) -> type["RLSSMConfig"]:
         """Return RLSSMConfig as the config class for RLSSM models."""
         return RLSSMConfig
+
+    @classmethod
+    def _build_model_config(
+        cls,
+        model: "SupportedModels | str",
+        loglik_kind: "LoglikKind | None",
+        model_config: "ModelConfig | dict | None",
+        choices: "list[int] | None",
+        loglik: Any = None,
+    ) -> "Config":
+        """Build a validated Config for RLSSM by delegating to Config's builder.
+
+        RLSSM constructs and validates the full RLSSMConfig in its own
+        ``__init__`` before calling ``HSSMBase.__init__``. The model_config
+        passed here is a ModelConfig derived from
+        ``RLSSMConfig.to_model_config()``, so this method delegates directly
+        to ``Config._build_model_config`` for normalization.
+        """
+        return Config._build_model_config(
+            model, loglik_kind, model_config, choices, loglik
+        )
 
     @classmethod
     def from_defaults(
