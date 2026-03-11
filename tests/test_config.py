@@ -1,8 +1,11 @@
-import numpy as np
-import pytest
+import logging
 
-import hssm
+import pytest
+import numpy as np
+
 from hssm.config import Config, ModelConfig
+import hssm
+
 
 hssm.set_floatX("float32")
 
@@ -79,3 +82,47 @@ def test_update_config():
 
     assert v_prior.name == "Normal"
     assert v_bounds == (-np.inf, np.inf)
+
+
+class TestConfigBuildModelConfigExtraLogic:
+    def test_build_model_config_dict_with_choices_conflict(self, caplog):
+        # model 'ddm' has defaults in hssm.defaults; use a minimal dict override
+        model_config = {
+            "response": ("rt", "response"),
+            "list_params": ["v", "a"],
+            "choices": (0, 1),
+        }
+        # provide a different choices argument — should log that model_config wins
+        with caplog.at_level(logging.INFO):
+            cfg = Config._build_model_config("ddm", None, model_config, choices=[1, 0])
+
+        assert isinstance(cfg, Config)
+        assert "choices list provided in both model_config" in caplog.text
+
+    def test_build_model_config_modelconfig_adds_choices(self):
+        # Create a ModelConfig without choices and pass choices argument
+        mc = ModelConfig(response=("rt", "response"), list_params=["v"], choices=None)
+        cfg = Config._build_model_config("ddm", None, mc, choices=[0, 1])
+        # choices should be applied to resulting Config
+        assert tuple(cfg.choices) == (0, 1)
+
+    def test_build_model_config_uses_ssms_model_config(self, monkeypatch):
+        # Simulate an external ssms_model_config entry for a model not in SupportedModels
+        fake_model = "external_ssm"
+        fake_choices = [2, 3]
+
+        # Monkeypatch the ssms_model_config mapping in the module
+        import hssm.config as cfgmod
+
+        monkeypatch.setitem(
+            cfgmod.ssms_model_config, fake_model, {"choices": fake_choices}
+        )
+
+        # Build config with model not in SupportedModels (string) and no choices arg
+        # provide a loglik_kind so from_defaults does not raise for custom model
+        # Monkeypatch Config.validate to skip strict checks for this synthetic case
+        monkeypatch.setattr(Config, "validate", lambda self: None)
+        result = Config._build_model_config(
+            fake_model, "analytical", None, choices=None
+        )
+        assert tuple(result.choices) == tuple(fake_choices)
