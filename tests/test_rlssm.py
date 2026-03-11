@@ -112,14 +112,14 @@ def test_rlssm_init(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
 
 
 def test_rlssm_panel_attrs(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
-    """_n_participants and _n_trials should match the fixture data structure."""
+    """n_participants and n_trials should match the fixture data structure."""
     model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
 
     n_participants = rldm_data["participant_id"].nunique()
     n_trials = len(rldm_data) // n_participants
 
-    assert model._n_participants == n_participants
-    assert model._n_trials == n_trials
+    assert model.n_participants == n_participants
+    assert model.n_trials == n_trials
 
 
 def test_rlssm_params_keys(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
