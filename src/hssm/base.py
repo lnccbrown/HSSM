@@ -323,8 +323,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.initval_jitter = initval_jitter
 
         # region ===== Construct a model_config from defaults and user inputs =====
-        self.model_config: BaseModelConfig = self._build_model_config(
-            model, loglik_kind, model_config, choices, loglik
+        # Delegate to the config-family builder (Config, RLSSMConfig, etc.) via MRO.
+        self.model_config: BaseModelConfig = (
+            self.get_config_class()._build_model_config(  # type: ignore[attr-defined]
+                model, loglik_kind, model_config, choices, loglik
+            )
         )
         # endregion
 
@@ -605,27 +608,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                         f"Fixed vector for parameter '{name}' has length "
                         f"{len(param.prior)}, but data has {len(self.data)} rows."
                     )
-
-    @classmethod
-    def _build_model_config(
-        cls,
-        model: SupportedModels | str,
-        loglik_kind: LoglikKind | None,
-        model_config: ModelConfig | dict | None,
-        choices: list[int] | None,
-        loglik: Any = None,
-    ) -> BaseModelConfig:
-        """Delegate config building to the appropriate config-family builder.
-
-        Calls ``_build_model_config`` on the config class returned by
-        ``get_config_class()``, resolved via the MRO of the calling model
-        class (e.g. ``HSSM`` → ``Config``, ``RLSSM`` → ``RLSSMConfig``).
-        The family builder handles defaults resolution, dict normalization,
-        loglik/choices precedence, and final validation.
-        """
-        return cls.get_config_class()._build_model_config(  # type: ignore[attr-defined]
-            model, loglik_kind, model_config, choices, loglik
-        )
 
     @classproperty
     def supported_models(cls) -> tuple[SupportedModels, ...]:

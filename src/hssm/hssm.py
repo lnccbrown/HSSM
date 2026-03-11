@@ -368,7 +368,7 @@ class HSSM(HSSMBase, Config):
 
         assert self.list_params is not None, "list_params should be set"
         return make_distribution(
-            rv=self.model_config.rv or self.model_name,
+            rv=getattr(self.model_config, "rv", None) or self.model_name,
             loglik=self.loglik,
             list_params=self.list_params,
             bounds=self.bounds,
