@@ -94,6 +94,16 @@ class BaseModelConfig(ABC):
         """Get default values for a parameter. Must be implemented by subclasses."""
         ...
 
+    @property
+    def n_params(self) -> int | None:
+        """Return the number of parameters."""
+        return len(self.list_params) if self.list_params else None
+
+    @property
+    def n_extra_fields(self) -> int | None:
+        """Return the number of extra fields."""
+        return len(self.extra_fields) if self.extra_fields else None
+
     @classmethod
     @abstractmethod
     def _build_model_config(
@@ -438,16 +448,6 @@ class RLSSMConfig(BaseModelConfig):
     ) -> Config:
         """Return the shared Config defaults (delegated to :class:`Config`)."""
         return Config.from_defaults(model_name, loglik_kind)
-
-    @property
-    def n_params(self) -> int | None:
-        """Return the number of parameters."""
-        return len(self.list_params) if self.list_params else None
-
-    @property
-    def n_extra_fields(self) -> int | None:
-        """Return the number of extra fields."""
-        return len(self.extra_fields) if self.extra_fields else None
 
     @classmethod
     def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> "RLSSMConfig":
