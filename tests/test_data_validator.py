@@ -1,4 +1,3 @@
-import random
 from typing import Callable
 
 import pytest
@@ -140,12 +139,12 @@ def test_post_check_data_sanity_valid(base_data):
         n_choices=3,
     )
 
-    invalid_response = random.choice(range(3, 100))
-    dv_instance_no_missing.data.iloc[0, 1] = invalid_response
+    invalid_response = max(dv_instance_no_missing.choices) + 1
+    dv_instance_no_missing.data.loc[0, "response"] = invalid_response
     with pytest.raises(ValueError, match=f"Invalid responses found in your dataset: "):
         dv_instance_no_missing._post_check_data_sanity()
 
-    dv_instance_no_missing.data.iloc[0, 1] = 1  # Reset to valid response
+    dv_instance_no_missing.data.loc[0, "response"] = 1  # Reset to valid response
     with pytest.warns(
         UserWarning,
         match=(r"missing from your dataset"),
