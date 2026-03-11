@@ -8,6 +8,7 @@ This file defines the entry class HSSM.
 
 import datetime
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from inspect import signature
@@ -29,7 +30,6 @@ import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
-from ssms.config import model_config as ssms_model_config
 
 from hssm._types import LoglikKind, SupportedModels
 from hssm.data_validator import DataValidatorMixin
@@ -49,7 +49,7 @@ from hssm.utils import (
 )
 
 from . import plotting
-from .config import Config, ModelConfig
+from .config import BaseModelConfig, ModelConfig
 from .param import Params
 from .param import UserParam as Param
 
@@ -323,26 +323,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.initval_jitter = initval_jitter
 
         # region ===== Construct a model_config from defaults and user inputs =====
-        self.model_config: Config = self._build_model_config(
-            model, loglik_kind, model_config, choices
+        self.model_config: BaseModelConfig = self._build_model_config(
+            model, loglik_kind, model_config, choices, loglik
         )
-        self.model_config.update_loglik(loglik)
-        self.model_config.validate()
         # endregion
 
-        # region ===== Set up shortcuts so old code will work ======
-        self.response = (
-            list(self.model_config.response)
-            if self.model_config.response is not None
-            else None
-        )
-        self.list_params = self.model_config.list_params
-        self.choices = self.model_config.choices  # type: ignore[assignment]
-        self.model_name = self.model_config.model_name
-        self.loglik = self.model_config.loglik
-        self.loglik_kind = self.model_config.loglik_kind
-        self.extra_fields = self.model_config.extra_fields
-        # endregion
+        # Previously scalar shortcuts (e.g. `self.list_params`) were set here.
+        # These are now provided as deprecated proxy properties that forward to
+        # the authoritative `self.model_config` object. See property definitions
+        # below.
 
         self._validate_choices()
 
@@ -624,94 +613,19 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         loglik_kind: LoglikKind | None,
         model_config: ModelConfig | dict | None,
         choices: list[int] | None,
-    ) -> Config:
-        """Build a ModelConfig object from defaults and user inputs.
+        loglik: Any = None,
+    ) -> BaseModelConfig:
+        """Delegate config building to the appropriate config-family builder.
 
-        Parameters
-        ----------
-        model : SupportedModels | str
-            The model name.
-        loglik_kind : LoglikKind | None
-            The kind of likelihood function.
-        model_config : ModelConfig | dict | None
-            User-provided model configuration.
-        choices : list[int] | None
-            User-provided choices list.
-
-        Returns
-        -------
-        Config
-            A complete Config object with choices and other settings applied.
+        Calls ``_build_model_config`` on the config class returned by
+        ``get_config_class()``, resolved via the MRO of the calling model
+        class (e.g. ``HSSM`` → ``Config``, ``RLSSM`` → ``RLSSMConfig``).
+        The family builder handles defaults resolution, dict normalization,
+        loglik/choices precedence, and final validation.
         """
-        # Start with defaults
-        # get_config_class is provided by Config/RLSSMConfig mixin through MRO
-        config = cls.get_config_class().from_defaults(model, loglik_kind)  # type: ignore[attr-defined]
-
-        # Handle user-provided model_config
-        if model_config is not None:
-            # Check if choices already exists in the provided config
-            has_choices = (
-                isinstance(model_config, dict)
-                and "choices" in model_config
-                or isinstance(model_config, ModelConfig)
-                and model_config.choices is not None
-            )
-
-            # Handle choices conflict or missing choices
-            if choices is not None:
-                if has_choices:
-                    _logger.info(
-                        "choices list provided in both model_config and "
-                        "as an argument directly."
-                        " Using the one provided in model_config. \n"
-                        "We recommend providing choices in model_config."
-                    )
-                else:
-                    # Add choices to a copy of the config to avoid mutating input
-                    if isinstance(model_config, dict):
-                        model_config = {**model_config, "choices": choices}
-                    else:  # ModelConfig instance
-                        # Create a dict from the ModelConfig and add choices
-                        model_config_dict = {
-                            k: getattr(model_config, k)
-                            for k in model_config.__dataclass_fields__
-                            if getattr(model_config, k) is not None
-                        }
-                        model_config_dict["choices"] = choices
-                        model_config = model_config_dict
-
-            # Convert dict to ModelConfig if needed and update
-            final_config = (
-                model_config
-                if isinstance(model_config, ModelConfig)
-                else ModelConfig(**model_config)
-            )
-            config.update_config(final_config)
-
-        # Handle default config (no model_config provided)
-        else:
-            # For supported models, defaults already have choices
-            if model in get_args(SupportedModels):
-                if choices is not None:
-                    _logger.info(
-                        "Model string is in SupportedModels."
-                        " Ignoring choices arguments."
-                    )
-            # For custom models, try to get choices
-            else:
-                if choices is not None:
-                    config.update_choices(choices)
-                elif model in ssms_model_config:
-                    config.update_choices(ssms_model_config[model]["choices"])
-                    _logger.info(
-                        "choices argument passed as None, "
-                        "but found %s in ssms-simulators. "
-                        "Using choices, from ssm-simulators configs: %s",
-                        model,
-                        ssms_model_config[model]["choices"],
-                    )
-
-        return config
+        return cls.get_config_class()._build_model_config(  # type: ignore[attr-defined]
+            model, loglik_kind, model_config, choices, loglik
+        )
 
     @classproperty
     def supported_models(cls) -> tuple[SupportedModels, ...]:
