@@ -25,7 +25,8 @@ import pymc as pm
 if TYPE_CHECKING:
     from pytensor.graph import Op
 
-from hssm.config import RLSSMConfig
+
+from hssm.config import Config, RLSSMConfig
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
 )
@@ -217,27 +218,37 @@ class RLSSM(HSSMBase):
         RLSSM and ``missing_data`` / ``deadline`` are rejected in ``__init__``
         before this method is ever reached.
         """
-        # Build params_is_trialwise in the same order as self.list_params so the
-        # length always matches the list_params= argument passed to make_distribution.
-        # p_outlier is a scalar mixture weight (not trialwise); every other RLSSM
-        # parameter is trialwise (the Op receives one value per trial).
-        assert self.list_params is not None, "list_params should be set by HSSMBase"
-        params_is_trialwise = [name != "p_outlier" for name in self.list_params]
+        list_params = self.model_config.list_params
+        assert list_params is not None, "model_config.list_params must be set"
+        assert isinstance(list_params, list), (
+            "model_config.list_params must be a list"
+        )  # for type checker
 
+        # p_outlier is a scalar mixture weight (not trialwise); every other
+        # RLSSM parameter is trialwise (the Op receives one value per trial).
+        params_is_trialwise = [name != "p_outlier" for name in list_params]
+
+        extra_fields = self.model_config.extra_fields or []
         extra_fields_data = (
             None
-            if not self.extra_fields
-            else [self.data[field].to_numpy(copy=True) for field in self.extra_fields]
+            if not extra_fields
+            else [self.data[field].to_numpy(copy=True) for field in extra_fields]
         )
 
-        # self.loglik was set to the pytensor Op built in __init__; cast to
-        # narrow the inherited union type so make_distribution's type-checker
-        # accepts it without a runtime penalty.
-        loglik_op = cast("Callable[..., Any] | Op", self.loglik)
+        # The differentiable pytensor Op was stored on the validated model_config
+        # during __init__ as its `loglik`; ensure it's present and cast for typing.
+        assert self.model_config.loglik is not None, "model_config.loglik must be set"
+        loglik_op = cast("Callable[..., Any] | Op", self.model_config.loglik)
+
+        # `model_config` is typed as BaseModelConfig on the base class; cast
+        # to `Config` here so static checkers understand `rv` exists.
+        cfg = cast("Config", self.model_config)
+        rv_name = cfg.rv or cfg.model_name
+
         return make_distribution(
-            rv=self.model_name,
+            rv=rv_name,
             loglik=loglik_op,
-            list_params=self.list_params,
+            list_params=list_params,
             bounds=self.bounds,
             lapse=self.lapse,
             extra_fields=extra_fields_data,
