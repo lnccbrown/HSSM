@@ -26,6 +26,7 @@ from ssms.config import model_config as ssms_model_config
 
 _logger = logging.getLogger("hssm")
 
+
 # ====== Centralized RLSSM defaults =====
 DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
 DEFAULT_RLSSM_OBSERVED_DATA = ["rt", "response"]
@@ -293,37 +294,7 @@ class Config(BaseModelConfig):
         config = cls.from_defaults(model, loglik_kind)
 
         if model_config is not None:
-            has_choices = (
-                isinstance(model_config, dict)
-                and model_config.get("choices") is not None  # choices not none in dict
-                or isinstance(model_config, ModelConfig)
-                and model_config.choices is not None
-            )
-            if choices is not None:
-                if has_choices:
-                    _logger.info(
-                        "choices list provided in both model_config and "
-                        "as an argument directly."
-                        " Using the one provided in model_config. \n"
-                        "We recommend providing choices in model_config."
-                    )
-                else:
-                    if isinstance(model_config, dict):
-                        model_config = {**model_config, "choices": choices}
-                    else:
-                        model_config_dict = {
-                            k: getattr(model_config, k)
-                            for k in model_config.__dataclass_fields__
-                            if getattr(model_config, k) is not None
-                        }
-                        model_config_dict["choices"] = choices
-                        model_config = model_config_dict
-
-            final_config = (
-                model_config
-                if isinstance(model_config, ModelConfig)
-                else ModelConfig(**model_config)
-            )
+            final_config = _normalize_model_config_with_choices(model_config, choices)
             config.update_config(final_config)
 
         else:
@@ -631,3 +602,57 @@ class ModelConfig:
     backend: Literal["jax", "pytensor"] | None = None
     rv: RandomVariable | None = None
     extra_fields: list[str] | None = None
+
+
+def _normalize_model_config_with_choices(
+    model_config: "ModelConfig" | dict[str, Any],
+    choices: list[int] | tuple[int, ...] | None,
+) -> "ModelConfig":
+    """Normalize a user-supplied model_config and apply choices.
+
+    Returns a fresh :class:`ModelConfig` instance and does not mutate the
+    caller's objects. If both ``model_config`` and ``choices`` are provided
+    and ``model_config`` already contains ``choices``, the value from
+    ``model_config`` wins (and a log entry is emitted).
+    """
+    has_choices = (
+        isinstance(model_config, dict)
+        and model_config.get("choices") is not None
+        or isinstance(model_config, ModelConfig)
+        and model_config.choices is not None
+    )
+
+    # Guard: no explicit choices -> return ModelConfig from input
+    if choices is None:
+        return (
+            model_config
+            if isinstance(model_config, ModelConfig)
+            else ModelConfig(**model_config)
+        )
+
+    # Guard: model_config already carries choices -> prefer it
+    if has_choices:
+        _logger.info(
+            "choices list provided in both model_config and "
+            "as an argument directly. Using the one provided in "
+            "model_config.\nWe recommend providing choices in model_config."
+        )
+        return (
+            model_config
+            if isinstance(model_config, ModelConfig)
+            else ModelConfig(**model_config)
+        )
+
+    # Apply provided choices without mutating caller's object
+    if isinstance(model_config, dict):
+        mc = model_config.copy()
+        mc["choices"] = choices
+        return ModelConfig(**mc)
+
+    mc = {
+        k: getattr(model_config, k)
+        for k in model_config.__dataclass_fields__
+        if getattr(model_config, k) is not None
+    }
+    mc["choices"] = choices
+    return ModelConfig(**mc)
