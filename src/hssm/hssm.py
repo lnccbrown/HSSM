@@ -345,8 +345,8 @@ class HSSM(HSSMBase):
             "backend": backend,
         }
         if loglik_kind == "approx_differentiable" and backend == "jax":
-            kwargs["params_is_reg"] = params_is_trialwise # type: ignore
-        likelihood_callable = make_likelihood_callable(**kwargs) # type: ignore
+            kwargs["params_is_reg"] = params_is_trialwise  # type: ignore
+        likelihood_callable = make_likelihood_callable(**kwargs)  # type: ignore
         # endregion
 
         # Update the authoritative `model_config` with the resolved callable
