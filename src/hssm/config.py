@@ -297,25 +297,27 @@ class Config(BaseModelConfig):
             final_config = _normalize_model_config_with_choices(model_config, choices)
             config.update_config(final_config)
 
-        else:
-            if model in get_args(SupportedModels):
-                if choices is not None:
-                    _logger.info(
-                        "Model string is in SupportedModels."
-                        " Ignoring choices arguments."
-                    )
-            else:
-                if choices is not None:
-                    config.update_choices(choices)
-                elif model in ssms_model_config:
-                    config.update_choices(ssms_model_config[model]["choices"])
-                    _logger.info(
-                        "choices argument passed as None, "
-                        "but found %s in ssms-simulators. "
-                        "Using choices, from ssm-simulators configs: %s",
-                        model,
-                        ssms_model_config[model]["choices"],
-                    )
+        # No model_config provided: apply `choices` when appropriate.
+        # If caller passed a SupportedModels string, ignore explicit `choices`.
+        if model in get_args(SupportedModels) and choices is not None:
+            _logger.info(
+                "Model string is in SupportedModels. Ignoring choices arguments."
+            )
+
+        # If model is not a supported built-in, prefer explicit choices or
+        # fall back to ssms-simulators lookup when available.
+        if model not in get_args(SupportedModels):
+            if choices is not None:
+                config.update_choices(choices)
+            elif model in ssms_model_config:
+                config.update_choices(ssms_model_config[model]["choices"])
+                _logger.info(
+                    "choices argument passed as None, "
+                    "but found %s in ssms-simulators. "
+                    "Using choices, from ssm-simulators configs: %s",
+                    model,
+                    ssms_model_config[model]["choices"],
+                )
 
         config.update_loglik(loglik)
         config.validate()
