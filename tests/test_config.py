@@ -102,14 +102,14 @@ class TestConfigBuildModelConfigExtraLogic:
     def test_build_model_config_modelconfig_adds_choices(self):
         # Create a ModelConfig without choices and pass choices argument
         mc = ModelConfig(response=("rt", "response"), list_params=["v"], choices=None)
-        cfg = Config._build_model_config("ddm", None, mc, choices=[0, 1])
+        cfg = Config._build_model_config("ddm", None, mc, choices=(0, 1))
         # choices should be applied to resulting Config
-        assert tuple(cfg.choices) == (0, 1)
+        assert cfg.choices == (0, 1)
 
     def test_build_model_config_uses_ssms_model_config(self, monkeypatch):
         # Simulate an external ssms_model_config entry for a model not in SupportedModels
         fake_model = "external_ssm"
-        fake_choices = [2, 3]
+        fake_choices = (2, 3)
 
         # Monkeypatch the ssms_model_config mapping in the module
         import hssm.config as cfgmod
@@ -125,4 +125,4 @@ class TestConfigBuildModelConfigExtraLogic:
         result = Config._build_model_config(
             fake_model, "analytical", None, choices=None
         )
-        assert tuple(result.choices) == tuple(fake_choices)
+        assert result.choices == fake_choices
