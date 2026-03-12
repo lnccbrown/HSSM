@@ -295,7 +295,7 @@ class Config(BaseModelConfig):
         if model_config is not None:
             has_choices = (
                 isinstance(model_config, dict)
-                and model_config.get("choices") is not None  # choicesn not none in dict
+                and model_config.get("choices") is not None  # choices not none in dict
                 or isinstance(model_config, ModelConfig)
                 and model_config.choices is not None
             )
