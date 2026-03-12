@@ -464,11 +464,11 @@ def _jax_rdm_tcdf(t, b, v, A, eps_t: float = 1e-8, eps_v: float = 1e-6):
     return F
 
 
-def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2):
+def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2, eps_t: float = 1e-8):
     """Log-likelihood for 3-choice RDM at JAX level."""
     v_vector = jnp.stack(jnp.broadcast_arrays(v0, v1, v2))
-    all_pdfs = vmap(lambda v: _jax_rdm_tpdf(t, b, v, A))(v_vector)
-    all_cdfs = vmap(lambda v: _jax_rdm_tcdf(t, b, v, A))(v_vector)
+    all_pdfs = vmap(lambda v: _jax_rdm_tpdf(t, b, v, A, eps_t=eps_t))(v_vector)
+    all_cdfs = vmap(lambda v: _jax_rdm_tcdf(t, b, v, A, eps_t=eps_t))(v_vector)
 
     idx = jnp.arange(ch.shape[0])
     pdf_winner = all_pdfs[ch, idx]
@@ -489,6 +489,7 @@ def logp_rdm3(
     v1: float,
     v2: float,
     t: float,
+    epsilon: float = 1e-10,
 ) -> np.ndarray:
     """Compute the log-likelihood of the RDM model with 3 drift rates."""
     data_reshaped = jnp.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
@@ -497,9 +498,13 @@ def logp_rdm3(
     response = data_reshaped[:, 1]
     response_int = response.astype(jnp.int_)
 
-    logp = _jax_rdm3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
+    is_negative_rt = rt <= 0.0
+    rt_safe = jnp.where(is_negative_rt, jnp.asarray(epsilon, dtype=rt.dtype), rt)
+
+    logp = _jax_rdm3_ll(rt_safe, response_int, A, b, v0, v1, v2, eps_t=epsilon)
+    logp = jnp.where(is_negative_rt, jnp.asarray(LOGP_LB, dtype=logp.dtype), logp)
+    logp = logp.squeeze()
     logp = jax_check_parameters(logp, b > A, msg="b > A")
-    logp = jax_check_parameters(logp, rt > 0.0, msg="rt > 0 after non-decision time")
     return logp
 
 
