@@ -407,15 +407,14 @@ class HSSM(HSSMBase):
             if isinstance(param.prior, np.ndarray)
         }
 
-        # Use the typed `model_config` attributes directly to avoid triggering
-        # DeprecationWarnings from the deprecated proxy properties.
+        # Use the typed `model_config` attributes directly
         _list_params = self.model_config.list_params
         assert _list_params is not None, "list_params should be set"  # for type checker
         rv_name = getattr(self.model_config, "rv") or self.model_config.model_name
 
         return make_distribution(
             rv=rv_name,
-            loglik=self.loglik,
+            loglik=resolved_loglik,
             list_params=_list_params,
             bounds=self.bounds,
             lapse=self.lapse,
