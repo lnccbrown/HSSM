@@ -334,40 +334,29 @@ class HSSM(HSSMBase):
             for param_name, param in self.params.items()
             if param_name != "p_outlier"
         ]
-
         # params_is_trialwise: extends the base list with extra_fields
-        # (always trialwise). Used for vmap construction in
-        # make_likelihood_callable and for assemble_callables, where
-        # dist_params includes extra_fields flattened in.
-        params_is_trialwise = list(params_is_trialwise_base)
+        params_is_trialwise = params_is_trialwise_base.copy()
         if self.extra_fields is not None:
             params_is_trialwise += [True for _ in self.extra_fields]
+        # endregion
 
-        if self.loglik_kind == "approx_differentiable":
-            if self.model_config.backend == "jax":
-                likelihood_callable = make_likelihood_callable(
-                    loglik=loglik_callable,
-                    loglik_kind="approx_differentiable",
-                    backend="jax",
-                    params_is_reg=params_is_trialwise,
-                )
-            else:
-                likelihood_callable = make_likelihood_callable(
-                    loglik=loglik_callable,
-                    loglik_kind="approx_differentiable",
-                    backend=self.model_config.backend,
-                )
-        else:
-            likelihood_callable = make_likelihood_callable(
-                loglik=loglik_callable,
-                loglik_kind=self.loglik_kind,
-                backend=self.model_config.backend,
-            )
+        # region Build the likelihood callable using guard clauses
+        backend = self.model_config.backend
+        kwargs = {
+            "loglik": loglik_callable,
+            "loglik_kind": loglik_kind,
+            "backend": backend,
+        }
+        if loglik_kind == "approx_differentiable" and backend == "jax":
+            kwargs["params_is_reg"] = params_is_trialwise # type: ignore
+        likelihood_callable = make_likelihood_callable(**kwargs) # type: ignore
+        # endregion
 
-        self.loglik = likelihood_callable
+        # Update the authoritative `model_config` with the resolved callable
+        typing_cast("Config", self.model_config).update_loglik(likelihood_callable)
+        resolved_loglik = likelihood_callable
 
-        # Make the callable for missing data
-        # And assemble it with the callable for the likelihood
+        # Missing-data network: build and assemble the missing-data callable
         if self.missing_data_network != MissingDataNetwork.NONE:
             if self.missing_data_network == MissingDataNetwork.OPN:
                 params_only = False
