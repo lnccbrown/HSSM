@@ -363,30 +363,32 @@ class HSSM(HSSMBase):
                 params_only = None
 
             if self.loglik_missing_data is None:
+                # Use the model name from the typed config
                 self.loglik_missing_data = (
-                    self.model_name
+                    self.model_config.model_name
                     + missing_data_networks_suffix[self.missing_data_network]
                     + ".onnx"
                 )
 
-            backend_tmp: Literal["pytensor", "jax", "other"] | None = (
-                "jax"
-                if self.model_config.backend != "pytensor"
-                else self.model_config.backend
-            )
+            if self.model_config.backend != "pytensor":
+                backend_tmp: Literal["pytensor", "jax", "other"] | None = "jax"
+            else:
+                backend_tmp = self.model_config.backend
             missing_data_callable = make_missing_data_callable(
                 self.loglik_missing_data, backend_tmp, params_is_trialwise, params_only
             )
 
             self.loglik_missing_data = missing_data_callable
 
-            self.loglik = assemble_callables(
-                self.loglik,
+            assembled = assemble_callables(
+                resolved_loglik,
                 self.loglik_missing_data,
                 params_only,
                 has_deadline=self.deadline,
                 params_is_trialwise=params_is_trialwise,
             )
+            typing_cast("Config", self.model_config).update_loglik(assembled)
+            resolved_loglik = assembled
 
         if self.missing_data:
             _logger.info(
