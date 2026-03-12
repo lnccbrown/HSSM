@@ -302,30 +302,27 @@ class HSSM(HSSMBase):
         )
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
-        """Make a pm.Distribution for the model."""
-        ### Logic for different types of likelihoods:
-        # -`analytical` and `blackbox`:
-        #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
-        #     function).
-        # - `approx_differentiable`:
-        #     In addition to `pm.Distribution` and any arbitrary function, it can also
-        #     be an str (which we will download from hugging face) or a Pathlike
-        #     which we will download and make a distribution.
+        """Make a pm.Distribution for the model.
 
-        # If user has already provided a log-likelihood function as a distribution
-        # Use it directly as the distribution
-        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
-            return self.loglik
+        This method avoids using the deprecated proxy properties on ``self`` and
+        instead reads and updates the authoritative ``self.model_config``.
+        """
+        # Read raw inputs from the typed model_config
+        raw_loglik = self.model_config.loglik
+        if isclass(raw_loglik) and issubclass(
+            typing_cast("type[pm.Distribution]", raw_loglik), pm.Distribution
+        ):
+            return typing_cast("type[pm.Distribution]", raw_loglik)
 
-        # At this point, loglik should not be a type[Distribution] and should be set
-
-        assert self.loglik is not None, "loglik should be set"
-        assert self.loglik_kind is not None, "loglik_kind should be set"
-        assert not (isclass(self.loglik) and issubclass(self.loglik, pm.Distribution))
         loglik_callable = typing_cast(
-            "Op | Callable[..., Any] | PathLike | str", self.loglik
+            "Op | Callable[..., Any] | PathLike | str", raw_loglik
         )
 
+        # Prefer the typed value in model_config for loglik_kind
+        loglik_kind = typing_cast("LoglikKind", self.model_config.loglik_kind)
+
+        # region Determine the trialwise nature of parameters for use in loglik and
+        # missing-data callables
         # params_is_trialwise_base: one entry per model param (excluding
         # p_outlier). Used for graph-level broadcasting in logp() and
         # make_distribution, where dist_params does not include extra_fields.
