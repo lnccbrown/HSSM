@@ -617,44 +617,33 @@ def _normalize_model_config_with_choices(
     and ``model_config`` already contains ``choices``, the value from
     ``model_config`` wins (and a log entry is emitted).
     """
-    has_choices = (
-        isinstance(model_config, dict)
-        and model_config.get("choices") is not None
-        or isinstance(model_config, ModelConfig)
-        and model_config.choices is not None
-    )
+    # Normalize input to a mutable dict so we can coerce and avoid mutating
+    # the caller's objects. Build a fresh ModelConfig from that dict.
+    if isinstance(model_config, ModelConfig):
+        mc: dict[str, Any] = {
+            k: getattr(model_config, k) for k in model_config.__dataclass_fields__
+        }
+    else:
+        mc = model_config.copy()
 
-    # Guard: no explicit choices -> return ModelConfig from input
+    # Coerce any existing choices on the input to a tuple for immutability
+    if mc.get("choices") is not None:
+        mc["choices"] = tuple(mc["choices"])
+
+    # If caller didn't provide an explicit `choices` argument, return the
+    # normalized ModelConfig built from the input (fresh instance).
     if choices is None:
-        return (
-            model_config
-            if isinstance(model_config, ModelConfig)
-            else ModelConfig(**model_config)
-        )
+        return ModelConfig(**{k: v for k, v in mc.items() if v is not None})
 
-    # Guard: model_config already carries choices -> prefer it
-    if has_choices:
+    # Caller provided choices; prefer the one embedded in model_config if
+    # present, otherwise apply the provided value (coerced to tuple).
+    if mc.get("choices") is not None:
         _logger.info(
             "choices list provided in both model_config and "
             "as an argument directly. Using the one provided in "
-            "model_config.\nWe recommend providing choices in model_config."
+            "model_config. We recommend providing choices in model_config."
         )
-        return (
-            model_config
-            if isinstance(model_config, ModelConfig)
-            else ModelConfig(**model_config)
-        )
+        return ModelConfig(**{k: v for k, v in mc.items() if v is not None})
 
-    # Apply provided choices without mutating caller's object
-    if isinstance(model_config, dict):
-        mc = model_config.copy()
-        mc["choices"] = choices
-        return ModelConfig(**mc)
-
-    mc = {
-        k: getattr(model_config, k)
-        for k in model_config.__dataclass_fields__
-        if getattr(model_config, k) is not None
-    }
-    mc["choices"] = choices
-    return ModelConfig(**mc)
+    mc["choices"] = tuple(choices)
+    return ModelConfig(**{k: v for k, v in mc.items() if v is not None})
