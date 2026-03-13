@@ -471,6 +471,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         dict[str, Any]
             A mapping of parameter names to their values, suitable for
             reconstructing the instance via ``cls(**init_args)``.
+
+        Notes
+        -----
+        The implementation filters out internal names that commonly appear in
+        ``locals()`` snapshots (for example, ``__class__`` and ``kwargs``) so
+        that the returned mapping is safe to pass back to the class
+        constructor during unpickling.
         """
         # Exclude internal names that appear in locals() snapshots and are not
         # valid constructor parameters when re-instantiating the class.
