@@ -238,9 +238,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Store a safe default for the constructor-arguments snapshot so that
         # pickling / save-load cannot raise AttributeError if a subclass forgets
-        # to call `_store_init_args(locals(), kwargs)` early.  Subclasses are
-        # still expected to overwrite this with the real snapshot.
-        self._init_args: dict[str, Any] = {}
+        # to call `_store_init_args(locals(), kwargs)` early. Subclasses are
+        # still expected to overwrite this with the real snapshot. However,
+        # do not overwrite if a subclass already set `_init_args` prior to
+        # calling `super().__init__()` (the subclass may capture its
+        # constructor args before delegating to the base class).
+        if not hasattr(self, "_init_args"):
+            self._init_args: dict[str, Any] = {}
 
         # Set up additional namespace for formula evaluation
         additional_namespace = transformations_namespace.copy()
@@ -468,7 +472,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A mapping of parameter names to their values, suitable for
             reconstructing the instance via ``cls(**init_args)``.
         """
-        result = {k: v for k, v in local_vars.items() if k not in ("self", "kwargs")}
+        # Exclude internal names that appear in locals() snapshots and are not
+        # valid constructor parameters when re-instantiating the class.
+        exclude_keys = {"self", "kwargs", "__class__"}
+        result = {k: v for k, v in local_vars.items() if k not in exclude_keys}
         result.update(extra_kwargs)
         return result
 
