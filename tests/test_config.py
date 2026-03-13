@@ -1,8 +1,11 @@
-import numpy as np
-import pytest
+import logging
 
-import hssm
+import pytest
+import numpy as np
+
 from hssm.config import Config, ModelConfig
+import hssm
+
 
 hssm.set_floatX("float32")
 
@@ -79,3 +82,60 @@ def test_update_config():
 
     assert v_prior.name == "Normal"
     assert v_bounds == (-np.inf, np.inf)
+
+
+class TestConfigBuildModelConfigExtraLogic:
+    def test_build_model_config_dict_with_choices_conflict(self, caplog):
+        # model 'ddm' has defaults in hssm.defaults; use a minimal dict override
+        model_config = {
+            "response": ("rt", "response"),
+            "list_params": ["v", "a"],
+            "choices": (0, 1),
+        }
+        # provide a different choices argument — should log that model_config wins
+        with caplog.at_level(logging.INFO):
+            cfg = Config._build_model_config("ddm", None, model_config, choices=[1, 0])
+
+        assert isinstance(cfg, Config)
+        assert "choices list provided in both model_config" in caplog.text
+
+    def test_build_model_config_modelconfig_adds_choices(self):
+        # Create a ModelConfig without choices and pass choices argument
+        mc = ModelConfig(response=("rt", "response"), list_params=["v"], choices=None)
+        cfg = Config._build_model_config("ddm", None, mc, choices=(0, 1))
+        # choices should be applied to resulting Config
+        assert cfg.choices == (0, 1)
+
+    def test_build_model_config_uses_ssms_model_config(self, monkeypatch):
+        # High-level view of the test: ensures that when a model name is not in the built-in
+        # SupportedModels and no choices argument is passed, _build_model_config will consult
+        # the external ssms_model_config registry and use its defaults (here, the choices tuple).
+        # The monkeypatch fixture isolates the change and will be undone after the test.
+
+        # Simulate an external ssms_model_config entry for a model not in SupportedModels
+        fake_model = "external_ssm"
+        fake_choices = (2, 3)
+
+        # Monkeypatch the ssms_model_config mapping in the module
+        import hssm.config as cfgmod
+
+        # Emulate an external package registering defaults for external_ssm.
+        # Ensures `_build_model_config` will consult `ssms_model_config`
+        # when the model name isn't in SupportedModels.
+        monkeypatch.setitem(
+            cfgmod.ssms_model_config, fake_model, {"choices": fake_choices}
+        )
+
+        # Build config with model not in SupportedModels and no choices arg.
+        # Provide a minimal ModelConfig and a dummy `loglik` so
+        # `Config.validate()` runs (loglik is required) while still
+        # exercising the ssms-simulators choices fallback.
+        mc = ModelConfig(response=("rt", "response"), list_params=["v"], choices=None)
+        result = Config._build_model_config(
+            fake_model,
+            "analytical",
+            mc,
+            choices=None,
+            loglik=(lambda *a, **k: None),  # required so Config.validate() passes
+        )
+        assert result.choices == fake_choices

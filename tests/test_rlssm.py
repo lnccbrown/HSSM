@@ -108,18 +108,18 @@ def test_rlssm_init(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
     """Basic RLSSM initialisation should succeed and return an RLSSM instance."""
     model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
     assert isinstance(model, RLSSM)
-    assert model.model_name == "rldm_test"
+    assert model.model_config.model_name == "rldm_test"
 
 
 def test_rlssm_panel_attrs(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
-    """_n_participants and _n_trials should match the fixture data structure."""
+    """n_participants and n_trials should match the fixture data structure."""
     model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
 
     n_participants = rldm_data["participant_id"].nunique()
     n_trials = len(rldm_data) // n_participants
 
-    assert model._n_participants == n_participants
-    assert model._n_trials == n_trials
+    assert model.n_participants == n_participants
+    assert model.n_trials == n_trials
 
 
 def test_rlssm_params_keys(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
@@ -220,10 +220,12 @@ def test_rlssm_params_is_trialwise_aligned(
 ) -> None:
     """params_is_trialwise must align with list_params (same length, p_outlier=False)."""
     model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
-    assert model.list_params is not None
-    params_is_trialwise = [name != "p_outlier" for name in model.list_params]
-    assert len(params_is_trialwise) == len(model.list_params)
-    for name, is_tw in zip(model.list_params, params_is_trialwise):
+    assert model.model_config.list_params is not None
+    params_is_trialwise = [
+        name != "p_outlier" for name in model.model_config.list_params
+    ]
+    assert len(params_is_trialwise) == len(model.model_config.list_params)
+    for name, is_tw in zip(model.model_config.list_params, params_is_trialwise):
         if name == "p_outlier":
             assert not is_tw, "p_outlier must be non-trialwise"
         else:
