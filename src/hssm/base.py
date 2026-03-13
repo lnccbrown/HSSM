@@ -8,7 +8,6 @@ This file defines the entry class HSSM.
 
 import datetime
 import logging
-import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from os import PathLike
@@ -264,10 +263,19 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.model_config: BaseModelConfig = model_config
         # endregion
 
-        # Previously scalar shortcuts (e.g. `self.list_params`) were set here.
-        # These are now provided as deprecated proxy properties that forward to
-        # the authoritative `self.model_config` object. See property definitions
-        # below.
+        # region ===== Set up shortcuts so old code will work ======
+        self.response = (
+            list(self.model_config.response)
+            if self.model_config.response is not None
+            else None
+        )
+        self.list_params = self.model_config.list_params
+        self.choices = self.model_config.choices  # type: ignore[assignment]
+        self.model_name = self.model_config.model_name
+        self.loglik = self.model_config.loglik
+        self.loglik_kind = self.model_config.loglik_kind
+        self.extra_fields = self.model_config.extra_fields
+        # endregion
 
         self._validate_choices()
 
@@ -381,123 +389,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         distribution for the specific model type.
         """
         ...
-
-    def _deprecation_warn(self, name: str) -> None:
-        """Emit a DeprecationWarning advising to use the typed config.
-
-        Parameters
-        ----------
-        name
-            Attribute name being deprecated.
-        """
-        warnings.warn(
-            f"`{name}` is deprecated; use `self.model_config.{name}` instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-    @property
-    def response(self):
-        """Deprecated proxy for `self.model_config.response`.
-
-        Returns the list of observed response column names or None.
-        """
-        self._deprecation_warn("response")
-        return (
-            list(self.model_config.response)
-            if self.model_config.response is not None
-            else None
-        )
-
-    @response.setter
-    def response(self, value):
-        """Set the model_config.response value (deprecated).
-
-        Converts the assigned value to a list or None before assignment.
-        """
-        self._deprecation_warn("response")
-        self.model_config.response = list(value) if value is not None else None
-
-    @property
-    def list_params(self):
-        """Deprecated proxy for `self.model_config.list_params`.
-
-        Returns the parameter name list used by the likelihood.
-        """
-        self._deprecation_warn("list_params")
-        return self.model_config.list_params
-
-    @list_params.setter
-    def list_params(self, value):
-        """Set the model_config.list_params value (deprecated)."""
-        self._deprecation_warn("list_params")
-        self.model_config.list_params = value
-
-    @property
-    def choices(self):
-        """Deprecated proxy for `self.model_config.choices`.
-
-        Returns a tuple of valid response choices.
-        """
-        self._deprecation_warn("choices")
-        return self.model_config.choices
-
-    @choices.setter
-    def choices(self, value):
-        """Set the model_config.choices value (deprecated)."""
-        self._deprecation_warn("choices")
-        self.model_config.choices = tuple(value) if value is not None else None
-
-    @property
-    def model_name(self):
-        """Deprecated proxy for `self.model_config.model_name`."""
-        self._deprecation_warn("model_name")
-        return self.model_config.model_name
-
-    @model_name.setter
-    def model_name(self, value):
-        """Set the model_config.model_name value (deprecated)."""
-        self._deprecation_warn("model_name")
-        self.model_config.model_name = value
-
-    @property
-    def loglik(self):
-        """Deprecated proxy for `self.model_config.loglik`.
-
-        Returns the configured log-likelihood callable or object.
-        """
-        self._deprecation_warn("loglik")
-        return self.model_config.loglik
-
-    @loglik.setter
-    def loglik(self, value):
-        """Set the model_config.loglik value (deprecated)."""
-        self._deprecation_warn("loglik")
-        self.model_config.loglik = value
-
-    @property
-    def loglik_kind(self):
-        """Deprecated proxy for `self.model_config.loglik_kind`."""
-        self._deprecation_warn("loglik_kind")
-        return self.model_config.loglik_kind
-
-    @loglik_kind.setter
-    def loglik_kind(self, value):
-        """Set the model_config.loglik_kind value (deprecated)."""
-        self._deprecation_warn("loglik_kind")
-        self.model_config.loglik_kind = value
-
-    @property
-    def extra_fields(self):
-        """Deprecated proxy for `self.model_config.extra_fields`."""
-        self._deprecation_warn("extra_fields")
-        return self.model_config.extra_fields
-
-    @extra_fields.setter
-    def extra_fields(self, value):
-        """Set the model_config.extra_fields value (deprecated)."""
-        self._deprecation_warn("extra_fields")
-        self.model_config.extra_fields = value
 
     def _fix_scalar_deterministic_dims(self) -> None:
         """Fix dims metadata for scalar deterministics.
