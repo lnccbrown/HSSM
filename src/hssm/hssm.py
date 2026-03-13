@@ -302,27 +302,30 @@ class HSSM(HSSMBase):
         )
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
-        """Make a pm.Distribution for the model.
+        """Make a pm.Distribution for the model."""
+        ### Logic for different types of likelihoods:
+        # -`analytical` and `blackbox`:
+        #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
+        #     function).
+        # - `approx_differentiable`:
+        #     In addition to `pm.Distribution` and any arbitrary function, it can also
+        #     be an str (which we will download from hugging face) or a Pathlike
+        #     which we will download and make a distribution.
 
-        This method avoids using the deprecated proxy properties on ``self`` and
-        instead reads and updates the authoritative ``self.model_config``.
-        """
-        # Read raw inputs from the typed model_config
-        raw_loglik = self.model_config.loglik
-        if isclass(raw_loglik) and issubclass(
-            typing_cast("type[pm.Distribution]", raw_loglik), pm.Distribution
-        ):
-            return typing_cast("type[pm.Distribution]", raw_loglik)
+        # If user has already provided a log-likelihood function as a distribution
+        # Use it directly as the distribution
+        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
+            return self.loglik
 
+        # At this point, loglik should not be a type[Distribution] and should be set
+
+        assert self.loglik is not None, "loglik should be set"
+        assert self.loglik_kind is not None, "loglik_kind should be set"
+        assert not (isclass(self.loglik) and issubclass(self.loglik, pm.Distribution))
         loglik_callable = typing_cast(
-            "Op | Callable[..., Any] | PathLike | str", raw_loglik
+            "Op | Callable[..., Any] | PathLike | str", self.loglik
         )
 
-        # Prefer the typed value in model_config for loglik_kind
-        loglik_kind = typing_cast("LoglikKind", self.model_config.loglik_kind)
-
-        # region Determine the trialwise nature of parameters for use in loglik and
-        # missing-data callables
         # params_is_trialwise_base: one entry per model param (excluding
         # p_outlier). Used for graph-level broadcasting in logp() and
         # make_distribution, where dist_params does not include extra_fields.
@@ -331,29 +334,40 @@ class HSSM(HSSMBase):
             for param_name, param in self.params.items()
             if param_name != "p_outlier"
         ]
+
         # params_is_trialwise: extends the base list with extra_fields
-        params_is_trialwise = params_is_trialwise_base.copy()
+        # (always trialwise). Used for vmap construction in
+        # make_likelihood_callable and for assemble_callables, where
+        # dist_params includes extra_fields flattened in.
+        params_is_trialwise = list(params_is_trialwise_base)
         if self.extra_fields is not None:
             params_is_trialwise += [True for _ in self.extra_fields]
-        # endregion
 
-        # region Build the likelihood callable using guard clauses
-        backend = self.model_config.backend
-        kwargs = {
-            "loglik": loglik_callable,
-            "loglik_kind": loglik_kind,
-            "backend": backend,
-        }
-        if loglik_kind == "approx_differentiable" and backend == "jax":
-            kwargs["params_is_reg"] = params_is_trialwise  # type: ignore
-        likelihood_callable = make_likelihood_callable(**kwargs)  # type: ignore
-        # endregion
+        if self.loglik_kind == "approx_differentiable":
+            if self.model_config.backend == "jax":
+                likelihood_callable = make_likelihood_callable(
+                    loglik=loglik_callable,
+                    loglik_kind="approx_differentiable",
+                    backend="jax",
+                    params_is_reg=params_is_trialwise,
+                )
+            else:
+                likelihood_callable = make_likelihood_callable(
+                    loglik=loglik_callable,
+                    loglik_kind="approx_differentiable",
+                    backend=self.model_config.backend,
+                )
+        else:
+            likelihood_callable = make_likelihood_callable(
+                loglik=loglik_callable,
+                loglik_kind=self.loglik_kind,
+                backend=self.model_config.backend,
+            )
 
-        # Update the authoritative `model_config` with the resolved callable
-        typing_cast("Config", self.model_config).update_loglik(likelihood_callable)
-        resolved_loglik = likelihood_callable
+        self.loglik = likelihood_callable
 
-        # Missing-data network: build and assemble the missing-data callable
+        # Make the callable for missing data
+        # And assemble it with the callable for the likelihood
         if self.missing_data_network != MissingDataNetwork.NONE:
             if self.missing_data_network == MissingDataNetwork.OPN:
                 params_only = False
@@ -363,32 +377,30 @@ class HSSM(HSSMBase):
                 params_only = None
 
             if self.loglik_missing_data is None:
-                # Use the model name from the typed config
                 self.loglik_missing_data = (
-                    self.model_config.model_name
+                    self.model_name
                     + missing_data_networks_suffix[self.missing_data_network]
                     + ".onnx"
                 )
 
-            if self.model_config.backend != "pytensor":
-                backend_tmp: Literal["pytensor", "jax", "other"] | None = "jax"
-            else:
-                backend_tmp = self.model_config.backend
+            backend_tmp: Literal["pytensor", "jax", "other"] | None = (
+                "jax"
+                if self.model_config.backend != "pytensor"
+                else self.model_config.backend
+            )
             missing_data_callable = make_missing_data_callable(
                 self.loglik_missing_data, backend_tmp, params_is_trialwise, params_only
             )
 
             self.loglik_missing_data = missing_data_callable
 
-            assembled = assemble_callables(
-                resolved_loglik,
+            self.loglik = assemble_callables(
+                self.loglik,
                 self.loglik_missing_data,
                 params_only,
                 has_deadline=self.deadline,
                 params_is_trialwise=params_is_trialwise,
             )
-            typing_cast("Config", self.model_config).update_loglik(assembled)
-            resolved_loglik = assembled
 
         if self.missing_data:
             _logger.info(
@@ -410,11 +422,11 @@ class HSSM(HSSMBase):
         # Use the typed `model_config` attributes directly
         _list_params = self.model_config.list_params
         assert _list_params is not None, "list_params should be set"  # for type checker
-        rv_name = getattr(self.model_config, "rv") or self.model_config.model_name
+        rv_name = getattr(self.model_config, "rv", None) or self.model_config.model_name
 
         return make_distribution(
             rv=rv_name,
-            loglik=resolved_loglik,
+            loglik=self.loglik,
             list_params=_list_params,
             bounds=self.bounds,
             lapse=self.lapse,
