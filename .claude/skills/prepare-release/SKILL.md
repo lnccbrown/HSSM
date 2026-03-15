@@ -16,7 +16,8 @@ in `pyproject.toml` has already been bumped. The skill walks through four steps:
 1. Update the changelog (`docs/changelog.md`)
 2. Update the announcement banner (`docs/overrides/main.html`)
 3. Build docs locally to verify they compile
-4. Create a draft GitHub release
+4. Run the notebook check workflow in CI
+5. Create a draft GitHub release
 
 ## Conventions
 
@@ -104,7 +105,27 @@ Check that the command exits with code 0. If it fails:
 
 If it succeeds, confirm to the user and move on.
 
-## Step 7: Create a draft GitHub release
+## Step 7: Run the notebook check workflow
+
+Trigger the `check_notebooks.yml` workflow on the current branch to verify all notebooks execute successfully:
+
+```bash
+gh workflow run "Check notebooks" --ref $(git branch --show-current)
+```
+
+Then monitor the run:
+
+```bash
+# Wait a few seconds for the run to register, then find it
+gh run list --workflow="Check notebooks" --limit 1 --json databaseId,status,conclusion
+```
+
+Use `gh run watch <RUN_ID>` to stream the status, or poll with `gh run view <RUN_ID>` periodically.
+
+- If the workflow **succeeds**, confirm to the user and proceed to the draft release.
+- If the workflow **fails**, show the user the failure details using `gh run view <RUN_ID> --log-failed` and help debug. Do NOT proceed to creating the release until notebooks pass.
+
+## Step 8: Create a draft GitHub release
 
 Run:
 
@@ -115,7 +136,7 @@ gh release create v{VERSION} --draft --title "v{VERSION}" --generate-notes --tar
 The `--draft` flag ensures nothing is published (and therefore no CI release pipeline is triggered).
 The `--generate-notes` flag uses GitHub's auto-generated release notes from merged PRs.
 
-## Step 8: Report
+## Step 9: Report
 
 Tell the user:
 - The draft release URL (from the `gh release create` output)

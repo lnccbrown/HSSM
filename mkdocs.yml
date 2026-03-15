@@ -103,13 +103,14 @@ plugins:
         - tutorials/rlssm_rlwm_model.ipynb
         - tutorials/tutorial_bayeux.ipynb
         - tutorials/bayesflow_lre_integration.ipynb
+        - tutorials/poisson_race.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
   - mkdocstrings:
       default_handler: python
       handlers:
         python:
-          import:
+          inventories:
             - https://docs.python.org/3/objects.inv
             - https://mkdocstrings.github.io/objects.inv
             - https://mkdocstrings.github.io/griffe/objects.inv
