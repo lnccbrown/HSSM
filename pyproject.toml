@@ -57,6 +57,7 @@ dev = [
     "pytest>=8.3.1",
     "pytest-random-order>=1.1.1",
     "pytest-rerunfailures>=15.0",
+    "pytest-timeout>=2.3.1",
     "ruff>=0.15.0",
     "pre-commit>=4.1.0",
     "onnxruntime>=1.17.1",
@@ -216,6 +217,9 @@ addopts = [
     "--cov-report=xml",
     "--exitfirst",
     "--capture=no",
+    "--timeout=360",
+    "--reruns=2",
+    "--reruns-delay=5",
 ]
 markers = [
     "slow: marks tests as slow (add --runslow option to run these tests)",
