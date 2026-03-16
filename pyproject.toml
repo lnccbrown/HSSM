@@ -47,7 +47,6 @@ repository = "https://github.com/lnccbrown/HSSM"
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.5.2"]
-bayesflow = ["bayesflow", "keras>=3"]
 
 [dependency-groups]
 dev = [
@@ -77,6 +76,8 @@ notebook = [
     "pyarrow>=20.0.0",
     "lanfactory>=0.5.3",
     "zeus-mcmc>=2.5.4",
+    "bayesflow @ git+https://github.com/bayesflow-org/bayesflow@dev",
+    "keras>=3",
 ]
 
 docs = [
