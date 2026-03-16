@@ -2,6 +2,10 @@
 hssm_section_notebooks/
 hssm_paper/
 
+# CLAUDE
+.claude/worktrees/
+.claude/settings.json
+
 # Distribution / packaging
 .Python
 build/
