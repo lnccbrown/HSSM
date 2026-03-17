@@ -309,5 +309,7 @@ def test_rlssm_pymc_model(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) ->
 def test_rlssm_sample_smoke(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
     """Minimal sampling run should return an InferenceData object."""
     model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
-    trace = model.sample(draws=2, tune=2, chains=1, cores=1)
+    trace = model.sample(
+        draws=4, tune=50, chains=1, cores=1, sampler="numpyro", target_accept=0.9
+    )
     assert trace is not None
