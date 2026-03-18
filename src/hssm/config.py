@@ -352,13 +352,32 @@ class RLSSMConfig(BaseModelConfig):
         """Set default loglik_kind for RLSSM models if not provided."""
         if self.loglik_kind is None:
             self.loglik_kind = "approx_differentiable"
+            _logger.debug(
+                "RLSSMConfig: loglik_kind not specified; "
+                "defaulting to 'approx_differentiable'."
+            )
 
     @classmethod
     def from_defaults(
         cls, model_name: SupportedModels | str, loglik_kind: LoglikKind | None
-    ) -> Config:
-        """Return the shared Config defaults (delegated to :class:`Config`)."""
-        return Config.from_defaults(model_name, loglik_kind)
+    ) -> "RLSSMConfig":
+        """Not supported for RLSSMConfig.
+
+        RLSSM models are always constructed via
+        :meth:`RLSSMConfig.from_rlssm_dict` or directly via the constructor.
+        This override exists only to prevent accidental delegation to
+        :meth:`Config.from_defaults`, which returns a :class:`Config` and
+        would mislead callers expecting an :class:`RLSSMConfig`.
+
+        Raises
+        ------
+        NotImplementedError
+            Always.
+        """
+        raise NotImplementedError(
+            "RLSSMConfig does not support from_defaults(). "
+            "Use RLSSMConfig.from_rlssm_dict() or the constructor directly."
+        )
 
     @classmethod
     def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> RLSSMConfig:
