@@ -218,14 +218,18 @@ def test_rlssm_deadline_raises(
 def test_rlssm_params_is_trialwise_aligned(
     rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
 ) -> None:
-    """params_is_trialwise must align with list_params (same length, p_outlier=False)."""
+    """params_is_trialwise must align with self.list_params (HSSMBase-managed copy).
+
+    self.list_params includes p_outlier when lapse is active; model_config.list_params
+    does not.  The test must use self.list_params to cover the lapse parameter path.
+    """
     model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
-    assert model.model_config.list_params is not None
-    params_is_trialwise = [
-        name != "p_outlier" for name in model.model_config.list_params
-    ]
-    assert len(params_is_trialwise) == len(model.model_config.list_params)
-    for name, is_tw in zip(model.model_config.list_params, params_is_trialwise):
+    assert model.list_params is not None
+    params_is_trialwise = [name != "p_outlier" for name in model.list_params]
+    assert len(params_is_trialwise) == len(model.list_params)
+    # p_outlier (added by HSSMBase when lapse is active) must be non-trialwise.
+    assert "p_outlier" in model.list_params, "fixture uses default p_outlier=0.05"
+    for name, is_tw in zip(model.list_params, params_is_trialwise):
         if name == "p_outlier":
             assert not is_tw, "p_outlier must be non-trialwise"
         else:
@@ -313,3 +317,30 @@ def test_rlssm_sample_smoke(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) 
         draws=4, tune=50, chains=1, cores=1, sampler="numpyro", target_accept=0.9
     )
     assert trace is not None
+
+
+def test_rlssm_pickle_round_trip(
+    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
+) -> None:
+    """cloudpickle round-trip must reconstruct an equivalent RLSSM.
+
+    Verifies that __getstate__ / __setstate__ survive serialisation:
+    - The reconstructed object is a fresh RLSSM (not the same instance).
+    - n_participants and n_trials are preserved.
+    - list_params (including p_outlier) are preserved.
+    - model_config.model_name is preserved.
+    - model.model (bambi model) is rebuilt, confirming full re-initialisation.
+    """
+    import cloudpickle
+
+    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    blob = cloudpickle.dumps(model)
+    restored = cloudpickle.loads(blob)
+
+    assert restored is not model
+    assert isinstance(restored, RLSSM)
+    assert restored.n_participants == model.n_participants
+    assert restored.n_trials == model.n_trials
+    assert restored.list_params == model.list_params
+    assert restored.model_config.model_name == model.model_config.model_name
+    assert restored.model is not None
