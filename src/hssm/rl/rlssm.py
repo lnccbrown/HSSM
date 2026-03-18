@@ -182,6 +182,10 @@ class RLSSM(HSSMBase):
         # Build a new RLSSMConfig with the Op and backend injected, leaving
         # the caller's object unmodified (dataclasses.replace creates a shallow
         # copy with only the specified fields overridden).
+        #
+        # backend is hardcoded to "jax" because the entire RLSSM likelihood
+        # stack is JAX-only. See ssm_logp_func, make_rl_logp_op, and
+        #  _make_model_distribution for details.
         model_config = replace(rlssm_config, loglik=loglik_op, backend="jax")
 
         super().__init__(
