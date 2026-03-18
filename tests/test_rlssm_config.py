@@ -68,6 +68,7 @@ def valid_rlssmconfig_kwargs():
         model_name="test_model",
         list_params=["alpha", "beta"],
         params_default=[0.5, 0.3],
+        bounds={"alpha": (0.0, 1.0), "beta": (0.0, 1.0)},
         decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
@@ -242,6 +243,13 @@ class TestRLSSMConfigValidation:
         with pytest.raises(
             ValueError, match="must be decorated with `@annotate_function`"
         ):
+            config.validate()
+
+    def test_validate_missing_bounds_for_param(self, valid_rlssmconfig_kwargs):
+        """validate() should raise early when a param has no bounds entry."""
+        kwargs = {**valid_rlssmconfig_kwargs, "bounds": {}}  # strip all bounds
+        config = RLSSMConfig(**kwargs)
+        with pytest.raises(ValueError, match="Missing bounds for parameter"):
             config.validate()
 
 

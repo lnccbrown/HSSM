@@ -461,6 +461,18 @@ class RLSSMConfig(BaseModelConfig):
                     f"match list_params length ({len(self.list_params)})"
                 )
 
+        # Every parameter must have bounds — get_defaults() returns (None, bounds)
+        # so missing bounds produce a cryptic "Bounds parameter unspecified" error
+        # deep in prior construction.  Surface it here with a clear message.
+        if self.list_params:
+            missing_bounds = [p for p in self.list_params if p not in self.bounds]
+            if missing_bounds:
+                raise ValueError(
+                    f"Missing bounds for parameter(s): {missing_bounds}. "
+                    "Every parameter in `list_params` must have a corresponding "
+                    "entry in `bounds`."
+                )
+
     def get_defaults(
         self, param: str
     ) -> tuple[float | None, tuple[float, float] | None]:
