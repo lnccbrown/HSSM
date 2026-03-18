@@ -39,8 +39,8 @@ class Param:
         Whether the parameter is a regression.
     is_fixed
         Whether the parameter is fixed.
-    is_vector
-        Whether the parameter is a vector parameter.
+    is_trialwise
+        Whether the parameter varies across observations.
     is_parent
         Whether the parameter is a parent parameter.
 
@@ -124,8 +124,33 @@ class Param:
         self._parent = value
 
     @property
-    def is_vector(self) -> bool:
-        """Whether the parameter is a vector parameter."""
+    def is_trialwise(self) -> bool:
+        """Whether the parameter varies across observations.
+
+        Returns ``True`` when the parameter is the parent, a regression,
+        or a fixed vector (``np.ndarray`` prior).
+
+        NOTE on ``is_parent``:
+        Bambi's ``model.predict()`` always returns ``(n_obs,)`` values for the
+        parent parameter, even for intercept-only models --- it evaluates the
+        full linear predictor for every observation.  The JAX/ONNX vmap layer
+        (``LANLogpOp.perform`` / ``LANLogpVJPOp.perform``) and the post-hoc
+        log-likelihood computation (``utils._compute_log_likelihood``) use this
+        flag to set ``in_axes=0``, telling vmap that the input varies along the
+        observation axis.
+
+        Treating intercept-only parents as scalars (``in_axes=None``) would be
+        incorrect because ``model.predict()`` is the canonical entry point for
+        extracting parameter values and it *always* broadcasts to ``(n_obs,)``.
+        Every downstream consumer --- plotting (``attach_trialwise_params_to_df``),
+        log-likelihood evaluation, posterior predictive checks --- receives the
+        parent through ``model.predict()``.  If ``is_trialwise`` returned
+        ``False`` for the parent, the vmap specification would declare a scalar
+        input while actually receiving an ``(n_obs,)`` array, causing a shape
+        mismatch in JAX.  Fixing that would require either patching Bambi's
+        ``predict()`` (upstream, not under our control) or adding a reduction
+        step at every consumption site, which is fragile and error-prone.
+        """
         return (
             self.is_parent or self.is_regression or isinstance(self.prior, np.ndarray)
         )

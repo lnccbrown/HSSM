@@ -88,21 +88,17 @@ def test_custom_model(data_ddm):
     ):
         model = HSSM(data=data_ddm, model="custom")
 
-    with pytest.raises(
-        ValueError, match="Please provide `list_params` via `model_config`."
-    ):
+    with pytest.raises(ValueError, match="Please provide `list_params`"):
         model = HSSM(data=data_ddm, model="custom", loglik_kind="analytical")
 
-    with pytest.raises(
-        ValueError, match="Please provide `list_params` via `model_config`."
-    ):
+    with pytest.raises(ValueError, match="Please provide `list_params`"):
         model = HSSM(
             data=data_ddm, model="custom", loglik=DDM, loglik_kind="analytical"
         )
 
     with pytest.raises(
         ValueError,
-        match="Please provide `list_params` via `model_config`.",
+        match="Please provide `list_params`",
     ):
         model = HSSM(
             data=data_ddm,
@@ -344,6 +340,87 @@ def test_compile_logp(cavanagh_test):
 
 
 @pytest.mark.slow
+class TestFixedVectorParams:
+    """Tests for passing np.ndarray as a fixed vector parameter."""
+
+    def test_fixed_vector_non_parent(self, data_ddm):
+        """A fixed vector for v (non-parent) should build successfully."""
+        n_obs = len(data_ddm)
+        v_fixed = np.random.uniform(0.3, 0.7, size=n_obs)
+        model = HSSM(
+            data=data_ddm,
+            model="ddm",
+            include=[{"name": "v", "prior": v_fixed}],
+        )
+
+        # v should not be parent; another param takes that role
+        assert model.params.parent != "v"
+        # v is fixed (scalar constant to Bambi, vector substituted in logp)
+        assert model.params["v"].is_fixed
+        assert model.params["v"].is_trialwise
+
+    def test_fixed_vector_length_mismatch(self, data_ddm):
+        """Vector length != n_obs should raise ValueError."""
+        wrong_length = np.random.uniform(0.3, 0.7, size=len(data_ddm) + 5)
+        with pytest.raises(ValueError, match="has length"):
+            HSSM(
+                data=data_ddm,
+                model="ddm",
+                include=[{"name": "v", "prior": wrong_length}],
+            )
+
+    def test_fixed_vector_bounds_validation(self, data_ddm):
+        """Vector values outside bounds should raise ValueError."""
+        n_obs = len(data_ddm)
+        out_of_bounds = np.full(n_obs, 2.0)  # z bounds are (0, 1)
+        with pytest.raises(ValueError):
+            HSSM(
+                data=data_ddm,
+                model="ddm",
+                include=[{"name": "z", "prior": out_of_bounds}],
+            )
+
+    def test_fixed_vector_sampling(self, data_ddm):
+        """Sampling with a fixed vector should succeed and exclude it from posterior."""
+        n_obs = len(data_ddm)
+        v_fixed = np.random.uniform(0.3, 0.7, size=n_obs)
+        model = HSSM(
+            data=data_ddm,
+            model="ddm",
+            include=[{"name": "v", "prior": v_fixed}],
+        )
+        idata = model.sample(draws=10, chains=1, tune=10)
+
+        # v must not appear in the posterior (it's a constant, not sampled)
+        assert "v" not in idata.posterior.data_vars
+        # The other params must be present
+        for param in ["a", "z", "t"]:
+            assert param in idata.posterior.data_vars
+
+    def test_fixed_vector_multiple_params(self, data_ddm):
+        """Fixing multiple parameters to vectors should work."""
+        n_obs = len(data_ddm)
+        v_fixed = np.random.uniform(0.3, 0.7, size=n_obs)
+        t_fixed = np.random.uniform(0.1, 0.4, size=n_obs)
+        model = HSSM(
+            data=data_ddm,
+            model="ddm",
+            include=[
+                {"name": "v", "prior": v_fixed},
+                {"name": "t", "prior": t_fixed},
+            ],
+        )
+        idata = model.sample(draws=10, chains=1, tune=10)
+
+        # Both fixed params excluded from posterior
+        assert "v" not in idata.posterior.data_vars
+        assert "t" not in idata.posterior.data_vars
+        # Remaining params present
+        assert "a" in idata.posterior.data_vars
+        assert "z" in idata.posterior.data_vars
+
+
+@pytest.mark.slow
 def test_sample_do(data_ddm):
     model = HSSM(data=data_ddm)
     sample_do = model.sample_do(params={"v": 1.0}, draws=10)
@@ -362,3 +439,26 @@ def test_sample_do(data_ddm):
         "rt,response_dim",
     }
     assert np.unique(sample_do.prior["v_mean"].values) == [1.0]
+
+
+def test_is_choice_only_and_deadline(data_ddm):
+    config_choice_only = {"response": ["response"]}
+
+    model = HSSM(data=data_ddm, model="ddm", model_config=config_choice_only)
+    assert model.model_config.is_choice_only
+    assert model.response_c == "response"
+    assert model.response_str == "response"
+
+    data_deadline = data_ddm.copy()
+    data_deadline["deadline"] = 0
+
+    model_with_deadline = HSSM(
+        data=data_deadline, model="ddm", model_config=config_choice_only, deadline=True
+    )
+
+    assert model_with_deadline.is_choice_only
+    assert model_with_deadline.deadline
+    assert model_with_deadline.response is not None
+    assert len(model_with_deadline.response) == 2
+    assert model_with_deadline.response_c == "c(response, deadline)"
+    assert model_with_deadline.response_str == "response,deadline"

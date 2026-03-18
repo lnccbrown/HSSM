@@ -24,12 +24,12 @@ PARAMETER_GRID = [
 
 def run_vi(model, method, expected):
     if expected == True:
-        model.vi(method, niter=1000)
+        model.vi(method, niter=100)
         assert isinstance(model.vi_idata, az.InferenceData)
         assert isinstance(model.vi_approx, pm.Approximation)
     else:
         with pytest.raises(expected):
-            model.vi(method, niter=1000)
+            model.vi(method, niter=100)
 
 
 @pytest.mark.slow

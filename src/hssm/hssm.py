@@ -43,6 +43,7 @@ from hssm.distribution_utils import (
     assemble_callables,
     make_distribution,
     make_family,
+    make_hssm_rv,
     make_likelihood_callable,
     make_missing_data_callable,
 )
@@ -282,7 +283,7 @@ class HSSM(DataValidatorMixin):
         ) = None,
         loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
-        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
+        lapse: float | dict | bmb.Prior | None = None,
         global_formula: str | None = None,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
@@ -396,13 +397,23 @@ class HSSM(DataValidatorMixin):
         self.model_config.validate()
 
         # Set up shortcuts so old code will work
-        self.response = self.model_config.response
+        # TODO: add to HSSMBase
+        self.response = self.model_config.response[:]
         self.list_params = self.model_config.list_params
         self.choices = self.model_config.choices
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
+
+        # TODO: add to HSSMBase
+        self.response = cast("list[str]", self.response)
+        self.is_choice_only: bool = self.model_config.is_choice_only
+
+        if self.choices is None:
+            raise ValueError(
+                "`choices` must be provided either in `model_config` or as an argument."
+            )
 
         self.n_choices = len(self.choices)
 
@@ -411,35 +422,42 @@ class HSSM(DataValidatorMixin):
 
         # Process missing data setting
         # AF-TODO: Could be a function in data validator?
-        if isinstance(missing_data, float):
-            if not ((self.data.rt == missing_data).any()):
-                raise ValueError(
-                    f"missing_data argument is provided as a float {missing_data}, "
-                    f"However, you have no RTs of {missing_data} in your dataset!"
-                )
+        # TODO: Move to the MissingDataMixin class when we have it
+        if self.is_choice_only and missing_data is not False:
+            raise ValueError("Choice-only models cannot have missing data.")
+
+        if not self.is_choice_only:
+            if isinstance(missing_data, float):
+                if not ((self.data.rt == missing_data).any()):
+                    raise ValueError(
+                        f"missing_data argument is provided as a float {missing_data}, "
+                        f"However, you have no RTs of {missing_data} in your dataset!"
+                    )
+                else:
+                    self.missing_data = True
+                    self.missing_data_value = missing_data
+            elif isinstance(missing_data, bool):
+                if missing_data and (not (self.data.rt == -999.0).any()):
+                    raise ValueError(
+                        "missing_data argument is provided as True, "
+                        " so RTs of -999.0 are treated as missing. \n"
+                        "However, you have no RTs of -999.0 in your dataset!"
+                    )
+                elif (not missing_data) and (self.data.rt == -999.0).any():
+                    # self.missing_data = True
+                    raise ValueError(
+                        "Missing data provided as False. \n"
+                        "However, you have RTs of -999.0 in your dataset!"
+                    )
+                else:
+                    self.missing_data = missing_data
             else:
-                self.missing_data = True
-                self.missing_data_value = missing_data
-        elif isinstance(missing_data, bool):
-            if missing_data and (not (self.data.rt == -999.0).any()):
                 raise ValueError(
-                    "missing_data argument is provided as True, "
-                    " so RTs of -999.0 are treated as missing. \n"
-                    "However, you have no RTs of -999.0 in your dataset!"
+                    "missing_data argument must be a bool or a float! \n"
+                    f"You provided: {type(missing_data)}"
                 )
-            elif (not missing_data) and (self.data.rt == -999.0).any():
-                # self.missing_data = True
-                raise ValueError(
-                    "Missing data provided as False. \n"
-                    "However, you have RTs of -999.0 in your dataset!"
-                )
-            else:
-                self.missing_data = missing_data
         else:
-            raise ValueError(
-                "missing_data argument must be a bool or a float! \n"
-                f"You provided: {type(missing_data)}"
-            )
+            self.missing_data = False
 
         if isinstance(deadline, str):
             self.deadline = True
@@ -465,13 +483,12 @@ class HSSM(DataValidatorMixin):
         )
 
         if self.deadline:
+            # self.response is a tuple (from Config); use concatenation.
             self.response.append(self.deadline_name)
 
         # Process lapse distribution
         self.has_lapse = p_outlier is not None and p_outlier != 0
         self._check_lapse(lapse)
-        if self.has_lapse and self.list_params[-1] != "p_outlier":
-            self.list_params.append("p_outlier")
 
         # Process all parameters
         self.params = Params.from_user_specs(
@@ -484,6 +501,7 @@ class HSSM(DataValidatorMixin):
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
+        self._validate_fixed_vectors()
         self.formula, self.priors, self.link = self.params.parse_bambi(model=self)
 
         # For parameters that have a regression backend, apply bounds at the likelihood
@@ -497,7 +515,6 @@ class HSSM(DataValidatorMixin):
 
         # Set p_outlier and lapse
         self.p_outlier = self.params.get("p_outlier")
-        self.lapse = lapse if self.has_lapse else None
 
         self._post_check_data_sanity()
 
@@ -525,6 +542,13 @@ class HSSM(DataValidatorMixin):
         self.set_alias(self._aliases)
         self.model.build()
 
+        # Bambi >= 0.17 declares dims=("__obs__",) for intercept-only
+        # deterministics that actually have shape (1,). This causes an
+        # xarray CoordinateValidationError during pm.sample() when ArviZ
+        # tries to create a DataArray with mismatched dimension sizes.
+        # Fix by removing the dims declaration for these deterministics.
+        self._fix_scalar_deterministic_dims()
+
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
         if self.initval_jitter > 0:
@@ -539,6 +563,49 @@ class HSSM(DataValidatorMixin):
             {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
         )
         _logger.info("Model initialized successfully.")
+
+    def _fix_scalar_deterministic_dims(self) -> None:
+        """Fix dims metadata for scalar deterministics.
+
+        Bambi >= 0.17 returns shape ``(1,)`` for intercept-only
+        deterministics but still declares ``dims=("__obs__",)``. This causes
+        an xarray ``CoordinateValidationError`` during ``pm.sample()`` because
+        the ``__obs__`` coordinate has ``n_obs`` entries. Removing the dims
+        declaration for these variables lets ArviZ handle them as
+        un-dimensioned arrays, avoiding the conflict.
+        """
+        n_obs = len(self.data)
+        dims_dict = self.pymc_model.named_vars_to_dims
+        for det in self.pymc_model.deterministics:
+            if det.name not in dims_dict:
+                continue
+            dims = dims_dict[det.name]
+            if "__obs__" in dims:
+                # Check static shape: if it doesn't match n_obs, remove dims
+                try:
+                    shape_0 = det.type.shape[0]
+                except (IndexError, TypeError):
+                    continue
+                if shape_0 is not None and shape_0 != n_obs:
+                    del dims_dict[det.name]
+
+    def _validate_fixed_vectors(self) -> None:
+        """Validate that fixed-vector parameters have the correct length.
+
+        Fixed-vector parameters (``prior=np.ndarray``) bypass Bambi's formula
+        system entirely --- they are passed as a scalar ``0.0`` placeholder to
+        Bambi, and the real vector is substituted inside
+        ``HSSMDistribution.logp()`` (see ``dist.py``).  Because this
+        substitution is invisible to Bambi, we must validate the vector length
+        against ``len(self.data)`` up front to catch shape mismatches early.
+        """
+        for name, param in self.params.items():
+            if isinstance(param.prior, np.ndarray):
+                if len(param.prior) != len(self.data):
+                    raise ValueError(
+                        f"Fixed vector for parameter '{name}' has length "
+                        f"{len(param.prior)}, but data has {len(self.data)} rows."
+                    )
 
     @classproperty
     def supported_models(cls) -> tuple[SupportedModels, ...]:
@@ -735,11 +802,7 @@ class HSSM(DataValidatorMixin):
 
         omit_offsets = kwargs.pop("omit_offsets", False)
         self._inference_obj = self.model.fit(
-            inference_method=(
-                "pymc"
-                if sampler in ["pymc", "numpyro", "blackjax", "nutpie"]
-                else sampler
-            ),
+            inference_method=sampler,
             init=init,
             include_response_params=include_response_params,
             omit_offsets=omit_offsets,
@@ -1242,7 +1305,8 @@ class HSSM(DataValidatorMixin):
         # mean prior here (which adds deterministics that
         # could be recomputed elsewhere)
         prior_predictive.add_groups(posterior=prior_predictive.prior)
-        self.model.predict(prior_predictive, kind="mean", inplace=True)
+        # Bambi >= 0.17 renamed kind="mean" to kind="response_params".
+        self.model.predict(prior_predictive, kind="response_params", inplace=True)
 
         # clean
         setattr(prior_predictive, "prior", prior_predictive["posterior"])
@@ -1303,11 +1367,18 @@ class HSSM(DataValidatorMixin):
         self.model.set_alias(aliases)
         self.model.build()
 
+    # TODO: update this to HSSMBase
     @property
     def response_c(self) -> str:
-        """Return the response variable names in c() format."""
+        """Return the response variable names in c() format.
+
+        New in 0.2.12: when model is choice-only and has deadline, the response
+        is not in the form of c(...).
+        """
         if self.response is None:
-            return "c()"
+            raise ValueError("Response is not defined.")
+        if self.is_choice_only and not self.deadline:
+            return self.response[0]
         return f"c({', '.join(self.response)})"
 
     @property
@@ -1579,43 +1650,42 @@ class HSSM(DataValidatorMixin):
 
         Parameters
         ----------
-        model : HSSM
-            The HSSM model instance to save
         model_name : str | None
             Name to use for the saved model files.
             If None, will use model.model_name with timestamp
         allow_absolute_base_path : bool
-            Whether to allow absolute paths for base_path
+            Whether to allow absolute paths for base_path.
+            Defaults to False for safety.
         base_path : str | Path
             Base directory to save model files in.
-            Must be relative path if allow_absolute_base_path=False
-        save_idata_only: bool = False,
-            Whether to save the model class instance itself
+            Must be relative path if allow_absolute_base_path=False.
+            Defaults to "hssm_models".
+        save_idata_only : bool
+            If True, only saves inference data (traces), not the model pickle.
+            Defaults to False (saves both model and traces).
 
         Raises
         ------
         ValueError
             If base_path is absolute and allow_absolute_base_path=False
         """
-        # check if base_path is absolute
-        if not allow_absolute_base_path:
-            if str(base_path).startswith("/"):
-                raise ValueError(
-                    "base_path must be a relative path"
-                    " if allow_absolute_base_path is False"
-                )
+        # Convert to Path object for cross-platform compatibility
+        base_path = Path(base_path)
+
+        # Check if base_path is absolute (works on all platforms)
+        if not allow_absolute_base_path and base_path.is_absolute():
+            raise ValueError(
+                "base_path must be a relative path if allow_absolute_base_path is False"
+            )
 
         if model_name is None:
             # Get date string format as suffix to model name
-            model_name = (
-                self.model_name
-                + "_"
-                + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-            )
+            timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+            model_name = f"{self.model_name}_{timestamp}"
 
-        # check if folder by name model_name exists
+        # Sanitize model_name and construct full path
         model_name = model_name.replace(" ", "_")
-        model_path = Path(base_path).joinpath(model_name)
+        model_path = base_path / model_name
         model_path.mkdir(parents=True, exist_ok=True)
 
         # Save model to pickle file
@@ -1926,22 +1996,32 @@ class HSSM(DataValidatorMixin):
     def _check_lapse(self, lapse):
         """Determine if p_outlier and lapse is specified correctly."""
         # Basically, avoid situations where only one of them is specified.
-        if self.has_lapse and lapse is None:
-            raise ValueError(
-                "You have specified `p_outlier`. Please also specify `lapse`."
-            )
-        if lapse is not None and not self.has_lapse:
+        if self.list_params[-1] != "p_outlier":
+            if "p_outlier" in self.list_params:
+                raise ValueError(
+                    "Please do not include 'p_outlier' in `list_params`. "
+                    + "We automatically append it to `list_params` when `p_outlier` "
+                    + "parameter is not None"
+                )
+        if self.has_lapse:
+            if lapse is None:
+                if self.is_choice_only:
+                    self.lapse = 1 / self.n_choices
+                else:
+                    self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
+            else:
+                self.lapse = lapse
+
+            self.list_params.append("p_outlier")
+            return
+
+        if lapse is not None:
             _logger.warning(
                 "You have specified the `lapse` argument to include a lapse "
                 + "distribution, but `p_outlier` is set to either 0 or None. "
                 + "Your lapse distribution will be ignored."
             )
-        if "p_outlier" in self.list_params and self.list_params[-1] != "p_outlier":
-            raise ValueError(
-                "Please do not include 'p_outlier' in `list_params`. "
-                + "We automatically append it to `list_params` when `p_outlier` "
-                + "parameter is not None"
-            )
+        self.lapse = None
 
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
@@ -1959,13 +2039,22 @@ class HSSM(DataValidatorMixin):
         if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
             return self.loglik
 
-        params_is_reg = [
-            param.is_vector
+        # params_is_trialwise_base: one entry per model param (excluding
+        # p_outlier). Used for graph-level broadcasting in logp() and
+        # make_distribution, where dist_params does not include extra_fields.
+        params_is_trialwise_base = [
+            param.is_trialwise
             for param_name, param in self.params.items()
             if param_name != "p_outlier"
         ]
+
+        # params_is_trialwise: extends the base list with extra_fields
+        # (always trialwise). Used for vmap construction in
+        # make_likelihood_callable and for assemble_callables, where
+        # dist_params includes extra_fields flattened in.
+        params_is_trialwise = list(params_is_trialwise_base)
         if self.extra_fields is not None:
-            params_is_reg += [True for _ in self.extra_fields]
+            params_is_trialwise += [True for _ in self.extra_fields]
 
         if self.loglik_kind == "approx_differentiable":
             if self.model_config.backend == "jax":
@@ -1973,7 +2062,7 @@ class HSSM(DataValidatorMixin):
                     loglik=self.loglik,
                     loglik_kind="approx_differentiable",
                     backend="jax",
-                    params_is_reg=params_is_reg,
+                    params_is_reg=params_is_trialwise,
                 )
             else:
                 likelihood_callable = make_likelihood_callable(
@@ -2013,7 +2102,7 @@ class HSSM(DataValidatorMixin):
                 else self.model_config.backend
             )
             missing_data_callable = make_missing_data_callable(
-                self.loglik_missing_data, backend_tmp, params_is_reg, params_only
+                self.loglik_missing_data, backend_tmp, params_is_trialwise, params_only
             )
 
             self.loglik_missing_data = missing_data_callable
@@ -2023,6 +2112,7 @@ class HSSM(DataValidatorMixin):
                 self.loglik_missing_data,
                 params_only,
                 has_deadline=self.deadline,
+                params_is_trialwise=params_is_trialwise,
             )
 
         if self.missing_data:
@@ -2033,7 +2123,42 @@ class HSSM(DataValidatorMixin):
                 self.missing_data_value,
             )
 
+        # TODO: This is a temporary solution to allow choice-only models without a
+        # specified simulator in ssm-simulators
+        if self.is_choice_only and self.model_config.rv is None:
+            _logger.warning(
+                "You are building a choice-only model without specifying "
+                "a RandomVariable class. Using a dummy simulator function. "
+                "Simulating data from this model will result in an error."
+            )
+
+            def dummy_simulator_func(*args, **kwargs):
+                raise NotImplementedError(
+                    "You are trying to simulate data from a choice-only model "
+                    "without specifying a RandomVariable class. Please specify "
+                    "a RandomVariable class via the `model_config.rv` argument."
+                )
+
+            setattr(dummy_simulator_func, "model_name", self.model_name)
+            setattr(dummy_simulator_func, "choices", self.choices)
+            setattr(dummy_simulator_func, "obs_dim", 1)
+
+            self.model_config.rv = make_hssm_rv(
+                dummy_simulator_func,
+                list_params=self.list_params,
+                lapse=self.lapse,
+                is_choice_only=True,
+            )
+
         self.data = _rearrange_data(self.data)
+
+        # Collect fixed-vector params to substitute in the distribution logp
+        fixed_vector_params = {
+            name: param.prior
+            for name, param in self.params.items()
+            if isinstance(param.prior, np.ndarray)
+        }
+
         return make_distribution(
             rv=self.model_config.rv or self.model_name,
             loglik=self.loglik,
@@ -2045,6 +2170,10 @@ class HSSM(DataValidatorMixin):
                 if not self.extra_fields
                 else [deepcopy(self.data[field].values) for field in self.extra_fields]
             ),
+            fixed_vector_params=fixed_vector_params if fixed_vector_params else None,
+            params_is_trialwise=params_is_trialwise_base,
+            # TODO: add to HSSMBase
+            is_choice_only=self.is_choice_only,
         )
 
     def _get_deterministic_var_names(self, idata) -> list[str]:

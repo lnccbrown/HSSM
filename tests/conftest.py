@@ -158,6 +158,35 @@ def cav_model_cartoon(cavanagh_test):
 
 
 @pytest.fixture
+def intercept_only_ddm_cartoon(cavanagh_test):
+    """Intercept-only DDM model (no regression covariates).
+
+    This covers the case where Bambi >= 0.17 returns scalar deterministics
+    with shape (1,) instead of (n_obs,), which previously caused a
+    dimensionality error in attach_trialwise_params_to_df.
+    """
+    model = hssm.HSSM(
+        model="ddm",
+        data=cavanagh_test,
+        p_outlier=0.00,
+    )
+
+    # Attach a minimal mock posterior so plot_model_cartoon can proceed
+    # without requiring actual MCMC sampling.
+    posterior = xr.Dataset(
+        {
+            "v_Intercept": (["chain", "draw"], np.array([[0.5, 0.6]])),
+            "a_Intercept": (["chain", "draw"], np.array([[1.4, 1.5]])),
+            "z_Intercept": (["chain", "draw"], np.array([[0.5, 0.5]])),
+            "t_Intercept": (["chain", "draw"], np.array([[0.3, 0.3]])),
+        },
+        coords={"chain": [0], "draw": [0, 1]},
+    )
+    model._inference_obj = az.InferenceData(posterior=posterior)
+    return model
+
+
+@pytest.fixture
 def race_model_cartoon():
     my_race_data = pd.read_csv("tests/fixtures/data_race.csv")
     race_model = hssm.HSSM(

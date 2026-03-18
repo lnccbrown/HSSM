@@ -1,5 +1,10 @@
 # Custom
 hssm_section_notebooks/
+hssm_paper/
+
+# CLAUDE
+.claude/worktrees/
+.claude/settings.json
 
 # Distribution / packaging
 .Python
@@ -77,6 +82,9 @@ site/
 /notebooks
 /test_notebooks
 /test_workshop
+
+# hssm paper
+hssm_paper/
 
 *.so
 .python-version

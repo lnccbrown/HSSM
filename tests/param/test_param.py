@@ -48,11 +48,11 @@ def test_is_parent():
     assert param.is_parent
 
 
-def test_is_vector():
-    """Test that the is_vector property works correctly."""
-    assert not Param(name="test", prior=0).is_vector
-    assert Param(name="test", prior=np.array([0, 1])).is_vector
-    assert not Param(name="test", prior={"mean": 0, "std": 1}).is_vector
+def test_is_trialwise():
+    """Test that the is_trialwise property works correctly."""
+    assert not Param(name="test", prior=0).is_trialwise
+    assert Param(name="test", prior=np.array([0, 1])).is_trialwise
+    assert not Param(name="test", prior={"mean": 0, "std": 1}).is_trialwise
 
 
 def test_fill_defaults():
@@ -73,7 +73,7 @@ def test_fill_defaults():
     assert param.user_param is None
     assert not param.is_parent
     assert param.is_fixed
-    assert param.is_vector
+    assert param.is_trialwise
     assert param.is_regression
 
     param = Param(name="test", prior=np.array([0, 1]))

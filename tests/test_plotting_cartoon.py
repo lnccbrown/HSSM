@@ -94,6 +94,26 @@ def test_plot_model_cartoon_2_choice(
 
 
 @pytest.mark.slow
+def test_plot_model_cartoon_intercept_only(intercept_only_ddm_cartoon):
+    """Test plot_model_cartoon with intercept-only DDM (no regression).
+
+    Bambi >= 0.17 returns scalar deterministics with shape (1,) for
+    intercept-only models. This test ensures attach_trialwise_params_to_df
+    correctly broadcasts these to all observation rows.
+    """
+    ax = hssm.plotting.plot_model_cartoon(
+        intercept_only_ddm_cartoon,
+        n_samples_prior=100,
+        bins=20,
+        plot_predictive_mean=True,
+        plot_predictive_samples=False,
+        predictive_group="prior_predictive",
+        n_trajectories=2,
+    )
+    assert ax is not None
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize(
     [
         "n_trajectories",

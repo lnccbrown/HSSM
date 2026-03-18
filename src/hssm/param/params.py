@@ -11,6 +11,7 @@ from collections import UserDict
 from typing import TYPE_CHECKING, Any
 
 import bambi as bmb
+import numpy as np
 
 from .param import Param
 from .regression_param import RegressionParam
@@ -122,7 +123,13 @@ class Params(UserDict[str, Param]):
         for param_name, param in self.items():
             formula, prior, link = param.parse_bambi()
 
-            if param.is_parent:
+            # Fixed-vector parameters: tell Bambi this is a scalar constant
+            # (0.0). The actual vector substitution happens inside
+            # HSSMDistribution.logp(), which replaces the scalar with the
+            # real vector at the correct position in the parameter list.
+            if isinstance(prior, np.ndarray):
+                priors[param_name] = 0.0
+            elif param.is_parent:
                 # parent is not a regression
                 if formula is None:
                     parent_formula = f"{model.response_c} ~ 1"

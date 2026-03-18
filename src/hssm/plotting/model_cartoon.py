@@ -263,15 +263,30 @@ def compute_merge_necessary_deterministics(
 def attach_trialwise_params_to_df(
     model, df, idata, idata_group: Literal["posterior", "prior"] = "posterior"
 ):
-    """Attach the trial-wise parameters to the dataframe."""
+    """Attach the trial-wise parameters to the dataframe.
+
+    Handles both trial-wise parameters (shape ``(n_obs,)`` after selecting
+    chain/draw, e.g. from regression models) and scalar parameters
+    (shape ``(1,)`` after selecting chain/draw, e.g. from intercept-only
+    models where Bambi >= 0.17 no longer broadcasts the intercept to all
+    observations).
+    """
     necessary_params = default_model_config[model.model_name]["list_params"]
     df[necessary_params] = 0.0
 
     for chain_tmp, draw_tmp in {(x[0], x[1]) for x in list(df.index) if x[0] != -1}:
+        n_rows = len(df.loc[(chain_tmp, draw_tmp, slice(None))])
         for param in necessary_params:
-            df.loc[(chain_tmp, draw_tmp, slice(None)), param] = (
+            values = (
                 idata[idata_group].sel(chain=chain_tmp, draw=draw_tmp)[param].values
             )
+            # Handle scalar / intercept-only params that don't have the
+            # full observation dimension. Bambi >= 0.17 returns shape (1,)
+            # for intercept-only deterministics; directly-sampled scalars
+            # come back as 0-dim arrays.
+            if values.ndim == 0 or values.shape[0] != n_rows:
+                values = np.broadcast_to(values.flat[0], (n_rows,))
+            df.loc[(chain_tmp, draw_tmp, slice(None)), param] = values
     return df
 
 
@@ -1251,7 +1266,9 @@ def _add_trajectories(
 
     b_h_init = b_high[0]
     b_l_init = b_low[0]
-    n_roll = int((sample[0]["metadata"]["t"][0] / delta_t_graph) + 1)
+    # .item() extracts a Python scalar; required since NumPy >= 1.25 deprecated
+    # implicit ndim>0-to-scalar conversion inside int()/float().
+    n_roll = int((sample[0]["metadata"]["t"][0] / delta_t_graph + 1).item())
     b_high = np.roll(b_high, n_roll)
     b_high[:n_roll] = b_h_init
     b_low = np.roll(b_low, n_roll)
@@ -1261,7 +1278,7 @@ def _add_trajectories(
     for i in range(n):
         metadata = sample[i]["metadata"]
         tmp_traj = metadata["trajectory"]
-        tmp_traj_choice = float(sample[i]["choices"].flatten())
+        tmp_traj_choice = float(sample[i]["choices"].flatten().item())
         maxid = np.minimum(np.argmax(np.where(tmp_traj > -999)), t_s.shape[0])
 
         axis.plot(
@@ -1439,7 +1456,8 @@ def _add_model_cartoon_to_ax(
 
     # Push boundary forward to accomodate non-decision time
     # Initial boundary value applied from t = 0 to t = t_ndt
-    n_roll = int((sample["metadata"]["t"][0] / delta_t_graph) + 1)
+    # .item(): NumPy >= 1.25 deprecated implicit ndim>0-to-scalar conversion.
+    n_roll = int((sample["metadata"]["t"][0] / delta_t_graph + 1).item())
     b_high = np.roll(b_high, n_roll)
     b_high[:n_roll] = b_h_init
     b_low = np.roll(b_low, n_roll)
@@ -1959,7 +1977,8 @@ def _add_trajectories_n(
     # Make bounds
     b = np.maximum(sample[0]["metadata"]["boundary"], 0)
     b_init = b[0]
-    n_roll = int((sample[0]["metadata"]["t"][0] / delta_t_graph) + 1)
+    # .item(): NumPy >= 1.25 deprecated implicit ndim>0-to-scalar conversion.
+    n_roll = int((sample[0]["metadata"]["t"][0] / delta_t_graph + 1).item())
     b = np.roll(b, n_roll)
     b[:n_roll] = b_init
 
@@ -1967,7 +1986,7 @@ def _add_trajectories_n(
     for i in range(n):
         metadata = sample[i]["metadata"]
         tmp_traj = metadata["trajectory"]
-        tmp_traj_choice = float(sample[i]["choices"].flatten())
+        tmp_traj_choice = float(sample[i]["choices"].flatten().item())
 
         for j in range(len(metadata["possible_choices"])):
             tmp_maxid = np.minimum(
@@ -2064,7 +2083,8 @@ def _add_model_n_cartoon_to_ax(
     """
     b = np.maximum(sample["metadata"]["boundary"], 0)
     b_init = b[0]
-    n_roll = int((sample["metadata"]["t"][0] / delta_t_graph) + 1)
+    # .item(): NumPy >= 1.25 deprecated implicit ndim>0-to-scalar conversion.
+    n_roll = int((sample["metadata"]["t"][0] / delta_t_graph + 1).item())
     b = np.roll(b, n_roll)
     b[:n_roll] = b_init
 
