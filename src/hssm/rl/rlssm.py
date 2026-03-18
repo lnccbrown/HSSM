@@ -16,6 +16,7 @@ The key difference from :class:`HSSM` is the likelihood:
     standard ``loglik`` / ``loglik_kind`` wrapping pipeline.
 """
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
@@ -178,14 +179,14 @@ class RLSSM(HSSMBase):
             extra_fields=list(rlssm_config.extra_fields or []),
         )
 
-        # Inject the built Op and backend directly onto rlssm_config so that
-        # HSSMBase stores the RLSSMConfig as-is — no Config conversion needed.
-        rlssm_config.loglik = loglik_op
-        rlssm_config.backend = "jax"
+        # Build a new RLSSMConfig with the Op and backend injected, leaving
+        # the caller's object unmodified (dataclasses.replace creates a shallow
+        # copy with only the specified fields overridden).
+        model_config = replace(rlssm_config, loglik=loglik_op, backend="jax")
 
         super().__init__(
             data=data,
-            model_config=rlssm_config,
+            model_config=model_config,
             include=include,
             p_outlier=p_outlier,
             lapse=lapse,
