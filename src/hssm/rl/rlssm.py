@@ -47,7 +47,7 @@ class RLSSM(HSSMBase):
 
     The likelihood is built via
     :func:`~hssm.rl.likelihoods.builder.make_rl_logp_op` from the annotated
-    SSM function stored in *rlssm_config.ssm_logp_func*.  This produces a
+    SSM function stored in *model_config.ssm_logp_func*.  This produces a
     differentiable pytensor ``Op`` that is passed directly to
     :func:`~hssm.distribution_utils.make_distribution`, superseding the
     ``loglik`` / ``loglik_kind`` dispatching used by :class:`~hssm.hssm.HSSM`.
@@ -56,12 +56,12 @@ class RLSSM(HSSMBase):
     ----------
     data : pd.DataFrame
         Trial-level data.  Must contain at least the response columns
-        specified in *rlssm_config* (typically ``"rt"`` and ``"response"``),
+        specified in *model_config* (typically ``"rt"`` and ``"response"``),
         a participant identifier column (default ``"participant_id"``), and
-        any extra fields listed in *rlssm_config.extra_fields*.
+        any extra fields listed in *model_config.extra_fields*.
         The data **must** form a balanced panel: every participant must have
         the same number of trials.
-    rlssm_config : RLSSMConfig
+    model_config : RLSSMConfig
         Full configuration for the RLSSM model.  Must have ``ssm_logp_func``
         set to the annotated JAX SSM log-likelihood function.
     participant_col : str, optional
@@ -108,7 +108,7 @@ class RLSSM(HSSMBase):
     def __init__(
         self,
         data: pd.DataFrame,
-        rlssm_config: RLSSMConfig,
+        model_config: RLSSMConfig,
         participant_col: str = "participant_id",
         include: list[dict[str, Any] | Any] | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
@@ -127,7 +127,7 @@ class RLSSM(HSSMBase):
         self._init_args = self._store_init_args(locals(), kwargs)
 
         # Validate config (ensures ssm_logp_func is present, etc.)
-        rlssm_config.validate()
+        model_config.validate()
 
         # RLSSM reshapes rows into (n_participants, n_trials, ...) by position,
         # so _rearrange_data (which moves missing/deadline rows to the front)
@@ -156,7 +156,7 @@ class RLSSM(HSSMBase):
 
         # Store RL-specific state on self BEFORE super().__init__() so that
         # _make_model_distribution() (called from super) can access them.
-        self.config = rlssm_config
+        self.config = model_config
         self.n_participants = n_participants
         self.n_trials = n_trials
 
@@ -170,18 +170,18 @@ class RLSSM(HSSMBase):
         # "p_outlier" to self.list_params, and that mutation must NOT be visible
         # to the Op's _validate_args_length check at sampling time.
         loglik_op = make_rl_logp_op(
-            ssm_logp_func=rlssm_config.ssm_logp_func,
+            ssm_logp_func=model_config.ssm_logp_func,
             n_participants=n_participants,
             n_trials=n_trials,
-            data_cols=list(rlssm_config.response),  # type: ignore[arg-type]
-            list_params=list(rlssm_config.list_params),  # type: ignore[arg-type]
-            extra_fields=list(rlssm_config.extra_fields or []),
+            data_cols=list(model_config.response),  # type: ignore[arg-type]
+            list_params=list(model_config.list_params),  # type: ignore[arg-type]
+            extra_fields=list(model_config.extra_fields or []),
         )
 
         # Build a typed Config instance via RLSSMConfig's own factory method.
         # The differentiable Op is passed so Config.validate() is satisfied;
         # loglik_kind="approx_differentiable" reflects that the Op has gradients.
-        config = rlssm_config._build_model_config(loglik_op)
+        config = model_config._build_model_config(loglik_op)
 
         super().__init__(
             data=data,
