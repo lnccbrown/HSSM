@@ -249,12 +249,15 @@ class TestRLSSMConfigDefaults:
     @pytest.mark.parametrize(
         "list_params, params_default, bounds, param, expected_default, expected_bounds",
         [
+            # params_default stores initialisation values, NOT priors.
+            # get_defaults always returns None for the prior so that
+            # prior_settings="safe" can assign priors from bounds.
             (
                 ["alpha", "beta", "gamma"],
                 [0.5, 0.3, 0.2],
                 {"beta": (0.0, 1.0)},
                 "beta",
-                0.3,
+                None,
                 (0.0, 1.0),
             ),
             (["alpha", "beta"], [0.5, 0.3], {"alpha": (0.0, 1.0)}, "gamma", None, None),
