@@ -208,7 +208,7 @@ class RLSSM(HSSMBase):
         through :func:`~hssm.distribution_utils.make_likelihood_callable`.
         Instead it uses ``self.loglik`` directly — the differentiable pytensor
         ``Op`` built in :meth:`__init__` from
-        ``self.config.ssm_logp_func``.
+        ``self.model_config.ssm_logp_func``.
 
         The Op already handles:
         - The RL learning rule (computing trial-wise intermediate parameters).

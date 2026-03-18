@@ -260,16 +260,35 @@ class TestRLSSMConfigDefaults:
             # params_default stores initialisation values, NOT priors.
             # get_defaults always returns None for the prior so that
             # prior_settings="safe" can assign priors from bounds.
+            #
+            # Case 1: queried param is present in bounds → bound returned.
             (
                 ["alpha", "beta", "gamma"],
                 [0.5, 0.3, 0.2],
-                {"beta": (0.0, 1.0)},
+                {"alpha": (0.0, 1.0), "beta": (0.0, 1.0), "gamma": (0.0, 1.0)},
                 "beta",
                 None,
                 (0.0, 1.0),
             ),
-            (["alpha", "beta"], [0.5, 0.3], {"alpha": (0.0, 1.0)}, "gamma", None, None),
-            (["alpha", "beta"], [], {"alpha": (0.0, 1.0)}, "alpha", None, (0.0, 1.0)),
+            # Case 2: queried param is NOT in list_params and NOT in bounds
+            # (e.g. a typo or an extra lookup) → both None.
+            (
+                ["alpha", "beta"],
+                [0.5, 0.3],
+                {"alpha": (0.0, 1.0), "beta": (0.0, 1.0)},
+                "gamma",
+                None,
+                None,
+            ),
+            # Case 3: params_default may be empty; param in bounds → bound returned.
+            (
+                ["alpha", "beta"],
+                [],
+                {"alpha": (0.0, 1.0), "beta": (0.0, 1.0)},
+                "alpha",
+                None,
+                (0.0, 1.0),
+            ),
         ],
     )
     def test_get_defaults_cases(
