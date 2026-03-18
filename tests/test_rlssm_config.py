@@ -252,6 +252,11 @@ class TestRLSSMConfigValidation:
         with pytest.raises(ValueError, match="Missing bounds for parameter"):
             config.validate()
 
+    def test_from_defaults_raises(self):
+        """RLSSMConfig.from_defaults() must raise NotImplementedError."""
+        with pytest.raises(NotImplementedError, match="from_defaults"):
+            RLSSMConfig.from_defaults("ddm", None)
+
 
 class TestRLSSMConfigDefaults:
     @pytest.mark.parametrize(
