@@ -187,11 +187,11 @@ class RLSSM(HSSMBase):
         # backend is hardcoded to "jax" because the entire RLSSM likelihood
         # stack is JAX-only. See ssm_logp_func, make_rl_logp_op, and
         #  _make_model_distribution for details.
-        model_config = replace(rlssm_config, loglik=loglik_op, backend="jax")
-        # Build a typed Config instance via RLSSMConfig's own factory method.
-        # The differentiable Op is passed so Config.validate() is satisfied;
-        # loglik_kind="approx_differentiable" reflects that the Op has gradients.
-        config = model_config._build_model_config(loglik_op)
+        model_config = replace(model_config, loglik=loglik_op, backend="jax")
+        # # Build a typed Config instance via RLSSMConfig's own factory method.
+        # # The differentiable Op is passed so Config.validate() is satisfied;
+        # # loglik_kind="approx_differentiable" reflects that the Op has gradients.
+        # config = model_config._build_model_config(loglik_op)
 
         super().__init__(
             data=data,

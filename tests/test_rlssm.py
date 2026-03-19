@@ -313,7 +313,7 @@ def test_rlssm_pickle_round_trip(
     """
     import cloudpickle
 
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
     blob = cloudpickle.dumps(model)
     restored = cloudpickle.loads(blob)
 
