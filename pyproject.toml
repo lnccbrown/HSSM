@@ -36,7 +36,7 @@ dependencies = [
     "pandas>=2.2,<3",
     "pymc>=5.26.0",
     "seaborn>=0.13.2",
-    "ssm-simulators>=0.12.0",
+    "ssm-simulators>=0.12.2",
     "tqdm>=4.66.0",
 ]
 
@@ -75,7 +75,7 @@ notebook = [
     "nbval>=0.11.0",
     "ptpython>=3.0.29",
     "pyarrow>=20.0.0",
-    "lanfactory>=0.5.3",
+    "lanfactory>=0.6.1",
     "zeus-mcmc>=2.5.4",
     "bayesflow @ git+https://github.com/bayesflow-org/bayesflow@dev",
     "keras>=3",
