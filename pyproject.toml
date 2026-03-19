@@ -77,7 +77,7 @@ notebook = [
     "pyarrow>=20.0.0",
     "lanfactory>=0.6.1",
     "zeus-mcmc>=2.5.4",
-    "bayesflow @ git+https://github.com/bayesflow-org/bayesflow@dev",
+    "bayesflow>=2.0.10",
     "keras>=3",
 ]
 
