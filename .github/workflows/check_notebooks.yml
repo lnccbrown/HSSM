@@ -1,7 +1,6 @@
 name: Check notebooks
 
 on:
-  workflow_call:
   workflow_dispatch:
 
 jobs:
