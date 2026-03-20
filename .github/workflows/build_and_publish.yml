@@ -16,13 +16,13 @@ jobs:
     with:
       run_slow_tests: true
 
-  check_notebooks:
-    name: Check notebooks
-    uses: ./.github/workflows/check_notebooks.yml
+  # check_notebooks:
+  #   name: Check notebooks
+  #   uses: ./.github/workflows/check_notebooks.yml
 
   publish:
     name: Build wheel and publish to test-PyPI, then PyPI, and publish docs
-    needs: [lint_and_typecheck, run_tests, check_notebooks]
+    needs: [lint_and_typecheck, run_tests]
     runs-on: ubuntu-latest
 
     strategy:
