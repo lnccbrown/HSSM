@@ -1,5 +1,20 @@
 # Changelog
 
+### 0.3.0
+
+This version includes the following changes:
+
+1. Support for **choice-only models**: the HSSM class, data validator, distributions, and model configs now handle models without reaction times, including a softmax likelihood family.
+2. **Racing Diffusion Model (RDM3)**: analytical likelihood, model configuration, and tests for a 3-choice RDM, with safe negative-RT handling and JAX backend support.
+3. **Poisson Race model**: initial implementation of the Poisson race model.
+4. **Hidden Markov Model (HMM-SSM)** example notebook.
+5. **BayesFlow LRE integration** through HSSM for likelihood ratio estimation.
+6. **RLSSM config system**: new `RLSSMConfig` and `BaseModelConfig` classes with comprehensive validation, plus a generalized RL likelihood builder supporting multiple computed parameters.
+7. New tutorials: choice-only modeling, first HMM-SSM example, and updated existing tutorials.
+8. `DataValidator` refactored to `DataValidatorMixin` for improved extensibility.
+9. Bug fixes: default prior assignment, dimensionality errors with Bambi 0.17.0, negative-RT checks on missing data, flaky tests.
+10. Infrastructure: Python 3.13 support, restructured CI test workflows with coverage reporting, updated `model.sample()` API to match Bambi conventions.
+
 ### 0.2.12
 
 This version includes the following changes:

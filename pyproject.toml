@@ -1,6 +1,6 @@
 [project]
 name = "HSSM"
-version = "0.2.12"
+version = "0.3.0"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
@@ -36,7 +36,7 @@ dependencies = [
     "pandas>=2.2,<3",
     "pymc>=5.26.0",
     "seaborn>=0.13.2",
-    "ssm-simulators>=0.12.0",
+    "ssm-simulators>=0.12.2",
     "tqdm>=4.66.0",
 ]
 
@@ -47,7 +47,6 @@ repository = "https://github.com/lnccbrown/HSSM"
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.5.2"]
-bayesflow = ["bayesflow", "keras>=3"]
 
 [dependency-groups]
 dev = [
@@ -58,6 +57,7 @@ dev = [
     "pytest>=8.3.1",
     "pytest-random-order>=1.1.1",
     "pytest-rerunfailures>=15.0",
+    "pytest-timeout>=2.3.1",
     "ruff>=0.15.0",
     "pre-commit>=4.1.0",
     "onnxruntime>=1.17.1",
@@ -75,8 +75,10 @@ notebook = [
     "nbval>=0.11.0",
     "ptpython>=3.0.29",
     "pyarrow>=20.0.0",
-    "lanfactory>=0.5.3",
+    "lanfactory>=0.6.1",
     "zeus-mcmc>=2.5.4",
+    "bayesflow>=2.0.10",
+    "keras>=3",
 ]
 
 docs = [
@@ -215,6 +217,9 @@ addopts = [
     "--cov-report=xml",
     "--exitfirst",
     "--capture=no",
+    "--timeout=360",
+    "--reruns=2",
+    "--reruns-delay=5",
 ]
 markers = [
     "slow: marks tests as slow (add --runslow option to run these tests)",
