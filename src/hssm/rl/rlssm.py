@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from pytensor.graph import Op
 
 
-from hssm.config import RLSSMConfig
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
 )
@@ -36,6 +35,7 @@ from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase
+from .config import RLSSMConfig
 
 
 class RLSSM(HSSMBase):
