@@ -1,7 +1,8 @@
 import pytest
 
 import hssm
-from hssm.config import Config, ModelConfig, RLSSMConfig
+from hssm.config import Config, ModelConfig
+from hssm.rl import RLSSMConfig
 from hssm.utils import annotate_function
 
 # Define constants for repeated data structures

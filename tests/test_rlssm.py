@@ -15,7 +15,7 @@ import pytensor
 import pytest
 
 import hssm
-from hssm import RLSSM, RLSSMConfig
+from hssm.rl import RLSSM, RLSSMConfig
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
 
