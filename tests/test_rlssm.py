@@ -104,53 +104,47 @@ def rlssm_config() -> RLSSMConfig:
 # ---------------------------------------------------------------------------
 
 
-def test_rlssm_init(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
+def test_rlssm_init(rldm_data, rlssm_config) -> None:
     """Basic RLSSM initialisation should succeed and return an RLSSM instance."""
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
     assert isinstance(model, RLSSM)
-    assert model.model_name == "rldm_test"
+    assert model.model_config.model_name == "rldm_test"
 
 
-def test_rlssm_panel_attrs(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
-    """_n_participants and _n_trials should match the fixture data structure."""
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+def test_rlssm_panel_attrs(rldm_data, rlssm_config) -> None:
+    """n_participants and n_trials should match the fixture data structure."""
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
 
     n_participants = rldm_data["participant_id"].nunique()
     n_trials = len(rldm_data) // n_participants
 
-    assert model._n_participants == n_participants
-    assert model._n_trials == n_trials
+    assert model.n_participants == n_participants
+    assert model.n_trials == n_trials
 
 
-def test_rlssm_params_keys(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
+def test_rlssm_params_keys(rldm_data, rlssm_config) -> None:
     """model.params should contain exactly list_params + p_outlier."""
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
     expected = set(rlssm_config.list_params) | {"p_outlier"}
     assert set(model.params.keys()) == expected
 
 
-def test_rlssm_unbalanced_raises(
-    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
-) -> None:
+def test_rlssm_unbalanced_raises(rldm_data, rlssm_config) -> None:
     """Dropping one row should make the panel unbalanced → ValueError."""
     unbalanced = rldm_data.iloc[:-1].copy()
     with pytest.raises(ValueError, match="balanced panels"):
-        RLSSM(data=unbalanced, rlssm_config=rlssm_config)
+        RLSSM(data=unbalanced, model_config=rlssm_config)
 
 
-def test_rlssm_nan_participant_id_raises(
-    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
-) -> None:
+def test_rlssm_nan_participant_id_raises(rldm_data, rlssm_config) -> None:
     """NaN in participant_id column should raise ValueError before groupby silently drops rows."""
     nan_data = rldm_data.copy()
     nan_data.loc[nan_data.index[0], "participant_id"] = float("nan")
     with pytest.raises(ValueError, match="NaN"):
-        RLSSM(data=nan_data, rlssm_config=rlssm_config)
+        RLSSM(data=nan_data, model_config=rlssm_config)
 
 
-def test_rlssm_missing_ssm_logp_func_raises(
-    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
-) -> None:
+def test_rlssm_missing_ssm_logp_func_raises(rldm_data, rlssm_config) -> None:
     """RLSSMConfig without ssm_logp_func should raise ValueError on init."""
     bad_config = RLSSMConfig(
         model_name="rldm_bad",
@@ -168,12 +162,10 @@ def test_rlssm_missing_ssm_logp_func_raises(
         # ssm_logp_func intentionally omitted → defaults to None
     )
     with pytest.raises(ValueError, match="ssm_logp_func"):
-        RLSSM(data=rldm_data, rlssm_config=bad_config)
+        RLSSM(data=rldm_data, model_config=bad_config)
 
 
-def test_rlssm_unannotated_ssm_logp_func_raises(
-    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
-) -> None:
+def test_rlssm_unannotated_ssm_logp_func_raises(rldm_data, rlssm_config) -> None:
     """A plain callable without @annotate_function attrs should raise ValueError."""
     bad_config = RLSSMConfig(
         model_name="rldm_bad",
@@ -191,23 +183,19 @@ def test_rlssm_unannotated_ssm_logp_func_raises(
         ssm_logp_func=lambda x: x,  # callable but no .inputs/.outputs/.computed
     )
     with pytest.raises(ValueError, match="annotate_function"):
-        RLSSM(data=rldm_data, rlssm_config=bad_config)
+        RLSSM(data=rldm_data, model_config=bad_config)
 
 
-def test_rlssm_missing_data_raises(
-    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
-) -> None:
+def test_rlssm_missing_data_raises(rldm_data, rlssm_config) -> None:
     """Passing missing_data!=False should raise ValueError with 'missing_data' in msg."""
     with pytest.raises(ValueError, match="missing_data"):
-        RLSSM(data=rldm_data, rlssm_config=rlssm_config, missing_data=True)
+        RLSSM(data=rldm_data, model_config=rlssm_config, missing_data=True)
 
 
-def test_rlssm_deadline_raises(
-    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
-) -> None:
+def test_rlssm_deadline_raises(rldm_data, rlssm_config) -> None:
     """Passing deadline!=False should raise ValueError with 'deadline' in msg."""
     with pytest.raises(ValueError, match="deadline"):
-        RLSSM(data=rldm_data, rlssm_config=rlssm_config, deadline=True)
+        RLSSM(data=rldm_data, model_config=rlssm_config, deadline=True)
 
 
 # ---------------------------------------------------------------------------
@@ -215,43 +203,43 @@ def test_rlssm_deadline_raises(
 # ---------------------------------------------------------------------------
 
 
-def test_rlssm_params_is_trialwise_aligned(
-    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
-) -> None:
+def test_rlssm_params_is_trialwise_aligned(rldm_data, rlssm_config) -> None:
     """params_is_trialwise must align with list_params (same length, p_outlier=False)."""
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
-    assert model.list_params is not None
-    params_is_trialwise = [name != "p_outlier" for name in model.list_params]
-    assert len(params_is_trialwise) == len(model.list_params)
-    for name, is_tw in zip(model.list_params, params_is_trialwise):
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
+    assert model.model_config.list_params is not None
+    params_is_trialwise = [
+        name != "p_outlier" for name in model.model_config.list_params
+    ]
+    assert len(params_is_trialwise) == len(model.model_config.list_params)
+    for name, is_tw in zip(model.model_config.list_params, params_is_trialwise):
         if name == "p_outlier":
             assert not is_tw, "p_outlier must be non-trialwise"
         else:
             assert is_tw, f"{name} must be trialwise"
 
 
-def test_rlssm_get_prefix(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
+def test_rlssm_get_prefix(rldm_data, rlssm_config) -> None:
     """_get_prefix must use token-based matching, not substring search.
 
     - 'rl_alpha_Intercept' → 'rl_alpha'  (underscore-containing RL param)
     - 'p_outlier_log__'   → 'p_outlier'  (lapse param via token loop, not substring)
     - 'a_Intercept'       → 'a'           (single-token standard param)
     """
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
     assert model._get_prefix("rl_alpha_Intercept") == "rl_alpha"
     assert model._get_prefix("p_outlier_log__") == "p_outlier"
     assert model._get_prefix("a_Intercept") == "a"
 
 
-def test_rlssm_no_lapse(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
+def test_rlssm_no_lapse(rldm_data, rlssm_config) -> None:
     """Setting p_outlier=None should remove p_outlier from params."""
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config, p_outlier=None)
+    model = RLSSM(data=rldm_data, model_config=rlssm_config, p_outlier=None)
     assert "p_outlier" not in model.params
 
 
-def test_rlssm_model_built(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
+def test_rlssm_model_built(rldm_data, rlssm_config) -> None:
     """The bambi model should be built and the computed param 'v' absent from params."""
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
     assert model.model is not None
     # rl_alpha is a free (sampled) parameter
     assert "rl_alpha" in model.params
@@ -259,9 +247,7 @@ def test_rlssm_model_built(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -
     assert "v" not in model.params
 
 
-def test_rlssm_extra_fields_are_copies(
-    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
-) -> None:
+def test_rlssm_extra_fields_are_copies(rldm_data, rlssm_config) -> None:
     """extra_fields passed to make_distribution must be independent numpy copies.
 
     to_numpy(copy=True) should return a new buffer; if it returned a view,
@@ -271,7 +257,7 @@ def test_rlssm_extra_fields_are_copies(
 
     from hssm.distribution_utils import make_distribution as real_make_distribution
 
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
     captured: dict = {}
 
     def capturing_make_distribution(*args, **kwargs):
@@ -292,9 +278,9 @@ def test_rlssm_extra_fields_are_copies(
         )
 
 
-def test_rlssm_pymc_model(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
+def test_rlssm_pymc_model(rldm_data, rlssm_config) -> None:
     """pymc_model should be accessible after model construction."""
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
     assert model.pymc_model is not None
 
 
@@ -304,8 +290,10 @@ def test_rlssm_pymc_model(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) ->
 
 
 @pytest.mark.slow
-def test_rlssm_sample_smoke(rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig) -> None:
+def test_rlssm_sample_smoke(rldm_data, rlssm_config) -> None:
     """Minimal sampling run should return an InferenceData object."""
-    model = RLSSM(data=rldm_data, rlssm_config=rlssm_config)
-    trace = model.sample(draws=2, tune=2, chains=1, cores=1)
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
+    trace = model.sample(
+        draws=4, tune=50, chains=1, cores=1, sampler="numpyro", target_accept=0.9
+    )
     assert trace is not None

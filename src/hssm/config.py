@@ -20,6 +20,13 @@ from .register import register_model
 if TYPE_CHECKING:
     from pytensor.tensor.random.op import RandomVariable
 
+import logging
+
+from ssms.config import model_config as ssms_model_config
+
+_logger = logging.getLogger("hssm")
+
+
 # ====== Centralized RLSSM defaults =====
 DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
 DEFAULT_RLSSM_OBSERVED_DATA = ["rt", "response"]
@@ -68,16 +75,6 @@ class BaseModelConfig(ABC):
     # Additional data requirements
     extra_fields: list[str] | None = None
 
-    @classmethod
-    @abstractmethod
-    def get_config_class(cls) -> type["BaseModelConfig"]:
-        """Return the config class for this model type.
-
-        This enables polymorphic config resolution without circular imports.
-        Each subclass returns itself as the config class.
-        """
-        ...
-
     @abstractmethod
     def validate(self) -> None:
         """Validate configuration. Must be implemented by subclasses."""
@@ -87,6 +84,16 @@ class BaseModelConfig(ABC):
     def get_defaults(self, param: str) -> Any:
         """Get default values for a parameter. Must be implemented by subclasses."""
         ...
+
+    @property
+    def n_params(self) -> int | None:
+        """Return the number of parameters."""
+        return len(self.list_params) if self.list_params else None
+
+    @property
+    def n_extra_fields(self) -> int | None:
+        """Return the number of extra fields."""
+        return len(self.extra_fields) if self.extra_fields else None
 
 
 @dataclass
@@ -101,11 +108,6 @@ class Config(BaseModelConfig):
         """Validate that loglik_kind is provided."""
         if self.loglik_kind is None:
             raise ValueError("loglik_kind is required for Config")
-
-    @classmethod
-    def get_config_class(cls) -> type["Config"]:
-        """Return Config as the config class for HSSM models."""
-        return Config
 
     @classmethod
     def from_defaults(
@@ -215,7 +217,7 @@ class Config(BaseModelConfig):
 
         Parameters
         ----------
-        choices : tuple[int, ...]
+        choices : tuple[int, ...] | None
             A tuple of choices.
         """
         if choices is None:
@@ -275,6 +277,52 @@ class Config(BaseModelConfig):
         """
         return self.default_priors.get(param), self.bounds.get(param)
 
+    @classmethod
+    def _build_model_config(
+        cls,
+        model: SupportedModels | str,
+        loglik_kind: LoglikKind | None,
+        model_config: ModelConfig | dict | None,
+        choices: list[int] | tuple[int, ...] | None,
+        loglik: Any = None,
+    ) -> Config:
+        """Build and return a validated Config for standard HSSM models.
+
+        Resolves defaults, normalizes dict/ModelConfig overrides, applies
+        choices and loglik precedence rules, then validates before returning.
+        """
+        config = cls.from_defaults(model, loglik_kind)
+
+        if model_config is not None:
+            final_config = _normalize_model_config_with_choices(model_config, choices)
+            config.update_config(final_config)
+
+        # No model_config provided: apply `choices` when appropriate.
+        # If caller passed a SupportedModels string, ignore explicit `choices`.
+        if model in get_args(SupportedModels) and choices is not None:
+            _logger.info(
+                "Model string is in SupportedModels. Ignoring choices arguments."
+            )
+
+        # If model is not a supported built-in, prefer explicit choices or
+        # fall back to ssms-simulators lookup when available.
+        if model not in get_args(SupportedModels):
+            if choices is not None:
+                config.update_choices(choices)
+            elif model in ssms_model_config:
+                config.update_choices(ssms_model_config[model]["choices"])
+                _logger.info(
+                    "choices argument passed as None, "
+                    "but found %s in ssms-simulators. "
+                    "Using choices, from ssm-simulators configs: %s",
+                    model,
+                    ssms_model_config[model]["choices"],
+                )
+
+        config.update_loglik(loglik)
+        config.validate()
+        return config
+
 
 @dataclass
 class RLSSMConfig(BaseModelConfig):
@@ -306,29 +354,14 @@ class RLSSMConfig(BaseModelConfig):
             self.loglik_kind = "approx_differentiable"
 
     @classmethod
-    def get_config_class(cls) -> type["RLSSMConfig"]:
-        """Return RLSSMConfig as the config class for RLSSM models."""
-        return RLSSMConfig
-
-    @classmethod
     def from_defaults(
         cls, model_name: SupportedModels | str, loglik_kind: LoglikKind | None
     ) -> Config:
         """Return the shared Config defaults (delegated to :class:`Config`)."""
         return Config.from_defaults(model_name, loglik_kind)
 
-    @property
-    def n_params(self) -> int | None:
-        """Return the number of parameters."""
-        return len(self.list_params) if self.list_params else None
-
-    @property
-    def n_extra_fields(self) -> int | None:
-        """Return the number of extra fields."""
-        return len(self.extra_fields) if self.extra_fields else None
-
     @classmethod
-    def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> "RLSSMConfig":
+    def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> RLSSMConfig:
         """
         Create RLSSMConfig from a configuration dictionary.
 
@@ -509,7 +542,7 @@ class RLSSMConfig(BaseModelConfig):
             loglik=self.loglik,
         )
 
-    def to_model_config(self) -> "ModelConfig":
+    def to_model_config(self) -> ModelConfig:
         """Build a :class:`ModelConfig` from this :class:`RLSSMConfig`.
 
         All fields are sourced from ``self``; the backend is fixed to ``"jax"``
@@ -530,6 +563,34 @@ class RLSSMConfig(BaseModelConfig):
             backend="jax",
         )
 
+    def _build_model_config(self, loglik_op: Any) -> Config:
+        """Build a validated :class:`Config` for use by :class:`~hssm.rl.rlssm.RLSSM`.
+
+        Converts this :class:`RLSSMConfig` to a :class:`ModelConfig`, then
+        delegates to :meth:`Config._build_model_config` using the pre-built
+        differentiable Op as ``loglik``.
+
+        Parameters
+        ----------
+        loglik_op
+            The differentiable pytensor Op produced by
+            :func:`~hssm.rl.likelihoods.builder.make_rl_logp_op`.
+
+        Returns
+        -------
+        Config
+            A fully validated :class:`Config` ready to pass to
+            :meth:`~hssm.base.HSSMBase.__init__`.
+        """
+        mc = self.to_model_config()
+        return Config._build_model_config(
+            self.model_name,
+            "approx_differentiable",
+            mc,
+            None,
+            loglik_op,
+        )
+
 
 @dataclass
 class ModelConfig:
@@ -543,3 +604,46 @@ class ModelConfig:
     backend: Literal["jax", "pytensor"] | None = None
     rv: RandomVariable | None = None
     extra_fields: list[str] | None = None
+
+
+def _normalize_model_config_with_choices(
+    model_config: "ModelConfig" | dict[str, Any],
+    choices: list[int] | tuple[int, ...] | None,
+) -> "ModelConfig":
+    """Normalize a user-supplied model_config and apply choices.
+
+    Returns a fresh :class:`ModelConfig` instance and does not mutate the
+    caller's objects. If both ``model_config`` and ``choices`` are provided
+    and ``model_config`` already contains ``choices``, the value from
+    ``model_config`` wins (and a log entry is emitted).
+    """
+    # Normalize input to a mutable dict so we can coerce and avoid mutating
+    # the caller's objects. Build a fresh ModelConfig from that dict.
+    if isinstance(model_config, ModelConfig):
+        mc: dict[str, Any] = {
+            k: getattr(model_config, k) for k in model_config.__dataclass_fields__
+        }
+    else:
+        mc = model_config.copy()
+
+    # Coerce any existing choices on the input to a tuple for immutability
+    if mc.get("choices") is not None:
+        mc["choices"] = tuple(mc["choices"])
+
+    # If caller didn't provide an explicit `choices` argument, return the
+    # normalized ModelConfig built from the input (fresh instance).
+    if choices is None:
+        return ModelConfig(**{k: v for k, v in mc.items() if v is not None})
+
+    # Caller provided choices; prefer the one embedded in model_config if
+    # present, otherwise apply the provided value (coerced to tuple).
+    if mc.get("choices") is not None:
+        _logger.info(
+            "choices list provided in both model_config and "
+            "as an argument directly. Using the one provided in "
+            "model_config. We recommend providing choices in model_config."
+        )
+        return ModelConfig(**{k: v for k, v in mc.items() if v is not None})
+
+    mc["choices"] = tuple(choices)
+    return ModelConfig(**{k: v for k, v in mc.items() if v is not None})

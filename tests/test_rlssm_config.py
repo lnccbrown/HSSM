@@ -313,7 +313,7 @@ class TestRLSSMConfigConversion:
         expected_default_priors,
         raises,
     ):
-        rlssm_config = RLSSMConfig(
+        model_config = RLSSMConfig(
             model_name="test_model",
             list_params=list_params,
             params_default=params_default,
@@ -327,14 +327,14 @@ class TestRLSSMConfigConversion:
         )
         if raises:
             with pytest.raises(raises):
-                rlssm_config.to_config()
+                model_config.to_config()
         else:
-            config = rlssm_config.to_config()
+            config = model_config.to_config()
             assert config.backend == expected_backend
             assert config.default_priors == expected_default_priors
 
     def test_to_config(self):
-        rlssm_config = RLSSMConfig(
+        model_config = RLSSMConfig(
             model_name="rlwm",
             description="RLWM model",
             list_params=["alpha", "beta", "v", "a"],
@@ -354,7 +354,7 @@ class TestRLSSMConfigConversion:
             learning_process_loglik_kind="blackbox",
             learning_process={},
         )
-        config = rlssm_config.to_config()
+        config = model_config.to_config()
         assert isinstance(config, Config)
         assert config.model_name == "rlwm"
         assert config.description == "RLWM model"
@@ -378,7 +378,7 @@ class TestRLSSMConfigConversion:
         }
 
     def test_to_config_defaults_backend(self):
-        rlssm_config = RLSSMConfig(
+        model_config = RLSSMConfig(
             model_name="test_model",
             list_params=["alpha"],
             params_default=[0.5],
@@ -389,11 +389,11 @@ class TestRLSSMConfigConversion:
             learning_process_loglik_kind="blackbox",
             learning_process={},
         )
-        config = rlssm_config.to_config()
+        config = model_config.to_config()
         assert config.backend == "jax"
 
     def test_to_config_no_defaults(self):
-        rlssm_config = RLSSMConfig(
+        model_config = RLSSMConfig(
             model_name="test_model",
             list_params=["alpha", "beta"],
             params_default=[],
@@ -404,11 +404,11 @@ class TestRLSSMConfigConversion:
             learning_process_loglik_kind="blackbox",
             learning_process={},
         )
-        config = rlssm_config.to_config()
+        config = model_config.to_config()
         assert config.default_priors == {}
 
     def test_to_config_mismatched_defaults_length(self):
-        rlssm_config = RLSSMConfig(
+        model_config = RLSSMConfig(
             model_name="test_model",
             list_params=["alpha", "beta", "gamma"],
             params_default=[0.5, 0.3],
@@ -423,7 +423,7 @@ class TestRLSSMConfigConversion:
             ValueError,
             match=r"params_default length \(2\) doesn't match list_params length \(3\)",
         ):
-            rlssm_config.to_config()
+            model_config.to_config()
 
 
 class TestRLSSMConfigLearningProcess:
