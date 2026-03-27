@@ -27,26 +27,9 @@ from ssms.config import model_config as ssms_model_config
 _logger = logging.getLogger("hssm")
 
 
-# ====== Centralized RLSSM defaults =====
+# ====== Centralized SSM defaults =====
 DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
-DEFAULT_RLSSM_OBSERVED_DATA = ["rt", "response"]
 DEFAULT_SSM_CHOICES = (0, 1)
-
-RLSSM_REQUIRED_FIELDS = (
-    "model_name",
-    "description",
-    "list_params",
-    "bounds",
-    "params_default",
-    "choices",
-    "decision_process",
-    "learning_process",
-    "response",
-    "decision_process_loglik_kind",
-    "learning_process_loglik_kind",
-    "extra_fields",
-    "ssm_logp_func",
-)
 
 ParamSpec = Union[float, dict[str, Any], Prior, None]
 
@@ -196,7 +179,7 @@ class Config(BaseModelConfig):
             return Config(
                 model_name=model_name,
                 loglik_kind=loglik_kind,
-                response=DEFAULT_RLSSM_OBSERVED_DATA,
+                response=DEFAULT_SSM_OBSERVED_DATA,
             )
 
     def update_loglik(self, loglik: Any | None) -> None:
