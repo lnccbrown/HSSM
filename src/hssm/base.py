@@ -273,7 +273,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             if self.model_config.response is not None
             else None
         )
-        self.list_params = self.model_config.list_params
+        self.list_params = (
+            list(self.model_config.list_params)
+            if self.model_config.list_params is not None
+            else None
+        )
         self.choices = self.model_config.choices  # type: ignore[assignment]
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik

@@ -11,7 +11,7 @@ import importlib.metadata
 import logging
 import sys
 
-from .config import ModelConfig, RLSSMConfig
+from .config import ModelConfig
 from .datasets import load_data
 from .defaults import show_defaults
 from .hssm import HSSM
@@ -33,7 +33,6 @@ __version__ = importlib.metadata.version(__package__ or __name__)
 __all__ = [
     "HSSM",
     "RLSSM",
-    "RLSSMConfig",
     "Link",
     "load_data",
     "ModelConfig",

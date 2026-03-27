@@ -15,7 +15,7 @@ import pytensor
 import pytest
 
 import hssm
-from hssm import RLSSM, RLSSMConfig
+from hssm.rl import RLSSM, RLSSMConfig
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
 
@@ -297,3 +297,30 @@ def test_rlssm_sample_smoke(rldm_data, rlssm_config) -> None:
         draws=4, tune=50, chains=1, cores=1, sampler="numpyro", target_accept=0.9
     )
     assert trace is not None
+
+
+def test_rlssm_pickle_round_trip(
+    rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
+) -> None:
+    """cloudpickle round-trip must reconstruct an equivalent RLSSM.
+
+    Verifies that __getstate__ / __setstate__ survive serialisation:
+    - The reconstructed object is a fresh RLSSM (not the same instance).
+    - n_participants and n_trials are preserved.
+    - list_params (including p_outlier) are preserved.
+    - model_config.model_name is preserved.
+    - model.model (bambi model) is rebuilt, confirming full re-initialisation.
+    """
+    import cloudpickle
+
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
+    blob = cloudpickle.dumps(model)
+    restored = cloudpickle.loads(blob)
+
+    assert restored is not model
+    assert isinstance(restored, RLSSM)
+    assert restored.n_participants == model.n_participants
+    assert restored.n_trials == model.n_trials
+    assert restored.list_params == model.list_params
+    assert restored.model_config.model_name == model.model_config.model_name
+    assert restored.model is not None

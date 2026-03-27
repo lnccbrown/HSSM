@@ -16,6 +16,7 @@ The key difference from :class:`HSSM` is the likelihood:
     standard ``loglik`` / ``loglik_kind`` wrapping pipeline.
 """
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
@@ -26,7 +27,6 @@ if TYPE_CHECKING:
     from pytensor.graph import Op
 
 
-from hssm.config import Config, RLSSMConfig
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
 )
@@ -35,6 +35,7 @@ from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase
+from .config import RLSSMConfig
 
 
 class RLSSM(HSSMBase):
@@ -97,8 +98,9 @@ class RLSSM(HSSMBase):
 
     Attributes
     ----------
-    config : RLSSMConfig
-        The RLSSM configuration object.
+    model_config : RLSSMConfig
+        The RLSSM configuration object (stored as ``self.model_config`` on
+        :class:`~hssm.base.HSSMBase` with the built ``loglik`` Op injected).
     n_participants : int
         Number of participants inferred from *data*.
     n_trials : int
@@ -161,9 +163,9 @@ class RLSSM(HSSMBase):
         self.n_trials = n_trials
 
         # Build the differentiable pytensor Op from the annotated SSM function.
-        # This Op supersedes the loglik/loglik_kind workflow: it is passed as
-        # `loglik` to HSSMBase so Config.validate() is satisfied, and
-        # _make_model_distribution() uses it directly without any further wrapping.
+        # This Op supersedes the loglik/loglik_kind workflow: it is stored on
+        # rlssm_config.loglik so that HSSMBase can access it uniformly via
+        # self.model_config.loglik, without any Config conversion.
         #
         # Fresh list() copies are passed to make_rl_logp_op so the closure inside
         # captures its own isolated list objects.  HSSMBase will later append
@@ -178,14 +180,18 @@ class RLSSM(HSSMBase):
             extra_fields=list(model_config.extra_fields or []),
         )
 
-        # Build a typed Config instance via RLSSMConfig's own factory method.
-        # The differentiable Op is passed so Config.validate() is satisfied;
-        # loglik_kind="approx_differentiable" reflects that the Op has gradients.
-        config = model_config._build_model_config(loglik_op)
+        # Build a new RLSSMConfig with the Op and backend injected, leaving
+        # the caller's object unmodified (dataclasses.replace creates a shallow
+        # copy with only the specified fields overridden).
+        #
+        # backend is hardcoded to "jax" because the entire RLSSM likelihood
+        # stack is JAX-only. See ssm_logp_func, make_rl_logp_op, and
+        #  _make_model_distribution for details.
+        model_config = replace(model_config, loglik=loglik_op, backend="jax")
 
         super().__init__(
             data=data,
-            model_config=config,
+            model_config=model_config,
             include=include,
             p_outlier=p_outlier,
             lapse=lapse,
@@ -207,7 +213,7 @@ class RLSSM(HSSMBase):
         through :func:`~hssm.distribution_utils.make_likelihood_callable`.
         Instead it uses ``self.loglik`` directly — the differentiable pytensor
         ``Op`` built in :meth:`__init__` from
-        ``self.config.ssm_logp_func``.
+        ``self.model_config.ssm_logp_func``.
 
         The Op already handles:
         - The RL learning rule (computing trial-wise intermediate parameters).
@@ -218,10 +224,13 @@ class RLSSM(HSSMBase):
         RLSSM and ``missing_data`` / ``deadline`` are rejected in ``__init__``
         before this method is ever reached.
         """
-        list_params = self.model_config.list_params
-        assert list_params is not None, "model_config.list_params must be set"
+        # Use self.list_params (managed by HSSMBase, includes p_outlier when
+        # has_lapse=True) rather than self.model_config.list_params (the original
+        # config list, never mutated by HSSMBase).
+        list_params = self.list_params
+        assert list_params is not None, "list_params must be set"
         assert isinstance(list_params, list), (
-            "model_config.list_params must be a list"
+            "list_params must be a list"
         )  # for type checker
 
         # p_outlier is a scalar mixture weight (not trialwise); every other
@@ -235,15 +244,13 @@ class RLSSM(HSSMBase):
             else [self.data[field].to_numpy(copy=True) for field in extra_fields]
         )
 
-        # The differentiable pytensor Op was stored on the validated model_config
-        # during __init__ as its `loglik`; ensure it's present and cast for typing.
+        # The differentiable pytensor Op was stored on model_config.loglik during
+        # __init__; ensure it's present and cast for typing.
         assert self.model_config.loglik is not None, "model_config.loglik must be set"
         loglik_op = cast("Callable[..., Any] | Op", self.model_config.loglik)
 
-        # `model_config` is typed as BaseModelConfig on the base class; cast
-        # to `Config` here so static checkers understand `rv` exists.
-        cfg = cast("Config", self.model_config)
-        rv_name = cfg.rv or cfg.model_name
+        # RLSSMConfig carries no `rv` field; use model_name as the rv identifier.
+        rv_name = self.model_config.model_name
 
         return make_distribution(
             rv=rv_name,
