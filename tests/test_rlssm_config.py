@@ -178,9 +178,9 @@ class TestRLSSMConfigValidation:
         [
             ("response", None, "Please provide `response` columns"),
             ("list_params", None, "Please provide `list_params"),
-            ("choices", None, "Please provide `choices"),
-            ("decision_process", None, "Please specify a `decision_process"),
-            ("ssm_logp_func", None, "Please provide `ssm_logp_func"),
+            ("choices", None, "Please provide `choices`"),
+            ("decision_process", None, "Please specify a `decision_process`"),
+            ("ssm_logp_func", None, "Please provide `ssm_logp_func`"),
         ],
     )
     def test_validate_missing_fields(
