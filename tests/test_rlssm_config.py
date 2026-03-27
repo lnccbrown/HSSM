@@ -246,6 +246,20 @@ class TestRLSSMConfigValidation:
         ):
             config.validate()
 
+    def test_validate_ssm_logp_func_computed_not_callable(
+        self, valid_rlssmconfig_kwargs
+    ):
+        """`computed` exists but contains non-callable values -> error."""
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        # Inject a computed mapping with a non-callable value to trigger the
+        # specific validation branch.
+        config.ssm_logp_func.computed = {"x": "not_callable"}
+        with pytest.raises(
+            ValueError,
+            match=r"`ssm_logp_func.computed` must be a dictionary with callable values\.",
+        ):
+            config.validate()
+
     def test_validate_missing_bounds_for_param(self, valid_rlssmconfig_kwargs):
         """validate() should raise early when a param has no bounds entry."""
         kwargs = {**valid_rlssmconfig_kwargs, "bounds": {}}  # strip all bounds
