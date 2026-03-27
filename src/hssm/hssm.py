@@ -30,6 +30,7 @@ from hssm.utils import (
 )
 
 from .base import HSSMBase
+from .config import Config
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -74,7 +75,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSM(HSSMBase):
+class HSSM(HSSMBase, Config):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters

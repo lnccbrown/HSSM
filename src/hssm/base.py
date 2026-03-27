@@ -264,8 +264,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         The jitter value for the initial values.
     """
 
-    config_class = Config
-
     def __init__(
         self,
         data: pd.DataFrame,
@@ -529,7 +527,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A complete Config object with choices and other settings applied.
         """
         # Start with defaults
-        config = cls.config_class.from_defaults(model, loglik_kind)
+        # get_config_class is provided by Config/RLSSMConfig mixin through MRO
+        config = cls.get_config_class().from_defaults(model, loglik_kind)  # type: ignore[attr-defined]
 
         # Handle user-provided model_config
         if model_config is not None:

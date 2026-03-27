@@ -38,6 +38,7 @@ RLSSM_REQUIRED_FIELDS = (
     "decision_process_loglik_kind",
     "learning_process_loglik_kind",
     "extra_fields",
+    "ssm_logp_func",
 )
 
 ParamSpec = Union[float, dict[str, Any], Prior, None]
@@ -67,6 +68,16 @@ class BaseModelConfig(ABC):
     # Additional data requirements
     extra_fields: list[str] | None = None
 
+    @classmethod
+    @abstractmethod
+    def get_config_class(cls) -> type["BaseModelConfig"]:
+        """Return the config class for this model type.
+
+        This enables polymorphic config resolution without circular imports.
+        Each subclass returns itself as the config class.
+        """
+        ...
+
     @abstractmethod
     def validate(self) -> None:
         """Validate configuration. Must be implemented by subclasses."""
@@ -90,6 +101,11 @@ class Config(BaseModelConfig):
         """Validate that loglik_kind is provided."""
         if self.loglik_kind is None:
             raise ValueError("loglik_kind is required for Config")
+
+    @classmethod
+    def get_config_class(cls) -> type["Config"]:
+        """Return Config as the config class for HSSM models."""
+        return Config
 
     @classmethod
     def from_defaults(
@@ -266,6 +282,12 @@ class RLSSMConfig(BaseModelConfig):
 
     This configuration class is designed for models that combine reinforcement
     learning processes with sequential sampling decision models (RLSSM).
+
+    The ``ssm_logp_func`` field holds the fully annotated JAX SSM log-likelihood
+    function (an :class:`AnnotatedFunction`) that is passed directly to
+    ``make_rl_logp_op``.  It supersedes the ``loglik`` / ``loglik_kind`` workflow
+    used by :class:`HSSM`: the Op is built from ``ssm_logp_func`` and therefore
+    no ``loglik`` callable needs to be provided.
     """
 
     decision_process_loglik_kind: str = field(kw_only=True)
@@ -273,11 +295,27 @@ class RLSSMConfig(BaseModelConfig):
     params_default: list[float] = field(kw_only=True)
     decision_process: str | ModelConfig = field(kw_only=True)
     learning_process: dict[str, Any] = field(kw_only=True)
+    # The fully annotated SSM log-likelihood function used by make_rl_logp_op.
+    # Type is Any to avoid a hard dependency on the AnnotatedFunction Protocol at
+    # import time; validated at runtime in validate().
+    ssm_logp_func: Any = field(default=None, kw_only=True)
 
     def __post_init__(self):
         """Set default loglik_kind for RLSSM models if not provided."""
         if self.loglik_kind is None:
             self.loglik_kind = "approx_differentiable"
+
+    @classmethod
+    def get_config_class(cls) -> type["RLSSMConfig"]:
+        """Return RLSSMConfig as the config class for RLSSM models."""
+        return RLSSMConfig
+
+    @classmethod
+    def from_defaults(
+        cls, model_name: SupportedModels | str, loglik_kind: LoglikKind | None
+    ) -> Config:
+        """Return the shared Config defaults (delegated to :class:`Config`)."""
+        return Config.from_defaults(model_name, loglik_kind)
 
     @property
     def n_params(self) -> int | None:
@@ -290,17 +328,16 @@ class RLSSMConfig(BaseModelConfig):
         return len(self.extra_fields) if self.extra_fields else None
 
     @classmethod
-    def from_rlssm_dict(cls, model_name: str, config_dict: dict[str, Any]):
+    def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> "RLSSMConfig":
         """
         Create RLSSMConfig from a configuration dictionary.
 
         Parameters
         ----------
-        model_name : str
-            The name of the RLSSM model.
         config_dict : dict[str, Any]
             Dictionary containing model configuration. Expected keys:
-                - description: Model description (optional)
+                - model_name: Model identifier (required)
+                - description: Model description (required)
                 - list_params: List of parameter names (required)
                 - extra_fields: List of extra field names from data (required)
                 - params_default: Default parameter values (required)
@@ -332,6 +369,7 @@ class RLSSMConfig(BaseModelConfig):
             params_default=config_dict["params_default"],
             decision_process=config_dict["decision_process"],
             learning_process=config_dict["learning_process"],
+            ssm_logp_func=config_dict["ssm_logp_func"],
             bounds=config_dict.get("bounds", {}),
             response=config_dict["response"],
             choices=config_dict["choices"],
@@ -355,6 +393,32 @@ class RLSSMConfig(BaseModelConfig):
             raise ValueError("Please provide `choices` in the configuration.")
         if self.decision_process is None:
             raise ValueError("Please specify a `decision_process`.")
+        if self.ssm_logp_func is None:
+            raise ValueError(
+                "Please provide `ssm_logp_func`: the fully annotated JAX SSM "
+                "log-likelihood function required by `make_rl_logp_op`."
+            )
+        if not callable(self.ssm_logp_func):
+            raise ValueError(
+                "`ssm_logp_func` must be a callable, "
+                f"but got {type(self.ssm_logp_func)!r}."
+            )
+        missing_attrs = [
+            attr
+            for attr in ("inputs", "outputs", "computed")
+            if not hasattr(self.ssm_logp_func, attr)
+        ]
+        if missing_attrs:
+            raise ValueError(
+                "`ssm_logp_func` must be decorated with `@annotate_function` "
+                "so that it carries the attributes required by `make_rl_logp_op`. "
+                f"Missing attribute(s): {missing_attrs}. "
+                "Decorate the function like:\n\n"
+                "    @annotate_function(\n"
+                "        inputs=[...], outputs=[...], computed={...}\n"
+                "    )\n"
+                "    def my_ssm_logp(lan_matrix): ..."
+            )
 
         # Validate parameter defaults consistency
         if self.params_default and self.list_params:
@@ -443,6 +507,27 @@ class RLSSMConfig(BaseModelConfig):
             extra_fields=self.extra_fields,
             backend=self.backend or "jax",  # RLSSM typically uses JAX
             loglik=self.loglik,
+        )
+
+    def to_model_config(self) -> "ModelConfig":
+        """Build a :class:`ModelConfig` from this :class:`RLSSMConfig`.
+
+        All fields are sourced from ``self``; the backend is fixed to ``"jax"``
+        because RLSSM exclusively uses the JAX backend.
+
+        ``default_priors`` is intentionally left empty so the
+        ``prior_settings="safe"`` mechanism in :class:`~hssm.base.HSSMBase`
+        assigns sensible priors from bounds rather than fixing every parameter
+        to a constant scalar.
+        """
+        return ModelConfig(
+            response=tuple(self.response),  # type: ignore[arg-type]
+            list_params=list(self.list_params),  # type: ignore[arg-type]
+            choices=tuple(self.choices),  # type: ignore[arg-type]
+            default_priors={},
+            bounds=self.bounds,
+            extra_fields=self.extra_fields,
+            backend="jax",
         )
 
 
