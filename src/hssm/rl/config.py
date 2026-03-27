@@ -104,26 +104,34 @@ class RLSSMConfig(BaseModelConfig):
             raise ValueError("Please provide `choices` in the configuration.")
         if self.decision_process is None:
             raise ValueError("Please specify a `decision_process`.")
-        if self.ssm_logp_func is None:
+
+        logpfunc = self.ssm_logp_func
+        if logpfunc is None:
             raise ValueError(
                 "Please provide `ssm_logp_func`: the fully annotated JAX SSM "
                 "log-likelihood function required by `make_rl_logp_op`."
             )
-        if not callable(self.ssm_logp_func):
+        if not callable(logpfunc):
             raise ValueError(
-                "`ssm_logp_func` must be a callable, "
-                f"but got {type(self.ssm_logp_func)!r}."
+                f"`ssm_logp_func` must be a callable, but got {type(logpfunc)!r}."
             )
         missing_attrs = [
             attr
             for attr in ("inputs", "outputs", "computed")
-            if not hasattr(self.ssm_logp_func, attr)
+            if not hasattr(logpfunc, attr)
         ]
         if missing_attrs:
             raise ValueError(
                 "`ssm_logp_func` must be decorated with `@annotate_function` "
                 "so that it carries the attributes required by `make_rl_logp_op`. "
                 f"Missing attribute(s): {missing_attrs}. "
+            )
+
+        if not isinstance(logpfunc.computed, dict) or not all(
+            callable(v) for v in logpfunc.computed.values()
+        ):
+            raise ValueError(
+                "`ssm_logp_func.computed` must be a dictionary with callable values."
             )
 
         if self.params_default and self.list_params:
