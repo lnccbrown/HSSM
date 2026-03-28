@@ -2,7 +2,7 @@
 
 ## What is HSSM?
 
-HSSM (Hierarchical Sequential Sampling Models) is a Python package for Bayesian inference on sequential sampling models (DDM, LBA, etc.) using PyMC and bambi. It provides a high-level API for defining, fitting, and analyzing these models.
+HSSM (Hierarchical Sequential Sampling Models) is a Python package for Bayesian inference on sequential sampling models (DDM, LBA, etc.) using PyMC and bambi. It provides a high-level API for defining, fitting, and analyzing these models. This is the user-facing package in the HSSM ecosystem. For ecosystem-wide context, see the HSSMSpine repo.
 
 ## Project Structure
 
@@ -100,6 +100,7 @@ Two separate skip mechanisms for notebooks:
 | `coverage.yml` | Code coverage |
 | `build_docs.yml` | Build documentation |
 | `build_and_publish.yml` | Release to PyPI (triggered on release publish) |
+| `prepare-release.yml` | Release preparation automation |
 
 ## Known Issues / Notes
 
