@@ -63,7 +63,6 @@ ENV/
 
 # Also ignore lock files
 poetry.lock
-uv.lock
 
 # Editor cruft
 .idea/
@@ -88,7 +87,6 @@ hssm_paper/
 
 *.so
 .python-version
-uv.lock
 explorations/
 *.nbconvert.ipynb
 pypi-token
