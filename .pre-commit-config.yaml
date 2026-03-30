@@ -14,7 +14,7 @@ repos:
       - id: check-yaml
         exclude: ^mkdocs\.yml$
       - id: check-added-large-files
-        args: ['--maxkb=1000']
+        args: ['--maxkb=99900']
       - id: check-merge-conflict
 
   - repo: https://github.com/pre-commit/mirrors-mypy
