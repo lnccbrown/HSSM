@@ -59,6 +59,7 @@ dev = [
     "pytest-rerunfailures>=15.0",
     "pytest-timeout>=2.3.1",
     "ruff>=0.15.0",
+    "types-PyYAML",
     "pre-commit>=4.1.0",
     "onnxruntime>=1.17.1",
 ]
