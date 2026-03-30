@@ -34,7 +34,7 @@ RLSSM_REQUIRED_FIELDS = (
     "learning_process",
     "response",
     "decision_process_loglik_kind",
-    "learning_process_loglik_kind",
+    "learning_process_kind",
     "extra_fields",
     "ssm_logp_func",
 )
@@ -50,7 +50,7 @@ class RLSSMConfig(BaseModelConfig):
     """
 
     decision_process_loglik_kind: str = field(kw_only=True)
-    learning_process_loglik_kind: str = field(kw_only=True)
+    learning_process_kind: str = field(kw_only=True)
     params_default: list[float] = field(kw_only=True)
     decision_process: str | "ModelConfig" = field(kw_only=True)
     learning_process: dict[str, Any] = field(kw_only=True)
@@ -92,7 +92,7 @@ class RLSSMConfig(BaseModelConfig):
             response=config_dict["response"],
             choices=config_dict["choices"],
             decision_process_loglik_kind=config_dict["decision_process_loglik_kind"],
-            learning_process_loglik_kind=config_dict["learning_process_loglik_kind"],
+            learning_process_kind=config_dict["learning_process_kind"],
         )
 
     def validate(self) -> None:  # noqa: D102

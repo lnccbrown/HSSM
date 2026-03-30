@@ -36,7 +36,7 @@ def create_config_dict(
     learning_process={},
     decision_process="ddm",
     decision_process_loglik_kind="analytical",
-    learning_process_loglik_kind="blackbox",
+    learning_process_kind="blackbox",
     ssm_logp_func=_module_dummy_ssm_logp,
 ):
     return dict(
@@ -52,7 +52,7 @@ def create_config_dict(
         learning_process=learning_process,
         decision_process=decision_process,
         decision_process_loglik_kind=decision_process_loglik_kind,
-        learning_process_loglik_kind=learning_process_loglik_kind,
+        learning_process_kind=learning_process_kind,
         ssm_logp_func=ssm_logp_func,
         data={},
     )
@@ -75,7 +75,7 @@ def valid_rlssmconfig_kwargs():
         choices=[0, 1],
         extra_fields=["feedback"],
         decision_process_loglik_kind="analytical",
-        learning_process_loglik_kind="blackbox",
+        learning_process_kind="blackbox",
         learning_process={},
         ssm_logp_func=_dummy_ssm_logp_func,
     )
@@ -201,7 +201,7 @@ class TestRLSSMConfigValidation:
             "params_default",
             "decision_process",
             "decision_process_loglik_kind",
-            "learning_process_loglik_kind",
+            "learning_process_kind",
             "learning_process",
         ],
     )
@@ -329,7 +329,7 @@ class TestRLSSMConfigDefaults:
             response=["rt", "response"],
             choices=[0, 1],
             decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
+            learning_process_kind="blackbox",
             learning_process={},
         )
         default_val, bounds_val = config.get_defaults(param)
@@ -348,7 +348,7 @@ class TestRLSSMConfigLearningProcess:
             choices=[0, 1],
             learning_process={"v": v_func, "a": a_func},
             decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
+            learning_process_kind="blackbox",
         )
         assert "v" in config.learning_process
         assert "a" in config.learning_process
@@ -365,7 +365,7 @@ class TestRLSSMConfigLearningProcess:
             choices=[0, 1],
             learning_process={"v": v_func},
             decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
+            learning_process_kind="blackbox",
         )
         config2 = RLSSMConfig(
             model_name="model2",
@@ -376,7 +376,7 @@ class TestRLSSMConfigLearningProcess:
             choices=[0, 1],
             learning_process={"a": a_func},
             decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
+            learning_process_kind="blackbox",
         )
         config1.learning_process["v"] = "function1"
         assert "v" not in config2.learning_process
@@ -393,7 +393,7 @@ class TestRLSSMConfigEdgeCases:
             "params_default": [0.0],
             "decision_process": "ddm",
             "learning_process": {},
-            "learning_process_loglik_kind": "blackbox",
+            "learning_process_kind": "blackbox",
             "response": ["rt", "response"],
             "choices": [0, 1],
             "description": "desc",
@@ -416,7 +416,7 @@ class TestRLSSMConfigEdgeCases:
             "params_default": [0.0],
             "decision_process": "ddm",
             "learning_process": {},
-            "learning_process_loglik_kind": "blackbox",
+            "learning_process_kind": "blackbox",
             "decision_process_loglik_kind": "analytical",
             "response": ["rt", "response"],
             "choices": [0, 1],
@@ -446,7 +446,7 @@ class TestRLSSMConfigEdgeCases:
             "data": {},
             "decision_process": "ddm",
             "learning_process": {},
-            "learning_process_loglik_kind": "blackbox",
+            "learning_process_kind": "blackbox",
             "response": ["rt", "response"],
             "choices": [0, 1],
             "extra_fields": [],
@@ -471,6 +471,6 @@ class TestRLSSMConfigEdgeCases:
             response=["rt", "response"],
             choices=[0, 1],
             decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
+            learning_process_kind="blackbox",
             learning_process={},
         )
