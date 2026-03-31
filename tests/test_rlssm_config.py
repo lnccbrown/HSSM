@@ -1,7 +1,8 @@
 import pytest
 
 import hssm
-from hssm.config import Config, ModelConfig, RLSSMConfig
+from hssm.config import Config, ModelConfig
+from hssm.rl import RLSSMConfig
 from hssm.utils import annotate_function
 
 # Define constants for repeated data structures
@@ -35,7 +36,7 @@ def create_config_dict(
     learning_process={},
     decision_process="ddm",
     decision_process_loglik_kind="analytical",
-    learning_process_loglik_kind="blackbox",
+    learning_process_kind="blackbox",
     ssm_logp_func=_module_dummy_ssm_logp,
 ):
     return dict(
@@ -51,7 +52,7 @@ def create_config_dict(
         learning_process=learning_process,
         decision_process=decision_process,
         decision_process_loglik_kind=decision_process_loglik_kind,
-        learning_process_loglik_kind=learning_process_loglik_kind,
+        learning_process_kind=learning_process_kind,
         ssm_logp_func=ssm_logp_func,
         data={},
     )
@@ -68,12 +69,13 @@ def valid_rlssmconfig_kwargs():
         model_name="test_model",
         list_params=["alpha", "beta"],
         params_default=[0.5, 0.3],
+        bounds={"alpha": (0.0, 1.0), "beta": (0.0, 1.0)},
         decision_process="ddm",
         response=["rt", "response"],
         choices=[0, 1],
         extra_fields=["feedback"],
         decision_process_loglik_kind="analytical",
-        learning_process_loglik_kind="blackbox",
+        learning_process_kind="blackbox",
         learning_process={},
         ssm_logp_func=_dummy_ssm_logp_func,
     )
@@ -199,7 +201,7 @@ class TestRLSSMConfigValidation:
             "params_default",
             "decision_process",
             "decision_process_loglik_kind",
-            "learning_process_loglik_kind",
+            "learning_process_kind",
             "learning_process",
         ],
     )
@@ -244,21 +246,69 @@ class TestRLSSMConfigValidation:
         ):
             config.validate()
 
+    def test_validate_ssm_logp_func_computed_not_callable(
+        self, valid_rlssmconfig_kwargs
+    ):
+        """`computed` exists but contains non-callable values -> error."""
+        config = RLSSMConfig(**valid_rlssmconfig_kwargs)
+        # Inject a computed mapping with a non-callable value to trigger the
+        # specific validation branch.
+        config.ssm_logp_func.computed = {"x": "not_callable"}
+        with pytest.raises(
+            ValueError,
+            match=r"`ssm_logp_func.computed` must be a dictionary with callable values\.",
+        ):
+            config.validate()
+
+    def test_validate_missing_bounds_for_param(self, valid_rlssmconfig_kwargs):
+        """validate() should raise early when a param has no bounds entry."""
+        kwargs = {**valid_rlssmconfig_kwargs, "bounds": {}}  # strip all bounds
+        config = RLSSMConfig(**kwargs)
+        with pytest.raises(ValueError, match="Missing bounds for parameter"):
+            config.validate()
+
+    def test_from_defaults_raises(self):
+        """RLSSMConfig.from_defaults() must raise NotImplementedError."""
+        with pytest.raises(NotImplementedError, match="from_defaults"):
+            RLSSMConfig.from_defaults("ddm", None)
+
 
 class TestRLSSMConfigDefaults:
     @pytest.mark.parametrize(
         "list_params, params_default, bounds, param, expected_default, expected_bounds",
         [
+            # params_default stores initialisation values, NOT priors.
+            # get_defaults always returns None for the prior so that
+            # prior_settings="safe" can assign priors from bounds.
+            #
+            # Case 1: queried param is present in bounds → bound returned.
             (
                 ["alpha", "beta", "gamma"],
                 [0.5, 0.3, 0.2],
-                {"beta": (0.0, 1.0)},
+                {"alpha": (0.0, 1.0), "beta": (0.0, 1.0), "gamma": (0.0, 1.0)},
                 "beta",
-                0.3,
+                None,
                 (0.0, 1.0),
             ),
-            (["alpha", "beta"], [0.5, 0.3], {"alpha": (0.0, 1.0)}, "gamma", None, None),
-            (["alpha", "beta"], [], {"alpha": (0.0, 1.0)}, "alpha", None, (0.0, 1.0)),
+            # Case 2: queried param is NOT in list_params and NOT in bounds
+            # (e.g. a typo or an extra lookup) → both None.
+            (
+                ["alpha", "beta"],
+                [0.5, 0.3],
+                {"alpha": (0.0, 1.0), "beta": (0.0, 1.0)},
+                "gamma",
+                None,
+                None,
+            ),
+            # Case 3: params_default may be empty; param in bounds → bound returned.
+            (
+                ["alpha", "beta"],
+                [],
+                {"alpha": (0.0, 1.0), "beta": (0.0, 1.0)},
+                "alpha",
+                None,
+                (0.0, 1.0),
+            ),
         ],
     )
     def test_get_defaults_cases(
@@ -279,151 +329,12 @@ class TestRLSSMConfigDefaults:
             response=["rt", "response"],
             choices=[0, 1],
             decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
+            learning_process_kind="blackbox",
             learning_process={},
         )
         default_val, bounds_val = config.get_defaults(param)
         assert default_val == expected_default
         assert bounds_val == expected_bounds
-
-
-class TestRLSSMConfigConversion:
-    @pytest.mark.parametrize(
-        "list_params, params_default, backend, expected_backend, expected_default_priors, raises",
-        [
-            (
-                ["alpha", "beta", "v", "a"],
-                [0.5, 0.3, 1.0, 1.5],
-                "jax",
-                "jax",
-                {"alpha": 0.5, "beta": 0.3, "v": 1.0, "a": 1.5},
-                None,
-            ),
-            (["alpha"], [0.5], None, "jax", {"alpha": 0.5}, None),
-            (["alpha", "beta"], [], None, "jax", {}, None),
-            (["alpha", "beta", "gamma"], [0.5, 0.3], None, None, None, ValueError),
-        ],
-    )
-    def test_to_config_cases(
-        self,
-        list_params,
-        params_default,
-        backend,
-        expected_backend,
-        expected_default_priors,
-        raises,
-    ):
-        model_config = RLSSMConfig(
-            model_name="test_model",
-            list_params=list_params,
-            params_default=params_default,
-            decision_process="ddm",
-            response=["rt", "response"],
-            choices=[0, 1],
-            backend=backend,
-            decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
-            learning_process={},
-        )
-        if raises:
-            with pytest.raises(raises):
-                model_config.to_config()
-        else:
-            config = model_config.to_config()
-            assert config.backend == expected_backend
-            assert config.default_priors == expected_default_priors
-
-    def test_to_config(self):
-        model_config = RLSSMConfig(
-            model_name="rlwm",
-            description="RLWM model",
-            list_params=["alpha", "beta", "v", "a"],
-            params_default=[0.5, 0.3, 1.0, 1.5],
-            bounds={
-                "alpha": (0.0, 1.0),
-                "beta": (0.0, 1.0),
-                "v": (-3.0, 3.0),
-                "a": (0.3, 2.5),
-            },
-            decision_process="ddm",
-            response=["rt", "response"],
-            choices=[0, 1],
-            extra_fields=["feedback"],
-            backend="jax",
-            decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
-            learning_process={},
-        )
-        config = model_config.to_config()
-        assert isinstance(config, Config)
-        assert config.model_name == "rlwm"
-        assert config.description == "RLWM model"
-        assert config.list_params == ["alpha", "beta", "v", "a"]
-        assert config.response == ["rt", "response"]
-        assert config.choices == [0, 1]
-        assert config.extra_fields == ["feedback"]
-        assert config.backend == "jax"
-        assert config.loglik_kind == "approx_differentiable"
-        assert config.bounds == {
-            "alpha": (0.0, 1.0),
-            "beta": (0.0, 1.0),
-            "v": (-3.0, 3.0),
-            "a": (0.3, 2.5),
-        }
-        assert config.default_priors == {
-            "alpha": 0.5,
-            "beta": 0.3,
-            "v": 1.0,
-            "a": 1.5,
-        }
-
-    def test_to_config_defaults_backend(self):
-        model_config = RLSSMConfig(
-            model_name="test_model",
-            list_params=["alpha"],
-            params_default=[0.5],
-            decision_process="ddm",
-            response=["rt", "response"],
-            choices=[0, 1],
-            decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
-            learning_process={},
-        )
-        config = model_config.to_config()
-        assert config.backend == "jax"
-
-    def test_to_config_no_defaults(self):
-        model_config = RLSSMConfig(
-            model_name="test_model",
-            list_params=["alpha", "beta"],
-            params_default=[],
-            decision_process="ddm",
-            response=["rt", "response"],
-            choices=[0, 1],
-            decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
-            learning_process={},
-        )
-        config = model_config.to_config()
-        assert config.default_priors == {}
-
-    def test_to_config_mismatched_defaults_length(self):
-        model_config = RLSSMConfig(
-            model_name="test_model",
-            list_params=["alpha", "beta", "gamma"],
-            params_default=[0.5, 0.3],
-            decision_process="ddm",
-            response=["rt", "response"],
-            choices=[0, 1],
-            decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
-            learning_process={},
-        )
-        with pytest.raises(
-            ValueError,
-            match=r"params_default length \(2\) doesn't match list_params length \(3\)",
-        ):
-            model_config.to_config()
 
 
 class TestRLSSMConfigLearningProcess:
@@ -437,7 +348,7 @@ class TestRLSSMConfigLearningProcess:
             choices=[0, 1],
             learning_process={"v": v_func, "a": a_func},
             decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
+            learning_process_kind="blackbox",
         )
         assert "v" in config.learning_process
         assert "a" in config.learning_process
@@ -454,7 +365,7 @@ class TestRLSSMConfigLearningProcess:
             choices=[0, 1],
             learning_process={"v": v_func},
             decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
+            learning_process_kind="blackbox",
         )
         config2 = RLSSMConfig(
             model_name="model2",
@@ -465,7 +376,7 @@ class TestRLSSMConfigLearningProcess:
             choices=[0, 1],
             learning_process={"a": a_func},
             decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
+            learning_process_kind="blackbox",
         )
         config1.learning_process["v"] = "function1"
         assert "v" not in config2.learning_process
@@ -482,7 +393,7 @@ class TestRLSSMConfigEdgeCases:
             "params_default": [0.0],
             "decision_process": "ddm",
             "learning_process": {},
-            "learning_process_loglik_kind": "blackbox",
+            "learning_process_kind": "blackbox",
             "response": ["rt", "response"],
             "choices": [0, 1],
             "description": "desc",
@@ -505,7 +416,7 @@ class TestRLSSMConfigEdgeCases:
             "params_default": [0.0],
             "decision_process": "ddm",
             "learning_process": {},
-            "learning_process_loglik_kind": "blackbox",
+            "learning_process_kind": "blackbox",
             "decision_process_loglik_kind": "analytical",
             "response": ["rt", "response"],
             "choices": [0, 1],
@@ -535,7 +446,7 @@ class TestRLSSMConfigEdgeCases:
             "data": {},
             "decision_process": "ddm",
             "learning_process": {},
-            "learning_process_loglik_kind": "blackbox",
+            "learning_process_kind": "blackbox",
             "response": ["rt", "response"],
             "choices": [0, 1],
             "extra_fields": [],
@@ -560,6 +471,6 @@ class TestRLSSMConfigEdgeCases:
             response=["rt", "response"],
             choices=[0, 1],
             decision_process_loglik_kind="analytical",
-            learning_process_loglik_kind="blackbox",
+            learning_process_kind="blackbox",
             learning_process={},
         )
