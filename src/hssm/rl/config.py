@@ -56,7 +56,11 @@ class RLSSMConfig(BaseModelConfig):
 
     @classmethod
     def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> "RLSSMConfig":  # noqa: D102
-        required_fields = [f.name for f in fields(cls)]
+        # field exceptions to allow the constructor to fill in defaults
+        field_exceptions = ("loglik", "loglik_kind", "backend")
+        required_fields = [
+            f.name for f in fields(cls) if f.name not in field_exceptions
+        ]
         for field_name in required_fields:
             if field_name not in config_dict or config_dict[field_name] is None:
                 raise ValueError(f"{field_name} must be provided in config_dict")
