@@ -9,7 +9,7 @@ behaviour.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -19,25 +19,6 @@ if TYPE_CHECKING:
 from ..config import BaseModelConfig
 
 _logger = logging.getLogger("hssm")
-
-# Local copy of required fields for RLSSM configs. Kept here so the class
-# can be imported without importing the entirety of `hssm.config`'s runtime
-# machinery earlier than necessary.
-RLSSM_REQUIRED_FIELDS = (
-    "model_name",
-    "description",
-    "list_params",
-    "bounds",
-    "params_default",
-    "choices",
-    "decision_process",
-    "learning_process",
-    "response",
-    "decision_process_loglik_kind",
-    "learning_process_kind",
-    "extra_fields",
-    "ssm_logp_func",
-)
 
 
 @dataclass
@@ -75,7 +56,8 @@ class RLSSMConfig(BaseModelConfig):
 
     @classmethod
     def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> "RLSSMConfig":  # noqa: D102
-        for field_name in RLSSM_REQUIRED_FIELDS:
+        required_fields = [f.name for f in fields(cls)]
+        for field_name in required_fields:
             if field_name not in config_dict or config_dict[field_name] is None:
                 raise ValueError(f"{field_name} must be provided in config_dict")
 
