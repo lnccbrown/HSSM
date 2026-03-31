@@ -13,7 +13,9 @@ def compare_hssm_class_attributes(model_a, model_b):
     b = np.array([type(v) for k, v in model_b._init_args.items()])
     assert (a == b).all(), "Init arg types not the same"
     assert (model_a.data).equals(model_b.data), "Data not the same"
-    assert model_a.model_name == model_b.model_name, "Model name not the same"
+    assert model_a.model_config.model_name == model_b.model_config.model_name, (
+        "Model name not the same"
+    )
     assert model_a.pymc_model._repr_latex_() == model_b.pymc_model._repr_latex_(), (
         "Latex representation of model not the same"
     )

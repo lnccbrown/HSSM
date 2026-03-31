@@ -16,6 +16,7 @@ The key difference from :class:`HSSM` is the likelihood:
     standard ``loglik`` / ``loglik_kind`` wrapping pipeline.
 """
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
@@ -25,7 +26,7 @@ import pymc as pm
 if TYPE_CHECKING:
     from pytensor.graph import Op
 
-from hssm.config import RLSSMConfig
+
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
 )
@@ -34,9 +35,10 @@ from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase
+from .config import RLSSMConfig
 
 
-class RLSSM(HSSMBase, RLSSMConfig):
+class RLSSM(HSSMBase):
     """Reinforcement Learning Sequential Sampling Model.
 
     Combines a reinforcement learning (RL) process with a sequential sampling
@@ -46,7 +48,7 @@ class RLSSM(HSSMBase, RLSSMConfig):
 
     The likelihood is built via
     :func:`~hssm.rl.likelihoods.builder.make_rl_logp_op` from the annotated
-    SSM function stored in *rlssm_config.ssm_logp_func*.  This produces a
+    SSM function stored in *model_config.ssm_logp_func*.  This produces a
     differentiable pytensor ``Op`` that is passed directly to
     :func:`~hssm.distribution_utils.make_distribution`, superseding the
     ``loglik`` / ``loglik_kind`` dispatching used by :class:`~hssm.hssm.HSSM`.
@@ -55,12 +57,12 @@ class RLSSM(HSSMBase, RLSSMConfig):
     ----------
     data : pd.DataFrame
         Trial-level data.  Must contain at least the response columns
-        specified in *rlssm_config* (typically ``"rt"`` and ``"response"``),
+        specified in *model_config* (typically ``"rt"`` and ``"response"``),
         a participant identifier column (default ``"participant_id"``), and
-        any extra fields listed in *rlssm_config.extra_fields*.
+        any extra fields listed in *model_config.extra_fields*.
         The data **must** form a balanced panel: every participant must have
         the same number of trials.
-    rlssm_config : RLSSMConfig
+    model_config : RLSSMConfig
         Full configuration for the RLSSM model.  Must have ``ssm_logp_func``
         set to the annotated JAX SSM log-likelihood function.
     participant_col : str, optional
@@ -96,18 +98,19 @@ class RLSSM(HSSMBase, RLSSMConfig):
 
     Attributes
     ----------
-    _rlssm_config : RLSSMConfig
-        The RLSSM configuration object.
-    _n_participants : int
+    model_config : RLSSMConfig
+        The RLSSM configuration object (stored as ``self.model_config`` on
+        :class:`~hssm.base.HSSMBase` with the built ``loglik`` Op injected).
+    n_participants : int
         Number of participants inferred from *data*.
-    _n_trials : int
+    n_trials : int
         Number of trials per participant inferred from *data*.
     """
 
     def __init__(
         self,
         data: pd.DataFrame,
-        rlssm_config: RLSSMConfig,
+        model_config: RLSSMConfig,
         participant_col: str = "participant_id",
         include: list[dict[str, Any] | Any] | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
@@ -122,8 +125,11 @@ class RLSSM(HSSMBase, RLSSMConfig):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs: Any,
     ) -> None:
+        # ===== save/load serialisation =====
+        self._init_args = self._store_init_args(locals(), kwargs)
+
         # Validate config (ensures ssm_logp_func is present, etc.)
-        rlssm_config.validate()
+        model_config.validate()
 
         # RLSSM reshapes rows into (n_participants, n_trials, ...) by position,
         # so _rearrange_data (which moves missing/deadline rows to the front)
@@ -152,42 +158,41 @@ class RLSSM(HSSMBase, RLSSMConfig):
 
         # Store RL-specific state on self BEFORE super().__init__() so that
         # _make_model_distribution() (called from super) can access them.
-        self._rlssm_config = rlssm_config
-        self._n_participants = n_participants
-        self._n_trials = n_trials
+        self.config = model_config
+        self.n_participants = n_participants
+        self.n_trials = n_trials
 
         # Build the differentiable pytensor Op from the annotated SSM function.
-        # This Op supersedes the loglik/loglik_kind workflow: it is passed as
-        # `loglik` to HSSMBase so Config.validate() is satisfied, and
-        # _make_model_distribution() uses it directly without any further wrapping.
+        # This Op supersedes the loglik/loglik_kind workflow: it is stored on
+        # rlssm_config.loglik so that HSSMBase can access it uniformly via
+        # self.model_config.loglik, without any Config conversion.
         #
         # Fresh list() copies are passed to make_rl_logp_op so the closure inside
         # captures its own isolated list objects.  HSSMBase will later append
         # "p_outlier" to self.list_params, and that mutation must NOT be visible
         # to the Op's _validate_args_length check at sampling time.
         loglik_op = make_rl_logp_op(
-            ssm_logp_func=rlssm_config.ssm_logp_func,
+            ssm_logp_func=model_config.ssm_logp_func,
             n_participants=n_participants,
             n_trials=n_trials,
-            data_cols=list(rlssm_config.response),  # type: ignore[arg-type]
-            list_params=list(rlssm_config.list_params),  # type: ignore[arg-type]
-            extra_fields=list(rlssm_config.extra_fields or []),
+            data_cols=list(model_config.response),  # type: ignore[arg-type]
+            list_params=list(model_config.list_params),  # type: ignore[arg-type]
+            extra_fields=list(model_config.extra_fields or []),
         )
 
-        # Delegate ModelConfig construction to RLSSMConfig, which already owns
-        # all the required fields (response, list_params, choices, bounds, …).
-        mc = rlssm_config.to_model_config()
+        # Build a new RLSSMConfig with the Op and backend injected, leaving
+        # the caller's object unmodified (dataclasses.replace creates a shallow
+        # copy with only the specified fields overridden).
+        #
+        # backend is hardcoded to "jax" because the entire RLSSM likelihood
+        # stack is JAX-only. See ssm_logp_func, make_rl_logp_op, and
+        #  _make_model_distribution for details.
+        model_config = replace(model_config, loglik=loglik_op, backend="jax")
 
         super().__init__(
             data=data,
-            model=rlssm_config.model_name,
+            model_config=model_config,
             include=include,
-            model_config=mc,
-            # Pass the Op as loglik so Config.validate() is satisfied.
-            # loglik_kind="approx_differentiable" reflects that the Op is
-            # differentiable (gradients flow through its VJP).
-            loglik=loglik_op,
-            loglik_kind="approx_differentiable",
             p_outlier=p_outlier,
             lapse=lapse,
             link_settings=link_settings,
@@ -208,7 +213,7 @@ class RLSSM(HSSMBase, RLSSMConfig):
         through :func:`~hssm.distribution_utils.make_likelihood_callable`.
         Instead it uses ``self.loglik`` directly — the differentiable pytensor
         ``Op`` built in :meth:`__init__` from
-        ``self._rlssm_config.ssm_logp_func``.
+        ``self.model_config.ssm_logp_func``.
 
         The Op already handles:
         - The RL learning rule (computing trial-wise intermediate parameters).
@@ -219,27 +224,38 @@ class RLSSM(HSSMBase, RLSSMConfig):
         RLSSM and ``missing_data`` / ``deadline`` are rejected in ``__init__``
         before this method is ever reached.
         """
-        # Build params_is_trialwise in the same order as self.list_params so the
-        # length always matches the list_params= argument passed to make_distribution.
-        # p_outlier is a scalar mixture weight (not trialwise); every other RLSSM
-        # parameter is trialwise (the Op receives one value per trial).
-        assert self.list_params is not None, "list_params should be set by HSSMBase"
-        params_is_trialwise = [name != "p_outlier" for name in self.list_params]
+        # Use self.list_params (managed by HSSMBase, includes p_outlier when
+        # has_lapse=True) rather than self.model_config.list_params (the original
+        # config list, never mutated by HSSMBase).
+        list_params = self.list_params
+        assert list_params is not None, "list_params must be set"
+        assert isinstance(list_params, list), (
+            "list_params must be a list"
+        )  # for type checker
 
+        # p_outlier is a scalar mixture weight (not trialwise); every other
+        # RLSSM parameter is trialwise (the Op receives one value per trial).
+        params_is_trialwise = [name != "p_outlier" for name in list_params]
+
+        extra_fields = self.model_config.extra_fields or []
         extra_fields_data = (
             None
-            if not self.extra_fields
-            else [self.data[field].to_numpy(copy=True) for field in self.extra_fields]
+            if not extra_fields
+            else [self.data[field].to_numpy(copy=True) for field in extra_fields]
         )
 
-        # self.loglik was set to the pytensor Op built in __init__; cast to
-        # narrow the inherited union type so make_distribution's type-checker
-        # accepts it without a runtime penalty.
-        loglik_op = cast("Callable[..., Any] | Op", self.loglik)
+        # The differentiable pytensor Op was stored on model_config.loglik during
+        # __init__; ensure it's present and cast for typing.
+        assert self.model_config.loglik is not None, "model_config.loglik must be set"
+        loglik_op = cast("Callable[..., Any] | Op", self.model_config.loglik)
+
+        # RLSSMConfig carries no `rv` field; use model_name as the rv identifier.
+        rv_name = self.model_config.model_name
+
         return make_distribution(
-            rv=self.model_name,
+            rv=rv_name,
             loglik=loglik_op,
-            list_params=self.list_params,
+            list_params=list_params,
             bounds=self.bounds,
             lapse=self.lapse,
             extra_fields=extra_fields_data,

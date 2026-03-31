@@ -123,9 +123,9 @@ def test_custom_model(data_ddm):
         loglik_kind="analytical",
     )
 
-    assert model.model_name == "custom"
-    assert model.loglik_kind == "analytical"
-    assert model.list_params == ["v", "a", "z", "t", "p_outlier"]
+    assert model.model_config.model_name == "custom"
+    assert model.model_config.loglik_kind == "analytical"
+    assert model.model_config.list_params == ["v", "a", "z", "t", "p_outlier"]
 
 
 @pytest.mark.slow
