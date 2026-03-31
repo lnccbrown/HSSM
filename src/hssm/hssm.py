@@ -9,13 +9,18 @@ This file defines the entry class HSSM.
 import logging
 from copy import deepcopy
 from inspect import isclass
+from os import PathLike
 from typing import TYPE_CHECKING, Any, Callable, Literal
 from typing import cast as typing_cast
 
+import bambi as bmb
 import numpy as np
+import pandas as pd
 import pymc as pm
 
+from hssm._types import LoglikKind, SupportedModels
 from hssm.defaults import (
+    INITVAL_JITTER_SETTINGS,
     MissingDataNetwork,
     missing_data_networks_suffix,
 )
@@ -30,10 +35,9 @@ from hssm.utils import (
 )
 
 from .base import HSSMBase
+from .config import Config, ModelConfig
 
 if TYPE_CHECKING:
-    from os import PathLike
-
     from pytensor.graph.op import Op
 
 _logger = logging.getLogger("hssm")
@@ -100,9 +104,12 @@ class HSSM(HSSMBase):
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
     model_config : optional
-        A dictionary containing the model configuration information. If None is
-        provided, defaults will be used if there are any. Defaults to None.
-        Fields for this `dict` are usually:
+        A :class:`~hssm.config.BaseModelConfig` / :class:`~hssm.config.Config`
+        instance or a ``dict`` with model configuration information. The
+        constructor accepts a typed ``ModelConfig`` or a plain ``dict``; when a
+        ``dict`` is provided the library will build a typed :class:`Config`
+        via the factory function. If ``None`` is provided, defaults will be
+        used where available. Fields for this config are usually:
 
         - `"list_params"`: a list of parameters indicating the parameters of the model.
             The order in which the parameters are specified in this list is important.
@@ -247,6 +254,56 @@ class HSSM(HSSMBase):
         The jitter value for the initial values.
     """
 
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        model: SupportedModels | str = "ddm",
+        choices: list[int] | None = None,
+        include: list[dict[str, Any] | Any] | None = None,
+        model_config: ModelConfig | dict | None = None,
+        loglik: (
+            str | PathLike | Callable | pm.Distribution | type[pm.Distribution] | None
+        ) = None,
+        loglik_kind: LoglikKind | None = None,
+        p_outlier: float | dict | bmb.Prior | None = 0.05,
+        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
+        global_formula: str | None = None,
+        link_settings: Literal["log_logit"] | None = None,
+        prior_settings: Literal["safe"] | None = "safe",
+        extra_namespace: dict[str, Any] | None = None,
+        missing_data: bool | float = False,
+        deadline: bool | str = False,
+        loglik_missing_data: (str | PathLike | Callable | None) = None,
+        process_initvals: bool = True,
+        initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+        **kwargs: Any,
+    ) -> None:
+        # ===== save/load serialisation =====
+        self._init_args = self._store_init_args(locals(), kwargs)
+
+        # Build typed Config via factory
+        config = Config._build_model_config(
+            model, loglik_kind, model_config, choices, loglik
+        )
+
+        super().__init__(
+            data=data,
+            model_config=config,
+            include=include,
+            p_outlier=p_outlier,
+            lapse=lapse,
+            global_formula=global_formula,
+            link_settings=link_settings,
+            prior_settings=prior_settings,
+            extra_namespace=extra_namespace,
+            missing_data=missing_data,
+            deadline=deadline,
+            loglik_missing_data=loglik_missing_data,
+            process_initvals=process_initvals,
+            initval_jitter=initval_jitter,
+            **kwargs,
+        )
+
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Make a pm.Distribution for the model."""
         ### Logic for different types of likelihoods:
@@ -365,11 +422,15 @@ class HSSM(HSSMBase):
             if isinstance(param.prior, np.ndarray)
         }
 
-        assert self.list_params is not None, "list_params should be set"
+        # Use the typed `model_config` attributes directly
+        _list_params = self.model_config.list_params
+        assert _list_params is not None, "list_params should be set"  # for type checker
+        rv_name = getattr(self.model_config, "rv", None) or self.model_config.model_name
+
         return make_distribution(
-            rv=self.model_config.rv or self.model_name,
+            rv=rv_name,
             loglik=self.loglik,
-            list_params=self.list_params,
+            list_params=_list_params,
             bounds=self.bounds,
             lapse=self.lapse,
             extra_fields=(
