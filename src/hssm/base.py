@@ -9,8 +9,9 @@ This file defines the entry class HSSM.
 import datetime
 import logging
 import typing
+from abc import ABC, abstractmethod
 from copy import deepcopy
-from inspect import isclass, signature
+from inspect import signature
 from os import PathLike
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, Union, cast, get_args
@@ -98,7 +99,7 @@ class classproperty:
         return self.fget(owner)
 
 
-class HSSM(DataValidatorMixin):
+class HSSMBase(ABC, DataValidatorMixin):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
     Parameters
@@ -2023,158 +2024,14 @@ class HSSM(DataValidatorMixin):
             )
         self.lapse = None
 
+    @abstractmethod
     def _make_model_distribution(self) -> type[pm.Distribution]:
-        """Make a pm.Distribution for the model."""
-        ### Logic for different types of likelihoods:
-        # -`analytical` and `blackbox`:
-        #     loglik should be a `pm.Distribution`` or a Python callable (any arbitrary
-        #     function).
-        # - `approx_differentiable`:
-        #     In addition to `pm.Distribution` and any arbitrary function, it can also
-        #     be an str (which we will download from hugging face) or a Pathlike
-        #     which we will download and make a distribution.
+        """Make a pm.Distribution for the model.
 
-        # If user has already provided a log-likelihood function as a distribution
-        # Use it directly as the distribution
-        if isclass(self.loglik) and issubclass(self.loglik, pm.Distribution):
-            return self.loglik
-
-        # params_is_trialwise_base: one entry per model param (excluding
-        # p_outlier). Used for graph-level broadcasting in logp() and
-        # make_distribution, where dist_params does not include extra_fields.
-        params_is_trialwise_base = [
-            param.is_trialwise
-            for param_name, param in self.params.items()
-            if param_name != "p_outlier"
-        ]
-
-        # params_is_trialwise: extends the base list with extra_fields
-        # (always trialwise). Used for vmap construction in
-        # make_likelihood_callable and for assemble_callables, where
-        # dist_params includes extra_fields flattened in.
-        params_is_trialwise = list(params_is_trialwise_base)
-        if self.extra_fields is not None:
-            params_is_trialwise += [True for _ in self.extra_fields]
-
-        if self.loglik_kind == "approx_differentiable":
-            if self.model_config.backend == "jax":
-                likelihood_callable = make_likelihood_callable(
-                    loglik=self.loglik,
-                    loglik_kind="approx_differentiable",
-                    backend="jax",
-                    params_is_reg=params_is_trialwise,
-                )
-            else:
-                likelihood_callable = make_likelihood_callable(
-                    loglik=self.loglik,
-                    loglik_kind="approx_differentiable",
-                    backend=self.model_config.backend,
-                )
-        else:
-            likelihood_callable = make_likelihood_callable(
-                loglik=self.loglik,
-                loglik_kind=self.loglik_kind,
-                backend=self.model_config.backend,
-            )
-
-        self.loglik = likelihood_callable
-
-        # Make the callable for missing data
-        # And assemble it with the callable for the likelihood
-        if self.missing_data_network != MissingDataNetwork.NONE:
-            if self.missing_data_network == MissingDataNetwork.OPN:
-                params_only = False
-            elif self.missing_data_network == MissingDataNetwork.CPN:
-                params_only = True
-            else:
-                params_only = None
-
-            if self.loglik_missing_data is None:
-                self.loglik_missing_data = (
-                    self.model_name
-                    + missing_data_networks_suffix[self.missing_data_network]
-                    + ".onnx"
-                )
-
-            backend_tmp: Literal["pytensor", "jax", "other"] | None = (
-                "jax"
-                if self.model_config.backend != "pytensor"
-                else self.model_config.backend
-            )
-            missing_data_callable = make_missing_data_callable(
-                self.loglik_missing_data, backend_tmp, params_is_trialwise, params_only
-            )
-
-            self.loglik_missing_data = missing_data_callable
-
-            self.loglik = assemble_callables(
-                self.loglik,
-                self.loglik_missing_data,
-                params_only,
-                has_deadline=self.deadline,
-                params_is_trialwise=params_is_trialwise,
-            )
-
-        if self.missing_data:
-            _logger.info(
-                "Re-arranging data to separate missing and observed datapoints. "
-                "Missing data (rt == %s) will be on top, "
-                "observed datapoints follow.",
-                self.missing_data_value,
-            )
-
-        # TODO: This is a temporary solution to allow choice-only models without a
-        # specified simulator in ssm-simulators
-        if self.is_choice_only and self.model_config.rv is None:
-            _logger.warning(
-                "You are building a choice-only model without specifying "
-                "a RandomVariable class. Using a dummy simulator function. "
-                "Simulating data from this model will result in an error."
-            )
-
-            def dummy_simulator_func(*args, **kwargs):
-                raise NotImplementedError(
-                    "You are trying to simulate data from a choice-only model "
-                    "without specifying a RandomVariable class. Please specify "
-                    "a RandomVariable class via the `model_config.rv` argument."
-                )
-
-            setattr(dummy_simulator_func, "model_name", self.model_name)
-            setattr(dummy_simulator_func, "choices", self.choices)
-            setattr(dummy_simulator_func, "obs_dim", 1)
-
-            self.model_config.rv = make_hssm_rv(
-                dummy_simulator_func,
-                list_params=self.list_params,
-                lapse=self.lapse,
-                is_choice_only=True,
-            )
-
-        self.data = _rearrange_data(self.data)
-
-        # Collect fixed-vector params to substitute in the distribution logp
-        fixed_vector_params = {
-            name: param.prior
-            for name, param in self.params.items()
-            if isinstance(param.prior, np.ndarray)
-        }
-
-        return make_distribution(
-            rv=self.model_config.rv or self.model_name,
-            loglik=self.loglik,
-            list_params=self.list_params,
-            bounds=self.bounds,
-            lapse=self.lapse,
-            extra_fields=(
-                None
-                if not self.extra_fields
-                else [deepcopy(self.data[field].values) for field in self.extra_fields]
-            ),
-            fixed_vector_params=fixed_vector_params if fixed_vector_params else None,
-            params_is_trialwise=params_is_trialwise_base,
-            # TODO: add to HSSMBase
-            is_choice_only=self.is_choice_only,
-        )
+        This method must be implemented by subclasses to create the appropriate
+        distribution for the specific model type.
+        """
+        ...
 
     def _get_deterministic_var_names(self, idata) -> list[str]:
         """Filter out the deterministic variables in var_names."""
