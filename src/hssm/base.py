@@ -1,10 +1,4 @@
-"""HSSM: Hierarchical Sequential Sampling Models.
-
-A package based on pymc and bambi to perform Bayesian inference for hierarchical
-sequential sampling models.
-
-This file defines the entry class HSSM.
-"""
+"""Base class for Hierarchical Sequential Sampling Models."""
 
 import datetime
 import logging
