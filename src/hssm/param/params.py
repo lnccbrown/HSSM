@@ -19,7 +19,7 @@ from .simple_param import DefaultParam, SimpleParam
 from .user_param import UserParam
 
 if TYPE_CHECKING:
-    from ..hssm.base import HSSMBase
+    from ..hssm import HSSM
 
 
 class Params(UserDict[str, Param]):
@@ -70,7 +70,7 @@ class Params(UserDict[str, Param]):
     @classmethod
     def from_user_specs(
         cls,
-        model: HSSMBase,
+        model: HSSM,
         include: list[dict[str, Any] | UserParam],
         kwargs: dict[str, Any],
         p_outlier: float | dict | bmb.Prior | None,
@@ -99,7 +99,7 @@ class Params(UserDict[str, Param]):
 
     def parse_bambi(
         self,
-        model: HSSMBase,
+        model: HSSM,
     ) -> tuple[bmb.Formula, dict | None, dict[str, str | bmb.Link] | str]:
         """Retrieve formulas, priors, and links for bambi model building.
 
@@ -183,7 +183,7 @@ class Params(UserDict[str, Param]):
 
 
 def collect_user_params(
-    model: HSSMBase,
+    model: HSSM,
     include: list[dict[str, Any] | UserParam],
     kwargs: dict[str, Any],
     p_outlier: float | dict | bmb.Prior | None,
@@ -251,7 +251,7 @@ def collect_user_params(
     return user_params
 
 
-def make_params(model: HSSMBase, user_params: dict[str, UserParam]) -> dict[str, Param]:
+def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Param]:
     """Make parameters from a dict of UserParams.
 
     Parameters
@@ -287,9 +287,7 @@ def make_params(model: HSSMBase, user_params: dict[str, UserParam]) -> dict[str,
     return params
 
 
-def make_param_from_user_param(
-    model: HSSMBase, name: str, user_param: UserParam
-) -> Param:
+def make_param_from_user_param(model: HSSM, name: str, user_param: UserParam) -> Param:
     """Create a Param object from a UserParam object.
 
     Parameters
@@ -336,7 +334,7 @@ def make_param_from_user_param(
     return param
 
 
-def make_param_from_defaults(model: HSSMBase, name: str) -> Param:
+def make_param_from_defaults(model: HSSM, name: str) -> Param:
     """Create a Param object from the default values.
 
     Parameters
