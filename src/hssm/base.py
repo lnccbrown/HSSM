@@ -34,25 +34,12 @@ from ssms.config import model_config as ssms_model_config
 
 from hssm._types import LoglikKind, SupportedModels
 from hssm.data_validator import DataValidatorMixin
-from hssm.defaults import (
-    INITVAL_JITTER_SETTINGS,
-    INITVAL_SETTINGS,
-    MissingDataNetwork,
-    missing_data_networks_suffix,
-)
-from hssm.distribution_utils import (
-    assemble_callables,
-    make_distribution,
-    make_family,
-    make_hssm_rv,
-    make_likelihood_callable,
-    make_missing_data_callable,
-)
+from hssm.defaults import INITVAL_JITTER_SETTINGS, INITVAL_SETTINGS
+from hssm.distribution_utils import make_family
 from hssm.utils import (
     _compute_log_likelihood,
     _get_alias_dict,
     _print_prior,
-    _rearrange_data,
     _split_array,
 )
 
@@ -1705,7 +1692,7 @@ class HSSMBase(ABC, DataValidatorMixin):
     @classmethod
     def load_model(
         cls, path: Union[str, Path]
-    ) -> Union["HSSM", dict[str, Optional[az.InferenceData]]]:
+    ) -> Union[str, dict[str, Optional[az.InferenceData]]]:
         """Load a HSSM model instance and its inference results from disk.
 
         Parameters
@@ -1833,6 +1820,8 @@ class HSSMBase(ABC, DataValidatorMixin):
             A dictionary containing the constructor arguments under the key
             'constructor_args'.
         """
+        from .hssm import HSSM
+
         new_instance = HSSM(**state["constructor_args"])
         self.__dict__ = new_instance.__dict__
 
