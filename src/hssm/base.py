@@ -1702,7 +1702,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     @classmethod
     def load_model(
         cls, path: Union[str, Path]
-    ) -> Union["HSSM", dict[str, Optional[az.InferenceData]]]:
+    ) -> Union["HSSMBase", dict[str, Optional[az.InferenceData]]]:
         """Load a HSSM model instance and its inference results from disk.
 
         Parameters
