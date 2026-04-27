@@ -136,16 +136,16 @@ class RLSSM(HSSMBase):
         # would scramble per-participant trial sequences and corrupt RL dynamics.
         # Raise early so the user gets a clear message before model construction.
         if missing_data is not False:
-            raise ValueError(
-                "RLSSM does not support `missing_data` handling. "
+            raise NotImplementedError(
+                "RLSSM currently does not support `missing_data` handling. "
                 "The RL log-likelihood Op relies on strict row order to recover "
                 "per-participant trial sequences; rearranging rows for missing RT "
                 "values would corrupt the RL learning dynamics. "
                 "Please remove missing trials from the data before passing it to RLSSM."
             )
         if deadline is not False:
-            raise ValueError(
-                "RLSSM does not support `deadline` handling. "
+            raise NotImplementedError(
+                "RLSSM currently does not support `deadline` handling. "
                 "The RL log-likelihood Op relies on strict row order to recover "
                 "per-participant trial sequences; rearranging rows for deadline "
                 "trials would corrupt the RL learning dynamics. Please remove "
