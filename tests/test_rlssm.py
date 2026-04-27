@@ -187,14 +187,14 @@ def test_rlssm_unannotated_ssm_logp_func_raises(rldm_data, rlssm_config) -> None
 
 
 def test_rlssm_missing_data_raises(rldm_data, rlssm_config) -> None:
-    """Passing missing_data!=False should raise ValueError with 'missing_data' in msg."""
-    with pytest.raises(ValueError, match="missing_data"):
+    """Passing missing_data!=False should raise NotImplementedError with 'missing_data' in msg."""
+    with pytest.raises(NotImplementedError, match="missing_data"):
         RLSSM(data=rldm_data, model_config=rlssm_config, missing_data=True)
 
 
 def test_rlssm_deadline_raises(rldm_data, rlssm_config) -> None:
-    """Passing deadline!=False should raise ValueError with 'deadline' in msg."""
-    with pytest.raises(ValueError, match="deadline"):
+    """Passing deadline!=False should raise NotImplementedError with 'deadline' in msg."""
+    with pytest.raises(NotImplementedError, match="deadline"):
         RLSSM(data=rldm_data, model_config=rlssm_config, deadline=True)
 
 
