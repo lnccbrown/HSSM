@@ -39,11 +39,6 @@ def validate_balanced_panel(
             "`participant_col`."
         )
 
-    if data.empty:
-        raise ValueError(
-            "Data is empty. Please provide a non-empty DataFrame."
-        )
-
     n_null = data[participant_col].isna().sum()
     if n_null > 0:
         raise ValueError(
