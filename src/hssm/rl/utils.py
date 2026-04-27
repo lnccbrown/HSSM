@@ -32,16 +32,16 @@ def validate_balanced_panel(
         If *participant_col* is not present in *data*, or if the panel is
         unbalanced (participants have different trial counts).
     """
-    if data.empty:
-        raise ValueError(
-            "Data is empty. Please provide a non-empty DataFrame."
-        )
-
     if participant_col not in data.columns:
         raise ValueError(
             f"Column '{participant_col}' not found in data. "
             "Please provide the correct participant column name via "
             "`participant_col`."
+        )
+
+    if data.empty:
+        raise ValueError(
+            "Data is empty. Please provide a non-empty DataFrame."
         )
 
     n_null = data[participant_col].isna().sum()
