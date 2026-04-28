@@ -53,4 +53,18 @@ def validate_balanced_panel(
             f"same number of trials. Observed trial counts: {dict(counts)}"
         )
 
+    # Check that each participant's rows are contiguous (not interleaved).
+    # make_rl_logp_op reshapes data as (n_participants, n_trials, ...) by row
+    # order, so interleaved rows would silently mix subjects and corrupt the
+    # RL learning dynamics.
+    n_runs = int((data[participant_col] != data[participant_col].shift()).sum())
+    if n_runs != len(counts):
+        raise ValueError(
+            "Data rows must be contiguous per participant. "
+            "The RL likelihood reshapes data by row position; interleaved "
+            "participant rows will corrupt per-participant trial sequences. "
+            "Please sort the data by participant before passing it to RLSSM "
+            f"(e.g. data.sort_values('{participant_col}'))."
+        )
+
     return int(len(counts)), int(counts.iloc[0])
