@@ -233,9 +233,10 @@ class RLSSM(HSSMBase):
             "list_params must be a list"
         )  # for type checker
 
-        # p_outlier is a scalar mixture weight (not trialwise); every other
-        # RLSSM parameter is trialwise (the Op receives one value per trial).
-        params_is_trialwise = [name != "p_outlier" for name in list_params]
+        # Every RLSSM distribution parameter is trialwise (the Op receives one
+        # value per trial). p_outlier is excluded to match the contract of
+        # make_distribution, which strips p_outlier before indexing this list.
+        params_is_trialwise = [True for name in list_params if name != "p_outlier"]
 
         extra_fields = self.model_config.extra_fields or []
         extra_fields_data = (
