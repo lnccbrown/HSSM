@@ -1985,18 +1985,27 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 ).astype(dtype)
 
     def _get_prefix(self, name_str: str) -> str:
-        """Get parameters wise link setting function from parameter prefix."""
-        # `p_outlier` is the only basic parameter floating around that has
-        # an underscore in it's name.
-        # We need to handle it separately. (Renaming might be better...)
+        """Resolve parameter prefix, handling underscore-containing RL param names.
+
+        The base-class implementation splits ``name_str`` on the first ``_`` and
+        returns that single token (e.g. ``"rl_alpha_Intercept" → "rl"``), which
+        breaks for RL parameters whose names contain underscores.  It also uses a
+        substring check (``"p_outlier" in name_str``) for the lapse parameter,
+        which would misfire for any parameter whose name merely *contains* that
+        substring.
+
+        This override replaces both heuristics with a single longest-prefix-first
+        token search: split on ``_``, then try joining 1…N tokens (longest first)
+        until a candidate is found in ``self.params``.  This is both correct for
+        multi-token RL param names and collision-free for ``p_outlier``.
+        """
         if "_" in name_str:
-            if "p_outlier" not in name_str:
-                name_str_prefix = name_str.split("_")[0]
-            else:
-                name_str_prefix = "p_outlier"
-        else:
-            name_str_prefix = name_str
-        return name_str_prefix
+            parts = name_str.split("_")
+            for i in range(len(parts), 0, -1):
+                candidate = "_".join(parts[:i])
+                if hasattr(self, "params") and candidate in self.params:
+                    return candidate
+        return name_str
 
     def _check_if_initval_user_supplied(
         self,

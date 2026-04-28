@@ -261,26 +261,3 @@ class RLSSM(HSSMBase):
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
         )
-
-    def _get_prefix(self, name_str: str) -> str:
-        """Resolve parameter prefix, handling underscore-containing RL param names.
-
-        The base-class implementation splits ``name_str`` on the first ``_`` and
-        returns that single token (e.g. ``"rl_alpha_Intercept" → "rl"``), which
-        breaks for RL parameters whose names contain underscores.  It also uses a
-        substring check (``"p_outlier" in name_str``) for the lapse parameter,
-        which would misfire for any parameter whose name merely *contains* that
-        substring.
-
-        This override replaces both heuristics with a single longest-prefix-first
-        token search: split on ``_``, then try joining 1…N tokens (longest first)
-        until a candidate is found in ``self.params``.  This is both correct for
-        multi-token RL param names and collision-free for ``p_outlier``.
-        """
-        if "_" in name_str:
-            parts = name_str.split("_")
-            for i in range(len(parts), 0, -1):
-                candidate = "_".join(parts[:i])
-                if candidate in self.params:
-                    return candidate
-        return super()._get_prefix(name_str)
