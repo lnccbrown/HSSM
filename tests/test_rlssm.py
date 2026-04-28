@@ -228,7 +228,10 @@ def test_rlssm_get_prefix(rldm_data, rlssm_config) -> None:
     model = RLSSM(data=rldm_data, model_config=rlssm_config)
     assert model._get_prefix("rl_alpha_Intercept") == "rl_alpha"
     assert model._get_prefix("p_outlier_log__") == "p_outlier"
+    assert model._get_prefix("p_outlier") == "p_outlier"
     assert model._get_prefix("a_Intercept") == "a"
+    # Fallback: not in params
+    assert model._get_prefix("unknown_param") == "unknown_param"
 
 
 def test_rlssm_no_lapse(rldm_data, rlssm_config) -> None:
