@@ -282,7 +282,11 @@ class Config(BaseModelConfig):
 
         # No model_config provided: apply `choices` when appropriate.
         # If caller passed a SupportedModels string, ignore explicit `choices`.
-        if model in get_args(SupportedModels) and choices is not None:
+        if (
+            model in get_args(SupportedModels)
+            and choices is not None
+            and model_config is None
+        ):
             _logger.info(
                 "Model string is in SupportedModels. Ignoring choices arguments."
             )
