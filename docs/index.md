@@ -13,13 +13,15 @@
 ![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-**HSSM** (Hierarchical Sequential Sampling Modeling) is a modern Python toolbox
-that provides state-of-the-art likelihood approximation methods within the
-Python Bayesian ecosystem. It facilitates hierarchical model building and
-inference via fast and robust MCMC samplers. User-friendly, extensible, and
-flexible, HSSM can rigorously estimate the impact of neural and other
-trial-by-trial covariates through parameter-wise mixed-effects models for a
-large variety of cognitive process models.
+**HSSM** (Hierarchical Sequential Sampling Modeling) is a modern open-source
+Python toolbox for computational modeling in cognitive neuroscience. It supports
+a broad range of sequential sampling models used to study decision-making,
+learning, and other cognitive processes — from basic research to the analysis of
+clinical effects. HSSM provides state-of-the-art likelihood approximation
+methods within the Python Bayesian ecosystem and facilitates hierarchical model
+building and inference via fast and robust MCMC samplers. User-friendly,
+extensible, and flexible, it can rigorously estimate the impact of neural and
+other trial-by-trial covariates through parameter-wise mixed-effects models.
 
 HSSM is a [BRAINSTORM](https://ccbs.carney.brown.edu/brainstorm) project in
 collaboration with the
