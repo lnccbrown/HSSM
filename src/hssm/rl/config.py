@@ -9,7 +9,7 @@ behaviour.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field, fields
+from dataclasses import MISSING, dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -56,27 +56,37 @@ class RLSSMConfig(BaseModelConfig):
 
     @classmethod
     def from_rlssm_dict(cls, config_dict: dict[str, Any]) -> "RLSSMConfig":  # noqa: D102
-        # field exceptions to allow the constructor to fill in defaults
+        # Derive required fields from the dataclass itself: a field is required
+        # iff it has no default and no default_factory. This keeps the dataclass
+        # as the single source of truth — no separate required-key list needed.
         field_exceptions = ("loglik", "loglik_kind", "backend")
         required_fields = [
-            f.name for f in fields(cls) if f.name not in field_exceptions
+            f.name
+            for f in fields(cls)
+            if f.name not in field_exceptions
+            and f.default is MISSING
+            and f.default_factory is MISSING  # type: ignore[misc]
         ]
         for field_name in required_fields:
             if field_name not in config_dict or config_dict[field_name] is None:
                 raise ValueError(f"{field_name} must be provided in config_dict")
 
+        # ssm_logp_func has a dataclass default of None but is required in practice.
+        if config_dict.get("ssm_logp_func") is None:
+            raise ValueError("ssm_logp_func must be provided in config_dict")
+
         return cls(
             model_name=config_dict["model_name"],
-            description=config_dict["description"],
-            list_params=config_dict["list_params"],
+            description=config_dict.get("description"),
+            list_params=config_dict.get("list_params"),
             extra_fields=config_dict.get("extra_fields"),
             params_default=config_dict["params_default"],
             decision_process=config_dict["decision_process"],
             learning_process=config_dict["learning_process"],
-            ssm_logp_func=config_dict["ssm_logp_func"],
+            ssm_logp_func=config_dict.get("ssm_logp_func"),
             bounds=config_dict.get("bounds", {}),
-            response=config_dict["response"],
-            choices=config_dict["choices"],
+            response=config_dict.get("response"),
+            choices=config_dict.get("choices"),
             decision_process_loglik_kind=config_dict["decision_process_loglik_kind"],
             learning_process_kind=config_dict["learning_process_kind"],
         )
