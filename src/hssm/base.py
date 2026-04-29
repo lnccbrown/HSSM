@@ -404,9 +404,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # TODO: add to HSSMBase
         self.response = cast("list[str]", self.response)
-        self.is_choice_only: bool = bool(
-            getattr(self.model_config, "is_choice_only", len(self.response) == 1)
-        )
+        self.is_choice_only: bool = self.model_config.is_choice_only
 
         if self.choices is None:
             raise ValueError(
