@@ -1,7 +1,12 @@
 import pytest
 
 import hssm
-from hssm.config import Config, ModelConfig
+from hssm.config import (
+    DEFAULT_SSM_CHOICES,
+    DEFAULT_SSM_OBSERVED_DATA,
+    Config,
+    ModelConfig,
+)
 from hssm.rl import RLSSMConfig
 from hssm.utils import annotate_function
 
@@ -474,3 +479,54 @@ class TestRLSSMConfigEdgeCases:
             learning_process_kind="blackbox",
             learning_process={},
         )
+
+
+class TestRLSSMConfigDefaultWarnings:
+    """Warnings are emitted when 'response' or 'choices' are missing from config_dict."""
+
+    @pytest.fixture
+    def _base_config_dict(self):
+        return {
+            "model_name": "test_model",
+            "list_params": ["alpha"],
+            "params_default": [0.0],
+            "bounds": {"alpha": (0.0, 1.0)},
+            "decision_process": "ddm",
+            "learning_process": {},
+            "learning_process_kind": "blackbox",
+            "decision_process_loglik_kind": "analytical",
+            "extra_fields": [],
+            "ssm_logp_func": _module_dummy_ssm_logp,
+        }
+
+    def test_warns_when_response_missing(self, _base_config_dict, caplog):
+        _base_config_dict["choices"] = (0, 1)
+        # 'response' deliberately omitted
+        with caplog.at_level("WARNING", logger="hssm"):
+            config = RLSSMConfig.from_rlssm_dict(_base_config_dict)
+        assert any("'response' not specified" in m for m in caplog.messages)
+        assert config.response == list(DEFAULT_SSM_OBSERVED_DATA)
+
+    def test_warns_when_choices_missing(self, _base_config_dict, caplog):
+        _base_config_dict["response"] = ["rt", "response"]
+        # 'choices' deliberately omitted
+        with caplog.at_level("WARNING", logger="hssm"):
+            config = RLSSMConfig.from_rlssm_dict(_base_config_dict)
+        assert any("'choices' not specified" in m for m in caplog.messages)
+        assert config.choices == DEFAULT_SSM_CHOICES
+
+    def test_warns_when_both_missing(self, _base_config_dict, caplog):
+        # Both 'response' and 'choices' omitted
+        with caplog.at_level("WARNING", logger="hssm"):
+            config = RLSSMConfig.from_rlssm_dict(_base_config_dict)
+        assert any("'response' not specified" in m for m in caplog.messages)
+        assert any("'choices' not specified" in m for m in caplog.messages)
+        assert config.response == list(DEFAULT_SSM_OBSERVED_DATA)
+        assert config.choices == DEFAULT_SSM_CHOICES
+
+    def test_no_warning_when_both_provided(self, _base_config_dict, caplog):
+        _base_config_dict["response"] = ["rt", "response"]
+        _base_config_dict["choices"] = (0, 1)
+        with caplog.at_level("WARNING", logger="hssm"):
+            RLSSMConfig.from_rlssm_dict(_base_config_dict)
+        assert not any("not specified" in m for m in caplog.messages)

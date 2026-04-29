@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .._types import LoglikKind, SupportedModels
     from ..config import ModelConfig
 
-from ..config import BaseModelConfig
+from ..config import DEFAULT_SSM_CHOICES, DEFAULT_SSM_OBSERVED_DATA, BaseModelConfig
 
 _logger = logging.getLogger("hssm")
 
@@ -75,7 +75,7 @@ class RLSSMConfig(BaseModelConfig):
         if config_dict.get("ssm_logp_func") is None:
             raise ValueError("ssm_logp_func must be provided in config_dict")
 
-        return cls(
+        init_kwargs = dict(
             model_name=config_dict["model_name"],
             description=config_dict.get("description"),
             list_params=config_dict.get("list_params"),
@@ -85,11 +85,23 @@ class RLSSMConfig(BaseModelConfig):
             learning_process=config_dict["learning_process"],
             ssm_logp_func=config_dict.get("ssm_logp_func"),
             bounds=config_dict.get("bounds", {}),
-            response=config_dict.get("response"),
-            choices=config_dict.get("choices"),
             decision_process_loglik_kind=config_dict["decision_process_loglik_kind"],
             learning_process_kind=config_dict["learning_process_kind"],
         )
+
+        def _get_or_warn(key: str, default: Any) -> None:
+            if key not in config_dict:
+                _logger.warning(
+                    "'%s' not specified in the RLSSM config; using default value: %r.",
+                    key,
+                    default,
+                )
+            init_kwargs[key] = config_dict.get(key, default)
+
+        _get_or_warn("response", DEFAULT_SSM_OBSERVED_DATA)
+        _get_or_warn("choices", DEFAULT_SSM_CHOICES)
+
+        return cls(**init_kwargs)
 
     def validate(self) -> None:  # noqa: D102
         if self.response is None:
