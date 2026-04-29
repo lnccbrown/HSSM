@@ -58,6 +58,9 @@ class BaseModelConfig(ABC):
     # Additional data requirements
     extra_fields: list[str] | None = None
 
+    # Random variable (simulator) for posterior predictive sampling
+    rv: Any | None = None
+
     @abstractmethod
     def validate(self) -> None:
         """Validate configuration. Must be implemented by subclasses."""
@@ -77,6 +80,11 @@ class BaseModelConfig(ABC):
     def n_extra_fields(self) -> int | None:
         """Return the number of extra fields."""
         return len(self.extra_fields) if self.extra_fields else None
+
+    @property
+    def is_choice_only(self) -> bool:
+        """Return whether the model is choice-only (no RT)."""
+        return self.response is not None and len(self.response) == 1
 
 
 @dataclass

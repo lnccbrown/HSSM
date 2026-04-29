@@ -299,7 +299,7 @@ class RegressionParam(Param):
         """
         formula = cast("str", self.formula)
         rhs = formula.split("~")[1]
-        formula = "rt ~ " + rhs
+        formula = f"response ~ {rhs}"
         dm = design_matrices(formula, data=data, extra_namespace=extra_namespace)
         return dm
 

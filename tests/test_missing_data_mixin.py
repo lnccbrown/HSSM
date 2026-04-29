@@ -22,6 +22,7 @@ class DummyModel(MissingDataMixin):
         self.missing_data_value = -999.0
         self.missing_data = False
         self.deadline = False
+        self.is_choice_only = False
 
 
 # region ===== Fixtures =====

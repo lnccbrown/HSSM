@@ -37,18 +37,18 @@ def data_angle():
 def data_ddm_reg():
     # Generate some fake simulation data
     intercept = 1.5
-    x = np.random.uniform(-0.5, 0.5, size=1000)
-    y = np.random.uniform(-0.5, 0.5, size=1000)
+    x = np.random.uniform(-0.5, 0.5, size=250)
+    y = np.random.uniform(-0.5, 0.5, size=250)
 
     v = intercept + 0.8 * x + 0.3 * y
     true_values = np.column_stack(
-        [v, np.repeat([[1.5, 0.5, 0.5]], axis=0, repeats=1000)]
+        [v, np.repeat([[1.5, 0.5, 0.5]], axis=0, repeats=250)]
     )
 
     dataset_reg_v = hssm.simulate_data(
         model="ddm",
         theta=true_values,
-        size=1,  # Generate one data point for each of the 1000 set of true values
+        size=1,
     )
 
     dataset_reg_v["x"] = x

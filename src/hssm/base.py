@@ -268,10 +268,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # endregion
 
         # region ===== Set up shortcuts so old code will work ======
-        self.response = (
+        self.response: list[str] = (  # type: ignore[assignment]
             list(self.model_config.response)
             if self.model_config.response is not None
-            else None
+            else []
         )
         self.list_params = (
             list(self.model_config.list_params)
@@ -284,6 +284,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
         # endregion
+
+        # TODO: add to HSSMBase
+        self.response = cast("list[str]", self.response)
+        self.is_choice_only: bool = self.model_config.is_choice_only
+
+        if self.choices is None:
+            raise ValueError(
+                "`choices` must be provided either in `model_config` or as an argument."
+            )
 
         self._validate_choices()
 
@@ -1240,6 +1249,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         """Return the response variable names in c() format."""
         if self.response is None:
             return "c()"
+        if len(self.response) == 1:
+            return self.response[0]
         return f"c({', '.join(self.response)})"
 
     @property
@@ -1247,6 +1258,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         """Return the response variable names in string format."""
         if self.response is None:
             return ""
+        if len(self.response) == 1:
+            return self.response[0]
         return ",".join(self.response)
 
     # NOTE: can't annotate return type because the graphviz dependency is optional
