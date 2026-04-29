@@ -18,6 +18,7 @@ def test_from_defaults():
     assert config1.loglik is not None
     assert "t" in config1.default_priors
     assert "v" in config1.bounds
+    assert not config1.is_choice_only
 
     # Case 2: Model supported, but no default prior
     config2 = Config.from_defaults("angle", "analytical")
@@ -29,6 +30,7 @@ def test_from_defaults():
     assert config2.loglik is None
     assert config2.default_priors == {}
     assert config2.bounds == {}
+    assert not config2.is_choice_only
 
     # Case 3: Model supported, loglik_kind is None
     config3 = Config.from_defaults("ddm", None)
@@ -44,8 +46,14 @@ def test_from_defaults():
     assert config4.loglik is None
     assert config4.default_priors == {}
     assert config4.bounds == {}
+    assert not config4.is_choice_only
 
-    # Case 5: No supported model, did not provide loglik_kind
+    # Case 5: No supported model, provided loglik_kind
+    config5 = Config.from_defaults("custom", "analytical")
+    config5.response = ["response"]
+    assert config5.is_choice_only
+
+    # Case 6: No supported model, did not provide loglik_kind
     with pytest.raises(ValueError):
         Config.from_defaults("custom", None)
 

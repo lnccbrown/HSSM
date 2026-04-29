@@ -22,6 +22,7 @@ from hssm.defaults import (
 from hssm.distribution_utils import (
     assemble_callables,
     make_distribution,
+    make_hssm_rv,
     make_likelihood_callable,
     make_missing_data_callable,
 )
@@ -356,6 +357,33 @@ class HSSM(HSSMBase):
                 self.missing_data_value,
             )
 
+        # TODO: This is a temporary solution to allow choice-only models without a
+        # specified simulator in ssm-simulators
+        if self.is_choice_only and self.model_config.rv is None:
+            _logger.warning(
+                "You are building a choice-only model without specifying "
+                "a RandomVariable class. Using a dummy simulator function. "
+                "Simulating data from this model will result in an error."
+            )
+
+            def dummy_simulator_func(*args, **kwargs):
+                raise NotImplementedError(
+                    "You are trying to simulate data from a choice-only model "
+                    "without specifying a RandomVariable class. Please specify "
+                    "a RandomVariable class via the `model_config.rv` argument."
+                )
+
+            setattr(dummy_simulator_func, "model_name", self.model_name)
+            setattr(dummy_simulator_func, "choices", self.choices)
+            setattr(dummy_simulator_func, "obs_dim", 1)
+
+            self.model_config.rv = make_hssm_rv(
+                dummy_simulator_func,
+                list_params=self.list_params,
+                lapse=self.lapse,
+                is_choice_only=True,
+            )
+
         self.data = _rearrange_data(self.data)
 
         # Collect fixed-vector params to substitute in the distribution logp
@@ -379,4 +407,6 @@ class HSSM(HSSMBase):
             ),
             fixed_vector_params=fixed_vector_params if fixed_vector_params else None,
             params_is_trialwise=params_is_trialwise_base,
+            # TODO: add to HSSMBase
+            is_choice_only=self.is_choice_only,
         )

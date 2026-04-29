@@ -113,7 +113,7 @@ class TestRLSSMConfigCreation:
         {"v": "subject_wise_function"},
     )
 
-    testcase2 = (
+    testcase2: tuple = (
         "minimal_rlssm",
         minimal_rlssm_config,
         "minimal_rlssm",

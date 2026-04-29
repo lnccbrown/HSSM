@@ -53,7 +53,14 @@ def make_jax_logp_funcs_from_onnx(
         Parameters that are regressions will not be vectorized in likelihood
         calculations.
     params_only:
-        If True, the log-likelihood function will only take parameters as input.
+        Controls the expected signature of the ``logp`` callable.
+        If False (default), the callable signature is ``f(data, *params)``,
+        where ``data`` is a 2-column array of [rt, choice].  This is the
+        standard case for LANs and other likelihoods that condition on
+        observed data.
+        If True, the callable signature is ``f(*params)`` with no data
+        argument.  This is used for Choice Probability Networks (CPNs)
+        and Outcome Probability Networks (OPNs).
     return_jit
         If `True`, the function will return a JIT-compiled version of the vectorized
         logp function, its VJP, and the non-jitted version of the logp function.
