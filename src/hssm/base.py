@@ -8,10 +8,8 @@ This file defines the entry class HSSM.
 
 import datetime
 import logging
-import typing
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from inspect import signature
 from os import PathLike
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, Union, cast, get_args
@@ -30,9 +28,8 @@ import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
-from ssms.config import model_config as ssms_model_config
 
-from hssm._types import LoglikKind, SupportedModels
+from hssm._types import SupportedModels
 from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
@@ -50,7 +47,7 @@ from hssm.utils import (
 )
 
 from . import plotting
-from .config import Config, ModelConfig
+from .config import BaseModelConfig
 from .param import Params
 from .param import UserParam as Param
 
@@ -117,65 +114,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
-    model_config : optional
-        A dictionary containing the model configuration information. If None is
-        provided, defaults will be used if there are any. Defaults to None.
-        Fields for this `dict` are usually:
-
-        - `"list_params"`: a list of parameters indicating the parameters of the model.
-            The order in which the parameters are specified in this list is important.
-            Values for each parameter will be passed to the likelihood function in this
-            order.
-        - `"backend"`: Only used when `loglik_kind` is `approx_differentiable` and
-            an onnx file is supplied for the likelihood approximation network (LAN).
-            Valid values are `"jax"` or `"pytensor"`. It determines whether the LAN in
-            ONNX should be converted to `"jax"` or `"pytensor"`. If not provided,
-            `jax` will be used for maximum performance.
-        - `"default_priors"`: A `dict` indicating the default priors for each parameter.
-        - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
-            of LAN, these bounds are training boundaries.
-        - `"rv"`: Optional. Can be a `RandomVariable` class containing the user's own
-            `rng_fn` function for sampling from the distribution that the user is
-            supplying. If not supplied, HSSM will automatically generate a
-            `RandomVariable` using the simulator identified by `model` from the
-            `ssm_simulators` package. If `model` is not supported in `ssm_simulators`,
-            a warning will be raised letting the user know that sampling from the
-            `RandomVariable` will result in errors.
-        - `"extra_fields"`: Optional. A list of strings indicating the additional
-            columns in `data` that will be passed to the likelihood function for
-            calculation. This is helpful if the likelihood function depends on data
-            other than the observed data and the parameter values.
-    loglik : optional
-        A likelihood function. Defaults to None. Requirements are:
-
-        1. if `loglik_kind` is `"analytical"` or `"blackbox"`, a pm.Distribution, a
-           pytensor Op, or a Python callable can be used. Signatures are:
-            - `pm.Distribution`: needs to have parameters specified exactly as listed in
-            `list_params`
-            - `pytensor.graph.Op` and `Callable`: needs to accept the parameters
-            specified exactly as listed in `list_params`
-        2. If `loglik_kind` is `"approx_differentiable"`, then in addition to the
-            specifications above, a `str` or `Pathlike` can also be used to specify a
-            path to an `onnx` file. If a `str` is provided, HSSM will first look locally
-            for an `onnx` file. If that is not successful, HSSM will try to download
-            that `onnx` file from Hugging Face hub.
-        3. It can also be `None`, in which case a default likelihood function will be
-            used
-    loglik_kind : optional
-        A string that specifies the kind of log-likelihood function specified with
-        `loglik`. Defaults to `None`. Can be one of the following:
-
-        - `"analytical"`: an analytical (approximation) likelihood function. It is
-            differentiable and can be used with samplers that requires differentiation.
-        - `"approx_differentiable"`: a likelihood approximation network (LAN) likelihood
-            function. It is differentiable and can be used with samplers that requires
-            differentiation.
-        - `"blackbox"`: a black box likelihood function. It is typically NOT
-            differentiable.
-        - `None`, in which a default will be used. For `ddm` type of models, the default
-            will be `analytical`. For other models supported, it will be
-            `approx_differentiable`. If the model is a custom one, a ValueError
-            will be raised.
+    model_config
+        A fully initialised :class:`~hssm.config.BaseModelConfig` instance
+         (typically :class:`~hssm.config.Config`) produced by the subclass
+         before calling ``super().__init__``. All likelihood, parameter, and
+         data information used by :class:`HSSMBase` is drawn from this object,
+         and it must provide populated ``loglik`` and ``list_params`` fields.
     p_outlier : optional
         The fixed lapse probability or the prior distribution of the lapse probability.
         Defaults to a fixed value of 0.05. When `None`, the lapse probability will not
@@ -265,21 +209,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         The jitter value for the initial values.
     """
 
-    config_class = Config
-
     def __init__(
         self,
         data: pd.DataFrame,
-        model: SupportedModels | str = "ddm",
-        choices: list[int] | None = None,
+        model_config: BaseModelConfig,
         include: list[dict[str, Any] | Param] | None = None,
-        model_config: ModelConfig | dict | None = None,
-        loglik: (
-            str | PathLike | Callable | pytensor.graph.Op | type[pm.Distribution] | None
-        ) = None,
-        loglik_kind: LoglikKind | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
-        lapse: float | dict | bmb.Prior | None = None,
+        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
         global_formula: str | None = None,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
@@ -293,114 +229,61 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
-        # Attach arguments to the instance
-        # so that we can easily define some
-        # methods that need to access these
-        # arguments (context: pickling / save - load).
-
-        # Define a dict with all call arguments:
-        self._init_args = {
-            k: v for k, v in locals().items() if k not in ["self", "kwargs"]
-        }
-        if kwargs:
-            self._init_args.update(kwargs)
-
+        # ===== Input Data & Configuration =====
         self.data = data.copy()
-        self._inference_obj: az.InferenceData | None = None
-        self._initvals: dict[str, Any] = {}
-        self.initval_jitter = initval_jitter
-        self._inference_obj_vi: pm.Approximation | None = None
-        self._vi_approx = None
-        self._map_dict = None
         self.global_formula = global_formula
-
         self.link_settings = link_settings
         self.prior_settings = prior_settings
-
         self.missing_data_value = -999.0
 
+        # Store a safe default for the constructor-arguments snapshot so that
+        # pickling / save-load cannot raise AttributeError if a subclass forgets
+        # to call `_store_init_args(locals(), kwargs)` early. Subclasses are
+        # still expected to overwrite this with the real snapshot. However,
+        # do not overwrite if a subclass already set `_init_args` prior to
+        # calling `super().__init__()` (the subclass may capture its
+        # constructor args before delegating to the base class).
+        if not hasattr(self, "_init_args"):
+            self._init_args: dict[str, Any] = {}
+
+        # Set up additional namespace for formula evaluation
         additional_namespace = transformations_namespace.copy()
         if extra_namespace is not None:
             additional_namespace.update(extra_namespace)
         self.additional_namespace = additional_namespace
 
-        # Construct a model_config from defaults
-        self.model_config = Config.from_defaults(model, loglik_kind)
-        # Update defaults with user-provided config, if any
-        if model_config is not None:
-            if isinstance(model_config, dict):
-                if "choices" not in model_config:
-                    if choices is not None:
-                        model_config["choices"] = tuple(choices)
-                else:
-                    if choices is not None:
-                        _logger.info(
-                            "choices list provided in both model_config and "
-                            "as an argument directly."
-                            " Using the one provided in model_config. \n"
-                            "We recommend providing choices in model_config."
-                        )
-            elif isinstance(model_config, ModelConfig):
-                if model_config.choices is None:
-                    if choices is not None:
-                        model_config.choices = tuple(choices)
-                else:
-                    if choices is not None:
-                        _logger.info(
-                            "choices list provided in both model_config and "
-                            "as an argument directly."
-                            " Using the one provided in model_config. \n"
-                            "We recommend providing choices in model_config."
-                        )
+        # region ===== Inference Results (initialized to None/empty) =====
+        self._inference_obj: az.InferenceData | None = None
+        self._inference_obj_vi: pm.Approximation | None = None
+        self._vi_approx = None
+        self._map_dict = None
+        # endregion
 
-            self.model_config.update_config(
-                model_config
-                if isinstance(model_config, ModelConfig)
-                else ModelConfig(**model_config)  # also serves as dict validation
-            )
-        else:
-            # Model config is not provided, but at this point was constructed from
-            # defaults.
-            if model not in typing.get_args(SupportedModels):
-                # TODO: ideally use self.supported_models above but mypy doesn't like it
-                if choices is not None:
-                    self.model_config.update_choices(choices)
-                elif model in ssms_model_config:
-                    self.model_config.update_choices(
-                        ssms_model_config[model]["choices"]
-                    )
-                    _logger.info(
-                        "choices argument passed as None, "
-                        "but found %s in ssms-simulators. "
-                        "Using choices, from ssm-simulators configs: %s",
-                        model,
-                        ssms_model_config[model]["choices"],
-                    )
-            else:
-                # Model config already constructed from defaults, and model string is
-                # in SupportedModels. So we are guaranteed that choices are in
-                # self.model_config already.
+        # ===== Initial Values Configuration =====
+        self._initvals: dict[str, Any] = {}
+        self.initval_jitter = initval_jitter
 
-                if choices is not None:
-                    _logger.info(
-                        "Model string is in SupportedModels."
-                        " Ignoring choices arguments."
-                    )
+        # region ===== Store the pre-built config =====
+        self.model_config: BaseModelConfig = model_config
+        # endregion
 
-        # Update loglik with user-provided value
-        self.model_config.update_loglik(loglik)
-        # Ensure that all required fields are valid
-        self.model_config.validate()
-
-        # Set up shortcuts so old code will work
-        # TODO: add to HSSMBase
-        self.response = self.model_config.response[:]
-        self.list_params = self.model_config.list_params
-        self.choices = self.model_config.choices
+        # region ===== Set up shortcuts so old code will work ======
+        self.response: list[str] = (  # type: ignore[assignment]
+            list(self.model_config.response)
+            if self.model_config.response is not None
+            else []
+        )
+        self.list_params = (
+            list(self.model_config.list_params)
+            if self.model_config.list_params is not None
+            else None
+        )
+        self.choices = self.model_config.choices  # type: ignore[assignment]
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
         self.extra_fields = self.model_config.extra_fields
+        # endregion
 
         # TODO: add to HSSMBase
         self.response = cast("list[str]", self.response)
@@ -411,94 +294,44 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 "`choices` must be provided either in `model_config` or as an argument."
             )
 
-        self.n_choices = len(self.choices)
-
         self._validate_choices()
+
+        # region Avoid mypy error later (None.append). Should list_params be Optional?
+        if self.list_params is None:
+            raise ValueError(
+                "`list_params` must be provided in the model configuration."
+            )
+        # endregion
+
+        self.n_choices = len(self.choices)  # type: ignore[arg-type]
+
         self._pre_check_data_sanity()
 
-        # Process missing data setting
-        # AF-TODO: Could be a function in data validator?
-        # TODO: Move to the MissingDataMixin class when we have it
-        if self.is_choice_only and missing_data is not False:
-            raise ValueError("Choice-only models cannot have missing data.")
-
-        if not self.is_choice_only:
-            if isinstance(missing_data, float):
-                if not ((self.data.rt == missing_data).any()):
-                    raise ValueError(
-                        f"missing_data argument is provided as a float {missing_data}, "
-                        f"However, you have no RTs of {missing_data} in your dataset!"
-                    )
-                else:
-                    self.missing_data = True
-                    self.missing_data_value = missing_data
-            elif isinstance(missing_data, bool):
-                if missing_data and (not (self.data.rt == -999.0).any()):
-                    raise ValueError(
-                        "missing_data argument is provided as True, "
-                        " so RTs of -999.0 are treated as missing. \n"
-                        "However, you have no RTs of -999.0 in your dataset!"
-                    )
-                elif (not missing_data) and (self.data.rt == -999.0).any():
-                    # self.missing_data = True
-                    raise ValueError(
-                        "Missing data provided as False. \n"
-                        "However, you have RTs of -999.0 in your dataset!"
-                    )
-                else:
-                    self.missing_data = missing_data
-            else:
-                raise ValueError(
-                    "missing_data argument must be a bool or a float! \n"
-                    f"You provided: {type(missing_data)}"
-                )
-        else:
-            self.missing_data = False
-
-        if isinstance(deadline, str):
-            self.deadline = True
-            self.deadline_name = deadline
-        else:
-            self.deadline = deadline
-            self.deadline_name = "deadline"
-
-        if (
-            not self.missing_data and not self.deadline
-        ) and loglik_missing_data is not None:
-            raise ValueError(
-                "You have specified a loglik_missing_data function, but you have not "
-                + "set the missing_data or deadline flag to True."
-            )
-        self.loglik_missing_data = loglik_missing_data
-
-        # Update data based on missing_data and deadline
-        self._handle_missing_data_and_deadline()
-        # Set self.missing_data_network based on `missing_data` and `deadline`
-        self.missing_data_network = self._set_missing_data_and_deadline(
-            self.missing_data, self.deadline, self.data
+        self._process_missing_data_and_deadline(
+            missing_data=missing_data,
+            deadline=deadline,
+            loglik_missing_data=loglik_missing_data,
         )
 
-        if self.deadline:
-            # self.response is a tuple (from Config); use concatenation.
-            self.response.append(self.deadline_name)
-
-        # Process lapse distribution
+        # region ===== Process lapse distribution =====
         self.has_lapse = p_outlier is not None and p_outlier != 0
         self._check_lapse(lapse)
+        if self.has_lapse and self.list_params[-1] != "p_outlier":
+            self.list_params.append("p_outlier")
+        # endregion
 
         # Process all parameters
         self.params = Params.from_user_specs(
-            model=self,
+            model=self,  # type: ignore[arg-type]
             include=[] if include is None else include,
             kwargs=kwargs,
             p_outlier=p_outlier,
         )
-
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
         self._validate_fixed_vectors()
-        self.formula, self.priors, self.link = self.params.parse_bambi(model=self)
+        self.formula, self.priors, self.link = self.params.parse_bambi(model=self)  # type: ignore[arg-type]
 
         # For parameters that have a regression backend, apply bounds at the likelihood
         # level to ensure that the samples that are out of bounds
@@ -511,6 +344,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Set p_outlier and lapse
         self.p_outlier = self.params.get("p_outlier")
+        self.lapse = lapse if self.has_lapse else None
 
         self._post_check_data_sanity()
 
@@ -538,13 +372,16 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.set_alias(self._aliases)
         self.model.build()
 
+        # region ===== Fix scalar deterministic dims for bambi >= 0.17 =====
         # Bambi >= 0.17 declares dims=("__obs__",) for intercept-only
         # deterministics that actually have shape (1,). This causes an
         # xarray CoordinateValidationError during pm.sample() when ArviZ
         # tries to create a DataArray with mismatched dimension sizes.
         # Fix by removing the dims declaration for these deterministics.
         self._fix_scalar_deterministic_dims()
+        # endregion
 
+        # region ===== Init vals and jitters =====
         if process_initvals:
             self._postprocess_initvals_deterministic(initval_settings=INITVAL_SETTINGS)
         if self.initval_jitter > 0:
@@ -552,6 +389,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 jitter_epsilon=self.initval_jitter,
                 vector_only=True,
             )
+        # endregion
 
         # Make sure we reset rvs_to_initial_values --> Only None's
         # Otherwise PyMC barks at us when asking to compute likelihoods
@@ -559,6 +397,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
         )
         _logger.info("Model initialized successfully.")
+
+    @abstractmethod
+    def _make_model_distribution(self) -> type[pm.Distribution]:
+        """Make a pm.Distribution for the model.
+
+        This method must be implemented by subclasses to create the appropriate
+        distribution for the specific model type.
+        """
+        ...
 
     def _fix_scalar_deterministic_dims(self) -> None:
         """Fix dims metadata for scalar deterministics.
@@ -614,13 +461,43 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         """
         return get_args(SupportedModels)
 
-    @classmethod
-    def _store_init_args(cls, *args, **kwargs):
-        """Store initialization arguments using signature binding."""
-        sig = signature(cls.__init__)
-        bound_args = sig.bind(*args, **kwargs)
-        bound_args.apply_defaults()
-        return {k: v for k, v in bound_args.arguments.items() if k != "self"}
+    @staticmethod
+    def _store_init_args(
+        local_vars: dict[str, Any], extra_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Capture subclass ``__init__`` arguments for save/load serialisation.
+
+        Call this at the very start of a subclass ``__init__`` before any local
+        variables are assigned, passing ``locals()`` and the ``**kwargs`` dict::
+
+            self._init_args = self._store_init_args(locals(), kwargs)
+
+        Parameters
+        ----------
+        local_vars
+            The ``locals()`` snapshot from the subclass ``__init__``.
+        extra_kwargs
+            The ``**kwargs`` dict captured by the subclass ``__init__``.
+
+        Returns
+        -------
+        dict[str, Any]
+            A mapping of parameter names to their values, suitable for
+            reconstructing the instance via ``cls(**init_args)``.
+
+        Notes
+        -----
+        The implementation filters out internal names that commonly appear in
+        ``locals()`` snapshots (for example, ``__class__`` and ``kwargs``) so
+        that the returned mapping is safe to pass back to the class
+        constructor during unpickling.
+        """
+        # Exclude internal names that appear in locals() snapshots and are not
+        # valid constructor parameters when re-instantiating the class.
+        exclude_keys = {"self", "kwargs", "__class__"}
+        result = {k: v for k, v in local_vars.items() if k not in exclude_keys}
+        result.update(extra_kwargs)
+        return result
 
     def find_MAP(self, **kwargs):
         """Perform Maximum A Posteriori estimation.
@@ -664,7 +541,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             Pass initial values to the sampler. This can be a dictionary of initial
             values for parameters of the model, or a string "map" to use initialization
             at the MAP estimate. If "map" is used, the MAP estimate will be computed if
-            not already attached to the base class from prior call to 'find_MAP'.
+            not already attached to the base class from prior call to `find_MAP`.
         include_response_params: optional
             Include parameters of the response distribution in the output. These usually
             take more space than other parameters as there's one of them per
@@ -798,7 +675,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         omit_offsets = kwargs.pop("omit_offsets", False)
         self._inference_obj = self.model.fit(
-            inference_method=sampler,
+            inference_method=(
+                "pymc"
+                if sampler in ["pymc", "numpyro", "blackjax", "nutpie"]
+                else sampler
+            ),
             init=init,
             include_response_params=include_response_params,
             omit_offsets=omit_offsets,
@@ -1363,17 +1244,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.model.set_alias(aliases)
         self.model.build()
 
-    # TODO: update this to HSSMBase
     @property
     def response_c(self) -> str:
-        """Return the response variable names in c() format.
-
-        New in 0.2.12: when model is choice-only and has deadline, the response
-        is not in the form of c(...).
-        """
+        """Return the response variable names in c() format."""
         if self.response is None:
-            raise ValueError("Response is not defined.")
-        if self.is_choice_only and not self.deadline:
+            return "c()"
+        if len(self.response) == 1:
             return self.response[0]
         return f"c({', '.join(self.response)})"
 
@@ -1382,6 +1258,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         """Return the response variable names in string format."""
         if self.response is None:
             return ""
+        if len(self.response) == 1:
+            return self.response[0]
         return ",".join(self.response)
 
     # NOTE: can't annotate return type because the graphviz dependency is optional
@@ -1681,7 +1559,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Sanitize model_name and construct full path
         model_name = model_name.replace(" ", "_")
-        model_path = base_path / model_name
+        model_path = Path(base_path).joinpath(model_name)
         model_path.mkdir(parents=True, exist_ok=True)
 
         # Save model to pickle file
@@ -1711,8 +1589,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        HSSM
-            The loaded HSSM model instance with inference results attached if available.
+        HSSMBase or dict[str, az.InferenceData | None]
+            The loaded model instance (with inference results attached if available),
+            or a dictionary of traces-only InferenceData objects when no model.pkl is
+            found.
         """
         # Convert path to Path object
         path = Path(path)
@@ -1812,6 +1692,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             A dictionary containing the constructor arguments
             under the key 'constructor_args'.
         """
+        # Provide a clear error when the initialization snapshot is missing or
+        # empty. This makes the contract explicit and avoids an AttributeError
+        # that is easy to miss for subclasses that forget to capture init args.
+        if not hasattr(self, "_init_args") or not self._init_args:
+            raise RuntimeError(
+                "Model state missing initialization snapshot; ensure subclasses "
+                "call _store_init_args(locals(), kwargs) early in __init__"
+            )
+
         state = {"constructor_args": self._init_args}
         return state
 
@@ -1819,7 +1708,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         """Set the state of the model when unpickling.
 
         This method is called when unpickling the model. It creates a new instance
-        of HSSM using the constructor arguments stored in the state dictionary,
+        using the constructor arguments stored in the state dictionary,
         and copies its attributes to the current instance.
 
         Parameters
@@ -1992,41 +1881,22 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def _check_lapse(self, lapse):
         """Determine if p_outlier and lapse is specified correctly."""
         # Basically, avoid situations where only one of them is specified.
-        if self.list_params[-1] != "p_outlier":
-            if "p_outlier" in self.list_params:
-                raise ValueError(
-                    "Please do not include 'p_outlier' in `list_params`. "
-                    + "We automatically append it to `list_params` when `p_outlier` "
-                    + "parameter is not None"
-                )
-        if self.has_lapse:
-            if lapse is None:
-                if self.is_choice_only:
-                    self.lapse = 1 / self.n_choices
-                else:
-                    self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
-            else:
-                self.lapse = lapse
-
-            self.list_params.append("p_outlier")
-            return
-
-        if lapse is not None:
+        if self.has_lapse and lapse is None:
+            raise ValueError(
+                "You have specified `p_outlier`. Please also specify `lapse`."
+            )
+        if lapse is not None and not self.has_lapse:
             _logger.warning(
                 "You have specified the `lapse` argument to include a lapse "
                 + "distribution, but `p_outlier` is set to either 0 or None. "
                 + "Your lapse distribution will be ignored."
             )
-        self.lapse = None
-
-    @abstractmethod
-    def _make_model_distribution(self) -> type[pm.Distribution]:
-        """Make a pm.Distribution for the model.
-
-        This method must be implemented by subclasses to create the appropriate
-        distribution for the specific model type.
-        """
-        ...
+        if "p_outlier" in self.list_params and self.list_params[-1] != "p_outlier":
+            raise ValueError(
+                "Please do not include 'p_outlier' in `list_params`. "
+                + "We automatically append it to `list_params` when `p_outlier` "
+                + "parameter is not None"
+            )
 
     def _get_deterministic_var_names(self, idata) -> list[str]:
         """Filter out the deterministic variables in var_names."""
@@ -2128,18 +1998,27 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 ).astype(dtype)
 
     def _get_prefix(self, name_str: str) -> str:
-        """Get parameters wise link setting function from parameter prefix."""
-        # `p_outlier` is the only basic parameter floating around that has
-        # an underscore in it's name.
-        # We need to handle it separately. (Renaming might be better...)
+        """Resolve parameter prefix, handling underscore-containing RL param names.
+
+        The base-class implementation splits ``name_str`` on the first ``_`` and
+        returns that single token (e.g. ``"rl_alpha_Intercept" → "rl"``), which
+        breaks for RL parameters whose names contain underscores.  It also uses a
+        substring check (``"p_outlier" in name_str``) for the lapse parameter,
+        which would misfire for any parameter whose name merely *contains* that
+        substring.
+
+        This override replaces both heuristics with a single longest-prefix-first
+        token search: split on ``_``, then try joining 1…N tokens (longest first)
+        until a candidate is found in ``self.params``.  This is both correct for
+        multi-token RL param names and collision-free for ``p_outlier``.
+        """
         if "_" in name_str:
-            if "p_outlier" not in name_str:
-                name_str_prefix = name_str.split("_")[0]
-            else:
-                name_str_prefix = "p_outlier"
-        else:
-            name_str_prefix = name_str
-        return name_str_prefix
+            parts = name_str.split("_")
+            for i in range(len(parts), 0, -1):
+                candidate = "_".join(parts[:i])
+                if hasattr(self, "params") and candidate in self.params:
+                    return candidate
+        return name_str
 
     def _check_if_initval_user_supplied(
         self,
