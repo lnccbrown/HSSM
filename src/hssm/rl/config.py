@@ -25,9 +25,64 @@ _logger = logging.getLogger("hssm")
 class RLSSMConfig(BaseModelConfig):
     """Config for reinforcement learning + sequential sampling models.
 
-    The ``ssm_logp_func`` field holds the fully annotated JAX SSM
-    log-likelihood function (an :class:`AnnotatedFunction`) that is passed
-    directly to ``make_rl_logp_op``.
+    Extends :class:`BaseModelConfig` with the fields required by the RLSSM
+    likelihood pipeline.  The key extra fields are:
+
+    - ``ssm_logp_func``: the annotated JAX SSM log-likelihood function (see
+      below) whose ``computed`` dict drives per-parameter RL computations.
+    - ``learning_process``: a mapping that declares *how* each computed
+      parameter is specified (see below).
+    - ``decision_process``: the name (string) or :class:`ModelConfig` instance
+      that identifies the SSM decision process (e.g. ``"ddm"``, ``"angle"``).
+    - ``decision_process_loglik_kind`` / ``learning_process_kind``: string
+      tags that record which kind of likelihood and which kind of learning rule
+      are used (e.g. ``"approx_differentiable"`` / ``"blackbox"``).
+
+    ssm_logp_func:
+        A JAX function decorated with ``@annotate_function``.  It must carry:
+
+        - ``.inputs`` — ordered list of all parameter names the function
+          expects (e.g. ``["v", "a", "z", "t", "theta", "rt", "response"]``).
+        - ``.outputs`` — list of output names (e.g. ``["logp"]``).
+        - ``.computed`` — dict mapping each *computed* parameter name to the
+          annotated function that produces it.  For example::
+
+              {"v": compute_v_annotated}
+
+          where ``compute_v_annotated`` is itself decorated with
+          ``@annotate_function`` and carries ``.inputs`` / ``.outputs``.
+
+        ``make_rl_logp_op`` inspects ``ssm_logp_func.computed`` to resolve
+        which parameters come from data / sampled posteriors and which must
+        be computed by the RL learning rule at each gradient step.
+
+    learning_process:
+        A dict keyed by the name of each computed parameter (matching the keys
+        in ``ssm_logp_func.computed``).  Values record how that parameter is
+        specified.  The dict is intentionally permissive — current supported
+        value forms are:
+
+        - **callable** — an annotated function (or plain function) used to
+          compute the parameter.  The actual computation at runtime is driven
+          by ``ssm_logp_func.computed``; this entry serves as declarative
+          documentation and for config serialisation / round-trip::
+
+              learning_process = {"v": compute_v_annotated}
+
+        - **string** — a symbolic identifier for declarative / YAML-based
+          configs that can be resolved to a callable by the caller::
+
+              learning_process = {"v": "subject_wise_function"}
+
+        An empty dict ``{}`` is valid when the SSM has no computed parameters
+        (i.e. ``ssm_logp_func.computed`` is also empty).
+
+        .. note::
+            The dict is *not* directly consumed by ``make_rl_logp_op``.
+            The actual compute functions used at runtime come from
+            ``ssm_logp_func.computed``.  ``learning_process`` therefore acts
+            as a config-level record of intent and is useful for inspection,
+            serialisation, and future higher-level tooling.
     """
 
     decision_process_loglik_kind: str = field(kw_only=True)
