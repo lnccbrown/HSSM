@@ -15,11 +15,20 @@ model.sample()
 
 where `addm_trial_df` contains standard columns (`rt`, `response`) plus **aDDM-specific per-trial arrays** (item values, fixation onsets, fixation counts, first-fixation flag). The aDDM needs per-trial covariates that are *not* themselves sampled parameters — exactly the pattern RLSSM already solves in HSSM. We therefore follow the RLSSM design so that aDDM lives alongside it rather than carving a new architectural lane.
 
-The intended outcome is a working `model="addm"` path inside HSSM that (a) validates aDDM-specific trial data, (b) composes the vendored JAX FPT likelihood with sampled parameters `{eta, kappa, sigma, a, b, x0, t}` (non-decision time optional), (c) exposes the standard HSSM hierarchical regression and sampling machinery, and (d) ships with a tutorial notebook and unit tests.
+The intended outcome is a working `aDDM(...)` class (and matching `aDDMConfig`) inside HSSM that (a) validates aDDM-specific trial data, (b) composes the vendored JAX FPT likelihood with sampled parameters `{eta, kappa, sigma, a, b, x0, t}` (non-decision time optional), (c) exposes the standard HSSM hierarchical regression and sampling machinery, and (d) ships with a tutorial notebook and unit tests.
 
-## Design choice: config pattern, not subclass
+## Design choice: subclass pattern (matching the new RLSSM architecture)
 
-The plan creates an **`aDDMConfig`** dataclass plus a small submodule — no new `aDDM(HSSM)` subclass is introduced. (If the user prefers an explicit subclass for API discoverability, a thin `class aDDM(HSSM)` wrapper can be added on top.)
+> **Architecture update (post-rebase, commit `b4228d1b` — "HSSM base + RLSSM classes" #893).** The HSSM base was refactored: `HSSMBase` is now an abstract base ([src/hssm/base.py](data/azhang/HSSM/src/hssm/base.py)) and both `HSSM` ([src/hssm/hssm.py](data/azhang/HSSM/src/hssm/hssm.py)) and `RLSSM` ([src/hssm/rl/rlssm.py](data/azhang/HSSM/src/hssm/rl/rlssm.py)) are concrete subclasses. `RLSSMConfig` was moved out of `hssm.config` into [src/hssm/rl/config.py](data/azhang/HSSM/src/hssm/rl/config.py) and **no longer exposes a `to_config()` method** — `HSSMBase` accepts any `BaseModelConfig` directly, and the family-specific subclass is responsible for building its own likelihood `Op` and stamping it onto the config via `dataclasses.replace(...)` before calling `super().__init__()`. The new `RLSSMConfig` also adds an `ssm_logp_func` field (an `@annotate_function`-decorated JAX function) and renamed `learning_process_loglik_kind` → `learning_process_kind`.
+
+Given this new architecture, the plan creates **both**:
+
+1. An `aDDM(HSSMBase)` concrete subclass — a peer of `HSSM` and `RLSSM`, exported from `hssm/__init__.py` as `hssm.aDDM`.
+2. An `aDDMConfig(BaseModelConfig)` dataclass living in `src/hssm/addm/config.py`, peer of `RLSSMConfig` in `src/hssm/rl/config.py`.
+
+The `aDDM` subclass handles (i) validating aDDM-specific data shape, (ii) building the differentiable PyTensor `Op` from the vendored JAX likelihood, (iii) stamping that `Op` onto the config (via `replace(loglik=op, backend="jax")`), and (iv) overriding `_make_model_distribution` to bypass the standard `loglik_kind` dispatching — exactly mirroring `RLSSM.__init__` and `RLSSM._make_model_distribution`.
+
+(There is **no longer** a `to_config()` round-trip; that method existed only in the pre-rebase architecture and has been removed from `RLSSMConfig` as well.)
 
 ---
 
@@ -57,61 +66,175 @@ The plan creates an **`aDDMConfig`** dataclass plus a small submodule — no new
 
 ### Step 2 — Define the aDDM submodule layout
 
-Create a new package under `src/hssm/addm/`, mirroring `src/hssm/rl/`:
+Create a new package under `src/hssm/addm/`, mirroring the **post-rebase** `src/hssm/rl/` layout (`config.py` and `rlssm.py` at the package root, plus a `likelihoods/` subpackage):
 
 ```
 src/hssm/addm/
-  __init__.py
+  __init__.py             # exports aDDM, aDDMConfig
+  config.py               # aDDMConfig — peer of hssm.rl.config.RLSSMConfig
+  addm.py                 # aDDM(HSSMBase) — peer of hssm.rl.rlssm.RLSSM
+  attention_process.py    # pluggable fixation/attention models (default: standard_alternating)
+  utils.py                # validate_addm_panel(...) — peer of hssm.rl.utils.validate_balanced_panel
   likelihoods/
     __init__.py
-    builder.py           # make_addm_logp_func / make_addm_logp_op
-    addm_jax.py          # thin wrapper that imports from .jax and applies the attention process
-    jax/                 # vendored from efficient_fpt_jax (Step 1)
+    builder.py            # make_addm_logp_func / make_addm_logp_op
+    addm_jax.py           # thin wrapper that imports from .jax and applies the attention process
+    jax/                  # vendored from efficient_fpt_jax (Step 1)
       __init__.py
       multi_stage.py
       single_stage.py
       utils.py
-  attention_process.py   # pluggable fixation/attention models
 ```
 
-**Rationale:** aDDM is conceptually a two-stage model (attention process → SSM likelihood) just like RLSSM (learning process → SSM likelihood). Reusing the folder layout makes the parallel obvious to future maintainers. The vendored JAX code lives in its own `jax/` subdirectory so it stays clearly identifiable as upstream-derived, isolated from HSSM-original code in `builder.py` and `addm_jax.py`.
+**Rationale:** aDDM is conceptually a two-stage model (attention process → SSM likelihood) just like RLSSM (learning process → SSM likelihood). After the rebase, RLSSM is a real `HSSMBase` subclass with its own subpackage; the aDDM subpackage now mirrors that exactly — same files (`config.py`, `<model>.py`, `utils.py`, `likelihoods/builder.py`), same conventions. The vendored JAX code lives in its own `jax/` subdirectory so it stays clearly identifiable as upstream-derived, isolated from HSSM-original code in `builder.py` and `addm_jax.py`.
 
-### Step 3 — Add `aDDMConfig` dataclass in `config.py`
+### Step 3 — Add `aDDMConfig` dataclass in `src/hssm/addm/config.py`
 
-**Critical file:** [src/hssm/config.py](data/azhang/HSSM/src/hssm/config.py) — add a new dataclass beneath `RLSSMConfig` (around line 457).
+**Critical file:** [src/hssm/addm/config.py](data/azhang/HSSM/src/hssm/addm/config.py) (new file) — peer of [src/hssm/rl/config.py](data/azhang/HSSM/src/hssm/rl/config.py).
+
+> **Note:** `aDDMConfig` is **not** added to `src/hssm/config.py`. After the rebase, family-specific configs live in their own subpackages (`hssm.rl.config.RLSSMConfig`, `hssm.addm.config.aDDMConfig`), with only `BaseModelConfig`, `Config`, and `ModelConfig` remaining in `hssm.config`.
 
 ```python
+from dataclasses import dataclass, field
+from typing import Any, Callable
+from ..config import BaseModelConfig, DEFAULT_SSM_OBSERVED_DATA, DEFAULT_SSM_CHOICES
+
 @dataclass
 class aDDMConfig(BaseModelConfig):
     """Config for the attentional DDM."""
-    model_name: str = "addm"
-    list_params: list[str] = field(
-        default_factory=lambda: ["eta", "kappa", "sigma", "a", "b", "x0"]
+
+    # Required (kw_only) fields — pattern borrowed from RLSSMConfig
+    params_default: list[float] = field(kw_only=True)
+    attention_process: str | Callable | dict[str, Any] = field(
+        kw_only=True, default="standard_alternating"
     )
-    params_default: list[float] = field(
-        default_factory=lambda: [0.3, 1.0, 1.0, 2.0, 0.0, 0.0]
-    )
-    response: list[str] = field(default_factory=lambda: ["rt", "response"])
-    choices: tuple[int, ...] = (-1, 1)
-    # trial-level covariates consumed by the attention process:
+
+    # aDDM-specific extra-field column names (defaultable)
+    # These are *data* columns, not sampled parameters.
     extra_fields: list[str] | None = field(
         default_factory=lambda: ["r1", "r2", "sacc_array", "d", "flag"]
     )
-    bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
-    loglik_kind: str = "approx_differentiable"
-    attention_process: str | Callable = "standard_alternating"
-    description: str | None = "Attentional Drift Diffusion Model"
 
-    def to_config(self) -> Config: ...
+    def __post_init__(self):
+        if self.loglik_kind is None:
+            self.loglik_kind = "approx_differentiable"
+
+    @classmethod
+    def from_defaults(cls, model_name, loglik_kind):
+        raise NotImplementedError(
+            "aDDMConfig does not support from_defaults(). "
+            "Use the aDDM(...) constructor directly, or pass an aDDMConfig "
+            "instance built explicitly."
+        )
+
+    def validate(self) -> None:
+        # Mirror RLSSMConfig.validate: required fields, params_default vs
+        # list_params length parity, every list_params entry has bounds, etc.
+        ...
+
+    def get_defaults(self, param):
+        return None, self.bounds.get(param)
+```
+
+**Key design decisions (post-rebase):**
+
+- **No `to_config()` method.** The new architecture has `HSSMBase` accept any `BaseModelConfig`; family-specific subclasses build the `loglik` `Op` themselves and stamp it onto the config via `dataclasses.replace(...)`. `RLSSMConfig` no longer has `to_config()` and neither will `aDDMConfig`.
+- **No `from_defaults` registration.** Like `RLSSMConfig`, `aDDMConfig` raises `NotImplementedError` from `from_defaults`. Users construct it explicitly (or via a `from_addm_dict` classmethod, optional). Therefore **`aDDM` is *not* registered through the `default_model_config` / `register_model` pipeline** that `HSSM(model="ddm", ...)` uses — instead, users instantiate `hssm.aDDM(...)` directly.
+- `extra_fields` defaults to the five aDDM-specific columns the JAX likelihood needs; these flow through the existing extra-fields machinery (data validator → `Op` `*args`) the same way they do for RLSSM.
+- `attention_process` is a pluggable hook (default `"standard_alternating"`) that maps `(r1, r2, flag, eta, kappa) → mu_array_padded` per trial. This mirrors `RLSSMConfig.learning_process` semantically (declarative documentation; the actual callable is resolved by the builder).
+- `list_params` covers the sampled parameters: `["eta", "kappa", "sigma", "a", "b", "x0"]`. Non-decision time `t` is deliberately omitted initially.
+- `bounds` is required (every `list_params` entry must have an entry), matching `RLSSMConfig.validate`'s post-rebase strictness.
+
+**Reuses:** `BaseModelConfig` ([src/hssm/config.py:48](data/azhang/HSSM/src/hssm/config.py#L48)), defaults `DEFAULT_SSM_OBSERVED_DATA` / `DEFAULT_SSM_CHOICES` ([src/hssm/config.py:24-26](data/azhang/HSSM/src/hssm/config.py#L24-L26)).
+
+### Step 3b — Add `aDDM` subclass in `src/hssm/addm/addm.py`
+
+**Critical file:** [src/hssm/addm/addm.py](data/azhang/HSSM/src/hssm/addm/addm.py) (new file) — peer of [src/hssm/rl/rlssm.py](data/azhang/HSSM/src/hssm/rl/rlssm.py).
+
+This step is **new in the post-rebase plan.** Mirror `RLSSM` (264 lines):
+
+```python
+from dataclasses import replace
+from typing import Any, Callable, Literal, cast
+import bambi as bmb
+import pandas as pd
+import pymc as pm
+
+from hssm.distribution_utils import make_distribution
+from hssm.defaults import INITVAL_JITTER_SETTINGS
+from ..base import HSSMBase
+from .config import aDDMConfig
+from .likelihoods.builder import make_addm_logp_op
+from .utils import validate_addm_panel
+
+
+class aDDM(HSSMBase):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        model_config: aDDMConfig,
+        include: list | None = None,
+        p_outlier: float | dict | bmb.Prior | None = 0.05,
+        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
+        link_settings: Literal["log_logit"] | None = None,
+        prior_settings: Literal["safe"] | None = "safe",
+        extra_namespace: dict | None = None,
+        missing_data: bool | float = False,
+        deadline: bool | str = False,
+        loglik_missing_data: Callable | None = None,
+        process_initvals: bool = True,
+        initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
+        **kwargs,
+    ):
+        self._init_args = self._store_init_args(locals(), kwargs)
+        model_config.validate()
+
+        # Same row-order argument as RLSSM: per-trial sacc_array shape and the
+        # JAX vmap rely on strict 1:1 row→trial correspondence; reordering
+        # missing/deadline rows would break the alignment.
+        if missing_data is not False or deadline is not False:
+            raise NotImplementedError(
+                "aDDM does not support `missing_data` or `deadline` handling..."
+            )
+
+        validate_addm_panel(data, model_config.extra_fields)
+
+        loglik_op = make_addm_logp_op(
+            attention_process=model_config.attention_process,
+            data_cols=list(model_config.response),
+            list_params=list(model_config.list_params),
+            extra_fields=list(model_config.extra_fields or []),
+        )
+
+        # Stamp the Op + backend onto a fresh config copy (do NOT mutate the
+        # caller's config). Identical pattern to RLSSM.__init__.
+        model_config = replace(model_config, loglik=loglik_op, backend="jax")
+
+        super().__init__(
+            data=data, model_config=model_config, include=include,
+            p_outlier=p_outlier, lapse=lapse,
+            link_settings=link_settings, prior_settings=prior_settings,
+            extra_namespace=extra_namespace,
+            missing_data=missing_data, deadline=deadline,
+            loglik_missing_data=loglik_missing_data,
+            process_initvals=process_initvals, initval_jitter=initval_jitter,
+            **kwargs,
+        )
+
+    def _make_model_distribution(self) -> type[pm.Distribution]:
+        # Mirror RLSSM._make_model_distribution: bypass loglik_kind dispatching
+        # and feed the pre-built Op directly into make_distribution.
+        ...
 ```
 
 **Key design decisions:**
-- `extra_fields` defaults to the five aDDM-specific columns that the JAX likelihood needs. These are **not** sampled parameters — they come from the data.
-- `attention_process` is a pluggable hook (default `"standard_alternating"`) that maps `(r1, r2, flag, eta, kappa) → mu_array_padded` per trial. This mirrors `RLSSMConfig.learning_process`.
-- `list_params` covers the sampled parameters. Non-decision time `t` is deliberately omitted initially; it can be added later via shifted RTs.
-- `.to_config()` builds a standard HSSM `Config` pointing at the new likelihood op from Step 4, so downstream `HSSM.__init__` behavior is unchanged.
 
-**Reuses:** `BaseModelConfig` (config.py:48), `Config.from_defaults` registration flow (config.py:96–145), `register_model` (register.py:16–60).
+- **`aDDM` is a peer of `HSSM` and `RLSSM`**, all three inheriting from `HSSMBase`. It is exported from `hssm/__init__.py` as `hssm.aDDM`.
+- **`_make_model_distribution` is overridden** (same as `RLSSM`) because the aDDM `Op` already encapsulates the attention process + per-trial vmap; the standard `make_likelihood_callable` dispatch on `loglik_kind` should be bypassed.
+- **No `participant_col`-style panel reshape** — unlike RLSSM (which reshapes rows into `(n_participants, n_trials, ...)` because the RL learning rule is per-subject), aDDM's likelihood is per-trial. The vmap inside the JAX `Op` handles the trial dimension; participants flow through bambi/HSSM hierarchical regression as usual.
+- **`missing_data` / `deadline` are rejected up front**, same as RLSSM, because rearranging rows would break the strict trial→`sacc_array`-row correspondence.
+
+**Reuses:** `HSSMBase` ([src/hssm/base.py:92](data/azhang/HSSM/src/hssm/base.py#L92)), `make_distribution` ([src/hssm/distribution_utils](data/azhang/HSSM/src/hssm/distribution_utils)), `INITVAL_JITTER_SETTINGS` (defaults.py).
 
 ### Step 4 — Build the likelihood op in `addm/likelihoods/builder.py`
 
@@ -149,15 +272,20 @@ mu2 = kappa * (eta * r1 - r2)
 
 This reproduces the logic in [efficient-fpt addm.py:_build_mu_data_padded](data/azhang/efficient-fpt/src/efficient_fpt/addm.py) but in JAX for autodiff. Expose it via a registry so future variants (e.g., bias, drift offsets) can be registered by name — the same way `RLSSMConfig.learning_process` accepts either a string or dict.
 
-### Step 6 — Register `"addm"` as a built-in model
+### Step 6 — Export `aDDM` and `aDDMConfig` from the top-level package
 
 **Critical files:**
-- [src/hssm/modelconfig/](data/azhang/HSSM/src/hssm/modelconfig/) — add `addm_config.py` in the same style as the existing per-model configs (e.g., `ddm_config.py`).
-- [src/hssm/defaults.py](data/azhang/HSSM/src/hssm/defaults.py) — register `"addm"` in the default model list so `hssm.HSSM(model="addm", ...)` works out of the box.
+- `src/hssm/addm/__init__.py` (new) — re-export `aDDM` and `aDDMConfig`, mirroring [src/hssm/rl/__init__.py](data/azhang/HSSM/src/hssm/rl/__init__.py).
+- [src/hssm/__init__.py](data/azhang/HSSM/src/hssm/__init__.py) — add `from .addm import aDDM` (line 22 already has `from .rl import RLSSM`) and add `"aDDM"` to `__all__`.
 
-`addm_config.py` returns a dict with `response`, `list_params`, `choices`, `description`, and a `likelihoods` sub-dict keyed `"approx_differentiable"` whose `loglik` points to `make_addm_logp_op(...)` from Step 4 and `extra_fields=["r1","r2","sacc_array","d","flag"]`.
+> **Architecture update:** `aDDM` follows the **`RLSSM` registration pattern, not the `HSSM(model=...)` pattern**. Like `RLSSM`, it is *not* added to `default_model_config` and *not* registered through `register_model`. Users instantiate it directly:
+> ```python
+> import hssm
+> model = hssm.aDDM(data=addm_trial_df, model_config=cfg, ...)
+> ```
+> No `src/hssm/modelconfig/addm_config.py` is created — that directory holds dicts consumed by `register_model` for the analytical/ONNX-based `HSSM(model="ddm", ...)` flow, which doesn't apply to subclass-based families like RLSSM and aDDM.
 
-**Reuses:** `register_model` (register.py:16–60) — already handles the registration flow; we just need to pass the right dict.
+**Reuses:** `hssm/__init__.py` re-export pattern (see existing `RLSSM` import at line 22).
 
 ### Step 7 — Data validation for aDDM-specific columns
 
@@ -174,12 +302,21 @@ Minimally invasive: put the hook in `_post_check_data_sanity` and no-op for non-
 
 ### Step 8 — Tests
 
-New file: `tests/test_addm_config.py`, patterned after [tests/test_rlssm_config.py](data/azhang/HSSM/tests/test_rlssm_config.py):
+Create a `tests/addm/` directory mirroring [tests/rl/](data/azhang/HSSM/tests/rl/):
 
-1. `TestaDDMConfigCreation` — build `aDDMConfig`, assert defaults.
-2. `TestaDDMConfigConversion` — `.to_config()` round-trip.
-3. `TestaDDMLikelihood` — tiny synthetic dataset (10 trials), confirm `logp` is finite, gradient w.r.t. each parameter is finite, matches a direct call to `get_addm_fptd_jax_fast`.
-4. `TestaDDMEndToEnd` — 200-trial synthetic dataset, `hssm.HSSM(model="addm", ...)` builds, a single MCMC draw succeeds (smoke test, `draws=5, tune=5`).
+- `tests/addm/test_addm_config.py` — patterned after [tests/test_rlssm_config.py](data/azhang/HSSM/tests/test_rlssm_config.py).
+- `tests/addm/test_addm.py` — patterned after [tests/test_rlssm.py](data/azhang/HSSM/tests/test_rlssm.py).
+- `tests/addm/test_addm_builder_output_shape.py` — patterned after [tests/test_rl_builder_output_shape.py](data/azhang/HSSM/tests/test_rl_builder_output_shape.py).
+- `tests/addm/test_addm_likelihood.py` — patterned after [tests/test_rldm_likelihood.py](data/azhang/HSSM/tests/test_rldm_likelihood.py).
+
+Test classes:
+
+1. `TestaDDMConfigCreation` — build `aDDMConfig`, assert defaults, assert `validate()` raises on missing/inconsistent fields.
+2. `TestaDDMConfigFromDefaults` — assert `aDDMConfig.from_defaults(...)` raises `NotImplementedError` (mirrors RLSSMConfig).
+3. `TestaDDMLikelihood` — tiny synthetic dataset (10 trials), confirm `logp` is finite, gradient w.r.t. each parameter is finite, matches a direct call to the vendored `get_addm_fptd_jax_fast`.
+4. `TestaDDMEndToEnd` — 200-trial synthetic dataset, `hssm.aDDM(data=..., model_config=...)` builds, a single MCMC draw succeeds (smoke test, `draws=5, tune=5`).
+
+> Removed: the obsolete `TestaDDMConfigConversion` (`.to_config()` round-trip) — there is no `to_config()` method in the post-rebase architecture.
 
 **Reuse:** test fixtures from `tests/conftest.py`.
 
@@ -187,7 +324,7 @@ New file: `tests/test_addm_config.py`, patterned after [tests/test_rlssm_config.
 
 Create `docs/tutorials/addm_tutorial.ipynb` mirroring the structure of `docs/tutorials/rlssm_tutorial.ipynb`:
 - Load/simulate a small aDDM dataset (reuse `simulate_addm` from efficient-fpt example6).
-- Build the HSSM model with `model="addm"`.
+- Build the model with `hssm.aDDM(data=..., model_config=aDDMConfig(...))` — **not** `hssm.HSSM(model="addm", ...)`, since aDDM follows the RLSSM subclass pattern.
 - Add a hierarchical regression on `eta` (e.g., by participant) to showcase why using HSSM buys more than raw efficient-fpt.
 - Run `model.sample()` and plot posteriors via `arviz`.
 
@@ -200,14 +337,19 @@ Create `docs/tutorials/addm_tutorial.ipynb` mirroring the structure of `docs/tut
 
 ## Files to be created
 
-**HSSM-original code:**
-- `src/hssm/addm/__init__.py`
-- `src/hssm/addm/attention_process.py`
+**HSSM-original code (mirrors `src/hssm/rl/` layout post-rebase):**
+- `src/hssm/addm/__init__.py` — re-exports `aDDM`, `aDDMConfig`
+- `src/hssm/addm/config.py` — `aDDMConfig` dataclass *(peer of `hssm/rl/config.py`)*
+- `src/hssm/addm/addm.py` — `aDDM(HSSMBase)` class *(peer of `hssm/rl/rlssm.py`)*
+- `src/hssm/addm/utils.py` — `validate_addm_panel` *(peer of `hssm/rl/utils.py`)*
+- `src/hssm/addm/attention_process.py` — `standard_alternating` and registry
 - `src/hssm/addm/likelihoods/__init__.py`
-- `src/hssm/addm/likelihoods/builder.py`
-- `src/hssm/addm/likelihoods/addm_jax.py`
-- `src/hssm/modelconfig/addm_config.py`
-- `tests/test_addm_config.py`
+- `src/hssm/addm/likelihoods/builder.py` — `make_addm_logp_func`, `make_addm_logp_op`
+- `src/hssm/addm/likelihoods/addm_jax.py` — thin wrapper composing attention process + vendored JAX likelihood
+- `tests/addm/test_addm_config.py`
+- `tests/addm/test_addm.py`
+- `tests/addm/test_addm_builder_output_shape.py`
+- `tests/addm/test_addm_likelihood.py`
 - `docs/tutorials/addm_tutorial.ipynb`
 
 **Vendored from efficient-fpt (verbatim copies, kept in their own subpackage):**
@@ -219,12 +361,14 @@ Create `docs/tutorials/addm_tutorial.ipynb` mirroring the structure of `docs/tut
 
 ## Files to be modified
 
-- `src/hssm/config.py` — add `aDDMConfig` dataclass.
-- `src/hssm/defaults.py` — register `"addm"` in the default model list.
+- `src/hssm/__init__.py` — `from .addm import aDDM` and add `"aDDM"` to `__all__` (mirrors the existing `RLSSM` import on line 22).
 - `src/hssm/data_validator.py` — add aDDM column-shape validation hook.
 - `README.md`, `mkdocs.yml` — mention the new model.
 
-(`pyproject.toml` is **not** modified — no new dependencies are introduced. JAX is already a core dependency.)
+> **Removed from "files to be modified":**
+> - ~~`src/hssm/config.py`~~ — `aDDMConfig` lives in its own subpackage at `src/hssm/addm/config.py`, not in the central `config.py`. (RLSSMConfig was moved out of `hssm.config` in the rebase for the same reason.)
+> - ~~`src/hssm/defaults.py`~~ — aDDM is **not** registered in `default_model_config`; users instantiate `hssm.aDDM(...)` directly, same as `hssm.RLSSM(...)`.
+> - ~~`pyproject.toml`~~ — no new dependencies (JAX is already core).
 
 ## Key functions/utilities to reuse (no re-implementation)
 
@@ -232,9 +376,11 @@ Create `docs/tutorials/addm_tutorial.ipynb` mirroring the structure of `docs/tut
 |---|---|
 | JAX FPT likelihood | `hssm.addm.likelihoods.jax.get_addm_fptd_jax_fast` *(vendored)* |
 | Safe padding of saccade arrays | `hssm.addm.likelihoods.jax.pad_sacc_array_safely` *(vendored)* |
-| Likelihood op wrapping pattern | [hssm/rl/likelihoods/builder.py](data/azhang/HSSM/src/hssm/rl/likelihoods/builder.py) |
-| Config → standard Config conversion | [config.RLSSMConfig.to_config](data/azhang/HSSM/src/hssm/config.py#L408) |
-| Model registration | [register.register_model](data/azhang/HSSM/src/hssm/register.py#L16) |
+| Likelihood `Op` builder pattern | [hssm/rl/likelihoods/builder.py](data/azhang/HSSM/src/hssm/rl/likelihoods/builder.py) |
+| Subclass `__init__` / `_make_model_distribution` pattern | [hssm/rl/rlssm.py](data/azhang/HSSM/src/hssm/rl/rlssm.py) |
+| Family-specific config dataclass pattern | [hssm/rl/config.RLSSMConfig](data/azhang/HSSM/src/hssm/rl/config.py) |
+| Abstract base for HSSM model classes | [hssm/base.HSSMBase](data/azhang/HSSM/src/hssm/base.py#L92) |
+| `make_distribution` (consumes pre-built loglik `Op`) | `hssm.distribution_utils.make_distribution` |
 | Extra-fields propagation into logp | [data_validator.DataValidatorMixin._update_extra_fields](data/azhang/HSSM/src/hssm/data_validator.py#L156) |
 | Param bound enforcement | [distribution_utils.dist.apply_param_bounds_to_loglik](data/azhang/HSSM/src/hssm/distribution_utils/dist.py#L40) |
 
@@ -244,15 +390,16 @@ Create `docs/tutorials/addm_tutorial.ipynb` mirroring the structure of `docs/tut
 
 End-to-end checks, in order:
 
-1. **Unit**: `pytest tests/test_addm_config.py -v` — all four test classes pass, including finite-gradient check.
-2. **Likelihood parity**: in `test_addm_config.py::TestaDDMLikelihood`, assert HSSM's wrapped op returns the same value (to 1e-6) as a direct call to the vendored `hssm.addm.likelihoods.jax.get_addm_fptd_jax_fast` on a 10-trial fixture. This confirms the HSSM extra-fields/op-wrapping plumbing does not corrupt the underlying JAX computation. (A separate, off-CI sanity script may also compare against an installed `efficient-fpt` checkout to detect drift between the vendored copy and upstream.)
-3. **Smoke sample**: `hssm.HSSM(model="addm", data=synthetic_trials).sample(draws=5, tune=5)` completes without error and returns an `InferenceData`.
-4. **Parameter recovery**: larger off-CI script (e.g., `tests/scripts/addm_recovery.py`) — simulate 1000 trials with known `(eta, kappa, a, b, x0, sigma)`, fit in HSSM, confirm posterior means within ~2σ of ground truth. Reuse the recovery setup from [efficient-fpt example8_empirical/parameter_recovery.ipynb](data/azhang/efficient-fpt/examples/example8_empirical).
+1. **Unit**: `pytest tests/addm/ -v` — all test files pass, including finite-gradient check.
+2. **Likelihood parity**: in `tests/addm/test_addm_likelihood.py`, assert HSSM's wrapped op returns the same value (to 1e-6) as a direct call to the vendored `hssm.addm.likelihoods.jax.get_addm_fptd_jax_fast` on a 10-trial fixture. This confirms the HSSM extra-fields/op-wrapping plumbing does not corrupt the underlying JAX computation. (A separate, off-CI sanity script may also compare against an installed `efficient-fpt` checkout to detect drift between the vendored copy and upstream.)
+3. **Smoke sample**: `hssm.aDDM(data=synthetic_trials, model_config=cfg).sample(draws=5, tune=5)` completes without error and returns an `InferenceData`.
+4. **Parameter recovery**: larger off-CI script (e.g., `tests/scripts/addm_recovery.py`) — simulate 1000 trials with known `(eta, kappa, a, b, x0, sigma)`, fit via `hssm.aDDM(...)`, confirm posterior means within ~2σ of ground truth. Reuse the recovery setup from [efficient-fpt example8_empirical/parameter_recovery.ipynb](data/azhang/efficient-fpt/examples/example8_empirical).
 5. **Tutorial runs clean**: `jupyter nbconvert --execute docs/tutorials/addm_tutorial.ipynb` finishes without errors.
 6. **Docs build**: `mkdocs build` succeeds with the new tutorial in nav.
 
 ## Open questions for the user
 
-1. **Subclass vs config-only**: confirm the config-pattern approach (no `class aDDM(HSSM)`) is acceptable, or whether a thin `hssm.aDDM` convenience class is desired on top.
+1. ~~**Subclass vs config-only**~~ — *resolved by the rebase.* The new architecture (`HSSMBase` + `RLSSM` subclass) settles this: aDDM follows the subclass pattern, with both `aDDM(HSSMBase)` and `aDDMConfig(BaseModelConfig)` introduced.
 2. **Non-decision time `t`**: include in v1 as an additional sampled parameter (shift RTs), or defer?
 3. **Attention-process extensibility**: is the default `standard_alternating` enough, or should v1 already expose user-pluggable attention processes (e.g., non-alternating fixation patterns)?
+4. **Hierarchical regression target**: should the tutorial demonstrate hierarchical regression on `eta` (attention bias) by participant, or is a different parameter (e.g., `kappa`) more meaningful as a worked example?
