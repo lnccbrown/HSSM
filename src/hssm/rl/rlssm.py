@@ -427,7 +427,7 @@ class RLSSM(_RLSSM):
 
         if model_config is not None:
             # Escape-hatch path: caller supplied a fully built config.
-            if any(
+            if model != "rldm" or any(
                 x is not None for x in [learning_process, decision_process, choices]
             ):
                 _logger.warning(
