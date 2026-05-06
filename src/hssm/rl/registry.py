@@ -270,19 +270,29 @@ def get_rlssm_model_config(
     # Defensive copy of response to prevent downstream mutation of registry.
     response = list(ssm_entry["response"])
 
-    rl_params: list[str] = entry.get("rl_params") or _derive_rl_params(
-        lp, response, entry.get("extra_fields") or []
+    # Use `is None` checks so that explicitly empty containers ([], {}) are
+    # respected as valid "no RL params" configuration and not overridden by
+    # the fallback derivation logic.
+    _rl_params = entry.get("rl_params")
+    rl_params: list[str] = (
+        _derive_rl_params(lp, response, entry.get("extra_fields") or [])
+        if _rl_params is None
+        else _rl_params
     )
     list_params = rl_params + ssm_sampled
 
     # bounds: RL bounds ∪ SSM sampled bounds
-    bounds: dict[str, tuple[float, float]] = dict(entry.get("rl_bounds") or {})
+    _rl_bounds = entry.get("rl_bounds")
+    bounds: dict[str, tuple[float, float]] = dict(
+        _rl_bounds if _rl_bounds is not None else {}
+    )
     for p in ssm_sampled:
         if p in ssm_entry["bounds_ssm"]:
             bounds[p] = ssm_entry["bounds_ssm"][p]
 
     # params_default aligned with list_params
-    rl_defaults: list[float] = list(entry.get("rl_params_default") or [])
+    _rl_defaults = entry.get("rl_params_default")
+    rl_defaults: list[float] = list(_rl_defaults if _rl_defaults is not None else [])
     ssm_all_defaults: list[float] = list(ssm_entry["params_default_ssm"])
     ssm_sampled_defaults = [
         ssm_all_defaults[i]
