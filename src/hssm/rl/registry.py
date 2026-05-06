@@ -89,6 +89,12 @@ def _get_ssm_logp(name: str) -> Any:
     the cached object without any I/O.
     """
     if name not in _SSM_LOGP_CACHE:
+        if name not in _SSM_REGISTRY:
+            raise KeyError(
+                f"SSM '{name}' not found in the SSM registry. "
+                f"Available: {list(_SSM_REGISTRY.keys())}. "
+                "Use register_ssm() to add it."
+            )
         entry = _SSM_REGISTRY[name]
         if "ssm_base_logp_func_factory" in entry:
             _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
@@ -148,6 +154,12 @@ def _build_ssm_logp_func(ssm_base_logp_func: Any, learning_process: dict) -> Any
     :func:`~hssm.rl.likelihoods.builder.make_rl_logp_op` can resolve which
     parameters are produced by the RL learning rule at runtime.
     """
+    existing = getattr(ssm_base_logp_func, "computed", None)
+    if existing:
+        raise ValueError(
+            "ssm_base_logp_func already has a non-empty .computed attribute. "
+            "Pass the raw (base) annotated function without .computed instead."
+        )
     return annotate_function(
         inputs=ssm_base_logp_func.inputs,
         outputs=ssm_base_logp_func.outputs,
@@ -168,8 +180,14 @@ def _derive_rl_params(
     exclude = set(response) | set(extra_fields)
     rl_params: list[str] = []
     seen: set[str] = set()
-    for lp_func in learning_process.values():
+    for param_name, lp_func in learning_process.items():
         if not hasattr(lp_func, "inputs"):
+            _logger.warning(
+                "Learning process function for '%s' has no .inputs attribute; "
+                "cannot derive RL parameters from it. "
+                "Ensure it is decorated with @annotate_function.",
+                param_name,
+            )
             continue
         for inp in lp_func.inputs:
             if inp not in exclude and inp not in seen:
@@ -249,8 +267,11 @@ def get_rlssm_model_config(
     computed_set = set(lp.keys())
     ssm_sampled = [p for p in ssm_entry["list_params_ssm"] if p not in computed_set]
 
+    # Defensive copy of response to prevent downstream mutation of registry.
+    response = list(ssm_entry["response"])
+
     rl_params: list[str] = entry.get("rl_params") or _derive_rl_params(
-        lp, ssm_entry["response"], entry.get("extra_fields") or []
+        lp, response, entry.get("extra_fields") or []
     )
     list_params = rl_params + ssm_sampled
 
@@ -281,7 +302,7 @@ def get_rlssm_model_config(
         list_params=list_params,
         bounds=bounds,
         params_default=params_default,
-        response=ssm_entry["response"],
+        response=response,
         choices=entry["choices"],
         extra_fields=entry.get("extra_fields"),
     )
@@ -339,12 +360,14 @@ def register_rlssm_model(
         )
     _RLSSM_REGISTRY[name] = {
         "decision_process": decision_process,
-        "learning_process": learning_process,
-        "rl_params": rl_params,
-        "rl_bounds": rl_bounds,
-        "rl_params_default": rl_params_default,
-        "extra_fields": extra_fields or [],
-        "choices": choices if choices is not None else [0, 1],
+        # Shallow-copy all mutable caller-supplied collections so that later
+        # mutations of the originals do not silently corrupt the registry entry.
+        "learning_process": dict(learning_process),
+        "rl_params": list(rl_params),
+        "rl_bounds": dict(rl_bounds),
+        "rl_params_default": list(rl_params_default),
+        "extra_fields": list(extra_fields) if extra_fields is not None else [],
+        "choices": list(choices) if choices is not None else [0, 1],
         "description": description,
         "decision_process_loglik_kind": decision_process_loglik_kind,
         "learning_process_kind": learning_process_kind,
@@ -380,6 +403,17 @@ def register_ssm(
     response:
         Data column names. Defaults to ``["rt", "response"]``.
     """
+    if not callable(ssm_base_logp_func):
+        raise ValueError(
+            f"ssm_base_logp_func must be callable, got {type(ssm_base_logp_func)!r}."
+        )
+    if not hasattr(ssm_base_logp_func, "inputs") or not hasattr(
+        ssm_base_logp_func, "outputs"
+    ):
+        raise ValueError(
+            "ssm_base_logp_func must be decorated with @annotate_function "
+            "(missing .inputs or .outputs attribute)."
+        )
     if name in _SSM_REGISTRY:
         _logger.warning(
             "SSM '%s' is already in the SSM registry and will be overwritten.", name

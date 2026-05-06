@@ -171,7 +171,6 @@ class _RLSSM(HSSMBase):
 
         # Store RL-specific state on self BEFORE super().__init__() so that
         # _make_model_distribution() (called from super) can access them.
-        self.config = model_config
         self.n_participants = n_participants
         self.n_trials = n_trials
 
@@ -202,6 +201,8 @@ class _RLSSM(HSSMBase):
         #  _make_model_distribution for details.
         model_config = replace(model_config, loglik=loglik_op, backend="jax")
 
+        # missing_data and deadline are guaranteed False at this point (guards
+        # above reject any other value).  Pass them explicitly for clarity.
         super().__init__(
             data=data,
             model_config=model_config,
@@ -211,8 +212,8 @@ class _RLSSM(HSSMBase):
             link_settings=link_settings,
             prior_settings=prior_settings,
             extra_namespace=extra_namespace,
-            missing_data=missing_data,
-            deadline=deadline,
+            missing_data=False,
+            deadline=False,
             loglik_missing_data=loglik_missing_data,
             process_initvals=process_initvals,
             initval_jitter=initval_jitter,
@@ -241,10 +242,12 @@ class _RLSSM(HSSMBase):
         # has_lapse=True) rather than self.model_config.list_params (the original
         # config list, never mutated by HSSMBase).
         list_params = self.list_params
-        assert list_params is not None, "list_params must be set"
-        assert isinstance(list_params, list), (
-            "list_params must be a list"
-        )  # for type checker
+        if list_params is None:
+            raise RuntimeError(
+                "list_params must be set before _make_model_distribution is called."
+            )
+        if not isinstance(list_params, list):
+            raise TypeError(f"list_params must be a list, got {type(list_params)!r}.")
 
         # Every RLSSM distribution parameter is trialwise (the Op receives one
         # value per trial). p_outlier is excluded to match the contract of
@@ -260,7 +263,11 @@ class _RLSSM(HSSMBase):
 
         # The differentiable pytensor Op was stored on model_config.loglik during
         # __init__; ensure it's present and cast for typing.
-        assert self.model_config.loglik is not None, "model_config.loglik must be set"
+        if self.model_config.loglik is None:
+            raise RuntimeError(
+                "model_config.loglik must be set before _make_model_distribution "
+                "is called. This indicates the Op was not built in __init__."
+            )
         loglik_op = cast("Callable[..., Any] | Op", self.model_config.loglik)
 
         # RLSSMConfig carries no `rv` field; use model_name as the rv identifier.
@@ -423,6 +430,7 @@ class RLSSM(_RLSSM):
     ) -> None:
         # Capture simplified args BEFORE calling super so they can be
         # restored afterwards for save/load serialisation.
+        # NOTE: _store_init_args only operates on its arguments, not on self.
         _my_init_args = self._store_init_args(locals(), kwargs)
 
         if model_config is not None:
@@ -442,6 +450,10 @@ class RLSSM(_RLSSM):
                 decision_process=decision_process,
             )
 
+        # missing_data / deadline are intentionally omitted — _RLSSM defaults
+        # them to False.  The _BlockedAttribute descriptors on this class
+        # silently accept writes from the base-class init path and block reads
+        # after _rlssm_fully_initialized is set below.
         super().__init__(
             data=data,
             model_config=model_config,
@@ -465,4 +477,6 @@ class RLSSM(_RLSSM):
         # Mark initialisation complete — after this point _BlockedAttribute
         # raises NotImplementedError on any read of missing_data / deadline /
         # loglik_missing_data.
+        # IMPORTANT: This MUST be the last statement in __init__.  Any code
+        # added after this line cannot read self.missing_data / self.deadline.
         self.__dict__["_rlssm_fully_initialized"] = True
