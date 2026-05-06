@@ -15,7 +15,7 @@ import pytensor
 import pytest
 
 import hssm
-from hssm.rl import RLSSM, RLSSMConfig
+from hssm.rl import RLSSM, RLSSMConfig, _RLSSM, register_rlssm_model
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
 
@@ -327,3 +327,95 @@ def test_rlssm_pickle_round_trip(
     assert restored.list_params == model.list_params
     assert restored.model_config.model_name == model.model_config.model_name
     assert restored.model is not None
+
+
+# ---------------------------------------------------------------------------
+# Simplified public interface tests (new RLSSM wrapper)
+# ---------------------------------------------------------------------------
+
+
+def test_rlssm_is_subclass_of_internal() -> None:
+    """RLSSM must be a subclass of _RLSSM."""
+    assert issubclass(RLSSM, _RLSSM)
+
+
+def test_rlssm_simplified_init(rldm_data) -> None:
+    """RLSSM(data, model='rldm') should build without supplying model_config."""
+    model = RLSSM(data=rldm_data, model="rldm")
+    assert isinstance(model, RLSSM)
+    # Registry-derived params: rl_alpha, scaler (RL) + a, z, t, theta (SSM)
+    assert "rl_alpha" in model.params
+    assert "scaler" in model.params
+    assert "a" in model.params
+    # v is computed inside the Op; must NOT appear as a free parameter
+    assert "v" not in model.params
+
+
+def test_rlssm_default_model_is_rldm(rldm_data) -> None:
+    """Omitting model should default to 'rldm'."""
+    model = RLSSM(data=rldm_data)
+    assert isinstance(model, RLSSM)
+    assert model.model_config.decision_process == "angle"
+
+
+def test_rlssm_model_config_escape_hatch(rldm_data, rlssm_config) -> None:
+    """Passing model_config= directly should bypass the registry."""
+    model = RLSSM(data=rldm_data, model_config=rlssm_config)
+    assert model.model_config.model_name == rlssm_config.model_name
+
+
+def test_rlssm_unregistered_model_raises(rldm_data) -> None:
+    """Using an unknown model name should raise ValueError."""
+    with pytest.raises(ValueError, match="not found in the RLSSM registry"):
+        RLSSM(data=rldm_data, model="model_not_in_registry")
+
+
+def test_rlssm_missing_data_property_raises(rldm_data) -> None:
+    """Accessing .missing_data on a built RLSSM instance must raise NotImplementedError."""
+    model = RLSSM(data=rldm_data, model="rldm")
+    with pytest.raises(NotImplementedError, match="missing_data"):
+        _ = model.missing_data
+
+
+def test_rlssm_deadline_property_raises(rldm_data) -> None:
+    """Accessing .deadline on a built RLSSM instance must raise NotImplementedError."""
+    model = RLSSM(data=rldm_data, model="rldm")
+    with pytest.raises(NotImplementedError, match="deadline"):
+        _ = model.deadline
+
+
+def test_rlssm_loglik_missing_data_property_raises(rldm_data) -> None:
+    """Accessing .loglik_missing_data on a built RLSSM instance must raise NotImplementedError."""
+    model = RLSSM(data=rldm_data, model="rldm")
+    with pytest.raises(NotImplementedError, match="loglik_missing_data"):
+        _ = model.loglik_missing_data
+
+
+def test_register_rlssm_model(rldm_data) -> None:
+    """A user-registered model should be instantiable via the simplified interface."""
+    # Re-use the existing annotated learning function and ssm logp from the
+    # module-level helpers defined at the top of this test file.
+    register_rlssm_model(
+        name="rldm_custom_test",
+        decision_process="angle",
+        learning_process={"v": _compute_v_annotated},
+        rl_params=["rl_alpha", "scaler"],
+        rl_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
+        rl_params_default=[0.1, 1.0],
+        extra_fields=["feedback"],
+        choices=[0, 1],
+    )
+    model = RLSSM(data=rldm_data, model="rldm_custom_test")
+    assert isinstance(model, RLSSM)
+    assert "rl_alpha" in model.params
+    assert "v" not in model.params
+
+
+def test_rlssm_init_args_uses_simplified_interface(rldm_data) -> None:
+    """_init_args should reflect the simplified constructor, not model_config."""
+    model = RLSSM(data=rldm_data, model="rldm")
+    assert "model" in model._init_args
+    assert model._init_args["model"] == "rldm"
+    # model_config should not be baked in as a hard reference
+    assert "model_config" in model._init_args
+    assert model._init_args["model_config"] is None
