@@ -19,7 +19,7 @@ from .link import Link
 from .param import UserParam as Param
 from .prior import Prior
 from .register import register_model
-from .rl import RLSSM
+from .rl import RLSSM, register_rlssm_model
 from .simulator import simulate_data
 from .utils import check_data_for_rl, set_floatX
 
@@ -40,6 +40,7 @@ __all__ = [
     "Prior",
     "check_data_for_rl",
     "register_model",
+    "register_rlssm_model",
     "simulate_data",
     "set_floatX",
     "show_defaults",
