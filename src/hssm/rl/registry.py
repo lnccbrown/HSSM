@@ -424,6 +424,14 @@ def register_ssm(
             "ssm_base_logp_func must be decorated with @annotate_function "
             "(missing .inputs or .outputs attribute)."
         )
+    existing_computed = getattr(ssm_base_logp_func, "computed", None)
+    if existing_computed:
+        raise ValueError(
+            "ssm_base_logp_func should not have a non-empty .computed attribute "
+            "at registration time. The .computed dict is injected later by "
+            "get_rlssm_model_config() when composing the learning process. "
+            "Pass the raw base function instead."
+        )
     if name in _SSM_REGISTRY:
         _logger.warning(
             "SSM '%s' is already in the SSM registry and will be overwritten.", name
