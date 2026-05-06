@@ -56,7 +56,10 @@ def _make_angle_base_logp() -> Any:
 
 _SSM_REGISTRY: dict[str, dict[str, Any]] = {
     "angle": {
-        "ssm_base_logp_func": _make_angle_base_logp(),
+        # Factory callable — invoked lazily on first use via _get_ssm_logp().
+        # Storing a callable (not the result) avoids loading angle.onnx at
+        # import time (which would trigger hf_hub_download in offline envs).
+        "ssm_base_logp_func_factory": _make_angle_base_logp,
         # All SSM params in the order the SSM expects them (includes computed).
         "list_params_ssm": ["v", "a", "z", "t", "theta"],
         # Bounds only for params that will be *sampled* (not RL-computed).
@@ -71,6 +74,29 @@ _SSM_REGISTRY: dict[str, dict[str, Any]] = {
         "response": ["rt", "response"],
     },
 }
+
+# Cache for resolved SSM base logp functions (populated on first use by
+# _get_ssm_logp, or immediately by register_ssm when a pre-built func is
+# supplied by the caller).
+_SSM_LOGP_CACHE: dict[str, Any] = {}
+
+
+def _get_ssm_logp(name: str) -> Any:
+    """Return the annotated SSM base logp function, building it on first use.
+
+    For built-in SSMs the ONNX model is downloaded / loaded only when this
+    function is first called (lazy initialisation).  Subsequent calls return
+    the cached object without any I/O.
+    """
+    if name not in _SSM_LOGP_CACHE:
+        entry = _SSM_REGISTRY[name]
+        if "ssm_base_logp_func_factory" in entry:
+            _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
+        else:
+            # Pre-built function registered via register_ssm().
+            _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
+    return _SSM_LOGP_CACHE[name]
+
 
 # ---------------------------------------------------------------------------
 # RLSSM named model registry
@@ -213,7 +239,7 @@ def get_rlssm_model_config(
         )
 
     ssm_entry = _SSM_REGISTRY[dp]
-    ssm_base = ssm_entry["ssm_base_logp_func"]
+    ssm_base = _get_ssm_logp(dp)
     lp: dict[str, Any] = entry["learning_process"]
 
     # Compose the full ssm_logp_func with .computed = learning_process.
@@ -365,3 +391,5 @@ def register_ssm(
         "params_default_ssm": params_default_ssm,
         "response": response or ["rt", "response"],
     }
+    # Pre-built: cache immediately so _get_ssm_logp never calls a factory.
+    _SSM_LOGP_CACHE[name] = ssm_base_logp_func
