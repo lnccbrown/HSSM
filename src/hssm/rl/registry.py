@@ -235,7 +235,9 @@ def get_rlssm_model_config(
         raise ValueError(
             f"Model '{model}' not found in the RLSSM registry. "
             f"Available models: {available}. "
-            "To use a custom model, pass 'model_config=' directly."
+            "To add a custom model, use register_rlssm_model() "
+            "(and register_ssm() for custom decision processes), "
+            "or pass 'model_config=' directly to RLSSM()."
         )
 
     # Shallow-copy so overrides don't mutate the registry entry.
