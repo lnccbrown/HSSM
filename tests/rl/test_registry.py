@@ -7,6 +7,7 @@ composition, and registration validation are caught at the module boundary.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 import pytest
@@ -19,9 +20,9 @@ from hssm.utils import annotate_function
 @pytest.fixture(autouse=True)
 def isolated_registries(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isolate global registries so tests do not leak state."""
-    monkeypatch.setattr(registry, "_SSM_REGISTRY", dict(registry._SSM_REGISTRY))
-    monkeypatch.setattr(registry, "_RLSSM_REGISTRY", dict(registry._RLSSM_REGISTRY))
-    monkeypatch.setattr(registry, "_SSM_LOGP_CACHE", {})
+    monkeypatch.setattr(registry, "_SSM_REGISTRY", deepcopy(registry._SSM_REGISTRY))
+    monkeypatch.setattr(registry, "_RLSSM_REGISTRY", deepcopy(registry._RLSSM_REGISTRY))
+    monkeypatch.setattr(registry, "_SSM_LOGP_CACHE", dict(registry._SSM_LOGP_CACHE))
 
 
 @pytest.fixture
@@ -186,10 +187,13 @@ def test_register_rlssm_model_copies_mutable_inputs(
     rl_defaults.append(1.0)
     extra_fields.append("trial")
     choices.append(2)
+    registry._SSM_REGISTRY["angle"]["response"].append("deadline")
     learning_process["other"] = next(iter(learning_process.values()))
 
     stored = registry._RLSSM_REGISTRY["copy_test_model"]
 
+    assert stored["decision_process"]["name"] == "angle"
+    assert stored["decision_process"]["response"] == ["rt", "response"]
     assert stored["rl_params"] == ["rl_alpha"]
     assert stored["rl_bounds"] == {"rl_alpha": (0.0, 1.0)}
     assert stored["rl_params_default"] == [0.2]
