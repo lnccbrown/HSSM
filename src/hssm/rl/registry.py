@@ -438,10 +438,10 @@ def register_ssm(
         )
     _SSM_REGISTRY[name] = {
         "ssm_base_logp_func": ssm_base_logp_func,
-        "list_params_ssm": list_params_ssm,
-        "bounds_ssm": bounds_ssm,
-        "params_default_ssm": params_default_ssm,
-        "response": response or ["rt", "response"],
+        "list_params_ssm": list(list_params_ssm),
+        "bounds_ssm": dict(bounds_ssm),
+        "params_default_ssm": list(params_default_ssm),
+        "response": list(response) if response is not None else ["rt", "response"],
     }
     # Pre-built: cache immediately so _get_ssm_logp never calls a factory.
     _SSM_LOGP_CACHE[name] = ssm_base_logp_func
