@@ -6,7 +6,7 @@ This module defines:
   a fully populated :class:`~hssm.rl.config.RLSSMConfig` to be passed directly.
 - :class:`RLSSM` — the public-facing subclass with a simplified constructor that
   accepts a *model* name string, optional *learning_process* / *decision_process*
-  overrides, and an optional *model_config* escape hatch.  Config construction is
+  overrides, and an optional *model_config* override.  Config construction is
   delegated to :func:`~hssm.rl.registry.get_rlssm_model_config`.
 
 The key difference from :class:`~hssm.hssm.HSSM` is the likelihood:
@@ -358,7 +358,7 @@ class RLSSM(_RLSSM):
     include : list | None, optional
         Parameter specifications forwarded to :class:`~hssm.base.HSSMBase`.
     model_config : RLSSMConfig | None, optional
-        Fully built config (escape hatch). When provided, *model*,
+        Fully built config. When provided, *model*,
         *learning_process*, *decision_process*, and *choices* are ignored
         (a warning is emitted if they are non-default).
     learning_process : dict | None, optional
@@ -434,7 +434,6 @@ class RLSSM(_RLSSM):
         _my_init_args = self._store_init_args(locals(), kwargs)
 
         if model_config is not None:
-            # Escape-hatch path: caller supplied a fully built config.
             if model != "rldm" or any(
                 x is not None for x in [learning_process, decision_process, choices]
             ):

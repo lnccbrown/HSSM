@@ -358,7 +358,7 @@ def test_rlssm_default_model_is_rldm(rldm_data) -> None:
     assert model.model_config.decision_process == "angle"
 
 
-def test_rlssm_model_config_escape_hatch(rldm_data, rlssm_config) -> None:
+def test_rlssm_model_config_provided(rldm_data, rlssm_config) -> None:
     """Passing model_config= directly should bypass the registry."""
     model = RLSSM(data=rldm_data, model_config=rlssm_config)
     assert model.model_config.model_name == rlssm_config.model_name
