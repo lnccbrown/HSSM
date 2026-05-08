@@ -67,7 +67,7 @@ def _set_floatx_float32() -> Generator[None, None, None]:
 def rldm_data() -> pd.DataFrame:
     """Load the RLDM fixture dataset (balanced panel)."""
     raw = np.load(
-        Path(__file__).parent / "fixtures" / "rldm_data.npy", allow_pickle=True
+        Path(__file__).parent.parent / "fixtures" / "rldm_data.npy", allow_pickle=True
     ).item()
     return pd.DataFrame(raw["data"])
 
