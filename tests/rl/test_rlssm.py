@@ -5,9 +5,12 @@ config validation, param keys, balanced-panel enforcement, the no-lapse
 variant, bambi / PyMC model construction, and a sampling smoke test.
 """
 
+import logging
 from collections.abc import Generator
 from pathlib import Path
+from unittest.mock import patch
 
+import cloudpickle
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
@@ -15,7 +18,8 @@ import pytensor
 import pytest
 
 import hssm
-from hssm.rl import RLSSM, RLSSMConfig, _RLSSM, register_rlssm_model
+from hssm.distribution_utils import make_distribution as real_make_distribution
+from hssm.rl import _RLSSM, RLSSM, RLSSMConfig, register_rlssm_model
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
 
@@ -256,10 +260,6 @@ def test_rlssm_extra_fields_are_copies(rldm_data, rlssm_config) -> None:
     to_numpy(copy=True) should return a new buffer; if it returned a view,
     in-place mutations of the DataFrame would silently corrupt the distribution.
     """
-    from unittest.mock import patch
-
-    from hssm.distribution_utils import make_distribution as real_make_distribution
-
     model = RLSSM(data=rldm_data, model_config=rlssm_config)
     captured: dict = {}
 
@@ -305,7 +305,7 @@ def test_rlssm_sample_smoke(rldm_data, rlssm_config) -> None:
 def test_rlssm_pickle_round_trip(
     rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
 ) -> None:
-    """cloudpickle round-trip must reconstruct an equivalent RLSSM.
+    """Cloudpickle round-trip must reconstruct an equivalent RLSSM.
 
     Verifies that __getstate__ / __setstate__ survive serialisation:
     - The reconstructed object is a fresh RLSSM (not the same instance).
@@ -314,8 +314,6 @@ def test_rlssm_pickle_round_trip(
     - model_config.model_name is preserved.
     - model.model (bambi model) is rebuilt, confirming full re-initialisation.
     """
-    import cloudpickle
-
     model = RLSSM(data=rldm_data, model_config=rlssm_config)
     blob = cloudpickle.dumps(model)
     restored = cloudpickle.loads(blob)
@@ -419,3 +417,52 @@ def test_rlssm_init_args_uses_simplified_interface(rldm_data) -> None:
     # model_config should not be baked in as a hard reference
     assert "model_config" in model._init_args
     assert model._init_args["model_config"] is None
+
+
+def test_rlssm_model_config_with_overrides_warns(
+    rldm_data, rlssm_config, caplog
+) -> None:
+    """Warn when model_config is given alongside model/overrides.
+
+    The extra arguments (model, learning_process, decision_process, choices)
+    should be ignored and a warning emitted.
+    """
+    with caplog.at_level(logging.WARNING, logger="hssm"):
+        RLSSM(data=rldm_data, model_config=rlssm_config, model="some_other_model")
+
+    assert any("ignoring" in r.message for r in caplog.records)
+
+
+def test_rlssm_no_extra_fields_none_passed_to_make_distribution(
+    rldm_data, rlssm_config
+) -> None:
+    """When extra_fields is empty, make_distribution receives extra_fields=None."""
+    # Build a config without extra_fields.
+    config_no_extra = RLSSMConfig(
+        model_name="rldm_no_extra",
+        loglik_kind="approx_differentiable",
+        decision_process="angle",
+        decision_process_loglik_kind="approx_differentiable",
+        learning_process_kind="blackbox",
+        list_params=rlssm_config.list_params,
+        params_default=rlssm_config.params_default,
+        bounds=rlssm_config.bounds,
+        learning_process=rlssm_config.learning_process,
+        response=list(rlssm_config.response),
+        choices=list(rlssm_config.choices),
+        extra_fields=[],  # empty → should pass None to make_distribution
+        ssm_logp_func=_dummy_ssm_logp,
+    )
+    model = RLSSM(data=rldm_data, model_config=config_no_extra)
+    captured: dict = {}
+
+    def capturing_make_distribution(*args, **kwargs):
+        captured["extra_fields"] = kwargs.get("extra_fields")
+        return real_make_distribution(*args, **kwargs)
+
+    with patch(
+        "hssm.rl.rlssm.make_distribution", side_effect=capturing_make_distribution
+    ):
+        model._make_model_distribution()
+
+    assert captured.get("extra_fields") is None
