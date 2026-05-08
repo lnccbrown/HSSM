@@ -15,6 +15,7 @@ This module provides:
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from typing import Any
 
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
@@ -81,6 +82,25 @@ _SSM_REGISTRY: dict[str, dict[str, Any]] = {
 _SSM_LOGP_CACHE: dict[str, Any] = {}
 
 
+def _get_decision_process_spec(
+    decision_process: str | dict[str, Any],
+) -> dict[str, Any]:
+    """Return a defensive copy of a registered decision-process specification."""
+    if isinstance(decision_process, dict):
+        return deepcopy(decision_process)
+
+    if decision_process not in _SSM_REGISTRY:
+        available_ssms = list(_SSM_REGISTRY.keys())
+        raise ValueError(
+            f"Decision process '{decision_process}' not found in the SSM registry. "
+            f"Available: {available_ssms}. Use register_ssm() to add it."
+        )
+
+    spec = deepcopy(_SSM_REGISTRY[decision_process])
+    spec["name"] = decision_process
+    return spec
+
+
 def _get_ssm_logp(name: str) -> Any:
     """Return the annotated SSM base logp function, building it on first use.
 
@@ -121,7 +141,7 @@ def _get_ssm_logp(name: str) -> Any:
 
 _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
     "rldm": {
-        "decision_process": "angle",
+        "decision_process": _get_decision_process_spec("angle"),
         "learning_process": {"v": _compute_v_annotated},
         "rl_params": ["rl_alpha", "scaler"],
         "rl_bounds": {
@@ -246,19 +266,12 @@ def get_rlssm_model_config(
     if learning_process is not None:
         entry["learning_process"] = learning_process
     if decision_process is not None:
-        entry["decision_process"] = decision_process
+        entry["decision_process"] = _get_decision_process_spec(decision_process)
     if choices is not None:
         entry["choices"] = choices
 
-    dp: str = entry["decision_process"]
-    if dp not in _SSM_REGISTRY:
-        available_ssms = list(_SSM_REGISTRY.keys())
-        raise ValueError(
-            f"Decision process '{dp}' not found in the SSM registry. "
-            f"Available: {available_ssms}. Use register_ssm() to add it."
-        )
-
-    ssm_entry = _SSM_REGISTRY[dp]
+    ssm_entry = _get_decision_process_spec(entry["decision_process"])
+    dp: str = ssm_entry["name"]
     ssm_base = _get_ssm_logp(dp)
     lp: dict[str, Any] = entry["learning_process"]
 
@@ -371,7 +384,7 @@ def register_rlssm_model(
             name,
         )
     _RLSSM_REGISTRY[name] = {
-        "decision_process": decision_process,
+        "decision_process": _get_decision_process_spec(decision_process),
         # Shallow-copy all mutable caller-supplied collections so that later
         # mutations of the originals do not silently corrupt the registry entry.
         "learning_process": dict(learning_process),
