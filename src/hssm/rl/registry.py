@@ -2,8 +2,12 @@
 
 This module provides:
 
-- :data:`_SSM_REGISTRY` — maps SSM names (e.g. ``"angle"``) to their base
-  annotated JAX log-likelihood functions and parameter metadata.
+- :data:`_SSM_REGISTRY` — holds *custom* SSM entries added via
+  :func:`register_ssm`.  Built-in HSSM models (``"ddm"``, ``"angle"``,
+  ``"weibull"``, and any other model in :mod:`hssm.modelconfig` that exposes an
+  ``approx_differentiable`` likelihood) are resolved automatically from
+  :func:`hssm.modelconfig.get_default_model_config` and do **not** need to be
+  pre-registered here.
 - :data:`_RLSSM_REGISTRY` — maps named RLSSM model strings (e.g. ``"rldm"``)
   to their default decision process, learning process, and parameter info.
 - :func:`get_rlssm_model_config` — builds a :class:`~hssm.rl.config.RLSSMConfig`
@@ -38,43 +42,18 @@ _compute_v_annotated = annotate_function(
 # ---------------------------------------------------------------------------
 # SSM base log-likelihood registry
 # ---------------------------------------------------------------------------
-# Each entry provides:
+# This dict holds only *custom* SSM entries added at runtime via register_ssm().
+# Built-in HSSM models are resolved on demand from hssm.modelconfig — see
+# _build_ssm_spec_from_modelconfig() and _get_decision_process_spec().
+#
+# Each entry (custom or derived) provides:
 #   ssm_base_logp_func  - annotated JAX function (inputs + outputs, no computed)
 #   list_params_ssm     - ordered SSM parameter names (including computed ones)
-#   bounds_ssm          - bounds for non-computed SSM params
+#   bounds_ssm          - bounds for all SSM params
 #   params_default_ssm  - default values aligned with list_params_ssm
 #   response            - data column names
 
-
-def _make_angle_base_logp() -> Any:
-    """Build the annotated angle SSM base logp function from its ONNX file."""
-    _raw = make_jax_matrix_logp_funcs_from_onnx(model="angle.onnx")
-    return annotate_function(
-        inputs=["v", "a", "z", "t", "theta", "rt", "response"],
-        outputs=["logp"],
-    )(_raw)
-
-
-_SSM_REGISTRY: dict[str, dict[str, Any]] = {
-    "angle": {
-        # Factory callable — invoked lazily on first use via _get_ssm_logp().
-        # Storing a callable (not the result) avoids loading angle.onnx at
-        # import time (which would trigger hf_hub_download in offline envs).
-        "ssm_base_logp_func_factory": _make_angle_base_logp,
-        # All SSM params in the order the SSM expects them (includes computed).
-        "list_params_ssm": ["v", "a", "z", "t", "theta"],
-        # Bounds only for params that will be *sampled* (not RL-computed).
-        "bounds_ssm": {
-            "a": (0.3, 3.0),
-            "z": (0.1, 0.9),
-            "t": (0.001, 2.0),
-            "theta": (-0.1, 1.3),
-        },
-        # Defaults aligned with list_params_ssm: v, a, z, t, theta
-        "params_default_ssm": [0.0, 1.5, 0.5, 0.5, 0.0],
-        "response": ["rt", "response"],
-    },
-}
+_SSM_REGISTRY: dict[str, dict[str, Any]] = {}
 
 # Cache for resolved SSM base logp functions (populated on first use by
 # _get_ssm_logp, or immediately by register_ssm when a pre-built func is
@@ -82,45 +61,124 @@ _SSM_REGISTRY: dict[str, dict[str, Any]] = {
 _SSM_LOGP_CACHE: dict[str, Any] = {}
 
 
+def _make_ssm_base_logp_from_onnx(
+    onnx_file: str,
+    list_params_ssm: list[str],
+    response: list[str],
+) -> Any:
+    """Build and annotate a JAX log-likelihood function from an ONNX model file."""
+    _raw = make_jax_matrix_logp_funcs_from_onnx(model=onnx_file)
+    return annotate_function(
+        inputs=list_params_ssm + response,
+        outputs=["logp"],
+    )(_raw)
+
+
+def _build_ssm_spec_from_modelconfig(name: str) -> dict[str, Any]:
+    """Build an SSM registry-compatible spec from HSSM's modelconfig system.
+
+    This allows any built-in HSSM model with an ``approx_differentiable``
+    likelihood to be used as an RLSSM decision process without re-registering
+    it in ``_SSM_REGISTRY``.  Parameter defaults are computed as midpoints of
+    the model's parameter bounds.
+
+    Raises
+    ------
+    ValueError
+        If *name* is not a supported HSSM model or it has no
+        ``approx_differentiable`` likelihood.
+    """
+    # Local import to avoid circular dependencies at module level.
+    from hssm.modelconfig import get_default_model_config  # noqa: PLC0415
+
+    try:
+        mc = get_default_model_config(name)  # type: ignore[arg-type]
+    except ValueError as exc:
+        raise ValueError(
+            f"Decision process '{name}' is not a registered custom SSM and is not a "
+            "supported HSSM model. "
+            f"Custom SSMs in registry: {list(_SSM_REGISTRY.keys())}. "
+            "Use register_ssm() to add a custom decision process."
+        ) from exc
+
+    ad = mc["likelihoods"].get("approx_differentiable")
+    if ad is None:
+        raise ValueError(
+            f"Model '{name}' has no approx_differentiable likelihood and cannot be "
+            "used as an RLSSM decision process."
+        )
+
+    list_params_ssm: list[str] = list(mc["list_params"])
+    bounds_ssm: dict[str, tuple[float, float]] = dict(ad["bounds"])
+    response: list[str] = list(mc["response"])
+    onnx_file: str = str(ad["loglik"])
+
+    # Derive parameter defaults as midpoints of their respective bounds.
+    params_default_ssm = [
+        (bounds_ssm[p][0] + bounds_ssm[p][1]) / 2.0 if p in bounds_ssm else 0.0
+        for p in list_params_ssm
+    ]
+
+    # Capture loop variables explicitly to avoid closure-over-variable issues.
+    def _factory(
+        _onnx_file: str = onnx_file,
+        _params: list[str] = list_params_ssm,
+        _response: list[str] = response,
+    ) -> Any:
+        return _make_ssm_base_logp_from_onnx(_onnx_file, _params, _response)
+
+    return {
+        "ssm_base_logp_func_factory": _factory,
+        "list_params_ssm": list_params_ssm,
+        "bounds_ssm": bounds_ssm,
+        "params_default_ssm": params_default_ssm,
+        "response": response,
+        "name": name,
+    }
+
+
 def _get_decision_process_spec(
     decision_process: str | dict[str, Any],
 ) -> dict[str, Any]:
-    """Return a defensive copy of a registered decision-process specification."""
+    """Return a defensive copy of a decision-process specification.
+
+    Custom SSMs (registered via :func:`register_ssm`) take precedence.  For
+    everything else the spec is derived on the fly from HSSM's modelconfig
+    system, meaning any built-in model with an ``approx_differentiable``
+    likelihood (e.g. ``"ddm"``, ``"angle"``, ``"weibull"``) works out of the
+    box without explicit registration.
+    """
     if isinstance(decision_process, dict):
         return deepcopy(decision_process)
 
-    if decision_process not in _SSM_REGISTRY:
-        available_ssms = list(_SSM_REGISTRY.keys())
-        raise ValueError(
-            f"Decision process '{decision_process}' not found in the SSM registry. "
-            f"Available: {available_ssms}. Use register_ssm() to add it."
-        )
+    # Custom registry takes precedence over modelconfig.
+    if decision_process in _SSM_REGISTRY:
+        spec = deepcopy(_SSM_REGISTRY[decision_process])
+        spec["name"] = decision_process
+        return spec
 
-    spec = deepcopy(_SSM_REGISTRY[decision_process])
-    spec["name"] = decision_process
-    return spec
+    # Fall back to HSSM's modelconfig for built-in SSMs.
+    return _build_ssm_spec_from_modelconfig(decision_process)
 
 
 def _get_ssm_logp(name: str) -> Any:
     """Return the annotated SSM base logp function, building it on first use.
 
-    For built-in SSMs the ONNX model is downloaded / loaded only when this
-    function is first called (lazy initialisation).  Subsequent calls return
-    the cached object without any I/O.
+    ONNX models are downloaded / loaded only when first called (lazy
+    initialisation).  Subsequent calls return the cached object.
     """
     if name not in _SSM_LOGP_CACHE:
-        if name not in _SSM_REGISTRY:
-            raise KeyError(
-                f"SSM '{name}' not found in the SSM registry. "
-                f"Available: {list(_SSM_REGISTRY.keys())}. "
-                "Use register_ssm() to add it."
-            )
-        entry = _SSM_REGISTRY[name]
-        if "ssm_base_logp_func_factory" in entry:
-            _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
+        if name in _SSM_REGISTRY:
+            entry = _SSM_REGISTRY[name]
+            if "ssm_base_logp_func_factory" in entry:
+                _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
+            else:
+                # Pre-built function registered via register_ssm().
+                _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
         else:
-            # Pre-built function registered via register_ssm().
-            _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
+            # Build from HSSM's modelconfig for built-in SSMs.
+            spec = _build_ssm_spec_from_modelconfig(name)
+            _SSM_LOGP_CACHE[name] = spec["ssm_base_logp_func_factory"]()
     return _SSM_LOGP_CACHE[name]
 
 
