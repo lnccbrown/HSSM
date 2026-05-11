@@ -198,6 +198,24 @@ def _get_ssm_logp(name: str) -> Any:
 #   learning_process_kind
 
 _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
+    "2AB_RescorlaWagner_DDM": {
+        "decision_process": _get_decision_process_spec("ddm"),
+        "learning_process": {"v": _compute_v_annotated},
+        "rl_params": ["rl_alpha", "scaler"],
+        "rl_bounds": {
+            "rl_alpha": (0.0, 1.0),
+            "scaler": (0.0, 10.0),
+        },
+        "rl_params_default": [0.1, 1.0],
+        "extra_fields": ["feedback"],
+        "choices": [0, 1],
+        "description": (
+            "RLSSM model with Rescorla-Wagner Q-learning and the "
+            "standard DDM as decision process."
+        ),
+        "decision_process_loglik_kind": "approx_differentiable",
+        "learning_process_kind": "blackbox",
+    },
     "2AB_RescorlaWagner_Angle": {
         "decision_process": _get_decision_process_spec("angle"),
         "learning_process": {"v": _compute_v_annotated},
@@ -212,6 +230,24 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
         "description": (
             "RLSSM model with Rescorla-Wagner Q-learning and a "
             "collapsing-bound DDM (angle model) as decision process."
+        ),
+        "decision_process_loglik_kind": "approx_differentiable",
+        "learning_process_kind": "blackbox",
+    },
+    "2AB_RescorlaWagner_Weibull": {
+        "decision_process": _get_decision_process_spec("weibull"),
+        "learning_process": {"v": _compute_v_annotated},
+        "rl_params": ["rl_alpha", "scaler"],
+        "rl_bounds": {
+            "rl_alpha": (0.0, 1.0),
+            "scaler": (0.0, 10.0),
+        },
+        "rl_params_default": [0.1, 1.0],
+        "extra_fields": ["feedback"],
+        "choices": [0, 1],
+        "description": (
+            "RLSSM model with Rescorla-Wagner Q-learning and a "
+            "Weibull-bound DDM as decision process."
         ),
         "decision_process_loglik_kind": "approx_differentiable",
         "learning_process_kind": "blackbox",
@@ -280,7 +316,7 @@ def _derive_rl_params(
 
 
 def get_rlssm_model_config(
-    model: str = "rldm",
+    model: str = "2AB_RescorlaWagner_DDM",
     choices: list[int] | None = None,
     learning_process: dict[str, Any] | None = None,
     decision_process: str | None = None,
@@ -290,7 +326,7 @@ def get_rlssm_model_config(
     Parameters
     ----------
     model:
-        Name of a registered RLSSM model (e.g. ``"rldm"``).
+        Name of a registered RLSSM model (e.g. ``"2AB_RescorlaWagner_DDM"``).
     choices:
         Override the response choice values stored in the registry.
     learning_process:
@@ -389,6 +425,32 @@ def get_rlssm_model_config(
         choices=entry["choices"],
         extra_fields=entry.get("extra_fields"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Public query helpers
+# ---------------------------------------------------------------------------
+
+
+def list_models() -> dict[str, str | None]:
+    """Return the names and descriptions of all registered RLSSM models.
+
+    This is the recommended starting point for new users who want to discover
+    which models are available out of the box.
+
+    Returns
+    -------
+    dict[str, str | None]
+        Mapping of model name → description string (or ``None`` if no
+        description was provided at registration time).
+
+    Examples
+    --------
+    >>> import hssm
+    >>> hssm.rl.list_rlssm_models()
+    {'2AB_RescorlaWagner_DDM': 'RLSSM model with Rescorla-Wagner ...', ...}
+    """
+    return {name: entry.get("description") for name, entry in _RLSSM_REGISTRY.items()}
 
 
 # ---------------------------------------------------------------------------

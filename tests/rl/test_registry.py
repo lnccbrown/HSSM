@@ -556,3 +556,77 @@ def test_register_ssm_warns_on_overwrite(
         )
 
     assert any("dup_ssm" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Built-in starter-pack RLSSM models (DDM and Weibull variants)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "model_name, expected_dp",
+    [
+        ("2AB_RescorlaWagner_DDM", "ddm"),
+        ("2AB_RescorlaWagner_Weibull", "weibull"),
+    ],
+)
+def test_builtin_2ab_models_are_registered(model_name: str, expected_dp: str) -> None:
+    """2AB_RescorlaWagner_DDM and _Weibull must be present in the RLSSM registry."""
+    assert model_name in registry._RLSSM_REGISTRY
+    entry = registry._RLSSM_REGISTRY[model_name]
+    assert entry["decision_process"]["name"] == expected_dp
+    assert entry["rl_params"] == ["rl_alpha", "scaler"]
+    assert entry["extra_fields"] == ["feedback"]
+    assert entry["choices"] == [0, 1]
+    assert entry["decision_process_loglik_kind"] == "approx_differentiable"
+    assert entry["learning_process_kind"] == "blackbox"
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    ["2AB_RescorlaWagner_DDM", "2AB_RescorlaWagner_Weibull"],
+)
+def test_builtin_2ab_models_config_structure(
+    monkeypatch: pytest.MonkeyPatch,
+    annotated_ssm_base_logp: Any,
+    model_name: str,
+) -> None:
+    """get_rlssm_model_config should produce a well-formed RLSSMConfig for
+    both the DDM and Weibull starter-pack models."""
+    import hssm.distribution_utils.onnx as onnx_module
+
+    monkeypatch.setattr(
+        onnx_module,
+        "make_jax_matrix_logp_funcs_from_onnx",
+        lambda model: annotated_ssm_base_logp,
+    )
+    monkeypatch.setattr(
+        registry,
+        "make_jax_matrix_logp_funcs_from_onnx",
+        lambda model: annotated_ssm_base_logp,
+    )
+
+    config = registry.get_rlssm_model_config(model_name)
+
+    assert isinstance(config, RLSSMConfig)
+    # RL params come first
+    assert config.list_params[:2] == ["rl_alpha", "scaler"]
+    assert "rl_alpha" in config.bounds
+    assert "scaler" in config.bounds
+    assert config.choices == [0, 1]
+    assert config.extra_fields == ["feedback"]
+    assert config.ssm_logp_func.computed == {"v": registry._compute_v_annotated}
+
+
+# ---------------------------------------------------------------------------
+# list_rlssm_models
+# ---------------------------------------------------------------------------
+
+
+def test_list_rlssm_models_returns_all_names() -> None:
+    """list_rlssm_models should return every key in _RLSSM_REGISTRY with its description."""
+    result = registry.list_models()
+
+    assert set(result.keys()) == set(registry._RLSSM_REGISTRY.keys())
+    for name, desc in result.items():
+        assert desc == registry._RLSSM_REGISTRY[name].get("description")
