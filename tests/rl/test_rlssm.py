@@ -337,23 +337,32 @@ def test_rlssm_is_subclass_of_internal() -> None:
     assert issubclass(RLSSM, _RLSSM)
 
 
-def test_rlssm_simplified_init(rldm_data) -> None:
-    """RLSSM(data, model='rldm') should build without supplying model_config."""
-    model = RLSSM(data=rldm_data, model="rldm")
+@pytest.mark.parametrize(
+    "model_name, expected_dp",
+    [
+        ("2AB_RescorlaWagner_DDM", "ddm"),
+        ("2AB_RescorlaWagner_Angle", "angle"),
+        ("2AB_RescorlaWagner_Weibull", "weibull"),
+    ],
+)
+def test_rlssm_builtin_models_instantiate(
+    rldm_data, model_name: str, expected_dp: str
+) -> None:
+    """All built-in 2AB_RescorlaWagner_* models should instantiate correctly."""
+    model = RLSSM(data=rldm_data, model=model_name)
     assert isinstance(model, RLSSM)
-    # Registry-derived params: rl_alpha, scaler (RL) + a, z, t, theta (SSM)
+    assert model.model_config.decision_process == expected_dp
     assert "rl_alpha" in model.params
     assert "scaler" in model.params
     assert "a" in model.params
-    # v is computed inside the Op; must NOT appear as a free parameter
     assert "v" not in model.params
 
 
-def test_rlssm_default_model_is_rldm(rldm_data) -> None:
-    """Omitting model should default to 'rldm'."""
+def test_rlssm_default_model_is_ddm(rldm_data) -> None:
+    """Omitting model should default to '2AB_RescorlaWagner_DDM'."""
     model = RLSSM(data=rldm_data)
     assert isinstance(model, RLSSM)
-    assert model.model_config.decision_process == "angle"
+    assert model.model_config.decision_process == "ddm"
 
 
 def test_rlssm_model_config_provided(rldm_data, rlssm_config) -> None:
@@ -370,21 +379,21 @@ def test_rlssm_unregistered_model_raises(rldm_data) -> None:
 
 def test_rlssm_missing_data_property_raises(rldm_data) -> None:
     """Accessing .missing_data on a built RLSSM instance must raise NotImplementedError."""
-    model = RLSSM(data=rldm_data, model="rldm")
+    model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
     with pytest.raises(NotImplementedError, match="missing_data"):
         _ = model.missing_data
 
 
 def test_rlssm_deadline_property_raises(rldm_data) -> None:
     """Accessing .deadline on a built RLSSM instance must raise NotImplementedError."""
-    model = RLSSM(data=rldm_data, model="rldm")
+    model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
     with pytest.raises(NotImplementedError, match="deadline"):
         _ = model.deadline
 
 
 def test_rlssm_loglik_missing_data_property_raises(rldm_data) -> None:
     """Accessing .loglik_missing_data on a built RLSSM instance must raise NotImplementedError."""
-    model = RLSSM(data=rldm_data, model="rldm")
+    model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
     with pytest.raises(NotImplementedError, match="loglik_missing_data"):
         _ = model.loglik_missing_data
 
@@ -411,9 +420,9 @@ def test_register_rlssm_model(rldm_data) -> None:
 
 def test_rlssm_init_args_uses_simplified_interface(rldm_data) -> None:
     """_init_args should reflect the simplified constructor, not model_config."""
-    model = RLSSM(data=rldm_data, model="rldm")
+    model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
     assert "model" in model._init_args
-    assert model._init_args["model"] == "rldm"
+    assert model._init_args["model"] == "2AB_RescorlaWagner_DDM"
     # model_config should not be baked in as a hard reference
     assert "model_config" in model._init_args
     assert model._init_args["model_config"] is None
