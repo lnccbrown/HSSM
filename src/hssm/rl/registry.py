@@ -198,7 +198,7 @@ def _get_ssm_logp(name: str) -> Any:
 #   learning_process_kind
 
 _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
-    "rldm": {
+    "2AB_RescorlaWagner_Angle": {
         "decision_process": _get_decision_process_spec("angle"),
         "learning_process": {"v": _compute_v_annotated},
         "rl_params": ["rl_alpha", "scaler"],
