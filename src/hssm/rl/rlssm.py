@@ -40,7 +40,7 @@ from hssm.distribution_utils import make_distribution
 from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
-from ..base import HSSMBase
+from ..base import HSSMBase, classproperty
 from .config import RLSSMConfig
 from .registry import get_rlssm_model_config
 
@@ -351,7 +351,7 @@ class RLSSM(_RLSSM):
     data : pd.DataFrame
         Trial-level data (balanced panel required).
     model : str, optional
-        Name of a registered RLSSM model. Defaults to ``"rldm"``.
+        Name of a registered RLSSM model. Defaults to ``"2AB_RescorlaWagner_DDM"``.
     choices : list[int] | None, optional
         Override the choice values in the registry. ``None`` uses the registry
         default.
@@ -412,7 +412,7 @@ class RLSSM(_RLSSM):
     def __init__(
         self,
         data: pd.DataFrame,
-        model: str = "rldm",
+        model: str = "2AB_RescorlaWagner_DDM",
         choices: list[int] | None = None,
         include: list[dict[str, Any] | Any] | None = None,
         model_config: RLSSMConfig | None = None,
@@ -479,3 +479,25 @@ class RLSSM(_RLSSM):
         # IMPORTANT: This MUST be the last statement in __init__.  Any code
         # added after this line cannot read self.missing_data / self.deadline.
         self.__dict__["_rlssm_fully_initialized"] = True
+
+    @classproperty
+    def list_models(cls) -> dict[str, str | None]:
+        """All registered RLSSM models and their descriptions.
+
+        This is the recommended entry point for newcomers to discover which
+        models are available without constructing a full model instance.
+
+        Returns
+        -------
+        dict[str, str | None]
+            Mapping of model name → description (``None`` if not provided).
+
+        Examples
+        --------
+        >>> from hssm.rl import RLSSM
+        >>> RLSSM.list_models
+        {'2AB_RescorlaWagner_DDM': 'RLSSM model with ...', ...}
+        """
+        from .registry import list_models  # noqa: PLC0415
+
+        return list_models()
