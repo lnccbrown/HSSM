@@ -391,13 +391,20 @@ def get_rlssm_model_config(
     list_params = rl_params + ssm_sampled
 
     # bounds: RL bounds ∪ SSM sampled bounds
+    missing_bounds = [p for p in ssm_sampled if p not in ssm_entry["bounds_ssm"]]
+    if missing_bounds:
+        raise ValueError(
+            f"SSM parameter(s) {missing_bounds} are included in list_params but have "
+            f"no entry in bounds_ssm for decision process '{dp}'. "
+            "Provide bounds for all sampled parameters via register_ssm() or ensure "
+            "the built-in modelconfig includes them."
+        )
     _rl_bounds = entry.get("rl_bounds")
     bounds: dict[str, tuple[float, float]] = dict(
         _rl_bounds if _rl_bounds is not None else {}
     )
     for p in ssm_sampled:
-        if p in ssm_entry["bounds_ssm"]:
-            bounds[p] = ssm_entry["bounds_ssm"][p]
+        bounds[p] = ssm_entry["bounds_ssm"][p]
 
     # params_default aligned with list_params
     _rl_defaults = entry.get("rl_params_default")

@@ -421,15 +421,20 @@ def test_get_rlssm_model_config_derives_rl_params_when_absent(
 
 
 # ---------------------------------------------------------------------------
-# get_rlssm_model_config — SSM param absent from bounds_ssm is skipped
+# get_rlssm_model_config — SSM param absent from bounds_ssm raises early
 # ---------------------------------------------------------------------------
 
 
-def test_get_rlssm_model_config_skips_missing_bounds(
+def test_get_rlssm_model_config_raises_for_missing_bounds(
     annotated_ssm_base_logp: Any,
     learning_process: dict[str, Any],
 ) -> None:
-    """SSM params not present in bounds_ssm must not appear in the output bounds."""
+    """SSM params missing from bounds_ssm must raise immediately with a clear error.
+
+    Previously the factory silently skipped such params, producing a broken
+    RLSSMConfig that only failed later inside _RLSSM.__init__. Now it must
+    raise at the factory boundary so the error message points at the root cause.
+    """
     registry.register_ssm(
         name="no_bounds_ssm",
         ssm_base_logp_func=annotated_ssm_base_logp,
@@ -450,10 +455,8 @@ def test_get_rlssm_model_config_skips_missing_bounds(
         choices=[0, 1],
     )
 
-    config = registry.get_rlssm_model_config("no_bounds_model")
-
-    assert "a" not in config.bounds
-    assert "rl_alpha" in config.bounds
+    with pytest.raises(ValueError, match="no entry in bounds_ssm"):
+        registry.get_rlssm_model_config("no_bounds_model")
 
 
 # ---------------------------------------------------------------------------
