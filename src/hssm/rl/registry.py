@@ -8,8 +8,9 @@ This module provides:
   ``approx_differentiable`` likelihood) are resolved automatically from
   :func:`hssm.modelconfig.get_default_model_config` and do **not** need to be
   pre-registered here.
-- :data:`_RLSSM_REGISTRY` — maps named RLSSM model strings (e.g. ``"rldm"``)
-  to their default decision process, learning process, and parameter info.
+- :data:`_RLSSM_REGISTRY` — maps named RLSSM model strings (e.g.
+  ``"2AB_RescorlaWagner_ddm"``) to their default decision process,
+  learning process, and parameter info.
 - :func:`get_rlssm_model_config` — builds a :class:`~hssm.rl.config.RLSSMConfig`
   from a named model string with optional overrides.
 - :func:`register_rlssm_model` — register a custom named RLSSM model.
@@ -454,7 +455,7 @@ def list_models() -> dict[str, str | None]:
     Examples
     --------
     >>> import hssm
-    >>> hssm.rl.list_rlssm_models()
+    >>> hssm.rl.list_models()
     {'2AB_RescorlaWagner_DDM': 'RLSSM model with Rescorla-Wagner ...', ...}
     """
     return {name: entry.get("description") for name, entry in _RLSSM_REGISTRY.items()}
@@ -485,7 +486,9 @@ def register_rlssm_model(
     name:
         Registry key (e.g. ``"my_rldm"``).
     decision_process:
-        Name of the SSM to use (must already be in the SSM registry).
+        Name of the SSM to use. This may be either a custom SSM already registered
+        in the SSM registry via :func:`register_ssm`, or a built-in HSSM modelconfig SSM
+        name such as ``"ddm"``, ``"angle"``, or ``"weibull"``.
     learning_process:
         Dict mapping computed parameter name → annotated learning function.
     rl_params:
