@@ -434,7 +434,7 @@ class RLSSM(_RLSSM):
         _my_init_args = self._store_init_args(locals(), kwargs)
 
         if model_config is not None:
-            if model != "rldm" or any(
+            if model != "2AB_RescorlaWagner_DDM" or any(
                 x is not None for x in [learning_process, decision_process, choices]
             ):
                 _logger.warning(
