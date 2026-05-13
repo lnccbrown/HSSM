@@ -463,6 +463,7 @@ def make_distribution(
             simulator_fun=cast("Callable[..., Any]", rv),
             list_params=list_params,
             lapse=lapse,
+            is_choice_only=is_choice_only,
         )
         rv_instance = random_variable()
     elif isinstance(rv, str):
@@ -470,6 +471,7 @@ def make_distribution(
             simulator_fun=rv,
             list_params=list_params,
             lapse=lapse,
+            is_choice_only=is_choice_only,
         )
         rv_instance = random_variable()
     else:
