@@ -143,16 +143,23 @@ class MissingDataMixin:
             Optional custom likelihood function for missing data. If not None,
             must be used only when missing_data or deadline is True.
         """
-        # Choice-only models have no "rt" column, so missing_data / deadline
-        # handling does not apply.
+        # Choice-only models have no "rt" column, so missing_data handling does
+        # not apply.  Deadline is still supported.
         if self.is_choice_only:  # type: ignore[attr-defined]
             if missing_data is not False:
                 raise ValueError("Choice-only models cannot have missing data.")
             self.missing_data = False
-            self.deadline = False
-            self.deadline_name = "deadline"
-            self.loglik_missing_data = None
             self.missing_data_network = MissingDataNetwork.NONE
+            if isinstance(deadline, str):
+                self.deadline = True
+                self.deadline_name = deadline
+            else:
+                self.deadline = deadline
+                self.deadline_name = "deadline"
+            self.loglik_missing_data = loglik_missing_data
+            if self.deadline and self.response is not None:  # type: ignore[attr-defined]
+                if self.deadline_name not in self.response:  # type: ignore[attr-defined]
+                    self.response.append(self.deadline_name)  # type: ignore[attr-defined]
             return
 
         if isinstance(missing_data, float):

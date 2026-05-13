@@ -215,7 +215,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         model_config: BaseModelConfig,
         include: list[dict[str, Any] | Param] | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
-        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
+        lapse: float | dict | bmb.Prior | None = None,
         global_formula: str | None = None,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
@@ -316,8 +316,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # region ===== Process lapse distribution =====
         self.has_lapse = p_outlier is not None and p_outlier != 0
         self._check_lapse(lapse)
-        if self.has_lapse and self.list_params[-1] != "p_outlier":
-            self.list_params.append("p_outlier")
         # endregion
 
         # Process all parameters
@@ -344,7 +342,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Set p_outlier and lapse
         self.p_outlier = self.params.get("p_outlier")
-        self.lapse = lapse if self.has_lapse else None
 
         self._post_check_data_sanity()
 
@@ -1881,22 +1878,31 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def _check_lapse(self, lapse):
         """Determine if p_outlier and lapse is specified correctly."""
         # Basically, avoid situations where only one of them is specified.
-        if self.has_lapse and lapse is None:
-            raise ValueError(
-                "You have specified `p_outlier`. Please also specify `lapse`."
-            )
-        if lapse is not None and not self.has_lapse:
+        if self.list_params[-1] != "p_outlier":
+            if "p_outlier" in self.list_params:
+                raise ValueError(
+                    "Please do not include 'p_outlier' in `list_params`. "
+                    + "We automatically append it to `list_params` when `p_outlier` "
+                    + "parameter is not None"
+                )
+        if self.has_lapse:
+            if lapse is None:
+                if self.is_choice_only:
+                    self.lapse = 1 / self.n_choices
+                else:
+                    self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
+            else:
+                self.lapse = lapse
+            self.list_params.append("p_outlier")
+            return
+
+        if lapse is not None:
             _logger.warning(
                 "You have specified the `lapse` argument to include a lapse "
                 + "distribution, but `p_outlier` is set to either 0 or None. "
                 + "Your lapse distribution will be ignored."
             )
-        if "p_outlier" in self.list_params and self.list_params[-1] != "p_outlier":
-            raise ValueError(
-                "Please do not include 'p_outlier' in `list_params`. "
-                + "We automatically append it to `list_params` when `p_outlier` "
-                + "parameter is not None"
-            )
+        self.lapse = None
 
     def _get_deterministic_var_names(self, idata) -> list[str]:
         """Filter out the deterministic variables in var_names."""
