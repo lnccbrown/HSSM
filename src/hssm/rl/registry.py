@@ -24,6 +24,10 @@ from copy import deepcopy
 from typing import Any
 
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
+from hssm.rl.likelihoods.softmax import (
+    compute_q_diff_subject_wise,
+    softmax_logp_func,
+)
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
 
@@ -39,6 +43,16 @@ _compute_v_annotated = annotate_function(
     inputs=["rl_alpha", "scaler", "response", "feedback"],
     outputs=["v"],
 )(compute_v_subject_wise)
+
+_compute_q_diff_annotated = annotate_function(
+    inputs=["rl_alpha", "response", "feedback"],
+    outputs=["q_diff"],
+)(compute_q_diff_subject_wise)
+
+_softmax_logp_annotated = annotate_function(
+    inputs=["beta", "q_diff", "response"],
+    outputs=["logp"],
+)(softmax_logp_func)
 
 # ---------------------------------------------------------------------------
 # SSM base log-likelihood registry
@@ -198,6 +212,19 @@ def _get_ssm_logp(name: str) -> Any:
 #   decision_process_loglik_kind
 #   learning_process_kind
 
+# Register the softmax 2AFC decision process.
+# list_params_ssm=["beta", "q_diff"]: "beta" is sampled; "q_diff" is computed
+# by the learning process.  Only "beta" appears in bounds_ssm.
+_register_softmax_ssm_entry = {
+    "ssm_base_logp_func": _softmax_logp_annotated,
+    "list_params_ssm": ["beta", "q_diff"],
+    "bounds_ssm": {"beta": (0.0, 10.0)},
+    "params_default_ssm": [1.0, 0.0],
+    "response": ["response"],
+}
+_SSM_REGISTRY["softmax_2AB"] = _register_softmax_ssm_entry
+_SSM_LOGP_CACHE["softmax_2AB"] = _softmax_logp_annotated
+
 _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
     "2AB_RescorlaWagner_DDM": {
         "decision_process": _get_decision_process_spec("ddm"),
@@ -251,6 +278,21 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
             "Weibull-bound DDM as decision process."
         ),
         "decision_process_loglik_kind": "approx_differentiable",
+        "learning_process_kind": "blackbox",
+    },
+    "2AB_RescorlaWagner_Softmax": {
+        "decision_process": "softmax_2AB",
+        "learning_process": {"q_diff": _compute_q_diff_annotated},
+        "rl_params": ["rl_alpha"],
+        "rl_bounds": {"rl_alpha": (0.0, 1.0)},
+        "rl_params_default": [0.1],
+        "extra_fields": ["feedback"],
+        "choices": [0, 1],
+        "description": (
+            "Choice-only RLSSM model with Rescorla-Wagner Q-learning and a "
+            "softmax decision process (no RT)."
+        ),
+        "decision_process_loglik_kind": "analytical",
         "learning_process_kind": "blackbox",
     },
 }
