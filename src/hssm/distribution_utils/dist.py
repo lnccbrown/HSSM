@@ -574,11 +574,7 @@ def make_distribution(
                     for i, p in enumerate(dist_params)
                 )
 
-            # For choice-only models the HSSMRV has scalar output, so PyMC
-            # supplies data as a 1D (n_obs,) tensor.  The RL logp Op always
-            # indexes data as data[:, col_idx], so reshape to (n_obs, 1) here
-            # before any loglik call.  Non-choice-only data is already 2D.
-            data_for_loglik = pt.shape_padright(data) if is_choice_only else data
+            data_for_loglik = data
 
             # AF-TODO: Apply clipping here
             if p_outlier is not None:

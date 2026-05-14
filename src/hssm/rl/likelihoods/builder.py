@@ -626,6 +626,13 @@ def make_rl_logp_func(
         np.ndarray
             The computed log-likelihoods for each trial, reshaped as a 2D array.
         """
+        # For choice-only RLSSM models the HSSMRV has scalar output, so PyMC
+        # supplies data as 1D (n_obs,).  Normalise to (n_obs, 1) here so the
+        # rest of this function can always use data[:, col_idx] uniformly.
+        # Non-choice-only data arrives as (n_obs, n_cols) and is unaffected.
+        if data.ndim == 1:
+            data = data.reshape(-1, 1)
+
         # Validate inputs
         _validate_inputs(
             data, args, n_participants, n_trials, data_cols, list_params, extra_fields
