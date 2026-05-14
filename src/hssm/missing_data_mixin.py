@@ -157,6 +157,11 @@ class MissingDataMixin:
                 self.deadline = deadline
                 self.deadline_name = "deadline"
             self.loglik_missing_data = loglik_missing_data
+            if not self.deadline and loglik_missing_data is not None:
+                raise ValueError(
+                    "loglik_missing_data function specified, but you have not"
+                    " set the missing_data or deadline flag to True."
+                )
             if self.deadline and self.response is not None:  # type: ignore[attr-defined]
                 if self.deadline_name not in self.data.columns:  # type: ignore[attr-defined]
                     raise ValueError(

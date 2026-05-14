@@ -272,3 +272,15 @@ class TestChoiceOnlyMissingDataMixin:
             missing_data=False, deadline=True, loglik_missing_data=None
         )
         assert choice_only_model.response.count("deadline") == 1
+
+    def test_loglik_missing_data_without_deadline_raises(self, choice_only_model):
+        """Providing loglik_missing_data without deadline=True must raise for choice-only."""
+        with pytest.raises(
+            ValueError,
+            match="loglik_missing_data function specified, but you have not set the missing_data or deadline flag to True",
+        ):
+            choice_only_model._process_missing_data_and_deadline(
+                missing_data=False,
+                deadline=False,
+                loglik_missing_data=lambda x: x,
+            )
