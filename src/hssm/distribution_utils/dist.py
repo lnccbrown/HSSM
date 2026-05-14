@@ -495,7 +495,11 @@ def make_distribution(
             list_params.append("p_outlier")
 
         if isinstance(lapse, float):
-            lapse_func = lambda data: np.full_like(data, lapse)
+            # lapse is a probability; the mixture formula uses pt.exp(lapse_logp),
+            # so we must store the log probability here to be consistent with the
+            # bmb.Prior path which calls pm.logp(...).
+            _log_lapse = np.log(lapse)
+            lapse_func = lambda data: np.full_like(data, _log_lapse)
         else:
             data_vector = pt.dvector()
             lapse_logp = pm.logp(
