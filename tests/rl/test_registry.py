@@ -616,7 +616,7 @@ def test_builtin_2ab_models_config_structure(
     assert config.list_params[:2] == ["rl_alpha", "scaler"]
     assert "rl_alpha" in config.bounds
     assert "scaler" in config.bounds
-    assert config.choices == [0, 1]
+    assert config.choices == (0, 1)
     assert config.extra_fields == ["feedback"]
     assert config.ssm_logp_func.computed == {"v": registry._compute_v_annotated}
 
