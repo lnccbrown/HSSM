@@ -104,6 +104,27 @@ def test_rlssm_softmax_logp_evaluates(choice_only_data) -> None:
     assert np.isfinite(lp), f"Expected a finite logp, got {lp}"
 
 
+def test_rlssm_softmax_per_trial_logp_valid(choice_only_data) -> None:
+    """Per-trial log-probabilities must be ≤ 0 (valid log-probabilities).
+
+    When lapse is a float (set to 1/n_choices for choice-only models),
+    make_distribution must treat it as a probability and pass log(lapse) to the
+    lapse_func — not the raw float.  Passing 0.5 directly causes exp(0.5) ≈ 1.649
+    in the lapse mixture, which can push the per-trial probability above 1 and
+    yield a positive log-probability.
+    """
+    model = RLSSM(data=choice_only_data, model="2AB_RescorlaWagner_Softmax")
+    with model.pymc_model:
+        ip = model.pymc_model.initial_point()
+        # compile_logp(sum=False) returns a list of per-component arrays
+        parts = model.pymc_model.compile_logp(sum=False)(ip)
+    all_logp = np.concatenate([np.atleast_1d(x) for x in parts])
+    assert np.all(all_logp <= 1e-6), (
+        f"Some log-probabilities are positive (> 0), indicating the "
+        f"lapse mixture probability exceeded 1. Max: {all_logp.max():.4f}"
+    )
+
+
 @pytest.mark.slow
 def test_rlssm_softmax_sample_smoke(choice_only_data) -> None:
     """Minimal sampling run should return an InferenceData object."""
