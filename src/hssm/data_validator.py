@@ -49,6 +49,12 @@ class DataValidatorMixin:
     def _post_check_data_sanity(self):
         """Check if the data is clean enough for the model."""
         if self.is_choice_only:
+            unique_responses = self.data["response"].unique().astype(int)
+            invalid = unique_responses[~np.isin(unique_responses, self.choices)]
+            if len(invalid):
+                raise ValueError(
+                    f"Invalid responses found in dataset: {sorted(invalid.tolist())}"
+                )
             return
         if self.deadline or self.missing_data:
             if -999.0 not in self.data["rt"].unique():

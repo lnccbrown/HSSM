@@ -84,6 +84,32 @@ def test_rlssm_softmax_no_rt_column(choice_only_data) -> None:
     assert model.model is not None
 
 
+def test_rlssm_softmax_invalid_response_rejected() -> None:
+    """Response values outside {0, 1} must be rejected at construction time.
+
+    The softmax logp uses ``jnp.where(response == 1, ...)``, treating anything
+    other than 1 as choice 0.  An invalid value such as -1 or 2 would therefore
+    silently produce a wrong likelihood (and corrupt Q-value updates via negative
+    array indexing).  ``_post_check_data_sanity`` must catch these before any JAX
+    computation runs.
+    """
+    rng = np.random.default_rng(0)
+    n_total = 50
+    bad_data = pd.DataFrame(
+        {
+            "participant_id": np.repeat(np.arange(5), 10),
+            "response": np.where(
+                rng.random(n_total) < 0.1,
+                -1,  # inject invalid responses
+                rng.integers(0, 2, size=n_total),
+            ).astype(float),
+            "feedback": rng.integers(0, 2, size=n_total).astype(float),
+        }
+    )
+    with pytest.raises(ValueError, match="Invalid responses"):
+        RLSSM(data=bad_data, model="2AB_RescorlaWagner_Softmax")
+
+
 def test_rlssm_softmax_pymc_model(choice_only_data) -> None:
     """pymc_model should be accessible after softmax model construction."""
     model = RLSSM(data=choice_only_data, model="2AB_RescorlaWagner_Softmax")
