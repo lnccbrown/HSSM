@@ -570,6 +570,12 @@ def make_distribution(
                     for i, p in enumerate(dist_params)
                 )
 
+            # For choice-only models the HSSMRV has scalar output, so PyMC
+            # supplies data as a 1D (n_obs,) tensor.  The RL logp Op always
+            # indexes data as data[:, col_idx], so reshape to (n_obs, 1) here
+            # before any loglik call.  Non-choice-only data is already 2D.
+            data_for_loglik = pt.shape_padright(data) if is_choice_only else data
+
             # AF-TODO: Apply clipping here
             if p_outlier is not None:
                 if not callable(lapse_func):
@@ -581,21 +587,25 @@ def make_distribution(
                 lapse_logp = lapse_func(data_for_lapse.eval())
 
                 # AF-TODO potentially apply clipping here
-                logp = loglik(data, *dist_params, *extra_fields)
+                logp = loglik(data_for_loglik, *dist_params, *extra_fields)
                 # Ensure that non-decision time is always smaller than rt.
                 # Assuming that the non-decision time parameter is always named "t".
                 if not is_choice_only:
-                    logp = ensure_positive_ndt(data, logp, list_params, dist_params)
+                    logp = ensure_positive_ndt(
+                        data_for_loglik, logp, list_params, dist_params
+                    )
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)
                     + p_outlier * pt.exp(lapse_logp)
                     + 1e-29
                 )
             else:
-                logp = loglik(data, *dist_params, *extra_fields)
+                logp = loglik(data_for_loglik, *dist_params, *extra_fields)
                 # Ensure that non-decision time is always smaller than rt.
                 if not is_choice_only:
-                    logp = ensure_positive_ndt(data, logp, list_params, dist_params)
+                    logp = ensure_positive_ndt(
+                        data_for_loglik, logp, list_params, dist_params
+                    )
 
             if bounds is not None:
                 logp = apply_param_bounds_to_loglik(
