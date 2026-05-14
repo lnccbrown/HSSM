@@ -88,3 +88,27 @@ def test_rlssm_softmax_pymc_model(choice_only_data) -> None:
     """pymc_model should be accessible after softmax model construction."""
     model = RLSSM(data=choice_only_data, model="2AB_RescorlaWagner_Softmax")
     assert model.pymc_model is not None
+
+
+def test_rlssm_softmax_logp_evaluates(choice_only_data) -> None:
+    """logp must evaluate to a finite scalar without shape errors.
+
+    The HSSMRV has scalar output for choice-only models, so PyMC supplies
+    observed data as a 1D (n_obs,) tensor.  The RL logp Op requires 2D input
+    (data[:, col_idx]).  This test confirms the reshape is applied correctly.
+    """
+    model = RLSSM(data=choice_only_data, model="2AB_RescorlaWagner_Softmax")
+    with model.pymc_model:
+        ip = model.pymc_model.initial_point()
+        lp = model.pymc_model.compile_logp()(ip)
+    assert np.isfinite(lp), f"Expected a finite logp, got {lp}"
+
+
+@pytest.mark.slow
+def test_rlssm_softmax_sample_smoke(choice_only_data) -> None:
+    """Minimal sampling run should return an InferenceData object."""
+    model = RLSSM(data=choice_only_data, model="2AB_RescorlaWagner_Softmax")
+    trace = model.sample(
+        draws=100, tune=200, chains=2, cores=1, sampler="numpyro", target_accept=0.9
+    )
+    assert trace is not None
