@@ -81,6 +81,36 @@ def test_transform_params_general(data_ddm_reg, include, should_raise_exception)
         assert len(model.params) == 5
 
 
+def test_check_lapse_no_duplicate_p_outlier(data_ddm) -> None:
+    """_check_lapse must not append p_outlier when it is already the last param.
+
+    A custom config whose list_params already ends with 'p_outlier' passes the
+    non-final-position guard and previously triggered an unconditional
+    list_params.append('p_outlier'), silently producing a duplicate entry that
+    misaligns distribution parameters.
+    """
+    model = HSSM(
+        data=data_ddm,
+        model="custom",
+        model_config={
+            "list_params": ["v", "a", "z", "t", "p_outlier"],
+            "choices": [-1, 1],
+            "bounds": {
+                "v": (-3.0, 3.0),
+                "a": (0.3, 2.5),
+                "z": (0.1, 0.9),
+                "t": (0.0, 2.0),
+            },
+        },
+        loglik=logp_ddm,
+        loglik_kind="analytical",
+        p_outlier=0.05,
+    )
+    assert model.list_params.count("p_outlier") == 1, (
+        f"p_outlier was duplicated in list_params: {model.list_params}"
+    )
+
+
 @pytest.mark.slow
 def test_custom_model(data_ddm):
     with pytest.raises(
