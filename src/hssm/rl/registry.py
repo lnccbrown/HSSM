@@ -368,7 +368,9 @@ def get_rlssm_model_config(
     ssm_entry = _get_decision_process_spec(entry["decision_process"])
     dp: str = ssm_entry["name"]
     ssm_base = _get_ssm_logp(dp)
-    lp: dict[str, Any] = entry["learning_process"]
+    # Defensive copy so callers mutating config.learning_process don't corrupt
+    # the registry entry (entry is only a shallow copy of _RLSSM_REGISTRY[model]).
+    lp: dict[str, Any] = dict(entry["learning_process"])
 
     # Compose the full ssm_logp_func with .computed = learning_process.
     ssm_logp_func = _build_ssm_logp_func(ssm_base, lp)
@@ -430,8 +432,10 @@ def get_rlssm_model_config(
         bounds=bounds,
         params_default=params_default,
         response=response,
-        choices=entry["choices"],
-        extra_fields=entry.get("extra_fields"),
+        choices=tuple(entry["choices"]),
+        extra_fields=list(entry["extra_fields"])
+        if entry.get("extra_fields") is not None
+        else None,
     )
 
 
