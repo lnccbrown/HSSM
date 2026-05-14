@@ -158,6 +158,11 @@ class MissingDataMixin:
                 self.deadline_name = "deadline"
             self.loglik_missing_data = loglik_missing_data
             if self.deadline and self.response is not None:  # type: ignore[attr-defined]
+                if self.deadline_name not in self.data.columns:  # type: ignore[attr-defined]
+                    raise ValueError(
+                        "You have specified that your data has deadline, but "
+                        f"`{self.deadline_name}` is not found in your dataset."
+                    )
                 if self.deadline_name not in self.response:  # type: ignore[attr-defined]
                     self.response.append(self.deadline_name)  # type: ignore[attr-defined]
             return
