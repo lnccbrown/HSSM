@@ -116,8 +116,7 @@ def _build_ssm_spec_from_modelconfig(name: str) -> dict[str, Any]:
 
     # Derive parameter defaults as midpoints of their respective bounds.
     params_default_ssm = [
-        (bounds_ssm[p][0] + bounds_ssm[p][1]) / 2.0 if p in bounds_ssm else 0.0
-        for p in list_params_ssm
+        sum(bounds_ssm[p]) / 2 if p in bounds_ssm else 0.0 for p in list_params_ssm
     ]
 
     # Capture loop variables explicitly to avoid closure-over-variable issues.
