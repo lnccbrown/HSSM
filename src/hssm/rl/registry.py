@@ -29,7 +29,7 @@ from hssm.utils import annotate_function
 
 from .config import RLSSMConfig
 
-_logger = logging.getLogger("hssm")
+_logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Default annotated Rescorla-Wagner learning function
