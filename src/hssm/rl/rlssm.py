@@ -284,11 +284,6 @@ class _RLSSM(HSSMBase):
         )
 
 
-# ---------------------------------------------------------------------------
-# Blocked-attribute descriptor
-# ---------------------------------------------------------------------------
-
-
 class _BlockedAttribute:
     """Data descriptor that blocks read access with NotImplementedError.
 
@@ -327,11 +322,6 @@ class _BlockedAttribute:
     def __set__(self, obj: Any, value: Any) -> None:  # noqa: D105
         # Store the value so internal reads during __init__ work correctly.
         obj.__dict__[self._storage_key] = value
-
-
-# ---------------------------------------------------------------------------
-# Public wrapper
-# ---------------------------------------------------------------------------
 
 
 class RLSSM(_RLSSM):
