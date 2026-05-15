@@ -12,6 +12,7 @@ from hssm.distribution_utils.dist import (
     ensure_positive_ndt,
     make_distribution,
     make_distribution_for_supported_model,
+    _apply_lapse_model,
     _create_arg_arrays,
     _extract_size,
     _get_p_outlier,
@@ -420,3 +421,65 @@ class TestGetPOutlier:
 
         assert p_outlier is None
         assert new_arg_arrays is arg_arrays
+
+
+# ---------------------------------------------------------------------------
+# Tests for _apply_lapse_model with float lapse_dist (choice-only models)
+# ---------------------------------------------------------------------------
+# Both tests are expected to fail with the current implementation because:
+#   Bug 1: `lapse_dist.args` is called on a float → AttributeError
+#   Bug 2: `np.stack([replace, replace], axis=-1)` creates a 2-column mask,
+#          but choice-only sims_out has only 1 column, corrupting the output.
+# Once the float-lapse branch is added to _apply_lapse_model these should pass.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Float lapse_dist crashes: `lapse_dist.args` raises AttributeError on float. "
+        "Fix: add isinstance(lapse_dist, float) branch in _apply_lapse_model."
+    ),
+)
+def test_apply_lapse_model_float_lapse_1d_does_not_crash():
+    """Float lapse_dist with 1-D sims_out (choice-only) must not crash."""
+    rng = np.random.default_rng(0)
+    choices = [0, 1]
+    # 1-D input: shape (n_obs,) — pure choice-only output from ssms_rng_fn
+    sims_out = np.array([0, 1, 0, 1, 0], dtype=float)
+    # p_outlier=1.0 forces every trial to be replaced, guaranteeing replace_n > 0
+    # and that the lapse branch is reached every time.
+    result = _apply_lapse_model(
+        sims_out=sims_out,
+        p_outlier=1.0,
+        rng=rng,
+        lapse_dist=0.5,  # float — 1/n_choices for a 2-choice model
+        choices=choices,
+    )
+    assert result.shape == sims_out.shape
+    assert set(result).issubset(set(choices))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Float lapse_dist with 2-D sims_out: shape mismatch from "
+        "`np.stack([replace, replace], axis=-1)` producing a 2-column mask for "
+        "a 1-column array.  Fix: add isinstance(lapse_dist, float) branch."
+    ),
+)
+def test_apply_lapse_model_float_lapse_2d_correct_shape():
+    """Float lapse_dist with 2-D (n_obs, 1) sims_out must return same shape."""
+    rng = np.random.default_rng(0)
+    choices = [0, 1]
+    # 2-D input: shape (n_obs, 1) — choice column only
+    sims_out = np.array([[0], [1], [0], [1], [0]], dtype=float)
+    result = _apply_lapse_model(
+        sims_out=sims_out,
+        p_outlier=1.0,
+        rng=rng,
+        lapse_dist=0.5,
+        choices=choices,
+    )
+    assert result.shape == sims_out.shape
+    assert set(result[:, -1]).issubset(set(choices))
