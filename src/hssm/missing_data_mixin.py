@@ -37,30 +37,20 @@ class MissingDataMixin:
         """
         import warnings
 
-        if not self.missing_data and not self.deadline:
-            # In the case of choice only model, we don't need to do anything with the
-            # data.
-            if self.is_choice_only:
-                return
-            # In the case where missing_data is set to False, we need to drop the
-            # cases where rt = na_value
-            if pd.isna(self.missing_data_value):
-                na_dropped = self.data.dropna(subset=["rt"])
-            else:
-                na_dropped = self.data.loc[
-                    self.data["rt"] != self.missing_data_value, :
-                ]
-
-            if len(na_dropped) != len(self.data):
-                warnings.warn(
-                    "`missing_data` is set to False, "
-                    + "but you have missing data in your dataset. "
-                    + "Missing data will be dropped.",
-                    stacklevel=2,
+        if self.deadline:
+            if self.deadline_name not in self.data.columns:
+                raise ValueError(
+                    "You have specified that your data has deadline, but "
+                    + f"`{self.deadline_name}` is not found in your dataset."
                 )
-            self.data = na_dropped
+            self.data.loc[:, "rt"] = np.where(
+                self.data["rt"] < self.data[self.deadline_name],
+                self.data["rt"],
+                -999.0,
+            )
+            return
 
-        elif self.missing_data and not self.deadline:
+        if self.missing_data:
             # In the case where missing_data is set to True, we need to replace the
             # missing data with a specified na_value
 
@@ -71,19 +61,27 @@ class MissingDataMixin:
                 self.data["rt"] = self.data["rt"].replace(
                     self.missing_data_value, -999.0
                 )
+            return
 
-        else:  # deadline = True
-            if self.deadline_name not in self.data.columns:
-                raise ValueError(
-                    "You have specified that your data has deadline, but "
-                    + f"`{self.deadline_name}` is not found in your dataset."
-                )
-            else:
-                self.data.loc[:, "rt"] = np.where(
-                    self.data["rt"] < self.data[self.deadline_name],
-                    self.data["rt"],
-                    -999.0,
-                )
+        # not missing_data and not deadline
+        # In the case of choice only model, we don't need to do anything with the data.
+        if self.is_choice_only:
+            return
+        # In the case where missing_data is set to False, we need to drop the
+        # cases where rt = na_value
+        if pd.isna(self.missing_data_value):
+            na_dropped = self.data.dropna(subset=["rt"])
+        else:
+            na_dropped = self.data.loc[self.data["rt"] != self.missing_data_value, :]
+
+        if len(na_dropped) != len(self.data):
+            warnings.warn(
+                "`missing_data` is set to False, "
+                + "but you have missing data in your dataset. "
+                + "Missing data will be dropped.",
+                stacklevel=2,
+            )
+        self.data = na_dropped
 
     @staticmethod
     def _set_missing_data_and_deadline(
@@ -150,12 +148,8 @@ class MissingDataMixin:
                 raise ValueError("Choice-only models cannot have missing data.")
             self.missing_data = False
             self.missing_data_network = MissingDataNetwork.NONE
-            if isinstance(deadline, str):
-                self.deadline = True
-                self.deadline_name = deadline
-            else:
-                self.deadline = deadline
-                self.deadline_name = "deadline"
+            self.deadline = True if isinstance(deadline, str) else deadline
+            self.deadline_name = deadline if isinstance(deadline, str) else "deadline"
             self.loglik_missing_data = loglik_missing_data
             if not self.deadline and loglik_missing_data is not None:
                 raise ValueError(
@@ -173,40 +167,34 @@ class MissingDataMixin:
             return
 
         if isinstance(missing_data, float):
-            if not ((self.data.rt == missing_data).any()):
+            if not (self.data.rt == missing_data).any():
                 raise ValueError(
                     f"missing_data argument is provided as a float {missing_data}, "
                     f"However, you have no RTs of {missing_data} in your dataset!"
                 )
-            else:
-                self.missing_data = True
-                self.missing_data_value = missing_data
+            self.missing_data = True
+            self.missing_data_value = missing_data
         elif isinstance(missing_data, bool):
-            if missing_data and (not (self.data.rt == -999.0).any()):
+            if missing_data and not (self.data.rt == -999.0).any():
                 raise ValueError(
                     "missing_data argument is provided as True, "
                     " so RTs of -999.0 are treated as missing. \n"
                     "However, you have no RTs of -999.0 in your dataset!"
                 )
-            elif (not missing_data) and (self.data.rt == -999.0).any():
+            if not missing_data and (self.data.rt == -999.0).any():
                 raise ValueError(
                     "Missing data provided as False. \n"
                     "However, you have RTs of -999.0 in your dataset!"
                 )
-            else:
-                self.missing_data = missing_data
+            self.missing_data = missing_data
         else:
             raise ValueError(
                 "missing_data argument must be a bool or a float! \n"
                 f"You provided: {type(missing_data)}"
             )
 
-        if isinstance(deadline, str):
-            self.deadline = True
-            self.deadline_name = deadline
-        else:
-            self.deadline = deadline
-            self.deadline_name = "deadline"
+        self.deadline = True if isinstance(deadline, str) else deadline
+        self.deadline_name = deadline if isinstance(deadline, str) else "deadline"
 
         if (
             not self.missing_data and not self.deadline
