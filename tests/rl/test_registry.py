@@ -7,6 +7,7 @@ composition, and registration validation are caught at the module boundary.
 
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from typing import Any
 
@@ -53,442 +54,312 @@ def annotated_ssm_base_logp() -> Any:
     return base_logp
 
 
-def test_get_ssm_logp_builds_lazy_factory_once(annotated_ssm_base_logp: Any) -> None:
-    """Lazy SSM factories should only build and cache one function instance."""
-    call_count = 0
+class TestBuildSsmSpecFromModelconfig:
+    def test_unknown_model_raises(self) -> None:
+        """Completely unknown names should raise ValueError from the modelconfig bridge."""
+        with pytest.raises(ValueError, match="not a registered custom SSM"):
+            registry._build_ssm_spec_from_modelconfig("totally_unknown_model")
 
-    def factory() -> Any:
-        nonlocal call_count
-        call_count += 1
-        return annotated_ssm_base_logp
+    def test_no_approx_differentiable_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Models without an approx_differentiable likelihood must be rejected."""
+        import hssm.modelconfig as mc_module
 
-    registry._SSM_REGISTRY["lazy_unit_test_ssm"] = {
-        "ssm_base_logp_func_factory": factory,
-        "list_params_ssm": ["v", "a"],
-        "bounds_ssm": {"a": (0.3, 3.0)},
-        "params_default_ssm": [0.0, 1.5],
-        "response": ["rt", "response"],
-    }
+        def _fake_get(name):  # type: ignore[no-untyped-def]
+            return {
+                "list_params": ["v", "a"],
+                "response": ["rt", "response"],
+                "likelihoods": {
+                    "analytical": {
+                        "loglik": lambda: None,
+                        "bounds": {},
+                        "backend": None,
+                    },
+                },
+            }
 
-    first = registry._get_ssm_logp("lazy_unit_test_ssm")
-    second = registry._get_ssm_logp("lazy_unit_test_ssm")
+        monkeypatch.setattr(mc_module, "get_default_model_config", _fake_get)
+        with pytest.raises(ValueError, match="no approx_differentiable likelihood"):
+            registry._build_ssm_spec_from_modelconfig("ddm")
 
-    assert first is annotated_ssm_base_logp
-    assert second is first
-    assert call_count == 1
+    def test_factory_calls_onnx_loader(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        annotated_ssm_base_logp: Any,
+    ) -> None:
+        """The lazy factory should call make_jax_matrix_logp_funcs_from_onnx with the
+        correct filename."""
+        import hssm.distribution_utils.onnx as onnx_module
 
+        called_with: list[str] = []
 
-def test_derive_rl_params_excludes_response_and_extra_fields(
-    learning_process: dict[str, Any],
-) -> None:
-    """Derived RL params should ignore response columns and extra fields."""
-    derived = registry._derive_rl_params(
-        learning_process=learning_process,
-        response=["rt", "response"],
-        extra_fields=["feedback"],
-    )
+        def _fake_onnx(model: str) -> Any:
+            called_with.append(model)
+            return annotated_ssm_base_logp
 
-    assert derived == ["rl_alpha"]
+        monkeypatch.setattr(
+            onnx_module, "make_jax_matrix_logp_funcs_from_onnx", _fake_onnx
+        )
+        monkeypatch.setattr(
+            registry, "make_jax_matrix_logp_funcs_from_onnx", _fake_onnx
+        )
 
+        spec = registry._build_ssm_spec_from_modelconfig("angle")
+        result = spec["ssm_base_logp_func_factory"]()
 
-def test_get_rlssm_model_config_builds_expected_config(
-    annotated_ssm_base_logp: Any,
-    learning_process: dict[str, Any],
-) -> None:
-    """Registry config composition should exclude computed SSM params."""
-    registry.register_ssm(
-        name="unit_test_ssm",
-        ssm_base_logp_func=annotated_ssm_base_logp,
-        list_params_ssm=["v", "a"],
-        bounds_ssm={"a": (0.3, 3.0)},
-        params_default_ssm=[0.0, 1.5],
-        response=["rt", "response"],
-    )
-    registry.register_rlssm_model(
-        name="unit_test_model",
-        decision_process="unit_test_ssm",
-        learning_process=learning_process,
-        rl_params=["rl_alpha"],
-        rl_bounds={"rl_alpha": (0.0, 1.0)},
-        rl_params_default=[0.2],
-        extra_fields=["feedback"],
-        choices=[0, 1],
-    )
-
-    config = registry.get_rlssm_model_config("unit_test_model")
-
-    assert isinstance(config, RLSSMConfig)
-    assert config.list_params == ["rl_alpha", "a"]
-    assert config.bounds == {"rl_alpha": (0.0, 1.0), "a": (0.3, 3.0)}
-    assert config.params_default == [0.2, 1.5]
-    assert config.response == ["rt", "response"]
-    assert config.ssm_logp_func.computed == learning_process
-
-    config.response.append("mutated")
-    assert registry._SSM_REGISTRY["unit_test_ssm"]["response"] == ["rt", "response"]
+        assert called_with == ["angle.onnx"]
+        assert callable(result)
+        assert result.inputs == ["v", "a", "z", "t", "theta", "rt", "response"]
+        assert result.outputs == ["logp"]
 
 
-def test_get_rlssm_model_config_respects_explicit_empty_rl_fields(
-    annotated_ssm_base_logp: Any,
-    learning_process: dict[str, Any],
-) -> None:
-    """Explicit empty RL collections must not trigger fallback derivation."""
-    registry.register_ssm(
-        name="empty_rl_ssm",
-        ssm_base_logp_func=annotated_ssm_base_logp,
-        list_params_ssm=["v", "a"],
-        bounds_ssm={"a": (0.3, 3.0)},
-        params_default_ssm=[0.0, 1.5],
-        response=["rt", "response"],
-    )
-    registry._RLSSM_REGISTRY["empty_rl_model"] = {
-        "decision_process": "empty_rl_ssm",
-        "learning_process": learning_process,
-        "rl_params": [],
-        "rl_bounds": {},
-        "rl_params_default": [],
-        "extra_fields": ["feedback"],
-        "choices": [0, 1],
-        "description": "test model",
-        "decision_process_loglik_kind": "approx_differentiable",
-        "learning_process_kind": "blackbox",
-    }
+class TestGetSsmLogp:
+    def test_builds_lazy_factory_once(self, annotated_ssm_base_logp: Any) -> None:
+        """Lazy SSM factories should only build and cache one function instance."""
+        call_count = 0
 
-    config = registry.get_rlssm_model_config("empty_rl_model")
+        def factory() -> Any:
+            nonlocal call_count
+            call_count += 1
+            return annotated_ssm_base_logp
 
-    assert config.list_params == ["a"]
-    assert config.bounds == {"a": (0.3, 3.0)}
-    assert config.params_default == [1.5]
+        registry._SSM_REGISTRY["lazy_unit_test_ssm"] = {
+            "ssm_base_logp_func_factory": factory,
+            "list_params_ssm": ["v", "a"],
+            "bounds_ssm": {"a": (0.3, 3.0)},
+            "params_default_ssm": [0.0, 1.5],
+            "response": ["rt", "response"],
+        }
 
+        first = registry._get_ssm_logp("lazy_unit_test_ssm")
+        second = registry._get_ssm_logp("lazy_unit_test_ssm")
 
-def test_register_rlssm_model_copies_mutable_inputs(
-    learning_process: dict[str, Any],
-) -> None:
-    """Caller mutations after registration must not alter the stored model."""
-    rl_params = ["rl_alpha"]
-    rl_bounds = {"rl_alpha": (0.0, 1.0)}
-    rl_defaults = [0.2]
-    extra_fields = ["feedback"]
-    choices = [0, 1]
+        assert first is annotated_ssm_base_logp
+        assert second is first
+        assert call_count == 1
 
-    registry.register_rlssm_model(
-        name="copy_test_model",
-        decision_process="angle",
-        learning_process=learning_process,
-        rl_params=rl_params,
-        rl_bounds=rl_bounds,
-        rl_params_default=rl_defaults,
-        extra_fields=extra_fields,
-        choices=choices,
-    )
+    def test_resolves_builtin_via_modelconfig(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        annotated_ssm_base_logp: Any,
+    ) -> None:
+        """_get_ssm_logp should build and cache the logp for a built-in SSM."""
+        import hssm.distribution_utils.onnx as onnx_module
 
-    rl_params.append("scaler")
-    rl_bounds["scaler"] = (0.0, 10.0)
-    rl_defaults.append(1.0)
-    extra_fields.append("trial")
-    choices.append(2)
-    # Built-in SSMs (e.g. "angle") are derived from modelconfig on each call
-    # and are never stored as shared mutable state in _SSM_REGISTRY, so there
-    # is no registry entry to corrupt here.
-    learning_process["other"] = next(iter(learning_process.values()))
+        monkeypatch.setattr(
+            onnx_module,
+            "make_jax_matrix_logp_funcs_from_onnx",
+            lambda **_: annotated_ssm_base_logp,
+        )
+        monkeypatch.setattr(
+            registry,
+            "make_jax_matrix_logp_funcs_from_onnx",
+            lambda **_: annotated_ssm_base_logp,
+        )
 
-    stored = registry._RLSSM_REGISTRY["copy_test_model"]
+        result = registry._get_ssm_logp("angle")
 
-    assert stored["decision_process"]["name"] == "angle"
-    assert stored["decision_process"]["response"] == ["rt", "response"]
-    assert stored["rl_params"] == ["rl_alpha"]
-    assert stored["rl_bounds"] == {"rl_alpha": (0.0, 1.0)}
-    assert stored["rl_params_default"] == [0.2]
-    assert stored["extra_fields"] == ["feedback"]
-    assert stored["choices"] == [0, 1]
-    assert list(stored["learning_process"]) == ["v"]
+        assert callable(result)
+        assert "angle" in registry._SSM_LOGP_CACHE
+        # Second call returns cached value without re-building.
+        assert registry._get_ssm_logp("angle") is result
 
 
-def test_register_ssm_caches_prebuilt_function(
-    annotated_ssm_base_logp: Any,
-) -> None:
-    """Registering a pre-built SSM should populate the cache immediately."""
-    registry.register_ssm(
-        name="cached_ssm",
-        ssm_base_logp_func=annotated_ssm_base_logp,
-        list_params_ssm=["v", "a"],
-        bounds_ssm={"a": (0.3, 3.0)},
-        params_default_ssm=[0.0, 1.5],
-    )
+class TestBuildSsmLogpFunc:
+    def test_raises_if_already_computed(
+        self,
+        annotated_ssm_base_logp: Any,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """_build_ssm_logp_func must refuse functions that already have .computed set."""
+        precomputed = annotate_function(
+            inputs=annotated_ssm_base_logp.inputs,
+            outputs=annotated_ssm_base_logp.outputs,
+            computed=learning_process,
+        )(annotated_ssm_base_logp)
 
-    assert registry._SSM_LOGP_CACHE["cached_ssm"] is annotated_ssm_base_logp
-    assert registry._SSM_REGISTRY["cached_ssm"]["response"] == ["rt", "response"]
+        with pytest.raises(ValueError, match="already has a non-empty .computed"):
+            registry._build_ssm_logp_func(precomputed, learning_process)
 
 
-def test_register_ssm_rejects_precomputed_function(
-    annotated_ssm_base_logp: Any,
-    learning_process: dict[str, Any],
-) -> None:
-    """SSM registration should reject functions that already carry computed params."""
-    precomputed_logp = annotate_function(
-        inputs=annotated_ssm_base_logp.inputs,
-        outputs=annotated_ssm_base_logp.outputs,
-        computed=learning_process,
-    )(annotated_ssm_base_logp)
+class TestDeriveRlParams:
+    def test_excludes_response_and_extra_fields(
+        self,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """Derived RL params should ignore response columns and extra fields."""
+        derived = registry._derive_rl_params(
+            learning_process=learning_process,
+            response=["rt", "response"],
+            extra_fields=["feedback"],
+        )
 
-    with pytest.raises(ValueError, match="should not have a non-empty .computed"):
+        assert derived == ["rl_alpha"]
+
+    def test_warns_for_unannotated_lp_func(self) -> None:
+        """A learning-process function without .inputs should log a warning and be skipped."""
+
+        def unannotated_func(x):  # type: ignore[no-untyped-def]
+            return x
+
+        lp = {"v": unannotated_func}
+        result = registry._derive_rl_params(
+            learning_process=lp,
+            response=["rt", "response"],
+            extra_fields=["feedback"],
+        )
+        # The unannotated function contributes no params.
+        assert result == []
+
+
+class TestRegisterSsm:
+    def test_caches_prebuilt_function(self, annotated_ssm_base_logp: Any) -> None:
+        """Registering a pre-built SSM should populate the cache immediately."""
         registry.register_ssm(
-            name="invalid_ssm",
-            ssm_base_logp_func=precomputed_logp,
+            name="cached_ssm",
+            ssm_base_logp_func=annotated_ssm_base_logp,
             list_params_ssm=["v", "a"],
             bounds_ssm={"a": (0.3, 3.0)},
             params_default_ssm=[0.0, 1.5],
         )
 
+        assert registry._SSM_LOGP_CACHE["cached_ssm"] is annotated_ssm_base_logp
+        assert registry._SSM_REGISTRY["cached_ssm"]["response"] == ["rt", "response"]
 
-def test_get_rlssm_model_config_unknown_model_raises() -> None:
-    """Unknown RLSSM model names should fail with a clear error."""
-    with pytest.raises(ValueError, match="not found in the RLSSM registry"):
-        registry.get_rlssm_model_config("does_not_exist")
+    def test_rejects_precomputed_function(
+        self,
+        annotated_ssm_base_logp: Any,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """SSM registration should reject functions that already carry computed params."""
+        precomputed_logp = annotate_function(
+            inputs=annotated_ssm_base_logp.inputs,
+            outputs=annotated_ssm_base_logp.outputs,
+            computed=learning_process,
+        )(annotated_ssm_base_logp)
 
+        with pytest.raises(ValueError, match="should not have a non-empty .computed"):
+            registry.register_ssm(
+                name="invalid_ssm",
+                ssm_base_logp_func=precomputed_logp,
+                list_params_ssm=["v", "a"],
+                bounds_ssm={"a": (0.3, 3.0)},
+                params_default_ssm=[0.0, 1.5],
+            )
 
-# ---------------------------------------------------------------------------
-# _build_ssm_spec_from_modelconfig — error paths
-# ---------------------------------------------------------------------------
+    def test_rejects_non_callable(self) -> None:
+        """register_ssm must raise when ssm_base_logp_func is not callable."""
+        with pytest.raises(ValueError, match="must be callable"):
+            registry.register_ssm(
+                name="bad_ssm",
+                ssm_base_logp_func="not_a_function",  # type: ignore[arg-type]
+                list_params_ssm=["v"],
+                bounds_ssm={},
+                params_default_ssm=[0.0],
+            )
 
+    def test_rejects_unannotated_callable(self) -> None:
+        """register_ssm must raise when the callable lacks .inputs or .outputs."""
 
-def test_build_ssm_spec_unknown_model_raises() -> None:
-    """Completely unknown names should raise ValueError from the modelconfig bridge."""
-    with pytest.raises(ValueError, match="not a registered custom SSM"):
-        registry._build_ssm_spec_from_modelconfig("totally_unknown_model")
+        def plain(x):  # type: ignore[no-untyped-def]
+            return x
 
+        with pytest.raises(
+            ValueError, match="must be decorated with @annotate_function"
+        ):
+            registry.register_ssm(
+                name="unannotated_ssm",
+                ssm_base_logp_func=plain,
+                list_params_ssm=["v"],
+                bounds_ssm={},
+                params_default_ssm=[0.0],
+            )
 
-def test_build_ssm_spec_no_approx_differentiable_raises(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Models without an approx_differentiable likelihood must be rejected."""
-    import hssm.modelconfig as mc_module
+    def test_warns_on_overwrite(
+        self,
+        annotated_ssm_base_logp: Any,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Re-registering an existing SSM name should emit a warning."""
+        registry.register_ssm(
+            name="dup_ssm",
+            ssm_base_logp_func=annotated_ssm_base_logp,
+            list_params_ssm=["v", "a"],
+            bounds_ssm={"a": (0.3, 3.0)},
+            params_default_ssm=[0.0, 1.5],
+        )
 
-    def _fake_get(name):  # type: ignore[no-untyped-def]
-        return {
-            "list_params": ["v", "a"],
-            "response": ["rt", "response"],
-            "likelihoods": {
-                "analytical": {"loglik": lambda: None, "bounds": {}, "backend": None},
-            },
-        }
+        with caplog.at_level(logging.WARNING, logger="hssm"):
+            registry.register_ssm(
+                name="dup_ssm",
+                ssm_base_logp_func=annotated_ssm_base_logp,
+                list_params_ssm=["v", "a"],
+                bounds_ssm={"a": (0.3, 3.0)},
+                params_default_ssm=[0.0, 1.5],
+            )
 
-    monkeypatch.setattr(mc_module, "get_default_model_config", _fake_get)
-    with pytest.raises(ValueError, match="no approx_differentiable likelihood"):
-        registry._build_ssm_spec_from_modelconfig("ddm")
-
-
-# ---------------------------------------------------------------------------
-# _make_ssm_base_logp_from_onnx + _factory (ONNX paths, mocked)
-# ---------------------------------------------------------------------------
-
-
-def test_build_ssm_spec_factory_calls_onnx_loader(
-    monkeypatch: pytest.MonkeyPatch,
-    annotated_ssm_base_logp: Any,
-) -> None:
-    """The lazy factory produced by _build_ssm_spec_from_modelconfig should
-    call make_jax_matrix_logp_funcs_from_onnx with the correct filename."""
-    import hssm.distribution_utils.onnx as onnx_module
-
-    called_with: list[str] = []
-
-    def _fake_onnx(model: str) -> Any:
-        called_with.append(model)
-        return annotated_ssm_base_logp
-
-    monkeypatch.setattr(onnx_module, "make_jax_matrix_logp_funcs_from_onnx", _fake_onnx)
-    monkeypatch.setattr(registry, "make_jax_matrix_logp_funcs_from_onnx", _fake_onnx)
-
-    spec = registry._build_ssm_spec_from_modelconfig("angle")
-    result = spec["ssm_base_logp_func_factory"]()
-
-    assert called_with == ["angle.onnx"]
-    assert callable(result)
-    assert result.inputs == ["v", "a", "z", "t", "theta", "rt", "response"]
-    assert result.outputs == ["logp"]
-
-
-# ---------------------------------------------------------------------------
-# _get_ssm_logp — built-in SSM path (not in _SSM_REGISTRY)
-# ---------------------------------------------------------------------------
-
-
-def test_get_ssm_logp_resolves_builtin_via_modelconfig(
-    monkeypatch: pytest.MonkeyPatch,
-    annotated_ssm_base_logp: Any,
-) -> None:
-    """_get_ssm_logp should build and cache the logp for a built-in SSM."""
-    import hssm.distribution_utils.onnx as onnx_module
-
-    monkeypatch.setattr(
-        onnx_module,
-        "make_jax_matrix_logp_funcs_from_onnx",
-        lambda **_: annotated_ssm_base_logp,
-    )
-    monkeypatch.setattr(
-        registry,
-        "make_jax_matrix_logp_funcs_from_onnx",
-        lambda **_: annotated_ssm_base_logp,
-    )
-
-    result = registry._get_ssm_logp("angle")
-
-    assert callable(result)
-    assert "angle" in registry._SSM_LOGP_CACHE
-    # Second call returns cached value without re-building.
-    assert registry._get_ssm_logp("angle") is result
+        assert any("dup_ssm" in r.message for r in caplog.records)
 
 
-# ---------------------------------------------------------------------------
-# _build_ssm_logp_func — raises when func already carries .computed
-# ---------------------------------------------------------------------------
+class TestRegisterRlssmModel:
+    def test_copies_mutable_inputs(
+        self,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """Caller mutations after registration must not alter the stored model."""
+        rl_params = ["rl_alpha"]
+        rl_bounds = {"rl_alpha": (0.0, 1.0)}
+        rl_defaults = [0.2]
+        extra_fields = ["feedback"]
+        choices = [0, 1]
 
+        registry.register_rlssm_model(
+            name="copy_test_model",
+            decision_process="angle",
+            learning_process=learning_process,
+            rl_params=rl_params,
+            rl_bounds=rl_bounds,
+            rl_params_default=rl_defaults,
+            extra_fields=extra_fields,
+            choices=choices,
+        )
 
-def test_build_ssm_logp_func_raises_if_already_computed(
-    annotated_ssm_base_logp: Any,
-    learning_process: dict[str, Any],
-) -> None:
-    """_build_ssm_logp_func must refuse functions that already have .computed set."""
-    precomputed = annotate_function(
-        inputs=annotated_ssm_base_logp.inputs,
-        outputs=annotated_ssm_base_logp.outputs,
-        computed=learning_process,
-    )(annotated_ssm_base_logp)
+        rl_params.append("scaler")
+        rl_bounds["scaler"] = (0.0, 10.0)
+        rl_defaults.append(1.0)
+        extra_fields.append("trial")
+        choices.append(2)
+        # Built-in SSMs (e.g. "angle") are derived from modelconfig on each call
+        # and are never stored as shared mutable state in _SSM_REGISTRY, so there
+        # is no registry entry to corrupt here.
+        learning_process["other"] = next(iter(learning_process.values()))
 
-    with pytest.raises(ValueError, match="already has a non-empty .computed"):
-        registry._build_ssm_logp_func(precomputed, learning_process)
+        stored = registry._RLSSM_REGISTRY["copy_test_model"]
 
+        assert stored["decision_process"]["name"] == "angle"
+        assert stored["decision_process"]["response"] == ["rt", "response"]
+        assert stored["rl_params"] == ["rl_alpha"]
+        assert stored["rl_bounds"] == {"rl_alpha": (0.0, 1.0)}
+        assert stored["rl_params_default"] == [0.2]
+        assert stored["extra_fields"] == ["feedback"]
+        assert stored["choices"] == [0, 1]
+        assert list(stored["learning_process"]) == ["v"]
 
-# ---------------------------------------------------------------------------
-# _derive_rl_params — LP function missing .inputs (warning branch)
-# ---------------------------------------------------------------------------
-
-
-def test_derive_rl_params_warns_for_unannotated_lp_func() -> None:
-    """A learning-process function without .inputs should log a warning and be skipped."""
-
-    def unannotated_func(x):  # type: ignore[no-untyped-def]
-        return x
-
-    lp = {"v": unannotated_func}
-    result = registry._derive_rl_params(
-        learning_process=lp,
-        response=["rt", "response"],
-        extra_fields=["feedback"],
-    )
-    # The unannotated function contributes no params.
-    assert result == []
-
-
-# ---------------------------------------------------------------------------
-# get_rlssm_model_config — rl_params=None fallback derivation
-# ---------------------------------------------------------------------------
-
-
-def test_get_rlssm_model_config_derives_rl_params_when_absent(
-    annotated_ssm_base_logp: Any,
-    learning_process: dict[str, Any],
-) -> None:
-    """When rl_params is absent from the registry entry, params are derived
-    from the learning_process .inputs."""
-    registry.register_ssm(
-        name="derive_params_ssm",
-        ssm_base_logp_func=annotated_ssm_base_logp,
-        list_params_ssm=["v", "a"],
-        bounds_ssm={"a": (0.3, 3.0)},
-        params_default_ssm=[0.0, 1.5],
-        response=["rt", "response"],
-    )
-    # Inject an entry without rl_params so the fallback derivation runs.
-    registry._RLSSM_REGISTRY["derive_params_model"] = {
-        "decision_process": "derive_params_ssm",
-        "learning_process": learning_process,
-        # rl_params deliberately absent
-        "rl_bounds": {},
-        "rl_params_default": [],
-        "extra_fields": ["feedback"],
-        "choices": [0, 1],
-        "description": None,
-        "decision_process_loglik_kind": "approx_differentiable",
-        "learning_process_kind": "blackbox",
-    }
-
-    config = registry.get_rlssm_model_config("derive_params_model")
-
-    # "rl_alpha" is the only input to learning_process that isn't response/extra.
-    assert "rl_alpha" in config.list_params
-
-
-# ---------------------------------------------------------------------------
-# get_rlssm_model_config — SSM param absent from bounds_ssm raises early
-# ---------------------------------------------------------------------------
-
-
-def test_get_rlssm_model_config_raises_for_missing_bounds(
-    annotated_ssm_base_logp: Any,
-    learning_process: dict[str, Any],
-) -> None:
-    """SSM params missing from bounds_ssm must raise immediately with a clear error.
-
-    Previously the factory silently skipped such params, producing a broken
-    RLSSMConfig that only failed later inside _RLSSM.__init__. Now it must
-    raise at the factory boundary so the error message points at the root cause.
-    """
-    registry.register_ssm(
-        name="no_bounds_ssm",
-        ssm_base_logp_func=annotated_ssm_base_logp,
-        list_params_ssm=["v", "a"],
-        # "a" intentionally has no bounds entry
-        bounds_ssm={},
-        params_default_ssm=[0.0, 1.5],
-        response=["rt", "response"],
-    )
-    registry.register_rlssm_model(
-        name="no_bounds_model",
-        decision_process="no_bounds_ssm",
-        learning_process=learning_process,
-        rl_params=["rl_alpha"],
-        rl_bounds={"rl_alpha": (0.0, 1.0)},
-        rl_params_default=[0.2],
-        extra_fields=["feedback"],
-        choices=[0, 1],
-    )
-
-    with pytest.raises(ValueError, match="no entry in bounds_ssm"):
-        registry.get_rlssm_model_config("no_bounds_model")
-
-
-# ---------------------------------------------------------------------------
-# register_rlssm_model — overwrite warning
-# ---------------------------------------------------------------------------
-
-
-def test_register_rlssm_model_warns_on_overwrite(
-    learning_process: dict[str, Any],
-    annotated_ssm_base_logp: Any,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Re-registering an existing RLSSM model name should emit a warning."""
-    registry.register_ssm(
-        name="overwrite_ssm",
-        ssm_base_logp_func=annotated_ssm_base_logp,
-        list_params_ssm=["v", "a"],
-        bounds_ssm={"a": (0.3, 3.0)},
-        params_default_ssm=[0.0, 1.5],
-    )
-    registry.register_rlssm_model(
-        name="overwrite_rlssm",
-        decision_process="overwrite_ssm",
-        learning_process=learning_process,
-        rl_params=["rl_alpha"],
-        rl_bounds={"rl_alpha": (0.0, 1.0)},
-        rl_params_default=[0.2],
-    )
-
-    import logging
-
-    with caplog.at_level(logging.WARNING, logger="hssm"):
+    def test_warns_on_overwrite(
+        self,
+        learning_process: dict[str, Any],
+        annotated_ssm_base_logp: Any,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Re-registering an existing RLSSM model name should emit a warning."""
+        registry.register_ssm(
+            name="overwrite_ssm",
+            ssm_base_logp_func=annotated_ssm_base_logp,
+            list_params_ssm=["v", "a"],
+            bounds_ssm={"a": (0.3, 3.0)},
+            params_default_ssm=[0.0, 1.5],
+        )
         registry.register_rlssm_model(
             name="overwrite_rlssm",
             decision_process="overwrite_ssm",
@@ -498,138 +369,226 @@ def test_register_rlssm_model_warns_on_overwrite(
             rl_params_default=[0.2],
         )
 
-    assert any("overwrite_rlssm" in r.message for r in caplog.records)
+        with caplog.at_level(logging.WARNING, logger="hssm"):
+            registry.register_rlssm_model(
+                name="overwrite_rlssm",
+                decision_process="overwrite_ssm",
+                learning_process=learning_process,
+                rl_params=["rl_alpha"],
+                rl_bounds={"rl_alpha": (0.0, 1.0)},
+                rl_params_default=[0.2],
+            )
+
+        assert any("overwrite_rlssm" in r.message for r in caplog.records)
 
 
-# ---------------------------------------------------------------------------
-# register_ssm — validation error paths
-# ---------------------------------------------------------------------------
-
-
-def test_register_ssm_rejects_non_callable() -> None:
-    """register_ssm must raise when ssm_base_logp_func is not callable."""
-    with pytest.raises(ValueError, match="must be callable"):
+class TestGetRlssmModelConfig:
+    def test_builds_expected_config(
+        self,
+        annotated_ssm_base_logp: Any,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """Registry config composition should exclude computed SSM params."""
         registry.register_ssm(
-            name="bad_ssm",
-            ssm_base_logp_func="not_a_function",  # type: ignore[arg-type]
-            list_params_ssm=["v"],
-            bounds_ssm={},
-            params_default_ssm=[0.0],
-        )
-
-
-def test_register_ssm_rejects_unannotated_callable() -> None:
-    """register_ssm must raise when the callable lacks .inputs or .outputs."""
-
-    def plain(x):  # type: ignore[no-untyped-def]
-        return x
-
-    with pytest.raises(ValueError, match="must be decorated with @annotate_function"):
-        registry.register_ssm(
-            name="unannotated_ssm",
-            ssm_base_logp_func=plain,
-            list_params_ssm=["v"],
-            bounds_ssm={},
-            params_default_ssm=[0.0],
-        )
-
-
-def test_register_ssm_warns_on_overwrite(
-    annotated_ssm_base_logp: Any,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Re-registering an existing SSM name should emit a warning."""
-    registry.register_ssm(
-        name="dup_ssm",
-        ssm_base_logp_func=annotated_ssm_base_logp,
-        list_params_ssm=["v", "a"],
-        bounds_ssm={"a": (0.3, 3.0)},
-        params_default_ssm=[0.0, 1.5],
-    )
-
-    import logging
-
-    with caplog.at_level(logging.WARNING, logger="hssm"):
-        registry.register_ssm(
-            name="dup_ssm",
+            name="unit_test_ssm",
             ssm_base_logp_func=annotated_ssm_base_logp,
             list_params_ssm=["v", "a"],
             bounds_ssm={"a": (0.3, 3.0)},
             params_default_ssm=[0.0, 1.5],
+            response=["rt", "response"],
+        )
+        registry.register_rlssm_model(
+            name="unit_test_model",
+            decision_process="unit_test_ssm",
+            learning_process=learning_process,
+            rl_params=["rl_alpha"],
+            rl_bounds={"rl_alpha": (0.0, 1.0)},
+            rl_params_default=[0.2],
+            extra_fields=["feedback"],
+            choices=[0, 1],
         )
 
-    assert any("dup_ssm" in r.message for r in caplog.records)
+        config = registry.get_rlssm_model_config("unit_test_model")
+
+        assert isinstance(config, RLSSMConfig)
+        assert config.list_params == ["rl_alpha", "a"]
+        assert config.bounds == {"rl_alpha": (0.0, 1.0), "a": (0.3, 3.0)}
+        assert config.params_default == [0.2, 1.5]
+        assert config.response == ["rt", "response"]
+        assert config.ssm_logp_func.computed == learning_process
+
+        # Mutating the returned config must not corrupt the registry's stored list.
+        config.response.append("mutated")
+        assert registry._SSM_REGISTRY["unit_test_ssm"]["response"] == ["rt", "response"]
+
+    def test_respects_explicit_empty_rl_fields(
+        self,
+        annotated_ssm_base_logp: Any,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """Explicit empty RL collections must not trigger fallback derivation."""
+        registry.register_ssm(
+            name="empty_rl_ssm",
+            ssm_base_logp_func=annotated_ssm_base_logp,
+            list_params_ssm=["v", "a"],
+            bounds_ssm={"a": (0.3, 3.0)},
+            params_default_ssm=[0.0, 1.5],
+            response=["rt", "response"],
+        )
+        registry._RLSSM_REGISTRY["empty_rl_model"] = {
+            "decision_process": "empty_rl_ssm",
+            "learning_process": learning_process,
+            "rl_params": [],
+            "rl_bounds": {},
+            "rl_params_default": [],
+            "extra_fields": ["feedback"],
+            "choices": [0, 1],
+            "description": "test model",
+            "decision_process_loglik_kind": "approx_differentiable",
+            "learning_process_kind": "blackbox",
+        }
+
+        config = registry.get_rlssm_model_config("empty_rl_model")
+
+        assert config.list_params == ["a"]
+        assert config.bounds == {"a": (0.3, 3.0)}
+        assert config.params_default == [1.5]
+
+    def test_unknown_model_raises(self) -> None:
+        """Unknown RLSSM model names should fail with a clear error."""
+        with pytest.raises(ValueError, match="not found in the RLSSM registry"):
+            registry.get_rlssm_model_config("does_not_exist")
+
+    def test_derives_rl_params_when_absent(
+        self,
+        annotated_ssm_base_logp: Any,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """When rl_params is absent from the registry entry, params are derived
+        from the learning_process .inputs."""
+        registry.register_ssm(
+            name="derive_params_ssm",
+            ssm_base_logp_func=annotated_ssm_base_logp,
+            list_params_ssm=["v", "a"],
+            bounds_ssm={"a": (0.3, 3.0)},
+            params_default_ssm=[0.0, 1.5],
+            response=["rt", "response"],
+        )
+        # Inject an entry without rl_params so the fallback derivation runs.
+        registry._RLSSM_REGISTRY["derive_params_model"] = {
+            "decision_process": "derive_params_ssm",
+            "learning_process": learning_process,
+            # rl_params deliberately absent
+            "rl_bounds": {},
+            "rl_params_default": [],
+            "extra_fields": ["feedback"],
+            "choices": [0, 1],
+            "description": None,
+            "decision_process_loglik_kind": "approx_differentiable",
+            "learning_process_kind": "blackbox",
+        }
+
+        config = registry.get_rlssm_model_config("derive_params_model")
+
+        # "rl_alpha" is the only input to learning_process that isn't response/extra.
+        assert "rl_alpha" in config.list_params
+
+    def test_raises_for_missing_bounds(
+        self,
+        annotated_ssm_base_logp: Any,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """SSM params missing from bounds_ssm must raise immediately with a clear error.
+
+        Previously the factory silently skipped such params, producing a broken
+        RLSSMConfig that only failed later inside _RLSSM.__init__. Now it must
+        raise at the factory boundary so the error message points at the root cause.
+        """
+        registry.register_ssm(
+            name="no_bounds_ssm",
+            ssm_base_logp_func=annotated_ssm_base_logp,
+            list_params_ssm=["v", "a"],
+            # "a" intentionally has no bounds entry
+            bounds_ssm={},
+            params_default_ssm=[0.0, 1.5],
+            response=["rt", "response"],
+        )
+        registry.register_rlssm_model(
+            name="no_bounds_model",
+            decision_process="no_bounds_ssm",
+            learning_process=learning_process,
+            rl_params=["rl_alpha"],
+            rl_bounds={"rl_alpha": (0.0, 1.0)},
+            rl_params_default=[0.2],
+            extra_fields=["feedback"],
+            choices=[0, 1],
+        )
+
+        with pytest.raises(ValueError, match="no entry in bounds_ssm"):
+            registry.get_rlssm_model_config("no_bounds_model")
 
 
-# ---------------------------------------------------------------------------
-# Built-in starter-pack RLSSM models (DDM and Weibull variants)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "model_name, expected_dp",
-    [
-        ("2AB_RescorlaWagner_DDM", "ddm"),
-        ("2AB_RescorlaWagner_Weibull", "weibull"),
-    ],
-)
-def test_builtin_2ab_models_are_registered(model_name: str, expected_dp: str) -> None:
-    """2AB_RescorlaWagner_DDM and _Weibull must be present in the RLSSM registry."""
-    assert model_name in registry._RLSSM_REGISTRY
-    entry = registry._RLSSM_REGISTRY[model_name]
-    assert entry["decision_process"]["name"] == expected_dp
-    assert entry["rl_params"] == ["rl_alpha", "scaler"]
-    assert entry["extra_fields"] == ["feedback"]
-    assert entry["choices"] == [0, 1]
-    assert entry["decision_process_loglik_kind"] == "approx_differentiable"
-    assert entry["learning_process_kind"] == "blackbox"
-
-
-@pytest.mark.parametrize(
-    "model_name",
-    ["2AB_RescorlaWagner_DDM", "2AB_RescorlaWagner_Weibull"],
-)
-def test_builtin_2ab_models_config_structure(
-    monkeypatch: pytest.MonkeyPatch,
-    annotated_ssm_base_logp: Any,
-    model_name: str,
-) -> None:
-    """get_rlssm_model_config should produce a well-formed RLSSMConfig for
-    both the DDM and Weibull starter-pack models."""
-    import hssm.distribution_utils.onnx as onnx_module
-
-    monkeypatch.setattr(
-        onnx_module,
-        "make_jax_matrix_logp_funcs_from_onnx",
-        lambda model: annotated_ssm_base_logp,
+class TestBuiltinModels:
+    @pytest.mark.parametrize(
+        "model_name, expected_dp",
+        [
+            ("2AB_RescorlaWagner_DDM", "ddm"),
+            ("2AB_RescorlaWagner_Weibull", "weibull"),
+        ],
     )
-    monkeypatch.setattr(
-        registry,
-        "make_jax_matrix_logp_funcs_from_onnx",
-        lambda model: annotated_ssm_base_logp,
+    def test_are_registered(self, model_name: str, expected_dp: str) -> None:
+        """2AB_RescorlaWagner_DDM and _Weibull must be present in the RLSSM registry."""
+        assert model_name in registry._RLSSM_REGISTRY
+        entry = registry._RLSSM_REGISTRY[model_name]
+        assert entry["decision_process"]["name"] == expected_dp
+        assert entry["rl_params"] == ["rl_alpha", "scaler"]
+        assert entry["extra_fields"] == ["feedback"]
+        assert entry["choices"] == [0, 1]
+        assert entry["decision_process_loglik_kind"] == "approx_differentiable"
+        assert entry["learning_process_kind"] == "blackbox"
+
+    @pytest.mark.parametrize(
+        "model_name",
+        ["2AB_RescorlaWagner_DDM", "2AB_RescorlaWagner_Weibull"],
     )
+    def test_config_structure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        annotated_ssm_base_logp: Any,
+        model_name: str,
+    ) -> None:
+        """get_rlssm_model_config should produce a well-formed RLSSMConfig for
+        both the DDM and Weibull starter-pack models."""
+        import hssm.distribution_utils.onnx as onnx_module
 
-    config = registry.get_rlssm_model_config(model_name)
+        monkeypatch.setattr(
+            onnx_module,
+            "make_jax_matrix_logp_funcs_from_onnx",
+            lambda model: annotated_ssm_base_logp,
+        )
+        monkeypatch.setattr(
+            registry,
+            "make_jax_matrix_logp_funcs_from_onnx",
+            lambda model: annotated_ssm_base_logp,
+        )
 
-    assert isinstance(config, RLSSMConfig)
-    # RL params come first
-    assert config.list_params[:2] == ["rl_alpha", "scaler"]
-    assert "rl_alpha" in config.bounds
-    assert "scaler" in config.bounds
-    assert config.choices == (0, 1)
-    assert config.extra_fields == ["feedback"]
-    assert config.ssm_logp_func.computed == {"v": registry._compute_v_annotated}
+        config = registry.get_rlssm_model_config(model_name)
+
+        assert isinstance(config, RLSSMConfig)
+        # RL params come first
+        assert config.list_params[:2] == ["rl_alpha", "scaler"]
+        assert "rl_alpha" in config.bounds
+        assert "scaler" in config.bounds
+        assert config.choices == (0, 1)
+        assert config.extra_fields == ["feedback"]
+        assert config.ssm_logp_func.computed == {"v": registry._compute_v_annotated}
 
 
-# ---------------------------------------------------------------------------
-# list_rlssm_models
-# ---------------------------------------------------------------------------
+class TestListModels:
+    def test_returns_all_names(self) -> None:
+        """list_models should return every key in _RLSSM_REGISTRY with its description."""
+        result = registry.list_models()
 
-
-def test_list_rlssm_models_returns_all_names() -> None:
-    """list_rlssm_models should return every key in _RLSSM_REGISTRY with its description."""
-    result = registry.list_models()
-
-    assert set(result.keys()) == set(registry._RLSSM_REGISTRY.keys())
-    for name, desc in result.items():
-        assert desc == registry._RLSSM_REGISTRY[name].get("description")
+        assert set(result.keys()) == set(registry._RLSSM_REGISTRY.keys())
+        for name, desc in result.items():
+            assert desc == registry._RLSSM_REGISTRY[name].get("description")
