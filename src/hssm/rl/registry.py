@@ -378,8 +378,7 @@ def get_rlssm_model_config(
     ssm_logp_func = _build_ssm_logp_func(ssm_base, lp)
 
     # list_params = [sampled RL params] + [sampled SSM params (non-computed)]
-    computed_set = set(lp.keys())
-    ssm_sampled = [p for p in ssm_entry["list_params_ssm"] if p not in computed_set]
+    ssm_sampled = [p for p in ssm_entry["list_params_ssm"] if p not in lp]
 
     # Defensive copy of response to prevent downstream mutation of registry.
     response = list(ssm_entry["response"])
@@ -418,7 +417,7 @@ def get_rlssm_model_config(
     ssm_sampled_defaults = [
         ssm_all_defaults[i]
         for i, p in enumerate(ssm_entry["list_params_ssm"])
-        if p not in computed_set
+        if p not in lp
     ]
     params_default = rl_defaults + ssm_sampled_defaults
 
