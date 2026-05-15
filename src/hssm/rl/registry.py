@@ -167,18 +167,21 @@ def _get_ssm_logp(name: str) -> Any:
     ONNX models are downloaded / loaded only when first called (lazy
     initialisation).  Subsequent calls return the cached object.
     """
-    if name not in _SSM_LOGP_CACHE:
-        if name in _SSM_REGISTRY:
-            entry = _SSM_REGISTRY[name]
-            if "ssm_base_logp_func_factory" in entry:
-                _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
-            else:
-                # Pre-built function registered via register_ssm().
-                _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
-        else:
-            # Build from HSSM's modelconfig for built-in SSMs.
-            spec = _build_ssm_spec_from_modelconfig(name)
-            _SSM_LOGP_CACHE[name] = spec["ssm_base_logp_func_factory"]()
+    if name in _SSM_LOGP_CACHE:
+        return _SSM_LOGP_CACHE[name]
+
+    if name not in _SSM_REGISTRY:
+        # Build from HSSM's modelconfig for built-in SSMs.
+        spec = _build_ssm_spec_from_modelconfig(name)
+        _SSM_LOGP_CACHE[name] = spec["ssm_base_logp_func_factory"]()
+        return _SSM_LOGP_CACHE[name]
+
+    entry = _SSM_REGISTRY[name]
+    if "ssm_base_logp_func_factory" in entry:
+        _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
+    else:
+        # Pre-built function registered via register_ssm().
+        _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
     return _SSM_LOGP_CACHE[name]
 
 
