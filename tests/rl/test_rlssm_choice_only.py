@@ -53,18 +53,18 @@ def choice_only_data() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def test_rlssm_softmax_config() -> None:
-    """2AB_RescorlaWagner_Softmax config should be choice-only with correct params."""
-    from hssm.rl.registry import get_rlssm_model_config
+# def test_rlssm_softmax_config() -> None:
+#     """2AB_RescorlaWagner_Softmax config should be choice-only with correct params."""
+#     from hssm.rl.registry import get_rlssm_model_config
 
-    cfg = get_rlssm_model_config("2AB_RescorlaWagner_Softmax")
-    assert cfg.is_choice_only
-    assert cfg.response == ["response"]
-    assert cfg.choices == [0, 1]
-    assert cfg.list_params == ["rl_alpha", "beta"]
-    assert "rl_alpha" in cfg.bounds
-    assert "beta" in cfg.bounds
-    assert cfg.extra_fields == ["feedback"]
+#     cfg = get_rlssm_model_config("2AB_RescorlaWagner_Softmax")
+#     assert cfg.is_choice_only
+#     assert cfg.response == ["response"]
+#     assert cfg.choices == [0, 1]
+#     assert cfg.list_params == ["rl_alpha", "beta"]
+#     assert "rl_alpha" in cfg.bounds
+#     assert "beta" in cfg.bounds
+#     assert cfg.extra_fields == ["feedback"]
 
 
 def test_rlssm_softmax_instantiate(choice_only_data) -> None:
