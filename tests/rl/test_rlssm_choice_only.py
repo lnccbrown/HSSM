@@ -110,6 +110,34 @@ def test_rlssm_softmax_invalid_response_rejected() -> None:
         RLSSM(data=bad_data, model="2AB_RescorlaWagner_Softmax")
 
 
+def test_rlssm_softmax_non_integral_response_rejected() -> None:
+    """Non-integer response values (e.g. 0.5) must be rejected before the int cast.
+
+    Casting to int first would silently convert 0.5 → 0, which passes the
+    membership check against choices=[0, 1] and then corrupts Q-value indexing
+    in the JAX learning step.  ``_post_check_data_sanity`` must detect the
+    fractional value and raise before any computation runs.
+    """
+    rng = np.random.default_rng(1)
+    n_total = 50
+    participant_ids = np.repeat(np.arange(5), 10)
+    feedback = rng.integers(0, 2, size=n_total).astype(float)
+    bad_responses = np.where(
+        rng.random(n_total) < 0.1,
+        0.5,  # inject non-integer responses that would cast to 0
+        rng.integers(0, 2, size=n_total),
+    ).astype(float)
+    bad_data = pd.DataFrame(
+        {
+            "participant_id": participant_ids,
+            "response": bad_responses,
+            "feedback": feedback,
+        }
+    )
+    with pytest.raises(ValueError, match="Non-integer response values"):
+        RLSSM(data=bad_data, model="2AB_RescorlaWagner_Softmax")
+
+
 def test_rlssm_softmax_pymc_model(choice_only_data) -> None:
     """pymc_model should be accessible after softmax model construction."""
     model = RLSSM(data=choice_only_data, model="2AB_RescorlaWagner_Softmax")
