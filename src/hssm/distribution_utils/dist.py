@@ -490,6 +490,7 @@ def make_distribution(
             idx = list_params.index(name)
             _fixed_vector_substitutions[idx] = pt.as_tensor_variable(pm.floatX(vector))
 
+    lapse_func = None
     if lapse is not None:
         if list_params[-1] != "p_outlier":
             list_params.append("p_outlier")
@@ -510,8 +511,6 @@ def make_distribution(
                 [data_vector],
                 lapse_logp,
             )
-    else:
-        lapse_func = None
 
     class HSSMDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""
