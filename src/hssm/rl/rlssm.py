@@ -340,7 +340,7 @@ class RLSSM(_RLSSM):
     ----------
     data : pd.DataFrame
         Trial-level data (balanced panel required).
-    model : str, optional
+    model : str | None, optional
         Name of a registered RLSSM model. Defaults to ``"2AB_RescorlaWagner_DDM"``.
     choices : list[int] | None, optional
         Override the choice values in the registry. ``None`` uses the registry
@@ -402,7 +402,7 @@ class RLSSM(_RLSSM):
     def __init__(
         self,
         data: pd.DataFrame,
-        model: str = "2AB_RescorlaWagner_DDM",
+        model: str | None = None,
         choices: list[int] | None = None,
         include: list[dict[str, Any] | Any] | None = None,
         model_config: RLSSMConfig | None = None,
@@ -423,21 +423,20 @@ class RLSSM(_RLSSM):
         # NOTE: _store_init_args only operates on its arguments, not on self.
         _my_init_args = self._store_init_args(locals(), kwargs)
 
-        if model_config is not None:
-            if model != "2AB_RescorlaWagner_DDM" or any(
-                x is not None for x in [learning_process, decision_process, choices]
-            ):
-                _logger.warning(
-                    "model_config was provided; ignoring model, learning_process, "
-                    "decision_process, and choices arguments."
-                )
-        else:
-            model_config = get_rlssm_model_config(
-                model=model,
-                choices=choices,
-                learning_process=learning_process,
-                decision_process=decision_process,
+        if model_config is not None and any(
+            x is not None for x in [model, learning_process, decision_process, choices]
+        ):
+            _logger.warning(
+                "model_config was provided; ignoring model, learning_process, "
+                "decision_process, and choices arguments."
             )
+
+        model_config = model_config or get_rlssm_model_config(
+            model=model or "2AB_RescorlaWagner_DDM",
+            choices=choices,
+            learning_process=learning_process,
+            decision_process=decision_process,
+        )
 
         # missing_data / deadline are intentionally omitted — _RLSSM defaults
         # them to False.  The _BlockedAttribute descriptors on this class
