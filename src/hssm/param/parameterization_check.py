@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import bambi as bmb
+import numpy as np
 
 if TYPE_CHECKING:
     import pymc as pm
@@ -83,6 +84,27 @@ def _has_hyperprior_mu(prior: Any) -> bool:
     if prior.name != "Normal":
         return False
     return isinstance(prior.args.get("mu"), bmb.Prior)
+
+
+def _has_nontrivial_mu(prior: Any) -> bool:
+    """Check whether a Normal prior has a `mu` that is not a scalar zero.
+
+    Returns True if ``prior`` is a Normal :class:`bmb.Prior` whose ``mu``
+    argument is either a :class:`bmb.Prior` (a hyperprior) or a non-zero
+    scalar. These are the cases in which `mu` contributes an extra location
+    parameter to the linear predictor; a scalar zero is benign.
+    """
+    if not isinstance(prior, bmb.Prior) or prior.name != "Normal":
+        return False
+    mu = prior.args.get("mu")
+    if isinstance(mu, bmb.Prior):
+        return True
+    if mu is None:
+        return False
+    try:
+        return bool(np.asarray(mu).reshape(-1)[0] != 0.0)
+    except (ValueError, TypeError, IndexError):
+        return False
 
 
 def check_user_priors_against_parameterization(
@@ -161,6 +183,68 @@ def check_user_priors_against_parameterization(
     return mismatches
 
 
+def check_user_priors_for_location_overparameterization(
+    params: Params,
+) -> list[PriorMismatch]:
+    """Detect group-specific terms whose location collides with a common Intercept.
+
+    When a regression formula contains a common `Intercept` and the user
+    supplies a group-specific Normal prior whose `mu` is non-trivial (a
+    hyperprior or a non-zero scalar), the linear predictor sees only
+    `Intercept + mu_u`. The likelihood is invariant under shifts of mass
+    between the two parameters, so they are non-identifiable individually
+    and the posterior has a ridge along the anti-diagonal of the two.
+
+    This is a statistical concern (separate from the disconnected-node
+    problem). It applies under both centered and non-centered
+    parameterizations: under centered the ridge is real and degrades
+    sampling; under non-centered the user's `mu` is silently ignored anyway,
+    so the warning doubles as a heads-up that the spec is not doing what
+    they probably think.
+    """
+    mismatches: list[PriorMismatch] = []
+    for param_name, param in params.items():
+        prior_dict = getattr(param, "prior", None)
+        if not isinstance(prior_dict, dict):
+            continue
+        user_keys: set[str] = getattr(param, "_user_specified_prior_keys", set())
+        terms: set[str] = set(getattr(param, "terms", []))
+        # A common `Intercept` is present iff the design matrix contained it
+        # (in which case `make_safe_priors` appended it to `terms`) or the
+        # user explicitly supplied a prior key for it.
+        if "Intercept" not in (terms | user_keys):
+            continue
+        for term_name, prior in prior_dict.items():
+            if "|" not in term_name:
+                continue
+            if term_name not in user_keys:
+                continue
+            if not _has_nontrivial_mu(prior):
+                continue
+            mismatches.append(
+                PriorMismatch(
+                    parameter=param_name,
+                    term=term_name,
+                    reason=(
+                        f"User prior for '{term_name}' on parameter "
+                        f"'{param_name}' has a non-trivial `mu`, and the "
+                        "formula also includes a common `Intercept` for "
+                        f"'{param_name}'. The data only constrains the sum "
+                        "`Intercept + mu`; the two are non-identifiable "
+                        "individually and the posterior will have a ridge "
+                        "along the anti-diagonal."
+                    ),
+                    suggestion=(
+                        "Set `mu=0` on the group term so the common "
+                        "`Intercept` owns the location, or drop the common "
+                        "intercept from the formula (e.g. "
+                        f"`{param_name} ~ 0 + ({term_name})`)."
+                    ),
+                )
+            )
+    return mismatches
+
+
 def find_disconnected_free_rvs(pymc_model: pm.Model) -> list[str]:
     """Return names of free RVs that do not feed any observed RV.
 
@@ -172,7 +256,7 @@ def find_disconnected_free_rvs(pymc_model: pm.Model) -> list[str]:
     try:
         from pytensor.graph.traversal import ancestors
     except ImportError:  # pragma: no cover - older pytensor
-        from pytensor.graph.basic import ancestors
+        from pytensor.graph.basic import ancestors  # type: ignore[no-redef]
 
     observed = list(getattr(pymc_model, "observed_RVs", []))
     free = list(getattr(pymc_model, "free_RVs", []))

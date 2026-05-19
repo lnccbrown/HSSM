@@ -52,6 +52,7 @@ from .param import Params
 from .param import UserParam as Param
 from .param.parameterization_check import (
     check_user_priors_against_parameterization,
+    check_user_priors_for_location_overparameterization,
     emit_disconnected_node_warnings,
     emit_parameterization_warnings,
     find_disconnected_free_rvs,
@@ -360,13 +361,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self._parent,
         )
 
-        # Targeted check: warn about user priors that the chosen
-        # parameterization will silently drop (e.g. nested `mu` hyperprior
-        # on a group-specific Normal under non-centered).
+        # Targeted checks against the user's prior dict:
+        #  * priors that the chosen parameterization will silently drop
+        #    (e.g. nested `mu` hyperprior on a group-specific Normal under
+        #    non-centered);
+        #  * priors whose group-specific `mu` is statistically redundant
+        #    with the common `Intercept` (location non-identifiability).
         emit_parameterization_warnings(
             check_user_priors_against_parameterization(
                 self.params, kwargs.get("noncentered", True)
             )
+            + check_user_priors_for_location_overparameterization(self.params)
         )
 
         self.model = bmb.Model(
