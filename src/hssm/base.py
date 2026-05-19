@@ -50,6 +50,12 @@ from . import plotting
 from .config import BaseModelConfig
 from .param import Params
 from .param import UserParam as Param
+from .param.parameterization_check import (
+    check_user_priors_against_parameterization,
+    emit_disconnected_node_warnings,
+    emit_parameterization_warnings,
+    find_disconnected_free_rvs,
+)
 
 _logger = logging.getLogger("hssm")
 
@@ -354,6 +360,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self._parent,
         )
 
+        # Targeted check: warn about user priors that the chosen
+        # parameterization will silently drop (e.g. nested `mu` hyperprior
+        # on a group-specific Normal under non-centered).
+        emit_parameterization_warnings(
+            check_user_priors_against_parameterization(
+                self.params, kwargs.get("noncentered", True)
+            )
+        )
+
         self.model = bmb.Model(
             self.formula,
             data=self.data,
@@ -368,6 +383,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
         self.set_alias(self._aliases)
         self.model.build()
+
+        # General safety net: walk the PyMC graph and surface any free RVs
+        # that do not feed an observed RV.
+        emit_disconnected_node_warnings(find_disconnected_free_rvs(self.pymc_model))
 
         # region ===== Fix scalar deterministic dims for bambi >= 0.17 =====
         # Bambi >= 0.17 declares dims=("__obs__",) for intercept-only
