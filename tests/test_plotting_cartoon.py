@@ -6,47 +6,90 @@ import pytest
 import numpy as np
 import hssm
 from hssm.plotting import model_cartoon as cartoon_module
-from hssm.plotting.model_cartoon import plot_func_model
+from hssm.plotting.model_cartoon import plot_func_model, plot_func_model_n
 
 matplotlib.use("Agg")
 
 hssm.set_floatX("float32")
 
 
-def test_plot_func_model_uses_facet_average_for_drift(monkeypatch):
+# (model_name, plot_func, drift_param_names, fixed_params, n_drift_params)
+# - drift_param_names varies per trial so random pick vs average disagrees
+# - fixed_params are constant across trials (a, z, t, theta, etc.)
+# - n_drift_params is the number of leading drift columns in theta
+_CARTOON_CASES = [
+    pytest.param(
+        "ddm",
+        plot_func_model,
+        ["v"],
+        {"a": 1.3, "z": 0.5, "t": 0.3},
+        id="2choice-ddm",
+    ),
+    pytest.param(
+        "race_no_bias_angle_4",
+        plot_func_model_n,
+        ["v0", "v1", "v2", "v3"],
+        {"a": 1.3, "z": 0.5, "t": 0.3, "theta": 0.1},
+        id="nchoice-race4",
+    ),
+]
+
+
+def _ensure_model_config_registered(model_name):
+    """Lazy-load a model's config into the global registry if absent.
+
+    `default_model_config` ships pre-populated with ``"ddm"`` only; other
+    models are loaded on first use through `hssm.HSSM`. Tests that exercise
+    the cartoon helpers directly need to populate the registry themselves.
+    """
+    from hssm.defaults import default_model_config
+    from hssm.modelconfig import get_default_model_config
+
+    if model_name not in default_model_config:
+        default_model_config[model_name] = get_default_model_config(model_name)
+
+
+@pytest.mark.parametrize(
+    "model_name, plot_func, drift_param_names, fixed_params", _CARTOON_CASES
+)
+def test_cartoon_uses_facet_average_for_drift(
+    monkeypatch, model_name, plot_func, drift_param_names, fixed_params
+):
     """The no-noise drift visualisation must use facet-averaged params.
 
     Regression test for a bug where the mean-drift cartoon line was
     drawn from a randomly-picked trial's parameters while the
     posterior-sample drift cartoons were pinned (by the simulator) to
     trial 0 of each (chain, draw). For trial-wise drift regressions
-    (`v ~ covariate`) the two referenced different trials with
-    different drifts, producing a visually misaligned black mean line.
-    With the fix, both pass facet-averaged parameters as a single-row
-    theta so the recorded drift trajectory represents the facet mean.
+    (``v ~ covariate`` for DDM, ``v0 ~ covariate`` for race models) the
+    two referenced different trials with different drifts, producing a
+    visually misaligned black mean line. With the fix, both pass
+    facet-averaged parameters as a single-row theta so the recorded
+    drift trajectory represents the facet mean.
+
+    Parameterised across the 2-choice path (``plot_func_model``) and
+    the n-choice path (``plot_func_model_n``) since they have the same
+    bug structure.
     """
     import matplotlib.pyplot as plt
 
-    # Trial-varying v (positions 0..4) so a random pick would obviously
-    # differ from the average.
-    v_per_trial = np.array([0.2, 0.6, 1.0, 1.4, 1.8])
-    a, z, t = 1.3, 0.5, 0.3
-    n_trials = len(v_per_trial)
-    expected_avg_v = float(v_per_trial.mean())
+    _ensure_model_config_registered(model_name)
+    n_trials = 5
+    # Trial-varying drift columns so a random pick obviously differs
+    # from the average.
+    drift_columns = {
+        name: np.linspace(0.2 + 0.3 * idx, 1.8 + 0.3 * idx, n_trials)
+        for idx, name in enumerate(drift_param_names)
+    }
+    fixed_columns = {k: np.full(n_trials, v) for k, v in fixed_params.items()}
 
-    # theta_mean: indexed (chain, draw, obs_n) — same layout that
-    # attach_trialwise_params_to_df produces.
     theta_mean = pd.DataFrame(
-        {
-            "v": v_per_trial,
-            "a": np.full(n_trials, a),
-            "z": np.full(n_trials, z),
-            "t": np.full(n_trials, t),
-        },
+        {**drift_columns, **fixed_columns},
         index=pd.MultiIndex.from_tuples(
             [(0, 0, i) for i in range(n_trials)], names=["chain", "draw", "obs_n"]
         ),
     )
+    expected_avg = theta_mean.mean(axis=0).values
 
     captured_no_noise_thetas: list[np.ndarray] = []
     real_simulator = cartoon_module.simulator
@@ -59,8 +102,8 @@ def test_plot_func_model_uses_facet_average_for_drift(monkeypatch):
     monkeypatch.setattr(cartoon_module, "simulator", recording_simulator)
 
     fig, ax = plt.subplots()
-    plot_func_model(
-        model_name="ddm",
+    plot_func(
+        model_name=model_name,
         axis=ax,
         theta_mean=theta_mean,
         theta_samples=None,
@@ -68,19 +111,25 @@ def test_plot_func_model_uses_facet_average_for_drift(monkeypatch):
         n_trajectories=0,  # avoid trajectory-side simulator calls
     )
 
-    # First no_noise=True call inside plot_func_model is the posterior-mean
-    # drift visualization — that's the one we care about for this test.
+    # First no_noise=True call is the posterior-mean drift simulation —
+    # that's the one we care about for this test.
     assert captured_no_noise_thetas, (
         "expected at least one no_noise=True simulator call"
     )
     mean_theta = captured_no_noise_thetas[0]
-    assert mean_theta.shape == (1, 4), (
+    expected_shape = (1, theta_mean.shape[1])
+    assert mean_theta.shape == expected_shape, (
         f"mean drift theta should be a single averaged row, "
-        f"got shape {mean_theta.shape}"
+        f"got shape {mean_theta.shape}, expected {expected_shape}"
     )
-    assert mean_theta[0, 0] == pytest.approx(expected_avg_v, abs=1e-6), (
-        f"facet-averaged drift expected {expected_avg_v}, "
-        f"got {mean_theta[0, 0]} — random-trial selection bug regressed"
+    np.testing.assert_allclose(
+        mean_theta[0],
+        expected_avg,
+        atol=1e-6,
+        err_msg=(
+            f"facet-averaged drift params expected {expected_avg}, "
+            f"got {mean_theta[0]} — random-trial selection bug regressed"
+        ),
     )
     plt.close(fig)
 
