@@ -323,10 +323,11 @@ def _plot_quantile_probability_1D(
     )
     xticks = ticks_and_labels[x]
     xticklabels = xticklabels or ticks_and_labels[cond]
-    secax = ax.twiny()
+    # secondary_xaxis (not twiny) so the top condition labels stay synced with
+    # `ax` even if the caller modifies the main axis xlim afterwards.
+    secax = ax.secondary_xaxis("top")
     secax.set_xticks(xticks)
     secax.set_xticklabels(xticklabels)
-    secax.set_xlim(*ax.get_xlim())
     secax.set_label(cond)
 
     if title:
@@ -414,12 +415,6 @@ def _plot_quantile_probability_2D(
 
     g.set_xlabels(xlabel)
     g.set_ylabels(ylabel)
-
-    # Ensures that the x-limits for the axes on top are correct.
-    first_ax = g.figure.axes[0]
-    for ax in g.figure.get_axes():
-        if ax.get_label() == cond:
-            ax.set_xlim(first_ax.get_xlim())
 
     return g
 

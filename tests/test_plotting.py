@@ -32,7 +32,11 @@ hssm.set_floatX("float32")
 
 
 def has_twin(ax):
-    """Checks if an axes has a twin axes with the same bounds.
+    """Checks if an axes has a twin or a secondary x-axis attached.
+
+    Detects both `ax.twiny()` (twin shows up in `figure.axes` with the same
+    bbox) and `ax.secondary_xaxis(...)` (secondary axis shows up in
+    `ax.child_axes` instead).
 
     Credit: https://stackoverflow.com/questions/36209575/how-to-detect-if-a-twin-axis-has-been-generated-for-a-matplotlib-axis
     """
@@ -41,7 +45,7 @@ def has_twin(ax):
             continue
         if other_ax.bbox.bounds == ax.bbox.bounds:
             return True
-    return False
+    return bool(getattr(ax, "child_axes", []))
 
 
 @pytest.mark.slow
@@ -283,6 +287,49 @@ class TestPlotting:
         assert ax.get_ylabel() == "rt"
         assert ax.get_title() == "Quantile Probability Plot"
 
+    def test__plot_quantile_probability_1D_secax_tracks_xlim(
+        self, cav_idata, cavanagh_test
+    ):
+        """Regression: secondary x-axis labels must follow main-axis xlim changes.
+
+        Previously the function created the top condition-label axis with
+        `ax.twiny()` and synced its xlim once at construction time. If the
+        caller modified `ax.set_xlim(...)` afterwards, the top labels stayed
+        anchored to the old xlim and visually drifted away from the data —
+        making the fit look bad even when it was correct. With the fix the
+        top axis is `ax.secondary_xaxis("top")`, which shares the main
+        axis's transform, so a data coordinate maps to the same pixel on
+        both.
+        """
+        df = _get_plotting_df(cav_idata, cavanagh_test, extra_dims=["stim"])
+        # Fresh figure so plt.gca() (used internally) returns a clean axes
+        # and child_axes isn't polluted by other tests in the same process.
+        plt.figure()
+        ax = _plot_quantile_probability_1D(df, cond="stim", predictive_style="ellipse")
+
+        # User-pattern: change ax xlim after the plot is drawn
+        ax.set_xlim(0.15, 0.85)
+        ax.figure.canvas.draw()  # force layout/transform refresh
+
+        # Find the secondary axis (child_axes for secondary_xaxis)
+        secaxes = list(getattr(ax, "child_axes", []))
+        assert len(secaxes) == 1, f"expected one secondary axis, found {len(secaxes)}"
+        secax = secaxes[0]
+
+        # secondary_xaxis must inherit the parent's xlim
+        assert secax.get_xlim() == ax.get_xlim(), (
+            f"secax xlim {secax.get_xlim()} != ax xlim {ax.get_xlim()}"
+        )
+
+        # Same data coord should map to the same pixel on both axes
+        for x in (0.20, 0.35, 0.50, 0.65, 0.80):
+            px_ax = ax.transData.transform([(x, 0)])[0][0]
+            px_secax = secax.transData.transform([(x, 0)])[0][0]
+            assert abs(px_ax - px_secax) < 0.5, (
+                f"secax transform diverged from ax at x={x}: "
+                f"px_ax={px_ax}, px_secax={px_secax}"
+            )
+
     @pytest.mark.parametrize("predictive_style", ["points", "ellipse", "both"])
     def test__plot_quantile_probability_2D(
         self, cav_idata, cavanagh_test, predictive_style
@@ -302,7 +349,11 @@ class TestPlotting:
             col_wrap=3,
             predictive_style=predictive_style,
         )
-        assert len(g.figure.axes) == 10
+        # 5 participants -> 5 subplots. Each has a secondary_xaxis attached
+        # as a child axis (not a separate entry in figure.axes), so the
+        # figure-level count is 5 rather than 10. We assert both.
+        assert len(g.figure.axes) == 5
+        assert all(len(getattr(ax, "child_axes", [])) == 1 for ax in g.figure.axes)
 
         df = _get_plotting_df(
             cav_idata, cavanagh_test, extra_dims=["participant_id", "stim", "conf"]
@@ -314,7 +365,10 @@ class TestPlotting:
             row="conf",
             predictive_style=predictive_style,
         )
-        assert len(g.figure.axes) == 5 * 4
+        # 5 participants x 2 conf = 10 subplots; each carries one secondary
+        # x-axis as a child axis.
+        assert len(g.figure.axes) == 5 * 2
+        assert all(len(getattr(ax, "child_axes", [])) == 1 for ax in g.figure.axes)
 
     @pytest.mark.parametrize("predictive_style", ["points", "ellipse", "both"])
     def test_plot_quantile_probability(
