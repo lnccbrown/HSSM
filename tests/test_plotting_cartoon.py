@@ -1,10 +1,88 @@
 """Test plotting module."""
 
+import matplotlib
+import pandas as pd
 import pytest
 import numpy as np
 import hssm
+from hssm.plotting import model_cartoon as cartoon_module
+from hssm.plotting.model_cartoon import plot_func_model
+
+matplotlib.use("Agg")
 
 hssm.set_floatX("float32")
+
+
+def test_plot_func_model_uses_facet_average_for_drift(monkeypatch):
+    """The no-noise drift visualisation must use facet-averaged params.
+
+    Regression test for a bug where the mean-drift cartoon line was
+    drawn from a randomly-picked trial's parameters while the
+    posterior-sample drift cartoons were pinned (by the simulator) to
+    trial 0 of each (chain, draw). For trial-wise drift regressions
+    (`v ~ covariate`) the two referenced different trials with
+    different drifts, producing a visually misaligned black mean line.
+    With the fix, both pass facet-averaged parameters as a single-row
+    theta so the recorded drift trajectory represents the facet mean.
+    """
+    import matplotlib.pyplot as plt
+
+    # Trial-varying v (positions 0..4) so a random pick would obviously
+    # differ from the average.
+    v_per_trial = np.array([0.2, 0.6, 1.0, 1.4, 1.8])
+    a, z, t = 1.3, 0.5, 0.3
+    n_trials = len(v_per_trial)
+    expected_avg_v = float(v_per_trial.mean())
+
+    # theta_mean: indexed (chain, draw, obs_n) — same layout that
+    # attach_trialwise_params_to_df produces.
+    theta_mean = pd.DataFrame(
+        {
+            "v": v_per_trial,
+            "a": np.full(n_trials, a),
+            "z": np.full(n_trials, z),
+            "t": np.full(n_trials, t),
+        },
+        index=pd.MultiIndex.from_tuples(
+            [(0, 0, i) for i in range(n_trials)], names=["chain", "draw", "obs_n"]
+        ),
+    )
+
+    captured_no_noise_thetas: list[np.ndarray] = []
+    real_simulator = cartoon_module.simulator
+
+    def recording_simulator(*args, **kwargs):
+        if kwargs.get("no_noise", False):
+            captured_no_noise_thetas.append(np.asarray(kwargs["theta"]).copy())
+        return real_simulator(*args, **kwargs)
+
+    monkeypatch.setattr(cartoon_module, "simulator", recording_simulator)
+
+    fig, ax = plt.subplots()
+    plot_func_model(
+        model_name="ddm",
+        axis=ax,
+        theta_mean=theta_mean,
+        theta_samples=None,
+        n_samples=1,
+        n_trajectories=0,  # avoid trajectory-side simulator calls
+    )
+
+    # First no_noise=True call inside plot_func_model is the posterior-mean
+    # drift visualization — that's the one we care about for this test.
+    assert captured_no_noise_thetas, (
+        "expected at least one no_noise=True simulator call"
+    )
+    mean_theta = captured_no_noise_thetas[0]
+    assert mean_theta.shape == (1, 4), (
+        f"mean drift theta should be a single averaged row, "
+        f"got shape {mean_theta.shape}"
+    )
+    assert mean_theta[0, 0] == pytest.approx(expected_avg_v, abs=1e-6), (
+        f"facet-averaged drift expected {expected_avg_v}, "
+        f"got {mean_theta[0, 0]} — random-trial selection bug regressed"
+    )
+    plt.close(fig)
 
 
 # I want to parameter

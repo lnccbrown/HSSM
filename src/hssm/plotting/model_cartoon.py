@@ -863,11 +863,16 @@ def plot_func_model(
             random_state=rand_int,
         )
 
-        # Simulate model without noise: posterior mean
-        # (this allows to extract the time-dynamics of the drift e.g.)
+        # Simulate model without noise: posterior mean.
+        # We average parameters across all trials in this facet so the
+        # recorded drift trajectory represents the facet-average drift.
+        # (The simulator only records `metadata["trajectory"]` for the
+        # first trial when theta is multi-row, so passing per-trial theta
+        # would silently pin the visualization to trial 0; passing the
+        # average instead gives a single representative drift.)
         sim_out_no_noise = simulator(
             model=model_name,
-            theta=theta_mean.loc[np.random.choice(theta_mean.shape[0], 1), :].values,
+            theta=theta_mean.mean(axis=0).values.reshape(1, -1),
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
@@ -881,16 +886,24 @@ def plot_func_model(
         for i, (chain, draw) in enumerate(
             list(theta_samples.index.droplevel("obs_n").unique())
         ):
+            # Same facet-averaging as for the posterior mean, applied
+            # per (chain, draw). The resulting drift slopes cluster
+            # around the posterior-mean drift instead of being pinned to
+            # whatever happens to be trial 0 in the facet.
             posterior_pred_no_noise[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].values,
+                theta=theta_samples.loc[(chain, draw), :]
+                .mean(axis=0)
+                .values.reshape(1, -1),
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
                 smooth_unif=False,
             )
 
-            # Simulate model: posterior samples
+            # Simulate model: posterior samples (with noise — kept
+            # per-trial because predictive RT histograms must reflect
+            # trial-level parameter variation, not the facet average).
             posterior_pred_sims[i] = simulator(
                 model=model_name,
                 theta=theta_samples.loc[(chain, draw), :].values,
@@ -1639,9 +1652,15 @@ def plot_func_model_n(
             random_state=rand_int,
         )
 
+        # Posterior-mean drift visualization: average parameters across
+        # all trials in this facet so the recorded drift trajectory
+        # represents the facet-average. The simulator only records
+        # `metadata["trajectory"]` for the first trial when theta is
+        # multi-row; passing the average avoids silently pinning the
+        # visualization to trial 0 or to a randomly picked trial.
         sim_out_no_noise = simulator(
             model=model_name,
-            theta=theta_mean.loc[np.random.choice(theta_mean.shape[0], 1), :].values,
+            theta=theta_mean.mean(axis=0).values.reshape(1, -1),
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
@@ -1655,17 +1674,20 @@ def plot_func_model_n(
         for i, (chain, draw) in enumerate(
             list(theta_samples.index.droplevel("obs_n").unique())
         ):
-            # Simulate model: no noise
+            # Per-draw facet-average drift, matching the mean above.
             posterior_pred_no_noise[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].values,
+                theta=theta_samples.loc[(chain, draw), :]
+                .mean(axis=0)
+                .values.reshape(1, -1),
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
                 smooth_unif=False,
             )
 
-            # Simulate model: posterior samples
+            # Predictive RT histograms keep per-trial parameter variation
+            # so the histograms reflect the trial-level mixture.
             posterior_pred_sims[i] = simulator(
                 model=model_name,
                 theta=theta_samples.loc[(chain, draw), :].values,
