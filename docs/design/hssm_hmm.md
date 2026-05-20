@@ -1,15 +1,15 @@
 # HSSM-HMM Class: Design Document
 
 **Issue:** [#957](https://github.com/lnccbrown/HSSM/issues/957)
-**Status:** Draft — design phase (feasibility-validated 2026-05-19)
+**Status:** Draft — design phase (v1 feasibility-validated 2026-05-19)
 **Companion:** [hssm_hmm_overview.md](./hssm_hmm_overview.md) (high-level summary for applied users)
 
-A throwaway prototype that mirrors the L1/L2/L3 layering, `HMMConfig` typed
-unions, `HSSM_HMM` facade, and FFBS method specified below was exercised against
-the tutorial on single-participant and 3-participant balanced panels. Posteriors
-matched the hand-written tutorial bit-for-bit (Option B form) and recovered
-ground-truth parameters within MC error. Three substantive changes to the
-original spec are folded in below — see Section 10.1 items 4–6.
+A throwaway prototype mirrored the v1 layered architecture (`HMMConfig` typed
+unions, the `HSSM_HMM` facade, the L1/L2/L3 likelihood, FFBS) and was exercised
+against the tutorial on single- and multi-participant balanced panels.
+Posteriors matched the hand-written tutorial bit-for-bit and FFBS matched
+trial-by-trial. Four substantive changes to the original spec are folded in
+below — see Section 10.1 items 4–7.
 
 ---
 
@@ -170,9 +170,24 @@ The soft-ordering Potential alone is insufficient to keep both chains in the sam
 
 This trades the design's original "trivial superset, no flags needed" property for sampler robustness. Re-evaluate Option A in a future revision if a JAX-only LAN backend with a custom VJP makes the autodiff path stable.
 
-### 3.5 Per-participant batching
+### 3.5 Per-participant batching — one scan, not N
 
-For balanced panels of `N` participants and `T` trials each, the builder closes over `(N, T)` and reshapes the input `(N*T, ...)` arrays to `(N, T, ...)` internally. The forward recursion runs along the trial axis for each participant in parallel (vmap over the participant axis for the JAX path; a Python for-loop suffices for the pytensor path with realistic N). Each participant's scalar `L_n = log p(y^{(n)}_{1..T} | theta, P, pi0)` is summed to give the joint marginal `sum_n L_n`, contributed to the model as a single `pm.Potential`.
+For balanced panels of `N` participants and `T` trials each, the builder reshapes the input `(N*T, ...)` arrays to `(N, T, ...)` internally and runs a **single** forward recursion whose hidden-state tensor carries a leading participant axis. The recursion proceeds along the *trial* axis, and at every step its scan step processes all N participants in parallel.
+
+Concretely, the per-step `log_alpha` has shape `(N, K)` rather than `(K,)`, and the transition update broadcasts the `(K, K)` log-transition matrix against the `(N, K, 1)` previous-state tensor:
+
+```
+log_alpha_new[n, k] = logsumexp_j ( log_alpha_prev[n, j] + log_P[j, k] )
+                     + log_emission[n, t, k]
+```
+
+This produces:
+- **pytensor backend:** one `pytensor.scan` over `T` (not N), one JAX-JIT compile unit overall.
+- **JAX backend:** the same recursion expressed with `jax.lax.scan` + `jax.vmap` over the participant axis.
+
+The joint marginal `sum_n L_n` is then `pt.sum(pt.logsumexp(log_alpha_T, axis=1))` — one scalar contributed to the model as a single `pm.Potential`.
+
+**Why not a Python for-loop over participants.** The feasibility prototype tried the obvious "loop over n in Python, build one `pytensor.scan` per subject" pattern. At `N = 1` it works fine. At `N = 5` it samples in ~2.5 min. At `N = 20` it never finished a 400-draw run in 40+ minutes — because each per-subject scan becomes its own JIT-compile unit and per-subject compilation dominates. The batched single-scan pattern above scales linearly in N for the leaf compute while keeping compilation roughly constant in N.
 
 Row-order assumption (inherited from RLSSM): rows are grouped by participant, and within each participant they appear in trial order. The class validates this via `validate_balanced_panel` before constructing the builder.
 
@@ -313,7 +328,7 @@ Layer 2 (`hmm/likelihoods/emissions.py`) computes `log_emission_lik` by evaluati
 - `analytical` — calls into the existing analytical likelihoods in `hssm.likelihoods` (e.g. `logp_ddm`).
 - `approx_differentiable` — calls into the JAX/ONNX LAN via `make_distribution_for_supported_model(..., backend="jax")`.
 
-The composition (L3 in `builder.py`) sums L1 over participants — `jax.vmap` for the JAX path, a Python loop for the pytensor path (cheap for realistic N; revisit if N grows).
+The composition (L3 in `builder.py`) runs a **single** batched forward recursion whose hidden state carries the participant axis (see Section 3.5). One `pytensor.scan` over `T` for the pytensor path; one `jax.lax.scan` over `T` (often combined with `jax.vmap` over `N`) for the JAX path. A Python loop over participants was tried in the feasibility prototype and rejected — it does not scale (40+ min at N=20).
 
 ### 5.3 Label-switching: `AutoOrdering`
 
@@ -335,6 +350,8 @@ pm.Potential("hmm_order", pt.switch(
 (equivalent to `param[0] > param[1] > ... > param[K-1]`).
 
 **Why strict `>`, not `>=`.** The default initial value for unbounded switching parameters is `0` for every regime, so `param[:-1] >= param[1:]` is *True* at init (every pair ties). The Potential then contributes `0` to the logp at init and the sampler has no signal to break the symmetry; two chains can drift to opposite sides of the constraint surface during tuning and each gets locked into its own label-switching mode. Strict `>` evaluates *False* at the tie, applies the `-1e10` penalty immediately, and forces all chains to break symmetry the same way. The feasibility prototype confirmed this: `>=` produced R-hat 1.83 on the switching parameter; switching the single character to `>` fixed it.
+
+> **Note for future hierarchical extensions.** The soft Potential is sufficient for v1 (a single length-K switching vector). It is *not* expected to hold once switching parameters are pooled across participants — the larger energy landscape lets NUTS cross the sharp `-1e10` barrier. A hierarchical extension would replace it with PyMC's `ordered` transform on the group-level anchor. This is out of scope for v1; flagged here so the v1 ordering code is written in a way that is easy to swap.
 
 `OrderByParam(name=..., direction="asc"|"desc")` is the user-supplied override; `NoOrdering()` is the escape hatch (with a `_logger.warning` reminding the user that posteriors may be multi-modal).
 
@@ -575,7 +592,7 @@ Tracking issue should list these as separate items. Whether they ship in one PR 
 - Tutorial regression test (Section 7.1) — must pass before this phase ends. The feasibility prototype already showed bit-for-bit equality is achievable; the regression test should target the same standard.
 
 ### Phase 3 — Generalize: arbitrary K, multiple switching params, balanced panel
-- Panel validation; vmap (JAX backend) or for-loop (pytensor backend) over participants in the L3 builder.
+- Panel validation; a single batched forward scan over `(subject, trial)` in the L3 builder — not a Python loop over participants (Section 3.5, decision 10.1.7).
 - LAN emission backend — this is the path that earns the `pytensor.graph.Op` + JAX VJP wrapping (Section 5.2 path 2); the feasibility prototype did not exercise it, so allocate time for a focused validation against the tutorial's LAN run.
 - `AutoOrdering` heuristic; `OrderByParam` / `NoOrdering` variants.
 - Synthetic recovery suite (Section 7.2).
@@ -592,17 +609,21 @@ Tracking issue should list these as separate items. Whether they ship in one PR 
 - Changelog entry.
 
 ### Phase 6+ — Deferred features (separate PRs, in priority order)
-1. Hierarchical pooling.
+1. Hierarchical pooling of switching params across participants.
 2. Estimable `pi0`.
 3. Covariate-driven transitions.
 4. Per-regime priors / regressions for switching params.
 5. Cross-emission and semi-Markov support.
 
+These are out of scope for v1 and not required by issue #957. Each has an
+extension hook in Section 8; the deferred work begins only after Phases 2–5
+land a working v1 class.
+
 ---
 
 ## 10. Decisions and open questions
 
-### 10.1 Decisions (resolved 2026-05-12, plus 4–6 resolved 2026-05-19 from the feasibility prototype)
+### 10.1 Decisions (1–3 resolved 2026-05-12, 4–7 resolved 2026-05-19 from the v1 feasibility prototype)
 
 1. **`P` and `pi0` placement in the PyMC graph.** Register them as PyMC random variables in the step-11 lifecycle hook (after bambi builds the model). The alternative — extending `Params.from_user_specs` to understand non-trial-shaped priors — is cleaner architecturally but not justified for a single use case. Revisit if a second feature needs the same shape of node.
 
@@ -615,6 +636,8 @@ Tracking issue should list these as separate items. Whether they ship in one PR 
 5. **Strict `>` for the ordering Potential.** Non-strict `>=` is satisfied at the default init (all switching params start at 0), gives the sampler no signal to break label symmetry at tuning time, and produced R-hat 1.83 in the feasibility prototype. Strict `>` evaluates False at the tie, applies the `-1e10` penalty immediately, and forces all chains to break symmetry the same way. Spelled out in Section 5.3.
 
 6. **Op-factory contract is per-backend.** The analytical and LAN backends share the L1 / L2 / L3 *layering*, but `make_hmm_logp_op`'s output type differs: a model-builder closure for the pytensor (analytical) backend, a `pytensor.graph.Op` with hand-rolled JAX VJP for the JAX (LAN) backend. Trying to wrap pytensor's analytical logp in a JAX Op adds complexity without benefit because pytensor.scan already differentiates correctly and numpyro JIT-compiles the whole graph. Spelled out in Section 5.2.
+
+7. **One batched scan over participants, not a Python loop.** An earlier draft of the design said "a Python for-loop suffices for the pytensor path with realistic N." The feasibility prototype tried it: ~2.5 min at N=5, failed to finish in 40+ min at N=20. The cause is that each iteration of the Python loop creates an independent `pytensor.scan` operation, and each scan becomes its own JIT-compile unit — so compilation time scales linearly in N with a large constant, and the JIT graph blows up. The fix is to run a *single* forward recursion whose hidden-state tensor carries the participant axis, so all N subjects are advanced in lockstep at every trial step. Spelled out in Section 3.5 and Section 5.2's L3 description.
 
 ### 10.2 Open questions
 
