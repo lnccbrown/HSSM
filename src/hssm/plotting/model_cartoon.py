@@ -265,27 +265,53 @@ def attach_trialwise_params_to_df(
 ):
     """Attach the trial-wise parameters to the dataframe.
 
-    Handles both trial-wise parameters (shape ``(n_obs,)`` after selecting
-    chain/draw, e.g. from regression models) and scalar parameters
-    (shape ``(1,)`` after selecting chain/draw, e.g. from intercept-only
-    models where Bambi >= 0.17 no longer broadcasts the intercept to all
-    observations).
+    Handles three cases per ``necessary_param``:
+
+    1. Trial-wise parameters (shape ``(n_obs,)`` after selecting
+       chain/draw, e.g. from regression models).
+    2. Scalar parameters (shape ``(1,)`` or ``()`` after selecting
+       chain/draw, e.g. intercept-only models on Bambi >= 0.17 and
+       directly-sampled scalars).
+    3. Parameters fixed via the HSSM constructor (e.g.
+       ``hssm.HSSM(..., z=0.5)``), which are *not* in
+       ``idata[idata_group]`` at all. The fixed value is read from
+       ``model.params[param].prior`` and broadcast to every row.
     """
     necessary_params = default_model_config[model.model_name]["list_params"]
     df[necessary_params] = 0.0
+    sampled_vars = set(idata[idata_group].data_vars)
 
     for chain_tmp, draw_tmp in {(x[0], x[1]) for x in list(df.index) if x[0] != -1}:
         n_rows = len(df.loc[(chain_tmp, draw_tmp, slice(None))])
         for param in necessary_params:
-            values = (
-                idata[idata_group].sel(chain=chain_tmp, draw=draw_tmp)[param].values
-            )
-            # Handle scalar / intercept-only params that don't have the
-            # full observation dimension. Bambi >= 0.17 returns shape (1,)
-            # for intercept-only deterministics; directly-sampled scalars
-            # come back as 0-dim arrays.
-            if values.ndim == 0 or values.shape[0] != n_rows:
-                values = np.broadcast_to(values.flat[0], (n_rows,))
+            if param in sampled_vars:
+                values = (
+                    idata[idata_group].sel(chain=chain_tmp, draw=draw_tmp)[param].values
+                )
+                # Handle scalar / intercept-only params that don't have the
+                # full observation dimension. Bambi >= 0.17 returns shape (1,)
+                # for intercept-only deterministics; directly-sampled scalars
+                # come back as 0-dim arrays.
+                if values.ndim == 0 or values.shape[0] != n_rows:
+                    values = np.broadcast_to(values.flat[0], (n_rows,))
+            else:
+                # Param wasn't sampled — look for a fixed value on the
+                # model. This covers `hssm.HSSM(..., z=0.5)` and the
+                # `prior=<scalar/array>` shorthand.
+                model_param = model.params.get(param)
+                if model_param is None or not getattr(model_param, "is_fixed", False):
+                    raise KeyError(
+                        f"Parameter {param!r} is required by the "
+                        f"{model.model_name} cartoon plot but is missing "
+                        f"from idata['{idata_group}'] and is not registered "
+                        "as a fixed value on the model. Available vars: "
+                        f"{sorted(sampled_vars)}."
+                    )
+                fixed = np.asarray(model_param.prior)
+                if fixed.ndim >= 1 and fixed.shape[0] == n_rows:
+                    values = fixed
+                else:
+                    values = np.broadcast_to(fixed.flat[0], (n_rows,))
             df.loc[(chain_tmp, draw_tmp, slice(None)), param] = values
     return df
 
