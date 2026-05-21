@@ -192,8 +192,9 @@ def _get_ssm_logp(name: str) -> Any:
 #   decision_process            - key into _SSM_REGISTRY
 #   learning_process            - {param: annotated_func}
 #   learning_process_params     - ordered list of sampled RL parameter names
-#   learning_process_bounds                   - {param: (lo, hi)} for RL params
-#   rl_params_default           - default values aligned with learning_process_params
+#   learning_process_bounds     - {param: (lo, hi)} for RL params
+#   learning_process_params_default
+#                               - default values aligned with learning_process_params
 #   extra_fields                - extra data column names required by LP
 #   choices                     - response choice values
 #   description                 - human-readable description
@@ -209,7 +210,7 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
             "rl_alpha": (0.0, 1.0),
             "scaler": (0.0, 10.0),
         },
-        "rl_params_default": [0.1, 1.0],
+        "learning_process_params_default": [0.1, 1.0],
         "extra_fields": ["feedback"],
         "choices": [0, 1],
         "description": (
@@ -227,7 +228,7 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
             "rl_alpha": (0.0, 1.0),
             "scaler": (0.0, 10.0),
         },
-        "rl_params_default": [0.1, 1.0],
+        "learning_process_params_default": [0.1, 1.0],
         "extra_fields": ["feedback"],
         "choices": [0, 1],
         "description": (
@@ -245,7 +246,7 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
             "rl_alpha": (0.0, 1.0),
             "scaler": (0.0, 10.0),
         },
-        "rl_params_default": [0.1, 1.0],
+        "learning_process_params_default": [0.1, 1.0],
         "extra_fields": ["feedback"],
         "choices": [0, 1],
         "description": (
@@ -411,7 +412,7 @@ def get_rlssm_model_config(
         bounds[p] = ssm_entry["bounds_ssm"][p]
 
     # params_default aligned with list_params
-    _rl_defaults = entry.get("rl_params_default")
+    _rl_defaults = entry.get("learning_process_params_default")
     rl_defaults: list[float] = list(_rl_defaults if _rl_defaults is not None else [])
     ssm_all_defaults: list[float] = list(ssm_entry["params_default_ssm"])
     ssm_sampled_defaults = [
@@ -477,7 +478,7 @@ def register_rlssm_model(
     learning_process: dict[str, Any],
     learning_process_params: list[str],
     learning_process_bounds: dict[str, tuple[float, float]],
-    rl_params_default: list[float],
+    learning_process_params_default: list[float],
     extra_fields: list[str] | None = None,
     choices: list[int] | None = None,
     description: str | None = None,
@@ -500,7 +501,7 @@ def register_rlssm_model(
         Ordered list of sampled RL parameter names.
     learning_process_bounds:
         Parameter bounds for the RL parameters.
-    rl_params_default:
+    learning_process_params_default:
         Default values aligned with *learning_process_params*.
     extra_fields:
         Data column names required by the learning process (e.g. ``["feedback"]``).
@@ -525,7 +526,7 @@ def register_rlssm_model(
         "learning_process": dict(learning_process),
         "learning_process_params": list(learning_process_params),
         "learning_process_bounds": dict(learning_process_bounds),
-        "rl_params_default": list(rl_params_default),
+        "learning_process_params_default": list(learning_process_params_default),
         "extra_fields": list(extra_fields) if extra_fields is not None else [],
         "choices": list(choices) if choices is not None else [0, 1],
         "description": description,

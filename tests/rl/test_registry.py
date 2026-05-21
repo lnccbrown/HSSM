@@ -320,7 +320,7 @@ class TestRegisterRlssmModel:
             learning_process=learning_process,
             learning_process_params=learning_process_params,
             learning_process_bounds=learning_process_bounds,
-            rl_params_default=rl_defaults,
+            learning_process_params_default=rl_defaults,
             extra_fields=extra_fields,
             choices=choices,
         )
@@ -341,7 +341,7 @@ class TestRegisterRlssmModel:
         assert stored["decision_process"]["response"] == ["rt", "response"]
         assert stored["learning_process_params"] == ["rl_alpha"]
         assert stored["learning_process_bounds"] == {"rl_alpha": (0.0, 1.0)}
-        assert stored["rl_params_default"] == [0.2]
+        assert stored["learning_process_params_default"] == [0.2]
         assert stored["extra_fields"] == ["feedback"]
         assert stored["choices"] == [0, 1]
         assert list(stored["learning_process"]) == ["v"]
@@ -366,7 +366,7 @@ class TestRegisterRlssmModel:
             learning_process=learning_process,
             learning_process_params=["rl_alpha"],
             learning_process_bounds={"rl_alpha": (0.0, 1.0)},
-            rl_params_default=[0.2],
+            learning_process_params_default=[0.2],
         )
 
         with caplog.at_level(logging.WARNING, logger="hssm"):
@@ -376,7 +376,7 @@ class TestRegisterRlssmModel:
                 learning_process=learning_process,
                 learning_process_params=["rl_alpha"],
                 learning_process_bounds={"rl_alpha": (0.0, 1.0)},
-                rl_params_default=[0.2],
+                learning_process_params_default=[0.2],
             )
 
         assert any("overwrite_rlssm" in r.message for r in caplog.records)
@@ -403,7 +403,7 @@ class TestGetRlssmModelConfig:
             learning_process=learning_process,
             learning_process_params=["rl_alpha"],
             learning_process_bounds={"rl_alpha": (0.0, 1.0)},
-            rl_params_default=[0.2],
+            learning_process_params_default=[0.2],
             extra_fields=["feedback"],
             choices=[0, 1],
         )
@@ -440,7 +440,7 @@ class TestGetRlssmModelConfig:
             "learning_process": learning_process,
             "learning_process_params": [],
             "learning_process_bounds": {},
-            "rl_params_default": [],
+            "learning_process_params_default": [],
             "extra_fields": ["feedback"],
             "choices": [0, 1],
             "description": "test model",
@@ -480,7 +480,7 @@ class TestGetRlssmModelConfig:
             "learning_process": learning_process,
             # learning_process_params deliberately absent
             "learning_process_bounds": {},
-            "rl_params_default": [],
+            "learning_process_params_default": [],
             "extra_fields": ["feedback"],
             "choices": [0, 1],
             "description": None,
@@ -519,7 +519,7 @@ class TestGetRlssmModelConfig:
             learning_process=learning_process,
             learning_process_params=["rl_alpha"],
             learning_process_bounds={"rl_alpha": (0.0, 1.0)},
-            rl_params_default=[0.2],
+            learning_process_params_default=[0.2],
             extra_fields=["feedback"],
             choices=[0, 1],
         )
