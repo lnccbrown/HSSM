@@ -403,7 +403,7 @@ class TestRLSSMSimplifiedInterface:
             decision_process="angle",
             learning_process={"v": _compute_v_annotated},
             learning_process_params=["rl_alpha", "scaler"],
-            rl_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
+            learning_process_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
             rl_params_default=[0.1, 1.0],
             extra_fields=["feedback"],
             choices=[0, 1],

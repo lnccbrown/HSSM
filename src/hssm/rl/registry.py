@@ -192,7 +192,7 @@ def _get_ssm_logp(name: str) -> Any:
 #   decision_process            - key into _SSM_REGISTRY
 #   learning_process            - {param: annotated_func}
 #   learning_process_params     - ordered list of sampled RL parameter names
-#   rl_bounds                   - {param: (lo, hi)} for RL params
+#   learning_process_bounds                   - {param: (lo, hi)} for RL params
 #   rl_params_default           - default values aligned with learning_process_params
 #   extra_fields                - extra data column names required by LP
 #   choices                     - response choice values
@@ -205,7 +205,7 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
         "decision_process": _get_decision_process_spec("ddm"),
         "learning_process": {"v": _compute_v_annotated},
         "learning_process_params": ["rl_alpha", "scaler"],
-        "rl_bounds": {
+        "learning_process_bounds": {
             "rl_alpha": (0.0, 1.0),
             "scaler": (0.0, 10.0),
         },
@@ -223,7 +223,7 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
         "decision_process": _get_decision_process_spec("angle"),
         "learning_process": {"v": _compute_v_annotated},
         "learning_process_params": ["rl_alpha", "scaler"],
-        "rl_bounds": {
+        "learning_process_bounds": {
             "rl_alpha": (0.0, 1.0),
             "scaler": (0.0, 10.0),
         },
@@ -241,7 +241,7 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
         "decision_process": _get_decision_process_spec("weibull"),
         "learning_process": {"v": _compute_v_annotated},
         "learning_process_params": ["rl_alpha", "scaler"],
-        "rl_bounds": {
+        "learning_process_bounds": {
             "rl_alpha": (0.0, 1.0),
             "scaler": (0.0, 10.0),
         },
@@ -403,7 +403,7 @@ def get_rlssm_model_config(
             "Provide bounds for all sampled parameters via register_ssm() or ensure "
             "the built-in modelconfig includes them."
         )
-    _rl_bounds = entry.get("rl_bounds")
+    _rl_bounds = entry.get("learning_process_bounds")
     bounds: dict[str, tuple[float, float]] = dict(
         _rl_bounds if _rl_bounds is not None else {}
     )
@@ -476,7 +476,7 @@ def register_rlssm_model(
     decision_process: str,
     learning_process: dict[str, Any],
     learning_process_params: list[str],
-    rl_bounds: dict[str, tuple[float, float]],
+    learning_process_bounds: dict[str, tuple[float, float]],
     rl_params_default: list[float],
     extra_fields: list[str] | None = None,
     choices: list[int] | None = None,
@@ -498,7 +498,7 @@ def register_rlssm_model(
         Dict mapping computed parameter name → annotated learning function.
     learning_process_params:
         Ordered list of sampled RL parameter names.
-    rl_bounds:
+    learning_process_bounds:
         Parameter bounds for the RL parameters.
     rl_params_default:
         Default values aligned with *learning_process_params*.
@@ -524,7 +524,7 @@ def register_rlssm_model(
         # mutations of the originals do not silently corrupt the registry entry.
         "learning_process": dict(learning_process),
         "learning_process_params": list(learning_process_params),
-        "rl_bounds": dict(rl_bounds),
+        "learning_process_bounds": dict(learning_process_bounds),
         "rl_params_default": list(rl_params_default),
         "extra_fields": list(extra_fields) if extra_fields is not None else [],
         "choices": list(choices) if choices is not None else [0, 1],

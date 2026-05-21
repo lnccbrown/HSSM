@@ -309,7 +309,7 @@ class TestRegisterRlssmModel:
     ) -> None:
         """Caller mutations after registration must not alter the stored model."""
         learning_process_params = ["rl_alpha"]
-        rl_bounds = {"rl_alpha": (0.0, 1.0)}
+        learning_process_bounds = {"rl_alpha": (0.0, 1.0)}
         rl_defaults = [0.2]
         extra_fields = ["feedback"]
         choices = [0, 1]
@@ -319,14 +319,14 @@ class TestRegisterRlssmModel:
             decision_process="angle",
             learning_process=learning_process,
             learning_process_params=learning_process_params,
-            rl_bounds=rl_bounds,
+            learning_process_bounds=learning_process_bounds,
             rl_params_default=rl_defaults,
             extra_fields=extra_fields,
             choices=choices,
         )
 
         learning_process_params.append("scaler")
-        rl_bounds["scaler"] = (0.0, 10.0)
+        learning_process_bounds["scaler"] = (0.0, 10.0)
         rl_defaults.append(1.0)
         extra_fields.append("trial")
         choices.append(2)
@@ -340,7 +340,7 @@ class TestRegisterRlssmModel:
         assert stored["decision_process"]["name"] == "angle"
         assert stored["decision_process"]["response"] == ["rt", "response"]
         assert stored["learning_process_params"] == ["rl_alpha"]
-        assert stored["rl_bounds"] == {"rl_alpha": (0.0, 1.0)}
+        assert stored["learning_process_bounds"] == {"rl_alpha": (0.0, 1.0)}
         assert stored["rl_params_default"] == [0.2]
         assert stored["extra_fields"] == ["feedback"]
         assert stored["choices"] == [0, 1]
@@ -365,7 +365,7 @@ class TestRegisterRlssmModel:
             decision_process="overwrite_ssm",
             learning_process=learning_process,
             learning_process_params=["rl_alpha"],
-            rl_bounds={"rl_alpha": (0.0, 1.0)},
+            learning_process_bounds={"rl_alpha": (0.0, 1.0)},
             rl_params_default=[0.2],
         )
 
@@ -375,7 +375,7 @@ class TestRegisterRlssmModel:
                 decision_process="overwrite_ssm",
                 learning_process=learning_process,
                 learning_process_params=["rl_alpha"],
-                rl_bounds={"rl_alpha": (0.0, 1.0)},
+                learning_process_bounds={"rl_alpha": (0.0, 1.0)},
                 rl_params_default=[0.2],
             )
 
@@ -402,7 +402,7 @@ class TestGetRlssmModelConfig:
             decision_process="unit_test_ssm",
             learning_process=learning_process,
             learning_process_params=["rl_alpha"],
-            rl_bounds={"rl_alpha": (0.0, 1.0)},
+            learning_process_bounds={"rl_alpha": (0.0, 1.0)},
             rl_params_default=[0.2],
             extra_fields=["feedback"],
             choices=[0, 1],
@@ -439,7 +439,7 @@ class TestGetRlssmModelConfig:
             "decision_process": "empty_rl_ssm",
             "learning_process": learning_process,
             "learning_process_params": [],
-            "rl_bounds": {},
+            "learning_process_bounds": {},
             "rl_params_default": [],
             "extra_fields": ["feedback"],
             "choices": [0, 1],
@@ -479,7 +479,7 @@ class TestGetRlssmModelConfig:
             "decision_process": "derive_params_ssm",
             "learning_process": learning_process,
             # learning_process_params deliberately absent
-            "rl_bounds": {},
+            "learning_process_bounds": {},
             "rl_params_default": [],
             "extra_fields": ["feedback"],
             "choices": [0, 1],
@@ -518,7 +518,7 @@ class TestGetRlssmModelConfig:
             decision_process="no_bounds_ssm",
             learning_process=learning_process,
             learning_process_params=["rl_alpha"],
-            rl_bounds={"rl_alpha": (0.0, 1.0)},
+            learning_process_bounds={"rl_alpha": (0.0, 1.0)},
             rl_params_default=[0.2],
             extra_fields=["feedback"],
             choices=[0, 1],
