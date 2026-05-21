@@ -284,7 +284,7 @@ def _build_ssm_logp_func(ssm_base_logp_func: Any, learning_process: dict) -> Any
     )(ssm_base_logp_func)
 
 
-def _derive_rl_params(
+def _derive_lp_params(
     learning_process: dict[str, Any],
     response: list[str],
     extra_fields: list[str],
@@ -388,7 +388,7 @@ def get_rlssm_model_config(
     # the fallback derivation logic.
     _rl_params = entry.get("rl_params")
     rl_params: list[str] = (
-        _derive_rl_params(lp, response, entry.get("extra_fields") or [])
+        _derive_lp_params(lp, response, entry.get("extra_fields") or [])
         if _rl_params is None
         else _rl_params
     )

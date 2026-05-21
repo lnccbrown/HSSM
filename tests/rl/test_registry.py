@@ -189,7 +189,7 @@ class TestDeriveRlParams:
         learning_process: dict[str, Any],
     ) -> None:
         """Derived RL params should ignore response columns and extra fields."""
-        derived = registry._derive_rl_params(
+        derived = registry._derive_lp_params(
             learning_process=learning_process,
             response=["rt", "response"],
             extra_fields=["feedback"],
@@ -204,7 +204,7 @@ class TestDeriveRlParams:
             return x
 
         lp = {"v": unannotated_func}
-        result = registry._derive_rl_params(
+        result = registry._derive_lp_params(
             learning_process=lp,
             response=["rt", "response"],
             extra_fields=["feedback"],
