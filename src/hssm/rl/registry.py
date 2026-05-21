@@ -191,7 +191,7 @@ def _get_ssm_logp(name: str) -> Any:
 # Each entry provides:
 #   decision_process            - key into _SSM_REGISTRY
 #   learning_process            - {param: annotated_func}
-#   learning_process_params                   - ordered list of sampled RL parameter names
+#   learning_process_params     - ordered list of sampled RL parameter names
 #   rl_bounds                   - {param: (lo, hi)} for RL params
 #   rl_params_default           - default values aligned with learning_process_params
 #   extra_fields                - extra data column names required by LP
