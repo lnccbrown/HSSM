@@ -191,9 +191,9 @@ def _get_ssm_logp(name: str) -> Any:
 # Each entry provides:
 #   decision_process            - key into _SSM_REGISTRY
 #   learning_process            - {param: annotated_func}
-#   rl_params                   - ordered list of sampled RL parameter names
+#   learning_process_params                   - ordered list of sampled RL parameter names
 #   rl_bounds                   - {param: (lo, hi)} for RL params
-#   rl_params_default           - default values aligned with rl_params
+#   rl_params_default           - default values aligned with learning_process_params
 #   extra_fields                - extra data column names required by LP
 #   choices                     - response choice values
 #   description                 - human-readable description
@@ -204,7 +204,7 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
     "2AB_RescorlaWagner_DDM": {
         "decision_process": _get_decision_process_spec("ddm"),
         "learning_process": {"v": _compute_v_annotated},
-        "rl_params": ["rl_alpha", "scaler"],
+        "learning_process_params": ["rl_alpha", "scaler"],
         "rl_bounds": {
             "rl_alpha": (0.0, 1.0),
             "scaler": (0.0, 10.0),
@@ -222,7 +222,7 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
     "2AB_RescorlaWagner_Angle": {
         "decision_process": _get_decision_process_spec("angle"),
         "learning_process": {"v": _compute_v_annotated},
-        "rl_params": ["rl_alpha", "scaler"],
+        "learning_process_params": ["rl_alpha", "scaler"],
         "rl_bounds": {
             "rl_alpha": (0.0, 1.0),
             "scaler": (0.0, 10.0),
@@ -240,7 +240,7 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
     "2AB_RescorlaWagner_Weibull": {
         "decision_process": _get_decision_process_spec("weibull"),
         "learning_process": {"v": _compute_v_annotated},
-        "rl_params": ["rl_alpha", "scaler"],
+        "learning_process_params": ["rl_alpha", "scaler"],
         "rl_bounds": {
             "rl_alpha": (0.0, 1.0),
             "scaler": (0.0, 10.0),
@@ -295,7 +295,7 @@ def _derive_lp_params(
     neither response columns nor extra fields.
     """
     exclude = set(response) | set(extra_fields)
-    rl_params: list[str] = []
+    learning_process_params: list[str] = []
     seen: set[str] = set()
     for param_name, lp_func in learning_process.items():
         if not hasattr(lp_func, "inputs"):
@@ -308,9 +308,9 @@ def _derive_lp_params(
             continue
         for inp in lp_func.inputs:
             if inp not in exclude and inp not in seen:
-                rl_params.append(inp)
+                learning_process_params.append(inp)
                 seen.add(inp)
-    return rl_params
+    return learning_process_params
 
 
 # ---------------------------------------------------------------------------
@@ -386,13 +386,13 @@ def get_rlssm_model_config(
     # Use `is None` checks so that explicitly empty containers ([], {}) are
     # respected as valid "no RL params" configuration and not overridden by
     # the fallback derivation logic.
-    _rl_params = entry.get("rl_params")
-    rl_params: list[str] = (
+    _rl_params = entry.get("learning_process_params")
+    learning_process_params: list[str] = (
         _derive_lp_params(lp, response, entry.get("extra_fields") or [])
         if _rl_params is None
         else _rl_params
     )
-    list_params = rl_params + ssm_sampled
+    list_params = learning_process_params + ssm_sampled
 
     # bounds: RL bounds ∪ SSM sampled bounds
     missing_bounds = [p for p in ssm_sampled if p not in ssm_entry["bounds_ssm"]]
@@ -475,7 +475,7 @@ def register_rlssm_model(
     name: str,
     decision_process: str,
     learning_process: dict[str, Any],
-    rl_params: list[str],
+    learning_process_params: list[str],
     rl_bounds: dict[str, tuple[float, float]],
     rl_params_default: list[float],
     extra_fields: list[str] | None = None,
@@ -496,12 +496,12 @@ def register_rlssm_model(
         name such as ``"ddm"``, ``"angle"``, or ``"weibull"``.
     learning_process:
         Dict mapping computed parameter name → annotated learning function.
-    rl_params:
+    learning_process_params:
         Ordered list of sampled RL parameter names.
     rl_bounds:
         Parameter bounds for the RL parameters.
     rl_params_default:
-        Default values aligned with *rl_params*.
+        Default values aligned with *learning_process_params*.
     extra_fields:
         Data column names required by the learning process (e.g. ``["feedback"]``).
     choices:
@@ -523,7 +523,7 @@ def register_rlssm_model(
         # Shallow-copy all mutable caller-supplied collections so that later
         # mutations of the originals do not silently corrupt the registry entry.
         "learning_process": dict(learning_process),
-        "rl_params": list(rl_params),
+        "learning_process_params": list(learning_process_params),
         "rl_bounds": dict(rl_bounds),
         "rl_params_default": list(rl_params_default),
         "extra_fields": list(extra_fields) if extra_fields is not None else [],

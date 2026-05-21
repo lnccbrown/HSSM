@@ -308,7 +308,7 @@ class TestRegisterRlssmModel:
         learning_process: dict[str, Any],
     ) -> None:
         """Caller mutations after registration must not alter the stored model."""
-        rl_params = ["rl_alpha"]
+        learning_process_params = ["rl_alpha"]
         rl_bounds = {"rl_alpha": (0.0, 1.0)}
         rl_defaults = [0.2]
         extra_fields = ["feedback"]
@@ -318,14 +318,14 @@ class TestRegisterRlssmModel:
             name="copy_test_model",
             decision_process="angle",
             learning_process=learning_process,
-            rl_params=rl_params,
+            learning_process_params=learning_process_params,
             rl_bounds=rl_bounds,
             rl_params_default=rl_defaults,
             extra_fields=extra_fields,
             choices=choices,
         )
 
-        rl_params.append("scaler")
+        learning_process_params.append("scaler")
         rl_bounds["scaler"] = (0.0, 10.0)
         rl_defaults.append(1.0)
         extra_fields.append("trial")
@@ -339,7 +339,7 @@ class TestRegisterRlssmModel:
 
         assert stored["decision_process"]["name"] == "angle"
         assert stored["decision_process"]["response"] == ["rt", "response"]
-        assert stored["rl_params"] == ["rl_alpha"]
+        assert stored["learning_process_params"] == ["rl_alpha"]
         assert stored["rl_bounds"] == {"rl_alpha": (0.0, 1.0)}
         assert stored["rl_params_default"] == [0.2]
         assert stored["extra_fields"] == ["feedback"]
@@ -364,7 +364,7 @@ class TestRegisterRlssmModel:
             name="overwrite_rlssm",
             decision_process="overwrite_ssm",
             learning_process=learning_process,
-            rl_params=["rl_alpha"],
+            learning_process_params=["rl_alpha"],
             rl_bounds={"rl_alpha": (0.0, 1.0)},
             rl_params_default=[0.2],
         )
@@ -374,7 +374,7 @@ class TestRegisterRlssmModel:
                 name="overwrite_rlssm",
                 decision_process="overwrite_ssm",
                 learning_process=learning_process,
-                rl_params=["rl_alpha"],
+                learning_process_params=["rl_alpha"],
                 rl_bounds={"rl_alpha": (0.0, 1.0)},
                 rl_params_default=[0.2],
             )
@@ -401,7 +401,7 @@ class TestGetRlssmModelConfig:
             name="unit_test_model",
             decision_process="unit_test_ssm",
             learning_process=learning_process,
-            rl_params=["rl_alpha"],
+            learning_process_params=["rl_alpha"],
             rl_bounds={"rl_alpha": (0.0, 1.0)},
             rl_params_default=[0.2],
             extra_fields=["feedback"],
@@ -438,7 +438,7 @@ class TestGetRlssmModelConfig:
         registry._RLSSM_REGISTRY["empty_rl_model"] = {
             "decision_process": "empty_rl_ssm",
             "learning_process": learning_process,
-            "rl_params": [],
+            "learning_process_params": [],
             "rl_bounds": {},
             "rl_params_default": [],
             "extra_fields": ["feedback"],
@@ -464,7 +464,7 @@ class TestGetRlssmModelConfig:
         annotated_ssm_base_logp: Any,
         learning_process: dict[str, Any],
     ) -> None:
-        """When rl_params is absent from the registry entry, params are derived
+        """When learning_process_params is absent from the registry entry, params are derived
         from the learning_process .inputs."""
         registry.register_ssm(
             name="derive_params_ssm",
@@ -474,11 +474,11 @@ class TestGetRlssmModelConfig:
             params_default_ssm=[0.0, 1.5],
             response=["rt", "response"],
         )
-        # Inject an entry without rl_params so the fallback derivation runs.
+        # Inject an entry without learning_process_params so the fallback derivation runs.
         registry._RLSSM_REGISTRY["derive_params_model"] = {
             "decision_process": "derive_params_ssm",
             "learning_process": learning_process,
-            # rl_params deliberately absent
+            # learning_process_params deliberately absent
             "rl_bounds": {},
             "rl_params_default": [],
             "extra_fields": ["feedback"],
@@ -517,7 +517,7 @@ class TestGetRlssmModelConfig:
             name="no_bounds_model",
             decision_process="no_bounds_ssm",
             learning_process=learning_process,
-            rl_params=["rl_alpha"],
+            learning_process_params=["rl_alpha"],
             rl_bounds={"rl_alpha": (0.0, 1.0)},
             rl_params_default=[0.2],
             extra_fields=["feedback"],
@@ -541,7 +541,7 @@ class TestBuiltinModels:
         assert model_name in registry._RLSSM_REGISTRY
         entry = registry._RLSSM_REGISTRY[model_name]
         assert entry["decision_process"]["name"] == expected_dp
-        assert entry["rl_params"] == ["rl_alpha", "scaler"]
+        assert entry["learning_process_params"] == ["rl_alpha", "scaler"]
         assert entry["extra_fields"] == ["feedback"]
         assert entry["choices"] == [0, 1]
         assert entry["decision_process_loglik_kind"] == "approx_differentiable"

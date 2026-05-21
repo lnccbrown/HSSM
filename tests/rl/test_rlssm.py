@@ -402,7 +402,7 @@ class TestRLSSMSimplifiedInterface:
             name="rldm_custom_test",
             decision_process="angle",
             learning_process={"v": _compute_v_annotated},
-            rl_params=["rl_alpha", "scaler"],
+            learning_process_params=["rl_alpha", "scaler"],
             rl_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
             rl_params_default=[0.1, 1.0],
             extra_fields=["feedback"],
