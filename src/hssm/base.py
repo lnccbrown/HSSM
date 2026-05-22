@@ -671,12 +671,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 compute_likelihood = kwargs["idata_kwargs"].pop("log_likelihood", True)
 
         omit_offsets = kwargs.pop("omit_offsets", False)
+        # Pass the user's sampler choice through to bambi verbatim. Bambi's
+        # inference_method natively accepts "pymc"/"numpyro"/"blackjax"/"nutpie"
+        # and routes each to a distinct pm.sample(nuts_sampler=...) call.
+        # The previous conditional collapsed all four NUTS variants to "pymc",
+        # which silently downgraded user choice — surfaced via the sbi NLE
+        # tutorial where sampler="numpyro" still went through PyMC's multiprocess
+        # path and tripped cloudpickle on the ONNX ModelProto.
         self._inference_obj = self.model.fit(
-            inference_method=(
-                "pymc"
-                if sampler in ["pymc", "numpyro", "blackjax", "nutpie"]
-                else sampler
-            ),
+            inference_method=sampler,
             init=init,
             include_response_params=include_response_params,
             omit_offsets=omit_offsets,
