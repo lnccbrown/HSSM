@@ -1,6 +1,6 @@
 """Use jaxonnxruntime to convert ONNX models to JAX functions."""
 
-import warnings
+import logging
 from typing import Callable
 
 import jax
@@ -8,6 +8,8 @@ import jax.numpy as jnp
 import numpy as np
 import onnx
 from jaxonnxruntime import call_onnx, config
+
+_logger = logging.getLogger("hssm")
 
 # torch.onnx.export emits some shape arguments (e.g. for Reshape inside masked
 # autoregressive flows) as Constant nodes rather than as model initializers.
@@ -75,13 +77,11 @@ def _ensure_x64_if_needed(onnx_model: onnx.ModelProto) -> None:
             "    jax.config.update('jax_enable_x64', True)\n"
             "at the very top of your script, before any other JAX import."
         )
-    warnings.warn(
+    _logger.warning(
         "HSSM auto-enabled `jax_enable_x64` because the loaded ONNX graph "
         "carries int64 tensors that JAX would otherwise silently truncate. "
         "To silence this warning, set the flag yourself at the top of your "
-        "script: `jax.config.update('jax_enable_x64', True)`.",
-        UserWarning,
-        stacklevel=3,
+        "script: `jax.config.update('jax_enable_x64', True)`."
     )
 
 
