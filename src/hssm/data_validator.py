@@ -49,6 +49,24 @@ class DataValidatorMixin:
     def _post_check_data_sanity(self):
         """Check if the data is clean enough for the model."""
         if self.is_choice_only:
+            unique_responses = self.data["response"].unique()
+            # Reject non-integer values before casting: 0.5 would silently become
+            # 0 after astype(int) and pass membership checks against choices=[0, 1],
+            # then be misrouted in the softmax Q-value indexing.
+            non_integral = unique_responses[unique_responses % 1 != 0]
+            if len(non_integral):
+                raise ValueError(
+                    "Non-integer response values found in your dataset: "
+                    f"{sorted(non_integral.tolist())}. "
+                    "Responses must be exact integers."
+                )
+            invalid = unique_responses.astype(int)[
+                ~np.isin(unique_responses.astype(int), self.choices)
+            ]
+            if len(invalid):
+                raise ValueError(
+                    f"Invalid responses found in dataset: {sorted(invalid.tolist())}"
+                )
             return
         if self.deadline or self.missing_data:
             if -999.0 not in self.data["rt"].unique():

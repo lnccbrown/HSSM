@@ -86,8 +86,9 @@ class _RLSSM(HSSMBase):
         Parameter specifications forwarded to :class:`~hssm.base.HSSMBase`.
     p_outlier : float | dict | bmb.Prior | None, optional
         Lapse probability specification. Defaults to ``0.05``.
-    lapse : dict | bmb.Prior | None, optional
-        Lapse distribution. Defaults to ``Uniform(0, 20)``.
+    lapse : float | dict | bmb.Prior | None, optional
+        Lapse distribution. Defaults to ``None`` (auto: ``1/n_choices`` for
+        choice-only models, ``Uniform(0, 20)`` otherwise).
     link_settings : Literal["log_logit"] | None, optional
         Link-function preset. Defaults to ``None``.
     prior_settings : Literal["safe"] | None, optional
@@ -127,7 +128,7 @@ class _RLSSM(HSSMBase):
         participant_col: str = "participant_id",
         include: list[dict[str, Any] | Any] | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
-        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
+        lapse: float | dict | bmb.Prior | None = None,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
         extra_namespace: dict[str, Any] | None = None,
@@ -281,6 +282,7 @@ class _RLSSM(HSSMBase):
             lapse=self.lapse,
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
+            is_choice_only=self.is_choice_only,
         )
 
 
@@ -361,8 +363,9 @@ class RLSSM(_RLSSM):
         Column identifying participants. Defaults to ``"participant_id"``.
     p_outlier : float | dict | bmb.Prior | None, optional
         Lapse probability. Defaults to ``0.05``.
-    lapse : dict | bmb.Prior | None, optional
-        Lapse distribution. Defaults to ``Uniform(0, 20)``.
+    lapse : float | dict | bmb.Prior | None, optional
+        Lapse distribution. Defaults to ``None`` (auto: ``1/n_choices`` for
+        choice-only models, ``Uniform(0, 20)`` otherwise).
     link_settings : Literal["log_logit"] | None, optional
         Link-function preset. Defaults to ``None``.
     prior_settings : Literal["safe"] | None, optional
@@ -410,7 +413,7 @@ class RLSSM(_RLSSM):
         decision_process: str | None = None,
         participant_col: str = "participant_id",
         p_outlier: float | dict | bmb.Prior | None = 0.05,
-        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
+        lapse: float | dict | bmb.Prior | None = None,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
         extra_namespace: dict[str, Any] | None = None,
