@@ -37,6 +37,10 @@ class MissingDataMixin:
         """
         import warnings
 
+        # In the case of choice only model, we don't need to do anything with the data.
+        if self.is_choice_only:
+            return
+
         if self.deadline:
             if self.deadline_name not in self.data.columns:
                 raise ValueError(
@@ -63,10 +67,6 @@ class MissingDataMixin:
                 )
             return
 
-        # not missing_data and not deadline
-        # In the case of choice only model, we don't need to do anything with the data.
-        if self.is_choice_only:
-            return
         # In the case where missing_data is set to False, we need to drop the
         # cases where rt = na_value
         if pd.isna(self.missing_data_value):
