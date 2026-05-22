@@ -94,9 +94,10 @@ def softmax_logp_func(params_matrix: jnp.ndarray) -> jnp.ndarray:
     response = params_matrix[:, 2]
 
     # p(choice=1) = sigmoid(beta * q_diff)
+    scaled = beta * q_diff
     logp = jnp.where(
         response == 1,
-        jax_nn.log_sigmoid(beta * q_diff),
-        jax_nn.log_sigmoid(-beta * q_diff),
+        jax_nn.log_sigmoid(scaled),
+        jax_nn.log_sigmoid(-scaled),
     )
     return logp
