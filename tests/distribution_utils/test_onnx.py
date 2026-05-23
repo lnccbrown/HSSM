@@ -11,6 +11,10 @@ from hssm.distribution_utils.onnx import (
     make_jax_logp_funcs_from_onnx,
     make_jax_matrix_logp_funcs_from_onnx,
 )
+from hssm.distribution_utils.onnx_utils.onnx2jax import (
+    _recast_int64_to_int32,
+    make_jax_func,
+)
 
 hssm.set_floatX("float32")
 DECIMAL = 4
@@ -156,3 +160,60 @@ def test_make_simple_jax_logp_funcs_from_onnx(fixture_path):
         result_simple,
         decimal=DECIMAL,
     )
+
+
+# ---------------------------------------------------------------------------
+# Guards introduced when removing the auto-x64 flip in onnx2jax.py.
+# ---------------------------------------------------------------------------
+
+
+def _make_minimal_onnx(input_shape):
+    """Construct a minimal Identity-graph ONNX model with the requested shape.
+
+    ``input_shape`` is an iterable of ``int`` (concrete) or ``str``/``None``
+    (symbolic / dynamic).
+    """
+    from onnx import helper, TensorProto
+
+    dims = list(input_shape)
+    in_tensor = helper.make_tensor_value_info("x", TensorProto.FLOAT, dims)
+    out_tensor = helper.make_tensor_value_info("y", TensorProto.FLOAT, dims)
+    node = helper.make_node("Identity", inputs=["x"], outputs=["y"])
+    graph = helper.make_graph([node], "minimal", [in_tensor], [out_tensor])
+    return helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+
+
+def test_make_jax_func_rejects_dynamic_input_dim():
+    """Dynamic input dims would silently produce wrong outputs -- must raise."""
+    model = _make_minimal_onnx(["batch", 5])  # symbolic batch dim
+    with pytest.raises(ValueError, match="dynamic"):
+        make_jax_func(model)
+
+
+def test_make_jax_func_accepts_concrete_input_dim():
+    """Concrete-shape models pass the guard and produce a callable."""
+    model = _make_minimal_onnx([1, 5])
+    fn = make_jax_func(model)
+    out = np.asarray(fn(np.ones((1, 5), dtype=np.float32)))
+    assert out.shape == (5,) or out.shape == (1, 5)  # squeeze may drop the 1
+
+
+def test_recast_int64_to_int32_rewrites_initializers():
+    """The int64 -> int32 pre-cast must rewrite int64 initializers in place."""
+    from onnx import helper, numpy_helper, TensorProto
+
+    init = numpy_helper.from_array(np.array([1, 2, 3], dtype=np.int64), "shape")
+    in_tensor = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 3])
+    out_tensor = helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 3])
+    node = helper.make_node("Reshape", inputs=["x", "shape"], outputs=["y"])
+    graph = helper.make_graph(
+        [node], "minimal", [in_tensor], [out_tensor], initializer=[init]
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+
+    assert model.graph.initializer[0].data_type == TensorProto.INT64
+    n = _recast_int64_to_int32(model)
+    assert n == 1
+    assert model.graph.initializer[0].data_type == TensorProto.INT32
+    # Idempotent: a second call is a no-op.
+    assert _recast_int64_to_int32(model) == 0
