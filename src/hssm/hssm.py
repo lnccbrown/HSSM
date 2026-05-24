@@ -51,34 +51,6 @@ _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
 }
 
 
-class classproperty:
-    """A decorator that combines the behavior of @property and @classmethod.
-
-    This decorator allows you to define a property that can be accessed on the class
-    itself, rather than on instances of the class. It is useful for defining class-level
-    properties that need to perform some computation or access class-level data.
-
-    This implementation is provided for compatibility with Python versions 3.10 through
-    3.12, as one cannot combine the @property and @classmethod decorators is across all
-    these versions.
-
-    Example
-    -------
-    class MyClass:
-        @classproperty
-        def my_class_property(cls):
-            return "This is a class property"
-
-    print(MyClass.my_class_property)  # Output: This is a class property
-    """
-
-    def __init__(self, fget):
-        self.fget = fget
-
-    def __get__(self, instance, owner):  # noqa: D105
-        return self.fget(owner)
-
-
 class HSSM(HSSMBase):
     """The basic Hierarchical Sequential Sampling Model (HSSM) class.
 
