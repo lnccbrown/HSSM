@@ -1,7 +1,7 @@
 # HSSM-HMM Class: High-Level Overview
 
 **Issue:** [#957](https://github.com/lnccbrown/HSSM/issues/957)
-**Companion:** [hssm_hmm.md](./hssm_hmm.md) (full rigorous design)
+**Companions:** [hssm_hmm.md](./hssm_hmm.md) (full rigorous design); [hssm_hmm_math.md](./hssm_hmm_math.md) (full math spec — v1 model in §14; planned Phase 6.1 hierarchical extension in §5–13)
 
 This is a short companion to the rigorous design document. Audience: applied users, project stakeholders, anyone deciding whether the proposed feature meets their needs without reading the math.
 
@@ -47,7 +47,7 @@ regimes = model.infer_regimes(idata)
 What you get back:
 - Posterior distributions over the SSM parameters (per-regime for switching ones, shared otherwise) and the transition matrix.
 - Per-trial posterior probabilities of each regime, recovered post-hoc.
-- All the standard HSSM machinery — `summary`, trace plots, posterior-predictive checks, save/load — works without modification.
+- Standard post-fit tools — `summary`, trace plots, `find_MAP` — work as inherited. A few methods are HMM-specific (`infer_regimes`, per-trial log-likelihood) or out of v1 scope (posterior-predictive simulation, which a regime-switching model needs a bespoke routine for); see Section 6.3 of the rigorous doc.
 
 ---
 
@@ -71,6 +71,7 @@ We've drawn a tight boundary for v1 so the first version ships quickly and match
 - Estimable initial-state distribution.
 - Mixed-emission models (different regimes use different SSMs).
 - Semi-Markov regime durations.
+- The per-trial lapse mixture (`p_outlier` / `lapse`). v1 rejects these inherited arguments outright — the HMM handles lapses *structurally*, as a regime (see "Why this matters" above), so the iid mixture would double-model the same effect.
 
 The full design document explains how each deferred feature plugs in — they're all **additions** to the v1 architecture, not refactors of it.
 
@@ -78,36 +79,43 @@ The full design document explains how each deferred feature plugs in — they're
 
 ## How it fits in the package
 
-`HSSM_HMM` joins the family alongside `HSSM` (per-trial emission-only models) and `RLSSM` (deterministic across-trial dynamics via reinforcement learning). All three subclass `HSSMBase`, share the same `.sample()` / `.summary()` / `.save_model()` API, and use the same priors and data conventions. The architectural pattern follows `RLSSM` closely — both handle across-trial coupling through a custom differentiable likelihood.
+`HSSM_HMM` joins the family alongside `HSSM` (per-trial emission-only models) and `RLSSM` (deterministic across-trial dynamics via reinforcement learning). It subclasses `HSSMBase`, keeps the familiar `.sample()` / `.summary()` API and the same priors and data conventions, and follows `RLSSM`'s structural pattern — across-trial coupling through a custom differentiable likelihood. One deliberate difference: the HMM's regime structure (a transition matrix, regime-indexed parameter vectors) cannot be expressed through bambi's regression formulas, so the model is built directly in PyMC rather than via bambi. The rigorous doc (decision 8) explains why, and how bambi re-enters cleanly if per-regime regressions are added later.
 
 ---
 
 ## Implementation plan
 
-The rigorous doc breaks the work into six phases. The first three are the v1 release:
+The rigorous doc breaks the work into six phases. Phases 1–5 together deliver the v1 release; Phase 6 is deferred follow-up work:
 
 1. **Design doc** — this document and [hssm_hmm.md](./hssm_hmm.md).
-2. **Prototype** — K=2, DDM emission, single participant. Matches the existing tutorial numerically.
-3. **Generalize** — arbitrary K, multiple switching parameters, multi-participant panels, LAN emission backend.
+2. **Core implementation** — the full class on the analytical emission backend, written for arbitrary K and multiple participants from the start (no "K=2 first" step — generalizing the regime count is free, and the feasibility prototype already validated K=2 and K=3). First test gate: the existing tutorial reproduced numerically.
+3. **LAN backend + coverage** — the `approx_differentiable` emission backend (a genuinely separate code path), plus the synthetic-recovery and edge-case test suite.
 4. **FFBS** — `infer_regimes` and a plotting helper.
 5. **Documentation** — tutorial notebook using the class instead of raw PyMC.
 6. **Deferred features** — separate PRs as priorities allow.
 
-Whether phases 2–5 land in one PR or several is an open question; the architecture supports either.
+Whether Phases 2–5 land in one PR or several is an open question; the architecture supports either.
 
 ---
 
 ## Decisions and open questions
 
-### Resolved (2026-05-12)
+### Resolved
 
-- **`validate_balanced_panel` location.** Keep in `hssm.rl.utils` for v1; hoist to `hssm.utils` when a third subclass needs it. Single import seam to flip later.
-- **`participant_col` for single-participant data.** Class synthesizes a constant column when absent and logs an info message — no friction for single-participant use.
-- **`P` and `pi0` placement.** Registered as PyMC random variables after bambi builds the model (the step-11 lifecycle seam).
+The design is **feasibility-validated** across the full v1 scope. Throwaway prototype runs reproduced the existing tutorial bit-for-bit, recovered known parameters on synthetic data, and exercised every dimension v1 promises: K=2 and K=3 (one to three switching parameters), single- and multi-participant panels including their cross-product (multi-participant × K=3), the analytical and LAN emission backends (with the LAN run validated on a LAN-only SSM with no analytical comparand, not just DDM-via-LAN), and edge cases like effectively empty regimes (no NaN/Inf propagation). FFBS post-hoc regime recovery was confirmed end-to-end on both an analytical and a LAN-only emission. The full table is in §7.4 of the rigorous doc; reproduction scripts are archived under [docs/design/v1_extra_validations/](./v1_extra_validations/). The load-bearing decisions:
+
+- **Likelihood.** The hidden regimes are marginalized analytically by the forward algorithm and contributed as a single scalar — the form the tutorial uses. Per-trial log-likelihood for `arviz.loo` is reconstructed post-hoc.
+- **Label-switching.** Broken automatically by an `ordered` transform on one switching parameter. (A soft penalty was tried first; it fails for K ≥ 3.)
+- **Model construction.** Built directly in PyMC. bambi — used by `HSSM`/`RLSSM` — cannot represent the HMM's regime-indexed latents, so it is deferred until per-regime regressions are scoped.
+- **Lapse handling.** v1 rejects the `p_outlier` mixture; lapses are modeled structurally, as a regime.
+- **Emission backends.** Analytical and LAN (`approx_differentiable`) are both validated; the LAN runs on the `jax` (default) and `pytensor` backends.
+- **Scaling.** Multi-participant panels run as one batched recursion, not a per-subject loop (which does not scale).
+
+See Section 10 of the rigorous doc for the full list (nine decisions) and the rationale behind each.
 
 ### Still open
 
-- **Default sampler.** Tutorial uses `nuts_sampler="numpyro"`; proposal is to keep the inherited PyMC default and document the numpyro recommendation in the tutorial.
+- **Default sampler.** Tutorial uses `nuts_sampler="numpyro"`; proposal is to keep PyMC NUTS as the code default (`HSSM_HMM` overrides `sample()` to call `pm.sample` directly) and document the numpyro recommendation in the tutorial.
 - **`infer_regimes` return shape.** Proposal is to return both per-draw state sequences and marginal regime probabilities.
 - **PR scope.** Phases 2–5 = full v1; can ship as one PR or split. Decide as Phase 2 nears completion.
 
