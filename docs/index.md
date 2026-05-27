@@ -1,3 +1,7 @@
+<div align="center">
+    <img src="images/mobius.png" style="width: 80px;">
+</div>
+
 <div>
     <a href="https://ccbs.carney.brown.edu/brainstorm" style="display: block; float: right; padding: 10px">
         <img src="images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
