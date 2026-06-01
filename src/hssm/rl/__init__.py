@@ -6,7 +6,6 @@ learning rules with sequential-sampling decision models (SSMs).
 Public API (import from ``hssm.rl``):
 
 - ``RLSSM``: the public RL + SSM model class in :mod:`hssm.rl.rlssm`.
-- ``_RLSSM``: the internal base class that requires a fully built config.
 - ``RLSSMConfig``: the config class for RL + SSM models in :mod:`hssm.rl.config`.
 - ``get_rlssm_model_config``: factory that builds a config from a named model.
 - ``register_rlssm_model``: register a custom named RLSSM model.
@@ -26,12 +25,11 @@ from .registry import (
     register_rlssm_model,
     register_ssm,
 )
-from .rlssm import _RLSSM, RLSSM
+from .rlssm import RLSSM
 from .utils import validate_balanced_panel
 
 __all__ = [
     "RLSSM",
-    "_RLSSM",
     "RLSSMConfig",
     "get_rlssm_model_config",
     "list_models",
