@@ -41,9 +41,8 @@ from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase, classproperty
-from . import list_models
 from .config import RLSSMConfig
-from .registry import get_rlssm_model_config
+from .registry import get_rlssm_model_config, list_models
 
 _logger = logging.getLogger("hssm")
 
