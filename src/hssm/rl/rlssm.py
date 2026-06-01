@@ -41,6 +41,7 @@ from hssm.rl.likelihoods.builder import make_rl_logp_op
 from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase, classproperty
+from . import list_models
 from .config import RLSSMConfig
 from .registry import get_rlssm_model_config
 
@@ -487,6 +488,4 @@ class RLSSM(_RLSSM):
         >>> RLSSM.list_models
         {'2AB_RescorlaWagner_DDM': 'RLSSM model with ...', ...}
         """
-        from .registry import list_models  # noqa: PLC0415
-
         return list_models()
