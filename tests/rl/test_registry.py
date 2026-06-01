@@ -592,3 +592,10 @@ class TestListModels:
         assert set(result.keys()) == set(registry._RLSSM_REGISTRY.keys())
         for name, desc in result.items():
             assert desc == registry._RLSSM_REGISTRY[name].get("description")
+
+    def test_public_rl_api_matches_registry(self) -> None:
+        """The public hssm.rl and RLSSM accessors should delegate to the registry."""
+        import hssm
+
+        assert hssm.rl.list_models() == registry.list_models()
+        assert hssm.RLSSM.list_models == registry.list_models()

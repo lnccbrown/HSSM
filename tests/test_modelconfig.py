@@ -109,6 +109,10 @@ def test_load_all_supported_model_configs(model):
     assert isinstance(get_default_model_config(model), dict)
 
 
+def test_hssm_list_models_matches_supported_models():
+    assert hssm.list_models() == hssm.HSSM.supported_models
+
+
 def test_get_default_model_config_invalid():
     with pytest.raises(ValueError):
         get_default_model_config("invalid_model")
