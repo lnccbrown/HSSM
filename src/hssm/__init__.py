@@ -16,6 +16,7 @@ from .datasets import load_data
 from .defaults import show_defaults
 from .hssm import HSSM
 from .link import Link
+from .modelconfig import list_models
 from .param import UserParam as Param
 from .prior import Prior
 from .register import register_model
@@ -34,6 +35,7 @@ __all__ = [
     "HSSM",
     "RLSSM",
     "Link",
+    "list_models",
     "load_data",
     "ModelConfig",
     "Param",

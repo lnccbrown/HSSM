@@ -22,6 +22,7 @@ helpers such as :func:`~hssm.rl.likelihoods.builder.make_rl_logp_func` and
 from .config import RLSSMConfig
 from .registry import (
     get_rlssm_model_config,
+    list_models,
     register_rlssm_model,
     register_ssm,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "_RLSSM",
     "RLSSMConfig",
     "get_rlssm_model_config",
+    "list_models",
     "register_rlssm_model",
     "register_ssm",
     "validate_balanced_panel",

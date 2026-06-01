@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Union, cast, get_args
+from typing import Any, Callable, Literal, Optional, Union, cast
 
 import arviz as az
 import bambi as bmb
@@ -48,6 +48,7 @@ from hssm.utils import (
 
 from . import plotting
 from .config import BaseModelConfig
+from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
 
@@ -456,7 +457,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         tuple[SupportedModels, ...]
             A tuple containing all supported model names.
         """
-        return get_args(SupportedModels)
+        return list_models()
 
     @staticmethod
     def _store_init_args(
