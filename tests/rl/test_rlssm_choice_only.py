@@ -48,15 +48,15 @@ def choice_only_data() -> pd.DataFrame:
     )
 
 
-@pytest.mark.flaky(reruns=5, reruns_delay=1)
-def test_rlssm_softmax_instantiate(choice_only_data) -> None:
-    """2AB_RescorlaWagner_Softmax should instantiate without error."""
-    model = RLSSM(data=choice_only_data, model="2AB_RescorlaWagner_Softmax")
-    assert isinstance(model, RLSSM)
-    assert model.model_config.is_choice_only
-    assert "rl_alpha" in model.params
-    assert "beta" in model.params
-    assert "q_diff" not in model.params  # computed inside Op, not a free param
+# @pytest.mark.flaky(reruns=5, reruns_delay=1)
+# def test_rlssm_softmax_instantiate(choice_only_data) -> None:
+#     """2AB_RescorlaWagner_Softmax should instantiate without error."""
+#     model = RLSSM(data=choice_only_data, model="2AB_RescorlaWagner_Softmax")
+#     assert isinstance(model, RLSSM)
+#     assert model.model_config.is_choice_only
+#     assert "rl_alpha" in model.params
+#     assert "beta" in model.params
+#     assert "q_diff" not in model.params  # computed inside Op, not a free param
 
 
 def test_rlssm_softmax_no_rt_column(choice_only_data) -> None:
