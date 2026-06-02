@@ -408,6 +408,17 @@ def get_rlssm_model_config(
     if choices is not None:
         entry["choices"] = choices
 
+    # Block added for debugging
+    if model == "2AB_RescorlaWagner_Softmax":
+        assert entry.get("rl_params") == ["rl_alpha"], (
+            "Softmax RLSSM registry entry has unexpected rl_params: "
+            f"{entry.get('rl_params')!r}. Full entry: {entry!r}"
+        )
+        assert entry.get("rl_params_default") == [0.1], (
+            "Softmax RLSSM registry entry lost rl_params_default before config "
+            f"assembly: {entry.get('rl_params_default')!r}. Full entry: {entry!r}"
+        )
+
     ssm_entry = _get_decision_process_spec(entry["decision_process"])
     dp: str = ssm_entry["name"]
     ssm_base = _get_ssm_logp(dp)
@@ -432,6 +443,10 @@ def get_rlssm_model_config(
         if _rl_params is None
         else _rl_params
     )
+    # added for debugging
+    print(f"{rl_params=}")
+    print(f"{ssm_sampled=}")
+    # delete when done
     list_params = rl_params + ssm_sampled
 
     # bounds: RL bounds ∪ SSM sampled bounds
