@@ -14,10 +14,6 @@ import pytest
 import hssm
 from hssm.rl import RLSSM
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture(scope="module", autouse=True)
 def _set_floatx_float32() -> Generator[None, None, None]:
@@ -48,7 +44,6 @@ def choice_only_data() -> pd.DataFrame:
     )
 
 
-# @pytest.mark.flaky(reruns=5, reruns_delay=1)
 def test_rlssm_softmax_instantiate(choice_only_data) -> None:
     """2AB_RescorlaWagner_Softmax should instantiate without error."""
     model = RLSSM(data=choice_only_data, model="2AB_RescorlaWagner_Softmax")
