@@ -42,29 +42,29 @@ from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase, classproperty
 from .config import RLSSMConfig
-from .registry import get_rlssm_model_config
+from .registry import get_rlssm_model_config, list_models
 
-_logger = logging.getLogger("hssm")
+_logger = logging.getLogger(__name__)
 
 
 class _RLSSM(HSSMBase):
-    """Internal Reinforcement Learning Sequential Sampling Model.
+    """Internal implementation class for reinforcement-learning SSMs.
 
-    Requires a fully populated :class:`RLSSMConfig` (with ``ssm_logp_func`` set)
-    to be passed directly.  End users should use :class:`RLSSM` instead, which
-    provides a simplified interface backed by the named-model registry.
+    This class is intended for maintainers and advanced integrations that
+    already have a fully built :class:`RLSSMConfig`. It combines a
+    reinforcement-learning update rule with a sequential-sampling likelihood in
+    a single differentiable model, using the annotated SSM log-likelihood
+    stored on ``model_config.ssm_logp_func``.
 
-    Combines a reinforcement learning (RL) process with a sequential sampling
-    model (SSM) inside a single differentiable likelihood.  The RL component
-    computes trial-wise intermediate parameters (e.g., drift rates) from the
-    learning history, which are then fed into the SSM log-likelihood.
+    Unlike :class:`~hssm.hssm.HSSM`, this implementation does not go through
+    the standard ``loglik`` / ``loglik_kind`` wrapping pipeline. It builds a
+    differentiable pytensor ``Op`` with
+    :func:`~hssm.rl.likelihoods.builder.make_rl_logp_op` and passes that Op
+    directly to :func:`~hssm.distribution_utils.make_distribution`.
 
-    The likelihood is built via
-    :func:`~hssm.rl.likelihoods.builder.make_rl_logp_op` from the annotated
-    SSM function stored in *model_config.ssm_logp_func*.  This produces a
-    differentiable pytensor ``Op`` that is passed directly to
-    :func:`~hssm.distribution_utils.make_distribution`, superseding the
-    ``loglik`` / ``loglik_kind`` dispatching used by :class:`~hssm.hssm.HSSM`.
+    The data must form a balanced panel because the RL likelihood reconstructs
+    per-participant trial sequences from row order. Any reshuffling of rows
+    would change the learning history seen by the model.
 
     Parameters
     ----------
@@ -286,11 +286,6 @@ class _RLSSM(HSSMBase):
         )
 
 
-# ---------------------------------------------------------------------------
-# Blocked-attribute descriptor
-# ---------------------------------------------------------------------------
-
-
 class _BlockedAttribute:
     """Data descriptor that blocks read access with NotImplementedError.
 
@@ -331,28 +326,26 @@ class _BlockedAttribute:
         obj.__dict__[self._storage_key] = value
 
 
-# ---------------------------------------------------------------------------
-# Public wrapper
-# ---------------------------------------------------------------------------
-
-
 class RLSSM(_RLSSM):
-    """Reinforcement Learning Sequential Sampling Model — simplified public API.
+    """Fit reinforcement-learning sequential sampling models from trial data.
 
-    This class wraps :class:`_RLSSM` with a user-friendly constructor that
-    accepts a *model* name string (looked up in the named-model registry) and
-    optional overrides for *learning_process*, *decision_process*, and
-    *choices*.  Advanced users can bypass the registry entirely by supplying a
-    pre-built *model_config*.
+    RLSSM combines a reinforcement-learning process with a sequential-sampling
+    decision model in a single likelihood. In the common case, you choose a
+    named RLSSM model with ``model`` and optionally override its
+    ``learning_process``, ``decision_process``, or ``choices`` settings. Use
+    :attr:`RLSSM.list_models` to inspect the named models available in HSSM.
 
-    ``missing_data``, ``deadline``, and ``loglik_missing_data`` are not
-    supported for RLSSM models and raise :exc:`NotImplementedError` if accessed.
+    If you already have a fully built :class:`RLSSMConfig`, you can pass it as
+    ``model_config`` instead of selecting a named model.
+
+    RLSSM currently requires balanced panel data and does not support
+    ``missing_data``, ``deadline``, or ``loglik_missing_data`` handling.
 
     Parameters
     ----------
     data : pd.DataFrame
         Trial-level data (balanced panel required).
-    model : str, optional
+    model : str | None, optional
         Name of a registered RLSSM model. Defaults to ``"2AB_RescorlaWagner_DDM"``.
     choices : list[int] | None, optional
         Override the choice values in the registry. ``None`` uses the registry
@@ -415,7 +408,7 @@ class RLSSM(_RLSSM):
     def __init__(
         self,
         data: pd.DataFrame,
-        model: str = "2AB_RescorlaWagner_DDM",
+        model: str | None = None,
         choices: list[int] | None = None,
         include: list[dict[str, Any] | Any] | None = None,
         model_config: RLSSMConfig | None = None,
@@ -436,21 +429,20 @@ class RLSSM(_RLSSM):
         # NOTE: _store_init_args only operates on its arguments, not on self.
         _my_init_args = self._store_init_args(locals(), kwargs)
 
-        if model_config is not None:
-            if model != "2AB_RescorlaWagner_DDM" or any(
-                x is not None for x in [learning_process, decision_process, choices]
-            ):
-                _logger.warning(
-                    "model_config was provided; ignoring model, learning_process, "
-                    "decision_process, and choices arguments."
-                )
-        else:
-            model_config = get_rlssm_model_config(
-                model=model,
-                choices=choices,
-                learning_process=learning_process,
-                decision_process=decision_process,
+        if model_config is not None and any(
+            x is not None for x in [model, learning_process, decision_process, choices]
+        ):
+            _logger.warning(
+                "model_config was provided; ignoring model, learning_process, "
+                "decision_process, and choices arguments."
             )
+
+        model_config = model_config or get_rlssm_model_config(
+            model=model or "2AB_RescorlaWagner_DDM",
+            choices=choices,
+            learning_process=learning_process,
+            decision_process=decision_process,
+        )
 
         # missing_data / deadline are intentionally omitted — _RLSSM defaults
         # them to False.  The _BlockedAttribute descriptors on this class
@@ -501,6 +493,4 @@ class RLSSM(_RLSSM):
         >>> RLSSM.list_models
         {'2AB_RescorlaWagner_DDM': 'RLSSM model with ...', ...}
         """
-        from .registry import list_models  # noqa: PLC0415
-
         return list_models()
