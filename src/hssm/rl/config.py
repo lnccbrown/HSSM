@@ -198,7 +198,10 @@ class RLSSMConfig(BaseModelConfig):
             )
 
         if self.params_default and self.list_params:
+            # breakpoint()
             if len(self.params_default) != len(self.list_params):
+                print(f"{self.params_default=}")
+                print(f"{self.list_params=}")
                 raise ValueError(
                     f"params_default length ({len(self.params_default)}) doesn't "
                     f"match list_params length ({len(self.list_params)})"
