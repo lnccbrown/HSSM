@@ -35,6 +35,17 @@ from typing import get_args
 from .._types import DefaultConfig, SupportedModels
 
 
+def list_models() -> tuple[SupportedModels, ...]:
+    """Return the names of the built-in HSSM models.
+
+    Returns
+    -------
+    tuple[SupportedModels, ...]
+        A tuple containing all built-in HSSM model names.
+    """
+    return get_args(SupportedModels)
+
+
 def get_default_model_config(model_name: SupportedModels) -> DefaultConfig:
     """
     Get the default configuration for a given model name.
@@ -53,7 +64,7 @@ def get_default_model_config(model_name: SupportedModels) -> DefaultConfig:
         and likelihood specifications.
 
     """
-    supported_models = get_args(SupportedModels)
+    supported_models = list_models()
     if model_name not in supported_models:
         error_message = (
             f"{model_name} is not a supported model in HSSM. "

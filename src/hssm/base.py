@@ -8,11 +8,12 @@ This file defines the entry class HSSM.
 
 import datetime
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Union, cast, get_args
+from typing import Any, Callable, Literal, Optional, Union, cast
 
 import arviz as az
 import bambi as bmb
@@ -48,6 +49,7 @@ from hssm.utils import (
 
 from . import plotting
 from .config import BaseModelConfig
+from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
 
@@ -451,12 +453,20 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def supported_models(cls) -> tuple[SupportedModels, ...]:
         """Get a tuple of all supported models.
 
+        Deprecated in favor of ``hssm.list_models()``.
+
         Returns
         -------
         tuple[SupportedModels, ...]
             A tuple containing all supported model names.
         """
-        return get_args(SupportedModels)
+        warnings.warn(
+            "HSSM.supported_models is deprecated and will be removed in a "
+            "future release. Use hssm.list_models() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return list_models()
 
     @staticmethod
     def _store_init_args(

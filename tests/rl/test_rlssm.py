@@ -19,8 +19,9 @@ import pytest
 
 import hssm
 from hssm.distribution_utils import make_distribution as real_make_distribution
-from hssm.rl import _RLSSM, RLSSM, RLSSMConfig, register_rlssm_model
+from hssm.rl import RLSSM, RLSSMConfig, register_rlssm_model
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
+from hssm.rl.rlssm import _RLSSM
 from hssm.utils import annotate_function
 
 # Annotate the RL learning function: maps
