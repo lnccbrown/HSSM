@@ -287,9 +287,9 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
     "2AB_RescorlaWagner_Softmax": {
         "decision_process": "softmax_2AB",
         "learning_process": {"q_diff": _compute_q_diff_annotated},
-        "rl_params": ["rl_alpha"],
-        "rl_bounds": {"rl_alpha": (0.0, 1.0)},
-        "rl_params_default": [0.1],
+        "learning_process_params": ["rl_alpha"],
+        "learning_process_bounds": {"rl_alpha": (0.0, 1.0)},
+        "learning_process_params_default": [0.1],
         "extra_fields": ["feedback"],
         "choices": [0, 1],
         "description": (
@@ -413,13 +413,17 @@ def get_rlssm_model_config(
 
     # Block added for debugging
     if model == "2AB_RescorlaWagner_Softmax":
-        assert entry.get("rl_params") == ["rl_alpha"], (
-            "Softmax RLSSM registry entry has unexpected rl_params: "
-            f"{entry.get('rl_params')!r}. Full entry: {entry!r}"
+        print(f"{__file__=}")
+        print(f"{entry=}")
+        assert entry.get("learning_process_params") == ["rl_alpha"], (
+            "Softmax RLSSM registry entry has unexpected "
+            "learning_process_params: "
+            f"{entry.get('learning_process_params')!r}. Full entry: {entry!r}"
         )
-        assert entry.get("rl_params_default") == [0.1], (
-            "Softmax RLSSM registry entry lost rl_params_default before config "
-            f"assembly: {entry.get('rl_params_default')!r}. Full entry: {entry!r}"
+        assert entry.get("learning_process_params_default") == [0.1], (
+            "Softmax RLSSM registry entry lost "
+            "learning_process_params_default before config assembly: "
+            f"{entry.get('learning_process_params_default')!r}. Full entry: {entry!r}"
         )
 
     ssm_entry = _get_decision_process_spec(entry["decision_process"])
@@ -475,6 +479,14 @@ def get_rlssm_model_config(
         if p not in lp
     ]
     params_default = rl_defaults + ssm_sampled_defaults
+
+    if model == "2AB_RescorlaWagner_Softmax":
+        print(f"{learning_process_params=}")
+        print(f"{ssm_sampled=}")
+        print(f"{rl_defaults=}")
+        print(f"{ssm_sampled_defaults=}")
+        print(f"{list_params=}")
+        print(f"{params_default=}")
 
     return RLSSMConfig(
         model_name=entry.get("model_name", model),
