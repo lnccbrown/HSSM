@@ -83,10 +83,11 @@ def _make_ssm_base_logp_from_onnx(
 ) -> Any:
     """Build and annotate a JAX log-likelihood function from an ONNX model file."""
     _raw = make_jax_matrix_logp_funcs_from_onnx(model=onnx_file)
-    return annotate_function(
+    annotated = annotate_function(
         inputs=list_params_ssm + response,
         outputs=["logp"],
     )(_raw)
+    return annotated
 
 
 def _build_ssm_spec_from_modelconfig(name: str) -> dict[str, Any]:
