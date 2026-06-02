@@ -57,16 +57,6 @@ _softmax_logp_annotated = annotate_function(
 # ---------------------------------------------------------------------------
 # SSM base log-likelihood registry
 # ---------------------------------------------------------------------------
-# This dict holds only *custom* SSM entries added at runtime via register_ssm().
-# Built-in HSSM models are resolved on demand from hssm.modelconfig — see
-# _build_ssm_spec_from_modelconfig() and _get_decision_process_spec().
-#
-# Each entry (custom or derived) provides:
-#   ssm_base_logp_func  - annotated JAX function (inputs + outputs, no computed)
-#   list_params_ssm     - ordered SSM parameter names (including computed ones)
-#   bounds_ssm          - bounds for all SSM params
-#   params_default_ssm  - default values aligned with list_params_ssm
-#   response            - data column names
 
 _SSM_REGISTRY: dict[str, dict[str, Any]] = {}
 
@@ -129,7 +119,6 @@ def _build_ssm_spec_from_modelconfig(name: str) -> dict[str, Any]:
     response: list[str] = list(mc["response"])
     onnx_file: str = str(ad["loglik"])
 
-    # Derive parameter defaults as midpoints of their respective bounds.
     params_default_ssm = [
         sum(bounds_ssm[p]) / 2 if p in bounds_ssm else 0.0 for p in list_params_ssm
     ]
@@ -166,13 +155,11 @@ def _get_decision_process_spec(
     if isinstance(decision_process, dict):
         return deepcopy(decision_process)
 
-    # Custom registry takes precedence over modelconfig.
     if decision_process in _SSM_REGISTRY:
         spec = deepcopy(_SSM_REGISTRY[decision_process])
         spec["name"] = decision_process
         return spec
 
-    # Fall back to HSSM's modelconfig for built-in SSMs.
     return _build_ssm_spec_from_modelconfig(decision_process)
 
 
@@ -186,7 +173,6 @@ def _get_ssm_logp(name: str) -> Any:
         return _SSM_LOGP_CACHE[name]
 
     if name not in _SSM_REGISTRY:
-        # Build from HSSM's modelconfig for built-in SSMs.
         spec = _build_ssm_spec_from_modelconfig(name)
         _SSM_LOGP_CACHE[name] = spec["ssm_base_logp_func_factory"]()
         return _SSM_LOGP_CACHE[name]
@@ -195,7 +181,6 @@ def _get_ssm_logp(name: str) -> Any:
     if "ssm_base_logp_func_factory" in entry:
         _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
     else:
-        # Pre-built function registered via register_ssm().
         _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
     return _SSM_LOGP_CACHE[name]
 
@@ -203,18 +188,6 @@ def _get_ssm_logp(name: str) -> Any:
 # ---------------------------------------------------------------------------
 # RLSSM named model registry
 # ---------------------------------------------------------------------------
-# Each entry provides:
-#   decision_process            - key into _SSM_REGISTRY
-#   learning_process            - {param: annotated_func}
-#   learning_process_params     - ordered list of sampled RL parameter names
-#   learning_process_bounds     - {param: (lo, hi)} for RL params
-#   learning_process_params_default
-#                               - default values aligned with learning_process_params
-#   extra_fields                - extra data column names required by LP
-#   choices                     - response choice values
-#   description                 - human-readable description
-#   decision_process_loglik_kind
-#   learning_process_kind
 
 # Register the softmax 2AFC decision process.
 # list_params_ssm=["beta", "q_diff"]: "beta" is sampled; "q_diff" is computed
@@ -401,7 +374,6 @@ def get_rlssm_model_config(
             "or pass 'model_config=' directly to RLSSM()."
         )
 
-    # Shallow-copy so overrides don't mutate the registry entry.
     entry = dict(_RLSSM_REGISTRY[model])
 
     if learning_process is not None:
@@ -411,21 +383,6 @@ def get_rlssm_model_config(
     if choices is not None:
         entry["choices"] = choices
 
-    # Block added for debugging
-    if model == "2AB_RescorlaWagner_Softmax":
-        print(f"{__file__=}")
-        print(f"{entry=}")
-        assert entry.get("learning_process_params") == ["rl_alpha"], (
-            "Softmax RLSSM registry entry has unexpected "
-            "learning_process_params: "
-            f"{entry.get('learning_process_params')!r}. Full entry: {entry!r}"
-        )
-        assert entry.get("learning_process_params_default") == [0.1], (
-            "Softmax RLSSM registry entry lost "
-            "learning_process_params_default before config assembly: "
-            f"{entry.get('learning_process_params_default')!r}. Full entry: {entry!r}"
-        )
-
     ssm_entry = _get_decision_process_spec(entry["decision_process"])
     dp: str = ssm_entry["name"]
     ssm_base = _get_ssm_logp(dp)
@@ -433,13 +390,10 @@ def get_rlssm_model_config(
     # the registry entry (entry is only a shallow copy of _RLSSM_REGISTRY[model]).
     lp: dict[str, Any] = dict(entry["learning_process"])
 
-    # Compose the full ssm_logp_func with .computed = learning_process.
     ssm_logp_func = _build_ssm_logp_func(ssm_base, lp)
 
-    # list_params = [sampled RL params] + [sampled SSM params (non-computed)]
     ssm_sampled = [p for p in ssm_entry["list_params_ssm"] if p not in lp]
 
-    # Defensive copy of response to prevent downstream mutation of registry.
     response = list(ssm_entry["response"])
 
     # Use `is None` checks so that explicitly empty containers ([], {}) are
@@ -453,7 +407,6 @@ def get_rlssm_model_config(
     )
     list_params = learning_process_params + ssm_sampled
 
-    # bounds: RL bounds ∪ SSM sampled bounds
     missing_bounds = [p for p in ssm_sampled if p not in ssm_entry["bounds_ssm"]]
     if missing_bounds:
         raise ValueError(
@@ -469,7 +422,6 @@ def get_rlssm_model_config(
     for p in ssm_sampled:
         bounds[p] = ssm_entry["bounds_ssm"][p]
 
-    # params_default aligned with list_params
     _rl_defaults = entry.get("learning_process_params_default")
     rl_defaults: list[float] = list(_rl_defaults if _rl_defaults is not None else [])
     ssm_all_defaults: list[float] = list(ssm_entry["params_default_ssm"])
@@ -479,14 +431,6 @@ def get_rlssm_model_config(
         if p not in lp
     ]
     params_default = rl_defaults + ssm_sampled_defaults
-
-    if model == "2AB_RescorlaWagner_Softmax":
-        print(f"{learning_process_params=}")
-        print(f"{ssm_sampled=}")
-        print(f"{rl_defaults=}")
-        print(f"{ssm_sampled_defaults=}")
-        print(f"{list_params=}")
-        print(f"{params_default=}")
 
     return RLSSMConfig(
         model_name=entry.get("model_name", model),
