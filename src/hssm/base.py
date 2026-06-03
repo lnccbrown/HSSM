@@ -1955,7 +1955,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def _drop_parent_str_from_idata(
         self, idata: az.InferenceData | xr.DataTree | None
     ) -> az.InferenceData | xr.DataTree:
-        """Drop the parent_str variable from an inference data object.
+        """Drop the parent_str variable from an (inference) data object.
 
         Parameters
         ----------
