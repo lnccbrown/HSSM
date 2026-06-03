@@ -1937,9 +1937,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     ) -> xr.Dataset:
         """Return a dataset view for a named inference-data group."""
         group_data = idata[group]
-        if isinstance(group_data, xr.DataTree):
-            group_data = group_data.ds
-        return group_data
+        if isinstance(group_data, (xr.DataTree, xr.DataArray)):
+            return group_data.to_dataset()
+        if isinstance(group_data, xr.Dataset):
+            return group_data
+        raise TypeError(f"Group '{group}' is not backed by an xarray Dataset.")
 
     def _set_idata_group_dataset(
         self, idata: az.InferenceData | xr.DataTree, group: str, dataset: xr.Dataset
