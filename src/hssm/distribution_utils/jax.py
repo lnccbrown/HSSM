@@ -46,6 +46,10 @@ def make_jax_logp_ops(
     class LANLogpOp(Op):  # pylint: disable=W0223
         """Wraps a JAX function in an pytensor Op."""
 
+        def do_constant_folding(self, fgraph, node):
+            """Keep PyTensor from trying to precompute opaque JAX-backed outputs."""
+            return False
+
         def make_node(self, data, *dist_params):
             """Take the inputs to the Op and puts them in a list.
 
@@ -133,6 +137,10 @@ def make_jax_logp_ops(
 
     class LANLogpVJPOp(Op):  # pylint: disable=W0223
         """Wraps the VJP operation of a jax function in an pytensor op."""
+
+        def do_constant_folding(self, fgraph, node):
+            """Keep PyTensor from trying to precompute opaque JAX-backed outputs."""
+            return False
 
         def make_node(self, data, *dist_params, gz):
             """Take the inputs to the Op and puts them in a list.

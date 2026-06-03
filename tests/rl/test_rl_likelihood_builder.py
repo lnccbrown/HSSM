@@ -781,7 +781,7 @@ class TestRldmLikelihoodBuilder:
 
         logp_with_var = logp_op(rldm_setup.values.astype(np.float32), *args_float32)
         grad_rl_alpha = pytensor.grad(logp_with_var.sum(), wrt=rl_alpha_var)
-        grad_eval = grad_rl_alpha.eval()
+        grad_eval = pytensor.function([], grad_rl_alpha, mode="FAST_COMPILE")()
 
         assert grad_eval.shape == param_arrays.rl_alpha.shape
         assert not np.allclose(grad_eval, 0.0), "Gradient should not be all zeros"
