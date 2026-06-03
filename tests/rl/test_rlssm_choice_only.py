@@ -115,6 +115,79 @@ def test_rlssm_softmax_non_integral_response_rejected() -> None:
         RLSSM(data=bad_data, model="2AB_RescorlaWagner_Softmax")
 
 
+@pytest.mark.xfail(
+    reason="Choice label overrides are not remapped to the softmax model's internal binary actions yet.",
+    strict=True,
+)
+def test_rlssm_softmax_custom_choice_labels_behave_like_binary_actions() -> None:
+    """Non-default binary labels should be handled consistently.
+
+    The public RLSSM API accepts ``choices`` overrides, so a valid binary coding
+    such as ``[1, 2]`` should produce the same likelihood as the equivalent data
+    recoded to the internal binary actions ``[0, 1]``.
+    """
+    rng = np.random.default_rng(7)
+    n_participants, n_trials = 4, 12
+    n_total = n_participants * n_trials
+
+    binary_data = pd.DataFrame(
+        {
+            "participant_id": np.repeat(np.arange(n_participants), n_trials),
+            "response": rng.integers(0, 2, size=n_total).astype(float),
+            "feedback": rng.integers(0, 2, size=n_total).astype(float),
+        }
+    )
+    relabeled_data = binary_data.copy()
+    relabeled_data["response"] = relabeled_data["response"].replace(
+        {0.0: 1.0, 1.0: 2.0}
+    )
+
+    default_model = RLSSM(data=binary_data, model="2AB_RescorlaWagner_Softmax")
+    relabeled_model = RLSSM(
+        data=relabeled_data,
+        model="2AB_RescorlaWagner_Softmax",
+        choices=[1, 2],
+    )
+
+    with default_model.pymc_model:
+        default_ip = default_model.pymc_model.initial_point()
+        default_lp = default_model.pymc_model.compile_logp()(default_ip)
+
+    with relabeled_model.pymc_model:
+        relabeled_ip = relabeled_model.pymc_model.initial_point()
+        relabeled_lp = relabeled_model.pymc_model.compile_logp()(relabeled_ip)
+
+    assert np.isclose(default_lp, relabeled_lp), (
+        "Relabeling the two valid choices should not change the log-likelihood. "
+        f"Expected matching values, got {default_lp} and {relabeled_lp}."
+    )
+
+
+@pytest.mark.xfail(
+    reason="Choice-only data validation returns before emitting missing-category warnings.",
+    strict=True,
+)
+def test_rlssm_softmax_warns_when_a_declared_choice_is_missing() -> None:
+    """Choice-only RLSSM should warn when one declared response never appears."""
+    rng = np.random.default_rng(11)
+    n_participants, n_trials = 4, 12
+    data = pd.DataFrame(
+        {
+            "participant_id": np.repeat(np.arange(n_participants), n_trials),
+            "response": np.zeros(n_participants * n_trials, dtype=float),
+            "feedback": rng.integers(0, 2, size=n_participants * n_trials).astype(
+                float
+            ),
+        }
+    )
+
+    with pytest.warns(
+        UserWarning,
+        match=r"You set choices to be \(0, 1\), but \[1\] are missing from your dataset\.",
+    ):
+        RLSSM(data=data, model="2AB_RescorlaWagner_Softmax")
+
+
 def test_rlssm_softmax_pymc_model(choice_only_data) -> None:
     """pymc_model should be accessible after softmax model construction."""
     model = RLSSM(data=choice_only_data, model="2AB_RescorlaWagner_Softmax")
