@@ -1927,6 +1927,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         tuple[str, ...]
             Available group names.
         """
+        if isinstance(idata, xr.DataTree):
+            return tuple(idata.keys())
+
         groups = getattr(idata, "groups")
         if callable(groups):
             return groups()  # ArviZ v0.15+
