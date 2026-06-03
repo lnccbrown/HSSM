@@ -608,7 +608,8 @@ class TestBuiltinModels:
         if model_name == "2AB_RescorlaWagner_Softmax":
             assert "beta" in config.bounds
             assert config.ssm_logp_func.computed == {
-                "q_diff": registry._compute_q_diff_annotated
+                "q0": registry._compute_q0_annotated,
+                "q1": registry._compute_q1_annotated,
             }
         else:
             assert "scaler" in config.bounds

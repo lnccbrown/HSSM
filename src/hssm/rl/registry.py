@@ -25,7 +25,8 @@ from typing import Any
 
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 from hssm.rl.likelihoods.softmax import (
-    compute_q_diff_subject_wise,
+    compute_q0_subject_wise,
+    compute_q1_subject_wise,
     softmax_logp_func,
 )
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
@@ -44,13 +45,18 @@ _compute_v_annotated = annotate_function(
     outputs=["v"],
 )(compute_v_subject_wise)
 
-_compute_q_diff_annotated = annotate_function(
+_compute_q0_annotated = annotate_function(
     inputs=["rl_alpha", "response", "feedback"],
-    outputs=["q_diff"],
-)(compute_q_diff_subject_wise)
+    outputs=["q0"],
+)(compute_q0_subject_wise)
+
+_compute_q1_annotated = annotate_function(
+    inputs=["rl_alpha", "response", "feedback"],
+    outputs=["q1"],
+)(compute_q1_subject_wise)
 
 _softmax_logp_annotated = annotate_function(
-    inputs=["beta", "q_diff", "response"],
+    inputs=["beta", "q0", "q1", "response"],
     outputs=["logp"],
 )(softmax_logp_func)
 
@@ -190,13 +196,13 @@ def _get_ssm_logp(name: str) -> Any:
 # ---------------------------------------------------------------------------
 
 # Register the softmax 2AFC decision process.
-# list_params_ssm=["beta", "q_diff"]: "beta" is sampled; "q_diff" is computed
-# by the learning process.  Only "beta" appears in bounds_ssm.
+# list_params_ssm=["beta", "q0", "q1"]: "beta" is sampled; the per-action
+# Q-values are computed by the learning process. Only "beta" appears in bounds_ssm.
 _register_softmax_ssm_entry = {
     "ssm_base_logp_func": _softmax_logp_annotated,
-    "list_params_ssm": ["beta", "q_diff"],
+    "list_params_ssm": ["beta", "q0", "q1"],
     "bounds_ssm": {"beta": (0.0, 10.0)},
-    "params_default_ssm": [1.0, 0.0],
+    "params_default_ssm": [1.0, 0.5, 0.5],
     "response": ["response"],
 }
 _SSM_REGISTRY["softmax_2AB"] = _register_softmax_ssm_entry
@@ -259,7 +265,10 @@ _RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
     },
     "2AB_RescorlaWagner_Softmax": {
         "decision_process": "softmax_2AB",
-        "learning_process": {"q_diff": _compute_q_diff_annotated},
+        "learning_process": {
+            "q0": _compute_q0_annotated,
+            "q1": _compute_q1_annotated,
+        },
         "learning_process_params": ["rl_alpha"],
         "learning_process_bounds": {"rl_alpha": (0.0, 1.0)},
         "learning_process_params_default": [0.1],

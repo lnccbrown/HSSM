@@ -51,7 +51,8 @@ def test_rlssm_softmax_instantiate(choice_only_data) -> None:
     assert model.model_config.is_choice_only
     assert "rl_alpha" in model.params
     assert "beta" in model.params
-    assert "q_diff" not in model.params  # computed inside Op, not a free param
+    assert "q0" not in model.params  # computed inside Op, not a free param
+    assert "q1" not in model.params  # computed inside Op, not a free param
 
 
 def test_rlssm_softmax_no_rt_column(choice_only_data) -> None:
