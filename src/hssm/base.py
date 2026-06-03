@@ -962,7 +962,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             )
 
         if idata is not None:
-            if "posterior_predictive" in idata.groups():
+            if "posterior_predictive" in self._get_idata_groups(idata):
                 del idata["posterior_predictive"]
                 _logger.warning(
                     "pre-existing posterior_predictive group deleted from idata. \n"
@@ -1119,22 +1119,16 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         do_idata = self._drop_parent_str_from_idata(idata=do_idata)
 
         # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in do_idata["prior_predictive"].dims:
-            setattr(
-                do_idata,
-                "prior_predictive",
-                do_idata["prior_predictive"].rename_dims(
-                    {"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+        prior_predictive = self._get_idata_group_dataset(do_idata, "prior_predictive")
+        if "rt,response_extra_dim_0" in prior_predictive.dims:
+            prior_predictive = prior_predictive.rename_dims(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
             )
-        if "rt,response_extra_dim_0" in do_idata["prior_predictive"].coords:
-            setattr(
-                do_idata,
-                "prior_predictive",
-                do_idata["prior_predictive"].rename_vars(
-                    name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+        if "rt,response_extra_dim_0" in prior_predictive.coords:
+            prior_predictive = prior_predictive.rename_vars(
+                name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
             )
+        self._set_idata_group_dataset(do_idata, "prior_predictive", prior_predictive)
 
         if return_model:
             return do_idata, do_model
@@ -1193,22 +1187,16 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         idata = self._drop_parent_str_from_idata(idata=self._inference_obj)
 
         # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in idata["prior_predictive"].dims:
-            setattr(
-                idata,
-                "prior_predictive",
-                idata["prior_predictive"].rename_dims(
-                    {"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+        prior_predictive = self._get_idata_group_dataset(idata, "prior_predictive")
+        if "rt,response_extra_dim_0" in prior_predictive.dims:
+            prior_predictive = prior_predictive.rename_dims(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
             )
-        if "rt,response_extra_dim_0" in idata["prior_predictive"].coords:
-            setattr(
-                idata,
-                "prior_predictive",
-                idata["prior_predictive"].rename_vars(
-                    name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+        if "rt,response_extra_dim_0" in prior_predictive.coords:
+            prior_predictive = prior_predictive.rename_vars(
+                name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
             )
+        self._set_idata_group_dataset(idata, "prior_predictive", prior_predictive)
 
         # Update self._inference_obj to match the cleaned idata
         self._inference_obj = idata
@@ -1924,10 +1912,48 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         return var_names
 
+    def _get_idata_groups(
+        self, idata: az.InferenceData | xr.DataTree
+    ) -> tuple[str, ...]:
+        """Return inference data group names across ArviZ container versions.
+
+        Parameters
+        ----------
+        idata
+            The inference data container.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Available group names.
+        """
+        groups = getattr(idata, "groups")
+        if callable(groups):
+            return groups()  # ArviZ v0.15+
+        return tuple(groups)
+
+    def _get_idata_group_dataset(
+        self, idata: az.InferenceData | xr.DataTree, group: str
+    ) -> xr.Dataset:
+        """Return a dataset view for a named inference-data group."""
+        group_data = idata[group]
+        if isinstance(group_data, xr.DataTree):
+            group_data = group_data.ds
+        return group_data
+
+    def _set_idata_group_dataset(
+        self, idata: az.InferenceData | xr.DataTree, group: str, dataset: xr.Dataset
+    ) -> None:
+        """Replace a named inference-data group with a dataset."""
+        if isinstance(idata, xr.DataTree):
+            idata[group] = dataset
+        else:
+            setattr(idata, group, dataset)
+
     def _drop_parent_str_from_idata(
-        self, idata: az.InferenceData | None
-    ) -> az.InferenceData:
-        """Drop the parent_str variable from an InferenceData object.
+        self, idata: az.InferenceData | xr.DataTree | None
+    ) -> az.InferenceData | xr.DataTree:
+        """Drop the parent_str variable from an inference data object.
 
         Parameters
         ----------
@@ -1936,20 +1962,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        xr.Dataset
-            The modified InferenceData object.
+        az.InferenceData | xr.DataTree
+            The modified inference data object.
         """
         if idata is None:
             raise ValueError("Please provide an InferenceData object.")
         else:
-            for group in idata.groups():
-                if ("rt,response_mean" in idata[group].data_vars) and (
-                    self._parent not in idata[group].data_vars
+            for group in self._get_idata_groups(idata):
+                group_dataset = self._get_idata_group_dataset(idata, group)
+                if ("rt,response_mean" in group_dataset.data_vars) and (
+                    self._parent not in group_dataset.data_vars
                 ):
-                    setattr(
+                    self._set_idata_group_dataset(
                         idata,
                         group,
-                        idata[group].rename({"rt,response_mean": self._parent}),
+                        group_dataset.rename({"rt,response_mean": self._parent}),
                     )
             return idata
 
