@@ -1959,8 +1959,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Parameters
         ----------
-        idata
-            The InferenceData object to be modified.
+        idata : az.InferenceData | xr.DataTree | None
+            The inference data object to be modified.
 
         Returns
         -------
@@ -1968,7 +1968,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             The modified inference data object.
         """
         if idata is None:
-            raise ValueError("Please provide an InferenceData object.")
+            raise ValueError(
+                "Please provide an inference data object"
+                " (az.InferenceData/xr.DataTree)."
+            )
         else:
             for group in self._get_idata_groups(idata):
                 group_dataset = self._get_idata_group_dataset(idata, group)
