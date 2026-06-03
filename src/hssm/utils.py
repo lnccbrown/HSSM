@@ -538,7 +538,7 @@ def check_data_for_rl(
 
 
 def predictive_idata_to_dataframe(
-    idata: az.InferenceData,
+    idata: az.InferenceData | xr.DataTree,
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
@@ -549,8 +549,8 @@ def predictive_idata_to_dataframe(
 
     Parameters
     ----------
-    idata : az.InferenceData
-        The InferenceData object to convert.
+    idata : az.InferenceData | xr.DataTree
+        The inference data object to convert.
     predictive_group : Literal["posterior_predictive", "prior_predictive"]
         The predictive group to convert.
 
@@ -559,7 +559,11 @@ def predictive_idata_to_dataframe(
     pd.DataFrame:
         A dataframe with the predictive samples.
     """
-    df = idata[predictive_group].to_dataframe().reset_index(drop=False)
+    predictive_data = idata[predictive_group]
+    if isinstance(predictive_data, xr.DataTree):
+        predictive_data = predictive_data.ds
+
+    df = predictive_data.to_dataframe().reset_index(drop=False)
     df_wide = df.pivot_table(
         index=["chain", "draw", "__obs__"], columns=response_dim, values=response_str
     ).reset_index()
