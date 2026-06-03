@@ -530,26 +530,49 @@ class TestGetRlssmModelConfig:
 
 class TestBuiltinModels:
     @pytest.mark.parametrize(
-        "model_name, expected_dp",
+        "model_name, expected_dp_name",
         [
             ("2AB_RescorlaWagner_DDM", "ddm"),
+            ("2AB_RescorlaWagner_Angle", "angle"),
             ("2AB_RescorlaWagner_Weibull", "weibull"),
+            ("2AB_RescorlaWagner_Softmax", "softmax_2AB"),
         ],
     )
-    def test_are_registered(self, model_name: str, expected_dp: str) -> None:
-        """2AB_RescorlaWagner_DDM and _Weibull must be present in the RLSSM registry."""
+    def test_are_registered(self, model_name: str, expected_dp_name: str) -> None:
+        """Built-in RLSSM starter models must be present in the registry."""
         assert model_name in registry._RLSSM_REGISTRY
         entry = registry._RLSSM_REGISTRY[model_name]
-        assert entry["decision_process"]["name"] == expected_dp
-        assert entry["learning_process_params"] == ["rl_alpha", "scaler"]
+        decision_process = entry["decision_process"]
+        actual_dp_name = (
+            decision_process
+            if isinstance(decision_process, str)
+            else decision_process["name"]
+        )
+        assert actual_dp_name == expected_dp_name
+        expected_rl_params = (
+            ["rl_alpha"]
+            if model_name == "2AB_RescorlaWagner_Softmax"
+            else ["rl_alpha", "scaler"]
+        )
+        expected_loglik_kind = (
+            "analytical"
+            if model_name == "2AB_RescorlaWagner_Softmax"
+            else "approx_differentiable"
+        )
+        assert entry["learning_process_params"] == expected_rl_params
         assert entry["extra_fields"] == ["feedback"]
         assert entry["choices"] == [0, 1]
-        assert entry["decision_process_loglik_kind"] == "approx_differentiable"
+        assert entry["decision_process_loglik_kind"] == expected_loglik_kind
         assert entry["learning_process_kind"] == "blackbox"
 
     @pytest.mark.parametrize(
         "model_name",
-        ["2AB_RescorlaWagner_DDM", "2AB_RescorlaWagner_Weibull"],
+        [
+            "2AB_RescorlaWagner_DDM",
+            "2AB_RescorlaWagner_Angle",
+            "2AB_RescorlaWagner_Weibull",
+            "2AB_RescorlaWagner_Softmax",
+        ],
     )
     def test_config_structure(
         self,
@@ -558,7 +581,7 @@ class TestBuiltinModels:
         model_name: str,
     ) -> None:
         """get_rlssm_model_config should produce a well-formed RLSSMConfig for
-        both the DDM and Weibull starter-pack models."""
+        the built-in RLSSM starter-pack models."""
         import hssm.distribution_utils.onnx as onnx_module
 
         monkeypatch.setattr(
@@ -575,13 +598,23 @@ class TestBuiltinModels:
         config = registry.get_rlssm_model_config(model_name)
 
         assert isinstance(config, RLSSMConfig)
-        # RL params come first
-        assert config.list_params[:2] == ["rl_alpha", "scaler"]
+        expected_params = (
+            ["rl_alpha", "beta"]
+            if model_name == "2AB_RescorlaWagner_Softmax"
+            else ["rl_alpha", "scaler"]
+        )
+        assert config.list_params[: len(expected_params)] == expected_params
         assert "rl_alpha" in config.bounds
-        assert "scaler" in config.bounds
+        if model_name == "2AB_RescorlaWagner_Softmax":
+            assert "beta" in config.bounds
+            assert config.ssm_logp_func.computed == {
+                "q_diff": registry._compute_q_diff_annotated
+            }
+        else:
+            assert "scaler" in config.bounds
+            assert config.ssm_logp_func.computed == {"v": registry._compute_v_annotated}
         assert config.choices == (0, 1)
         assert config.extra_fields == ["feedback"]
-        assert config.ssm_logp_func.computed == {"v": registry._compute_v_annotated}
 
 
 class TestListModels:
