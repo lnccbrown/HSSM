@@ -1,3 +1,7 @@
+import sys
+import types
+
+import jax.numpy as jnp
 import pytest
 
 import hssm
@@ -177,6 +181,153 @@ class TestRLSSMConfigCreation:
         assert config.response == expected_response
         assert config.choices == expected_choices
         assert config.learning_process == expected_learning_process
+
+
+class _FakeSsMsModelConfig:
+    def __init__(self, *, gradient="available"):
+        self.gradient = gradient
+        self.validated_data = None
+
+    def validate(self):
+        return None
+
+    def compile(self, backend="auto"):
+        return _FakeSsMsCompiledModel(self, backend=backend, gradient=self.gradient)
+
+    def validate_data(self, data):
+        self.validated_data = data
+
+        class _Report:
+            def raise_for_errors(self):
+                return None
+
+        return _Report()
+
+
+class _FakeSsMsCompiledModel:
+    def __init__(self, config, *, backend, gradient):
+        self.config = config
+        self.learning_backend = backend
+        self.gradient = gradient
+        self.model_name = "2AB_RW_Angle"
+        self.decision_process = "angle"
+        self.list_params = ["rl_alpha", "scaler", "a", "z", "t", "theta"]
+        self.bounds = {
+            "rl_alpha": (0.0, 1.0),
+            "scaler": (0.001, 10.0),
+            "a": (0.3, 3.0),
+            "z": (0.1, 0.9),
+            "t": (0.001, 2.0),
+            "theta": (-0.1, 1.3),
+        }
+        self.params_default = [0.2, 2.0, 1.5, 0.5, 0.3, 0.2]
+        self.response = ["rt", "response"]
+        self.choices = (-1, 1)
+        self.extra_fields = ["feedback"]
+        self.computed_params = ["v"]
+        self.response_to_action = {-1: 0, 1: 1}
+
+    def participant_input_fields(self):
+        return ["rl_alpha", "scaler", "response", "feedback"]
+
+    def compile_participant_fn(self, output="array"):
+        assert output == "dict"
+
+        def compute(subject_trials):
+            responses = subject_trials[:, 2]
+            actions = jnp.where(responses == -1, 0.0, 1.0)
+            return {"v": subject_trials[:, 1] * actions}
+
+        return compute
+
+
+def _install_fake_ssms_rl(monkeypatch, *, gradient="available"):
+    config = _FakeSsMsModelConfig(gradient=gradient)
+    fake_rl = types.SimpleNamespace(
+        ModelConfig=_FakeSsMsModelConfig,
+        resolve_model=lambda model: config,
+    )
+    monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
+    return config
+
+
+def _fake_matrix_logp(_model):
+    def logp(lan_matrix):
+        return jnp.sum(lan_matrix, axis=1)
+
+    return logp
+
+
+class TestRLSSMConfigFromSsMsModel:
+    def test_from_ssms_model_builds_hssm_config_from_compiled_metadata(
+        self, monkeypatch
+    ):
+        _install_fake_ssms_rl(monkeypatch)
+        monkeypatch.setattr(
+            "hssm.rl.config.make_jax_matrix_logp_funcs_from_onnx",
+            _fake_matrix_logp,
+            raising=False,
+        )
+
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+        assert config.model_name == "2AB_RW_Angle"
+        assert config.decision_process == "angle"
+        assert config.decision_process_loglik_kind == "approx_differentiable"
+        assert config.learning_process_kind == "approx_differentiable"
+        assert config.list_params == ["rl_alpha", "scaler", "a", "z", "t", "theta"]
+        assert "rl.alpha" not in config.list_params
+        assert "Z" not in config.list_params
+        assert config.response == ["rt", "response"]
+        assert config.choices == (-1, 1)
+        assert config.extra_fields == ["feedback"]
+        assert set(config.ssm_logp_func.computed) == {"v"}
+        assert config.ssm_logp_func.inputs == [
+            "v",
+            "a",
+            "z",
+            "t",
+            "theta",
+            "rt",
+            "response",
+        ]
+        assert config.ssm_logp_func.computed["v"].inputs == [
+            "rl_alpha",
+            "scaler",
+            "response",
+            "feedback",
+        ]
+        assert config._ssms_response_mapping == {-1: 0, 1: 1}
+
+    def test_compiled_compute_function_uses_ssms_response_mapping(self, monkeypatch):
+        _install_fake_ssms_rl(monkeypatch)
+        monkeypatch.setattr(
+            "hssm.rl.config.make_jax_matrix_logp_funcs_from_onnx",
+            _fake_matrix_logp,
+            raising=False,
+        )
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+        compute_v = config.ssm_logp_func.computed["v"]
+        subject_trials = jnp.asarray(
+            [
+                [0.2, 2.0, -1.0, 1.0],
+                [0.2, 2.0, 1.0, 0.0],
+            ]
+        )
+
+        assert jnp.allclose(compute_v(subject_trials), jnp.asarray([0.0, 2.0]))
+
+    def test_from_ssms_model_rejects_unavailable_gradient(self, monkeypatch):
+        _install_fake_ssms_rl(monkeypatch, gradient="unavailable")
+        monkeypatch.setattr(
+            "hssm.rl.config.make_jax_matrix_logp_funcs_from_onnx",
+            _fake_matrix_logp,
+            raising=False,
+        )
+
+        with pytest.raises(ValueError, match="gradient support"):
+            RLSSMConfig.from_ssms_model("2AB_RW_Angle")
 
 
 class TestRLSSMConfigValidation:

@@ -128,8 +128,23 @@ class RLSSM(HSSMBase):
         # ===== save/load serialisation =====
         self._init_args = self._store_init_args(locals(), kwargs)
 
+        if not isinstance(model_config, RLSSMConfig):
+            raise TypeError(
+                "`model_config` must be an hssm.rl.RLSSMConfig. To use an "
+                "`ssms.rl` model or preset, convert it first with "
+                "`RLSSMConfig.from_ssms_model(...)`."
+            )
+
         # Validate config (ensures ssm_logp_func is present, etc.)
         model_config.validate()
+
+        ssms_model_config = getattr(model_config, "_ssms_model_config", None)
+        if ssms_model_config is not None and hasattr(
+            ssms_model_config, "validate_data"
+        ):
+            validation_report = ssms_model_config.validate_data(data)
+            if hasattr(validation_report, "raise_for_errors"):
+                validation_report.raise_for_errors()
 
         # RLSSM reshapes rows into (n_participants, n_trials, ...) by position,
         # so _rearrange_data (which moves missing/deadline rows to the front)

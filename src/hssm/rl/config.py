@@ -8,15 +8,23 @@ behaviour.
 
 from __future__ import annotations
 
+import importlib
 import logging
 from dataclasses import MISSING, dataclass, field, fields
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from .._types import LoglikKind, SupportedModels
     from ..config import ModelConfig
 
-from ..config import DEFAULT_SSM_CHOICES, DEFAULT_SSM_OBSERVED_DATA, BaseModelConfig
+from ..config import (
+    DEFAULT_SSM_CHOICES,
+    DEFAULT_SSM_OBSERVED_DATA,
+    BaseModelConfig,
+    Config,
+)
+from ..distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
+from ..utils import annotate_function
 
 _logger = logging.getLogger("hssm")
 
@@ -158,6 +166,76 @@ class RLSSMConfig(BaseModelConfig):
 
         return cls(**init_kwargs)
 
+    @classmethod
+    def from_ssms_model(
+        cls,
+        model: str | Any,
+        *,
+        backend: Literal["auto", "jax"] = "jax",
+        decision_process_loglik_kind: str = "approx_differentiable",
+    ) -> "RLSSMConfig":
+        """Build an HSSM RLSSM config from a canonical ``ssms.rl`` model."""
+        try:
+            ssms_rl = importlib.import_module("ssms.rl")
+        except ImportError as exc:
+            raise ImportError(
+                "RLSSMConfig.from_ssms_model() requires an ssm-simulators "
+                "version that exposes `ssms.rl`. Install or upgrade "
+                "`ssm-simulators` with RLSSM/JAX support."
+            ) from exc
+
+        structural_config = ssms_rl.resolve_model(model)
+        compiled = structural_config.compile(backend=backend)
+        if compiled.gradient != "available":
+            raise ValueError(
+                "HSSM's ssms-backed RLSSM bridge requires gradient support. "
+                f"Compiled model {compiled.model_name!r} resolved "
+                f"learning_backend={compiled.learning_backend!r} and "
+                f"gradient={compiled.gradient!r}."
+            )
+
+        decision_config = Config.from_defaults(
+            compiled.decision_process,
+            decision_process_loglik_kind,
+        )
+        if decision_config.loglik is None:
+            raise ValueError(
+                "Could not resolve a decision-process log-likelihood for "
+                f"{compiled.decision_process!r} with "
+                f"loglik kind {decision_process_loglik_kind!r}."
+            )
+        decision_logp = make_jax_matrix_logp_funcs_from_onnx(decision_config.loglik)
+        computed_functions = _make_ssms_computed_functions(compiled)
+        ssm_logp_func = annotate_function(
+            inputs=list(decision_config.list_params or []) + list(compiled.response),
+            outputs=["logp"],
+            computed=computed_functions,
+        )(decision_logp)
+
+        config = cls.from_rlssm_dict(
+            {
+                "model_name": compiled.model_name,
+                "description": getattr(structural_config, "description", None),
+                "list_params": list(compiled.list_params),
+                "bounds": dict(compiled.bounds),
+                "params_default": list(compiled.params_default),
+                "decision_process": compiled.decision_process,
+                "learning_process": computed_functions,
+                "ssm_logp_func": ssm_logp_func,
+                "response": list(compiled.response),
+                "choices": tuple(compiled.choices),
+                "extra_fields": list(compiled.extra_fields),
+                "decision_process_loglik_kind": decision_process_loglik_kind,
+                "learning_process_kind": "approx_differentiable",
+            }
+        )
+        config._ssms_model_config = structural_config
+        config._ssms_compiled_model = compiled
+        config._ssms_response_mapping = dict(compiled.response_to_action)
+        if hasattr(structural_config, "participant_contract"):
+            config._ssms_participant_contract = structural_config.participant_contract()
+        return config
+
     def validate(self) -> None:  # noqa: D102
         if self.response is None:
             raise ValueError("Please provide `response` columns in the configuration.")
@@ -217,3 +295,20 @@ class RLSSMConfig(BaseModelConfig):
         self, param: str
     ) -> tuple[float | None, tuple[float, float] | None]:
         return None, self.bounds.get(param)
+
+
+def _make_ssms_computed_functions(compiled: Any) -> dict[str, Any]:
+    input_fields = list(compiled.participant_input_fields())
+    participant_fn = compiled.compile_participant_fn(output="dict")
+
+    def _make_compute_func(param_name: str):
+        @annotate_function(inputs=input_fields, outputs=[param_name])
+        def compute(subject_trials):
+            return participant_fn(subject_trials)[param_name]
+
+        return compute
+
+    return {
+        param_name: _make_compute_func(param_name)
+        for param_name in compiled.computed_params
+    }

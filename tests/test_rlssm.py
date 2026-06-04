@@ -111,6 +111,16 @@ def test_rlssm_init(rldm_data, rlssm_config) -> None:
     assert model.model_config.model_name == "rldm_test"
 
 
+def test_rlssm_rejects_non_hssm_model_config(rldm_data) -> None:
+    """ssms.rl configs must be converted before using the low-level constructor."""
+
+    class FakeSsMsModelConfig:
+        pass
+
+    with pytest.raises(TypeError, match="RLSSMConfig.from_ssms_model"):
+        RLSSM(data=rldm_data, model_config=FakeSsMsModelConfig())
+
+
 def test_rlssm_panel_attrs(rldm_data, rlssm_config) -> None:
     """n_participants and n_trials should match the fixture data structure."""
     model = RLSSM(data=rldm_data, model_config=rlssm_config)
