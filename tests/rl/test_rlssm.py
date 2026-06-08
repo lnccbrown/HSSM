@@ -447,6 +447,15 @@ class TestRLSSMSimplifiedInterface:
 
         assert any("ignoring" in r.message for r in caplog.records)
 
+    def test_rlssm_model_config_without_overrides_does_not_warn(
+        self, rldm_data, rlssm_config, caplog
+    ) -> None:
+        """Passing only model_config should not emit the ignored-args warning."""
+        with caplog.at_level(logging.WARNING, logger="hssm"):
+            RLSSM(data=rldm_data, model_config=rlssm_config)
+
+        assert not any("ignoring" in r.message for r in caplog.records)
+
     def test_rlssm_learning_process_override_keeps_matching_metadata(
         self, rldm_data
     ) -> None:
