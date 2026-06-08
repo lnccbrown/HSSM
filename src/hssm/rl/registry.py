@@ -2,19 +2,19 @@
 
 This module provides:
 
-- :data:`_SSM_REGISTRY` — holds *custom* SSM entries added via
-  :func:`register_ssm`.  Built-in HSSM models (``"ddm"``, ``"angle"``,
-  ``"weibull"``, and any other model in :mod:`hssm.modelconfig` that exposes an
-  ``approx_differentiable`` likelihood) are resolved automatically from
-  :func:`hssm.modelconfig.get_default_model_config` and do **not** need to be
-  pre-registered here.
-- :data:`_RLSSM_REGISTRY` — maps named RLSSM model strings (e.g.
-  ``"2AB_RescorlaWagner_ddm"``) to their default decision process,
-  learning process, and parameter info.
-- :func:`get_rlssm_model_config` — builds a :class:`~hssm.rl.config.RLSSMConfig`
-  from a named model string with optional overrides.
-- :func:`register_rlssm_model` — register a custom named RLSSM model.
-- :func:`register_ssm` — register a custom SSM base logp function.
+- `_SSM_REGISTRY` — holds custom SSM entries added via `register_ssm`.
+    Built-in HSSM models (`"ddm"`, `"angle"`, `"weibull"`, and any other
+    model in `hssm.modelconfig` that exposes an `approx_differentiable`
+    likelihood) are resolved automatically from
+    `hssm.modelconfig.get_default_model_config` and do not need to be
+    pre-registered here.
+- `_RLSSM_REGISTRY` — maps named RLSSM model strings (for example,
+    `"2AB_RescorlaWagner_DDM"`) to their default decision process,
+    learning process, and parameter info.
+- `get_rlssm_model_config` — builds an `RLSSMConfig` from a named model
+    string with optional overrides.
+- `register_rlssm_model` — registers a custom named RLSSM model.
+- `register_ssm` — registers a custom SSM base logp function.
 """
 
 from __future__ import annotations
@@ -249,7 +249,7 @@ def _get_decision_process_spec(
 ) -> dict[str, Any]:
     """Return a defensive copy of a decision-process specification.
 
-    Custom SSMs (registered via :func:`register_ssm`) take precedence.  For
+    Custom SSMs (registered via `register_ssm`) take precedence. For
     everything else the spec is derived on the fly from HSSM's modelconfig
     system, meaning any built-in model with an ``approx_differentiable``
     likelihood (e.g. ``"ddm"``, ``"angle"``, ``"weibull"``) works out of the
@@ -359,7 +359,7 @@ def _build_ssm_logp_func(ssm_base_logp_func: Any, learning_process: dict) -> Any
 
     Creates a new wrapper that carries the same ``.inputs`` and ``.outputs`` as
     the base function but adds the ``computed`` dict so that
-    :func:`~hssm.rl.likelihoods.builder.make_rl_logp_op` can resolve which
+    `make_rl_logp_op` can resolve which
     parameters are produced by the RL learning rule at runtime.
     """
     existing = getattr(ssm_base_logp_func, "computed", None)
@@ -415,7 +415,7 @@ def get_rlssm_model_config(
     learning_process: dict[str, Any] | None = None,
     decision_process: str | None = None,
 ) -> RLSSMConfig:
-    """Build an :class:`~hssm.rl.config.RLSSMConfig` from a named model.
+    """Build an `RLSSMConfig` from a named model.
 
     Parameters
     ----------
@@ -431,7 +431,7 @@ def get_rlssm_model_config(
     Returns
     -------
     RLSSMConfig
-        Fully populated configuration ready to be passed to :class:`_RLSSM`.
+        Fully populated configuration ready to be passed to `_RLSSM`.
 
     Raises
     ------
@@ -569,8 +569,8 @@ def register_rlssm_model(
         Registry key (e.g. ``"my_rldm"``).
     decision_process:
         Name of the SSM to use. This may be either a custom SSM already registered
-        in the SSM registry via :func:`register_ssm`, or a built-in HSSM modelconfig SSM
-        name such as ``"ddm"``, ``"angle"``, or ``"weibull"``.
+        in the SSM registry via `register_ssm`, or a built-in HSSM modelconfig SSM
+        name such as `"ddm"`, `"angle"`, or `"weibull"`.
     learning_process:
         Dict mapping computed parameter name → annotated learning function.
     learning_process_params:
