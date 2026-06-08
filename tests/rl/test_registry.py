@@ -295,6 +295,19 @@ class TestRegisterSsm:
                 params_default_ssm=[0.0, 1.5, 0.0, 1.0],
             )
 
+    def test_rejects_misaligned_ssm_defaults(
+        self, annotated_ssm_base_logp: Any
+    ) -> None:
+        """register_ssm must reject defaults that do not align with params."""
+        with pytest.raises(ValueError, match="params_default_ssm length"):
+            registry.register_ssm(
+                name="misaligned_defaults_ssm",
+                ssm_base_logp_func=annotated_ssm_base_logp,
+                list_params_ssm=["v", "a"],
+                bounds_ssm={"a": (0.3, 3.0)},
+                params_default_ssm=[0.0],
+            )
+
     def test_warns_on_overwrite(
         self,
         annotated_ssm_base_logp: Any,
