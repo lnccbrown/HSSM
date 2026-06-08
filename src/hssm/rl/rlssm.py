@@ -426,9 +426,13 @@ class RLSSM(_RLSSM):
         # NOTE: _store_init_args only operates on its arguments, not on self.
         _my_init_args = self._store_init_args(locals(), kwargs)
 
-        if model_config is not None and any(
-            x is not None for x in [model, learning_process, decision_process, choices]
-        ):
+        ignored_overrides_provided = (
+            model != "2AB_RescorlaWagner_DDM"
+            or learning_process is not None
+            or decision_process is not None
+            or choices is not None
+        )
+        if model_config is not None and ignored_overrides_provided:
             _logger.warning(
                 "model_config was provided; ignoring model, learning_process, "
                 "decision_process, and choices arguments."
