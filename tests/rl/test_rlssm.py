@@ -192,6 +192,21 @@ class TestRLSSMInit:
         with pytest.raises(NotImplementedError, match="deadline"):
             RLSSM(data=rldm_data, model_config=rlssm_config, deadline=True)
 
+    def test_rlssm_loglik_missing_data_init_raises(
+        self, rldm_data, rlssm_config
+    ) -> None:
+        """Passing loglik_missing_data should raise RLSSM's NotImplementedError."""
+
+        def dummy_loglik_missing_data(*_args, **_kwargs):
+            return None
+
+        with pytest.raises(NotImplementedError, match="loglik_missing_data"):
+            RLSSM(
+                data=rldm_data,
+                model_config=rlssm_config,
+                loglik_missing_data=dummy_loglik_missing_data,
+            )
+
 
 class TestRLSSMModelStructure:
     """Internal model anatomy after construction: params, prefix, lapse, bambi/pymc, extra_fields."""
