@@ -435,3 +435,38 @@ class TestRLSSMSimplifiedInterface:
             RLSSM(data=rldm_data, model_config=rlssm_config, model="some_other_model")
 
         assert any("ignoring" in r.message for r in caplog.records)
+
+    def test_rlssm_learning_process_override_keeps_matching_metadata(
+        self, rldm_data
+    ) -> None:
+        """Public RLSSM constructor should accept LP overrides with the same sampled params."""
+
+        @annotate_function(
+            inputs=["rl_alpha", "scaler", "response", "feedback"],
+            outputs=["v"],
+        )
+        def alt_compute_v(rl_alpha, scaler, response, feedback):
+            return rl_alpha + scaler
+
+        model = RLSSM(
+            data=rldm_data,
+            model="2AB_RescorlaWagner_DDM",
+            learning_process={"v": alt_compute_v},
+        )
+
+        assert model.model_config.learning_process == {"v": alt_compute_v}
+        assert "rl_alpha" in model.params
+        assert "scaler" in model.params
+
+    def test_rlssm_decision_process_override_updates_sampled_params(
+        self, rldm_data
+    ) -> None:
+        """Public RLSSM constructor should respect decision_process overrides."""
+        model = RLSSM(
+            data=rldm_data,
+            model="2AB_RescorlaWagner_DDM",
+            decision_process="angle",
+        )
+
+        assert model.model_config.decision_process == "angle"
+        assert "theta" in model.params
