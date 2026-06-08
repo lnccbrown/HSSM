@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any
 
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
@@ -30,6 +31,111 @@ from hssm.utils import annotate_function
 from .config import RLSSMConfig
 
 _logger = logging.getLogger(__name__)
+
+
+@dataclass
+class LearningProcessMetadata:
+    """Metadata describing the sampled-parameter side of a learning process."""
+
+    learning_process: dict[str, Any]
+    sampled_params: list[str] = field(default_factory=list)
+    bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+    defaults: list[float] = field(default_factory=list)
+    extra_fields: list[str] = field(default_factory=list)
+    kind: str = "blackbox"
+
+    def copy(self) -> LearningProcessMetadata:
+        """Return a defensive copy for safe registry reuse."""
+        return LearningProcessMetadata(
+            learning_process=dict(self.learning_process),
+            sampled_params=list(self.sampled_params),
+            bounds=dict(self.bounds),
+            defaults=list(self.defaults),
+            extra_fields=list(self.extra_fields),
+            kind=self.kind,
+        )
+
+    def validate(self) -> None:
+        """Ensure defaults and bounds align with sampled params."""
+        if len(self.defaults) != len(self.sampled_params):
+            raise ValueError(
+                "learning_process defaults length "
+                f"({len(self.defaults)}) must match sampled params length "
+                f"({len(self.sampled_params)})"
+            )
+
+        missing_bounds = [p for p in self.sampled_params if p not in self.bounds]
+        if missing_bounds:
+            raise ValueError(
+                f"Missing bounds for learning-process parameter(s): {missing_bounds}."
+            )
+
+    def with_learning_process_override(
+        self,
+        learning_process: dict[str, Any],
+        response: list[str],
+    ) -> LearningProcessMetadata:
+        """Return metadata updated for a new learning-process mapping.
+
+        Sampled parameter names are always re-derived from the override. Bounds and
+        defaults are preserved only for parameters that still exist under the new
+        learning process; newly introduced parameters must be supplied through a
+        custom model registration or model_config, otherwise we fail early.
+        """
+        new_learning_process = dict(learning_process)
+        new_sampled_params = _derive_lp_params(
+            new_learning_process, response, self.extra_fields
+        )
+
+        defaults_by_param = dict(zip(self.sampled_params, self.defaults))
+        missing_bounds = [p for p in new_sampled_params if p not in self.bounds]
+        missing_defaults = [p for p in new_sampled_params if p not in defaults_by_param]
+
+        if missing_bounds or missing_defaults:
+            missing_parts: list[str] = []
+            if missing_bounds:
+                missing_parts.append(f"bounds for {missing_bounds}")
+            if missing_defaults:
+                missing_parts.append(f"defaults for {missing_defaults}")
+            raise ValueError(
+                "learning_process override introduced sampled parameter metadata "
+                f"not available in the registry entry: {', '.join(missing_parts)}. "
+                "Register a custom RLSSM model with matching metadata or pass "
+                "model_config= directly to RLSSM()."
+            )
+
+        return LearningProcessMetadata(
+            learning_process=new_learning_process,
+            sampled_params=new_sampled_params,
+            bounds={p: self.bounds[p] for p in new_sampled_params},
+            defaults=[defaults_by_param[p] for p in new_sampled_params],
+            extra_fields=list(self.extra_fields),
+            kind=self.kind,
+        )
+
+
+@dataclass
+class RLSSMRegistryEntry:
+    """Structured registry entry for a named RLSSM template."""
+
+    decision_process: str | dict[str, Any]
+    learning_process_metadata: LearningProcessMetadata
+    choices: list[int] = field(default_factory=lambda: [0, 1])
+    description: str | None = None
+    decision_process_loglik_kind: str = "approx_differentiable"
+    model_name: str | None = None
+
+    def copy(self) -> RLSSMRegistryEntry:
+        """Return a defensive copy for safe local overrides."""
+        return RLSSMRegistryEntry(
+            decision_process=deepcopy(self.decision_process),
+            learning_process_metadata=self.learning_process_metadata.copy(),
+            choices=list(self.choices),
+            description=self.description,
+            decision_process_loglik_kind=self.decision_process_loglik_kind,
+            model_name=self.model_name,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Default annotated Rescorla-Wagner learning function
@@ -190,72 +296,55 @@ def _get_ssm_logp(name: str) -> Any:
 # ---------------------------------------------------------------------------
 # Each entry provides:
 #   decision_process            - key into _SSM_REGISTRY
-#   learning_process            - {param: annotated_func}
-#   learning_process_params     - ordered list of sampled RL parameter names
-#   learning_process_bounds     - {param: (lo, hi)} for RL params
-#   learning_process_params_default
-#                               - default values aligned with learning_process_params
-#   extra_fields                - extra data column names required by LP
+#   learning_process_metadata   - LearningProcessMetadata for RL params and LP inputs
 #   choices                     - response choice values
 #   description                 - human-readable description
 #   decision_process_loglik_kind
-#   learning_process_kind
 
-_RLSSM_REGISTRY: dict[str, dict[str, Any]] = {
-    "2AB_RescorlaWagner_DDM": {
-        "decision_process": _get_decision_process_spec("ddm"),
-        "learning_process": {"v": _compute_v_annotated},
-        "learning_process_params": ["rl_alpha", "scaler"],
-        "learning_process_bounds": {
-            "rl_alpha": (0.0, 1.0),
-            "scaler": (0.0, 10.0),
-        },
-        "learning_process_params_default": [0.1, 1.0],
-        "extra_fields": ["feedback"],
-        "choices": [0, 1],
-        "description": (
+
+def _make_rescorla_wagner_learning_metadata() -> LearningProcessMetadata:
+    """Return the shared learning metadata for built-in Rescorla-Wagner RLSSMs."""
+    return LearningProcessMetadata(
+        learning_process={"v": _compute_v_annotated},
+        sampled_params=["rl_alpha", "scaler"],
+        bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
+        defaults=[0.1, 1.0],
+        extra_fields=["feedback"],
+        kind="blackbox",
+    )
+
+
+_RLSSM_REGISTRY: dict[str, RLSSMRegistryEntry] = {
+    "2AB_RescorlaWagner_DDM": RLSSMRegistryEntry(
+        decision_process=_get_decision_process_spec("ddm"),
+        learning_process_metadata=_make_rescorla_wagner_learning_metadata(),
+        choices=[0, 1],
+        description=(
             "RLSSM model with Rescorla-Wagner Q-learning and the "
             "standard DDM as decision process."
         ),
-        "decision_process_loglik_kind": "approx_differentiable",
-        "learning_process_kind": "blackbox",
-    },
-    "2AB_RescorlaWagner_Angle": {
-        "decision_process": _get_decision_process_spec("angle"),
-        "learning_process": {"v": _compute_v_annotated},
-        "learning_process_params": ["rl_alpha", "scaler"],
-        "learning_process_bounds": {
-            "rl_alpha": (0.0, 1.0),
-            "scaler": (0.0, 10.0),
-        },
-        "learning_process_params_default": [0.1, 1.0],
-        "extra_fields": ["feedback"],
-        "choices": [0, 1],
-        "description": (
+        decision_process_loglik_kind="approx_differentiable",
+    ),
+    "2AB_RescorlaWagner_Angle": RLSSMRegistryEntry(
+        decision_process=_get_decision_process_spec("angle"),
+        learning_process_metadata=_make_rescorla_wagner_learning_metadata(),
+        choices=[0, 1],
+        description=(
             "RLSSM model with Rescorla-Wagner Q-learning and a "
             "collapsing-bound DDM (angle model) as decision process."
         ),
-        "decision_process_loglik_kind": "approx_differentiable",
-        "learning_process_kind": "blackbox",
-    },
-    "2AB_RescorlaWagner_Weibull": {
-        "decision_process": _get_decision_process_spec("weibull"),
-        "learning_process": {"v": _compute_v_annotated},
-        "learning_process_params": ["rl_alpha", "scaler"],
-        "learning_process_bounds": {
-            "rl_alpha": (0.0, 1.0),
-            "scaler": (0.0, 10.0),
-        },
-        "learning_process_params_default": [0.1, 1.0],
-        "extra_fields": ["feedback"],
-        "choices": [0, 1],
-        "description": (
+        decision_process_loglik_kind="approx_differentiable",
+    ),
+    "2AB_RescorlaWagner_Weibull": RLSSMRegistryEntry(
+        decision_process=_get_decision_process_spec("weibull"),
+        learning_process_metadata=_make_rescorla_wagner_learning_metadata(),
+        choices=[0, 1],
+        description=(
             "RLSSM model with Rescorla-Wagner Q-learning and a "
             "Weibull-bound DDM as decision process."
         ),
-        "decision_process_loglik_kind": "approx_differentiable",
-        "learning_process_kind": "blackbox",
-    },
+        decision_process_loglik_kind="approx_differentiable",
+    ),
 }
 
 
@@ -358,41 +447,31 @@ def get_rlssm_model_config(
             "or pass 'model_config=' directly to RLSSM()."
         )
 
-    # Shallow-copy so overrides don't mutate the registry entry.
-    entry = dict(_RLSSM_REGISTRY[model])
+    entry = _RLSSM_REGISTRY[model].copy()
+    learning_metadata = entry.learning_process_metadata.copy()
 
-    if learning_process is not None:
-        entry["learning_process"] = learning_process
     if decision_process is not None:
-        entry["decision_process"] = _get_decision_process_spec(decision_process)
+        entry.decision_process = _get_decision_process_spec(decision_process)
     if choices is not None:
-        entry["choices"] = choices
+        entry.choices = list(choices)
 
-    ssm_entry = _get_decision_process_spec(entry["decision_process"])
+    ssm_entry = _get_decision_process_spec(entry.decision_process)
+    response = list(ssm_entry["response"])
+    if learning_process is not None:
+        learning_metadata = learning_metadata.with_learning_process_override(
+            learning_process, response
+        )
+
     dp: str = ssm_entry["name"]
     ssm_base = _get_ssm_logp(dp)
-    # Defensive copy so callers mutating config.learning_process don't corrupt
-    # the registry entry (entry is only a shallow copy of _RLSSM_REGISTRY[model]).
-    lp: dict[str, Any] = dict(entry["learning_process"])
+    lp: dict[str, Any] = dict(learning_metadata.learning_process)
 
     # Compose the full ssm_logp_func with .computed = learning_process.
     ssm_logp_func = _build_ssm_logp_func(ssm_base, lp)
 
     # list_params = [sampled RL params] + [sampled SSM params (non-computed)]
     ssm_sampled = [p for p in ssm_entry["list_params_ssm"] if p not in lp]
-
-    # Defensive copy of response to prevent downstream mutation of registry.
-    response = list(ssm_entry["response"])
-
-    # Use `is None` checks so that explicitly empty containers ([], {}) are
-    # respected as valid "no RL params" configuration and not overridden by
-    # the fallback derivation logic.
-    _rl_params = entry.get("learning_process_params")
-    learning_process_params: list[str] = (
-        _derive_lp_params(lp, response, entry.get("extra_fields") or [])
-        if _rl_params is None
-        else _rl_params
-    )
+    learning_process_params = list(learning_metadata.sampled_params)
     list_params = learning_process_params + ssm_sampled
 
     # bounds: RL bounds ∪ SSM sampled bounds
@@ -404,16 +483,12 @@ def get_rlssm_model_config(
             "Provide bounds for all sampled parameters via register_ssm() or ensure "
             "the built-in modelconfig includes them."
         )
-    _rl_bounds = entry.get("learning_process_bounds")
-    bounds: dict[str, tuple[float, float]] = dict(
-        _rl_bounds if _rl_bounds is not None else {}
-    )
+    bounds: dict[str, tuple[float, float]] = dict(learning_metadata.bounds)
     for p in ssm_sampled:
         bounds[p] = ssm_entry["bounds_ssm"][p]
 
     # params_default aligned with list_params
-    _rl_defaults = entry.get("learning_process_params_default")
-    rl_defaults: list[float] = list(_rl_defaults if _rl_defaults is not None else [])
+    rl_defaults: list[float] = list(learning_metadata.defaults)
     ssm_all_defaults: list[float] = list(ssm_entry["params_default_ssm"])
     ssm_sampled_defaults = [
         ssm_all_defaults[i]
@@ -423,20 +498,20 @@ def get_rlssm_model_config(
     params_default = rl_defaults + ssm_sampled_defaults
 
     return RLSSMConfig(
-        model_name=entry.get("model_name", model),
-        description=entry.get("description"),
+        model_name=entry.model_name or model,
+        description=entry.description,
         decision_process=dp,
-        decision_process_loglik_kind=entry["decision_process_loglik_kind"],
-        learning_process_kind=entry["learning_process_kind"],
+        decision_process_loglik_kind=entry.decision_process_loglik_kind,
+        learning_process_kind=learning_metadata.kind,
         learning_process=lp,
         ssm_logp_func=ssm_logp_func,
         list_params=list_params,
         bounds=bounds,
         params_default=params_default,
         response=response,
-        choices=tuple(entry["choices"]),
-        extra_fields=list(entry["extra_fields"])
-        if entry.get("extra_fields") is not None
+        choices=tuple(entry.choices),
+        extra_fields=list(learning_metadata.extra_fields)
+        if learning_metadata.extra_fields is not None
         else None,
     )
 
@@ -464,7 +539,7 @@ def list_models() -> dict[str, str | None]:
     >>> hssm.rl.list_models()
     {'2AB_RescorlaWagner_DDM': 'RLSSM model with Rescorla-Wagner ...', ...}
     """
-    return {name: entry.get("description") for name, entry in _RLSSM_REGISTRY.items()}
+    return {name: entry.description for name, entry in _RLSSM_REGISTRY.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -519,20 +594,23 @@ def register_rlssm_model(
             "Model '%s' is already in the RLSSM registry and will be overwritten.",
             name,
         )
-    _RLSSM_REGISTRY[name] = {
-        "decision_process": _get_decision_process_spec(decision_process),
-        # Shallow-copy all mutable caller-supplied collections so that later
-        # mutations of the originals do not silently corrupt the registry entry.
-        "learning_process": dict(learning_process),
-        "learning_process_params": list(learning_process_params),
-        "learning_process_bounds": dict(learning_process_bounds),
-        "learning_process_params_default": list(learning_process_params_default),
-        "extra_fields": list(extra_fields) if extra_fields is not None else [],
-        "choices": list(choices) if choices is not None else [0, 1],
-        "description": description,
-        "decision_process_loglik_kind": decision_process_loglik_kind,
-        "learning_process_kind": learning_process_kind,
-    }
+    learning_process_metadata = LearningProcessMetadata(
+        learning_process=dict(learning_process),
+        sampled_params=list(learning_process_params),
+        bounds=dict(learning_process_bounds),
+        defaults=list(learning_process_params_default),
+        extra_fields=list(extra_fields) if extra_fields is not None else [],
+        kind=learning_process_kind,
+    )
+    learning_process_metadata.validate()
+
+    _RLSSM_REGISTRY[name] = RLSSMRegistryEntry(
+        decision_process=_get_decision_process_spec(decision_process),
+        learning_process_metadata=learning_process_metadata,
+        choices=list(choices) if choices is not None else [0, 1],
+        description=description,
+        decision_process_loglik_kind=decision_process_loglik_kind,
+    )
 
 
 def register_ssm(
