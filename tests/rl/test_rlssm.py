@@ -57,6 +57,7 @@ def _set_floatx_float32() -> Generator[None, None, None]:
         hssm.set_floatX(prev_floatx, update_jax=True)
 
 
+# runs before every test function to isolate the RLSSM registry state, preventing test bleed-through
 @pytest.fixture(autouse=True)
 def isolated_registries(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isolate RL registries so simplified-interface tests do not leak state."""
