@@ -224,14 +224,17 @@ class RLSSMConfig(BaseModelConfig):
                 "ssm_logp_func": ssm_logp_func,
                 "response": list(compiled.response),
                 "choices": tuple(compiled.choices),
-                "extra_fields": list(compiled.extra_fields),
+                # ssms exposes task/design columns (feedback, condition, block,
+                # ...) as `context_fields`; HSSM carries them through its
+                # internal `extra_fields` data-column plumbing.
+                "extra_fields": list(compiled.context_fields),
                 "decision_process_loglik_kind": decision_process_loglik_kind,
                 "learning_process_kind": "approx_differentiable",
             }
         )
         config._ssms_model_config = structural_config
         config._ssms_compiled_model = compiled
-        config._ssms_response_mapping = dict(compiled.response_to_action)
+        config._ssms_response_to_choice = dict(compiled.response_to_choice)
         if hasattr(structural_config, "participant_contract"):
             config._ssms_participant_contract = structural_config.participant_contract()
         return config

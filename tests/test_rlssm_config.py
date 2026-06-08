@@ -223,9 +223,9 @@ class _FakeSsMsCompiledModel:
         self.params_default = [0.2, 2.0, 1.5, 0.5, 0.3, 0.2]
         self.response = ["rt", "response"]
         self.choices = (-1, 1)
-        self.extra_fields = ["feedback"]
+        self.context_fields = ["feedback"]
         self.computed_params = ["v"]
-        self.response_to_action = {-1: 0, 1: 1}
+        self.response_to_choice = {-1: 0, 1: 1}
 
     def participant_input_fields(self):
         return ["rl_alpha", "scaler", "response", "feedback"]
@@ -297,9 +297,9 @@ class TestRLSSMConfigFromSsMsModel:
             "response",
             "feedback",
         ]
-        assert config._ssms_response_mapping == {-1: 0, 1: 1}
+        assert config._ssms_response_to_choice == {-1: 0, 1: 1}
 
-    def test_compiled_compute_function_uses_ssms_response_mapping(self, monkeypatch):
+    def test_compiled_compute_function_uses_ssms_response_to_choice(self, monkeypatch):
         _install_fake_ssms_rl(monkeypatch)
         monkeypatch.setattr(
             "hssm.rl.config.make_jax_matrix_logp_funcs_from_onnx",
@@ -328,6 +328,107 @@ class TestRLSSMConfigFromSsMsModel:
 
         with pytest.raises(ValueError, match="gradient support"):
             RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+    def test_from_ssms_model_supports_multiple_computed_params(self, monkeypatch):
+        """The bridge must wire every compiled computed decision parameter.
+
+        Generic models can compute more than a single drift parameter (e.g.
+        ``drift -> v`` and ``threshold -> a``) and may carry context fields
+        beyond ``feedback`` (e.g. ``condition``). The bridge must not assume
+        Rescorla-Wagner, a single computed ``v``, or a privileged outcome
+        column.
+        """
+
+        class _MultiParamCompiled(_FakeSsMsCompiledModel):
+            def __init__(self, config, *, backend, gradient):
+                super().__init__(config, backend=backend, gradient=gradient)
+                self.computed_params = ["v", "a"]
+                self.context_fields = ["feedback", "condition"]
+
+            def participant_input_fields(self):
+                return ["rl_alpha", "scaler", "response", "feedback", "condition"]
+
+            def compile_participant_fn(self, output="array"):
+                assert output == "dict"
+
+                def compute(subject_trials):
+                    return {
+                        "v": subject_trials[:, 1],
+                        "a": subject_trials[:, 0],
+                    }
+
+                return compute
+
+        class _MultiParamConfig(_FakeSsMsModelConfig):
+            def compile(self, backend="auto"):
+                return _MultiParamCompiled(
+                    self, backend=backend, gradient=self.gradient
+                )
+
+        fake_rl = types.SimpleNamespace(
+            ModelConfig=_MultiParamConfig,
+            resolve_model=lambda model: _MultiParamConfig(),
+        )
+        monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
+        monkeypatch.setattr(
+            "hssm.rl.config.make_jax_matrix_logp_funcs_from_onnx",
+            _fake_matrix_logp,
+            raising=False,
+        )
+
+        config = RLSSMConfig.from_ssms_model("multi_param_model")
+
+        # Both computed decision parameters are exposed to the annotated path.
+        assert set(config.ssm_logp_func.computed) == {"v", "a"}
+        # Context fields flow through HSSM's extra_fields plumbing, untouched —
+        # `condition` is not treated specially and `trial_id` is not injected.
+        assert config.extra_fields == ["feedback", "condition"]
+        for computed_fn in config.ssm_logp_func.computed.values():
+            assert computed_fn.inputs == [
+                "rl_alpha",
+                "scaler",
+                "response",
+                "feedback",
+                "condition",
+            ]
+
+
+class TestRLSSMConfigFromRealSsMs:
+    """Integration tests against a real, rl-capable ``ssm-simulators``.
+
+    These exercise the live ``ssms.rl`` handshake (not a stub), so they guard
+    against silent contract drift like the Milestone-4 rename of
+    ``extra_fields``/``response_to_action`` to ``context_fields``/
+    ``response_to_choice``. They skip automatically when the installed
+    ``ssm-simulators`` does not yet ship the RLSSM/JAX module (HSSM's pinned
+    release lags the ssms RLSSM feature branch).
+    """
+
+    @staticmethod
+    def _require_ssms_rl():
+        ssms_rl = pytest.importorskip(
+            "ssms.rl", reason="installed ssm-simulators has no ssms.rl module"
+        )
+        if not hasattr(ssms_rl, "resolve_model"):
+            pytest.skip("ssms.rl does not expose resolve_model")
+        return ssms_rl
+
+    def test_from_ssms_model_real_2ab_rw_angle(self):
+        self._require_ssms_rl()
+
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+        config.validate()
+
+        assert config.model_name == "2AB_RW_Angle"
+        assert config.decision_process == "angle"
+        # Canonical ssms parameter / response vocabulary.
+        assert "rl_alpha" in config.list_params
+        assert config.response == ["rt", "response"]
+        # context_fields surface through HSSM extra_fields, response mapping
+        # is keyed on raw SSM response labels.
+        assert config.extra_fields == ["feedback"]
+        assert config._ssms_response_to_choice == {-1: 0, 1: 1}
+        assert set(config.ssm_logp_func.computed) == {"v"}
 
 
 class TestRLSSMConfigValidation:
