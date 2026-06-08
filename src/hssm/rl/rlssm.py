@@ -405,7 +405,7 @@ class RLSSM(_RLSSM):
     def __init__(
         self,
         data: pd.DataFrame,
-        model: str | None = None,
+        model: str = "2AB_RescorlaWagner_DDM",
         choices: list[int] | None = None,
         include: list[dict[str, Any] | Any] | None = None,
         model_config: RLSSMConfig | None = None,
