@@ -331,9 +331,9 @@ class RLSSM(_RLSSM):
     decision model in a single likelihood. In the common case, you choose a
     named RLSSM model with ``model`` and optionally override its
     ``learning_process``, ``decision_process``, or ``choices`` settings. Use
-    :attr:`RLSSM.list_models` to inspect the named models available in HSSM.
+    ``RLSSM.list_models`` to inspect the named models available in HSSM.
 
-    If you already have a fully built :class:`RLSSMConfig`, you can pass it as
+    If you already have a fully built ``RLSSMConfig``, you can pass it as
     ``model_config`` instead of selecting a named model.
 
     RLSSM currently requires balanced panel data and does not support
