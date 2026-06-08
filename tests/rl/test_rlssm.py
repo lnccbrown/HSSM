@@ -18,6 +18,7 @@ import pytensor
 import pytest
 
 import hssm
+from hssm.rl import registry
 from hssm.distribution_utils import make_distribution as real_make_distribution
 from hssm.rl import RLSSM, RLSSMConfig, register_rlssm_model
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
@@ -53,6 +54,14 @@ def _set_floatx_float32() -> Generator[None, None, None]:
         yield
     finally:
         hssm.set_floatX(prev_floatx, update_jax=True)
+
+
+@pytest.fixture(autouse=True)
+def isolated_registries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate RL registries so simplified-interface tests do not leak state."""
+    monkeypatch.setattr(registry, "_SSM_REGISTRY", deepcopy(registry._SSM_REGISTRY))
+    monkeypatch.setattr(registry, "_RLSSM_REGISTRY", deepcopy(registry._RLSSM_REGISTRY))
+    monkeypatch.setattr(registry, "_SSM_LOGP_CACHE", dict(registry._SSM_LOGP_CACHE))
 
 
 @pytest.fixture(scope="module")
@@ -470,3 +479,30 @@ class TestRLSSMSimplifiedInterface:
 
         assert model.model_config.decision_process == "angle"
         assert "theta" in model.params
+
+    def test_rlssm_builtin_model_re_resolves_registered_ssm(self, rldm_data) -> None:
+        """Built-in RLSSM models should pick up later register_ssm() overrides."""
+
+        @annotate_function(
+            inputs=["v", "custom_a", "rt", "response"],
+            outputs=["logp"],
+        )
+        def custom_ddm_logp(v, custom_a, rt, response):
+            return custom_a
+
+        registry.register_ssm(
+            name="ddm",
+            ssm_base_logp_func=custom_ddm_logp,
+            list_params_ssm=["v", "custom_a"],
+            bounds_ssm={"custom_a": (0.3, 3.0)},
+            params_default_ssm=[0.0, 1.5],
+            response=["rt", "response"],
+        )
+
+        model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
+
+        assert model.model_config.decision_process == "ddm"
+        assert "rl_alpha" in model.params
+        assert "scaler" in model.params
+        assert "custom_a" in model.params
+        assert "a" not in model.params
