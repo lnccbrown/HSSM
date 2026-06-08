@@ -7,6 +7,7 @@ variant, bambi / PyMC model construction, and a sampling smoke test.
 
 import logging
 from collections.abc import Generator
+from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
 
