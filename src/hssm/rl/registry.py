@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
+from inspect import signature
 from typing import Any
 
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
@@ -653,6 +654,15 @@ def register_ssm(
             "ssm_base_logp_func must be decorated with @annotate_function "
             "(missing .inputs or .outputs attribute)."
         )
+    try:
+        # Validate that the registered callable can accept one positional
+        #  lan_matrix argument.
+        signature(ssm_base_logp_func).bind(object())
+    except TypeError as exc:
+        raise ValueError(
+            "ssm_base_logp_func must accept a single positional `lan_matrix` "
+            "argument when called by the RL likelihood builder."
+        ) from exc
     existing_computed = getattr(ssm_base_logp_func, "computed", None)
     if existing_computed:
         raise ValueError(

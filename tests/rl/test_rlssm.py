@@ -513,8 +513,8 @@ class TestRLSSMSimplifiedInterface:
             inputs=["v", "custom_a", "rt", "response"],
             outputs=["logp"],
         )
-        def custom_ddm_logp(v, custom_a, rt, response):
-            return custom_a
+        def custom_ddm_logp(lan_matrix):
+            return lan_matrix[:, 1]
 
         registry.register_ssm(
             name="ddm",

@@ -48,8 +48,8 @@ def annotated_ssm_base_logp() -> Any:
         inputs=["v", "a", "rt", "response"],
         outputs=["logp"],
     )
-    def base_logp(v, a, rt, response):
-        return a
+    def base_logp(lan_matrix):
+        return lan_matrix[:, 1]
 
     return base_logp
 
@@ -274,6 +274,25 @@ class TestRegisterSsm:
                 list_params_ssm=["v"],
                 bounds_ssm={},
                 params_default_ssm=[0.0],
+            )
+
+    def test_rejects_callable_without_lan_matrix_signature(self) -> None:
+        """register_ssm must reject annotated functions that need multiple args."""
+
+        @annotate_function(
+            inputs=["v", "a", "rt", "response"],
+            outputs=["logp"],
+        )
+        def wrong_signature(v, a, rt, response):
+            return a
+
+        with pytest.raises(ValueError, match="single positional `lan_matrix`"):
+            registry.register_ssm(
+                name="wrong_signature_ssm",
+                ssm_base_logp_func=wrong_signature,
+                list_params_ssm=["v", "a", "rt", "response"],
+                bounds_ssm={"a": (0.3, 3.0)},
+                params_default_ssm=[0.0, 1.5, 0.0, 1.0],
             )
 
     def test_warns_on_overwrite(
@@ -608,8 +627,8 @@ class TestBuiltinModels:
             inputs=["v", "custom_a", "rt", "response"],
             outputs=["logp"],
         )
-        def custom_ddm_logp(v, custom_a, rt, response):
-            return custom_a
+        def custom_ddm_logp(lan_matrix):
+            return lan_matrix[:, 1]
 
         registry.register_ssm(
             name="ddm",
