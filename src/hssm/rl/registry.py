@@ -663,6 +663,12 @@ def register_ssm(
             "ssm_base_logp_func must accept a single positional `lan_matrix` "
             "argument when called by the RL likelihood builder."
         ) from exc
+    if len(params_default_ssm) != len(list_params_ssm):
+        raise ValueError(
+            "params_default_ssm length "
+            f"({len(params_default_ssm)}) must match list_params_ssm length "
+            f"({len(list_params_ssm)})."
+        )
     existing_computed = getattr(ssm_base_logp_func, "computed", None)
     if existing_computed:
         raise ValueError(
