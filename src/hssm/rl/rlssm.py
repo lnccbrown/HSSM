@@ -164,6 +164,13 @@ class _RLSSM(HSSMBase):
                 "trials would corrupt the RL learning dynamics. Please remove "
                 "deadline trials from the data before passing it to RLSSM."
             )
+        if loglik_missing_data is not None:
+            raise NotImplementedError(
+                "RLSSM currently does not support `loglik_missing_data` handling. "
+                "Missing-data network assembly (OPN / CPN) is not implemented "
+                "for RLSSM. Please remove missing-data handling arguments before "
+                "passing the model to RLSSM."
+            )
 
         # Infer panel structure and validate balance BEFORE calling super so any
         # error surfaces before the expensive model-build steps.
@@ -201,8 +208,9 @@ class _RLSSM(HSSMBase):
         #  _make_model_distribution for details.
         model_config = replace(model_config, loglik=loglik_op, backend="jax")
 
-        # missing_data and deadline are guaranteed False at this point (guards
-        # above reject any other value).  Pass them explicitly for clarity.
+        # missing_data and deadline are guaranteed False, and
+        # loglik_missing_data guaranteed None, at this point (guards above
+        # reject any other value). Pass them explicitly for clarity.
         super().__init__(
             data=data,
             model_config=model_config,
@@ -214,7 +222,7 @@ class _RLSSM(HSSMBase):
             extra_namespace=extra_namespace,
             missing_data=False,
             deadline=False,
-            loglik_missing_data=loglik_missing_data,
+            loglik_missing_data=None,
             process_initvals=process_initvals,
             initval_jitter=initval_jitter,
             **kwargs,
