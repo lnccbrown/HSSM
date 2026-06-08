@@ -338,8 +338,7 @@ class TestRegisterRlssmModel:
         stored = registry._RLSSM_REGISTRY["copy_test_model"]
         metadata = stored.learning_process_metadata
 
-        assert stored.decision_process["name"] == "angle"
-        assert stored.decision_process["response"] == ["rt", "response"]
+        assert stored.decision_process == "angle"
         assert metadata.sampled_params == ["rl_alpha"]
         assert metadata.bounds == {"rl_alpha": (0.0, 1.0)}
         assert metadata.defaults == [0.2]
@@ -593,12 +592,40 @@ class TestBuiltinModels:
         assert model_name in registry._RLSSM_REGISTRY
         entry = registry._RLSSM_REGISTRY[model_name]
         metadata = entry.learning_process_metadata
-        assert entry.decision_process["name"] == expected_dp
+        assert entry.decision_process == expected_dp
         assert metadata.sampled_params == ["rl_alpha", "scaler"]
         assert metadata.extra_fields == ["feedback"]
         assert entry.choices == [0, 1]
         assert entry.decision_process_loglik_kind == "approx_differentiable"
         assert metadata.kind == "blackbox"
+
+    def test_builtin_model_re_resolves_registered_ssm(
+        self,
+    ) -> None:
+        """Built-in starter models should pick up later register_ssm() overrides."""
+
+        @annotate_function(
+            inputs=["v", "custom_a", "rt", "response"],
+            outputs=["logp"],
+        )
+        def custom_ddm_logp(v, custom_a, rt, response):
+            return custom_a
+
+        registry.register_ssm(
+            name="ddm",
+            ssm_base_logp_func=custom_ddm_logp,
+            list_params_ssm=["v", "custom_a"],
+            bounds_ssm={"custom_a": (0.3, 3.0)},
+            params_default_ssm=[0.0, 1.5],
+            response=["rt", "response"],
+        )
+
+        config = registry.get_rlssm_model_config("2AB_RescorlaWagner_DDM")
+
+        assert config.decision_process == "ddm"
+        assert config.list_params == ["rl_alpha", "scaler", "custom_a"]
+        assert config.bounds["custom_a"] == (0.3, 3.0)
+        assert config.params_default[-1] == 1.5
 
     @pytest.mark.parametrize(
         "model_name",
