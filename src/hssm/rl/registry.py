@@ -316,7 +316,7 @@ def _make_rescorla_wagner_learning_metadata() -> LearningProcessMetadata:
 
 _RLSSM_REGISTRY: dict[str, RLSSMRegistryEntry] = {
     "2AB_RescorlaWagner_DDM": RLSSMRegistryEntry(
-        decision_process=_get_decision_process_spec("ddm"),
+        decision_process="ddm",
         learning_process_metadata=_make_rescorla_wagner_learning_metadata(),
         choices=[0, 1],
         description=(
@@ -326,7 +326,7 @@ _RLSSM_REGISTRY: dict[str, RLSSMRegistryEntry] = {
         decision_process_loglik_kind="approx_differentiable",
     ),
     "2AB_RescorlaWagner_Angle": RLSSMRegistryEntry(
-        decision_process=_get_decision_process_spec("angle"),
+        decision_process="angle",
         learning_process_metadata=_make_rescorla_wagner_learning_metadata(),
         choices=[0, 1],
         description=(
@@ -336,7 +336,7 @@ _RLSSM_REGISTRY: dict[str, RLSSMRegistryEntry] = {
         decision_process_loglik_kind="approx_differentiable",
     ),
     "2AB_RescorlaWagner_Weibull": RLSSMRegistryEntry(
-        decision_process=_get_decision_process_spec("weibull"),
+        decision_process="weibull",
         learning_process_metadata=_make_rescorla_wagner_learning_metadata(),
         choices=[0, 1],
         description=(
@@ -605,7 +605,7 @@ def register_rlssm_model(
     learning_process_metadata.validate()
 
     _RLSSM_REGISTRY[name] = RLSSMRegistryEntry(
-        decision_process=_get_decision_process_spec(decision_process),
+        decision_process=decision_process,
         learning_process_metadata=learning_process_metadata,
         choices=list(choices) if choices is not None else [0, 1],
         description=description,
