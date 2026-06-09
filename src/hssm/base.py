@@ -117,8 +117,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
     model_config
-        A fully initialised hssm.config.BaseModelConfig` instance
-         (typically hssm.config.Config`) produced by the subclass
+        A fully initialised `hssm.config.BaseModelConfig` instance
+         (typically `hssm.config.Config`) produced by the subclass
          before calling ``super().__init__``. All likelihood, parameter, and
          data information used by `HSSMBase` is drawn from this object,
          and it must provide populated ``loglik`` and ``list_params`` fields.

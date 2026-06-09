@@ -3,7 +3,7 @@
 This module defines:
 
 - `_RLSSM` — the internal base class (previously ``RLSSM``) that requires
-  a fully populated hssm.rl.config.RLSSMConfig` to be passed directly.
+  a fully populated `hssm.rl.config.RLSSMConfig` to be passed directly.
 - `RLSSM` — the public-facing subclass with a simplified constructor that
   accepts a *model* name string, optional *learning_process* / *decision_process*
   overrides, and an optional *model_config* override.  Config construction is
@@ -17,7 +17,7 @@ The key difference from `hssm.hssm.HSSM` is the likelihood:
     `hssm.rl.likelihoods.builder.make_rl_logp_op`, which internally
     handles the RL learning rule and per-participant trial structure.
     This Op is then passed straight to
-    hssm.distribution_utils.make_distribution`, bypassing the
+    `hssm.distribution_utils.make_distribution`, bypassing the
     standard ``loglik`` / ``loglik_kind`` wrapping pipeline.
 """
 
@@ -56,7 +56,7 @@ class _RLSSM(HSSMBase):
     a single differentiable model, using the annotated SSM log-likelihood
     stored on ``model_config.ssm_logp_func``.
 
-    Unlike hssm.hssm.HSSM`, this implementation does not go through
+    Unlike `hssm.hssm.HSSM`, this implementation does not go through
     the standard ``loglik`` / ``loglik_kind`` wrapping pipeline. It builds a
     differentiable pytensor ``Op`` with
     `hssm.rl.likelihoods.builder.make_rl_logp_op` and passes that Op
@@ -413,7 +413,7 @@ class RLSSM(_RLSSM):
     def __init__(
         self,
         data: pd.DataFrame,
-        model: str = "2AB_RescorlaWagner_DDM",
+        model: str | None = "2AB_RescorlaWagner_DDM",
         choices: list[int] | None = None,
         include: list[dict[str, Any] | Any] | None = None,
         model_config: RLSSMConfig | None = None,
