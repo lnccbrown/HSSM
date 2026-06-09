@@ -68,8 +68,6 @@ Each commit below is self-contained, reviewable, and passes tests on its own. Br
 | `efficient_fpt/_defaults.py` (relevant constants only) | `src/hssm/addm/likelihoods/jax/_defaults.py` |
 | `efficient_fpt/utils.py:resolve_quadrature_orders` | inline into `jax/utils.py` |
 
-**Important — this differs from prior drafts** of the plan, which named non-existent functions (`get_addm_fptd_jax_fast`, `pad_sacc_array_safely`). Those names are gone upstream. The actual entry points are `compute_addm_loglikelihoods` (batch) and `compute_addm_logfptd` (single-trial); see the use-case table above.
-
 **Actions in this commit:**
 
 1. Create `src/hssm/addm/likelihoods/jax/` and copy the six files. Relative imports inside the copied files (`from .._defaults`, `from ..utils import resolve_quadrature_orders`) must be retargeted because `_defaults.py` and `resolve_quadrature_orders` were one level up in efficient-fpt:
@@ -139,7 +137,7 @@ from ..addm.likelihoods.builder import make_addm_logp_op
 # Build the JAX Op once at module-import time. It is shape-polymorphic
 # (lax.scan over the trial batch), so the same Op handles any dataset.
 _ADDM_LOGLIK_OP = make_addm_logp_op(
-    list_params=["eta", "kappa", "a", "b", "x0"],
+    list_params=["eta", "kappa", "a", "b", "z", "t"],
     extra_fields=["r1", "r2", "sacc_array", "d", "flag", "sigma"],
 )
 
@@ -148,7 +146,7 @@ def get_addm_config() -> DefaultConfig:
     """Default configuration for the attentional drift diffusion model."""
     return {
         "response": ["rt", "response"],
-        "list_params": ["eta", "kappa", "a", "b", "x0"],
+        "list_params": ["eta", "kappa", "a", "b", "z", "t"],
         "choices": [-1, 1],
         "description": (
             "Attentional drift-diffusion model (Krajbich et al.). "
@@ -166,7 +164,8 @@ def get_addm_config() -> DefaultConfig:
                     "kappa": (0.0, 5.0),
                     "a": (0.1, 3.0),
                     "b": (0.0, 1.0),
-                    "x0": (-1.0, 1.0),
+                    "z": (-1.0, 1.0),
+                    "t": (0, 0.4),
                 },
                 "extra_fields": ["r1", "r2", "sacc_array", "d", "flag", "sigma"],
             },
@@ -216,12 +215,163 @@ Create `tests/addm/`:
   Asserts the call completes and returns an `InferenceData`.
 - `tests/scripts/addm_recovery.py` — off-CI script; 1000-trial recovery with known `(eta, kappa, a, b, x0, sigma)`, fit via `hssm.HSSM(model="addm", data=...)`, confirm posterior means within ~2σ of ground truth. Reuse the recovery setup from [efficient-fpt examples/example8_empirical](data/azhang/efficient-fpt/examples/example8_empirical) where applicable.
 
-### Commit 6 — `test(addm): ssm-simulators integration smoke`
+### Commit 6 — `feat(addm): sampled non-decision time as pre-decision motor delay`
 
-- `tests/addm/test_addm_simulator.py` — confirm that `hssm.simulate_data(model="addm", theta=..., n_samples=...)` (which dispatches into ssm-simulators' `cssm.addm`) returns a DataFrame whose columns are a superset of what the registered `addm` model consumes. This is a sanity check that the ssm-simulators registration is wired correctly end-to-end and that HSSM's prior/posterior predictive surface works for aDDM.
-- If this fails (e.g., ssm-simulators' aDDM doesn't emit `sacc_array`/`d`/`flag` in a DataFrame-friendly shape), record the gap in the commit message and open a follow-up to harmonize the schema. **Do not** block the rest of the plan on this; the JAX likelihood path is independent.
+Adds `t` to `list_params` and shifts both `rt` and `sacc_array` by `t` before the JAX kernel runs. **Interpretation:** `t` is a pre-decision motor/encoding delay — during `[0, t]` neither the decision diffusion nor the recorded fixations contribute to drift evolution, and at decision-time 0 the subject is in whichever fixation stage contains real-time `t`. 
+**Why this is more than "subtract `t` from `rt`":** `sacc_array` is recorded in *trial-time* coordinates (with `sacc_array[0] = 0`) while the decision-only likelihood expects *decision-time* coordinates. A naive `rt - t` shift without touching `sacc_array` would mis-align fixation stage onsets relative to the decision process. The full transformation is:
 
-### Commit 7 — `docs(addm): tutorial notebook, README, mkdocs nav`
+| Quantity | Trial-time (input) | Decision-time (passed to kernel) |
+|---|---|---|
+| Response time | `rt` | `rt - t` |
+| Stage 0 onset | `sacc_array[0] = 0` | `0` *(kept anchored to decision start)* |
+| Stage `i >= 1` onset | `sacc_array[i]` | `sacc_array[i] - t` |
+| Stage count | `d` | `d` *(unchanged — see constraint below)* |
+| First-fixation flag | `flag` | `flag` *(unchanged — see constraint below)* |
+
+**Critical constraint — `t` lives entirely inside the first fixation.** That is, `t < sacc_array[i, 1]` for every trial. With this constraint:
+- The first stage's effective decision-time duration shrinks from `sacc_array[1]` to `sacc_array[1] - t` (truncated head).
+- All subsequent stage durations (`sacc_array[i+1] - sacc_array[i]` for `i >= 1`) are preserved.
+- No stage is dropped, so the first-fixation `flag` does not flip (it would flip if we ever needed to skip an odd number of pre-decision stages).
+- No piecewise re-bucketing inside JAX — the transformation is a smooth function of `t`, so NUTS gets clean gradients everywhere except the boundary `t = sacc_array[i, 1]`, which is bounded out of the support.
+
+This constraint is consistent with the empirical literature: motor/encoding NDT is typically ~150–400 ms, while first fixations are typically 500 ms+. The configurable bound enforces it (and the parity test in commit 4 should be extended to confirm it on the recovery fixture).
+
+**Code change — `src/hssm/addm/likelihoods/builder.py`:**
+
+```python
+def make_addm_logp_func():
+    def logp(data, eta, kappa, sigma, a, b, x0, t,
+             r1, r2, sacc_array, d, flag):
+        rt = data[:, 0]
+        response = data[:, 1]
+
+        rt_shifted = rt - t
+
+        # Shift stage onsets but keep index 0 anchored at 0.
+        # JAX requires an out-of-place update.
+        sacc_shifted = sacc_array.at[:, 1:].add(-t)
+
+        # Validity mask:
+        #   (a) decision time positive
+        #   (b) t fits inside the first fixation, per the constraint above
+        first_sacc_end = sacc_array[:, 1]  # max_d >= 2 guaranteed by validator
+        valid = (rt_shifted > 0.0) & (t < first_sacc_end)
+
+        ll = compute_addm_loglikelihoods(
+            rt_shifted, response,
+            eta, kappa, sigma, a, b, x0,
+            r1, r2, flag, sacc_shifted, d,
+        )
+        return jnp.where(valid, ll, -jnp.inf)
+    return logp
+```
+
+**Caveats baked into the implementation:**
+
+1. **Boundary `t = 0` is well-defined** — `rt_shifted = rt`, `sacc_shifted = sacc_array`, and the kernel sees exactly the same arrays as the no-NDT path. So this commit is strictly a superset of commits 1–3.
+2. **`-inf` masking, not error** — when a proposed `t` violates the constraint on any trial, we return `-inf` for that trial rather than raising. NUTS handles `-inf` cleanly (the proposal gets rejected); raising would crash the sampler.
+3. **No `lax.cond` on `t`** — `jnp.where` over the full computation rather than gating with `lax.cond` keeps the trace shape-stable and avoids recompilation. The cost is computing `compute_addm_loglikelihoods` on invalid trials too, but they're masked out at the end.
+4. **`max_d >= 2` requirement** — the validator (commit 3) is extended to reject datasets where any trial has `d < 2`, so `sacc_array[:, 1]` is always meaningful. Single-stage trials (whole RT spent fixating one item, no saccade) are a degenerate case that the pre-decision NDT interpretation doesn't cleanly support; reject them.
+5. **Gradient through `.at[:, 1:].add(-t)`** — JAX's scatter-add propagates gradient w.r.t. `t` correctly. This is the only place `t` enters the kernel call's input arrays directly (besides `rt_shifted`), and both are differentiable scalar shifts.
+6. **`set_jax_precision`** — the shifted RTs and sacc onsets can have small magnitudes (`rt - t` near 0, `sacc[i] - t` for early `i`). Recommend running this commit's tests with `set_jax_precision("x64")` to catch any roundoff sensitivity in the boundary-handling code; document that in the test file.
+
+**Config change — `src/hssm/modelconfig/addm_config.py`:**
+
+```python
+"list_params": ["eta", "kappa", "sigma", "a", "b", "x0", "t"],  # t appended last
+...
+"bounds": {
+    "eta":   (0.0, 1.0),
+    "kappa": (0.0, 5.0),
+    "a":     (0.1, 3.0),
+    "b":     (0.0, 1.0),
+    "x0":    (-1.0, 1.0),
+    "t":     (0.0, 0.4),   # tight upper bound; refine per-dataset if needed
+},
+"extra_fields": ["r1", "r2", "sacc_array", "d", "flag", "sigma"],  # unchanged
+```
+
+`t` is appended last so existing tests that index `list_params` positionally don't break. The `(0.0, 0.4)` bound is a conservative default; users with shorter first fixations should override via `include=[{"name": "t", "prior": ..., "bounds": ...}]`.
+
+**Validator change — `src/hssm/data_validator.py:_validate_addm_columns`:**
+
+- Add: assert `sacc_array.shape[1] >= 2` and every trial has `d >= 2`.
+- Add: warn (don't fail) if the model's default `t` upper bound exceeds `min(sacc_array[:, 1])` over the dataset — that proposal range will routinely violate the in-first-fixation constraint and waste gradient evaluations. Suggest tightening.
+
+**New tests — `tests/addm/test_addm_ndt.py`:**
+
+1. `test_ndt_zero_matches_no_ndt` — set `t = 0`, confirm `logp` matches the commit-3 no-NDT path bit-for-bit (both use the same kernel).
+2. `test_ndt_shifts_logp_consistently` — for fixed `t > 0`, the JAX logp at `(rt, sacc_array, t)` equals a manually computed shift: `compute_addm_loglikelihoods(rt - t, ..., sacc_shifted, ...)`.
+3. `test_ndt_invalid_t_returns_neginf` — propose `t > sacc_array[i, 1]` for some trial; assert that trial's logp is `-inf` while others remain finite.
+4. `test_ndt_gradient_finite` — `jax.grad` w.r.t. `t` is finite at an interior valid point.
+5. `test_ndt_recovery_smoke` — extend `tests/scripts/addm_recovery.py` (off-CI) to include `t` in the sampled parameters; confirm posterior mean of `t` is within ~2σ of the simulated value.
+
+**Reuses:** the vendored `compute_addm_loglikelihoods` is unchanged — all NDT handling is in the HSSM-owned `builder.py`. No edit to `src/hssm/addm/likelihoods/jax/`.
+
+> **Why this is a separate commit, not folded into commit 2.** Adding `t` after the no-NDT path is shown to work isolates the additional complexity (sacc-shift, validity masking, recovery test) from the core-correctness story. If the v1 path lands cleanly and the v1.1 NDT path turns out to need a more elaborate treatment (e.g., the pre-decision interpretation breaks down for some dataset), the v1 commits remain a working baseline.
+
+### Commit 7 — `feat(addm): user-supplied covariates + fixation continuation in the cssm.addm PPC simulator` *(ssm-simulators, cross-repo)*
+
+**Two coupled problems, one commit.** Faithful posterior predictives require simulating under the fitted model *on the dataset's own covariates*. Today `cssm.addm` (`ssm-simulators/src/cssm/addm_models.pyx`) does the opposite on both counts:
+
+1. **No covariate passthrough.** It randomizes every trial-level latent internally — `r1`, `r2`, `flag`, and the fixation durations (`addm_models.pyx:145-155`) — and exposes no input for them. So it can only produce a *generic* aDDM predictive, never one conditioned on a specific trial's stimulus values or observed gaze. There is no saccade-array argument at all.
+2. **Last-fixation freeze.** It pre-generates a *fixed* budget of `max_fixations` (default 100) durations and looks up drift via `_piecewise_drift`, which **returns the last stage's drift for any `t` beyond the final saccade** (`addm_models.pyx:58-66`). When a `(trial, sample)`'s decision outruns the available fixations, the particle is held at one fixed drift — biologically implausible (subjects keep saccading) and it distorts the RT/choice tails. Under defaults the ~60 s budget over-covers `max_t=20 s`, so it is *masked* in pure self-generation; but with a **finite user-supplied saccade prefix** (e.g. human fixation onsets, which only extend to the observed RT) a slow draw runs past the prefix and the freeze is *guaranteed*, not incidental.
+
+These are coupled: once users can supply real (finite) saccade arrays, the freeze stops being a corner case and becomes the common failure mode. So both land together.
+
+**Why `cssm.addm` (not an HSSM-side shim).** PPC must simulate under the *same* generative model that was fit, and the intention is for `cssm.addm` to host the core of efficient-fpt's collapsing-boundary aDDM (the two are converging). efficient-fpt's own `_run_heterog_trial` has the identical freeze (`efficient-fpt/src/efficient_fpt/cython/simulator.pyx:265`, the `while stage + 1 < d` guard) and its `simulate_fpt` already accepts a `sacc_array_data` prefix — so the target design unifies both: efficient-fpt's "accepts a prefix" + a continuation that efficient-fpt lacks. Fix in lockstep when the core is ported.
+
+**Design — optional covariates + a spliced fixation sequence.** Add optional per-trial covariate inputs to `cssm.addm`; when `None`, fall back to the current internal sampling (full backward compatibility).
+
+| Input (per trial, length `n_trials`) | When supplied | When `None` (default) |
+|---|---|---|
+| `r1`, `r2` | use as the stimulus ratings | randomize `int∈[1,5]` as today |
+| `flag` | use as first-item indicator | randomize `0/1` as today |
+| `sacc_array` (padded `n_trials × max_d`) + `d` | use as the **observed fixation prefix** | empty prefix → fully self-generated |
+
+The fixation sequence actually used by the diffusion is always **prefix ++ continuation**:
+- *Prefix* = the supplied observed onsets for that trial (or empty).
+- *Continuation* = `Gamma(gamma_shape, gamma_scale)` draws (chosen option: parametric, not empirical), appended until cumulative time `≥ deadline_tmp = compute_deadline_tmp(max_t, deadline, t)`. Because the boundary collapses, `deadline_tmp` is finite (bounded by `a/b` and `max_t`), so coverage is guaranteed and `_piecewise_drift` can never reach "beyond the last saccade" within an active trial — **the freeze is structurally impossible in every regime.**
+
+Continuation must preserve the alternation: stage `i ≥ d_prefix` takes the item opposite to stage `i−1`, derived from `flag` and parity, so the spliced drift array `[μ_first, μ_second, …]` stays consistent across the prefix→continuation seam.
+
+Sketch (`addm_models.pyx`, replacing the fixed-budget block at ~lines 152-160; `prefix` is the supplied onsets for trial `k`, or `[0.0]` if none):
+
+```python
+# Start from the user-supplied observed onsets (decision-time, see NDT note),
+# then keep saccading until the whole diffusion horizon is covered.
+sacc_list = list(prefix) if prefix is not None else [0.0]
+cum = sacc_list[-1]
+while cum < deadline_tmp:
+    cum += rng.gamma(gamma_shape, gamma_scale)
+    sacc_list.append(cum)
+sacc_np = np.asarray(sacc_list, dtype=np.float64)
+d = len(sacc_np)
+# mu_np built by alternating from `flag`, parity continued across the seam
+```
+
+`max_fixations` becomes a soft safety cap on *continuation* length (warn/raise under pathological params), not the coverage mechanism. Per `(trial, sample)`, the prefix is reused and the continuation is freshly drawn (a fresh gaze realization beyond the observed data).
+
+**Coordinate consistency with NDT (commit 6).** Supplied saccade onsets are in **trial-time**; the decision simulator runs in **decision-time**. So before simulating, shift the supplied prefix by the (simulated/sampled) `t` exactly as commit 6 shifts the likelihood inputs (`sacc_array[1:] − t`, stage 0 anchored at 0), drop any prefix onset `≤ t`, and add `t` back to the simulated decision time at the end (`cssm.addm` already does `rts = t_particle + t + smooth_u`, `addm_models.pyx:207`). Continuation is generated in decision-time. This keeps the simulator and the commit-6 likelihood in the same coordinate frame.
+
+**HSSM-side plumbing (this repo).** The PPC/simulate path must forward the dataset's `extra_fields` (`r1`, `r2`, `flag`, `sacc_array`, `d`) into `cssm.addm`. Wire `hssm.simulate_data(model="addm", data=...)` (and the posterior-predictive call) to pass observed covariates through; document that omitting them yields the generic self-generated predictive. No likelihood change. This is the same schema-alignment surface tracked in Open Question 4 — now load-bearing in both directions (covariates in, fixation sequence out).
+
+**Emit the generated fixation sequence.** Extend the `full` return metadata with the per-`(trial, sample)` spliced `sacc_np`/`d`/`flag`, so PPC can check predicted *fixation counts* and gaze statistics, not just `rt`/`choice`. (Minimal-return path unchanged.)
+
+**Cross-repo coordination (spine rule).** ssm-simulators change: after editing `addm_models.pyx`, rebuild the Cython extension, run `ssm-simulators` tests, and verify the output schema matches what `hssm.simulate_data` and the registered likelihood expect. Bump HSSM's ssm-simulators floor (commit 9) to the release containing the fix.
+
+**Tests (ssm-simulators — cssm.addm suite):**
+1. `test_covariates_respected` — supplied `r1`/`r2`/`flag` are used verbatim (drifts match `kappa·(r1−η·r2)` etc.), not randomized.
+2. `test_supplied_prefix_used` — with a supplied saccade prefix and a fast decision, the simulated switch-times match the prefix exactly up to `d_prefix`.
+3. `test_continuation_past_prefix` — short supplied prefix + slow decision; assert the sequence extends past `d_prefix`, alternates correctly across the seam, and reaches `deadline_tmp`.
+4. `test_no_covariates_backward_compatible` — all covariates `None` reproduces the current self-generating behavior, distributionally (KS on RT, χ² on choice) — no regression.
+5. `test_fixation_coverage_invariant` — for random params, `sacc_np[-1] ≥ deadline_tmp` for every `(trial, sample)`.
+6. `test_ndt_coordinate_consistency` — a supplied trial-time prefix shifted by `t` yields the same decision-time sequence as a manual commit-6 shift.
+7. `test_fixation_metadata_emitted` — `return_option='full'` includes per-sample spliced fixation sequences with sane counts.
+
+> **Optional split.** This can land as two sub-commits if review prefers: **7a** covariate passthrough (inputs + plumbing + tests 1–2, 4), **7b** continuation + coverage guarantee (tests 3, 5–7). They're separable, but 7b is only *fully exercised* once 7a allows finite user prefixes, so the plan keeps them adjacent.
+
+### Commit 8 — `docs(addm): tutorial notebook, README, mkdocs nav`
 
 - `docs/tutorials/addm_tutorial.ipynb` — mirror the structure of [docs/tutorials/rlssm_tutorial.ipynb](docs/tutorials/rlssm_tutorial.ipynb):
   1. Generate a small aDDM dataset two ways: (a) `efficient_fpt.aDDModel(...).generate_experiment(...)`, and/or (b) `hssm.simulate_data(model="addm", ...)`. Show both as a tour of what's available.
@@ -231,7 +381,7 @@ Create `tests/addm/`:
 - `mkdocs.yml` — add the tutorial to nav.
 - `README.md` — add `addm` to the supported-models list.
 
-### Commit 8 — `chore(addm): cleanup`
+### Commit 9 — `chore(addm): cleanup`
 
 - Delete the stale `addm-andrew-dev/` scratch folder (which sits at the branch root) once the new code is working.
 - Bump the ssm-simulators floor in `pyproject.toml` to the first release containing `addm` in `_modelconfig/` (look this up at PR time).
@@ -264,6 +414,7 @@ Create `tests/addm/`:
 - `tests/addm/test_addm_builder_output_shape.py`
 - `tests/addm/test_addm_likelihood.py`
 - `tests/addm/test_addm.py`
+- `tests/addm/test_addm_ndt.py` *(commit 6)*
 - `tests/addm/test_addm_simulator.py`
 - `tests/scripts/addm_recovery.py`
 - `docs/tutorials/addm_tutorial.ipynb`
@@ -271,8 +422,10 @@ Create `tests/addm/`:
 ## Files modified
 
 - `src/hssm/_types.py` — add `"addm"` to the `SupportedModels` Literal.
-- `src/hssm/data_validator.py` — add `_validate_addm_columns` hook gated on `model_config.model_name == "addm"`, called from `_post_check_data_sanity`.
-- `pyproject.toml` — bump ssm-simulators floor to the release that registers `addm` (commit 8).
+- `src/hssm/data_validator.py` — add `_validate_addm_columns` hook gated on `model_config.model_name == "addm"`, called from `_post_check_data_sanity`. Commit 6 extends this to require `d >= 2` and warn when the `t` prior range exceeds first-fixation onset.
+- `src/hssm/addm/likelihoods/builder.py` — commit 6 extends `make_addm_logp_func` to accept `t` and shift `rt`/`sacc_array`.
+- `src/hssm/modelconfig/addm_config.py` — commit 6 appends `t` to `list_params` and adds `t` bounds.
+- `pyproject.toml` — bump ssm-simulators floor to the release that registers `addm` (commit 9).
 - `README.md`, `mkdocs.yml` — mention the new model and tutorial.
 
 **Not modified** (and why):
@@ -308,14 +461,17 @@ End-to-end checks, in order:
 3. **Unit** — `pytest tests/addm/ -v` passes (commits 4–6).
 4. **Likelihood parity** — `test_addm_likelihood.py` asserts the registered `Op` matches a direct call to `compute_addm_loglikelihoods` to 1e-6, *and* matches per-trial `compute_addm_logfptd` summed over a 10-trial fixture.
 5. **Smoke sample** — `hssm.HSSM(model="addm", data=synthetic_trials).sample(draws=5, tune=5)` returns an `InferenceData`.
-6. **Simulator path** — `hssm.simulate_data(model="addm", theta=..., n_samples=...)` returns a DataFrame whose columns are a superset of what the registered `addm` likelihood consumes.
-7. **Parameter recovery** (off-CI) — `tests/scripts/addm_recovery.py` confirms posterior means within ~2σ of ground truth on 1000 simulated trials.
-8. **Tutorial runs clean** — `jupyter nbconvert --execute docs/tutorials/addm_tutorial.ipynb` finishes without errors.
-9. **Docs build** — `mkdocs build` succeeds with the new tutorial in nav.
+6. **NDT correctness** — `test_addm_ndt.py` (commit 6) confirms `t = 0` matches the no-NDT path bit-for-bit, that `t > 0` yields a logp consistent with manually shifting `rt`/`sacc_array`, and that `t` violating the in-first-fixation constraint returns `-inf` per offending trial.
+7. **Simulator path** — `hssm.simulate_data(model="addm", theta=..., n_samples=...)` returns a DataFrame whose columns are a superset of what the registered `addm` likelihood consumes (including a `t` column, or with NDT applied client-side if `cssm.addm` doesn't model it). After commit 7, also assert: (a) **covariate passthrough** — supplying `data=` with `r1`/`r2`/`flag`/`sacc_array` produces predictives conditioned on those values (not randomized); (b) **no freeze** — simulated RTs show no spurious tail spike from fixation-exhausted trials and `sacc_np[-1] ≥ deadline_tmp` holds per sample; (c) omitting covariates still yields the generic self-generated predictive.
+8. **Parameter recovery** (off-CI) — `tests/scripts/addm_recovery.py` confirms posterior means within ~2σ of ground truth on 1000 simulated trials, including `t` after commit 6.
+9. **Tutorial runs clean** — `jupyter nbconvert --execute docs/tutorials/addm_tutorial.ipynb` finishes without errors.
+10. **Docs build** — `mkdocs build` succeeds with the new tutorial in nav.
 
 ## Open questions
 
-1. **Non-decision time `t`** — include in v1 as an additional sampled parameter (shift RTs), or defer to a follow-up commit? Affects the `list_params` and `bounds` keys in `addm_config.py`.
-2. **`extra_fields` defaulting** — the model config sets `extra_fields=["r1","r2","sacc_array","d","flag"]`. Confirm that `HSSM.__init__` honors `extra_fields` from the model config dict without the user having to pass it again; if not, document the required user-side call.
-3. **ssm-simulators schema alignment** — does `cssm.addm`'s output via `hssm.simulate_data` emit `sacc_array`/`d`/`flag` in a DataFrame shape that matches what the registered likelihood expects? If not, commit 6 will surface the gap.
-4. **ssm-simulators version pin** — confirm which ssm-simulators release first contains `addm` in `_modelconfig/`, and bump HSSM's `pyproject.toml` floor accordingly (commit 8).
+1. **`extra_fields` defaulting** — the model config sets `extra_fields=["r1","r2","sacc_array","d","flag"]`. Confirm that `HSSM.__init__` honors `extra_fields` from the model config dict without the user having to pass it again; if not, document the required user-side call.
+2. **`t` upper bound** — the default `t ∈ (0.0, 0.4)` may be too loose for datasets with short first fixations. If the warning in `_validate_addm_columns` (commit 6) fires often, consider auto-tightening to `(0.0, 0.9 * min(sacc_array[:, 1]))` per-dataset, or expose a helper that suggests a bound.
+3. **Single-stage trials (`d == 1`)** — rejected by commit 6's validator. If real datasets contain non-trivial fractions of single-fixation trials, we will need a fallback (e.g., fall back to a pure-DDM likelihood for those trials, or relax to post-decision NDT).
+4. **ssm-simulators schema alignment (now bidirectional)** — commit 7 makes this load-bearing in both directions. *Inputs:* can `cssm.addm` accept the dataset's per-trial `r1`/`r2`/`flag`/`sacc_array`/`d` covariates in the shape `hssm.simulate_data` forwards them (padded ragged saccade arrays, trial-time vs decision-time)? *Outputs:* does the emitted spliced fixation sequence (`sacc_np`/`d`/`flag` per sample) land in the `full`-return metadata in the expected shape? Confirm both before wiring the PPC path.
+5. **ssm-simulators version pin** — confirm which ssm-simulators release first contains `addm` in `_modelconfig/`, and bump HSSM's `pyproject.toml` floor accordingly (commit 9).
+
