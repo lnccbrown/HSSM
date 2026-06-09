@@ -18,8 +18,8 @@ Branch: `addm-integration-class-0` (HSSM repo). Branch off `main` at current HEA
 
 The attentional drift diffusion model (aDDM; Krajbich et al.) extends the standard DDM by
 modulating the drift rate based on **which option the subject is currently fixating**. The
-sampled parameters are `{eta, kappa, sigma, a, b, x0}` (plus optional non-decision time `t`,
-added in Commit 5); the **per-trial covariates** `{r1, r2, flag, sacc_array, d}` come from the
+sampled parameters are `{eta, kappa, a, b, x0}` (plus optional non-decision time `t`,
+added in Commit 5); the **per-trial covariates** `{r1, r2, flag, sacc_array, d, sigma}` come from the
 data and are *not* sampled — exactly the pattern [`RLSSM`](src/hssm/rl/rlssm.py) already solves
 with its extra-fields machinery. We therefore follow the RLSSM design point-for-point so aDDM
 lives alongside it as a peer subclass rather than carving a new architectural lane.
@@ -83,8 +83,8 @@ by HSSM's ordinary `include=[...]` machinery, not by the Op.
 
 | Kind | Names | Notes |
 |---|---|---|
-| **Sampled** (`list_params`) | `eta, kappa, sigma, a, b, x0` → `+ t` (Commit 5) | `kappa` = drift scaling, `eta` = attentional discount, `sigma` = diffusion noise, `a` = boundary, `b` = collapse rate, `x0` = start point, `t` = non-decision time. `sigma` is **kept sampled** (consistent with the class plan), matching the kernel's positional `sigma`. A user can fix it via a constant prior. |
-| **Per-trial covariates** (`extra_fields`) | `r1, r2, flag, sacc_array, d` | Ordered to match the kernel's positional covariate slots. Not sampled. |
+| **Sampled** (`list_params`) | `eta, kappa, a, b, x0` → `+ t` (Commit 5) | `kappa` = drift scaling, `eta` = attentional discount, `a` = boundary, `b` = collapse rate, `x0` = start point, `t` = non-decision time.  |
+| **Per-trial covariates** (`extra_fields`) | `r1, r2, flag, sacc_array, d, sigma` | Ordered to match the kernel's positional covariate slots. Not sampled. |
 
 `t` is appended **last** to `list_params` so positional indexing in earlier tests doesn't break,
 and it is consumed **inside the builder** (it shifts `rt`/`sacc_array`); it is *not* a kernel
@@ -147,7 +147,7 @@ the `jax/` files reach *above* the subpackage in three places, all of which must
    process** path (Commit 2) a stable entry that accepts a pre-built drift array, while the
    default path keeps calling `compute_addm_loglikelihoods` (which builds the drift array
    internally). Record it in the header comment so a re-vendor preserves it.
-5. `src/hssm/addm/likelihoods/jax/NOTICE` — efficient-fpt license text plus a `Source-Commit: <sha>` line.
+
 
 **Not vendored:** `efficient_fpt/cython/`, `efficient_fpt/numpy/`, `efficient_fpt/models.py`,
 the NumPy `addm_helpers.py`, the simulator. None are on the inference path.
@@ -165,8 +165,7 @@ the surface narrow makes a future re-vendor a single-directory change.
 4. `test_from_mu_matches_default` — `compute_addm_loglikelihoods_from_mu` with
    `mu_array = _build_addm_mu_array_data(...)` equals `compute_addm_loglikelihoods` on the same
    inputs (within `1e-6`) — confirms the new core wrapper is wired correctly.
-5. *(off-CI, optional)* `test_matches_upstream` — if an `efficient_fpt` checkout is importable,
-   assert the vendored copy matches upstream bit-for-bit on the fixture, to detect drift.
+
 
 ### Commit 2 — `feat(addm): submodule scaffolding, attention process, likelihood Op builder`
 
@@ -205,8 +204,8 @@ the seam that keeps the class plan's extensibility story alive on the new batche
 
 1. **`make_addm_logp_func(attention_process="standard_alternating")`** → callable `logp(data, *args)`:
    - `data[:, 0]` = rt, `data[:, 1]` = response.
-   - `args` are the sampled params in `list_params` order: `eta, kappa, sigma, a, b, x0`.
-   - extra fields `r1, r2, flag, sacc_array, d` are appended to `args` by HSSM's extra-fields
+   - `args` are the sampled params in `list_params` order: `eta, kappa, a, b, x0`.
+   - extra fields `r1, r2, flag, sacc_array, d, sigma` are appended to `args` by HSSM's extra-fields
      machinery (same as RLSSM; see `DataValidatorMixin._update_extra_fields` in
      [data_validator.py](src/hssm/data_validator.py)).
    - **Default attention process:** call `compute_addm_loglikelihoods(rt, response, eta, kappa,
@@ -253,7 +252,7 @@ class aDDMConfig(BaseModelConfig):
     """Config for the attentional DDM (subclass formulation)."""
     model_name: str = "addm"
     list_params: list[str] = field(
-        default_factory=lambda: ["eta", "kappa", "sigma", "a", "b", "x0"]
+        default_factory=lambda: ["eta", "kappa", "a", "b", "x0"]
     )
     params_default: list[float] = field(
         default_factory=lambda: [0.3, 1.0, 1.0, 2.0, 0.0, 0.0]
@@ -261,13 +260,12 @@ class aDDMConfig(BaseModelConfig):
     response: list[str] = field(default_factory=lambda: ["rt", "response"])
     choices: tuple[int, ...] = (-1, 1)
     extra_fields: list[str] | None = field(
-        default_factory=lambda: ["r1", "r2", "flag", "sacc_array", "d"]
+        default_factory=lambda: ["r1", "r2", "flag", "sacc_array", "d", "sigma"]
     )
     bounds: dict[str, tuple[float, float]] = field(
         default_factory=lambda: {
             "eta":   (0.0, 1.0),
             "kappa": (0.0, 5.0),
-            "sigma": (0.0, 2.0),
             "a":     (0.1, 3.0),
             "b":     (0.0, 1.0),
             "x0":    (-1.0, 1.0),
@@ -465,7 +463,7 @@ def logp(data, eta, kappa, sigma, a, b, x0, t, r1, r2, flag, sacc_array, d):
    masked-out invalid trials are computed-then-discarded.
 4. **`max_d >= 2`** — the validator is extended to reject `d < 2`, so `sacc_array[:, 1]` is always
    meaningful. Single-fixation trials are a degenerate case the pre-decision interpretation
-   doesn't support; reject them (see Open Question 3).
+   doesn't support; reject them (see Open Question 3) **This I'm not entirely sure of -- are we supposed to reject single-fixation trials here? - Andrew**.
 5. **Gradient through `.at[:, 1:].add(-t)`** — JAX's scatter-add propagates `∂/∂t` correctly.
 6. **Precision** — `rt - t` and early `sacc[:, i] - t` can be small; run this commit's tests under
    `set_jax_precision("x64")` and document it.
@@ -509,7 +507,7 @@ fitted model *on the dataset's own covariates*. Today `cssm.addm`
 2. **Last-fixation freeze.** It pre-generates a fixed budget of `max_fixations` durations and looks
    up drift via `_piecewise_drift`, which **returns the last stage's drift for any `t` beyond the
    final saccade**. When a `(trial, sample)`'s decision outruns the available fixations, the
-   particle is held at one fixed drift — biologically implausible (subjects keep saccading) and it
+   particle is held at one fixed drift and it
    distorts the RT/choice tails. Under self-generation the default budget over-covers `max_t`, so
    it is *masked*; but with a **finite user-supplied saccade prefix** (human fixation onsets,
    which only extend to the observed RT) a slow draw runs past the prefix and the freeze is
@@ -528,11 +526,11 @@ compatibility).
 |---|---|---|
 | `r1`, `r2` | use as stimulus ratings | randomize `int∈[1,5]` |
 | `flag` | use as first-item indicator | randomize `0/1` |
-| `sacc_array` (padded `n×max_d`) + `d` | use as the **observed fixation prefix** | empty prefix → fully self-generated |
+| `sacc_array` (padded `n×max_d`) + `d` | use as the **observed fixation prefix** | empty prefix → fully self-generated based off of subject-wise fixation data |
 
 The fixation sequence used by the diffusion is always **prefix ++ continuation**:
 - *Prefix* = supplied observed onsets (or empty).
-- *Continuation* = `Gamma(gamma_shape, gamma_scale)` draws appended until cumulative time
+- *Continuation* = `Gamma(gamma_shape, gamma_scale)` fits a Gamma distribution based off of subject-wise fixation data until cumulative time
   `≥ deadline_tmp = compute_deadline_tmp(max_t, deadline, t)`. Because the boundary collapses,
   `deadline_tmp` is finite (bounded by `a/b` and `max_t`), so coverage is guaranteed and
   `_piecewise_drift` can never reach "beyond the last saccade" within an active trial — **the
@@ -546,7 +544,7 @@ Sketch (`addm_models.pyx`, replacing the fixed-budget block; `prefix` = supplied
 sacc_list = list(prefix) if prefix is not None else [0.0]
 cum = sacc_list[-1]
 while cum < deadline_tmp:
-    cum += rng.gamma(gamma_shape, gamma_scale)
+    cum += rng.gamma(gamma_shape, gamma_scale) # ought to be a Gamma with parameters extrapolated per subject
     sacc_list.append(cum)
 sacc_np = np.asarray(sacc_list, dtype=np.float64); d = len(sacc_np)
 # mu_np built by alternating from `flag`, parity continued across the seam
@@ -573,9 +571,6 @@ aDDM is a subclass, this plumbing is self-contained — no model-name branching 
 `(trial, sample)` spliced `sacc_np`/`d`/`flag`, so PPC can check predicted *fixation counts* and
 gaze statistics, not just `rt`/`choice`. (Minimal-return path unchanged.)
 
-**Cross-repo coordination (spine rule).** After editing `addm_models.pyx`: rebuild the Cython
-extension, run `ssm-simulators` tests, and verify the output schema matches what the aDDM PPC
-plumbing expects. Bump HSSM's ssm-simulators floor (Commit 8) to the release containing the fix.
 
 **Tests:**
 - *ssm-simulators (`cssm.addm` suite):*
@@ -584,20 +579,17 @@ plumbing expects. Bump HSSM's ssm-simulators floor (Commit 8) to the release con
   2. `test_supplied_prefix_used` — supplied prefix + fast decision → simulated switch-times match
      the prefix up to `d_prefix`.
   3. `test_continuation_past_prefix` — short prefix + slow decision → sequence extends past
-     `d_prefix`, alternates across the seam, reaches `deadline_tmp`.
-  4. `test_no_covariates_backward_compatible` — all covariates `None` reproduces current behavior
-     distributionally (KS on RT, χ² on choice).
-  5. `test_fixation_coverage_invariant` — `sacc_np[-1] ≥ deadline_tmp` for every `(trial, sample)`.
-  6. `test_ndt_coordinate_consistency` — a trial-time prefix shifted by `t` yields the same
-     decision-time sequence as a manual Commit-5 shift.
-  7. `test_fixation_metadata_emitted` — `return_option='full'` includes per-sample spliced
-     sequences with sane counts.
+     `d_prefix`, alternates across the seam, reaches `deadline_tmp`..
+  4. `test_fixation_coverage_invariant` — `sacc_np[-1] ≥ deadline_tmp` for every `(trial, sample)` (**not sure if needed - Andrew**).
+  5. `test_ndt_coordinate_consistency` — a trial-time prefix shifted by `t` yields the same
+     decision-time sequence as a manual Commit-5 shift (**not sure if needed - Andrew**).
+  6. `test_fixation_metadata_emitted` — `return_option='full'` includes per-sample spliced
+     sequences with sane counts (**not sure if needed - Andrew**).
 - *HSSM (`tests/addm/test_addm_ppc.py`):*
-  8. `test_ppc_forwards_covariates` — `aDDM(...).sample_posterior_predictive(...)` (or the
+  7. `test_ppc_forwards_covariates` — `aDDM(...).sample_posterior_predictive(...)` (or the
      simulate path) passes the dataset's `r1/r2/flag/sacc_array/d` to `cssm.addm`; predictive RTs
      are conditioned on them (differ from the covariate-free predictive).
-  9. `test_ppc_no_freeze_tail` — simulated RTs show no spurious tail spike from fixation-exhausted
-     trials.
+
 
 > **Optional split.** Can land as **6a** (covariate passthrough: inputs + plumbing + tests 1–2,
 > 4, 8) and **6b** (continuation + coverage guarantee: tests 3, 5–7, 9). 6b is only fully
@@ -606,7 +598,7 @@ plumbing expects. Bump HSSM's ssm-simulators floor (Commit 8) to the release con
 ### Commit 7 — `test+docs(addm): parameter recovery, tutorial notebook, docs`
 
 - **`tests/scripts/addm_recovery.py`** (off-CI) — 1000-trial recovery with known
-  `(eta, kappa, sigma, a, b, x0, t)`; fit via `hssm.aDDM(data=...)`; confirm posterior means
+  `(eta, kappa, a, b, x0, t)`; fit via `hssm.aDDM(data=...)`; confirm posterior means
   within ~2σ of ground truth. Reuse the recovery setup from
   [efficient-fpt examples/example8_empirical](data/azhang/efficient-fpt/examples/example8_empirical).
 - **`docs/tutorials/addm_tutorial.ipynb`** — mirror
@@ -746,19 +738,11 @@ End-to-end checks, in order:
    default is desired (it is more user-friendly and we keep the explicit path too).
 2. **`t` upper bound.** `t ∈ (0.0, 0.4)` may be too loose for short first fixations. If the
    Commit-5 warning fires often, auto-tighten to `(0.0, 0.9 · min(sacc_array[:, 1]))` per dataset,
-   or expose a helper that suggests a bound.
-3. **Single-stage trials (`d == 1`).** Rejected by the Commit-5 validator. If real datasets carry
+   or expose a helper that suggests a bound?
+3. **Single-stage trials (`d == 1`) What do we do in the case of single-stage trials?.** Rejected by the Commit-5 validator. If real datasets carry
    a non-trivial fraction of single-fixation trials, add a fallback (pure-DDM likelihood for those
-   trials, or relax to post-decision NDT).
-4. **`sigma`: sampled vs fixed.** Kept **sampled** here (consistent with the class plan and the
-   kernel's positional `sigma`). For datasets where `sigma` trades off with `kappa`/`a`, document
-   fixing it via a constant prior (or moving it to `extra_fields`).
-5. **ssm-simulators schema alignment (bidirectional, Commit 6).** *Inputs:* can `cssm.addm` accept
-   the dataset's per-trial `r1/r2/flag/sacc_array/d` in the shape the aDDM PPC plumbing forwards
-   (padded ragged saccade arrays, trial-time vs decision-time)? *Outputs:* does the emitted
-   spliced fixation sequence land in the `full`-return metadata in the expected shape? Confirm
-   both before wiring PPC.
-6. **`missing_data`/`deadline`.** Allowed for aDDM (no within-participant ordering to corrupt,
-   unlike RLSSM). Confirm no hidden coupling in the simulate/PPC path before advertising support.
-7. **Convenience vs explicitness.** Should `hssm.HSSM` gain any awareness of aDDM, or is
-   `hssm.aDDM` the sole entry point? This plan keeps it sole (mirrors `hssm.RLSSM`).
+   trials)?
+4. **`missing_data`/`deadline`.** Allowed for aDDM (no within-participant ordering to corrupt,
+   unlike RLSSM). Confirm no hidden coupling in the simulate/PPC path before advertising support. Not entirely sure what the purpose would be for 'missing_data' and 'deadline'
+5. **Convenience vs explicitness.** Should `hssm.HSSM` gain any awareness of aDDM, or is
+   `hssm.aDDM` the sole entry point? This plan keeps it sole (mirrors `hssm.RLSSM`). Down the line, may want to incorporate ADDM as a model under the main HSSM class. 

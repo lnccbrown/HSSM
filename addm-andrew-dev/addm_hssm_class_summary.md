@@ -16,8 +16,7 @@ posterior predictive checks aren't biased. Each commit ships with its own tests.
 
 ## Why a subclass (not `model="addm"`)
 
-aDDM's likelihood is a pre-built JAX `Op`, not a string/ONNX path. That's exactly why `RLSSM` is
-a subclass rather than a registered model. We follow `RLSSM` so aDDM sits next to it as a peer —
+We follow `RLSSM` so aDDM sits next to it as a peer —
 entry point `hssm.aDDM(data=...)`, **not** `hssm.HSSM(model="addm", ...)`. The payoff: **we touch
 almost no generic HSSM code** (no edits to the model registry, the global validator, or the base
 classes). aDDM is simpler than RLSSM in one way — trials are independent, so there's no
@@ -35,14 +34,14 @@ model = hssm.aDDM(
 idata = model.sample()
 ```
 
-Sampled parameters: `eta, kappa, sigma, a, b, x0` (+ `t` after Commit 5).
-Per-trial data (not sampled): `r1, r2, flag, sacc_array, d`.
+Sampled parameters: `eta, kappa, a, b, x0` (+ `t` after Commit 5).
+Per-trial data (not sampled): `r1, r2, flag, sacc_array, d, sigma`.
 
 ## The commits
 
 | # | Commit | One-liner | How we know it works |
 |---|--------|-----------|----------------------|
-| 1 | Vendor the JAX likelihood | Copy efficient-fpt's `jax/` kernel into `hssm/addm/likelihoods/jax/`; fix the cross-package imports; keep a license + commit-hash header. | Vendored kernel runs on a tiny batch and matches the per-trial reference to `1e-6`. |
+| 1 | Vendor the JAX likelihood | Copy efficient-fpt's `jax/` kernel into `hssm/addm/likelihoods/jax/`; fix the cross-package imports. | Vendored kernel runs on a tiny batch and matches the per-trial reference to `1e-6`. |
 | 2 | Builder + Op + attention process | Wrap the kernel as a `logp` and a gradient-carrying PyTensor `Op`; add a pluggable "attention process" (default = the standard alternating drift). | Op = func = raw kernel to `1e-6`; gradients finite; a custom attention process changes the answer as expected. |
 | 3 | `aDDMConfig` dataclass | A config object (params, bounds, extra fields, attention process) mirroring `RLSSMConfig`. | Defaults are right; `validate()` accepts good configs and rejects bad ones; dict round-trips. |
 | 4 | `aDDM(HSSMBase)` subclass | The real class: builds the Op in `__init__`, validates aDDM columns, exports `hssm.aDDM`. | `hssm.aDDM(data=df)` constructs, is an `HSSMBase`, and a 5-draw smoke sample returns `InferenceData`. |
@@ -66,16 +65,9 @@ fixed budget of fixations and, if a slow decision runs out of them, freezes the 
 fixation's value. That's masked when the simulator invents its own (over-long) fixations, but it
 **breaks** the moment we feed it a real subject's fixations, which only run up to their observed
 response. The fix: always treat the subject's fixations as a *prefix*, then keep drawing new
-fixations (alternating between the two options, like a real subject) until the whole decision is
-covered. Because the decision boundary collapses over time, "the whole decision" is a finite
+fixations by fitting a subject-wise Gamma distribution that appends additional fixations until the whole decision is
+covered or a preset max decision time. Because the decision boundary collapses over time, "the whole decision" is a finite
 horizon, so coverage is guaranteed and the freeze becomes impossible. This is what makes
 posterior predictive checks trustworthy.
 
-## How this differs from the sibling registered-model plan
 
-[addm_hssm.md](addm_hssm.md) explores the same model as a **registered model**
-(`hssm.HSSM(model="addm")`, an entry in `SupportedModels`, a `modelconfig/addm_config.py`). This
-plan deliberately keeps the **subclass** formulation (`hssm.aDDM`, an `aDDMConfig` dataclass, a
-pluggable attention process), trading a little more code in the `addm/` submodule for **zero
-edits to generic HSSM modules**. The modeling content — vendored kernel, NDT treatment, simulator
-fix, tests — is shared; only the integration surface differs.
