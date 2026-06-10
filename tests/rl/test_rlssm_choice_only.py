@@ -164,10 +164,6 @@ def test_rlssm_softmax_custom_choice_labels_behave_like_binary_actions() -> None
     )
 
 
-@pytest.mark.xfail(
-    reason="Choice-only data validation returns before emitting missing-category warnings.",
-    strict=True,
-)
 def test_rlssm_softmax_warns_when_a_declared_choice_is_missing() -> None:
     """Choice-only RLSSM should warn when one declared response never appears."""
     rng = np.random.default_rng(11)

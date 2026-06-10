@@ -77,10 +77,10 @@ class HSSM(HSSMBase):
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
     model_config : optional
-        A :class:`~hssm.config.BaseModelConfig` / :class:`~hssm.config.Config`
+        A `hssm.config.BaseModelConfig` / `hssm.config.Config`
         instance or a ``dict`` with model configuration information. The
         constructor accepts a typed ``ModelConfig`` or a plain ``dict``; when a
-        ``dict`` is provided the library will build a typed :class:`Config`
+        ``dict`` is provided the library will build a typed `Config`
         via the factory function. If ``None`` is provided, defaults will be
         used where available. Fields for this config are usually:
 

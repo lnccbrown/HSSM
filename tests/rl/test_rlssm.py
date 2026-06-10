@@ -7,6 +7,7 @@ variant, bambi / PyMC model construction, and a sampling smoke test.
 
 import logging
 from collections.abc import Generator
+from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +19,7 @@ import pytensor
 import pytest
 
 import hssm
+from hssm.rl import registry
 from hssm.distribution_utils import make_distribution as real_make_distribution
 from hssm.rl import RLSSM, RLSSMConfig, register_rlssm_model
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
@@ -53,6 +55,15 @@ def _set_floatx_float32() -> Generator[None, None, None]:
         yield
     finally:
         hssm.set_floatX(prev_floatx, update_jax=True)
+
+
+# runs before every test function to isolate the RLSSM registry state, preventing test bleed-through
+@pytest.fixture(autouse=True)
+def isolated_registries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate RL registries so simplified-interface tests do not leak state."""
+    monkeypatch.setattr(registry, "_SSM_REGISTRY", deepcopy(registry._SSM_REGISTRY))
+    monkeypatch.setattr(registry, "_RLSSM_REGISTRY", deepcopy(registry._RLSSM_REGISTRY))
+    monkeypatch.setattr(registry, "_SSM_LOGP_CACHE", dict(registry._SSM_LOGP_CACHE))
 
 
 @pytest.fixture(scope="module")
@@ -180,6 +191,21 @@ class TestRLSSMInit:
         """Passing deadline!=False should raise NotImplementedError with 'deadline' in msg."""
         with pytest.raises(NotImplementedError, match="deadline"):
             RLSSM(data=rldm_data, model_config=rlssm_config, deadline=True)
+
+    def test_rlssm_loglik_missing_data_init_raises(
+        self, rldm_data, rlssm_config
+    ) -> None:
+        """Passing loglik_missing_data should raise RLSSM's NotImplementedError."""
+
+        def dummy_loglik_missing_data(*_args, **_kwargs):
+            return None
+
+        with pytest.raises(NotImplementedError, match="loglik_missing_data"):
+            RLSSM(
+                data=rldm_data,
+                model_config=rlssm_config,
+                loglik_missing_data=dummy_loglik_missing_data,
+            )
 
 
 class TestRLSSMModelStructure:
@@ -435,3 +461,74 @@ class TestRLSSMSimplifiedInterface:
             RLSSM(data=rldm_data, model_config=rlssm_config, model="some_other_model")
 
         assert any("ignoring" in r.message for r in caplog.records)
+
+    def test_rlssm_model_config_without_overrides_does_not_warn(
+        self, rldm_data, rlssm_config, caplog
+    ) -> None:
+        """Passing only model_config should not emit the ignored-args warning."""
+        with caplog.at_level(logging.WARNING, logger="hssm"):
+            RLSSM(data=rldm_data, model_config=rlssm_config)
+
+        assert not any("ignoring" in r.message for r in caplog.records)
+
+    def test_rlssm_learning_process_override_keeps_matching_metadata(
+        self, rldm_data
+    ) -> None:
+        """Public RLSSM constructor should accept LP overrides with the same sampled params."""
+
+        @annotate_function(
+            inputs=["rl_alpha", "scaler", "response", "feedback"],
+            outputs=["v"],
+        )
+        def alt_compute_v(rl_alpha, scaler, response, feedback):
+            return rl_alpha + scaler
+
+        model = RLSSM(
+            data=rldm_data,
+            model="2AB_RescorlaWagner_DDM",
+            learning_process={"v": alt_compute_v},
+        )
+
+        assert model.model_config.learning_process == {"v": alt_compute_v}
+        assert "rl_alpha" in model.params
+        assert "scaler" in model.params
+
+    def test_rlssm_decision_process_override_updates_sampled_params(
+        self, rldm_data
+    ) -> None:
+        """Public RLSSM constructor should respect decision_process overrides."""
+        model = RLSSM(
+            data=rldm_data,
+            model="2AB_RescorlaWagner_DDM",
+            decision_process="angle",
+        )
+
+        assert model.model_config.decision_process == "angle"
+        assert "theta" in model.params
+
+    def test_rlssm_builtin_model_re_resolves_registered_ssm(self, rldm_data) -> None:
+        """Built-in RLSSM models should pick up later register_ssm() overrides."""
+
+        @annotate_function(
+            inputs=["v", "custom_a", "rt", "response"],
+            outputs=["logp"],
+        )
+        def custom_ddm_logp(lan_matrix):
+            return lan_matrix[:, 1]
+
+        registry.register_ssm(
+            name="ddm",
+            ssm_base_logp_func=custom_ddm_logp,
+            list_params_ssm=["v", "custom_a"],
+            bounds_ssm={"custom_a": (0.3, 3.0)},
+            params_default_ssm=[0.0, 1.5],
+            response=["rt", "response"],
+        )
+
+        model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
+
+        assert model.model_config.decision_process == "ddm"
+        assert "rl_alpha" in model.params
+        assert "scaler" in model.params
+        assert "custom_a" in model.params
+        assert "a" not in model.params

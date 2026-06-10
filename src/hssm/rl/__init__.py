@@ -13,8 +13,8 @@ Public API (import from ``hssm.rl``):
 - ``validate_balanced_panel``: panel-balance utility in :mod:`hssm.rl.utils`.
 
 RL likelihood builders live in :mod:`hssm.rl.likelihoods.builder` and include
-helpers such as :func:`~hssm.rl.likelihoods.builder.make_rl_logp_func` and
-:func:`~hssm.rl.likelihoods.builder.make_rl_logp_op`.
+helpers such as `hssm.rl.likelihoods.builder.make_rl_logp_func` and
+`hssm.rl.likelihoods.builder.make_rl_logp_op`.
 
 """
 

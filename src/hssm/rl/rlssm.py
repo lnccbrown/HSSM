@@ -2,22 +2,22 @@
 
 This module defines:
 
-- :class:`_RLSSM` — the internal base class (previously ``RLSSM``) that requires
-  a fully populated :class:`~hssm.rl.config.RLSSMConfig` to be passed directly.
-- :class:`RLSSM` — the public-facing subclass with a simplified constructor that
+- `_RLSSM` — the internal base class (previously ``RLSSM``) that requires
+  a fully populated `hssm.rl.config.RLSSMConfig` to be passed directly.
+- `RLSSM` — the public-facing subclass with a simplified constructor that
   accepts a *model* name string, optional *learning_process* / *decision_process*
   overrides, and an optional *model_config* override.  Config construction is
-  delegated to :func:`~hssm.rl.registry.get_rlssm_model_config`.
+  delegated to `hssm.rl.registry.get_rlssm_model_config`.
 
-The key difference from :class:`~hssm.hssm.HSSM` is the likelihood:
+The key difference from `hssm.hssm.HSSM` is the likelihood:
   - ``HSSM`` wraps an analytical / ONNX / blackbox callable via
-    :func:`~hssm.distribution_utils.make_likelihood_callable`.
+    `hssm.distribution_utils.make_likelihood_callable`.
   - ``_RLSSM`` / ``RLSSM`` build a differentiable pytensor ``Op`` directly from
-    an :class:`~hssm.rl.likelihoods.builder.AnnotatedFunction` via
-    :func:`~hssm.rl.likelihoods.builder.make_rl_logp_op`, which internally
+    an `hssm.rl.likelihoods.builder.AnnotatedFunction` via
+    `hssm.rl.likelihoods.builder.make_rl_logp_op`, which internally
     handles the RL learning rule and per-participant trial structure.
     This Op is then passed straight to
-    :func:`~hssm.distribution_utils.make_distribution`, bypassing the
+    `hssm.distribution_utils.make_distribution`, bypassing the
     standard ``loglik`` / ``loglik_kind`` wrapping pipeline.
 """
 
@@ -51,16 +51,16 @@ class _RLSSM(HSSMBase):
     """Internal implementation class for reinforcement-learning SSMs.
 
     This class is intended for maintainers and advanced integrations that
-    already have a fully built :class:`RLSSMConfig`. It combines a
+    already have a fully built `RLSSMConfig`. It combines a
     reinforcement-learning update rule with a sequential-sampling likelihood in
     a single differentiable model, using the annotated SSM log-likelihood
     stored on ``model_config.ssm_logp_func``.
 
-    Unlike :class:`~hssm.hssm.HSSM`, this implementation does not go through
+    Unlike `hssm.hssm.HSSM`, this implementation does not go through
     the standard ``loglik`` / ``loglik_kind`` wrapping pipeline. It builds a
     differentiable pytensor ``Op`` with
-    :func:`~hssm.rl.likelihoods.builder.make_rl_logp_op` and passes that Op
-    directly to :func:`~hssm.distribution_utils.make_distribution`.
+    `hssm.rl.likelihoods.builder.make_rl_logp_op` and passes that Op
+    directly to `hssm.distribution_utils.make_distribution`.
 
     The data must form a balanced panel because the RL likelihood reconstructs
     per-participant trial sequences from row order. Any reshuffling of rows
@@ -83,7 +83,7 @@ class _RLSSM(HSSMBase):
         Used to infer ``n_participants`` and ``n_trials`` from *data*.
         Defaults to ``"participant_id"``.
     include : list, optional
-        Parameter specifications forwarded to :class:`~hssm.base.HSSMBase`.
+        Parameter specifications forwarded to `hssm.base.HSSMBase`.
     p_outlier : float | dict | bmb.Prior | None, optional
         Lapse probability specification. Defaults to ``0.05``.
     lapse : float | dict | bmb.Prior | None, optional
@@ -106,15 +106,15 @@ class _RLSSM(HSSMBase):
         Whether to post-process initial values. Defaults to ``True``.
     initval_jitter : float, optional
         Jitter magnitude for initial values.
-        Defaults to :data:`~hssm.defaults.INITVAL_JITTER_SETTINGS` epsilon.
+        Defaults to `hssm.defaults.INITVAL_JITTER_SETTINGS` epsilon.
     **kwargs
-        Additional keyword arguments forwarded to :class:`bmb.Model`.
+        Additional keyword arguments forwarded to `bmb.Model`.
 
     Attributes
     ----------
     model_config : RLSSMConfig
         The RLSSM configuration object (stored as ``self.model_config`` on
-        :class:`~hssm.base.HSSMBase` with the built ``loglik`` Op injected).
+        `hssm.base.HSSMBase` with the built ``loglik`` Op injected).
     n_participants : int
         Number of participants inferred from *data*.
     n_trials : int
@@ -165,6 +165,13 @@ class _RLSSM(HSSMBase):
                 "trials would corrupt the RL learning dynamics. Please remove "
                 "deadline trials from the data before passing it to RLSSM."
             )
+        if loglik_missing_data is not None:
+            raise NotImplementedError(
+                "RLSSM currently does not support `loglik_missing_data` handling. "
+                "Missing-data network assembly (OPN / CPN) is not implemented "
+                "for RLSSM. Please remove missing-data handling arguments before "
+                "passing the model to RLSSM."
+            )
 
         # Infer panel structure and validate balance BEFORE calling super so any
         # error surfaces before the expensive model-build steps.
@@ -202,8 +209,9 @@ class _RLSSM(HSSMBase):
         #  _make_model_distribution for details.
         model_config = replace(model_config, loglik=loglik_op, backend="jax")
 
-        # missing_data and deadline are guaranteed False at this point (guards
-        # above reject any other value).  Pass them explicitly for clarity.
+        # missing_data and deadline are guaranteed False, and
+        # loglik_missing_data guaranteed None, at this point (guards above
+        # reject any other value). Pass them explicitly for clarity.
         super().__init__(
             data=data,
             model_config=model_config,
@@ -215,7 +223,7 @@ class _RLSSM(HSSMBase):
             extra_namespace=extra_namespace,
             missing_data=False,
             deadline=False,
-            loglik_missing_data=loglik_missing_data,
+            loglik_missing_data=None,
             process_initvals=process_initvals,
             initval_jitter=initval_jitter,
             **kwargs,
@@ -225,7 +233,7 @@ class _RLSSM(HSSMBase):
         """Build a pm.Distribution using the pre-built RL log-likelihood Op.
 
         Unlike :meth:`HSSM._make_model_distribution`, this method does not go
-        through :func:`~hssm.distribution_utils.make_likelihood_callable`.
+        through `hssm.distribution_utils.make_likelihood_callable`.
         Instead it uses ``self.loglik`` directly — the differentiable pytensor
         ``Op`` built in :meth:`__init__` from
         ``self.model_config.ssm_logp_func``.
@@ -333,9 +341,9 @@ class RLSSM(_RLSSM):
     decision model in a single likelihood. In the common case, you choose a
     named RLSSM model with ``model`` and optionally override its
     ``learning_process``, ``decision_process``, or ``choices`` settings. Use
-    :attr:`RLSSM.list_models` to inspect the named models available in HSSM.
+    ``RLSSM.list_models`` to inspect the named models available in HSSM.
 
-    If you already have a fully built :class:`RLSSMConfig`, you can pass it as
+    If you already have a fully built ``RLSSMConfig``, you can pass it as
     ``model_config`` instead of selecting a named model.
 
     RLSSM currently requires balanced panel data and does not support
@@ -351,7 +359,7 @@ class RLSSM(_RLSSM):
         Override the choice values in the registry. ``None`` uses the registry
         default.
     include : list | None, optional
-        Parameter specifications forwarded to :class:`~hssm.base.HSSMBase`.
+        Parameter specifications forwarded to `hssm.base.HSSMBase`.
     model_config : RLSSMConfig | None, optional
         Fully built config. When provided, *model*,
         *learning_process*, *decision_process*, and *choices* are ignored
@@ -380,7 +388,7 @@ class RLSSM(_RLSSM):
     initval_jitter : float, optional
         Jitter magnitude for initial values.
     **kwargs
-        Additional keyword arguments forwarded to :class:`bmb.Model`.
+        Additional keyword arguments forwarded to `bmb.Model`.
     """
 
     # Block read access to the three missing-data attributes while silently
@@ -408,7 +416,7 @@ class RLSSM(_RLSSM):
     def __init__(
         self,
         data: pd.DataFrame,
-        model: str | None = None,
+        model: str | None = "2AB_RescorlaWagner_DDM",
         choices: list[int] | None = None,
         include: list[dict[str, Any] | Any] | None = None,
         model_config: RLSSMConfig | None = None,
@@ -429,9 +437,13 @@ class RLSSM(_RLSSM):
         # NOTE: _store_init_args only operates on its arguments, not on self.
         _my_init_args = self._store_init_args(locals(), kwargs)
 
-        if model_config is not None and any(
-            x is not None for x in [model, learning_process, decision_process, choices]
-        ):
+        ignored_overrides_provided = (
+            model != "2AB_RescorlaWagner_DDM"
+            or learning_process is not None
+            or decision_process is not None
+            or choices is not None
+        )
+        if model_config is not None and ignored_overrides_provided:
             _logger.warning(
                 "model_config was provided; ignoring model, learning_process, "
                 "decision_process, and choices arguments."

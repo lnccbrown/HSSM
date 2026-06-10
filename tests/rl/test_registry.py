@@ -48,8 +48,8 @@ def annotated_ssm_base_logp() -> Any:
         inputs=["v", "a", "rt", "response"],
         outputs=["logp"],
     )
-    def base_logp(v, a, rt, response):
-        return a
+    def base_logp(lan_matrix):
+        return lan_matrix[:, 1]
 
     return base_logp
 
@@ -276,6 +276,38 @@ class TestRegisterSsm:
                 params_default_ssm=[0.0],
             )
 
+    def test_rejects_callable_without_lan_matrix_signature(self) -> None:
+        """register_ssm must reject annotated functions that need multiple args."""
+
+        @annotate_function(
+            inputs=["v", "a", "rt", "response"],
+            outputs=["logp"],
+        )
+        def wrong_signature(v, a, rt, response):
+            return a
+
+        with pytest.raises(ValueError, match="single positional `lan_matrix`"):
+            registry.register_ssm(
+                name="wrong_signature_ssm",
+                ssm_base_logp_func=wrong_signature,
+                list_params_ssm=["v", "a", "rt", "response"],
+                bounds_ssm={"a": (0.3, 3.0)},
+                params_default_ssm=[0.0, 1.5, 0.0, 1.0],
+            )
+
+    def test_rejects_misaligned_ssm_defaults(
+        self, annotated_ssm_base_logp: Any
+    ) -> None:
+        """register_ssm must reject defaults that do not align with params."""
+        with pytest.raises(ValueError, match="params_default_ssm length"):
+            registry.register_ssm(
+                name="misaligned_defaults_ssm",
+                ssm_base_logp_func=annotated_ssm_base_logp,
+                list_params_ssm=["v", "a"],
+                bounds_ssm={"a": (0.3, 3.0)},
+                params_default_ssm=[0.0],
+            )
+
     def test_warns_on_overwrite(
         self,
         annotated_ssm_base_logp: Any,
@@ -336,15 +368,16 @@ class TestRegisterRlssmModel:
         learning_process["other"] = next(iter(learning_process.values()))
 
         stored = registry._RLSSM_REGISTRY["copy_test_model"]
+        metadata = stored.learning_process_metadata
 
-        assert stored["decision_process"]["name"] == "angle"
-        assert stored["decision_process"]["response"] == ["rt", "response"]
-        assert stored["learning_process_params"] == ["rl_alpha"]
-        assert stored["learning_process_bounds"] == {"rl_alpha": (0.0, 1.0)}
-        assert stored["learning_process_params_default"] == [0.2]
-        assert stored["extra_fields"] == ["feedback"]
-        assert stored["choices"] == [0, 1]
-        assert list(stored["learning_process"]) == ["v"]
+        assert stored.decision_process == "angle"
+        assert metadata.sampled_params == ["rl_alpha"]
+        assert metadata.bounds == {"rl_alpha": (0.0, 1.0)}
+        assert metadata.defaults == [0.2]
+        assert metadata.extra_fields == ["feedback"]
+        assert metadata.kind == "blackbox"
+        assert stored.choices == [0, 1]
+        assert list(metadata.learning_process) == ["v"]
 
     def test_warns_on_overwrite(
         self,
@@ -435,18 +468,20 @@ class TestGetRlssmModelConfig:
             params_default_ssm=[0.0, 1.5],
             response=["rt", "response"],
         )
-        registry._RLSSM_REGISTRY["empty_rl_model"] = {
-            "decision_process": "empty_rl_ssm",
-            "learning_process": learning_process,
-            "learning_process_params": [],
-            "learning_process_bounds": {},
-            "learning_process_params_default": [],
-            "extra_fields": ["feedback"],
-            "choices": [0, 1],
-            "description": "test model",
-            "decision_process_loglik_kind": "approx_differentiable",
-            "learning_process_kind": "blackbox",
-        }
+        registry._RLSSM_REGISTRY["empty_rl_model"] = registry.RLSSMRegistryEntry(
+            decision_process="empty_rl_ssm",
+            learning_process_metadata=registry.LearningProcessMetadata(
+                learning_process=learning_process,
+                sampled_params=[],
+                bounds={},
+                defaults=[],
+                extra_fields=["feedback"],
+                kind="blackbox",
+            ),
+            choices=[0, 1],
+            description="test model",
+            decision_process_loglik_kind="approx_differentiable",
+        )
 
         config = registry.get_rlssm_model_config("empty_rl_model")
 
@@ -459,39 +494,87 @@ class TestGetRlssmModelConfig:
         with pytest.raises(ValueError, match="not found in the RLSSM registry"):
             registry.get_rlssm_model_config("does_not_exist")
 
-    def test_derives_rl_params_when_absent(
+    def test_learning_process_override_with_matching_metadata(
         self,
         annotated_ssm_base_logp: Any,
-        learning_process: dict[str, Any],
     ) -> None:
-        """When learning_process_params is absent from the registry entry, params are derived
-        from the learning_process .inputs."""
+        """Overriding the LP with the same sampled params should preserve metadata."""
+
+        @annotate_function(
+            inputs=["rl_alpha", "scaler", "response", "feedback"],
+            outputs=["v"],
+        )
+        def alt_compute_v(rl_alpha, scaler, response, feedback):
+            return rl_alpha + scaler
+
         registry.register_ssm(
-            name="derive_params_ssm",
+            name="override_lp_ssm",
             ssm_base_logp_func=annotated_ssm_base_logp,
             list_params_ssm=["v", "a"],
             bounds_ssm={"a": (0.3, 3.0)},
             params_default_ssm=[0.0, 1.5],
             response=["rt", "response"],
         )
-        # Inject an entry without learning_process_params so the fallback derivation runs.
-        registry._RLSSM_REGISTRY["derive_params_model"] = {
-            "decision_process": "derive_params_ssm",
-            "learning_process": learning_process,
-            # learning_process_params deliberately absent
-            "learning_process_bounds": {},
-            "learning_process_params_default": [],
-            "extra_fields": ["feedback"],
-            "choices": [0, 1],
-            "description": None,
-            "decision_process_loglik_kind": "approx_differentiable",
-            "learning_process_kind": "blackbox",
-        }
+        registry.register_rlssm_model(
+            name="override_lp_model",
+            decision_process="override_lp_ssm",
+            learning_process={"v": registry._compute_v_annotated},
+            learning_process_params=["rl_alpha", "scaler"],
+            learning_process_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
+            learning_process_params_default=[0.2, 1.5],
+            extra_fields=["feedback"],
+            choices=[0, 1],
+        )
 
-        config = registry.get_rlssm_model_config("derive_params_model")
+        config = registry.get_rlssm_model_config(
+            "override_lp_model", learning_process={"v": alt_compute_v}
+        )
 
-        # "rl_alpha" is the only input to learning_process that isn't response/extra.
-        assert "rl_alpha" in config.list_params
+        assert config.list_params == ["rl_alpha", "scaler", "a"]
+        assert config.bounds["rl_alpha"] == (0.0, 1.0)
+        assert config.bounds["scaler"] == (0.0, 10.0)
+        assert config.params_default[:2] == [0.2, 1.5]
+        assert config.ssm_logp_func.computed == {"v": alt_compute_v}
+
+    def test_learning_process_override_missing_metadata_raises(
+        self,
+        annotated_ssm_base_logp: Any,
+    ) -> None:
+        """Overriding the LP with new sampled params must fail early."""
+
+        @annotate_function(
+            inputs=["new_alpha", "response", "feedback"],
+            outputs=["v"],
+        )
+        def alt_compute_v(new_alpha, response, feedback):
+            return new_alpha
+
+        registry.register_ssm(
+            name="override_missing_meta_ssm",
+            ssm_base_logp_func=annotated_ssm_base_logp,
+            list_params_ssm=["v", "a"],
+            bounds_ssm={"a": (0.3, 3.0)},
+            params_default_ssm=[0.0, 1.5],
+            response=["rt", "response"],
+        )
+        registry.register_rlssm_model(
+            name="override_missing_meta_model",
+            decision_process="override_missing_meta_ssm",
+            learning_process={"v": registry._compute_v_annotated},
+            learning_process_params=["rl_alpha", "scaler"],
+            learning_process_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
+            learning_process_params_default=[0.2, 1.5],
+            extra_fields=["feedback"],
+            choices=[0, 1],
+        )
+
+        with pytest.raises(
+            ValueError, match="override introduced sampled parameter metadata"
+        ):
+            registry.get_rlssm_model_config(
+                "override_missing_meta_model",
+                learning_process={"v": alt_compute_v},
+            )
 
     def test_raises_for_missing_bounds(
         self,
@@ -530,40 +613,58 @@ class TestGetRlssmModelConfig:
 
 class TestBuiltinModels:
     @pytest.mark.parametrize(
-        "model_name, expected_dp_name",
+        "model_name, expected_dp_name, expected_lp_params",
         [
-            ("2AB_RescorlaWagner_DDM", "ddm"),
-            ("2AB_RescorlaWagner_Angle", "angle"),
-            ("2AB_RescorlaWagner_Weibull", "weibull"),
-            ("2AB_RescorlaWagner_Softmax", "softmax_2AB"),
+            ("2AB_RescorlaWagner_DDM", "ddm", ["rl_alpha", "scaler"]),
+            ("2AB_RescorlaWagner_Angle", "angle", ["rl_alpha", "scaler"]),
+            ("2AB_RescorlaWagner_Weibull", "weibull", ["rl_alpha", "scaler"]),
+            ("2AB_RescorlaWagner_Softmax", "softmax_2AB", ["rl_alpha"]),
         ],
     )
-    def test_are_registered(self, model_name: str, expected_dp_name: str) -> None:
+    def test_are_registered(
+        self,
+        model_name: str,
+        expected_dp_name: str,
+        expected_lp_params: list[str],
+    ) -> None:
         """Built-in RLSSM starter models must be present in the registry."""
         assert model_name in registry._RLSSM_REGISTRY
         entry = registry._RLSSM_REGISTRY[model_name]
-        decision_process = entry["decision_process"]
-        actual_dp_name = (
-            decision_process
-            if isinstance(decision_process, str)
-            else decision_process["name"]
+        metadata = entry.learning_process_metadata
+        assert entry.decision_process == expected_dp_name
+        assert metadata.sampled_params == expected_lp_params
+        assert metadata.extra_fields == ["feedback"]
+        assert entry.choices == [0, 1]
+        assert entry.decision_process_loglik_kind == "approx_differentiable"
+        assert metadata.kind == "blackbox"
+
+    def test_builtin_model_re_resolves_registered_ssm(
+        self,
+    ) -> None:
+        """Built-in starter models should pick up later register_ssm() overrides."""
+
+        @annotate_function(
+            inputs=["v", "custom_a", "rt", "response"],
+            outputs=["logp"],
         )
-        assert actual_dp_name == expected_dp_name
-        expected_rl_params = (
-            ["rl_alpha"]
-            if model_name == "2AB_RescorlaWagner_Softmax"
-            else ["rl_alpha", "scaler"]
+        def custom_ddm_logp(lan_matrix):
+            return lan_matrix[:, 1]
+
+        registry.register_ssm(
+            name="ddm",
+            ssm_base_logp_func=custom_ddm_logp,
+            list_params_ssm=["v", "custom_a"],
+            bounds_ssm={"custom_a": (0.3, 3.0)},
+            params_default_ssm=[0.0, 1.5],
+            response=["rt", "response"],
         )
-        expected_loglik_kind = (
-            "analytical"
-            if model_name == "2AB_RescorlaWagner_Softmax"
-            else "approx_differentiable"
-        )
-        assert entry["learning_process_params"] == expected_rl_params
-        assert entry["extra_fields"] == ["feedback"]
-        assert entry["choices"] == [0, 1]
-        assert entry["decision_process_loglik_kind"] == expected_loglik_kind
-        assert entry["learning_process_kind"] == "blackbox"
+
+        config = registry.get_rlssm_model_config("2AB_RescorlaWagner_DDM")
+
+        assert config.decision_process == "ddm"
+        assert config.list_params == ["rl_alpha", "scaler", "custom_a"]
+        assert config.bounds["custom_a"] == (0.3, 3.0)
+        assert config.params_default[-1] == 1.5
 
     @pytest.mark.parametrize(
         "model_name",
@@ -625,7 +726,7 @@ class TestListModels:
 
         assert set(result.keys()) == set(registry._RLSSM_REGISTRY.keys())
         for name, desc in result.items():
-            assert desc == registry._RLSSM_REGISTRY[name].get("description")
+            assert desc == registry._RLSSM_REGISTRY[name].description
 
     def test_public_rl_api_matches_registry(self) -> None:
         """The public hssm.rl and RLSSM accessors should delegate to the registry."""
