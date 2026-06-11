@@ -268,13 +268,13 @@ def _get_decision_process_spec(
     if isinstance(decision_process, dict):
         return deepcopy(decision_process)
 
-    if decision_process == "softmax_2AB":
-        return _build_softmax_2ab_spec()
-
     if decision_process in _SSM_REGISTRY:
         spec = deepcopy(_SSM_REGISTRY[decision_process])
         spec["name"] = decision_process
         return spec
+
+    if decision_process == "softmax_2AB":
+        return _build_softmax_2ab_spec()
 
     return _build_ssm_spec_from_modelconfig(decision_process)
 
