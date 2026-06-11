@@ -139,6 +139,25 @@ class TestGetSsmLogp:
         assert second is first
         assert call_count == 1
 
+    def test_prefers_registered_softmax_over_builtin(
+        self,
+        annotated_ssm_base_logp: Any,
+    ) -> None:
+        """A registered softmax_2AB SSM should override the built-in fallback."""
+        registry._SSM_REGISTRY["softmax_2AB"] = {
+            "ssm_base_logp_func": annotated_ssm_base_logp,
+            "list_params_ssm": ["beta", "q0", "q1"],
+            "bounds_ssm": {"beta": (0.0, 10.0)},
+            "params_default_ssm": [1.0, 0.5, 0.5],
+            "response": ["response"],
+        }
+
+        result = registry._get_ssm_logp("softmax_2AB")
+
+        assert result is annotated_ssm_base_logp
+        assert result is not registry._softmax_logp_annotated
+        assert registry._SSM_LOGP_CACHE["softmax_2AB"] is annotated_ssm_base_logp
+
     def test_resolves_builtin_via_modelconfig(
         self,
         monkeypatch: pytest.MonkeyPatch,
