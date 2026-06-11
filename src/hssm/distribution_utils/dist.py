@@ -496,6 +496,8 @@ def make_distribution(
             list_params.append("p_outlier")
 
         if isinstance(lapse, float):
+            if not (0 < lapse <= 1):
+                raise ValueError("If `lapse` is a float, it must be between 0 and 1.")
             # lapse is a probability; the mixture formula uses pt.exp(lapse_logp),
             # so we must store the log probability here to be consistent with the
             # bmb.Prior path which calls pm.logp(...).
