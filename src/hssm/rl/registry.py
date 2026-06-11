@@ -288,20 +288,20 @@ def _get_ssm_logp(name: str) -> Any:
     if name in _SSM_LOGP_CACHE:
         return _SSM_LOGP_CACHE[name]
 
+    if name in _SSM_REGISTRY:
+        entry = _SSM_REGISTRY[name]
+        if "ssm_base_logp_func_factory" in entry:
+            _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
+        else:
+            _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
+        return _SSM_LOGP_CACHE[name]
+
     if name == "softmax_2AB":
         _SSM_LOGP_CACHE[name] = _softmax_logp_annotated
         return _SSM_LOGP_CACHE[name]
 
-    if name not in _SSM_REGISTRY:
-        spec = _build_ssm_spec_from_modelconfig(name)
-        _SSM_LOGP_CACHE[name] = spec["ssm_base_logp_func_factory"]()
-        return _SSM_LOGP_CACHE[name]
-
-    entry = _SSM_REGISTRY[name]
-    if "ssm_base_logp_func_factory" in entry:
-        _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
-    else:
-        _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
+    spec = _build_ssm_spec_from_modelconfig(name)
+    _SSM_LOGP_CACHE[name] = spec["ssm_base_logp_func_factory"]()
     return _SSM_LOGP_CACHE[name]
 
 
