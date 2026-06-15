@@ -770,7 +770,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # We drop all distributional components, IF they are deterministics
         # (in which case they will be trial wise systematically)
         # and we keep distributional components, IF they are
-        # basic random-variabels (in which case they should never
+        # basic random-variables (in which case they should never
         # appear trial-wise).
         if dt is None:
             raise ValueError(
