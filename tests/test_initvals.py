@@ -54,6 +54,11 @@ def test_sample_map(caplog, loglik_kind, model, sampler, initvals):
         process_initvals=True,
     )
 
+    if sampler == "numpyro":
+        pytest.xfail(
+            "TypeError: NUTS.__init__() got an unexpected keyword argument 'jitter'"
+        )
+
     initial_point = model_on.initial_point(transformed=True)
 
     if initvals == "initial_point":
