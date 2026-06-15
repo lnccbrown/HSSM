@@ -220,8 +220,8 @@ markers = [
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.11.21,<0.12"]
+build-backend = "uv_build"
 
 [tool.hatch.build.targets.sdist]
 exclude = [
