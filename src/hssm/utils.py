@@ -27,7 +27,6 @@ import pytensor.tensor as pt
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from bambi.utils import get_aliased_name, response_evaluate_new_data
-from tqdm import tqdm
 
 from .param.param import Param
 
@@ -291,9 +290,7 @@ def log_likelihood(
         )
 
     # Loop through chain and draws
-    for ids in tqdm(
-        list(itertools.product(coords["chain"].values, coords["draw"].values))
-    ):
+    for ids in itertools.product(coords["chain"].values, coords["draw"].values):
         kwargs_tmp = {
             key_: (
                 val[ids[0], ids[1], ...]
