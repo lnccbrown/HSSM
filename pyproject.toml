@@ -40,6 +40,10 @@ repository = "https://github.com/lnccbrown/HSSM"
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.5.2"]
+io = [
+    "h5netcdf>=1.8.1",
+    "h5py>=3.16.0",
+]
 
 [dependency-groups]
 dev = [
@@ -55,6 +59,7 @@ dev = [
     "types-PyYAML",
     "pre-commit>=4.1.0",
     "onnxruntime>=1.17.1",
+    "hssm[io]",
 ]
 
 notebook = [
@@ -239,3 +244,6 @@ url = "https://pypi.org/simple/"
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
+
+[tool.uv.sources]
+hssm = { workspace = true }
