@@ -720,7 +720,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             The number of samples to draw from the posterior distribution.
             Defaults to 1000.
         return_idata : bool
-            If True, returns an DataTree object. Otherwise, returns the
+            If True, returns a DataTree object. Otherwise, returns the
             approximation object directly. Defaults to True.
 
         Returns
@@ -1364,7 +1364,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         Parameters
         ----------
         data : optional
-            An DataTree object. If None, the traces stored in the model will
+            A DataTree object. If None, the traces stored in the model will
             be used.
         include_deterministic : optional
             Whether to include deterministic variables in the plot. Defaults to False.
@@ -1377,7 +1377,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         """
         data = data or self.traces
         if not isinstance(data, DataTree):
-            raise TypeError("data must be an DataTree object.")
+            raise TypeError("data must be a DataTree object.")
 
         if not include_deterministic:
             var_names = list(
@@ -1442,7 +1442,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         """
         data = data or self.traces
         if not isinstance(data, DataTree):
-            raise TypeError("data must be an DataTree object.")
+            raise TypeError("data must be a DataTree object.")
 
         if not include_deterministic:
             var_names = list(
@@ -1477,12 +1477,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
     @_requires_io_backends
     def restore_traces(self, traces: DataTree | Approximation | str | PathLike) -> None:
-        """Restore traces from an DataTree object or a .netcdf file.
+        """Restore traces from a DataTree object or a .netcdf file.
 
         Parameters
         ----------
         traces
-            An DataTree object or a path to a file containing the traces.
+            A DataTree object or a path to a file containing the traces.
         """
         if isinstance(traces, Approximation):
             self._inference_obj_vi = traces
@@ -1930,7 +1930,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return var_names
 
     def _drop_parent_str_from_datatree(self, dt: DataTree | None) -> DataTree:
-        """Drop the parent_str variable from a DataTree object."""
+        """Drop the parent_str variable from a DataTree object.
 
         Parameters
         ----------
