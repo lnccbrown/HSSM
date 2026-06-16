@@ -87,8 +87,7 @@ def sample(model, sampler, step):
 def run_sample(model, sampler, step, expected):
     if expected is True:
         sample(model, sampler, step)
-        assert isinstance(model.traces, az.InferenceData)
-
+        assert isinstance(model.traces, xr.DataTree)
         traces_copy = deepcopy(model.traces)
         del traces_copy["log_likelihood"]
 
