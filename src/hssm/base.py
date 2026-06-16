@@ -1024,8 +1024,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 if inplace:
                     dt.add_groups(
                         posterior_predictive=xr.concat(
-                            posterior_predictive_list, dim="draw"
-                        )  # type: ignore[arg-type]
+                            posterior_predictive_list,  # type: ignore[arg-type]
+                            dim="draw",
+                        )
                     )
                     # for inplace, we don't return anything
                     return None
@@ -1036,8 +1037,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     del dt_copy["posterior_predictive"]
                     dt_copy.add_groups(
                         posterior_predictive=xr.concat(
-                            posterior_predictive_list, dim="draw"
-                        )  # type: ignore[arg-type]
+                            posterior_predictive_list,  # type: ignore[arg-type]
+                            dim="draw",
+                        )
                     )
                     return dt_copy
             else:
