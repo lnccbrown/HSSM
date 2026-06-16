@@ -48,6 +48,7 @@ def sample(model, sampler, step):
             tune=10,
             draws=10,
             step=pm.Slice(model=model.pymc_model),
+            progressbar=False,
         )
     else:
         model.sample(
@@ -56,16 +57,13 @@ def sample(model, sampler, step):
             chains=1,
             tune=10,
             draws=10,
+            progressbar=False,
         )
 
 
 def run_sample(model, sampler, step, expected):
     """Run the sample function and check if the expected error is raised."""
     if expected is True:
-        if sampler == "numpyro":
-            pytest.xfail(
-                "TypeError: NUTS.__init__() got an unexpected keyword argument 'jitter'"
-            )
         sample(model, sampler, step)
         assert isinstance(model.traces, xr.DataTree)
 
@@ -87,9 +85,6 @@ def run_sample(model, sampler, step, expected):
 
 # Basic tests for LBA likelihood
 @pytest.mark.slow
-@pytest.mark.xfail(
-    reason="TypeError: NUTS.__init__() got an unexpected keyword argument 'jitter'"
-)
 def test_lba_sampling():
     """Test if sampling works for available lba models."""
     lba2_data_out = hssm.simulate_data(
@@ -182,7 +177,7 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
         summary = model.summary()
         assert summary.shape[0] == 6
 
-        model.plot_trace(show=False)
+        az.plot_trace_dist(model.traces)
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 6
 
@@ -252,18 +247,18 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, ex
         summary = model.summary(var_names=["~a", "~t"])
         assert summary.shape[0] == 7
 
-        model.plot_trace(show=False)
+        az.plot_trace_dist(model.traces)
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 8
 
-        model.plot_trace(show=False, var_names=["~a"])
+        az.plot_trace_dist(model.traces, var_names=["~a"])
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 8
 
-        model.plot_trace(show=False, var_names=["~t"])
+        az.plot_trace_dist(model.traces, var_names=["~t"])
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 7
 
-        model.plot_trace(show=False, var_names=["~a", "~t"])
+        az.plot_trace_dist(model.traces, var_names=["~a", "~t"])
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 7
