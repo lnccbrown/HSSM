@@ -648,6 +648,7 @@ def _requires_io_backends(func: Callable) -> Callable:
     Callable
         The wrapped function.
     """
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
