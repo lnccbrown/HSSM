@@ -1,8 +1,8 @@
 import pytest
 
-import arviz as az
 import hssm
 import pymc as pm
+import xarray as xr
 
 hssm.set_floatX("float32", update_jax=True)
 
@@ -24,13 +24,12 @@ PARAMETER_GRID = [
 
 def run_vi(model, method, expected):
     if expected == True:
-        pytest.xfail("TypeError: No model on context stack.")
-        model.vi(method, niter=100)
-        assert isinstance(model.vi_idata, az.InferenceData)
-        assert isinstance(model.vi_approx, pm.Approximation)
+        model.vi(method, niter=100, progressbar=False)
+        assert isinstance(model.vi_idata, xr.DataTree)
+        assert isinstance(model.vi_approx, pm.variational.Approximation)
     else:
         with pytest.raises(expected):
-            model.vi(method, niter=100)
+            model.vi(method, niter=100, progressbar=False)
 
 
 @pytest.mark.slow

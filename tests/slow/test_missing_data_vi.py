@@ -1,8 +1,8 @@
 import pytest
 
-import arviz as az
 import hssm
 import numpy as np
+import xarray as xr
 
 from hssm.utils import _rearrange_data
 
@@ -79,18 +79,16 @@ def run_vi(model, method, expected):
     import pymc as pm
 
     if expected == True:
-        pytest.xfail("TypeError: No model on context stack.")
-        model.vi(method, niter=100)
-        assert isinstance(model.vi_idata, az.InferenceData)
-        assert isinstance(model.vi_approx, pm.Approximation)
+        model.vi(method, niter=100, progressbar=False)
+        assert isinstance(model.vi_idata, xr.DataTree)
+        assert isinstance(model.vi_approx, pm.variational.Approximation)
     else:
         with pytest.raises(expected):
-            model.vi(method, niter=100)
+            model.vi(method, niter=100, progressbar=False)
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-# @pytest.mark.xfail(reason="Needs to be reactivated, CPN logic needs to be revised")
 def test_simple_models_missing_data(
     data_ddm_missing, loglik_kind, backend, method, expected, cpn
 ):
@@ -107,7 +105,6 @@ def test_simple_models_missing_data(
 
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-# @pytest.mark.xfail(reason="Needs to be reactivated, CPN logic needs to be revised")
 def test_reg_models_missing_data(
     data_ddm_reg_missing, loglik_kind, backend, method, expected, cpn
 ):
