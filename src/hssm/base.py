@@ -743,9 +743,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         with self.pymc_model:
             self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
 
-        # Sample from the approximate posterior
-        if self._vi_approx is not None:
-            self._inference_obj_vi = self._vi_approx.sample(draws)
+            # Sample from the approximate posterior
+            if self._vi_approx is not None:
+                self._inference_obj_vi = self._vi_approx.sample(draws)
 
         # Post-processing
         self._clean_posterior_group(dt=self._inference_obj_vi)
