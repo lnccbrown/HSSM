@@ -630,3 +630,37 @@ def annotate_function(**kwargs):
         return wrapper
 
     return decorator
+
+
+def _requires_io_backends(func: Callable) -> Callable:
+    """Decorate a function to require h5py and h5netcdf.
+
+    If h5py or h5netcdf is not installed, raise an ImportError instructing
+    the user to install hssm with the "io" extra.
+
+    Parameters
+    ----------
+    func : Callable
+        The function to wrap.
+
+    Returns
+    -------
+    Callable
+        The wrapped function.
+    """
+    try:
+        import h5netcdf  # noqa: F401
+        import h5py  # noqa: F401
+    except ImportError as exc:
+        raise ImportError(
+            "h5py and h5netcdf are required for I/O operations for model traces. "
+            'Please install hssm with the "io" extra: '
+            "`pip install hssm[io]` "
+            'or `uv add "hssm[io]"` if using uv.'
+        ) from exc
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    return wrapper
