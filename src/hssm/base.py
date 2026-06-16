@@ -966,9 +966,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             _logger.info(
                 "dt=None, we use the traces assigned to the HSSM object as datatree."
             )
-
-        if dt is not None:
-            if "posterior_predictive" in dt:
+        else:
+            if inplace and "posterior_predictive" in dt:
                 del dt["posterior_predictive"]
                 _logger.warning(
                     "pre-existing posterior_predictive group deleted from datatree."
