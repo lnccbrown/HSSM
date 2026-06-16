@@ -968,7 +968,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             )
 
         if dt is not None:
-            if "posterior_predictive" in dt.groups():
+            if "posterior_predictive" in dt:
                 del dt["posterior_predictive"]
                 _logger.warning(
                     "pre-existing posterior_predictive group deleted from datatree."
@@ -1002,7 +1002,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             and not np.allclose(draws, dt["posterior"].draw.values)
         ):
             # Reassign posterior to sub-sampled version
-            setattr(dt_copy, "posterior", dt["posterior"].isel(draw=draws))
+            dt_copy["posterior"] = dt["posterior"].isel(draw=draws)
 
         if kind == "response":
             # If we run kind == 'response' we actually run the observation RV
@@ -1014,31 +1014,28 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 posterior_predictive_list = []
                 for samples_tmp in split_draws:
                     tmp_posterior = dt["posterior"].sel(draw=samples_tmp)
-                    setattr(dt_copy, "posterior", tmp_posterior)
+                    dt_copy["posterior"] = tmp_posterior
                     self.model.predict(
                         dt_copy, kind, data, True, include_group_specific
                     )
                     posterior_predictive_list.append(dt_copy["posterior_predictive"])
 
                 if inplace:
-                    dt.add_groups(
-                        posterior_predictive=xr.concat(
-                            posterior_predictive_list,  # type: ignore[arg-type]
-                            dim="draw",
-                        )
+                    dt["posterior_predictive"] = xr.concat(
+                        posterior_predictive_list,  # type: ignore[arg-type]
+                        dim="draw",
                     )
                     # for inplace, we don't return anything
                     return None
                 else:
                     # Reassign original posterior to dt_copy
-                    setattr(dt_copy, "posterior", dt["posterior"])
+                    dt_copy["posterior"] = dt["posterior"]
                     # Add new posterior predictive group to dt_copy
-                    del dt_copy["posterior_predictive"]
-                    dt_copy.add_groups(
-                        posterior_predictive=xr.concat(
-                            posterior_predictive_list,  # type: ignore[arg-type]
-                            dim="draw",
-                        )
+                    if "posterior_predictive" in dt_copy:
+                        del dt_copy["posterior_predictive"]
+                    dt_copy["posterior_predictive"] = xr.concat(
+                        posterior_predictive_list,  # type: ignore[arg-type]
+                        dim="draw",
                     )
                     return dt_copy
             else:
@@ -1054,7 +1051,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     )
 
                     # posterior predictive group added to dt
-                    dt.add_groups(posterior_predictive=dt_copy["posterior_predictive"])
+                    dt["posterior_predictive"] = dt_copy["posterior_predictive"]
                     # don't return anything if inplace
                     return None
                 else:
