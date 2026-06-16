@@ -1943,7 +1943,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             The modified DataTree object.
         """
         if dt is None:
-            raise ValueError("Please provide an DataTree (traces) object.")
+            raise ValueError("Please provide a DataTree (traces) object.")
         else:
             for group in dt.groups():
                 if ("rt,response_mean" in dt[group].data_vars) and (
