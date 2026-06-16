@@ -76,24 +76,16 @@ def sample(model, sampler, step):
             tune=10,
             draws=10,
             step=pm.Slice(model=model.pymc_model),
+            progressbar=False,
         )
     else:
         model.sample(
-            sampler=sampler,
-            cores=1,
-            chains=1,
-            tune=10,
-            draws=10,
+            sampler=sampler, cores=1, chains=1, tune=10, draws=10, progressbar=False
         )
 
 
 def run_sample(model, sampler, step, expected):
     if expected is True:
-        if sampler == "numpyro":
-            pytest.xfail(
-                "TypeError: NUTS.__init__() got an unexpected keyword argument 'jitter'"
-            )
-        pytest.xfail("TypeError: 'tuple' object is not callable")
         sample(model, sampler, step)
         assert isinstance(model.traces, az.InferenceData)
 
@@ -102,8 +94,8 @@ def run_sample(model, sampler, step, expected):
 
         model.log_likelihood(traces_copy, inplace=True)
         assert isinstance(traces_copy, az.InferenceData)
-        assert "log_likelihood" in traces_copy.groups()
-        for group_ in traces_copy.groups():
+        assert "log_likelihood" in traces_copy
+        for group_ in traces_copy:
             xr.testing.assert_equal(traces_copy[group_], model.traces[group_])
     else:
         with pytest.raises(expected):
@@ -113,7 +105,6 @@ def run_sample(model, sampler, step, expected):
 # AF-TODO: CPN / GONOGO part has to be rethought
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-# @pytest.mark.xfail(reason="Needs to be reactivated, CPN logic needs to be revised")
 def test_simple_models_missing_data(
     data_ddm_missing, loglik_kind, backend, sampler, step, expected, cpn
 ):
@@ -133,7 +124,6 @@ def test_simple_models_missing_data(
 
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-# @pytest.mark.xfail(reason="Needs to be reactivated, CPN logic needs to be revised")
 def test_reg_models_missing_data(
     data_ddm_reg_missing, loglik_kind, backend, sampler, step, expected, cpn
 ):
