@@ -25,11 +25,11 @@ import pymc as pm
 import pytensor
 import seaborn as sns
 import xarray as xr
-from arviz import DataTree
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
 from pymc.variational import Approximation
+from xarray import DataTree
 
 from hssm._types import SupportedModels
 from hssm.data_validator import DataValidatorMixin
