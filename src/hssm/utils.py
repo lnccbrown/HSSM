@@ -14,7 +14,6 @@ import functools
 import itertools
 import logging
 import os
-from copy import deepcopy
 from typing import Any, Callable, Literal, cast
 
 import arviz as az
@@ -28,7 +27,6 @@ import pytensor.tensor as pt
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from bambi.utils import get_aliased_name, response_evaluate_new_data
-from tqdm import tqdm
 
 from .param.param import Param
 
@@ -131,27 +129,29 @@ def _get_alias_dict(
 
 def _compute_log_likelihood(
     model: bmb.Model,
-    idata: az.InferenceData,
+    dt: xr.DataTree,
     data: pd.DataFrame | None,
     inplace: bool = True,
-) -> az.InferenceData | None:
+) -> xr.DataTree | None:
     """Compute the model's log-likelihood.
 
     Parameters
     ----------
-    idata : InferenceData
-        The `InferenceData` instance returned by `.fit()`.
+    model : bmb.Model
+        The fitted Bambi model for which the log-likelihood is to be computed.
+    dt : xr.DataTree
+        The `DataTree` instance returned by `.fit()`.
     data : pandas.DataFrame or None
         An optional data frame with values for the predictors and the response on which
         the model's log-likelihood function is evaluated.
         If omitted, the original dataset is used.
     inplace : bool
-        If True` it will modify `idata` in-place. Otherwise, it will return a copy of
-        `idata` with the `log_likelihood` group added.
+        If True` it will modify `dt` in-place. Otherwise, it will return a copy of
+        `dt` with the `log_likelihood` group added.
 
     Returns
     -------
-    InferenceData or None
+    xr.DataTree | None
     """
     # These are not formal parameters because it does not make sense to...
     #   1. compute the log-likelihood omitting
@@ -164,34 +164,34 @@ def _compute_log_likelihood(
     response_aliased_name = get_aliased_name(model.response_component.term)
 
     if not inplace:
-        idata = deepcopy(idata)
+        dt = dt.copy(deep=True)
 
-    # # Populate the posterior in the InferenceData object
+    # # Populate the posterior in the DataTree object
     # with the likelihood parameters
-    idata = model._compute_likelihood_params(  # pylint: disable=protected-access
-        idata, data, include_group_specific, sample_new_groups
+    dt = model._compute_likelihood_params(  # pylint: disable=protected-access
+        dt, data, include_group_specific, sample_new_groups
     )
 
-    required_kwargs = {"model": model, "posterior": idata["posterior"], "data": data}
+    required_kwargs = {"model": model, "posterior": dt["posterior"], "data": data}
+
+    if not model.family:
+        raise ValueError("Model family is not defined. Cannot compute log-likelihood.")
     log_likelihood_out = log_likelihood(model.family, **required_kwargs).to_dataset(
         name=response_aliased_name
     )
 
     # Drop the existing log_likelihood group if it exists
-    if "log_likelihood" in idata:
-        _logger.info("Replacing existing log_likelihood group in idata.")
-        del idata["log_likelihood"]
+    if "log_likelihood" in dt:
+        _logger.warning("Replacing existing log_likelihood group in dt.")
+        del dt["log_likelihood"]
 
-    # Assign the log-likelihood group to the InferenceData object
-    idata.add_groups({"log_likelihood": log_likelihood_out})
-    setattr(
-        idata,
-        "log_likelihood",
-        idata["log_likelihood"].assign_attrs(
-            modeling_interface="bambi", modeling_interface_version=bmb.__version__
-        ),
+    log_likelihood_out = log_likelihood_out.assign_attrs(
+        modeling_interface="bambi", modeling_interface_version=bmb.__version__
     )
-    return idata
+
+    # Assign the log-likelihood group to the DataTree object
+    dt["log_likelihood"] = log_likelihood_out
+    return dt
 
 
 def log_likelihood(
@@ -290,9 +290,7 @@ def log_likelihood(
         )
 
     # Loop through chain and draws
-    for ids in tqdm(
-        list(itertools.product(coords["chain"].values, coords["draw"].values))
-    ):
+    for ids in itertools.product(coords["chain"].values, coords["draw"].values):
         kwargs_tmp = {
             key_: (
                 val[ids[0], ids[1], ...]

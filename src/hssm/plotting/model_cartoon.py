@@ -1896,7 +1896,7 @@ def plot_func_model_n(
             fontsize=legend_fontsize,
             shadow=legend_shadow,
             loc=legend_location,
-        )
+        )  # type: ignore
 
     # FRAME
     if not keep_frame:

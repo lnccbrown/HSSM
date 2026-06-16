@@ -515,7 +515,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         initvals: str | dict | None = None,
         include_response_params: bool = False,
         **kwargs,
-    ) -> az.InferenceData | pm.Approximation:
+    ) -> xr.DataTree | pm.Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
 
         Parameters
@@ -550,7 +550,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        az.InferenceData | pm.Approximation
+        xr.DataTree | pm.Approximation
             A reference to the `model.traces` object, which stores the traces of the
             last call to `model.sample()`. `model.traces` is an ArviZ `InferenceData`
             instance if `sampler` is `"pymc"` (default), `"numpyro"`,
@@ -691,7 +691,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self.log_likelihood(self._inference_obj, inplace=True)
 
         # Subset data vars in posterior
-        self._clean_posterior_group(idata=self._inference_obj)
+        self._clean_posterior_group(dt=self._inference_obj)
         return self.traces
 
     def vi(
@@ -747,7 +747,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self._inference_obj_vi = self._vi_approx.sample(draws)
 
         # Post-processing
-        self._clean_posterior_group(idata=self._inference_obj_vi)
+        self._clean_posterior_group(dt=self._inference_obj_vi)
 
         # Return the InferenceData object if return_idata is True
         if return_idata:
@@ -755,35 +755,35 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # Otherwise return the appromation object directly
         return self.vi_approx
 
-    def _clean_posterior_group(self, idata: az.InferenceData | None = None):
+    def _clean_posterior_group(self, dt: xr.DataTree | None = None):
         """Clean up the posterior group of the InferenceData object.
 
         Parameters
         ----------
-        idata : az.InferenceData
-            The InferenceData object to clean up. If None, the last InferenceData object
+        dt : xr.DataTree | None
+            The DataTree object to clean up. If None, the last DataTree object
             will be used.
         """
-        # # Logic behind which variables to keep:
-        # # We essentially want to get rid of
-        # # all the trial-wise variables.
+        # Logic behind which variables to keep:
+        # We essentially want to get rid of all the trial-wise variables.
 
-        # # We drop all distributional components, IF they are deterministics
-        # # (in which case they will be trial wise systematically)
-        # # and we keep distributional components, IF they are
-        # # basic random-variabels (in which case they should never
-        # # appear trial-wise).
-        if idata is None:
+        # We drop all distributional components, IF they are deterministics
+        # (in which case they will be trial wise systematically)
+        # and we keep distributional components, IF they are
+        # basic random-variables (in which case they should never
+        # appear trial-wise).
+        if dt is None:
             raise ValueError(
-                "The InferenceData object is None. Cannot clean up the posterior group."
-            )
-        elif not hasattr(idata, "posterior"):
-            raise ValueError(
-                "The InferenceData object does not have a posterior group. "
-                + "Cannot clean up the posterior group."
+                "The DataTree object is None. Cannot clean up the posterior group."
             )
 
-        vars_to_keep = set(idata["posterior"].data_vars.keys()).difference(
+        if "posterior" not in dt:
+            raise ValueError(
+                "The DataTree object does not have a posterior group. "
+                "Cannot clean up the posterior group."
+            )
+
+        vars_to_keep = set(dt["posterior"].data_vars.keys()).difference(
             set(
                 key_
                 for key_ in self.model.distributional_components.keys()
@@ -795,12 +795,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             for var_ in vars_to_keep
             if isinstance(var_, str) and "_mean" not in var_
         ]
-
-        setattr(
-            idata,
-            "posterior",
-            idata["posterior"][vars_to_keep_clean],
-        )
+        dt["posterior"] = dt["posterior"].to_dataset()[vars_to_keep_clean]
 
     def log_likelihood(
         self,
@@ -852,7 +847,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # clean up posterior:
         if not keep_likelihood_params:
-            self._clean_posterior_group(idata=idata)
+            self._clean_posterior_group(dt=idata)
 
         if inplace:
             return None
