@@ -66,9 +66,8 @@ def run_sample(model, sampler, step, expected):
             pytest.xfail(
                 "TypeError: NUTS.__init__() got an unexpected keyword argument 'jitter'"
             )
-        pytest.xfail("TypeError: 'tuple' object is not callable")
         sample(model, sampler, step)
-        assert isinstance(model.traces, az.InferenceData)
+        assert isinstance(model.traces, xr.DataTree)
 
         # make sure log_likelihood computations check out
         traces_copy = deepcopy(model.traces)
@@ -76,9 +75,9 @@ def run_sample(model, sampler, step, expected):
 
         # recomputing log-likelihood yields same results?
         model.log_likelihood(traces_copy, inplace=True)
-        assert isinstance(traces_copy, az.InferenceData)
-        assert "log_likelihood" in traces_copy.groups()
-        for group_ in traces_copy.groups():
+        assert isinstance(traces_copy, xr.DataTree)
+        assert "log_likelihood" in traces_copy
+        for group_ in traces_copy:
             xr.testing.assert_equal(traces_copy[group_], model.traces[group_])
 
     else:
@@ -142,7 +141,7 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
         summary = model.summary()
         assert summary.shape[0] == 4
 
-        model.plot_trace(show=False)
+        az.plot_trace_dist(model.traces)
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 4
 
