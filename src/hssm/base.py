@@ -1930,7 +1930,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return var_names
 
     def _drop_parent_str_from_datatree(self, dt: DataTree | None) -> DataTree:
-        """Drop the parent_str variable from an DataTree object.
+        """Drop the parent_str variable from a DataTree object."""
 
         Parameters
         ----------
