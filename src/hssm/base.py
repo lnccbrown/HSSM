@@ -18,7 +18,6 @@ import arviz as az
 import bambi as bmb
 import cloudpickle as cpickle
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -1353,61 +1352,20 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         tight_layout: bool = True,
         **kwargs,
     ) -> None:
-        """Generate trace plot with ArviZ but with additional convenience features.
+        """Deprecate the `plot_trace` method and remove its functionality.
 
-        This is a simple wrapper for the az.plot_trace() function. By default, it
-        filters out the deterministic values from the plot. Please see the
-        [arviz documentation]
-        (https://arviz-devs.github.io/arviz/api/generated/arviz.plot_trace.html)
-        for additional parameters that can be specified.
-
-        Parameters
-        ----------
-        data : optional
-            A DataTree object. If None, the traces stored in the model will
-            be used.
-        include_deterministic : optional
-            Whether to include deterministic variables in the plot. Defaults to False.
-            Note that if include deterministic is set to False and and `var_names` is
-            provided, the `var_names` provided will be modified to also exclude the
-            deterministic values. If this is not desirable, set
-            `include deterministic` to True.
-        tight_layout : optional
-            Whether to call plt.tight_layout() after plotting. Defaults to True.
+        This method has been deprecated and its functionality has been removed.
+        Please use `az.plot_trace_dist` from ArviZ instead. For more information,
+        see the
+        [arviz documentation](
+        https://python.arviz.org/projects/plots/en/latest/api/generated
+        /arviz_plots.plot_trace_dist.html#arviz_plots.plot_trace_dist).
         """
-        data = data or self.traces
-        if not isinstance(data, DataTree):
-            raise TypeError("data must be a DataTree object.")
-
-        if not include_deterministic:
-            var_names = list(
-                set([var.name for var in self.pymc_model.free_RVs]).intersection(
-                    set(list(data["posterior"].data_vars.keys()))
-                )
-            )
-            # var_names = self._get_deterministic_var_names(data)
-            if var_names:
-                if "var_names" in kwargs:
-                    if isinstance(kwargs["var_names"], str):
-                        if kwargs["var_names"] not in var_names:
-                            var_names.append(kwargs["var_names"])
-                        kwargs["var_names"] = var_names
-                    elif isinstance(kwargs["var_names"], list):
-                        kwargs["var_names"] = list(
-                            set(var_names) | set(kwargs["var_names"])
-                        )
-                    elif kwargs["var_names"] is None:
-                        kwargs["var_names"] = var_names
-                    else:
-                        raise ValueError(
-                            "`var_names` must be a string, a list of strings, or None."
-                        )
-                else:
-                    kwargs["var_names"] = var_names
-        az.plot_trace(data, **kwargs)
-
-        if tight_layout:
-            plt.tight_layout()
+        raise NotImplementedError(
+            "HSSM.plot_trace has been deprecated. Please use az.plot_trace_dist from "
+            "ArviZ directly. For example: "
+            "`az.plot_trace_dist(model.traces, var_names=[...])`."
+        )
 
     def summary(
         self,
@@ -1415,45 +1373,18 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         include_deterministic: bool = False,
         **kwargs,
     ) -> pd.DataFrame | xr.Dataset:
-        """Produce a summary table with ArviZ but with additional convenience features.
+        """Deprecate the `summary` method and remove its functionality.
 
-        This is a simple wrapper for the az.summary() function. By default, it
-        filters out the deterministic values from the plot. Please see the
-        [arviz documentation]
-        (https://arviz-devs.github.io/arviz/api/generated/arviz.summary.html)
-        for additional parameters that can be specified.
-
-        Parameters
-        ----------
-        data
-            An ArviZ DataTree object. If None, the traces stored in the model will
-            be used.
-        include_deterministic : optional
-            Whether to include deterministic variables in the plot. Defaults to False.
-            Note that if include_deterministic is set to False and and `var_names` is
-            provided, the `var_names` provided will be modified to also exclude the
-            deterministic values. If this is not desirable, set
-            `include_deterministic` to True.
-
-        Returns
-        -------
-        pd.DataFrame | xr.Dataset
-            A pandas DataFrame or xarray Dataset containing the summary statistics.
+        This method has been deprecated and its functionality has been removed.
+        Please use `az.summary` from ArviZ instead. For more information, see the
+        [arviz documentation](
+        https://python.arviz.org/projects/stats/en/stable/api/generated
+        /arviz_stats.summary.html).
         """
-        data = data or self.traces
-        if not isinstance(data, DataTree):
-            raise TypeError("data must be a DataTree object.")
-
-        if not include_deterministic:
-            var_names = list(
-                set([var.name for var in self.pymc_model.free_RVs]).intersection(
-                    set(list(data["posterior"].data_vars.keys()))
-                )
-            )
-            # var_names = self._get_deterministic_var_names(data)
-            if var_names:
-                kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
-        return az.summary(data, **kwargs)
+        raise NotImplementedError(
+            "HSSM.summary has been deprecated. Please use az.summary from ArviZ "
+            "directly. For example: `az.summary(model.traces, var_names=[...])`."
+        )
 
     def initial_point(self, transformed: bool = False) -> dict[str, np.ndarray]:
         """Compute the initial point of the model.
