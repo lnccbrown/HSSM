@@ -28,6 +28,7 @@ import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
+from pymc.variational import Approximation
 
 from hssm._types import SupportedModels
 from hssm.data_validator import DataValidatorMixin
@@ -254,7 +255,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # region ===== Inference Results (initialized to None/empty) =====
         self._inference_obj: az.InferenceData | None = None
-        self._inference_obj_vi: pm.Approximation | None = None
+        self._inference_obj_vi: Approximation | None = None
         self._vi_approx = None
         self._map_dict = None
         # endregion
@@ -515,7 +516,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         initvals: str | dict | None = None,
         include_response_params: bool = False,
         **kwargs,
-    ) -> xr.DataTree | pm.Approximation:
+    ) -> xr.DataTree | Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
 
         Parameters
@@ -550,7 +551,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        xr.DataTree | pm.Approximation
+        xr.DataTree | Approximation
             A reference to the `model.traces` object, which stores the traces of the
             last call to `model.sample()`. `model.traces` is an ArviZ `InferenceData`
             instance if `sampler` is `"pymc"` (default), `"numpyro"`,
@@ -703,7 +704,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return_idata: bool = True,
         ignore_mcmc_start_point_defaults=False,
         **vi_kwargs,
-    ) -> pm.Approximation | az.InferenceData:
+    ) -> Approximation | az.InferenceData:
         """Perform Variational Inference.
 
         Parameters
@@ -722,7 +723,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-            pm.Approximation or az.InferenceData: The mean field approximation object.
+            Approximation or az.InferenceData: The mean field approximation object.
         """
         if self.loglik_kind == "analytical":
             _logger.warning(
@@ -1474,7 +1475,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return pm.model.Point(fn(None), model=self.pymc_model)
 
     def restore_traces(
-        self, traces: az.InferenceData | pm.Approximation | str | PathLike
+        self, traces: az.InferenceData | Approximation | str | PathLike
     ) -> None:
         """Restore traces from an InferenceData object or a .netcdf file.
 
@@ -1483,7 +1484,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         traces
             An InferenceData object or a path to a file containing the traces.
         """
-        if isinstance(traces, pm.Approximation):
+        if isinstance(traces, Approximation):
             self._inference_obj_vi = traces
             return
 
@@ -1492,7 +1493,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self._inference_obj = cast("az.InferenceData", traces)
 
     def restore_vi_traces(
-        self, traces: az.InferenceData | pm.Approximation | str | PathLike
+        self, traces: az.InferenceData | Approximation | str | PathLike
     ) -> None:
         """Restore VI traces from an InferenceData object or a .netcdf file.
 
@@ -1501,7 +1502,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         traces
             An InferenceData object or a path to a file containing the VI traces.
         """
-        if isinstance(traces, pm.Approximation):
+        if isinstance(traces, Approximation):
             self._inference_obj_vi = traces
             return
 
@@ -1778,7 +1779,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return self.__repr__()
 
     @property
-    def traces(self) -> az.InferenceData | pm.Approximation:
+    def traces(self) -> az.InferenceData | Approximation:
         """Return the trace of the model after sampling.
 
         Raises
@@ -1788,7 +1789,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        az.InferenceData | pm.Approximation
+        az.InferenceData | Approximation
             The trace of the model after the last call to `sample()`.
         """
         if not self._inference_obj:
@@ -1819,7 +1820,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return self._inference_obj_vi
 
     @property
-    def vi_approx(self) -> pm.Approximation:
+    def vi_approx(self) -> Approximation:
         """Return the variational inference approximation object.
 
         Raises
@@ -1829,7 +1830,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        pm.Approximation
+        Approximation
             The variational inference approximation object.
         """
         if not self._vi_approx:
