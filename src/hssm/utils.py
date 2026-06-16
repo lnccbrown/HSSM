@@ -648,19 +648,19 @@ def _requires_io_backends(func: Callable) -> Callable:
     Callable
         The wrapped function.
     """
-    try:
-        import h5netcdf  # noqa: F401
-        import h5py  # noqa: F401
-    except ImportError as exc:
-        raise ImportError(
-            "h5py and h5netcdf are required for I/O operations for model traces. "
-            'Please install hssm with the "io" extra: '
-            "`pip install hssm[io]` "
-            'or `uv add "hssm[io]"` if using uv.'
-        ) from exc
-
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
+        try:
+            import h5netcdf  # noqa: F401
+            import h5py  # noqa: F401
+        except ImportError as exc:
+            raise ImportError(
+                "h5py and h5netcdf are required for I/O operations for model traces. "
+                'Please install hssm with the "io" extra: '
+                "`pip install hssm[io]` "
+                'or `uv add "hssm[io]"` if using uv.'
+            ) from exc
+
         return func(*args, **kwargs)
 
     return wrapper
