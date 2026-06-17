@@ -571,3 +571,78 @@ def test_forward_marginal_matches_tutorial():
     rsssm_val = float(pot.eval())
 
     assert abs(tutorial - rsssm_val) < 1e-3
+
+
+# ---------------------------------------------------------------------------
+# Per-regime p_outlier lapse mixture (§1.2)
+# ---------------------------------------------------------------------------
+
+
+def test_p_outlier_switching_builds_lapse_mixture(small_single_participant):
+    """`p_outlier` in switching_params adds a per-regime RV + lapse mixture."""
+    import pytensor.tensor as pt_
+
+    from hssm.hmm import ffbs
+
+    m = RSSSM(
+        data=small_single_participant,
+        model="ddm",
+        K=2,
+        switching_params=["v", "p_outlier"],
+        p_outlier={"name": "Beta", "alpha": 1, "beta": 15},
+    )
+    assert m.list_params[-1] == "p_outlier"
+    assert "p_outlier" in m._regime_params
+    rvs = {rv.name: rv for rv in m.pymc_model.free_RVs}
+    assert "p_outlier" in rvs and tuple(rvs["p_outlier"].type.shape) == (2,)
+
+    ip = m.pymc_model.initial_point()
+    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+
+    # The mixture genuinely alters the emission: p_outlier=0 vs 0.3 differ.
+    fn, order = ffbs._compile_emission_fn(m)
+    base = {"v": np.array([0.2, 1.5]), "a": 0.8, "z": 0.5, "t": 0.3}
+
+    def total(po):
+        vals = {**base, "p_outlier": np.array([po, po])}
+        return float(np.sum(fn(*[vals[n] for n in order])))
+
+    assert abs(total(0.0) - total(0.3)) > 1.0
+
+
+def test_p_outlier_fixed_per_regime_is_constant(small_single_participant):
+    """A length-K `p_outlier` list fixes the lapse per regime (no RV)."""
+    m = RSSSM(
+        data=small_single_participant,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        p_outlier=[0.02, 0.1],
+    )
+    assert "p_outlier" in m._regime_params  # carries a regime axis
+    assert "p_outlier" not in [rv.name for rv in m.pymc_model.free_RVs]  # but fixed
+
+
+def test_p_outlier_global_iid_rejected(small_single_participant):
+    """A scalar / non-per-regime `p_outlier` is rejected (decision 10.1.9)."""
+    for bad in (0.05, {"name": "Beta", "alpha": 1, "beta": 15}):
+        with pytest.raises(NotImplementedError, match="global iid"):
+            RSSSM(
+                data=small_single_participant,
+                model="ddm",
+                K=2,
+                switching_params=["v"],
+                p_outlier=bad,
+            )
+
+
+def test_top_level_lapse_still_rejected(small_single_participant):
+    """The top-level `lapse` kwarg remains rejected in v1."""
+    with pytest.raises(NotImplementedError):
+        RSSSM(
+            data=small_single_participant,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            lapse={"name": "Uniform", "lower": 0.0, "upper": 10.0},
+        )

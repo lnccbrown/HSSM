@@ -8,7 +8,7 @@ the *same* forward recursion (design doc §5.2, decision 10.1.6).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pymc as pm
 import pytensor.tensor as pt
@@ -25,6 +25,7 @@ def resolve_emission_dist(
     backend: str | None,
     list_params: list[str] | None = None,
     is_choice_only: bool = False,
+    lapse: Any = None,
 ):
     """Resolve the per-regime SSM distribution class for the emission.
 
@@ -36,6 +37,11 @@ def resolve_emission_dist(
     parameter passed per-row (it drives the JAX ``vmap``); the HMM emission
     passes them all, so ``list_params`` is forwarded as ``reg_params`` and the
     builder broadcasts each regime value to a per-row vector.
+
+    When ``lapse`` (a ``bmb.Prior``) is supplied, the distribution gains a
+    trailing ``p_outlier`` parameter and its logp returns the lapse mixture
+    ``(1 - p_outlier) * SSM + p_outlier * lapse`` — the per-regime ``p_outlier``
+    is then fed like any other regime parameter (design §1.2).
     """
     resolved_backend = backend if backend is not None else "pytensor"
     reg_params = None
@@ -47,6 +53,7 @@ def resolve_emission_dist(
         backend=resolved_backend,  # type: ignore[arg-type]
         reg_params=reg_params,
         is_choice_only=is_choice_only,
+        lapse=lapse,
     )
 
 

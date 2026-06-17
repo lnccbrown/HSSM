@@ -185,3 +185,48 @@ def test_infer_regimes_and_loo_end_to_end():
     assert np.isfinite(ll).all()
     loo = az.loo(idata)
     assert np.isfinite(loo.elpd_loo)
+
+
+def test_per_regime_p_outlier_recovery():
+    """Per-regime `p_outlier` lapse mixture recovers a regime-specific lapse rate.
+
+    Regime 0 carries a high lapse (0.30), regime 1 a low lapse (0.03); lapses
+    are injected as Uniform(0, 20) RTs with random choice (matching the model's
+    fixed lapse). The inferred per-regime `p_outlier` must order correctly and
+    recover the high-lapse regime, while `v` stays well recovered.
+    """
+    true = {
+        0: {"v": -1.2, "a": 1.0, "z": 0.5, "t": 0.3},
+        1: {"v": 1.2, "a": 1.0, "z": 0.5, "t": 0.3},
+    }
+    P = np.array([[0.92, 0.08], [0.08, 0.92]])
+    pi0 = np.array([0.5, 0.5])
+    data, regimes = simulate_hmm_ddm_data(400, true, P, pi0, seed=11)
+    rng = np.random.default_rng(99)
+    true_p = {0: 0.30, 1: 0.03}
+    for i in range(len(data)):
+        if rng.random() < true_p[regimes[i]]:
+            data[i, 0] = rng.uniform(0.0, 20.0)
+            data[i, 1] = rng.choice([-1.0, 1.0])
+    df = pd.DataFrame(data, columns=["rt", "response"])
+
+    model = RSSSM(
+        data=df,
+        model="ddm",
+        K=2,
+        switching_params=["v", "p_outlier"],
+        v={"name": "Normal", "mu": 0.0, "sigma": 3.0},
+        p_outlier={"name": "Beta", "alpha": 1, "beta": 8},
+    )
+    idata = model.sample(
+        draws=600, tune=600, chains=2, target_accept=0.9, random_seed=1
+    )
+
+    assert model.summary()["r_hat"].max() < 1.1
+    post = idata.posterior
+    v_mean = post["v"].mean(("chain", "draw")).values
+    p_mean = post["p_outlier"].mean(("chain", "draw")).values
+    assert v_mean[0] < 0.0 < v_mean[1]  # drifts recovered + ordered
+    assert np.isfinite(p_mean).all()
+    assert p_mean[0] > p_mean[1]  # regime 0 is the high-lapse regime
+    assert abs(p_mean[0] - 0.30) < 0.15  # high lapse recovered
