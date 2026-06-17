@@ -5,13 +5,14 @@ from itertools import product
 from typing import Any, Iterable, Literal
 
 import arviz as az
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.axes import Axes
 from matplotlib.patches import Ellipse
 from scipy.stats import chi2
+from seaborn import FacetGrid
 
 from .utils import (
     _check_groups_and_groups_order,
@@ -148,7 +149,7 @@ def _plot_quantile_probability_1D(
     predictive_samples_kwargs: dict[str, Any] | None = None,
     ellipse_kwargs: dict[str, Any] | None = None,
     **kwargs,
-) -> mpl.axes.Axes:
+) -> Axes:
     """Produce one quantile probability plot.
 
     Used internally by the functions below to produce the plot.
@@ -366,17 +367,17 @@ def _plot_quantile_probability_2D(
     predictive_samples_kwargs: dict[str, Any] | None = None,
     ellipse_kwargs: dict[str, Any] | None = None,
     **kwargs,
-) -> sns.FacetGrid:
+) -> FacetGrid:
     """Plot the quantile probabilities against the observed data.
 
     Check the function below for docstring.
 
     Returns
     -------
-    sns.FacetGrid
+    FacetGrid
         A seaborn FacetGrid object containing the plot.
     """
-    g = sns.FacetGrid(
+    g = FacetGrid(
         data=data,
         row=row,
         col=col,
@@ -455,7 +456,7 @@ def plot_quantile_probability(
     predictive_samples_kwargs: dict[str, Any] | None = None,
     ellipse_kwargs: dict[str, Any] | None = None,
     **kwargs,
-) -> sns.FacetGrid:
+) -> Axes | FacetGrid | list[FacetGrid]:
     """Plot the quantile probabilities against the observed data.
 
     Parameters
@@ -560,7 +561,7 @@ def plot_quantile_probability(
 
     Returns
     -------
-    mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
+    Axes | FacetGrid | list[FacetGrid]
         A seaborn FacetGrid object containing the plot.
     """
     # AF-TODO: Should provide a few more safeguards to ensure
