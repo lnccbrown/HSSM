@@ -13,6 +13,7 @@ transform — cannot match draw-for-draw).  Here we assert recovery instead.
 
 from __future__ import annotations
 
+import arviz as az
 import numpy as np
 import pandas as pd
 import pytest
@@ -141,3 +142,46 @@ def test_lan_only_angle_recovery():
     # signed (true v = [-1.5, +1.5]); the ordered transform guarantees v[0]<v[1].
     assert v_mean[0] < 0.0 < v_mean[1]
     assert (v_mean[1] - v_mean[0]) > 1.0
+
+
+def test_infer_regimes_and_loo_end_to_end():
+    """End-to-end Phase 4: sample, recover regimes accurately, and run loo.
+
+    Exercises the full post-hoc path on a real posterior: `infer_regimes`
+    (FFBS) must recover the well-separated two-regime trajectory at high
+    per-trial accuracy, and `compute_log_likelihood` must produce a
+    `log_likelihood` group that `arviz.loo` consumes.
+    """
+    true_params = {
+        0: {"v": -1.5, "a": 1.0, "z": 0.5, "t": 0.3},
+        1: {"v": 1.5, "a": 1.0, "z": 0.5, "t": 0.3},
+    }
+    P = np.array([[0.92, 0.08], [0.08, 0.92]])
+    pi0 = np.array([0.5, 0.5])
+    data, regimes = simulate_hmm_ddm_data(250, true_params, P, pi0, seed=7)
+    df = pd.DataFrame(data, columns=["rt", "response"])
+
+    model = RSSSM(
+        data=df,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        v={"name": "Normal", "mu": 0.0, "sigma": 3.0},
+    )
+    idata = model.sample(draws=500, tune=500, chains=2, random_seed=42)
+
+    # --- infer_regimes: marginal MAP tracks the ground-truth regimes ---
+    reg_idata = model.infer_regimes(n_draws=200, seed=0)
+    freq = reg_idata.posterior_regimes["regime_sample_frequency"].values[0]  # (T, K)
+    assert np.allclose(freq.sum(axis=1), 1.0)
+    map_regime = freq.argmax(axis=1)
+    # Ascending anchor: regime 0 = low drift; matches the simulated labels.
+    assert (map_regime == regimes).mean() > 0.8
+
+    # --- compute_log_likelihood: arviz.loo runs on the attached group ---
+    model.compute_log_likelihood(idata)
+    assert "log_likelihood" in idata.groups()
+    ll = idata.log_likelihood["obs"].values
+    assert np.isfinite(ll).all()
+    loo = az.loo(idata)
+    assert np.isfinite(loo.elpd_loo)
