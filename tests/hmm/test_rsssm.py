@@ -335,6 +335,19 @@ def test_missing_participant_col_synthesised(small_single_participant):
     assert m.n_participants == 1
 
 
+def test_finite_gradient_at_init(small_single_participant):
+    """The default start must give finite gradients (safe `t` initval).
+
+    The non-decision time `t` is seeded below the minimum RT so the start does
+    not land in the SSM's invalid region (`rt < t`), where the gradient is NaN
+    — which otherwise makes the PyMC NUTS sampler diverge on every draw.
+    """
+    m = RSSSM(data=small_single_participant, model="ddm", K=2, switching_params=["v"])
+    ip = m.pymc_model.initial_point()
+    grad = m.pymc_model.compile_dlogp()(ip)
+    assert np.all(np.isfinite(grad))
+
+
 # ---------------------------------------------------------------------------
 # Forward algorithm correctness (the definitive checks)
 # ---------------------------------------------------------------------------

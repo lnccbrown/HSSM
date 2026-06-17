@@ -81,6 +81,22 @@ def test_lan_build_angle_lan_only(angle_df, backend):
     assert _logp_finite(m)
 
 
+@pytest.mark.parametrize("backend", ["jax", "pytensor"])
+def test_lan_finite_gradient_at_init(ddm_df, backend):
+    """The LAN start must also give finite gradients (safe `t` initval)."""
+    m = RSSSM(
+        data=ddm_df,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        loglik_kind="approx_differentiable",
+        backend=backend,
+    )
+    ip = m.pymc_model.initial_point()
+    grad = m.pymc_model.compile_dlogp()(ip)
+    assert np.all(np.isfinite(grad))
+
+
 def test_lan_jax_default_backend(ddm_df):
     """approx_differentiable defaults to backend='jax' (HSSM default)."""
     m = RSSSM(
