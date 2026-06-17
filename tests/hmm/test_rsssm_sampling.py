@@ -13,19 +13,13 @@ transform — cannot match draw-for-draw).  Here we assert recovery instead.
 
 from __future__ import annotations
 
-import arviz as az
 import numpy as np
+import pandas as pd
 import pytest
 
 from hssm import RSSSM
 
-from .conftest import (
-    TUTORIAL_P,
-    TUTORIAL_PI0,
-    TUTORIAL_TRUE_PARAMS,
-    make_panel,
-    simulate_hmm_ddm_data,
-)
+from .conftest import simulate_hmm_data, simulate_hmm_ddm_data
 
 pytestmark = pytest.mark.slow
 
@@ -75,8 +69,6 @@ def test_sample_multi_participant_k3():
     pi0 = np.array([1 / 3, 1 / 3, 1 / 3])
 
     frames = []
-    import pandas as pd
-
     for p in range(3):
         data, _ = simulate_hmm_ddm_data(200, true_params, P, pi0, seed=10 + p)
         sub = pd.DataFrame(data, columns=["rt", "response"])
@@ -106,3 +98,42 @@ def test_sample_multi_participant_k3():
     # Ascending anchor -> recovered drifts ordered and near the true sorted set.
     assert np.all(np.diff(v_mean) > 0)
     assert np.max(np.abs(v_mean - np.array([-1.0, 0.5, 1.8]))) < 0.4
+
+
+def test_lan_only_angle_recovery():
+    """LAN-only SSM (`angle`, no analytical comparand): recover v ordering + theta.
+
+    Mirrors the §7.4 LAN-only validation: the emission has no analytical form, so
+    this exercises the `approx_differentiable` jax path end-to-end through NUTS.
+    """
+    true_params = {
+        0: {"v": -0.5, "a": 1.2, "z": 0.5, "t": 0.3, "theta": 0.2},
+        1: {"v": 1.5, "a": 1.2, "z": 0.5, "t": 0.3, "theta": 0.2},
+    }
+    P = np.array([[0.92, 0.08], [0.08, 0.92]])
+    pi0 = np.array([0.5, 0.5])
+    data, _ = simulate_hmm_data("angle", 250, true_params, P, pi0, seed=7)
+    df = pd.DataFrame(data, columns=["rt", "response"])
+
+    model = RSSSM(
+        data=df,
+        model="angle",
+        K=2,
+        switching_params=["v"],
+        loglik_kind="approx_differentiable",
+        backend="jax",
+    )
+    idata = model.sample(
+        draws=500, tune=500, chains=2, target_accept=0.9, random_seed=42
+    )
+
+    summary = model.summary()
+    assert summary["r_hat"].max() < 1.1
+
+    post = idata.posterior
+    v_mean = post["v"].mean(("chain", "draw")).values  # ascending
+    assert v_mean[0] < v_mean[1]
+    # Recover the well-separated drifts and the shared boundary-angle theta.
+    assert abs(v_mean[0] - (-0.5)) < 0.4
+    assert abs(v_mean[1] - 1.5) < 0.4
+    assert abs(float(post["theta"].mean()) - 0.2) < 0.2

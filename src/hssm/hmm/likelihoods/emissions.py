@@ -23,6 +23,7 @@ def resolve_emission_dist(
     model: str,
     loglik_kind: "LoglikKind",
     backend: str | None,
+    list_params: list[str] | None = None,
     is_choice_only: bool = False,
 ):
     """Resolve the per-regime SSM distribution class for the emission.
@@ -30,12 +31,21 @@ def resolve_emission_dist(
     Returns a ``pm.Distribution`` subclass whose ``.dist(**params)`` accepts the
     SSM parameters and whose ``pm.logp(dist, data)`` evaluates the per-trial
     log-density (the same object the hand-written tutorial uses).
+
+    For the LAN ``backend="jax"`` path, ``reg_params`` must list every emission
+    parameter passed per-row (it drives the JAX ``vmap``); the HMM emission
+    passes them all, so ``list_params`` is forwarded as ``reg_params`` and the
+    builder broadcasts each regime value to a per-row vector.
     """
     resolved_backend = backend if backend is not None else "pytensor"
+    reg_params = None
+    if loglik_kind == "approx_differentiable" and resolved_backend == "jax":
+        reg_params = list(list_params) if list_params is not None else None
     return make_distribution_for_supported_model(
         model=cast("SupportedModels", model),
         loglik_kind=loglik_kind,
         backend=resolved_backend,  # type: ignore[arg-type]
+        reg_params=reg_params,
         is_choice_only=is_choice_only,
     )
 
