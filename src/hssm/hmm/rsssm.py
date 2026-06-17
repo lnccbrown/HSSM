@@ -29,6 +29,7 @@ from pymc.distributions.transforms import ordered as ordered_transform
 
 from ..base import HSSMBase
 from ..config import BaseModelConfig
+from ..defaults import INITVAL_SETTINGS
 from ..modelconfig import get_default_model_config
 from .config import RSSSMConfig
 from .likelihoods.builder import make_hmm_logp_op
@@ -431,7 +432,26 @@ class RSSSM(HSSMBase):
             return rv, True
         # Shared inferred parameter.
         shape = (N,) if is_no_pooling else None
-        return self._make_dist(prior, name, shape=shape), False
+        return (
+            self._make_dist(
+                prior, name, shape=shape, initval=self._param_initval(name, shape)
+            ),
+            False,
+        )
+
+    def _param_initval(self, name: str, shape: tuple[int, ...] | None):
+        """Return a safe starting value for ``name`` from HSSM's INITVAL_SETTINGS.
+
+        This mirrors HSSM's initval post-processing (which the direct-build path
+        bypasses).  It matters most for the non-decision time ``t``: its prior
+        mode sits above typical RTs, so the default start lands in the SSM's
+        invalid region (``rt < t``) where the gradient is NaN — harmless under
+        numpyro's re-init but fatal for the PyMC NUTS sampler.
+        """
+        val = INITVAL_SETTINGS.get(None, {}).get(name)
+        if val is None:
+            return None
+        return float(val) if shape is None else np.full(shape, float(val))
 
     def _make_switching_rv(
         self, name, prior, is_anchor, anchor, is_no_pooling, N, K
@@ -439,7 +459,9 @@ class RSSSM(HSSMBase):
         """Create a per-regime switching RV, applying the anchor transform."""
         shape = (N, K) if is_no_pooling else (K,)
         if not is_anchor:
-            return self._make_dist(prior, name, shape=shape)
+            return self._make_dist(
+                prior, name, shape=shape, initval=self._param_initval(name, shape)
+            )
 
         # Anchor: apply the `ordered` transform (ascending).
         bounds = self.bounds.get(name)
