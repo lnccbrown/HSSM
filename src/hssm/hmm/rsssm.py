@@ -29,7 +29,7 @@ from pymc.distributions.transforms import ordered as ordered_transform
 
 from ..base import HSSMBase
 from ..config import BaseModelConfig
-from ..defaults import default_model_config
+from ..modelconfig import get_default_model_config
 from .config import RSSSMConfig
 from .likelihoods.builder import make_hmm_logp_op
 from .likelihoods.emissions import resolve_emission_dist
@@ -208,10 +208,16 @@ class RSSSM(HSSMBase):
         ) = pad_and_align_to_T_max(self.data, participant_col, self.response)
 
         # ===== resolve the emission distribution (L2) =====
+        # The LAN backend="jax" path needs each per-row parameter broadcast to a
+        # vector (it drives the JAX vmap); analytical / pytensor pass scalars.
+        self._broadcast_params = (
+            cfg.loglik_kind == "approx_differentiable" and cfg.backend == "jax"
+        )
         self._emission_dist = resolve_emission_dist(
             model=cfg.model if isinstance(cfg.model, str) else cfg.model_name,
             loglik_kind=cfg.loglik_kind,  # type: ignore[arg-type]
             backend=cfg.backend,
+            list_params=self.list_params,
         )
 
         # ===== build the PyMC model directly =====
@@ -306,14 +312,16 @@ class RSSSM(HSSMBase):
                 raise ValueError("Provided model config has no `list_params`.")
             return list(model.list_params), dict(model.bounds)
 
-        if model not in default_model_config:
+        try:
+            cfg = get_default_model_config(cast("SupportedModels", model))
+        except Exception as exc:  # unknown / unsupported model name
             raise ValueError(
                 f"Unknown model {model!r}; provide a model config instead, or use "
                 "a supported SSM."
-            )
-        cfg = default_model_config[cast("SupportedModels", model)]
+            ) from exc
         list_params = list(cfg["list_params"])
-        # Pull bounds from the analytical likelihood config when available.
+        # Pull bounds from the requested likelihood kind when available, else the
+        # first available kind (e.g. LAN-only models such as `angle`).
         kind = cast("LoglikKind", loglik_kind or "analytical")
         likelihoods = cfg["likelihoods"]
         if kind not in likelihoods:
@@ -368,6 +376,7 @@ class RSSSM(HSSMBase):
                 n_trials=self.n_trials,
                 regime_params=regime_params,
                 pooling=pooling_mode,
+                broadcast_params=self._broadcast_params,
             )
             builder(param_values, log_P, log_pi0)
 
@@ -493,11 +502,14 @@ class RSSSM(HSSMBase):
         return dist_cls(var_name, **args, **extra)
 
     def _ssm_default_priors(self) -> dict[str, Any]:
-        """Return the SSM model's analytical default priors, if any."""
+        """Return the SSM model's default priors for the chosen kind, if any."""
         model = self.model_config.model
-        if not isinstance(model, str) or model not in default_model_config:
+        if not isinstance(model, str):
             return {}
-        model_cfg = default_model_config[cast("SupportedModels", model)]
+        try:
+            model_cfg = get_default_model_config(cast("SupportedModels", model))
+        except Exception:
+            return {}
         likelihoods = model_cfg["likelihoods"]
         kind = (
             self.loglik_kind

@@ -30,6 +30,7 @@ def make_hmm_logp_op(
     n_trials: int,
     regime_params: set[str],
     pooling: str = "full",
+    broadcast_params: bool = False,
     potential_name: str = "hmm_loglik",
 ) -> Callable[..., pt.TensorVariable]:
     """Build the forward-marginal model-builder closure.
@@ -48,6 +49,10 @@ def make_hmm_logp_op(
         Names of parameters carrying a regime axis (switching + fixed-per-regime).
     pooling
         ``"full"`` (global params) or ``"none"`` (per-participant params).
+    broadcast_params
+        When ``True`` (the LAN ``backend="jax"`` path), each per-regime parameter
+        value is broadcast to a per-row ``(M,)`` vector so it lines up with the
+        JAX ``vmap`` over data rows.
     potential_name
         Name of the ``pm.Potential`` added to the model.
 
@@ -59,7 +64,8 @@ def make_hmm_logp_op(
     """
     N, T = n_participants, n_trials
     n_cols = data_padded.shape[-1]
-    data_flat_np = data_padded.reshape(N * T, n_cols).astype("float32")
+    n_rows = N * T
+    data_flat_np = data_padded.reshape(n_rows, n_cols).astype("float32")
     mask_np = mask.astype("float32")
 
     def builder(
@@ -77,13 +83,16 @@ def make_hmm_logp_op(
                 if pooling == "full":
                     # switching/fixed-per-regime: (K,) -> scalar val[k];
                     # shared: scalar broadcast.
-                    params_k[name] = val[k] if has_regime else val
+                    value = val[k] if has_regime else val
                 else:  # "none": per-participant params
                     # switching: (N, K) -> column (N,); shared: (N,).
                     col = val[:, k] if has_regime else val
                     # Expand each participant's value across its T trials to
                     # align with the (participant-major, trial-minor) data rows.
-                    params_k[name] = pt.repeat(col, T)
+                    value = pt.repeat(col, T)
+                if broadcast_params:
+                    value = pt.broadcast_to(value, (n_rows,))  # type: ignore[arg-type]
+                params_k[name] = value
             regime_param_dicts.append(params_k)
 
         emission_flat = per_regime_emission_logp(

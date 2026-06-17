@@ -21,8 +21,8 @@ TUTORIAL_P = np.array([[0.95, 0.05], [0.10, 0.90]])
 TUTORIAL_PI0 = np.array([0.8, 0.2])
 
 
-def simulate_hmm_ddm_data(n_trials, regime_params, P, pi0, seed=42):
-    """Simulate one participant from a regime-switching DDM (tutorial logic)."""
+def simulate_hmm_data(model, n_trials, regime_params, P, pi0, seed=42):
+    """Simulate one participant from a regime-switching SSM (tutorial logic)."""
     rng = np.random.default_rng(seed)
     K = len(regime_params)
 
@@ -31,31 +31,27 @@ def simulate_hmm_ddm_data(n_trials, regime_params, P, pi0, seed=42):
     for t in range(1, n_trials):
         regimes[t] = rng.choice(K, p=P[regimes[t - 1]])
 
-    rts, responses = [], []
+    data = np.empty((n_trials, 2))
     for k in range(K):
         mask = regimes == k
         n_k = int(mask.sum())
         if n_k == 0:
-            rts.append(np.array([]))
-            responses.append(np.array([]))
             continue
         sims = hssm.simulate_data(
-            model="ddm",
+            model=model,
             theta=regime_params[k],
             size=n_k,
             random_state=seed + k,
             output_df=False,
         )
-        rts.append(sims[:, 0])
-        responses.append(sims[:, 1])
-
-    data = np.empty((n_trials, 2))
-    for k in range(K):
-        mask = regimes == k
-        if mask.sum():
-            data[mask, 0] = rts[k]
-            data[mask, 1] = responses[k]
+        data[mask, 0] = sims[:, 0]
+        data[mask, 1] = sims[:, 1]
     return data.astype("float32"), regimes
+
+
+def simulate_hmm_ddm_data(n_trials, regime_params, P, pi0, seed=42):
+    """Simulate one participant from a regime-switching DDM (tutorial logic)."""
+    return simulate_hmm_data("ddm", n_trials, regime_params, P, pi0, seed)
 
 
 def build_tutorial_forward_marginal(data, v, a, z, t, P, K):
