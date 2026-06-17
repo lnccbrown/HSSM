@@ -6,15 +6,14 @@ from itertools import product
 from typing import Any, Iterable, Literal, Protocol, cast
 
 import arviz as az
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import seaborn as sns
 import xarray as xr
 from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
+from seaborn import FacetGrid
 from ssms.basic_simulators.simulator import simulator
 
 # Original model cartoon plot from gui
@@ -66,7 +65,7 @@ def _plot_model_cartoon_1D(
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
     **kwargs,
-) -> mpl.axes.Axes:
+) -> Axes:
     """Plot the posterior predictive distribution against the observed data.
 
     Check the `plot_model_cartoon` function below for docstring.
@@ -173,17 +172,17 @@ def _plot_model_cartoon_2D(
     ylabel: str | None = "",
     grid_kwargs: dict | None = None,
     **kwargs,
-) -> sns.FacetGrid:
+) -> FacetGrid:
     """Plot the posterior predictive distribution against the observed data.
 
     Check the function below for docstring.
 
     Returns
     -------
-    sns.FacetGrid
+    FacetGrid
         A seaborn FacetGrid object containing the plot.
     """
-    g = sns.FacetGrid(
+    g = FacetGrid(
         data=data,
         col=col,
         row=row,
@@ -375,7 +374,7 @@ def plot_model_cartoon(
     ylabel: str | None = "",
     grid_kwargs: dict | None = None,
     **kwargs,
-) -> Axes | sns.FacetGrid | list[sns.FacetGrid]:
+) -> Axes | FacetGrid | list[FacetGrid]:
     """Plot the posterior predictive distribution against the observed data.
 
     Parameters
@@ -480,7 +479,7 @@ def plot_model_cartoon(
     ylabel : optional
         The label for the y-axis, by default "Density".
     grid_kwargs : optional
-        Additional keyword arguments are passed to the [`sns.FacetGrid` constructor]
+        Additional keyword arguments are passed to the [`FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
         when any of row or col is provided. When producing a single plot, these
         arguments are ignored.
@@ -489,7 +488,7 @@ def plot_model_cartoon(
 
     Returns
     -------
-    mpl.axes.Axes | sns.FacetGrid
+    Axes | FacetGrid
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
     if not (plot_predictive_mean or plot_predictive_samples):
