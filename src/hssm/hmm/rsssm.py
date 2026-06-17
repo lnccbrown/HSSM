@@ -72,8 +72,34 @@ def _bounds_based_prior(bounds: tuple[float, float] | None) -> dict[str, Any]:
     return {"name": "Uniform", "lower": float(lo), "upper": float(hi)}
 
 
-def _ascending_initval(K: int, bounds: tuple[float, float] | None) -> np.ndarray:
-    """Return a strictly-ascending in-support init vector for the anchor."""
+def _ascending_initval(
+    K: int, bounds: tuple[float, float] | None, center: float | None = None
+) -> np.ndarray:
+    """Return a strictly-ascending in-support init vector for the anchor.
+
+    When ``center`` (a known-safe seed from ``INITVAL_SETTINGS``) is supplied,
+    the grid is built *around* that value with a half-width that never reaches
+    the nearest finite support boundary.  This keeps an anchor with a
+    data-coupled validity bound — notably the non-decision time ``t``, which is
+    invalid wherever ``t >= rt`` — out of its invalid region, mirroring the safe
+    seed that non-anchor parameters already receive via ``_param_initval``.  For
+    an unbounded anchor such as ``v`` (center 0) this reproduces the previous
+    ``linspace(-2, 2, K)`` exactly.  Without a safe seed the grid spans the
+    parameter's bounds as before.
+    """
+    if center is not None:
+        half_width = 2.0  # default for sides open to infinity (e.g. v)
+        if bounds is not None:
+            lo, hi = bounds
+            if not np.isinf(lo):
+                half_width = min(half_width, 0.5 * (center - lo))
+            if not np.isinf(hi):
+                half_width = min(half_width, 0.5 * (hi - center))
+        # Floor guards the degenerate seed-on-boundary case; with the real
+        # seeds (t=0.025, a=1.5, v=0) the boundary-derived width dominates.
+        half_width = max(half_width, 1e-3)
+        return center + np.linspace(-half_width, half_width, K)
+
     if bounds is None:
         return np.linspace(-2.0, 2.0, K)
     lo, hi = bounds
@@ -463,9 +489,13 @@ class RSSSM(HSSMBase):
                 prior, name, shape=shape, initval=self._param_initval(name, shape)
             )
 
-        # Anchor: apply the `ordered` transform (ascending).
+        # Anchor: apply the `ordered` transform (ascending).  Seed the grid on
+        # the param's known-safe value (when one exists) so an anchor with a
+        # data-coupled validity bound (e.g. `t`, invalid where `t >= rt`) is not
+        # placed in its invalid region — the bug `_param_initval` already fixes
+        # for non-anchor params.
         bounds = self.bounds.get(name)
-        asc = _ascending_initval(K, bounds)
+        asc = _ascending_initval(K, bounds, center=self._param_initval(name, None))
         initval = np.broadcast_to(asc, shape).copy() if is_no_pooling else asc
 
         if anchor.direction == "desc":

@@ -335,17 +335,46 @@ def test_missing_participant_col_synthesised(small_single_participant):
     assert m.n_participants == 1
 
 
-def test_finite_gradient_at_init(small_single_participant):
-    """The default start must give finite gradients (safe `t` initval).
+@pytest.mark.parametrize(
+    "switching_params",
+    [
+        ["v"],  # default: v is the ordered anchor
+        ["v", "t"],  # t is a non-anchor switching param
+        ["t"],  # t is the ordered anchor (the bypass case)
+    ],
+)
+def test_finite_gradient_at_init(small_single_participant, switching_params):
+    """The start must give finite gradients across switching configurations.
 
-    The non-decision time `t` is seeded below the minimum RT so the start does
-    not land in the SSM's invalid region (`rt < t`), where the gradient is NaN
-    — which otherwise makes the PyMC NUTS sampler diverge on every draw.
+    The non-decision time `t` must be seeded below the minimum RT so the start
+    does not land in the SSM's invalid region (`rt < t`), where the gradient is
+    NaN — which otherwise makes the PyMC NUTS sampler diverge on every draw.
+    This must hold whether `t` is a non-anchor switching param (seeded via
+    `_param_initval`) or the ordered *anchor* (seeded via `_ascending_initval`),
+    since the anchor path bypasses `_param_initval`.
     """
-    m = RSSSM(data=small_single_participant, model="ddm", K=2, switching_params=["v"])
+    m = RSSSM(
+        data=small_single_participant,
+        model="ddm",
+        K=2,
+        switching_params=switching_params,
+    )
     ip = m.pymc_model.initial_point()
     grad = m.pymc_model.compile_dlogp()(ip)
     assert np.all(np.isfinite(grad))
+
+
+def test_v_anchor_initval_unchanged(small_single_participant):
+    """The `v` anchor's seeded grid is unchanged by the safe-seed centering.
+
+    `v` is unbounded with safe seed 0, so centering reproduces the historical
+    `linspace(-2, 2, K)` exactly — guarding against a regression in the
+    well-tested default anchor while the fix targets `t`.
+    """
+    from hssm.hmm.rsssm import _ascending_initval
+
+    asc = _ascending_initval(2, bounds=None, center=0.0)
+    np.testing.assert_allclose(asc, np.array([-2.0, 2.0]))
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +441,82 @@ def test_joint_marginal_is_sum_over_participants():
         for n in range(N)
     )
     assert abs(joint - per) < 1e-9
+
+
+def _np_logsumexp(x, axis):
+    """Independent numpy log-sum-exp (reference, no pytensor)."""
+    m = np.max(x, axis=axis, keepdims=True)
+    return np.squeeze(m + np.log(np.sum(np.exp(x - m), axis=axis, keepdims=True)), axis)
+
+
+@pytest.mark.parametrize("T", [400, 500, 1000])
+def test_forward_gradient_finite_for_long_sequences(T):
+    """The scaled forward keeps gradients finite (and correct) for long panels.
+
+    The textbook un-normalised forward recursion drifts ~linearly with the
+    sequence length, so its reverse-mode gradient becomes NaN past ~400 trials
+    (in *both* the C/PyTensor and JAX backends) even though the marginal value
+    stays finite — which silently breaks NUTS on realistic long panels.  The
+    scaled (normalised) recursion must stay finite.
+
+    The emission has ``theta`` added to every trial's log-density, so the
+    marginal is ``Z(theta) = Z(0) + T * theta`` exactly; the gradient w.r.t.
+    ``theta`` must therefore equal ``T`` — catching a finite-but-wrong gradient,
+    not merely a NaN.  Emissions are drawn in the realistic SSM range ``[-18,
+    -1]`` so the un-normalised recursion would genuinely overflow.
+    """
+    import pytensor
+
+    rng = np.random.default_rng(0)
+    K = 3
+    base = rng.uniform(-18.0, -1.0, size=(1, T, K))
+    praw = rng.uniform(0.1, 1.0, size=(K, K))
+    P = praw / praw.sum(1, keepdims=True)
+    pi0 = np.ones(K) / K
+
+    theta = pt.scalar("theta")
+    log_em = pt.as_tensor_variable(base) + theta  # gradient flows through every step
+    marginal = forward_log_marginal(
+        log_em,
+        pt.as_tensor_variable(np.log(P)),
+        pt.as_tensor_variable(np.log(pi0)),
+        pt.ones((1, T)),
+    )
+    grad_fn = pytensor.function([theta], pt.grad(marginal, theta))
+    g = float(grad_fn(0.0))
+    assert np.isfinite(g)
+    assert abs(g - T) < 1e-6  # exact: d/dtheta (Z0 + T*theta) = T
+
+
+def test_forward_marginal_value_matches_numpy_reference_long():
+    """Scaled forward *value* matches an independent numpy log-forward at T=500.
+
+    The brute-force enumeration test pins correctness at T=7; this pins the
+    value for a long sequence (where the rewrite's normalisation could in
+    principle drift) against a stable numpy log-space forward.
+    """
+    rng = np.random.default_rng(3)
+    K, T = 3, 500
+    log_em = rng.uniform(-18.0, -1.0, size=(1, T, K))
+    praw = rng.uniform(0.1, 1.0, size=(K, K))
+    P = praw / praw.sum(1, keepdims=True)
+    pi0 = np.ones(K) / K
+    log_P, log_pi0 = np.log(P), np.log(pi0)
+
+    a = log_pi0 + log_em[0, 0]
+    for t in range(1, T):
+        a = _np_logsumexp(a[:, None] + log_P, axis=0) + log_em[0, t]
+    ref = float(_np_logsumexp(a, axis=0))
+
+    got = float(
+        forward_log_marginal(
+            pt.as_tensor_variable(log_em),
+            pt.as_tensor_variable(log_P),
+            pt.as_tensor_variable(log_pi0),
+            pt.ones((1, T)),
+        ).eval()
+    )
+    assert abs(ref - got) < 1e-6
 
 
 # ---------------------------------------------------------------------------
