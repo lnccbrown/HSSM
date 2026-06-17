@@ -266,12 +266,7 @@ class TestPlotting:
     @pytest.mark.parametrize(
         "predictive_style",
         [
-            pytest.param(
-                "points",
-                marks=pytest.mark.xfail(
-                    reason="AssertionError: assert 'Density' == 'rt'"
-                ),
-            ),
+            "points",
             "ellipse",
             "both",
         ],
