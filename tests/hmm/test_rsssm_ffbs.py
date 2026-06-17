@@ -296,3 +296,40 @@ def test_compute_log_likelihood_is_idempotent():
     first = idata.log_likelihood["obs"].values.copy()
     model.compute_log_likelihood(idata)  # must not raise
     np.testing.assert_allclose(idata.log_likelihood["obs"].values, first)
+
+
+def test_ffbs_and_log_likelihood_under_no_pooling():
+    """FFBS + per-trial logp work with per-participant (N,K)/(N,) parameters."""
+    from .conftest import make_panel
+
+    panel = make_panel(2, 40)
+    model = RSSSM(
+        data=panel,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        pooling="none",
+        participant_col="participant_id",
+    )
+    n = model.n_participants
+    ds = xr.Dataset(
+        {
+            "v": (
+                ("chain", "draw", "p", "k"),
+                np.tile([[-1.0, 1.0], [-1.0, 1.0]], (1, 4, 1, 1)),
+            ),
+            "a": (("chain", "draw", "p"), np.full((1, 4, n), 0.8)),
+            "z": (("chain", "draw", "p"), np.full((1, 4, n), 0.5)),
+            "t": (("chain", "draw", "p"), np.full((1, 4, n), 0.3)),
+            "P": (
+                ("chain", "draw", "i", "j"),
+                np.tile([[0.9, 0.1], [0.1, 0.9]], (1, 4, 1, 1)),
+            ),
+        },
+        coords={"chain": [0], "draw": np.arange(4)},
+    )
+    idata = az.InferenceData(posterior=ds)
+    reg = model.infer_regimes(idata, n_draws=4, seed=0)
+    assert reg.posterior_regimes["regimes"].sizes["participant"] == n
+    model.compute_log_likelihood(idata)
+    assert np.isfinite(idata.log_likelihood["obs"].values).all()
