@@ -333,7 +333,7 @@ def plot_predictive(
     dt : optional
         The DataTree object with posterior samples. If not provided, will use the
         traces object stored inside the model. If posterior predictive samples are not
-        present in this object, will generate posterior predictive samples using the
+        present in this object, will generate posterior predictive samples using
         this DataTree object and the original data.
     data : optional
         The observed data.
