@@ -37,8 +37,14 @@ def resolve_anchor(
     The ``AutoOrdering`` heuristic (in order of preference):
 
     1. If ``v`` is among ``switching_params``, anchor on ``v``.
-    2. Else if there is exactly one switching parameter, anchor on it.
-    3. Else use the first switching parameter and warn.
+    2. Else if there is exactly one (non-``p_outlier``) switching parameter,
+       anchor on it.
+    3. Else use the first (non-``p_outlier``) switching parameter and warn.
+
+    ``p_outlier`` is never an auto-anchor: the ``ordered`` transform on the
+    bounded ``Beta`` lapse parameter is numerically unstable (it produces a
+    non-finite logp at the start), and ordering regimes by lapse rate is rarely
+    the intent.
     """
     if isinstance(ordering, NoOrdering):
         _logger.warning(
@@ -62,15 +68,33 @@ def resolve_anchor(
                 f"ordering direction must be 'asc' or 'desc', got "
                 f"{ordering.direction!r}."
             )
+        if ordering.name == "p_outlier":
+            raise NotImplementedError(
+                "Ordering on `p_outlier` is not supported: the `ordered` "
+                "transform on the bounded Beta lapse parameter is numerically "
+                "unstable. Anchor on a drift/threshold parameter, or use "
+                "NoOrdering."
+            )
         return AnchorInfo(name=ordering.name, direction=ordering.direction)
 
     if isinstance(ordering, AutoOrdering):
-        if "v" in switching_params:
+        # p_outlier is never an auto-anchor (unstable ordered-Beta; see above).
+        candidates = [p for p in switching_params if p != "p_outlier"]
+        if not candidates:
+            _logger.warning(
+                "AutoOrdering: the only switching parameter is `p_outlier`, "
+                "which cannot anchor label-switching ordering; proceeding "
+                "without an ordering constraint (the regime posterior may be "
+                "multi-modal). Add a drift/threshold switching parameter or use "
+                "OrderByParam."
+            )
+            return None
+        if "v" in candidates:
             name = "v"
-        elif len(switching_params) == 1:
-            name = switching_params[0]
+        elif len(candidates) == 1:
+            name = candidates[0]
         else:
-            name = switching_params[0]
+            name = candidates[0]
             _logger.warning(
                 "AutoOrdering: multiple switching parameters and no 'v'; "
                 "anchoring on %r. Use OrderByParam to choose another anchor or "

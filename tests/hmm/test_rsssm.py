@@ -676,3 +676,32 @@ def test_validate_requires_model_or_emission():
     )
     with pytest.raises(ValueError, match="model.*or.*emission_logp_func"):
         cfg.validate()
+
+
+def test_p_outlier_alone_is_not_an_anchor(small_single_participant):
+    """`p_outlier` as the sole switching param builds (unordered), not NaN.
+
+    Auto-anchoring `p_outlier` would apply the `ordered` transform to the
+    bounded Beta lapse parameter, which gives a non-finite logp at the start.
+    It is excluded from auto-anchoring; the model builds without an ordering
+    constraint and has a finite gradient.
+    """
+    m = RSSSM(
+        data=small_single_participant, model="ddm", K=2, switching_params=["p_outlier"]
+    )
+    assert "p_outlier" in {rv.name for rv in m.pymc_model.free_RVs}
+    ip = m.pymc_model.initial_point()
+    assert np.isfinite(m.pymc_model.compile_logp()(ip))
+    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+
+
+def test_order_by_p_outlier_rejected(small_single_participant):
+    """Explicitly ordering on `p_outlier` raises (unstable ordered-Beta)."""
+    with pytest.raises(NotImplementedError, match="Ordering on `p_outlier`"):
+        RSSSM(
+            data=small_single_participant,
+            model="ddm",
+            K=2,
+            switching_params=["v", "p_outlier"],
+            ordering={"name": "p_outlier", "direction": "asc"},
+        )
