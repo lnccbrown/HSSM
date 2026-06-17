@@ -180,7 +180,10 @@ class RSSSM(HSSMBase):
         self._initvals: dict[str, Any] = {}
 
         # ===== reject incompatible inherited kwargs (decision 10.1.9) =====
-        self._reject_unsupported_kwargs(missing_data, deadline, p_outlier, lapse)
+        # `p_outlier` is *not* rejected here: a per-regime lapse (in
+        # switching_params, or a length-K list) is supported and resolved in
+        # `_build_config`; only the global iid form is rejected there.
+        self._reject_unsupported_kwargs(missing_data, deadline, lapse)
 
         # ===== resolve the RSSSMConfig =====
         if model_config is not None:
@@ -202,6 +205,7 @@ class RSSSM(HSSMBase):
                 ordering=ordering,
                 pooling=pooling,
                 param_specs=kwargs,
+                p_outlier=p_outlier,
             )
 
         self.model_config.validate()
@@ -240,11 +244,19 @@ class RSSSM(HSSMBase):
         self._broadcast_params = (
             cfg.loglik_kind == "approx_differentiable" and cfg.backend == "jax"
         )
+        # Per-regime lapse mixture: a trailing `p_outlier` parameter means the
+        # emission is `(1 - p_outlier_k) * SSM_k + p_outlier_k * lapse` with a
+        # fixed Uniform(0, 20) lapse over RT (§1.2; v1 does not expose `lapse`).
+        self._has_p_outlier = "p_outlier" in (self.list_params or [])
+        self._lapse = (
+            bmb.Prior("Uniform", lower=0.0, upper=20.0) if self._has_p_outlier else None
+        )
         self._emission_dist = resolve_emission_dist(
             model=cfg.model if isinstance(cfg.model, str) else cfg.model_name,
             loglik_kind=cfg.loglik_kind,  # type: ignore[arg-type]
             backend=cfg.backend,
             list_params=self.list_params,
+            lapse=self._lapse,
         )
 
         # ===== build the PyMC model directly =====
@@ -256,7 +268,7 @@ class RSSSM(HSSMBase):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _reject_unsupported_kwargs(missing_data, deadline, p_outlier, lapse) -> None:
+    def _reject_unsupported_kwargs(missing_data, deadline, lapse) -> None:
         """Raise on inherited kwargs unsupported in v1 (decision 10.1.9)."""
         if missing_data is not False:
             raise NotImplementedError(
@@ -269,17 +281,45 @@ class RSSSM(HSSMBase):
                 "RSSSM does not support `deadline`: re-ordering rows would "
                 "corrupt the trial-axis Markov structure."
             )
-        if p_outlier is not None:
-            raise NotImplementedError(
-                "RSSSM rejects the top-level `p_outlier` kwarg: a single global "
-                "iid lapse mixture double-models the lapse regime. Model lapses "
-                "structurally via a regime, or pass `p_outlier` as a per-regime "
-                "parameter (in `switching_params` or a length-K list)."
-            )
         if lapse is not None:
             raise NotImplementedError(
-                "RSSSM rejects the top-level `lapse` kwarg (decision 10.1.9)."
+                "RSSSM rejects the top-level `lapse` kwarg (decision 10.1.9); the "
+                "per-regime lapse uses a fixed Uniform(0, 20) lapse distribution."
             )
+
+    @staticmethod
+    def _resolve_p_outlier_spec(p_outlier, K, switching_params):
+        """Return ``(active, spec)`` for per-regime ``p_outlier``.
+
+        Per-regime ``p_outlier`` is allowed (design §1.2): listed in
+        ``switching_params`` (inferred per regime) or supplied as a length-K
+        list (fixed per regime).  The global iid form — a scalar or a single
+        prior not tied to a regime — is rejected (decision 10.1.9): it
+        double-models the lapse regime.  ``spec`` is the value to store in
+        ``param_specs`` (a prior dict / ``bmb.Prior`` / length-K list), or
+        ``None`` to fall back to the default inferred prior.
+        """
+        in_switching = "p_outlier" in (switching_params or [])
+        active = (p_outlier is not None) or in_switching
+        if not active:
+            return False, None
+
+        is_list = isinstance(p_outlier, (list, tuple, np.ndarray))
+        per_regime = in_switching or (is_list and len(p_outlier) == K)
+        if not per_regime:
+            raise NotImplementedError(
+                "RSSSM rejects a global iid `p_outlier`: a single lapse "
+                "probability shared across regimes double-models the lapse "
+                "regime (decision 10.1.9). Pass `p_outlier` per regime — list it "
+                "in `switching_params` (inferred) or give a length-K list "
+                "(fixed per regime)."
+            )
+        if is_list and len(p_outlier) != K:
+            raise ValueError(
+                f"Fixed-per-regime `p_outlier` must have length K={K}, got "
+                f"{len(p_outlier)}."
+            )
+        return True, p_outlier
 
     def _build_config(
         self,
@@ -294,6 +334,7 @@ class RSSSM(HSSMBase):
         ordering,
         pooling,
         param_specs,
+        p_outlier=None,
     ) -> RSSSMConfig:
         """Assemble an ``RSSSMConfig`` from the granular constructor args."""
         if model is None:
@@ -307,6 +348,18 @@ class RSSSM(HSSMBase):
 
         # Resolve SSM parameter metadata (list_params, bounds) from defaults.
         list_params, bounds = self._resolve_ssm_param_meta(model, loglik_kind)
+
+        # Per-regime p_outlier: add a trailing `p_outlier` SSM parameter (the
+        # emission gains the lapse mixture) plumbed through the three-mode rule.
+        param_specs = dict(param_specs)
+        bounds = dict(bounds)
+        active, spec = self._resolve_p_outlier_spec(p_outlier, K, switching_params)
+        if active:
+            if "p_outlier" not in list_params:
+                list_params = list(list_params) + ["p_outlier"]
+            bounds.setdefault("p_outlier", (0.0, 1.0))
+            if spec is not None:
+                param_specs["p_outlier"] = spec
 
         resolved_loglik_kind = cast("LoglikKind", loglik_kind or "analytical")
         resolved_backend = backend
@@ -326,7 +379,7 @@ class RSSSM(HSSMBase):
             initial_distribution=resolve_initial_distribution(initial_distribution),
             ordering=resolve_ordering(ordering),
             pooling=resolve_pooling(pooling),
-            param_specs=dict(param_specs),
+            param_specs=param_specs,
         )
 
     @staticmethod
@@ -454,8 +507,12 @@ class RSSSM(HSSMBase):
         # Inferred: resolve the prior (explicit dict/Prior, else default).
         prior = spec if isinstance(spec, (dict, bmb.Prior)) else None
         if prior is None:
-            default_priors = self._ssm_default_priors()
-            prior = default_priors.get(name) or _bounds_based_prior(bounds)
+            if name == "p_outlier":
+                # Weakly-informative small-lapse default (mean ~0.06).
+                prior = {"name": "Beta", "alpha": 1.0, "beta": 15.0}
+            else:
+                default_priors = self._ssm_default_priors()
+                prior = default_priors.get(name) or _bounds_based_prior(bounds)
 
         if in_switching:
             rv = self._make_switching_rv(
