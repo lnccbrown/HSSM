@@ -139,9 +139,6 @@ def assertions(caplog, obj, n_samples, expected):
             assert "n_samples > n_draws" in caplog.text
 
 
-@pytest.mark.xfail(
-    reason="cav_idata fixture requires optional xarray NetCDF backends not installed",
-)
 @pytest.mark.parametrize(
     ["n_samples", "expected"],
     [
@@ -162,8 +159,8 @@ def test__random_sample(
     n_samples,
     expected,
 ):
-    posterior = cav_idata.posterior
-    posterior_predictive = cav_idata.posterior_predictive
+    posterior = cav_idata["posterior"]
+    posterior_predictive = cav_idata["posterior_predictive"]
 
     assertions(caplog, posterior, n_samples, expected)
     assertions(caplog, posterior_predictive, n_samples, expected)
@@ -233,9 +230,6 @@ def test_check_data_for_rl():
     assert n_trials == 2
 
 
-@pytest.mark.xfail(
-    reason="TypeError when accessing idata.groups(): 'tuple' object is not callable"
-)
 def test_predictive_idata_to_dataframe(data_ddm):
     model = hssm.HSSM(data=data_ddm)
     sample_do = model.sample_do(params={"v": 1.0}, draws=10)
