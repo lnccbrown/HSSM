@@ -655,6 +655,7 @@ class RSSSM(HSSMBase):
         tune: int = 1000,
         chains: int = 4,
         nuts_sampler: str = "numpyro",
+        include_log_likelihood: bool = False,
         **kwargs: Any,
     ) -> az.InferenceData:
         """Sample the model via ``pm.sample`` on the directly-built graph.
@@ -663,6 +664,24 @@ class RSSSM(HSSMBase):
         ``pytensor.scan`` JIT-compiles to ``jax.lax.scan`` under numpyro, which
         is dramatically faster than the PyMC NUTS default on the batched
         recursion.  All other ``pm.sample`` kwargs pass through.
+
+        Parameters
+        ----------
+        include_log_likelihood
+            When ``True``, attach the per-trial ``log_likelihood`` group via
+            :meth:`compute_log_likelihood` (needed for ``arviz.loo`` / ``waic``).
+            Defaults to ``False``: unlike a standard HSSM model whose per-trial
+            logp is vectorised, RSSSM reconstructs it post-hoc with a pure-NumPy
+            forward filter over every draw (``O(chains·draws·N·T)``), which is
+            costly on large posteriors — so it is opt-in here (call
+            ``compute_log_likelihood`` later instead if preferred).
+
+        Notes
+        -----
+        ``HSSMBase._clean_posterior_group`` is intentionally *not* applied: it
+        prunes bambi trial-wise deterministics, of which the directly-built RSSSM
+        graph has none, and it would risk dropping the descending-anchor
+        ``Deterministic`` (``OrderByParam(direction="desc")``).
         """
         if self._inference_obj is not None:
             _logger.warning(
@@ -677,6 +696,8 @@ class RSSSM(HSSMBase):
                 nuts_sampler=nuts_sampler,
                 **kwargs,
             )
+        if include_log_likelihood:
+            self.compute_log_likelihood(self._inference_obj)
         return self._inference_obj
 
     def graph(self, formatting="plain", **kwargs):

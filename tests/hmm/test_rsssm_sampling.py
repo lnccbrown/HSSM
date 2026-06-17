@@ -168,7 +168,10 @@ def test_infer_regimes_and_loo_end_to_end():
         switching_params=["v"],
         v={"name": "Normal", "mu": 0.0, "sigma": 3.0},
     )
-    idata = model.sample(draws=500, tune=500, chains=2, random_seed=42)
+    # `include_log_likelihood=True` wires compute_log_likelihood into sample().
+    idata = model.sample(
+        draws=500, tune=500, chains=2, random_seed=42, include_log_likelihood=True
+    )
 
     # --- infer_regimes: marginal MAP tracks the ground-truth regimes ---
     reg_idata = model.infer_regimes(n_draws=200, seed=0)
@@ -178,8 +181,7 @@ def test_infer_regimes_and_loo_end_to_end():
     # Ascending anchor: regime 0 = low drift; matches the simulated labels.
     assert (map_regime == regimes).mean() > 0.8
 
-    # --- compute_log_likelihood: arviz.loo runs on the attached group ---
-    model.compute_log_likelihood(idata)
+    # --- compute_log_likelihood (wired via sample): arviz.loo runs ---
     assert "log_likelihood" in idata.groups()
     ll = idata.log_likelihood["obs"].values
     assert np.isfinite(ll).all()

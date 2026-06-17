@@ -113,6 +113,16 @@ class RSSSMConfig(BaseModelConfig):
                 f"switching_params {unknown} are not parameters of model "
                 f"{self.model!r} (list_params={self.list_params})."
             )
+        # The emission must be set or resolvable from the SSM model.
+        if self.emission_logp_func is None and self.model is None:
+            raise ValueError(
+                "Either `model` (to resolve the emission) or a pre-built "
+                "`emission_logp_func` must be provided."
+            )
+        # The transition prior must be shape-consistent with K (eagerly, so a
+        # mismatched concentration matrix is caught here, not at build time).
+        if self.transition_prior is not None:
+            self.transition_prior.concentration(self.K)
         # Fixed-per-regime values supplied through param_specs must have length K.
         for name, spec in self.param_specs.items():
             if name not in self.list_params:

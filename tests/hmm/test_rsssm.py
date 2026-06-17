@@ -646,3 +646,33 @@ def test_top_level_lapse_still_rejected(small_single_participant):
             switching_params=["v"],
             lapse={"name": "Uniform", "lower": 0.0, "upper": 10.0},
         )
+
+
+def test_validate_rejects_mismatched_transition_prior(tiny_df):
+    """A transition prior whose shape disagrees with K is caught at construction."""
+    with pytest.raises(ValueError, match="alpha matrix has shape"):
+        RSSSM(
+            data=tiny_df,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            transition_prior={
+                "name": "Dirichlet",
+                "alpha": [[20, 1, 1], [1, 20, 1], [1, 1, 20]],
+            },
+        )
+
+
+def test_validate_requires_model_or_emission():
+    """A config with neither `model` nor `emission_logp_func` fails validation."""
+    cfg = RSSSMConfig(
+        model_name="x",
+        model=None,
+        K=2,
+        switching_params=["v"],
+        list_params=["v", "a", "z", "t"],
+        bounds={"v": (-np.inf, np.inf)},
+        loglik_kind="analytical",
+    )
+    with pytest.raises(ValueError, match="model.*or.*emission_logp_func"):
+        cfg.validate()
