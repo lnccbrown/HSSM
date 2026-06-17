@@ -5,7 +5,6 @@ from itertools import product
 from typing import Iterable, Literal, cast, overload
 
 import arviz as az
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -47,14 +46,14 @@ def _plot_predictive_1D(
     xlabel: str | None = "Response Time",
     ylabel: str | None = "Density",
     **kwargs,
-) -> mpl.axes.Axes:
+) -> Axes:
     """Plot the posterior predictive distribution against the observed data.
 
     Check the `plot_predictive` function below for docstring.
 
     Returns
     -------
-    mpl.Axes
+    Axes
         A matplotlib Axes object containing the plot.
     """
     if "color" in kwargs:
@@ -445,7 +444,7 @@ def plot_predictive(
 
     Returns
     -------
-    mpl.axes.Axes | sns.FacetGrid
+    Axes | sns.FacetGrid
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
     # Process hdi
