@@ -39,6 +39,7 @@ from .conftest import (
     TUTORIAL_P,
     build_tutorial_forward_marginal,
     make_panel,
+    simulate_hmm_data,
     simulate_hmm_ddm_data,
 )
 
@@ -746,3 +747,70 @@ def test_switching_param_with_fixed_value_raises(small_single_participant, fixed
             switching_params=["v"],
             v=fixed,
         )
+
+
+# ---------------------------------------------------------------------------
+# Edge cases (plan §7.3) and the remaining method surface
+# ---------------------------------------------------------------------------
+
+
+def test_unoccupied_and_imbalanced_regimes_do_not_crash():
+    """§7.3: a never-occupied / highly-imbalanced regime must not produce NaN/Inf.
+
+    Data is generated almost entirely from regime 0 (regime 1 is effectively
+    never visited), but the K=2 model still declares both regimes. The
+    unoccupied regime's parameters are prior-driven and constrained only by the
+    `ordered` transform; the joint logp and its gradient must stay finite.
+    """
+    P = np.array([[1.0 - 1e-9, 1e-9], [0.5, 0.5]])
+    data, regimes = simulate_hmm_ddm_data(
+        150,
+        {
+            0: {"v": -1.0, "a": 1.0, "z": 0.5, "t": 0.3},
+            1: {"v": 1.5, "a": 1.0, "z": 0.5, "t": 0.3},
+        },
+        P,
+        np.array([1.0, 0.0]),
+        seed=3,
+    )
+    assert set(np.unique(regimes)) == {0}  # regime 1 never occupied
+    m = RSSSM(
+        data=pd.DataFrame(data, columns=["rt", "response"]),
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+    )
+    ip = m.pymc_model.initial_point()
+    assert np.isfinite(m.pymc_model.compile_logp()(ip))
+    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+
+
+def test_descending_anchor_builds_with_finite_gradient(small_single_participant):
+    """`OrderByParam(direction="desc")` builds a valid graph (negated anchor)."""
+    m = RSSSM(
+        data=small_single_participant,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        ordering={"name": "v", "direction": "desc"},
+        v={"name": "Normal", "mu": 0.0, "sigma": 2.0},
+    )
+    assert "v" in {d.name for d in m.pymc_model.deterministics}  # exposed as -u
+    ip = m.pymc_model.initial_point()
+    assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
+
+
+def test_vi_and_log_likelihood_raise(small_single_participant):
+    """`vi` and `log_likelihood` are unavailable on the scalar-marginal graph."""
+    m = RSSSM(data=small_single_participant, model="ddm", K=2, switching_params=["v"])
+    with pytest.raises(NotImplementedError):
+        m.vi()
+    with pytest.raises(NotImplementedError, match="compute_log_likelihood"):
+        m.log_likelihood()
+
+
+def test_graph_returns_graphviz(small_single_participant):
+    """`graph()` renders the directly-built model via graphviz."""
+    pytest.importorskip("graphviz")
+    m = RSSSM(data=small_single_participant, model="ddm", K=2, switching_params=["v"])
+    assert m.graph() is not None
