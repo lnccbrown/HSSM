@@ -1,5 +1,11 @@
 # Changelog
 
+### Unreleased
+
+This version includes the following changes:
+
+1. **Regime-Switching Sequential Sampling Models (`RSSSM`)**: a new top-level class for fitting SSMs whose parameters switch across hidden regimes that evolve as a Markov chain. The discrete regimes are marginalised out by the forward algorithm (one batched `pytensor.scan`, contributed as a scalar `pm.Potential`), leaving only continuous parameters for NUTS. Features: any HSSM-supported emission (analytical and LAN backends), `K >= 2` regimes generic in the number of participants (unbalanced panels supported), label-switching handled by an `ordered`-transform anchor (`AutoOrdering` / `OrderByParam` / `NoOrdering`), a three-mode per-parameter rule (shared / fixed-per-regime / inferred-per-regime), full and no pooling across participants, an estimable initial-state distribution, and per-regime `p_outlier` lapse mixtures. Post-hoc helpers `infer_regimes` (Forward-Filter Backward-Sample), `compute_log_likelihood` (per-trial logp for `arviz.loo` / `arviz.waic`), and `plot_regime_recovery`.
+
 ### 0.3.0
 
 This version includes the following changes:

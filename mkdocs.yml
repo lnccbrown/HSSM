@@ -18,6 +18,7 @@ nav:
   - API References:
       - HSSM core classes:
           - hssm.HSSM: api/hssm.md
+          - hssm.RSSSM: api/rsssm.md
           - hssm.Param: api/param.md
           - hssm.ModelConfig: api/model_config.md
           - hssm.Prior: api/prior.md
