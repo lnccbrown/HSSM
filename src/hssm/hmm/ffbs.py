@@ -232,19 +232,28 @@ def compute_log_likelihood(model: RSSSM, idata: az.InferenceData) -> az.Inferenc
     For every posterior draw, the forward filter's running log-evidence
     ``logZ_t = logsumexp_k log_alpha_t(k)`` gives the one-step-ahead per-trial
     contribution ``delta_t = logZ_t - logZ_{t-1}`` (with ``delta_0 = logZ_0``).
-    By construction ``sum_t delta_t`` equals the scalar marginal the sampler
-    used, so ``arviz.loo`` / ``waic`` can consume the result.
+    By construction the per-participant sum equals that participant's marginal,
+    and the grand total equals the scalar marginal the sampler used, so
+    ``arviz.loo`` / ``waic`` can consume the result.
+
+    The ``log_likelihood`` group is laid out over the **real** trials only as a
+    single ``__obs__`` axis (participant-major, matching the input row order),
+    shape ``(chain, draw, n_real_trials)``.  Padded trials of unbalanced panels
+    are *excluded* — folding them in (as logp 0) would make ``arviz.loo`` count
+    spurious, perfectly-predicted observations and bias the result.  The group
+    is overwritten if it already exists (idempotent re-runs).
     """
     import xarray as xr
 
     posterior = idata.posterior  # type: ignore[attr-defined]
-    N, T = model.n_participants, model.n_trials
+    N = model.n_participants
     n_chains, n_post = posterior.sizes["chain"], posterior.sizes["draw"]
     lengths = _participant_lengths(model)
+    n_obs = int(lengths.sum())
 
     emission_fn, param_order = _compile_emission_fn(model)
 
-    ll = np.zeros((n_chains, n_post, N, T))
+    ll = np.zeros((n_chains, n_post, n_obs))
     for c in range(n_chains):
         for d in range(n_post):
             params = [
@@ -253,23 +262,34 @@ def compute_log_likelihood(model: RSSSM, idata: az.InferenceData) -> az.Inferenc
             log_em = np.asarray(emission_fn(*params))  # (N, T, K)
             log_P = np.log(np.asarray(posterior["P"].values[c, d], float) + 1e-300)
             log_pi0 = _log_pi0_for_draw(model, posterior, c, d)
+            offset = 0
             for n in range(N):
-                Tn = lengths[n]
+                Tn = int(lengths[n])
                 log_alpha = _forward_filter(log_em[n, :Tn], log_P, log_pi0)
                 logZ = logsumexp(log_alpha, axis=1)  # (Tn,)
                 delta = np.empty(Tn)
                 delta[0] = logZ[0]
                 delta[1:] = logZ[1:] - logZ[:-1]
-                ll[c, d, n, :Tn] = delta  # padded trials stay 0 (logp 0 = prob 1)
+                ll[c, d, offset : offset + Tn] = delta
+                offset += Tn
+
+    # Provenance: map each obs back to its (participant, trial) for traceability.
+    obs_participant = np.concatenate(
+        [np.full(int(lengths[n]), n) for n in range(N)]
+    ).astype(int)
+    obs_trial = np.concatenate([np.arange(int(lengths[n])) for n in range(N)])
 
     ds = xr.Dataset(
-        {"obs": (("chain", "draw", "participant", "trial"), ll)},
+        {"obs": (("chain", "draw", "__obs__"), ll)},
         coords={
             "chain": posterior.coords["chain"].values,
             "draw": posterior.coords["draw"].values,
-            "participant": np.arange(N),
-            "trial": np.arange(T),
+            "__obs__": np.arange(n_obs),
+            "participant": ("__obs__", obs_participant),
+            "trial": ("__obs__", obs_trial),
         },
     )
+    if "log_likelihood" in idata.groups():
+        del idata.log_likelihood  # type: ignore[attr-defined]
     idata.add_groups({"log_likelihood": ds})
     return idata
