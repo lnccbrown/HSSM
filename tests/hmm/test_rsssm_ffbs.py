@@ -333,3 +333,64 @@ def test_ffbs_and_log_likelihood_under_no_pooling():
     assert reg.posterior_regimes["regimes"].sizes["participant"] == n
     model.compute_log_likelihood(idata)
     assert np.isfinite(idata.log_likelihood["obs"].values).all()
+
+
+def test_plot_regime_recovery_returns_axes():
+    """plot_regime_recovery draws a stacked-area plot and returns the Axes."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    model, regimes = _fitted_model()
+    idata = _fake_posterior(
+        [0.2, 1.5], 0.8, 0.5, 0.3, [[0.9, 0.1], [0.1, 0.9]], n_draws=5
+    )
+    reg = model.infer_regimes(idata, n_draws=5, seed=0)
+    ax = model.plot_regime_recovery(reg, true_regimes=regimes)
+    assert ax is not None
+    assert len(ax.collections) > 0  # the stackplot rendered
+
+
+def test_lan_backend_ffbs_and_log_likelihood():
+    """FFBS + per-trial logp run on a LAN-only emission (`angle`, jax backend).
+
+    The post-hoc path recompiles the LAN emission to a NumPy callable; this
+    exercises the §5.5 claim that FFBS works uniformly across emission backends.
+    """
+    from .conftest import simulate_hmm_data
+
+    true = {
+        0: {"v": -1.0, "a": 1.2, "z": 0.5, "t": 0.3, "theta": 0.2},
+        1: {"v": 1.0, "a": 1.2, "z": 0.5, "t": 0.3, "theta": 0.2},
+    }
+    P = np.array([[0.9, 0.1], [0.1, 0.9]])
+    data, regimes = simulate_hmm_data(
+        "angle", 100, true, P, np.array([0.5, 0.5]), seed=3
+    )
+    df = pd.DataFrame(data, columns=["rt", "response"])
+    model = RSSSM(
+        data=df,
+        model="angle",
+        K=2,
+        switching_params=["v"],
+        loglik_kind="approx_differentiable",
+        backend="jax",
+    )
+    idata = az.InferenceData(
+        posterior=xr.Dataset(
+            {
+                "v": (("chain", "draw", "k"), [[[-1.0, 1.0]]]),
+                "a": (("chain", "draw"), [[1.2]]),
+                "z": (("chain", "draw"), [[0.5]]),
+                "t": (("chain", "draw"), [[0.3]]),
+                "theta": (("chain", "draw"), [[0.2]]),
+                "P": (("chain", "draw", "i", "j"), [[[[0.9, 0.1], [0.1, 0.9]]]]),
+            },
+            coords={"chain": [0], "draw": [0]},
+        )
+    )
+    reg = model.infer_regimes(idata, n_draws=1, seed=0)
+    freq = reg.posterior_regimes["regime_sample_frequency"].values[0]
+    assert np.allclose(freq.sum(axis=1), 1.0)
+    model.compute_log_likelihood(idata)
+    assert np.isfinite(idata.log_likelihood["obs"].values).all()
