@@ -244,3 +244,55 @@ def test_infer_regimes_uses_estimable_pi0(monkeypatch):
     monkeypatch.setattr(ffbs, "_log_pi0_for_draw", spy)
     model.infer_regimes(idata, n_draws=2, seed=0)
     assert np.allclose(np.exp(captured["log_pi0"]), [0.7, 0.3], atol=1e-6)
+
+
+def _unbalanced_model():
+    """Two participants with ragged lengths (50 and 30 real trials)."""
+    a, b = [], []
+    for pid, n in [(0, 50), (1, 30)]:
+        data, _ = simulate_hmm_ddm_data(
+            n,
+            {
+                0: {"v": 0.2, "a": 0.8, "z": 0.5, "t": 0.3},
+                1: {"v": 1.5, "a": 0.8, "z": 0.5, "t": 0.3},
+            },
+            np.array([[0.9, 0.1], [0.1, 0.9]]),
+            np.array([0.8, 0.2]),
+            seed=pid,
+        )
+        sub = pd.DataFrame(data, columns=["rt", "response"])
+        sub["pid"] = pid
+        a.append(sub)
+    df = pd.concat(a, ignore_index=True)
+    return RSSSM(
+        data=df, model="ddm", K=2, switching_params=["v"], participant_col="pid"
+    )
+
+
+def test_log_likelihood_unbalanced_excludes_padding():
+    """loo counts only real trials on unbalanced panels (no padded fakes).
+
+    Padded trials would otherwise enter as logp-0 ("perfectly predicted")
+    observations and inflate ``n_data_points`` / bias elpd.
+    """
+    model = _unbalanced_model()
+    idata = _fake_posterior(
+        [0.2, 1.5], 0.8, 0.5, 0.3, [[0.9, 0.1], [0.1, 0.9]], n_draws=8
+    )
+    model.compute_log_likelihood(idata)
+    ll = idata.log_likelihood["obs"]
+    # Flat over the 50 + 30 = 80 real trials only (not the 50*2 padded grid).
+    assert ll.sizes["__obs__"] == 80
+    loo = az.loo(idata)
+    assert int(loo.n_data_points) == 80
+    assert np.isfinite(loo.elpd_loo)
+
+
+def test_compute_log_likelihood_is_idempotent():
+    """Re-running compute_log_likelihood overwrites rather than raising."""
+    model, _ = _fitted_model()
+    idata = _fake_posterior([0.2, 1.5], 0.8, 0.5, 0.3, [[0.9, 0.1], [0.1, 0.9]])
+    model.compute_log_likelihood(idata)
+    first = idata.log_likelihood["obs"].values.copy()
+    model.compute_log_likelihood(idata)  # must not raise
+    np.testing.assert_allclose(idata.log_likelihood["obs"].values, first)
