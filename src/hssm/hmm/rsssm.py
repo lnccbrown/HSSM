@@ -392,6 +392,12 @@ class RSSSM(HSSMBase):
                 if has_regime:
                     regime_params.add(name)
 
+            # Stash the regime-param set + pooling mode so the post-hoc FFBS /
+            # per-trial-logp path (Section 5.5/5.6) can recompile the *same*
+            # emission to a NumPy callable.
+            self._regime_params = set(regime_params)
+            self._anchor = anchor
+
             # --- L3 builder: emission + forward + Potential ---
             pooling_mode = "none" if is_no_pooling else "full"
             builder = make_hmm_logp_op(
@@ -634,3 +640,128 @@ class RSSSM(HSSMBase):
         raise NotImplementedError(
             "Variational inference for RSSSM is not implemented in v1."
         )
+
+    # ------------------------------------------------------------------
+    # Post-hoc regime recovery / per-trial logp (Phase 4, §5.5/§5.6)
+    # ------------------------------------------------------------------
+
+    def infer_regimes(
+        self,
+        idata: az.InferenceData | None = None,
+        n_draws: int = 200,
+        seed: int | None = None,
+    ) -> az.InferenceData:
+        """Recover the latent regime sequences from the posterior via FFBS.
+
+        NUTS marginalises the discrete regimes out at sampling time, so the
+        posterior holds only ``theta``, ``P``, ``pi0``.  ``infer_regimes`` runs
+        Forward-Filter Backward-Sample for ``n_draws`` posterior draws, drawing
+        one regime sequence per participant per draw (§5.5).
+
+        Parameters
+        ----------
+        idata
+            Posterior to use; defaults to the model's own ``traces``.
+        n_draws
+            Number of posterior draws to run FFBS on.
+        seed
+            Seed for draw selection and the backward sampling.
+
+        Returns
+        -------
+        az.InferenceData
+            A ``posterior_regimes`` group with ``regimes``
+            ``(draw, participant, trial)`` and ``regime_sample_frequency``
+            ``(participant, trial, regime)``.
+        """
+        from .ffbs import infer_regimes as _infer_regimes
+
+        idata = idata if idata is not None else self.traces
+        return _infer_regimes(self, idata, n_draws=n_draws, seed=seed)
+
+    def compute_log_likelihood(
+        self, idata: az.InferenceData | None = None
+    ) -> az.InferenceData:
+        """Attach the post-hoc per-trial log-likelihood group (§5.6).
+
+        The sampler graph contributes only the scalar marginal (§3.4), so the
+        ``log_likelihood`` group needed by ``arviz.loo`` / ``arviz.waic`` is
+        reconstructed here from the saved posterior: per draw, the forward
+        filter's running log-evidence yields ``delta_t = logZ_t - logZ_{t-1}``,
+        whose per-participant sum equals the marginal the sampler used.
+
+        Parameters
+        ----------
+        idata
+            Posterior to use; defaults to the model's own ``traces``.  The
+            ``log_likelihood`` group is added to it in place and returned.
+        """
+        from .ffbs import compute_log_likelihood as _compute_ll
+
+        idata = idata if idata is not None else self.traces
+        return _compute_ll(self, idata)
+
+    def plot_regime_recovery(
+        self,
+        regimes_idata: az.InferenceData | None = None,
+        participant: int = 0,
+        true_regimes: Any = None,
+        ax: Any = None,
+        n_draws: int = 200,
+        seed: int | None = None,
+    ):
+        """Stacked-area plot of the posterior regime probabilities over trials.
+
+        Parameters
+        ----------
+        regimes_idata
+            Output of :meth:`infer_regimes`; computed on the fly (via
+            ``infer_regimes``) when ``None``.
+        participant
+            Index of the participant to plot.
+        true_regimes
+            Optional ground-truth regime sequence to overlay as a step line.
+        ax
+            Optional matplotlib axis; created when ``None``.
+        n_draws, seed
+            Forwarded to :meth:`infer_regimes` when ``regimes_idata is None``.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+        """
+        import matplotlib.pyplot as plt
+
+        if regimes_idata is None:
+            regimes_idata = self.infer_regimes(n_draws=n_draws, seed=seed)
+
+        freq = regimes_idata.posterior_regimes[  # type: ignore[attr-defined]
+            "regime_sample_frequency"
+        ].values[participant]  # (T, K)
+        n_real = int(np.sum(~np.isnan(freq[:, 0])))
+        freq = freq[:n_real]
+        trials = np.arange(n_real)
+
+        if ax is None:
+            _, ax = plt.subplots(figsize=(12, 3))
+        ax.stackplot(
+            trials,
+            *(freq[:, k] for k in range(self.K)),
+            labels=[f"regime {k}" for k in range(self.K)],
+            alpha=0.8,
+        )
+        if true_regimes is not None:
+            ax.step(
+                trials,
+                np.asarray(true_regimes)[:n_real],
+                where="mid",
+                color="black",
+                lw=1.0,
+                label="true regime",
+            )
+        ax.set_xlabel("trial")
+        ax.set_ylabel("P(regime | data)")
+        ax.set_ylim(0, 1)
+        ax.set_xlim(0, max(n_real - 1, 1))
+        ax.legend(loc="upper right", fontsize=8)
+        return ax

@@ -73,35 +73,72 @@ def make_hmm_logp_op(
         log_P: pt.TensorVariable,
         log_pi0: pt.TensorVariable,
     ) -> pt.TensorVariable:
-        data_flat = pt.as_tensor_variable(data_flat_np, name="hmm_data")
-
-        regime_param_dicts: list[dict[str, pt.TensorVariable]] = []
-        for k in range(K):
-            params_k: dict[str, pt.TensorVariable] = {}
-            for name, val in param_values.items():
-                has_regime = name in regime_params
-                if pooling == "full":
-                    # switching/fixed-per-regime: (K,) -> scalar val[k];
-                    # shared: scalar broadcast.
-                    value = val[k] if has_regime else val
-                else:  # "none": per-participant params
-                    # switching: (N, K) -> column (N,); shared: (N,).
-                    col = val[:, k] if has_regime else val
-                    # Expand each participant's value across its T trials to
-                    # align with the (participant-major, trial-minor) data rows.
-                    value = pt.repeat(col, T)
-                if broadcast_params:
-                    value = pt.broadcast_to(value, (n_rows,))  # type: ignore[arg-type]
-                params_k[name] = value
-            regime_param_dicts.append(params_k)
-
-        emission_flat = per_regime_emission_logp(
-            dist_class, data_flat, regime_param_dicts
-        )  # (M, K)
-        log_emission = emission_flat.reshape((N, T, K))
-
+        log_emission = build_log_emission(
+            dist_class=dist_class,
+            param_values=param_values,
+            data_flat_np=data_flat_np,
+            K=K,
+            n_participants=N,
+            n_trials=T,
+            regime_params=regime_params,
+            pooling=pooling,
+            broadcast_params=broadcast_params,
+        )
         mask_t = pt.as_tensor_variable(mask_np, name="hmm_mask")
         marginal = forward_log_marginal(log_emission, log_P, log_pi0, mask_t)
         return pm.Potential(potential_name, marginal)
 
     return builder
+
+
+def build_log_emission(
+    dist_class,
+    param_values: dict[str, pt.TensorVariable],
+    data_flat_np: np.ndarray,
+    K: int,
+    n_participants: int,
+    n_trials: int,
+    regime_params: set[str],
+    pooling: str = "full",
+    broadcast_params: bool = False,
+) -> pt.TensorVariable:
+    """Compose the ``(N, T, K)`` per-trial, per-regime emission log-density.
+
+    Shared by the sampling-time builder (which feeds it into the forward
+    recursion + ``pm.Potential``) and the post-hoc FFBS / per-trial-logp path
+    (Section 5.5/5.6), which compiles it to a NumPy callable via
+    ``pytensor.function``.  Both consume the *same* emission so the post-hoc
+    regime reconstruction is exactly consistent with what NUTS was fit on.
+
+    Parameters mirror :func:`make_hmm_logp_op`; ``param_values`` maps each SSM
+    parameter name to its tensor (the model RV at sampling time, or a symbolic
+    input when compiling the FFBS callable).
+    """
+    N, T = n_participants, n_trials
+    n_rows = N * T
+    data_flat = pt.as_tensor_variable(data_flat_np.astype("float32"), name="hmm_data")
+
+    regime_param_dicts: list[dict[str, pt.TensorVariable]] = []
+    for k in range(K):
+        params_k: dict[str, pt.TensorVariable] = {}
+        for name, val in param_values.items():
+            has_regime = name in regime_params
+            if pooling == "full":
+                # switching/fixed-per-regime: (K,) -> scalar val[k];
+                # shared: scalar broadcast.
+                value = val[k] if has_regime else val
+            else:  # "none": per-participant params
+                # switching: (N, K) -> column (N,); shared: (N,).
+                col = val[:, k] if has_regime else val
+                # Expand each participant's value across its T trials to
+                # align with the (participant-major, trial-minor) data rows.
+                value = pt.repeat(col, T)
+            if broadcast_params:
+                value = pt.broadcast_to(value, (n_rows,))  # type: ignore[arg-type]
+            params_k[name] = value
+        regime_param_dicts.append(params_k)
+
+    emission_flat = per_regime_emission_logp(
+        dist_class, data_flat, regime_param_dicts
+    )  # (M, K)
+    return emission_flat.reshape((N, T, K))
