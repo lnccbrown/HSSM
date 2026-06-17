@@ -25,7 +25,7 @@ from .utils import (
 _logger = logging.getLogger("hssm")
 
 
-def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 100) -> np.ndarray:
+def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 100) -> pd.Series:
     return pd.Series(
         np.histogram(a, bins=bins, density=True)[0],  # type: ignore
         name="bin_n",
