@@ -16,7 +16,6 @@ import logging
 import os
 from typing import Any, Callable, Literal, cast
 
-import arviz as az
 import bambi as bmb
 import jax
 import numpy as np
@@ -535,19 +534,19 @@ def check_data_for_rl(
 
 
 def predictive_idata_to_dataframe(
-    idata: az.InferenceData,
+    dt: xr.DataTree,
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
     response_str: str = "rt,response",
     response_dim: str = "rt,response_dim",
 ) -> pd.DataFrame:
-    """Convert a predictive InferenceData object to a dataframe.
+    """Convert a predictive DataTree object to a dataframe.
 
     Parameters
     ----------
-    idata : az.InferenceData
-        The InferenceData object to convert.
+    dt : xr.DataTree
+        The DataTree object to convert.
     predictive_group : Literal["posterior_predictive", "prior_predictive"]
         The predictive group to convert.
 
@@ -556,7 +555,7 @@ def predictive_idata_to_dataframe(
     pd.DataFrame:
         A dataframe with the predictive samples.
     """
-    df = idata[predictive_group].to_dataframe().reset_index(drop=False)
+    df = dt[predictive_group].ds.to_dataframe().reset_index(drop=False)
     df_wide = df.pivot_table(
         index=["chain", "draw", "__obs__"], columns=response_dim, values=response_str
     ).reset_index()
