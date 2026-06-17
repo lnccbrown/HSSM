@@ -40,6 +40,8 @@ jobs:
             "docs/tutorials/hsgp_regression.ipynb"
             "docs/tutorials/hssm_tutorial_workshop_1.ipynb"
             "docs/tutorials/hssm_tutorial_workshop_2.ipynb"
+            "docs/tutorials/rsssm_regime_switching.ipynb"
+            "docs/tutorials/rsssm_multiparticipant.ipynb"
           )
 
           EXIT_CODE=0
