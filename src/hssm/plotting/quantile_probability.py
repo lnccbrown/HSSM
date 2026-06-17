@@ -4,11 +4,11 @@ import logging
 from itertools import product
 from typing import Any, Iterable, Literal
 
-import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import xarray as xr
 from matplotlib.axes import Axes
 from matplotlib.patches import Ellipse
 from scipy.stats import chi2
@@ -429,7 +429,7 @@ def plot_quantile_probability(
     model,
     cond: str,
     data: pd.DataFrame | None = None,
-    idata: az.InferenceData | None = None,
+    dt: xr.DataTree | None = None,
     predictive_group: Literal["posterior_predictive", "prior_predictive"]
     | None = "posterior_predictive",
     n_samples: int = 20,
@@ -467,9 +467,9 @@ def plot_quantile_probability(
         The column in `data` that indicates the conditions.
     data : optional
         A pandas DataFrame containing the observed data. If None, the data from
-        `idata.observed_data` will be used.
-    idata : optional
-        An arviz InferenceData object. If None, the model's trace will be used.
+        `dt.observed_data` will be used.
+    dt : optional
+        An xarray DataTree object. If None, the model's trace will be used.
         If the model's trace does not contain posterior predictive samples, and
         "plot_predictive" is True, will use the model and `data` to produce posterior
         predictive samples.
@@ -477,8 +477,8 @@ def plot_quantile_probability(
         The type of predictive distribution to plot, by default "posterior_predictive".
         Can be "posterior_predictive" or "prior_predictive".
     n_samples : optional
-        When idata is provided, the number or proportion of posterior predictive samples
-        randomly drawn to be used from each chain for plotting. When idata is not
+        When dt is provided, the number or proportion of posterior predictive samples
+        randomly drawn to be used from each chain for plotting. When dt is not
         provided, the number or proportion of posterior samples to be used to generate
         posterior predictive samples. The number or proportion are defined as follows:
 
@@ -538,7 +538,7 @@ def plot_quantile_probability(
         will be excluded. If an iterable, will generate quantiles according to this
         iterable.
     title : optional
-        The title of the plot, by default "Quantile Predictive Plot". Ignored
+        The title of the plot, by default "Quantile Probability Plot". Ignored
         when `groups` is provided.
     xlabel : optional
         The label for the x-axis, by default "Proportion".
@@ -564,7 +564,7 @@ def plot_quantile_probability(
     Axes | FacetGrid | list[FacetGrid]
         A seaborn FacetGrid object containing the plot.
     """
-    # AF-TODO: Should provide a few more safeguards to ensure
+    # TODO: Should provide a few more safeguards to ensure
     # 1. quantile_by dimension is a column(s) of strings
     # 2. there is no overlap between quantile_by and extra_dims
 
@@ -595,13 +595,13 @@ def plot_quantile_probability(
         extra_dims += list(groups)
 
     if predictive_group is not None:
-        # Use the model's trace if idata is None
-        idata, sampled = _use_traces_or_sample(
-            model, data, idata, n_samples, predictive_group
+        # Use the model's trace if dt is None
+        dt, sampled = _use_traces_or_sample(
+            model, data, dt, n_samples, predictive_group
         )
 
         plotting_df = _get_plotting_df(
-            idata,
+            dt,
             data,
             extra_dims=extra_dims,
             quantile_by_dims=quantile_by,
@@ -610,7 +610,7 @@ def plot_quantile_probability(
             predictive_group=predictive_group,
         )
     else:
-        # Note if idata is passed as None,
+        # Note if dt is passed as None,
         # predictive_group is ignored in _get_plotting_df
         plotting_df = _get_plotting_df(
             None,
@@ -627,7 +627,7 @@ def plot_quantile_probability(
     if model.n_choices == 2:
         plotting_df["rt"] = plotting_df["rt"] * plotting_df["response"]
 
-    # If group is not provided, we are producing a single plot
+    # If neither row, col, nor groups is provided, produce a single plot
     if row is None and col is None and groups is None:
         ax = _plot_quantile_probability_1D(
             plotting_df,
@@ -654,7 +654,7 @@ def plot_quantile_probability(
 
         return ax
 
-    # If group is not provided, we are producing a grid of plots
+    # If groups is not provided, produce a grid of plots
     if groups is None:
         g = _plot_quantile_probability_2D(
             plotting_df,
