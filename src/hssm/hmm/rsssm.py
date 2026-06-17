@@ -305,7 +305,12 @@ class RSSSM(HSSMBase):
             return False, None
 
         is_list = isinstance(p_outlier, (list, tuple, np.ndarray))
-        per_regime = in_switching or (is_list and len(p_outlier) == K)
+        if is_list and len(p_outlier) != K:
+            raise ValueError(
+                f"Fixed-per-regime `p_outlier` must have length K={K}, got "
+                f"{len(p_outlier)}."
+            )
+        per_regime = in_switching or is_list
         if not per_regime:
             raise NotImplementedError(
                 "RSSSM rejects a global iid `p_outlier`: a single lapse "
@@ -313,11 +318,6 @@ class RSSSM(HSSMBase):
                 "regime (decision 10.1.9). Pass `p_outlier` per regime — list it "
                 "in `switching_params` (inferred) or give a length-K list "
                 "(fixed per regime)."
-            )
-        if is_list and len(p_outlier) != K:
-            raise ValueError(
-                f"Fixed-per-regime `p_outlier` must have length K={K}, got "
-                f"{len(p_outlier)}."
             )
         return True, p_outlier
 
@@ -492,16 +492,37 @@ class RSSSM(HSSMBase):
         in_switching = name in self.switching_params
         is_anchor = anchor is not None and anchor.name == name
 
-        # Fixed value(s) supplied directly.
-        if isinstance(spec, (int, float)) and not isinstance(spec, bool):
-            return pt.as_tensor_variable(float(spec)), False
-        if isinstance(spec, (list, tuple, np.ndarray)):
+        is_fixed_scalar = isinstance(spec, (int, float)) and not isinstance(spec, bool)
+        is_fixed_vector = isinstance(spec, (list, tuple, np.ndarray))
+
+        # The three modes are mutually exclusive: a parameter listed in
+        # switching_params (inferred per regime) must not also be handed a fixed
+        # value — that silently collapses the regime structure.
+        if in_switching and (is_fixed_scalar or is_fixed_vector):
+            raise ValueError(
+                f"{name!r} is in switching_params (inferred per regime) but was "
+                f"also given a fixed value {spec!r}. Pass a prior dict / bmb.Prior "
+                f"to infer it per regime, or drop it from switching_params to fix "
+                f"it."
+            )
+
+        # Fixed value(s) supplied directly.  Under no pooling the emission
+        # builder expects per-participant shapes (shared -> (N,), per-regime ->
+        # (N, K)), so broadcast the global fixed value across participants.
+        if is_fixed_scalar:
+            val = float(spec)  # type: ignore[arg-type]
+            if is_no_pooling:
+                return pt.as_tensor_variable(np.full(N, val)), False
+            return pt.as_tensor_variable(val), False
+        if is_fixed_vector:
             arr = np.asarray(spec, dtype=float)
             if arr.shape != (K,):
                 raise ValueError(
                     f"Fixed-per-regime value for {name!r} must have shape ({K},), "
                     f"got {arr.shape}."
                 )
+            if is_no_pooling:
+                return pt.as_tensor_variable(np.broadcast_to(arr, (N, K)).copy()), True
             return pt.as_tensor_variable(arr), True
 
         # Inferred: resolve the prior (explicit dict/Prior, else default).

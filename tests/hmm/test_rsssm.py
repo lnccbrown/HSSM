@@ -705,3 +705,44 @@ def test_order_by_p_outlier_rejected(small_single_participant):
             switching_params=["v", "p_outlier"],
             ordering={"name": "p_outlier", "direction": "asc"},
         )
+
+
+def test_no_pooling_fixed_scalar_and_list_build():
+    """Fixed scalar/per-regime values build under pooling='none' (broadcast to N)."""
+    panel = make_panel(3, 40)
+    m1 = RSSSM(
+        data=panel,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        pooling="none",
+        participant_col="participant_id",
+        a=1.5,
+    )
+    assert _logp_finite(m1)
+    assert "a" not in {rv.name for rv in m1.pymc_model.free_RVs}  # fixed, no RV
+    m2 = RSSSM(
+        data=panel,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        pooling="none",
+        participant_col="participant_id",
+        a=[0.8, 0.9],
+    )
+    assert _logp_finite(m2)
+    ip = m2.pymc_model.initial_point()
+    assert np.all(np.isfinite(m2.pymc_model.compile_dlogp()(ip)))
+
+
+@pytest.mark.parametrize("fixed", [0.5, [0.2, 1.5]])
+def test_switching_param_with_fixed_value_raises(small_single_participant, fixed):
+    """A param both in switching_params and given a fixed value is a conflict."""
+    with pytest.raises(ValueError, match="in switching_params"):
+        RSSSM(
+            data=small_single_participant,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            v=fixed,
+        )
