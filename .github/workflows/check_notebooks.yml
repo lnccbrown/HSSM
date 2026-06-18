@@ -41,7 +41,7 @@ jobs:
             "docs/tutorials/hssm_tutorial_workshop_1.ipynb"
             "docs/tutorials/hssm_tutorial_workshop_2.ipynb"
             "docs/tutorials/rsssm_regime_switching.ipynb"
-            "docs/tutorials/rsssm_multiparticipant.ipynb"
+            "docs/tutorials/rsssm_k3.ipynb"
           )
 
           EXIT_CODE=0
