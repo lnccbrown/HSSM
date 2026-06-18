@@ -19,6 +19,7 @@ pytensor graph node).
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
     import arviz as az
 
     from .rsssm import RSSSM
+
+_logger = logging.getLogger("hssm")
 
 
 # ----------------------------------------------------------------------------
@@ -118,6 +121,10 @@ def _log_pi0_for_draw(model: RSSSM, posterior, chain: int, draw: int) -> np.ndar
         pi0 = np.asarray(posterior["pi0"].values[chain, draw], dtype=float)
     else:
         pi0 = np.asarray(init.pi0_value(K), dtype=float)
+    # The 1e-300 floor keeps a fixed pi0 with an exact-zero entry finite in this
+    # post-hoc NumPy path; the sampling-time graph uses bare log() (an impossible
+    # initial regime is genuinely -inf there).  The difference is immaterial: a
+    # zeroed pi0 entry contributes negligibly to the forward filter either way.
     return np.log(pi0 + 1e-300)
 
 
@@ -242,6 +249,19 @@ def compute_log_likelihood(model: RSSSM, idata: az.InferenceData) -> az.Inferenc
     are *excluded* — folding them in (as logp 0) would make ``arviz.loo`` count
     spurious, perfectly-predicted observations and bias the result.  The group
     is overwritten if it already exists (idempotent re-runs).
+
+    Caveat (interpretation).  The per-trial contributions are *one-step-ahead*
+    predictive terms ``p(y_t | y_{1:t-1}, theta)``, so within a participant they
+    are serially dependent through the latent regime chain (the trials are not
+    exchangeable).  ``arviz.loo`` / ``waic`` treat each ``__obs__`` as an
+    independent observation, so the resulting estimate is an *approximate*
+    leave-one-out (closer in spirit to leave-future-out); treat it as a relative
+    model-comparison score rather than an exact LOO.  The factorisation itself is
+    exact: the per-participant sum of contributions equals that participant's
+    marginal.
+
+    This runs the NumPy forward filter for **every** posterior draw
+    (``O(chains * draws * N * T)``); it can be slow on large posteriors.
     """
     import xarray as xr
 
@@ -251,6 +271,14 @@ def compute_log_likelihood(model: RSSSM, idata: az.InferenceData) -> az.Inferenc
     lengths = _participant_lengths(model)
     n_obs = int(lengths.sum())
 
+    _logger.info(
+        "Reconstructing per-trial log-likelihood over %d draws (%d chains x %d) "
+        "for %d participants; this can be slow on large posteriors.",
+        n_chains * n_post,
+        n_chains,
+        n_post,
+        N,
+    )
     emission_fn, param_order = _compile_emission_fn(model)
 
     ll = np.zeros((n_chains, n_post, n_obs))
