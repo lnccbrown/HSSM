@@ -390,6 +390,12 @@ class RSSSM(HSSMBase):
         if isinstance(model, BaseModelConfig):
             if model.list_params is None:
                 raise ValueError("Provided model config has no `list_params`.")
+            if model.is_choice_only:
+                raise NotImplementedError(
+                    "RSSSM does not support choice-only emission models in v1: the "
+                    "emission is fed `(rt, response)` and the panel is keyed on the "
+                    "`rt` column."
+                )
             return list(model.list_params), dict(model.bounds)
 
         try:
@@ -399,6 +405,12 @@ class RSSSM(HSSMBase):
                 f"Unknown model {model!r}; provide a model config instead, or use "
                 "a supported SSM."
             ) from exc
+        if len(cfg["response"]) == 1:  # choice-only SSM (no RT dimension)
+            raise NotImplementedError(
+                f"RSSSM does not support the choice-only model {model!r} in v1: the "
+                "emission is fed `(rt, response)` and the panel is keyed on the "
+                "`rt` column."
+            )
         list_params = list(cfg["list_params"])
         # Pull bounds from the requested likelihood kind when available, else the
         # first available kind (e.g. LAN-only models such as `angle`).
@@ -686,6 +698,14 @@ class RSSSM(HSSMBase):
         is dramatically faster than the PyMC NUTS default on the batched
         recursion.  All other ``pm.sample`` kwargs pass through.
 
+        Note
+        ----
+        This signature deliberately differs from :meth:`HSSM.sample`: RSSSM
+        builds the PyMC model directly and calls ``pm.sample`` rather than
+        ``bambi.Model.fit``, so the sampler is selected with ``nuts_sampler=``
+        (not ``sampler=``) and the bambi-specific ``init`` / ``initvals`` /
+        ``include_response_params`` arguments are not accepted.
+
         Parameters
         ----------
         include_log_likelihood
@@ -722,7 +742,20 @@ class RSSSM(HSSMBase):
         return self._inference_obj
 
     def graph(self, formatting="plain", **kwargs):
-        """Render the PyMC model graph via graphviz."""
+        """Render the PyMC model graph via graphviz.
+
+        Only ``formatting`` is honoured.  Unlike :meth:`HSSM.graph`, the
+        direct-build path does not support the figure-saving arguments
+        (``name`` / ``figsize`` / ``dpi`` / ``fmt``); pass them and they are
+        ignored with a warning.  Save the returned graphviz object yourself if
+        you need a file.
+        """
+        if kwargs:
+            _logger.warning(
+                "RSSSM.graph() ignores %s; only `formatting` is supported. Render "
+                "and save the returned graphviz object directly if needed.",
+                ", ".join(sorted(kwargs)),
+            )
         return pm.model_to_graphviz(self._pymc_model_obj, formatting=formatting)
 
     def log_likelihood(self, *args: Any, **kwargs: Any):
@@ -788,6 +821,12 @@ class RSSSM(HSSMBase):
         reconstructed here from the saved posterior: per draw, the forward
         filter's running log-evidence yields ``delta_t = logZ_t - logZ_{t-1}``,
         whose per-participant sum equals the marginal the sampler used.
+
+        The per-trial terms are one-step-ahead predictives and are serially
+        dependent within a participant, so the ``arviz.loo`` / ``waic`` estimate
+        is an *approximate* leave-one-out (use it as a relative comparison score,
+        not an exact LOO).  This recomputes the forward filter for every
+        posterior draw, so it can be slow on large posteriors.
 
         Parameters
         ----------

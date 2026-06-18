@@ -100,6 +100,18 @@ def pad_and_align_to_T_max(
     t_max = max(g.shape[0] for g in groups)
     n_cols = len(data_cols)
 
+    # A regime-switching model needs at least one transition to identify the
+    # Markov structure: the forward recursion scans over trials 1..T_max-1, so a
+    # panel in which *every* participant has a single trial (T_max == 1) is
+    # degenerate (the scan would iterate an empty sequence).  Single-trial
+    # participants are fine as long as some participant has >= 2 trials.
+    if t_max < 2:
+        raise ValueError(
+            "RSSSM needs at least 2 trials for at least one participant "
+            f"(got T_max={t_max}); a single-trial-only panel cannot identify a "
+            "Markov chain."
+        )
+
     data_padded = np.empty((n_participants, t_max, n_cols), dtype=float)
     mask = np.zeros((n_participants, t_max), dtype=float)
     for i, g in enumerate(groups):

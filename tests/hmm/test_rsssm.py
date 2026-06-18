@@ -214,6 +214,29 @@ def test_v1_rejections(tiny_df, kwargs):
         RSSSM(data=tiny_df, model="ddm", K=2, switching_params=["v"], **kwargs)
 
 
+def test_choice_only_model_rejected(tiny_df):
+    """A choice-only SSM (single response column) is not supported in v1."""
+    with pytest.raises(NotImplementedError, match="choice-only"):
+        RSSSM(
+            data=tiny_df,
+            model="softmax_inv_temperature_2",  # a supported choice-only SSM
+            K=2,
+            switching_params=["v"],
+        )
+
+
+def test_fixed_vector_wrong_length_rejected_eagerly(tiny_df):
+    """A fixed-per-regime ndarray of the wrong length is caught at validate()."""
+    with pytest.raises(ValueError, match="length 3, expected K=2"):
+        RSSSM(
+            data=tiny_df,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            a=np.array([0.8, 0.9, 1.0]),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Spec resolvers & ordering heuristic
 # ---------------------------------------------------------------------------
@@ -298,6 +321,19 @@ def test_padding_requires_contiguous_participants():
         }
     )
     with pytest.raises(ValueError, match="contiguous"):
+        pad_and_align_to_T_max(df, "participant_id", ["rt", "response"])
+
+
+def test_single_trial_only_panel_rejected():
+    """A panel where every participant has one trial (T_max == 1) is rejected."""
+    df = pd.DataFrame(
+        {
+            "rt": [0.5, 0.6, 0.7],
+            "response": [1, -1, 1],
+            "participant_id": [0, 1, 2],
+        }
+    )
+    with pytest.raises(ValueError, match="at least 2 trials"):
         pad_and_align_to_T_max(df, "participant_id", ["rt", "response"])
 
 
