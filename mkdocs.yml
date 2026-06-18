@@ -59,8 +59,8 @@ nav:
       - P-outlier Regression: tutorials/tutorial_p_outlier_regression.ipynb
       - Sampling with Bayeux: tutorials/tutorial_bayeux.ipynb
       - Hidden Markov Models with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
-      - Regime-Switching SSMs (RSSSM) - a first example: tutorials/rsssm_regime_switching.ipynb
-      - Regime-Switching SSMs (RSSSM) - multi-participant: tutorials/rsssm_multiparticipant.ipynb
+      - Regime-Switching SSMs (RSSSM) — two regimes (K=2): tutorials/rsssm_regime_switching.ipynb
+      - Regime-Switching SSMs (RSSSM) — three regimes (K=3): tutorials/rsssm_k3.ipynb
   - Contributed Tutorials:
       - Winterbrain 2025 Workshop Talk 1: tutorials/hssm_tutorial_workshop_1.ipynb
       - Winterbrain 2025 Workshop Talk 2: tutorials/hssm_tutorial_workshop_2.ipynb
@@ -97,7 +97,7 @@ plugins:
         - tutorials/tutorial_p_outlier_regression.ipynb
         - tutorials/hmm_ddm_regime_switching.ipynb
         - tutorials/rsssm_regime_switching.ipynb
-        - tutorials/rsssm_multiparticipant.ipynb
+        - tutorials/rsssm_k3.ipynb
         - tutorials/hssm_tutorial_workshop_1.ipynb
         - tutorials/hssm_tutorial_workshop_2.ipynb
         - tutorials/add_custom_rlssm_model.ipynb
