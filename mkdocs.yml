@@ -36,6 +36,7 @@ nav:
           - hssm.plotting: api/plotting.md
   - Tutorials:
       - Main tutorial: tutorials/main_tutorial.ipynb
+      - Hierarchical DDM: tutorials/ddm_hierarchical_tutorial.ipynb
       - Choice-only models: tutorials/choice_only_models.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
       - Plotting: tutorials/plotting.ipynb
@@ -77,6 +78,7 @@ plugins:
         - getting_started/getting_started.ipynb
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
+        - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
         - tutorials/likelihoods.ipynb
         - tutorials/variational_inference.ipynb
