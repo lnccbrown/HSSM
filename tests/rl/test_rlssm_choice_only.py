@@ -65,11 +65,10 @@ def test_rlssm_softmax_no_rt_column(choice_only_data) -> None:
 def test_rlssm_softmax_invalid_response_rejected() -> None:
     """Response values outside {0, 1} must be rejected at construction time.
 
-    The softmax logp uses ``jnp.where(response == 1, ...)``, treating anything
-    other than 1 as choice 0.  An invalid value such as -1 or 2 would therefore
-    silently produce a wrong likelihood (and corrupt Q-value updates via negative
-    array indexing).  ``_post_check_data_sanity`` must catch these before any JAX
-    computation runs.
+    The softmax logp and the Q-value scan index per-action arrays by the integer
+    response, so an out-of-range value such as -1 or 2 would silently produce a
+    wrong likelihood (or corrupt Q-value updates via out-of-bounds indexing).
+    ``_post_check_data_sanity`` must catch these before any JAX computation runs.
     """
     rng = np.random.default_rng(0)
     n_total = 50
@@ -116,16 +115,28 @@ def test_rlssm_softmax_non_integral_response_rejected() -> None:
         RLSSM(data=bad_data, model="2AB_RescorlaWagner_Softmax")
 
 
-@pytest.mark.xfail(
-    reason="Choice label overrides are not remapped to the softmax model's internal binary actions yet.",
-    strict=True,
-)
-def test_rlssm_softmax_custom_choice_labels_behave_like_binary_actions() -> None:
-    """Non-default binary labels should be handled consistently.
+def _logp_at_initial_point(model: RLSSM) -> float:
+    """Compile and evaluate the model logp at its initial point."""
+    with model.pymc_model:
+        ip = model.pymc_model.initial_point()
+        return float(model.pymc_model.compile_logp()(ip))
 
-    The public RLSSM API accepts ``choices`` overrides, so a valid binary coding
-    such as ``[1, 2]`` should produce the same likelihood as the equivalent data
-    recoded to the internal binary actions ``[0, 1]``.
+
+@pytest.mark.parametrize(
+    "label_map, choices",
+    [
+        ({0.0: 1.0, 1.0: 2.0}, [1, 2]),  # shifted labels
+        ({0.0: -1.0, 1.0: 1.0}, [-1, 1]),  # signed labels (HSSM softmax convention)
+    ],
+)
+def test_rlssm_softmax_custom_choice_labels_behave_like_binary_actions(
+    label_map, choices
+) -> None:
+    """Arbitrary integer ``choices`` should reduce to the internal 0/1 actions.
+
+    The public RLSSM API accepts ``choices`` overrides; the response column is
+    remapped to 0-based action indices, so relabeling the two valid choices must
+    not change the log-likelihood relative to the canonical ``[0, 1]`` coding.
     """
     rng = np.random.default_rng(7)
     n_participants, n_trials = 4, 12
@@ -139,29 +150,83 @@ def test_rlssm_softmax_custom_choice_labels_behave_like_binary_actions() -> None
         }
     )
     relabeled_data = binary_data.copy()
-    relabeled_data["response"] = relabeled_data["response"].replace(
-        {0.0: 1.0, 1.0: 2.0}
-    )
+    relabeled_data["response"] = relabeled_data["response"].replace(label_map)
 
     default_model = RLSSM(data=binary_data, model="2AB_RescorlaWagner_Softmax")
     relabeled_model = RLSSM(
         data=relabeled_data,
         model="2AB_RescorlaWagner_Softmax",
-        choices=[1, 2],
+        choices=choices,
     )
 
-    with default_model.pymc_model:
-        default_ip = default_model.pymc_model.initial_point()
-        default_lp = default_model.pymc_model.compile_logp()(default_ip)
-
-    with relabeled_model.pymc_model:
-        relabeled_ip = relabeled_model.pymc_model.initial_point()
-        relabeled_lp = relabeled_model.pymc_model.compile_logp()(relabeled_ip)
+    default_lp = _logp_at_initial_point(default_model)
+    relabeled_lp = _logp_at_initial_point(relabeled_model)
 
     assert np.isclose(default_lp, relabeled_lp), (
         "Relabeling the two valid choices should not change the log-likelihood. "
         f"Expected matching values, got {default_lp} and {relabeled_lp}."
     )
+
+
+def test_rlssm_softmax_choice_remap_respects_declared_order() -> None:
+    """Remapping uses declared ``choices`` order: choices=[2, 1] maps 2->0, 1->1."""
+    rng = np.random.default_rng(11)
+    n_participants, n_trials = 4, 12
+    n_total = n_participants * n_trials
+    base_response = rng.integers(0, 2, size=n_total).astype(float)
+    feedback = rng.integers(0, 2, size=n_total).astype(float)
+    participant_id = np.repeat(np.arange(n_participants), n_trials)
+
+    canonical = pd.DataFrame(
+        {
+            "participant_id": participant_id,
+            "response": base_response,
+            "feedback": feedback,
+        }
+    )
+    # Map 0->2 and 1->1 so that declaring choices=[2, 1] inverts back to 0/1.
+    reordered = canonical.copy()
+    reordered["response"] = np.where(base_response == 0.0, 2.0, 1.0)
+
+    canonical_lp = _logp_at_initial_point(
+        RLSSM(data=canonical, model="2AB_RescorlaWagner_Softmax")
+    )
+    reordered_lp = _logp_at_initial_point(
+        RLSSM(data=reordered, model="2AB_RescorlaWagner_Softmax", choices=[2, 1])
+    )
+    assert np.isclose(canonical_lp, reordered_lp)
+
+
+def test_rlssm_softmax_remap_does_not_mutate_user_dataframe() -> None:
+    """The remap must operate on HSSM's copy, leaving the user's frame untouched."""
+    rng = np.random.default_rng(3)
+    n_total = 40
+    data = pd.DataFrame(
+        {
+            "participant_id": np.repeat(np.arange(4), 10),
+            "response": rng.choice([1.0, 2.0], size=n_total),
+            "feedback": rng.integers(0, 2, size=n_total).astype(float),
+        }
+    )
+    original_response = data["response"].copy()
+    RLSSM(data=data, model="2AB_RescorlaWagner_Softmax", choices=[1, 2])
+    pd.testing.assert_series_equal(data["response"], original_response)
+
+
+def test_rlssm_ddm_rejects_non_zero_based_choices() -> None:
+    """SSM-backed RLSSMs must reject custom labels (response is dual-use)."""
+    rng = np.random.default_rng(5)
+    n_total = 40
+    data = pd.DataFrame(
+        {
+            "participant_id": np.repeat(np.arange(4), 10),
+            "rt": rng.uniform(0.3, 1.5, size=n_total),
+            "response": rng.choice([1.0, 2.0], size=n_total),
+            "feedback": rng.integers(0, 2, size=n_total).astype(float),
+        }
+    )
+    with pytest.raises(ValueError, match="not supported for"):
+        RLSSM(data=data, model="2AB_RescorlaWagner_DDM", choices=[1, 2])
 
 
 def test_rlssm_softmax_warns_when_a_declared_choice_is_missing() -> None:
@@ -224,6 +289,44 @@ def test_rlssm_softmax_per_trial_logp_valid(choice_only_data) -> None:
         f"Some log-probabilities are positive (> 0), indicating the "
         f"lapse mixture probability exceeded 1. Max: {all_logp.max():.4f}"
     )
+
+
+@pytest.fixture(scope="module")
+def choice_only_data_3afc() -> pd.DataFrame:
+    """Synthetic balanced-panel 3-alternative choice-only dataset (no RT)."""
+    rng = np.random.default_rng(99)
+    n_participants, n_trials = 5, 20
+    n_total = n_participants * n_trials
+    return pd.DataFrame(
+        {
+            "participant_id": np.repeat(np.arange(n_participants), n_trials),
+            "response": rng.integers(0, 3, size=n_total).astype(float),
+            "feedback": rng.integers(0, 2, size=n_total).astype(float),
+        }
+    )
+
+
+def test_rlssm_softmax_3afc_instantiates_and_evaluates(choice_only_data_3afc) -> None:
+    """The registered 3-action softmax model builds and yields valid logp.
+
+    Exercises the N-action generalisation end to end: a single Q-value scan
+    produces q0/q1/q2, the generic softmax consumes them, and per-trial
+    log-probabilities are finite and non-positive.
+    """
+    model = RLSSM(data=choice_only_data_3afc, model="3AB_RescorlaWagner_Softmax")
+    assert model.model_config.is_choice_only
+    assert model.model_config.choices == (0, 1, 2)
+    # q0/q1/q2 are computed inside the Op, not free parameters.
+    assert {"rl_alpha", "beta"}.issubset(set(model.params))
+    assert not ({"q0", "q1", "q2"} & set(model.params))
+
+    with model.pymc_model:
+        ip = model.pymc_model.initial_point()
+        lp = model.pymc_model.compile_logp()(ip)
+        parts = model.pymc_model.compile_logp(sum=False)(ip)
+    assert np.isfinite(lp), f"Expected a finite logp, got {lp}"
+    all_logp = np.concatenate([np.atleast_1d(x) for x in parts])
+    assert np.all(all_logp <= 1e-6)
 
 
 @pytest.mark.slow

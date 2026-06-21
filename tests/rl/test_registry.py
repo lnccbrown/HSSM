@@ -727,15 +727,32 @@ class TestBuiltinModels:
         assert "rl_alpha" in config.bounds
         if model_name == "2AB_RescorlaWagner_Softmax":
             assert "beta" in config.bounds
-            assert config.ssm_logp_func.computed == {
-                "q0": registry._compute_q0_annotated,
-                "q1": registry._compute_q1_annotated,
-            }
+            # Both Q-value outputs are produced by the SAME annotated scan
+            # function (one scan, sliced per action), not two separate functions.
+            assert set(config.ssm_logp_func.computed) == {"q0", "q1"}
+            assert (
+                config.ssm_logp_func.computed["q0"]
+                is config.ssm_logp_func.computed["q1"]
+            )
         else:
             assert "scaler" in config.bounds
             assert config.ssm_logp_func.computed == {"v": registry._compute_v_annotated}
         assert config.choices == (0, 1)
         assert config.extra_fields == ["feedback"]
+
+    def test_three_action_softmax_registered(self) -> None:
+        """The 3-action softmax model exercises the N-action generalisation."""
+        assert "3AB_RescorlaWagner_Softmax" in registry._RLSSM_REGISTRY
+        config = registry.get_rlssm_model_config("3AB_RescorlaWagner_Softmax")
+        assert config.decision_process == "softmax_3AB"
+        assert config.choices == (0, 1, 2)
+        assert config.list_params == ["rl_alpha", "beta"]
+        # q0/q1/q2 all produced by the SAME annotated scan (one pass).
+        assert set(config.ssm_logp_func.computed) == {"q0", "q1", "q2"}
+        funcs = list(config.ssm_logp_func.computed.values())
+        assert all(f is funcs[0] for f in funcs)
+        # The logp inputs carry every action's Q-value column plus beta + response.
+        assert config.ssm_logp_func.inputs == ["beta", "q0", "q1", "q2", "response"]
 
 
 class TestListModels:
