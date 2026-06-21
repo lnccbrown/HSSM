@@ -551,15 +551,19 @@ def make_rl_logp_func(
     list_params = list_params or []
     extra_fields = extra_fields or []
 
-    # Pre-compute vmapped versions of all compute functions
-    vmapped_compute_funcs = (
-        {
-            param_name: jax.vmap(compute_func, in_axes=0)
-            for param_name, compute_func in ssm_logp_func.computed.items()
-        }
+    # Pre-compute vmapped versions of each DISTINCT compute function, keyed by
+    # function identity. A single compute function may produce several outputs
+    # (e.g. a Q-value scan emitting q0, q1, ... for an N-action softmax); it is
+    # then registered under multiple names in `computed` and must run only once,
+    # not once per output.
+    _distinct_compute_funcs = (
+        {id(f): f for f in ssm_logp_func.computed.values()}
         if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed
         else {}
     )
+    vmapped_compute_funcs = {
+        fid: jax.vmap(f, in_axes=0) for fid, f in _distinct_compute_funcs.items()
+    }
 
     def _prepare_subj_trials(
         compute_func: AnnotatedFunction, data: np.ndarray, args: tuple
@@ -585,21 +589,20 @@ def make_rl_logp_func(
         subj_trials = jnp.stack(cols_data, axis=1)
         return subj_trials.reshape(n_participants, n_trials, -1)
 
-    def compute_parameter(
-        param_name: str, data: np.ndarray, args: tuple
+    def compute_block(
+        compute_func: AnnotatedFunction, data: np.ndarray, args: tuple
     ) -> jnp.ndarray:
-        """Compute a single parameter."""
-        compute_func = ssm_logp_func.computed[param_name]
-        vmapped_func = vmapped_compute_funcs[param_name]
+        """Run one compute function once, returning (n_total_trials, n_outputs).
 
-        # Prepare data for computation
+        Single-output learning rules (e.g. drift rate ``v``) return one column;
+        multi-output rules (e.g. an N-action Q-value scan emitting
+        ``q0..q_{N-1}``) return one column per declared output. The caller slices
+        the block into the named output columns.
+        """
         subj_trials = _prepare_subj_trials(compute_func, data, args)
-
-        # Apply pre-vmapped function to compute parameter values
-        computed_values = vmapped_func(subj_trials)
-
-        # Reshape back to 2D (total_trials, 1) for concatenation
-        return computed_values.reshape((-1, 1))
+        computed_values = vmapped_compute_funcs[id(compute_func)](subj_trials)
+        n_out = len(compute_func.outputs)
+        return computed_values.reshape((-1, n_out))
 
     def logp(data, *args) -> Array:
         """Compute the log-likelihood for the RLDM model for each trial.
@@ -650,14 +653,35 @@ def make_rl_logp_func(
         # Validate that all computed parameters have compute functions
         _validate_computed_parameters(ssm_logp_func, ssm_logp_func_colidxs.computed)
 
-        computed_param_values = (
-            {
-                param_name: compute_parameter(param_name, data, args)
-                for param_name in ssm_logp_func_colidxs.computed
+        # Run each DISTINCT compute function once and slice its (n, n_out) block
+        # into the named output columns it produces. Grouping by function
+        # identity avoids re-running a multi-output learning rule (e.g. the
+        # softmax Q-value scan) once per action.
+        needed = ssm_logp_func_colidxs.computed
+        computed_param_values: dict[str, Array] = {}
+        if needed:
+            distinct_needed_funcs = {
+                id(ssm_logp_func.computed[name]): ssm_logp_func.computed[name]
+                for name in needed
             }
-            if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed
-            else {}
-        )
+            for compute_func in distinct_needed_funcs.values():
+                outputs = getattr(compute_func, "outputs", None)
+                if not outputs:
+                    raise ValueError(
+                        "Compute functions for computed parameters must be "
+                        "annotated with a non-empty `outputs` list; "
+                        f"got {outputs!r}."
+                    )
+                block = compute_block(compute_func, data, args)
+                if block.shape[1] != len(outputs):
+                    raise ValueError(
+                        f"Compute function produced {block.shape[1]} output "
+                        f"column(s) but its `.outputs` declares {len(outputs)} "
+                        f"({outputs})."
+                    )
+                for col, out_name in enumerate(outputs):
+                    if out_name in needed:
+                        computed_param_values[out_name] = block[:, col : col + 1]
 
         # Extract non-computed parameters
         non_computed_args = _collect_cols_arrays(

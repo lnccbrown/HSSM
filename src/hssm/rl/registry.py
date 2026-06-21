@@ -20,6 +20,7 @@ This module provides:
 from __future__ import annotations
 
 import logging
+import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from inspect import signature
@@ -27,8 +28,7 @@ from typing import Any
 
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 from hssm.rl.likelihoods.softmax import (
-    compute_q0_subject_wise,
-    compute_q1_subject_wise,
+    make_compute_q_values_subject_wise,
     softmax_logp_func,
 )
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
@@ -152,20 +152,42 @@ _compute_v_annotated = annotate_function(
     outputs=["v"],
 )(compute_v_subject_wise)
 
-_compute_q0_annotated = annotate_function(
-    inputs=["rl_alpha", "response", "feedback"],
-    outputs=["q0"],
-)(compute_q0_subject_wise)
 
-_compute_q1_annotated = annotate_function(
-    inputs=["rl_alpha", "response", "feedback"],
-    outputs=["q1"],
-)(compute_q1_subject_wise)
+def _make_compute_q_annotated(n_actions: int) -> Any:
+    """Annotate the single N-action Q-value scan.
 
-_softmax_logp_annotated = annotate_function(
-    inputs=["beta", "q0", "q1", "response"],
-    outputs=["logp"],
-)(softmax_logp_func)
+    The function emits one output column per action (``q0..q_{n_actions-1}``)
+    from a single Rescorla-Wagner scan; it is registered for every ``q_i`` under
+    this one object so the builder computes them in a single pass.
+    """
+    return annotate_function(
+        inputs=["rl_alpha", "response", "feedback"],
+        outputs=[f"q{i}" for i in range(n_actions)],
+    )(make_compute_q_values_subject_wise(n_actions))
+
+
+def _make_softmax_logp_annotated(n_actions: int) -> Any:
+    """Annotate the generic softmax logp for an N-action choice-only model."""
+    q_names = [f"q{i}" for i in range(n_actions)]
+    return annotate_function(
+        inputs=["beta", *q_names, "response"],
+        outputs=["logp"],
+    )(softmax_logp_func)
+
+
+def _softmax_n_actions(decision_process: str) -> int | None:
+    """Return N for a built-in softmax decision process ``softmax_<N>AB``.
+
+    Returns ``None`` when *decision_process* is not a built-in softmax name, so
+    callers fall through to the custom-SSM / modelconfig resolution.
+    """
+    match = re.fullmatch(r"softmax_(\d+)AB", decision_process)
+    return int(match.group(1)) if match else None
+
+
+# Built-in two-alternative softmax logp, kept module-level for the default
+# `softmax_2AB` decision process and for tests that reference it.
+_softmax_logp_annotated = _make_softmax_logp_annotated(2)
 
 # ---------------------------------------------------------------------------
 # SSM base log-likelihood registry
@@ -273,8 +295,9 @@ def _get_decision_process_spec(
         spec["name"] = decision_process
         return spec
 
-    if decision_process == "softmax_2AB":
-        return _build_softmax_2ab_spec()
+    n_actions = _softmax_n_actions(decision_process)
+    if n_actions is not None:
+        return _build_softmax_spec(n_actions)
 
     return _build_ssm_spec_from_modelconfig(decision_process)
 
@@ -296,8 +319,9 @@ def _get_ssm_logp(name: str) -> Any:
             _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
         return _SSM_LOGP_CACHE[name]
 
-    if name == "softmax_2AB":
-        _SSM_LOGP_CACHE[name] = _softmax_logp_annotated
+    n_actions = _softmax_n_actions(name)
+    if n_actions is not None:
+        _SSM_LOGP_CACHE[name] = _make_softmax_logp_annotated(n_actions)
         return _SSM_LOGP_CACHE[name]
 
     spec = _build_ssm_spec_from_modelconfig(name)
@@ -328,10 +352,19 @@ def _make_rescorla_wagner_learning_metadata() -> LearningProcessMetadata:
     )
 
 
-def _make_rescorla_wagner_softmax_learning_metadata() -> LearningProcessMetadata:
-    """Return learning metadata for the built-in choice-only softmax RLSSM."""
+def _make_rescorla_wagner_softmax_learning_metadata(
+    n_actions: int = 2,
+) -> LearningProcessMetadata:
+    """Return learning metadata for the built-in choice-only softmax RLSSM.
+
+    Every per-action Q-value (``q0..q_{n_actions-1}``) is produced by the *same*
+    annotated scan function, so the builder runs the Rescorla-Wagner scan once
+    and slices out all action values.
+    """
+    compute_q = _make_compute_q_annotated(n_actions)
+    q_names = [f"q{i}" for i in range(n_actions)]
     return LearningProcessMetadata(
-        learning_process={"q0": _compute_q0_annotated, "q1": _compute_q1_annotated},
+        learning_process={name: compute_q for name in q_names},
         sampled_params=["rl_alpha"],
         bounds={"rl_alpha": (0.0, 1.0)},
         defaults=[0.1],
@@ -340,15 +373,16 @@ def _make_rescorla_wagner_softmax_learning_metadata() -> LearningProcessMetadata
     )
 
 
-def _build_softmax_2ab_spec() -> dict[str, Any]:
-    """Return the built-in choice-only softmax decision-process specification."""
+def _build_softmax_spec(n_actions: int) -> dict[str, Any]:
+    """Return the built-in choice-only softmax decision-process spec for N actions."""
+    q_names = [f"q{i}" for i in range(n_actions)]
     return {
-        "ssm_base_logp_func": _softmax_logp_annotated,
-        "list_params_ssm": ["beta", "q0", "q1"],
+        "ssm_base_logp_func": _make_softmax_logp_annotated(n_actions),
+        "list_params_ssm": ["beta", *q_names],
         "bounds_ssm": {"beta": (0.0, 10.0)},
-        "params_default_ssm": [1.0, 0.5, 0.5],
+        "params_default_ssm": [1.0] + [0.5] * n_actions,
         "response": ["response"],
-        "name": "softmax_2AB",
+        "name": f"softmax_{n_actions}AB",
     }
 
 
@@ -385,11 +419,21 @@ _RLSSM_REGISTRY: dict[str, RLSSMRegistryEntry] = {
     ),
     "2AB_RescorlaWagner_Softmax": RLSSMRegistryEntry(
         decision_process="softmax_2AB",
-        learning_process_metadata=_make_rescorla_wagner_softmax_learning_metadata(),
+        learning_process_metadata=_make_rescorla_wagner_softmax_learning_metadata(2),
         choices=[0, 1],
         description=(
             "RLSSM model with Rescorla-Wagner Q-learning and a "
             "choice-only softmax decision process."
+        ),
+        decision_process_loglik_kind="approx_differentiable",
+    ),
+    "3AB_RescorlaWagner_Softmax": RLSSMRegistryEntry(
+        decision_process="softmax_3AB",
+        learning_process_metadata=_make_rescorla_wagner_softmax_learning_metadata(3),
+        choices=[0, 1, 2],
+        description=(
+            "RLSSM model with Rescorla-Wagner Q-learning and a choice-only "
+            "softmax decision process over three alternatives."
         ),
         decision_process_loglik_kind="approx_differentiable",
     ),

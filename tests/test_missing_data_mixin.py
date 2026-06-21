@@ -241,46 +241,43 @@ class TestChoiceOnlyMissingDataMixin:
                 missing_data=True, deadline=False, loglik_missing_data=None
             )
 
-    def test_deadline_column_missing_raises(self, choice_only_model):
-        """Specifying deadline with a column that doesn't exist must raise immediately."""
-        with pytest.raises(ValueError, match="not found in your dataset"):
-            choice_only_model._process_missing_data_and_deadline(
-                missing_data=False, deadline="nonexistent_col", loglik_missing_data=None
-            )
-
-    def test_deadline_true_missing_column_raises(self, choice_only_model):
-        """deadline=True with no 'deadline' column in data must raise."""
-        with pytest.raises(ValueError, match="not found in your dataset"):
+    def test_deadline_true_rejected(self, choice_only_model):
+        """deadline=True must raise for choice-only models (no RTs to censor)."""
+        with pytest.raises(
+            ValueError, match="Choice-only models cannot have a deadline"
+        ):
             choice_only_model._process_missing_data_and_deadline(
                 missing_data=False, deadline=True, loglik_missing_data=None
             )
 
-    def test_valid_deadline_appended_to_response(self, choice_only_model):
-        """Deadline column present in data should be appended to self.response."""
+    def test_deadline_str_rejected(self, choice_only_model):
+        """A deadline column name (str) must also raise for choice-only models."""
         choice_only_model.data["deadline"] = [1.0, 1.0, 1.0, 1.0, 1.0]
-        choice_only_model._process_missing_data_and_deadline(
-            missing_data=False, deadline=True, loglik_missing_data=None
-        )
-        assert "deadline" in choice_only_model.response
-        assert choice_only_model.deadline is True
+        with pytest.raises(
+            ValueError, match="Choice-only models cannot have a deadline"
+        ):
+            choice_only_model._process_missing_data_and_deadline(
+                missing_data=False, deadline="deadline", loglik_missing_data=None
+            )
 
-    def test_deadline_column_appended_once(self, choice_only_model):
-        """Deadline column already in response must not be duplicated."""
-        choice_only_model.data["deadline"] = [1.0, 1.0, 1.0, 1.0, 1.0]
-        choice_only_model.response.append("deadline")
-        choice_only_model._process_missing_data_and_deadline(
-            missing_data=False, deadline=True, loglik_missing_data=None
-        )
-        assert choice_only_model.response.count("deadline") == 1
-
-    def test_loglik_missing_data_without_deadline_raises(self, choice_only_model):
-        """Providing loglik_missing_data without deadline=True must raise for choice-only."""
+    def test_loglik_missing_data_rejected(self, choice_only_model):
+        """Providing loglik_missing_data must raise for choice-only models."""
         with pytest.raises(
             ValueError,
-            match="loglik_missing_data function specified, but you have not set the missing_data or deadline flag to True",
+            match="choice-only models do not support missing data or deadlines",
         ):
             choice_only_model._process_missing_data_and_deadline(
                 missing_data=False,
                 deadline=False,
                 loglik_missing_data=lambda x: x,
             )
+
+    def test_neither_set_disables_all(self, choice_only_model):
+        """With nothing requested, all missing-data/deadline state is disabled."""
+        choice_only_model._process_missing_data_and_deadline(
+            missing_data=False, deadline=False, loglik_missing_data=None
+        )
+        assert choice_only_model.missing_data is False
+        assert choice_only_model.deadline is False
+        assert choice_only_model.loglik_missing_data is None
+        assert choice_only_model.missing_data_network == MissingDataNetwork.NONE

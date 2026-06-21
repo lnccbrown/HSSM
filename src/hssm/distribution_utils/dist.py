@@ -190,7 +190,7 @@ def _get_p_outlier(cls: _RandomVariable, arg_arrays):
 def make_hssm_rv(
     simulator_fun: Callable | str,
     list_params: list[str],
-    lapse: bmb.Prior | None = None,
+    lapse: bmb.Prior | float | None = None,
     is_choice_only: bool = False,
 ) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
@@ -202,7 +202,8 @@ def make_hssm_rv(
     list_params
         A list of str of all parameters for this `RandomVariable`.
     lapse : optional
-        A bmb.Prior object representing the lapse distribution.
+        A bmb.Prior object representing the lapse distribution, or a ``float``
+        for choice-only models (the uniform choice probability ``1 / n_choices``).
     is_choice_only : bool
         Whether the model is a choice-only model.
 
@@ -312,7 +313,7 @@ def _apply_lapse_model(
     sims_out: np.ndarray,
     p_outlier: np.ndarray | float | None,
     rng: np.random.Generator,
-    lapse_dist: bmb.Prior | None,
+    lapse_dist: bmb.Prior | float | None,
     choices: list,
 ) -> np.ndarray:
     """Apply lapse model to the simulation output.
@@ -325,8 +326,11 @@ def _apply_lapse_model(
         Probability of outlier/lapse for each trial
     rng : np.random.Generator
         Random number generator
-    lapse_dist : bmb.Prior
-        The lapse distribution to draw from
+    lapse_dist : bmb.Prior | float
+        The lapse distribution to draw from. For choice-only models this is a
+        ``float`` (the uniform choice probability ``1 / n_choices``); there is
+        no RT distribution, so lapsed trials are replaced by a uniform draw over
+        ``choices``.
     choices : list
         List of possible choices
 
@@ -343,6 +347,27 @@ def _apply_lapse_model(
             "You have specified `p_outlier`, the probability of the lapse "
             "distribution but did not specify the distribution."
         )
+
+    # Choice-only models pass a float `lapse_dist` (the uniform choice
+    # probability 1/n_choices). `sims_out` then holds the choice column only,
+    # as either (n_obs,) or (n_obs, 1) — there is no RT to draw. Replace lapsed
+    # trials with a uniform draw over `choices`. The float lapse value itself is
+    # consumed as a log-probability in the logp path; here only `p_outlier`
+    # decides which trials lapse.
+    if isinstance(lapse_dist, float):
+        flat = sims_out.reshape(-1).copy()
+        n_obs = flat.shape[0]
+        if isinstance(p_outlier, np.ndarray):
+            p_vec = np.broadcast_to(
+                np.asarray(p_outlier, dtype=float).reshape(-1), (n_obs,)
+            )
+        else:
+            p_vec = np.full(n_obs, float(p_outlier))
+        replace = rng.binomial(n=1, p=p_vec, size=n_obs).astype(bool)
+        if not replace.any():
+            return sims_out
+        flat[replace] = rng.choice(choices, size=int(replace.sum()))
+        return flat.reshape(sims_out.shape)
 
     out_shape = sims_out.shape[:-1]
 

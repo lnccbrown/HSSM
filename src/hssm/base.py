@@ -347,6 +347,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         self._post_check_data_sanity()
 
+        # Remap response labels to internal 0..N-1 action indices where the model
+        # requires it (no-op by default; see `_remap_choice_only_responses`). Runs
+        # AFTER sanity validation (which reports against the declared labels) and
+        # BEFORE the distribution / bmb.Model is built from `self.data`.
+        self._remap_choice_only_responses()
+
         self.model_distribution = self._make_model_distribution()
 
         self.family = make_family(
@@ -396,6 +402,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             {key_: None for key_ in self.pymc_model.rvs_to_initial_values.keys()}
         )
         _logger.info("Model initialized successfully.")
+
+    def _remap_choice_only_responses(self) -> None:
+        """Remap response labels to internal 0..N-1 action indices.
+
+        No-op on the base class. Subclasses whose likelihood consumes the
+        response column purely as an action index (e.g. the choice-only softmax
+        RLSSM) override this to support arbitrary integer ``choices`` labels.
+        """
+        return
 
     @abstractmethod
     def _make_model_distribution(self) -> type[pm.Distribution]:

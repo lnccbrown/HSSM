@@ -141,29 +141,25 @@ class MissingDataMixin:
             Optional custom likelihood function for missing data. If not None,
             must be used only when missing_data or deadline is True.
         """
-        # Choice-only models have no "rt" column, so missing_data handling does
-        # not apply.  Deadline is still supported.
+        # Choice-only models have no "rt" column, so neither missing-data nor
+        # deadline handling applies. Reject both explicitly (a deadline censors
+        # RTs, which choice-only data does not have) and set the flags to their
+        # disabled state.
         if self.is_choice_only:  # type: ignore[attr-defined]
             if missing_data is not False:
                 raise ValueError("Choice-only models cannot have missing data.")
+            if deadline is not False:
+                raise ValueError("Choice-only models cannot have a deadline.")
+            if loglik_missing_data is not None:
+                raise ValueError(
+                    "loglik_missing_data function specified, but choice-only "
+                    "models do not support missing data or deadlines."
+                )
             self.missing_data = False
             self.missing_data_network = MissingDataNetwork.NONE
-            self.deadline = True if isinstance(deadline, str) else deadline
-            self.deadline_name = deadline if isinstance(deadline, str) else "deadline"
-            self.loglik_missing_data = loglik_missing_data
-            if not self.deadline and loglik_missing_data is not None:
-                raise ValueError(
-                    "loglik_missing_data function specified, but you have not"
-                    " set the missing_data or deadline flag to True."
-                )
-            if self.deadline and self.response is not None:  # type: ignore[attr-defined]
-                if self.deadline_name not in self.data.columns:  # type: ignore[attr-defined]
-                    raise ValueError(
-                        "You have specified that your data has deadline, but "
-                        f"`{self.deadline_name}` is not found in your dataset."
-                    )
-                if self.deadline_name not in self.response:  # type: ignore[attr-defined]
-                    self.response.append(self.deadline_name)  # type: ignore[attr-defined]
+            self.deadline = False
+            self.deadline_name = "deadline"
+            self.loglik_missing_data = None
             return
 
         if isinstance(missing_data, float):

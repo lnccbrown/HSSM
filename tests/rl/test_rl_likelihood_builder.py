@@ -1116,3 +1116,94 @@ class TestMultipleComputedParameters:
 
         assert result.shape[0] == rldm_data.total_trials
         assert not np.isnan(result).any()
+
+
+class TestMultiOutputComputedFunction:
+    """A single learning function emitting multiple named outputs.
+
+    Regression coverage for the per-action double scan: one annotated function
+    with ``outputs=["q0", "q1"]`` registered under both names must run ONCE and
+    have its (n, 2) block sliced into the two columns.
+    """
+
+    def _run(self):
+        n_participants, n_trials = 2, 3
+        total = n_participants * n_trials
+        call_count: list[int] = []
+
+        def _compute_q(subj_trials):
+            call_count.append(1)
+            # subj_trials columns follow .inputs: [rl_alpha, response, feedback]
+            return jnp.stack([subj_trials[:, 0], subj_trials[:, 2]], axis=1)
+
+        compute_q = annotate_function(
+            inputs=["rl_alpha", "response", "feedback"],
+            outputs=["q0", "q1"],
+        )(_compute_q)
+
+        def _ssm_logp(lan_matrix):
+            # lan_matrix columns: [beta, q0, q1, response]
+            return lan_matrix[:, 1] * 100.0 + lan_matrix[:, 2]
+
+        ssm_logp = annotate_function(
+            inputs=["beta", "q0", "q1", "response"],
+            outputs=["logp"],
+            computed={"q0": compute_q, "q1": compute_q},
+        )(_ssm_logp)
+
+        logp = make_rl_logp_func(
+            ssm_logp,
+            n_participants=n_participants,
+            n_trials=n_trials,
+            data_cols=["response"],
+            list_params=["beta", "rl_alpha"],
+            extra_fields=["feedback"],
+        )
+
+        rng = np.random.default_rng(0)
+        response = rng.integers(0, 2, total).astype(float)
+        beta = rng.uniform(0.5, 2.0, total)
+        rl_alpha = rng.uniform(0.0, 1.0, total)
+        feedback = rng.integers(0, 2, total).astype(float)
+        result = np.asarray(logp(response.reshape(-1, 1), beta, rl_alpha, feedback))
+        return result, rl_alpha, feedback, call_count
+
+    def test_both_outputs_reach_logp(self):
+        result, rl_alpha, feedback, _ = self._run()
+        # q0 == rl_alpha column, q1 == feedback column → result == q0*100 + q1
+        np.testing.assert_allclose(result, rl_alpha * 100.0 + feedback, rtol=1e-5)
+
+    def test_compute_function_runs_once(self):
+        _, _, _, call_count = self._run()
+        assert sum(call_count) == 1
+
+
+class TestComputedOutputsGuard:
+    """A computed function must declare a non-empty, correctly-sized .outputs."""
+
+    def test_missing_outputs_raises(self):
+        def _compute_q(subj_trials):
+            return jnp.stack([subj_trials[:, 0], subj_trials[:, 2]], axis=1)
+
+        # No `outputs` attribute on the compute function.
+        compute_q = annotate_function(
+            inputs=["rl_alpha", "response", "feedback"],
+        )(_compute_q)
+
+        ssm_logp = annotate_function(
+            inputs=["beta", "q0", "q1", "response"],
+            outputs=["logp"],
+            computed={"q0": compute_q, "q1": compute_q},
+        )(lambda lan_matrix: lan_matrix[:, 1])
+
+        logp = make_rl_logp_func(
+            ssm_logp,
+            n_participants=2,
+            n_trials=3,
+            data_cols=["response"],
+            list_params=["beta", "rl_alpha"],
+            extra_fields=["feedback"],
+        )
+        data = np.zeros((6, 1))
+        with pytest.raises(ValueError, match="non-empty `outputs`"):
+            logp(data, np.ones(6), np.ones(6), np.ones(6))
