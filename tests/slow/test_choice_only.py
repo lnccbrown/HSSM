@@ -5,6 +5,7 @@ import hssm
 import numpy as np
 import pandas as pd
 import pymc as pm
+import xarray as xr
 
 
 hssm.set_floatX("float32", update_jax=True)
@@ -78,7 +79,7 @@ def test_choice_only_default_params(
             progressbar=False,
         )
 
-    assert isinstance(idata, az.InferenceData)
+    assert isinstance(idata, xr.DataTree)
 
 
 @pytest.mark.slow
@@ -130,7 +131,7 @@ def test_choice_only_beta_reg(
             progressbar=False,
         )
 
-    assert isinstance(idata, az.InferenceData)
+    assert isinstance(idata, xr.DataTree)
 
 
 @pytest.mark.slow
@@ -182,7 +183,7 @@ def test_choice_only_logit_reg(
             progressbar=False,
         )
 
-    assert isinstance(idata, az.InferenceData)
+    assert isinstance(idata, xr.DataTree)
 
 
 @pytest.mark.slow
@@ -241,4 +242,4 @@ def test_choice_only_multiple_reg(
             progressbar=False,
         )
 
-    assert isinstance(idata, az.InferenceData)
+    assert isinstance(idata, xr.DataTree)
