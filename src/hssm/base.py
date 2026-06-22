@@ -636,20 +636,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 init = "auto"
 
+        # TODO: add back jitter after knowing what to do
         # If sampler is finally `numpyro` make sure
         # the jitter argument is set to False
-        if sampler == "numpyro":
-            if "nuts_sampler_kwargs" in kwargs:
-                if kwargs["nuts_sampler_kwargs"].get("jitter"):
-                    _logger.warning(
-                        "The jitter argument is set to True. "
-                        + "This argument is not supported "
-                        + "by the numpyro backend. "
-                        + "The jitter argument will be set to False."
-                    )
-                kwargs["nuts_sampler_kwargs"]["jitter"] = False
-            else:
-                kwargs["nuts_sampler_kwargs"] = {"jitter": False}
+        # if sampler == "numpyro":
+        #     if "nuts" in kwargs:
+        #         if kwargs["nuts"].get("jitter"):
+        #             _logger.warning(
+        #                 "The jitter argument is set to True. "
+        #                 + "This argument is not supported "
+        #                 + "by the numpyro backend. "
+        #                 + "The jitter argument will be set to False."
+        #             )
+        #         kwargs["nuts"]["jitter"] = False
+        #     else:
+        #         kwargs["nuts"] = {"jitter": False}
 
         if sampler != "pymc" and "step" in kwargs:
             raise ValueError(

@@ -5,6 +5,7 @@ import hssm
 import numpy as np
 import pandas as pd
 import pymc as pm
+import xarray as xr
 
 
 hssm.set_floatX("float32", update_jax=True)
@@ -17,16 +18,7 @@ PARAMETER_GRID = [
     ("analytical", None, None, "jax", True),  # Defaults should work
     ("analytical", "pymc", None, "jax", True),
     ("analytical", "pymc", "slice", "jax", True),
-    pytest.param(
-        "analytical",
-        "numpyro",
-        None,
-        "jax",
-        True,
-        marks=pytest.mark.xfail(
-            reason="TypeError: NUTS.__init__() got an unexpected keyword argument 'jitter'"
-        ),
-    ),
+    ("analytical", "numpyro", None, "jax", True),
     ("analytical", "numpyro", None, "pytensor", ValueError),
     ("analytical", "numpyro", "slice", "jax", ValueError),
 ]
@@ -67,17 +59,14 @@ def test_choice_only_default_params(
                 chains=1,
                 tune=10,
                 draws=10,
+                progressbar=False,
             )
 
         return
 
     if step is None:
         idata = model.sample(
-            sampler=sampler,
-            cores=1,
-            chains=1,
-            tune=10,
-            draws=10,
+            sampler=sampler, cores=1, chains=1, tune=10, draws=10, progressbar=False
         )
     else:
         idata = model.sample(
@@ -87,9 +76,10 @@ def test_choice_only_default_params(
             chains=1,
             tune=10,
             draws=10,
+            progressbar=False,
         )
 
-    assert isinstance(idata, az.InferenceData)
+    assert isinstance(idata, xr.DataTree)
 
 
 @pytest.mark.slow
@@ -121,17 +111,14 @@ def test_choice_only_beta_reg(
                 chains=1,
                 tune=10,
                 draws=10,
+                progressbar=False,
             )
 
         return
 
     if step is None:
         idata = model.sample(
-            sampler=sampler,
-            cores=1,
-            chains=1,
-            tune=10,
-            draws=10,
+            sampler=sampler, cores=1, chains=1, tune=10, draws=10, progressbar=False
         )
     else:
         idata = model.sample(
@@ -141,9 +128,10 @@ def test_choice_only_beta_reg(
             chains=1,
             tune=10,
             draws=10,
+            progressbar=False,
         )
 
-    assert isinstance(idata, az.InferenceData)
+    assert isinstance(idata, xr.DataTree)
 
 
 @pytest.mark.slow
@@ -175,17 +163,14 @@ def test_choice_only_logit_reg(
                 chains=1,
                 tune=10,
                 draws=10,
+                progressbar=False,
             )
 
         return
 
     if step is None:
         idata = model.sample(
-            sampler=sampler,
-            cores=1,
-            chains=1,
-            tune=10,
-            draws=10,
+            sampler=sampler, cores=1, chains=1, tune=10, draws=10, progressbar=False
         )
     else:
         idata = model.sample(
@@ -195,9 +180,10 @@ def test_choice_only_logit_reg(
             chains=1,
             tune=10,
             draws=10,
+            progressbar=False,
         )
 
-    assert isinstance(idata, az.InferenceData)
+    assert isinstance(idata, xr.DataTree)
 
 
 @pytest.mark.slow
@@ -236,17 +222,14 @@ def test_choice_only_multiple_reg(
                 chains=1,
                 tune=10,
                 draws=10,
+                progressbar=False,
             )
 
         return
 
     if step is None:
         idata = model.sample(
-            sampler=sampler,
-            cores=1,
-            chains=1,
-            tune=10,
-            draws=10,
+            sampler=sampler, cores=1, chains=1, tune=10, draws=10, progressbar=False
         )
     else:
         idata = model.sample(
@@ -256,6 +239,7 @@ def test_choice_only_multiple_reg(
             chains=1,
             tune=10,
             draws=10,
+            progressbar=False,
         )
 
-    assert isinstance(idata, az.InferenceData)
+    assert isinstance(idata, xr.DataTree)
