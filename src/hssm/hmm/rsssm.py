@@ -773,6 +773,49 @@ class RSSSM(HSSMBase):
             "Variational inference for RSSSM is not implemented in v1."
         )
 
+    # The predictive family is out of v1 scope (design §6.3): the HMM contributes
+    # its likelihood as a scalar `pm.Potential`, so the directly-built model has
+    # *no observed response RV* for PyMC's predictive samplers to draw from, and
+    # the inherited implementations reach through `self.model` (the bambi model
+    # RSSSM never builds).  Override them to raise an informative error rather
+    # than leak the bare `AttributeError: no attribute 'model'`.
+    _PREDICTIVE_MSG = (
+        "RSSSM does not support {name} in v1 (design §6.3): the regime-switching "
+        "likelihood is contributed as a scalar marginal, so the model has no "
+        "observed response random variable for PyMC's predictive samplers. "
+        "Predictive simulation for a regime-switching model is bespoke (draw a "
+        "regime path from P/pi0, then RTs from each trial's per-regime SSM) and "
+        "is a deferred helper. Use `infer_regimes` for posterior regime recovery."
+    )
+
+    def sample_posterior_predictive(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+        """Unavailable in v1: no observed response RV (design §6.3)."""
+        raise NotImplementedError(
+            self._PREDICTIVE_MSG.format(name="`sample_posterior_predictive`")
+        )
+
+    def predict(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+        """Unavailable in v1: no observed response RV (design §6.3)."""
+        raise NotImplementedError(self._PREDICTIVE_MSG.format(name="`predict`"))
+
+    def sample_prior_predictive(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+        """Unavailable in v1: no observed response RV (design §6.3)."""
+        raise NotImplementedError(
+            self._PREDICTIVE_MSG.format(name="`sample_prior_predictive`")
+        )
+
+    def plot_predictive(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+        """Unavailable in v1: depends on the predictive samplers (design §6.3)."""
+        raise NotImplementedError(self._PREDICTIVE_MSG.format(name="`plot_predictive`"))
+
+    def set_alias(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+        """Unavailable: RSSSM builds the PyMC model directly (no bambi aliases)."""
+        raise NotImplementedError(
+            "RSSSM builds its PyMC model directly rather than through bambi, so "
+            "bambi parameter aliases are not supported. Name variables via the "
+            "constructor's per-parameter specs instead."
+        )
+
     # ------------------------------------------------------------------
     # Post-hoc regime recovery / per-trial logp (Phase 4, §5.5/§5.6)
     # ------------------------------------------------------------------

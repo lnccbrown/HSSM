@@ -1912,7 +1912,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
             else:
                 self.lapse = lapse
-            self.list_params.append("p_outlier")
+            # Append idempotently: a config whose `list_params` already ends in
+            # `p_outlier` must not get a duplicate (the append is otherwise
+            # non-idempotent).
+            if self.list_params[-1] != "p_outlier":
+                self.list_params.append("p_outlier")
             return
 
         if lapse is not None:

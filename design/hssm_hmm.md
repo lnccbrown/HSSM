@@ -4,7 +4,7 @@
 **Status:** v1 feasibility-validated
 **Companions:** [hssm_hmm_overview.md](./hssm_hmm_overview.md) (high-level summary for applied users); [hssm_hmm_math.md](./hssm_hmm_math.md) (full math spec — v1 model in §14; planned Phase 6.1 hierarchical extension in §5–13)
 
-This is the rigorous design for `HSSM_HMM`. The TL;DR below is the 2-minute summary; the "Where to read next" block at its bottom is the navigation map into the rest of the document.
+This is the rigorous design for `RSSSM`. The TL;DR below is the 2-minute summary; the "Where to read next" block at its bottom is the navigation map into the rest of the document.
 
 ---
 
@@ -37,8 +37,8 @@ Sample-time is one JIT-compile unit, roughly constant in `N`. Post-hoc is decoup
 - **One batched `scan`, not a Python loop over participants.** The loop pattern didn't finish a 400-draw run at `N=20` in 40+ min — each per-subject scan becomes its own JIT-compile unit.
 - **`ordered` transform on one anchor switching parameter** for label-switching. A soft `pm.Potential` barrier works at `K=2` but breaks at higher `K` (NUTS jumps across it in a single step).
 - **Build the PyMC model directly, no bambi delegation.** The HMM's defining latents (transition matrix, regime sequence) are not row-indexed quantities bambi's formula system can declare.
-- **Balanced panels only in v1.** Required by the rectangular `(N, T, …)` reshape that powers the batched `scan`. Validated by `validate_balanced_panel` before the builder runs.
-- **Reject `missing_data`, `deadline`, `p_outlier`, `lapse` in v1.** The first two re-order rows and would corrupt the trial-axis Markov structure; the latter two assume the per-trial-mixture contract that HMM doesn't satisfy.
+- **Unbalanced panels in v1.** Participants may have different trial counts: `pad_and_align_to_T_max` end-pads each participant to `T_max` and carries an emission mask that zeroes padded steps inside the scan, leaving the marginal exact (the rectangular `(N, T_max, …)` reshape still powers the batched `scan`).
+- **Reject `missing_data`, `deadline`, and the *global iid* `p_outlier` / `lapse` in v1.** The first two re-order rows and would corrupt the trial-axis Markov structure; a single shared `p_outlier` rate assumes the per-trial-mixture contract the HMM doesn't satisfy. A *per-regime* `p_outlier` (via `switching_params` or a length-K vector) **is** supported — it attaches to each regime's own emission.
 
 **Validation status** (full table in §7.4; reproduction scripts in [docs/design/v1_extra_validations/](./v1_extra_validations/)). Throwaway prototype runs have settled every load-bearing decision above plus the breadth and edge-case claims:
 
@@ -57,20 +57,18 @@ What v1 implementation (Phase 2+) still has to verify: the `HSSMBase` override m
 **User-facing API.**
 
 ```python
-from hssm import HSSM_HMM
+from hssm import RSSSM
 
-model = HSSM_HMM(
-    data=df,  # long-format, balanced panel, sorted (participant, trial)
+model = RSSSM(
+    data=df,                          # long-format panel, sorted (participant, trial)
     K=2,
-    decision_process="ddm",
-    switching_params=["v"],  # parameters that vary by regime
+    model="ddm",
+    switching_params=["v"],           # parameters that vary by regime
     participant_col="participant_id",
 )
-idata = model.sample(...)  # standard HSSM .sample()
-regimes = model.infer_regimes(idata)  # posterior over s_{n,1:T}                (§5.5)
-idata = model.compute_log_likelihood(
-    idata
-)  # per-trial logp for arviz.loo / waic     (§5.6)
+idata   = model.sample(...)                    # standard HSSM .sample()
+regimes = model.infer_regimes()                # posterior over s_{n,1:T}                (§5.5)
+idata   = model.compute_log_likelihood(idata)  # per-trial logp for arviz.loo / waic     (§5.6)
 ```
 
 **Where to read next.**
@@ -86,7 +84,7 @@ idata = model.compute_log_likelihood(
 
 ### 1.1 What this design covers
 
-A new top-level class `HSSM_HMM` that fits **regime-switching sequential sampling models** through the same user-facing pattern as `HSSM(...)` and `RLSSM(...)`. The class wraps the manual construction shown in [docs/tutorials/hmm_ddm_regime_switching.ipynb](../tutorials/hmm_ddm_regime_switching.ipynb) so that users do not need to assemble the PyMC model by hand. See the TL;DR above for the one-paragraph model description and §3 for the formal specification.
+A new top-level class `RSSSM` that fits **regime-switching sequential sampling models** through the same user-facing pattern as `HSSM(...)` and `RLSSM(...)`. The class wraps the manual construction shown in [docs/tutorials/hmm_ddm_regime_switching.ipynb](../tutorials/hmm_ddm_regime_switching.ipynb) so that users do not need to assemble the PyMC model by hand. See the TL;DR above for the one-paragraph model description and §3 for the formal specification.
 
 ### 1.2 v1 scope (this design)
 
@@ -97,12 +95,13 @@ The first version targets the **simplest useful case** so that we can:
 
 **v1 includes:**
 - Arbitrary number of regimes `K >= 2`.
-- A subset of SSM parameters that switch by regime (declared as a flat list).
-- All non-switching SSM parameters shared across regimes; standard HSSM priors / regressions for them.
-- Balanced panel of participants (every participant has the same number of trials). v1 has **no per-participant parameter structure**: switching and shared parameters are global (the switching ones are length-K vectors indexed by regime, the shared ones are scalars). The only per-participant quantity is the latent regime sequence `s_{n,1:T}`. Hierarchical pooling of regime-specific parameters across participants is a deferred Phase 6.1 extension (§8).
-- Configurable Dirichlet prior on each row of the transition matrix (sticky concentration by default).
-- Fixed uniform initial-state distribution `pi0` by default; user-overridable to a fixed vector.
-- Automatic soft ordering constraint to break label-switching symmetry.
+- A subset of SSM parameters that switch by regime (declared as a flat list). Each SSM parameter follows a three-mode rule: a scalar is *shared*, a length-K vector is *fixed per regime*, and listing it in `switching_params` makes it *inferred per regime*.
+- All non-switching SSM parameters shared across regimes by default.
+- Unbalanced panel of participants (each may have a different trial count; `pad_and_align_to_T_max` end-pads to `T_max` with an emission mask). Two pooling modes: **full pooling** (global SSM parameters, the default) and **no pooling** (`pooling="none"` — independent per-participant SSM parameters, with `P` and `pi0` global). The latent regime sequence `s_{n,1:T}` is always per-participant. Hierarchical (partial) pooling of regime-specific parameters is a deferred Phase 6.1 extension (§8).
+- Configurable Dirichlet prior on each row of the transition matrix (sticky concentration by default), specified via the HSSM-style prior-dict surface.
+- Initial-state distribution `pi0`: fixed uniform by default; user-overridable to a fixed vector or an opt-in estimable (global) Dirichlet `pi0`.
+- Per-regime `p_outlier` lapse mixture: when `p_outlier` is in `switching_params` (inferred) or supplied as a length-K vector (fixed), each regime's emission becomes `(1 - p_outlier_k) * SSM_k + p_outlier_k * lapse` (fixed `Uniform(0, 20)` lapse over RT).
+- Automatic `ordered`-transform ordering constraint to break label-switching symmetry.
 - Both `analytical` and `approx_differentiable` (with `backend="jax"` and `backend="pytensor"`) emission backends for any SSM model supported by HSSM.
 - Post-hoc Forward-Filter Backward-Sample (FFBS) regime recovery as a method on the class.
 
@@ -110,13 +109,13 @@ The first version targets the **simplest useful case** so that we can:
 
 These are deferred but **must be accommodated by the v1 architecture** so they can be added later without breaking changes. Each appears in the design with an explicit extension hook (see Section 8).
 
-- Hierarchical pooling of regime-specific or transition-matrix parameters across participants.
+- Hierarchical (partial) pooling of regime-specific or transition-matrix parameters across participants.
 - Covariate-driven transitions (`P` as a function of trial-level covariates).
 - Per-regime priors or regressions for switching parameters (e.g. `v_0 ~ 1 + difficulty`, `v_1 ~ 1 + difficulty`).
-- Estimable initial-state distribution `pi0`.
+- Per-participant (non-global) initial-state distribution `pi0`.
 - Duration-dependent (semi-Markov) regimes.
 - Cross-emission models (e.g. one regime is a DDM, another is a uniform "guess" distribution).
-- Per-trial lapse mixture (`p_outlier` / `lapse`) inside a regime's emission. v1 rejects these inherited kwargs (decision 10.1.9); the HMM handles lapses structurally via a regime.
+- The *global iid* per-trial lapse mixture — a single shared `p_outlier` / `lapse` rate. v1 rejects this inherited form (decision 10.1.9); the HMM handles lapses structurally via a regime. (A *per-regime* `p_outlier` is supported — see §1.2.)
 - Model comparison across `K` (LOO/WAIC is delicate for HMMs because observations are not conditionally iid; flagged but not solved).
 
 ### 1.4 PR boundary (open)
@@ -167,8 +166,8 @@ HSSM-HMM follows the same skeleton — subclass `HSSMBase`, custom config datacl
 ### 3.1 Notation
 
 - `K` — number of regimes (an integer `>= 2`).
-- `T` — number of trials per participant.
-- `N` — number of participants. Total trials = `N * T` (balanced panel).
+- `T` — trials per participant (`T_n`; `T_max = max_n T_n` after end-padding).
+- `N` — number of participants. The panel may be unbalanced; it is padded to a rectangular `N * T_max` with an emission mask, so notation below writes `T` for `T_max`.
 - `s_{n,t} in {0, ..., K-1}` — hidden regime label for participant `n` at trial `t`.
 - `y_{n,t} = (rt_{n,t}, response_{n,t})` — observed emission.
 - `theta_switching` — SSM parameters that vary by regime. Each is a length-K vector.
@@ -228,7 +227,7 @@ This is exactly what the tutorial does, and the feasibility prototype confirmed 
 
 v1 runs **one** batched `pytensor.scan` over `T` and vectorises over participants — *not* `N` separate scans. The feasibility prototype showed the Python-loop-over-subjects pattern doesn't scale (~2.5 min at N=5, didn't finish a 400-draw run at N=20 in 40+ min); details below.
 
-For balanced panels of `N` participants and `T` trials each, the builder reshapes the input `(N*T, ...)` arrays to `(N, T, ...)` internally and runs a single forward recursion whose hidden-state tensor carries a leading participant axis. The recursion proceeds along the *trial* axis, and at every step its scan step processes all N participants in parallel.
+The builder end-pads each participant to `T_max` (`pad_and_align_to_T_max`), reshapes the `(N*T_max, ...)` arrays to `(N, T_max, ...)` internally, and runs a single forward recursion whose hidden-state tensor carries a leading participant axis. The recursion proceeds along the *trial* axis, and at every step its scan step processes all N participants in parallel. Padded steps are zeroed by an `(N, T_max)` emission mask: a padded step contributes a log-emission of 0 for every regime, and because each row of `P` sums to 1 the running marginal is left exactly unchanged after a participant's last real trial (so unbalanced panels are exact, not approximate).
 
 Concretely, the per-step `log_alpha` has shape `(N, K)` rather than `(K,)`, and the transition update broadcasts the `(K, K)` log-transition matrix against the `(N, K, 1)` previous-state tensor:
 
@@ -244,7 +243,7 @@ The joint marginal `sum_n L_n` is then `pt.sum(pt.logsumexp(log_alpha_T, axis=1)
 
 **Why not a Python for-loop over participants.** The feasibility prototype tried the obvious "loop over n in Python, build one `pytensor.scan` per subject" pattern. At `N = 1` it works fine. At `N = 5` it samples in ~2.5 min. At `N = 20` it never finished a 400-draw run in 40+ minutes — because each per-subject scan becomes its own JIT-compile unit and per-subject compilation dominates. The batched single-scan pattern above scales linearly in N for the leaf compute while keeping compilation roughly constant in N.
 
-Row-order assumption (inherited from RLSSM): rows are grouped by participant, and within each participant they appear in trial order. The class validates this via `validate_balanced_panel` before constructing the builder.
+Row-order assumption (inherited from RLSSM): rows are grouped by participant, and within each participant they appear in trial order. `pad_and_align_to_T_max` validates per-participant row contiguity (and requires `T_max >= 2`) before constructing the builder.
 
 ---
 
@@ -256,7 +255,7 @@ The implementation separates three concerns so that future extensions touch the 
 
 | Layer | Responsibility | Future extension points |
 |---|---|---|
-| **L1: Chain dynamics** | Initial distribution, transition matrix, forward recursion | Covariate-driven `P`; estimable `pi0`; semi-Markov durations |
+| **L1: Chain dynamics** | Initial distribution, transition matrix, forward recursion | Covariate-driven `P`; per-participant `pi0`; semi-Markov durations |
 | **L2: Emission** | Per-regime SSM log-density evaluation | Cross-emission models; new SSMs |
 | **L3: Composition** | Builds the differentiable Op by composing L1 + L2 | None expected — the seam is the contract between layers |
 
@@ -264,13 +263,13 @@ L3 is the builder invoked inside `_build_pymc_model` (Section 5.4). The class it
 
 ### 4.2 Module layout
 
-A new subpackage `src/hssm/hmm/`, structured to mirror the existing `src/hssm/rl/` subpackage (which houses `RLSSM`). Folders are named after the *domain* (`rl/`, `hmm/`), classes after themselves — both classes are re-exported from `hssm/__init__.py`, so users write `from hssm import HSSM_HMM` and never reference the folder.
+A new subpackage `src/hssm/hmm/`, structured to mirror the existing `src/hssm/rl/` subpackage (which houses `RLSSM`). Folders are named after the *domain* (`rl/`, `hmm/`), classes after themselves — both classes are re-exported from `hssm/__init__.py`, so users write `from hssm import RSSSM` and never reference the folder.
 
 ```
 src/hssm/hmm/
   __init__.py
-  hmm.py              # HSSM_HMM(HSSMBase)
-  config.py           # HMMConfig(BaseModelConfig)
+  rsssm.py            # RSSSM(HSSMBase)
+  config.py           # RSSSMConfig(BaseModelConfig)
   likelihoods/
     __init__.py
     builder.py        # make_hmm_logp_op(...) — composes L1 + L2 into a model-builder closure adding the joint-marginal pm.Potential (analytical and LAN alike)
@@ -278,19 +277,19 @@ src/hssm/hmm/
     emissions.py      # L2: helper to resolve a per-regime SSM logp
   ordering.py         # Label-switching heuristic
   ffbs.py             # Post-hoc FFBS regime recovery + per-trial logp (Section 5.6)
-  utils.py            # validate_balanced_panel re-export, K checks, etc.
+  utils.py            # pad_and_align_to_T_max (end-padding + mask), K checks, etc.
 ```
 
 File-by-file correspondence with the `rl/` template:
 
 | `src/hssm/rl/` (exists) | `src/hssm/hmm/` (this design) | Role |
 |---|---|---|
-| `rl/rlssm.py` → `RLSSM` | `hmm/hmm.py` → `HSSM_HMM` | the top-level user-facing class |
-| `rl/config.py` → `RLSSMConfig` | `hmm/config.py` → `HMMConfig` | the config dataclass |
+| `rl/rlssm.py` → `RLSSM` | `hmm/rsssm.py` → `RSSSM` | the top-level user-facing class |
+| `rl/config.py` → `RLSSMConfig` | `hmm/config.py` → `RSSSMConfig` | the config dataclass |
 | `rl/likelihoods/builder.py` | `hmm/likelihoods/builder.py` | builds the differentiable loglik |
 | *(no equivalent)* | `hmm/likelihoods/forward.py` | L1: forward recursion |
 | *(no equivalent)* | `hmm/likelihoods/emissions.py` | L2: per-regime SSM logp |
-| `rl/utils.py` → `validate_balanced_panel` | `hmm/utils.py` | panel validation, K checks |
+| `rl/utils.py` → `validate_balanced_panel` | `hmm/utils.py` → `pad_and_align_to_T_max` | panel preprocessing (end-pad + mask), K checks |
 | *(no equivalent)* | `hmm/ordering.py` | label-switching heuristic |
 | *(no equivalent)* | `hmm/ffbs.py` | post-hoc FFBS + per-trial logp |
 
@@ -299,8 +298,8 @@ The "no equivalent" rows are HMM-specific concerns (the forward algorithm, the d
 User-facing API:
 
 ```python
-from hssm import HSSM_HMM  # re-exported from hssm.__init__
-from hssm.hmm import HMMConfig  # advanced / custom-config path
+from hssm import RSSSM        # re-exported from hssm.__init__
+from hssm.hmm import RSSSMConfig   # advanced / custom-config path
 ```
 
 ### 4.3 Workflow at a glance
@@ -318,7 +317,7 @@ Stages 1–3 happen in `__init__` (Section 5.4); stage 4 is `sample()` (Section
 
 ```mermaid
 flowchart TD
-    A[1. Construct HSSM_HMM]
+    A[1. Construct RSSSM]
     B[2. Validate panel and config]
     C[3. Build PyMC model graph]
     D[4. sample — NUTS]
@@ -330,8 +329,8 @@ flowchart TD
 
 | Stage | What runs | Detail in |
 |---|---|---|
-| 1 | `HSSM_HMM.__init__` — store args, resolve config | §5.4 |
-| 2 | `HMMConfig.validate`, `validate_balanced_panel`; rejects `missing_data` / `deadline` / `p_outlier` / `lapse` | §5.4, decision 10.1.9 |
+| 1 | `RSSSM.__init__` — store args, resolve config | §5.4 |
+| 2 | `RSSSMConfig.validate`, `pad_and_align_to_T_max`; rejects `missing_data` / `deadline` / top-level `lapse` / global iid `p_outlier` | §5.4, decision 10.1.9 |
 | 3 | `_build_pymc_model` — opens one `pm.Model()`, declares all RVs, adds the forward `pm.Potential` (no bambi) | §5.4, decision 10.1.8 |
 | 4 | `self.sample(...)` overridden — calls `pm.sample(model=self.pymc_model, ...)` | §6.3 |
 | 5 | Returned `arviz.InferenceData` holds `P`, `pi0`, switching and shared params. The hidden regimes `s_t` are **never sampled** — the forward algorithm sums them out inside the likelihood in stage 3, so NUTS sees a purely continuous parameter space. | §3.3, §3.4 |
@@ -377,13 +376,13 @@ The cost concentrates in the `(N, T, K)` emission: the SSM likelihood is evaluat
 
 ### 4.4 Public exports
 
-- `HSSM_HMM` — main class (also re-exported from `hssm`).
-- `HMMConfig` — config dataclass (mirrors `RLSSMConfig`'s role).
+- `RSSSM` — main class (also re-exported from `hssm`).
+- `RSSSMConfig` — config dataclass (mirrors `RLSSMConfig`'s role).
 - The config-spec dataclasses a user needs for the advanced path (Section 6.2):
   the v1 variants of each typed union — `StickyDirichlet`, `DirichletConcentration`,
   `UniformInitialDistribution`, `FixedInitialDistribution`, `AutoOrdering`,
   `OrderByParam`, `NoOrdering`, `NoPooling`. These are part of the public API
-  because building an `HMMConfig` by hand requires them.
+  because building an `RSSSMConfig` by hand requires them.
 - Nothing else from `hssm.hmm` is public in v1. The Op factory, FFBS, and
   helpers are internal.
 
@@ -391,11 +390,11 @@ The cost concentrates in the `(N, T, K)` emission: the SSM likelihood is evaluat
 
 ## 5. Component design
 
-### 5.1 `HMMConfig(BaseModelConfig)`
+### 5.1 `RSSSMConfig(BaseModelConfig)`
 
 ```python
 @dataclass
-class HMMConfig(BaseModelConfig):
+class RSSSMConfig(BaseModelConfig):
     # --- Markov chain structure ---
     K: int = field(kw_only=True)
     switching_params: list[str] = field(kw_only=True)
@@ -406,8 +405,8 @@ class HMMConfig(BaseModelConfig):
     )
 
     # --- Emission ---
-    decision_process: str | BaseModelConfig = field(kw_only=True)
-    decision_process_loglik_kind: LoglikKind = field(kw_only=True)
+    model: str | BaseModelConfig = field(kw_only=True)
+    loglik_kind: LoglikKind = field(kw_only=True)
     emission_logp_func: Any = field(default=None, kw_only=True)
     # backend: Literal["jax", "pytensor"] is inherited from BaseModelConfig
     # (default "jax" for approx_differentiable; analytical likelihoods are pytensor).
@@ -415,23 +414,23 @@ class HMMConfig(BaseModelConfig):
     # --- Label-switching ---
     ordering: OrderingSpec = field(default_factory=AutoOrdering, kw_only=True)
 
-    # --- Hierarchical / pooling (v1: no-op; reserved for v2) ---
-    pooling: PoolingSpec = field(default_factory=NoPooling, kw_only=True)
+    # --- Pooling across participants (v1: full default, or "none") ---
+    pooling: PoolingSpec = field(default_factory=FullPooling, kw_only=True)
 ```
 
-`TransitionPriorSpec`, `InitialDistributionSpec`, `OrderingSpec`, `PoolingSpec` are typed unions of small dataclasses. Each starts with one "default" concrete case in v1 and the design leaves room for additional cases without API changes:
+`TransitionPriorSpec`, `InitialDistributionSpec`, `OrderingSpec`, `PoolingSpec` are typed unions of small dataclasses. Each ships its v1 cases and the design leaves room for additional cases without API changes:
 
 - `TransitionPriorSpec = StickyDirichlet | DirichletConcentration | CovariateDrivenTransition` — v1 ships the first two; the third is the documented extension hook.
-- `InitialDistributionSpec = UniformInitialDistribution | FixedInitialDistribution | DirichletInitialDistribution` — v1 ships the first two.
-- `OrderingSpec = AutoOrdering | OrderByParam | NoOrdering` — v1 ships `AutoOrdering` (default) and `NoOrdering` (escape hatch).
-- `PoolingSpec = NoPooling | PartialPooling(...) | FullPooling(...)` — v1 ships only `NoPooling`.
+- `InitialDistributionSpec = UniformInitialDistribution | FixedInitialDistribution | DirichletInitialDistribution` — v1 ships all three (uniform default, fixed vector, estimable global Dirichlet).
+- `OrderingSpec = AutoOrdering | OrderByParam | NoOrdering` — v1 ships all three (`AutoOrdering` default, `OrderByParam` for an explicit anchor/direction, `NoOrdering` escape hatch).
+- `PoolingSpec = FullPooling | NoPooling | PartialPooling(...)` — v1 ships `FullPooling` (default) and `NoPooling`; `PartialPooling` is the deferred hierarchical hook.
 
 This pattern means the constructor signature **never changes** when a new variant is added; only the union grows. See §8 for the v2/v3 extension hooks that introduce the deferred variants.
 
-`HMMConfig.validate()` enforces:
+`RSSSMConfig.validate()` enforces:
 - `K >= 2`.
 - Every element of `switching_params` appears in the decision-process's `list_params`.
-- `emission_logp_func` is set (or resolvable from `decision_process` + `decision_process_loglik_kind`).
+- `emission_logp_func` is set (or resolvable from `model` + `loglik_kind`).
 - `transition_prior` is consistent with `K` (e.g. concentration matrix has shape `(K, K)`).
 
 ### 5.2 The forward-algorithm builder (`make_hmm_logp_op`)
@@ -522,29 +521,30 @@ The `ordered` transform makes the permuted modes *unreachable* — no path throu
 
 **Convention: ascending.** PyMC's `ordered` transform enforces *ascending* order, so the anchor satisfies `anchor[0] < anchor[1] < ... < anchor[K-1]` and **regime 0 is the lowest-anchor-value regime**. `OrderByParam(name=..., direction="asc"|"desc")` is the user-supplied override of *which* parameter anchors and in which direction; `direction="desc"` is realized by applying `ordered` to the negated parameter. `NoOrdering()` is the escape hatch — no transform, no constraint — emitting a `_logger.warning` that posteriors may be multi-modal.
 
-### 5.4 The class: `HSSM_HMM(HSSMBase)`
+### 5.4 The class: `RSSSM(HSSMBase)`
 
 Constructor signature mirrors `HSSM`/`RLSSM`:
 
 ```python
-class HSSM_HMM(HSSMBase):
+class RSSSM(HSSMBase):
     def __init__(
         self,
         data: pd.DataFrame,
-        decision_process: str | BaseModelConfig | None = None,
+        model: str | BaseModelConfig | None = None,
         K: int | None = None,
         switching_params: list[str] | None = None,
         *,
-        model_config: HMMConfig | None = None,
+        model_config: RSSSMConfig | None = None,
         transition_prior: TransitionPriorSpec | dict | None = None,
         initial_distribution: InitialDistributionSpec | None = None,
-        decision_process_loglik_kind: LoglikKind | None = None,
+        loglik_kind: LoglikKind | None = None,
         participant_col: str = "participant_id",
         ordering: OrderingSpec | None = None,
+        pooling: PoolingSpec | str | None = None,      # "full" (default) | "none"
         # ---- inherited HSSM kwargs ----
         include: list[...] | None = None,
-        p_outlier: float | bmb.Prior | None = None,  # v1: rejected — decision 10.1.9
-        lapse: bmb.Prior | None = None,  # v1: rejected — decision 10.1.9
+        p_outlier: float | list | bmb.Prior | None = None,  # per-regime only (decision 10.1.9)
+        lapse: bmb.Prior | None = None,                # top-level rejected — decision 10.1.9
         link_settings: ... = None,
         prior_settings: ... = "safe",
         extra_namespace: dict | None = None,
@@ -555,11 +555,11 @@ class HSSM_HMM(HSSMBase):
 ```
 
 **Two construction paths.** The constructor supports both the minimal path
-(Section 6.1 — pass `decision_process`, `K`, `switching_params` and the
-spec kwargs; the `HMMConfig` is assembled internally) and the advanced path
-(Section 6.2 — pass a fully-built `model_config=HMMConfig(...)`). Exactly one
+(Section 6.1 — pass `model`, `K`, `switching_params` and the
+spec kwargs; the `RSSSMConfig` is assembled internally) and the advanced path
+(Section 6.2 — pass a fully-built `model_config=RSSSMConfig(...)`). Exactly one
 must be supplied: if `model_config` is given, the granular args
-(`decision_process`, `K`, `switching_params`, `transition_prior`, …) must be
+(`model`, `K`, `switching_params`, `transition_prior`, …) must be
 left at their defaults, and the constructor raises a clear error on conflict.
 
 v1 builds the PyMC model directly rather than delegating to bambi — rationale at the end of this subsection ("Why bambi is deferred", decision 10.1.8).
@@ -567,16 +567,16 @@ v1 builds the PyMC model directly rather than delegating to bambi — rationale 
 Order of operations in `__init__`:
 
 1. `self._init_args = self._store_init_args(locals(), kwargs)` — captures the constructor signature for the save/load round-trip (`HSSMBase.save_model` / `load_model`). This is the one piece of `HSSMBase.__init__` setup the v1 class needs; nothing else in `HSSMBase.__init__` is required, since the v1 class bypasses the bambi build path entirely.
-2. Resolve the `HMMConfig`: if `model_config` was passed, use it directly;
+2. Resolve the `RSSSMConfig`: if `model_config` was passed, use it directly;
    otherwise build it from the granular user args (resolving defaults,
    normalizing dict-shorthand for `transition_prior`, etc.).
 3. `model_config.validate()`.
-4. **Reject incompatible inherited kwargs.** `missing_data` / `deadline` are rejected like RLSSM (they re-order rows and corrupt cross-trial structure); `p_outlier` / `lapse` are rejected too (decision 10.1.9). All four default to a sentinel (`False` / `None`); any non-sentinel value raises `NotImplementedError` with a message pointing to the supported approach. The related `loglik_missing_data` kwarg is silently ignored when `missing_data=False`.
+4. **Reject incompatible inherited kwargs.** `missing_data` / `deadline` are rejected like RLSSM (they re-order rows and corrupt cross-trial structure); the top-level `lapse` kwarg and a *global iid* `p_outlier` (a scalar / single prior not tied to a regime) are rejected too (decision 10.1.9). A *per-regime* `p_outlier` — listed in `switching_params` or a length-K vector — is accepted and plumbed into the emission. Rejected kwargs raise `NotImplementedError` with a message pointing to the supported approach.
 5. Resolve `participant_col`:
    - If `participant_col` is in `data.columns`, use it as-is.
    - Otherwise synthesize a column of constant `0` and emit `_logger.info("No participant column found; treating all rows as a single participant.")`. This handles the common single-participant case without requiring the user to add a dummy column.
-6. `validate_balanced_panel(data, participant_col)` → stash `self.n_participants`, `self.n_trials`. The helper is re-used from RLSSM ([src/hssm/rl/utils.py](../../src/hssm/rl/utils.py)) — imported directly via `hssm.rl.utils` in v1 (no module churn for a single shared helper; hoist to `src/hssm/utils.py` when a third subclass needs it — the import path inside `hssm/hmm/utils.py` is the single seam to update on hoisting).
-7. Resolve `emission_logp_func` from `decision_process` + `decision_process_loglik_kind` + the emission `backend` (default `"jax"` for `approx_differentiable`; analytical likelihoods are pytensor) if not user-supplied. `HMMConfig` inherits the `backend` field from `BaseModelConfig`.
+6. `pad_and_align_to_T_max(data, participant_col, response)` → returns `(data_padded, mask, n_participants, n_trials)`, stashed on `self`. This HMM-local preprocessor (`hssm/hmm/utils.py`) end-pads each participant to `T_max` (duplicating the last in-support trial) and builds the emission mask; it validates per-participant row contiguity and requires `T_max >= 2`. It is *not* the RLSSM balance validator (RLSSM requires balanced panels; RSSSM does not), so nothing is reused from `hssm.rl.utils`.
+7. Resolve `emission_logp_func` from `model` + `loglik_kind` + the emission `backend` (default `"jax"` for `approx_differentiable`; analytical likelihoods are pytensor) if not user-supplied. `RSSSMConfig` inherits the `backend` field from `BaseModelConfig`.
 8. `self._pymc_model = self._build_pymc_model()` — construct the PyMC model
    directly (next paragraph). No bambi, no `super().__init__()` bambi build.
 
@@ -603,7 +603,7 @@ The label-switching ordering needs no separate step: it is the `ordered`
 transform on the anchor parameter, declared when that parameter is created
 (Section 5.3).
 
-**Relationship to `HSSMBase`.** `HSSM_HMM` still subclasses `HSSMBase`, but it
+**Relationship to `HSSMBase`.** `RSSSM` still subclasses `HSSMBase`, but it
 does not use the bambi-backed construction path. It inherits the non-bambi
 surface — `_store_init_args` (save/load), the panel-validation helpers, and the
 post-fit methods that operate on the PyMC model and the `InferenceData`
@@ -612,7 +612,7 @@ never reaches `HSSMBase.__init__`'s `bmb.Model(...)` build, and it overrides
 `sample()` to call `pm.sample` on the directly-built model (inherited
 `HSSMBase.sample` routes through `self.model.fit()`, a bambi object that does
 not exist here). `HSSMBase`'s abstract `_make_model_distribution` is part of the
-bambi flow and is not used by the direct path; `HSSM_HMM` provides a minimal
+bambi flow and is not used by the direct path; `RSSSM` provides a minimal
 implementation only to satisfy the abstract-method requirement. The precise
 per-method inheritance audit (which inherited methods touch `self.model` and
 need overriding) is in Section 6.3.
@@ -709,9 +709,9 @@ import pandas as pd
 
 df = pd.read_csv("...")  # columns: rt, response, participant_id
 
-model = hssm.HSSM_HMM(
+model = hssm.RSSSM(
     data=df,
-    decision_process="ddm",
+    model="ddm",
     K=2,
     switching_params=["v"],
     transition_prior={"sticky_diag": 20.0, "sticky_offdiag": 2.0},
@@ -729,18 +729,18 @@ regimes = model.infer_regimes(idata, n_draws=200)
 import numpy as np
 import hssm
 from hssm.hmm import (
-    HMMConfig,
+    RSSSMConfig,
     DirichletConcentration,
     FixedInitialDistribution,
     OrderByParam,
 )
 
-cfg = HMMConfig(
+cfg = RSSSMConfig(
     model_name="hmm_ddm",
     K=3,
     switching_params=["v", "a"],
-    decision_process="ddm",
-    decision_process_loglik_kind="analytical",
+    model="ddm",
+    loglik_kind="analytical",
     transition_prior=DirichletConcentration(
         alpha=np.array([[30, 2, 2], [2, 30, 2], [2, 2, 30]]),
     ),
@@ -749,7 +749,7 @@ cfg = HMMConfig(
     # ... standard BaseModelConfig fields ...
 )
 
-model = hssm.HSSM_HMM(data=df, model_config=cfg)
+model = hssm.RSSSM(data=df, model_config=cfg)
 ```
 
 This is the construction path that consumes a pre-built `model_config`
@@ -761,7 +761,7 @@ v1 builds the PyMC model directly rather than through bambi (decision 10.1.8),
 so the inherited-method surface is narrower than a pure `HSSMBase` subclass.
 `HSSMBase` exposes `pymc_model` as a *property* that returns
 `self.model.backend.model` — it reaches *through* the bambi model
-([src/hssm/base.py](../../src/hssm/base.py)). `HSSM_HMM` therefore **overrides
+([src/hssm/base.py](../../src/hssm/base.py)). `RSSSM` therefore **overrides
 the `pymc_model` property** to return the directly-built model; with that one
 override in place, every method below that depends only on `pymc_model` +
 `traces` works unchanged.
@@ -793,7 +793,7 @@ regime-switching model is inherently bespoke — draw a hidden regime path from
 with the FFBS machinery (Section 5.5) and is a Phase 4 / deferred helper, not an
 inherited method.
 
-### 6.4 New methods on `HSSM_HMM` only
+### 6.4 New methods on `RSSSM` only
 
 - `infer_regimes(idata=None, n_draws=200, seed=None)` — FFBS-based regime recovery.
 - `compute_log_likelihood(idata=None)` — post-hoc per-trial logp (Section 5.6), required for `arviz.loo` / `arviz.waic` because the sampler graph contributes only the scalar marginal.
@@ -805,7 +805,7 @@ inherited method.
 
 ### 7.1 Tutorial regression
 
-The first non-trivial test reproduces [docs/tutorials/hmm_ddm_regime_switching.ipynb](../tutorials/hmm_ddm_regime_switching.ipynb) using `HSSM_HMM`:
+The first non-trivial test reproduces [docs/tutorials/hmm_ddm_regime_switching.ipynb](../tutorials/hmm_ddm_regime_switching.ipynb) using `RSSSM`:
 - Same data-generating process, same priors, same sampling settings, same seed.
 - Posterior means for `v`, `a`, `z`, `t`, `P` must match the tutorial's results **bit-for-bit** (to 4 decimal places) — the feasibility prototype confirmed this is achievable when the graph is structurally identical (scalar-marginal contribution + `ordered`-transform anchor).
 - Recovered FFBS regime probabilities must agree trial-by-trial with the tutorial's FFBS output (per-trial probabilities differing by less than 0.05 on average; the prototype matched to 4 decimal places).
@@ -858,7 +858,7 @@ no NaN/Inf propagation. The full reproduction scripts are archived under
 findings report.
 
 **Not yet exercised — Phase 2+ must still validate:**
-- the `HSSM_HMM` subclass overrides against the real `HSSMBase` (the
+- the `RSSSM` subclass overrides against the real `HSSMBase` (the
   `pymc_model` property and `sample` — Section 6.3);
 - `compute_log_likelihood` (Section 5.6) and the `infer_regimes` InferenceData
   return shape (Section 5.5);
@@ -873,13 +873,12 @@ This section is load-bearing for the v2/v3 roadmap. Every deferred feature liste
 
 | Future feature | v1 hook | Surface change |
 |---|---|---|
-| Hierarchical pooling | `PoolingSpec` union on `HMMConfig.pooling` | New variant `PartialPooling(...)`; constructor signature unchanged. |
-| Covariate-driven `P` | `TransitionPriorSpec` union on `HMMConfig.transition_prior` | New variant `CovariateDrivenTransition(formula=..., link=...)`; Op factory branches on variant type. |
+| Hierarchical (partial) pooling | `PoolingSpec` union on `RSSSMConfig.pooling` (v1 ships `FullPooling` / `NoPooling`) | New variant `PartialPooling(...)`; constructor signature unchanged. |
+| Covariate-driven `P` | `TransitionPriorSpec` union on `RSSSMConfig.transition_prior` | New variant `CovariateDrivenTransition(formula=..., link=...)`; Op factory branches on variant type. |
 | Per-regime priors / regressions for switching params | `switching_params` is `list[str]` in v1; v2 widens to `list[str] | dict[str, RegimePriorSpec]` | Backwards-compatible: a list is treated as a dict with default specs. |
-| Estimable `pi0` | `InitialDistributionSpec` union | New variant `DirichletInitialDistribution(alpha=...)`; `_build_pymc_model` declares `pi0` as an RV instead of a fixed vector. |
+| Per-participant (non-global) `pi0` | `InitialDistributionSpec` union (v1 ships uniform / fixed-vector / global Dirichlet) | New variant or a per-participant Dirichlet; `_build_pymc_model` declares a per-participant `pi0`. |
 | Semi-Markov durations | Layer 1 (`forward.py`) gains a new recursion implementation; `TransitionPriorSpec` union grows | The L1 contract (in → scalar log-marginal) is unchanged. |
-| Cross-emission models | Layer 2 (`emissions.py`) gains a path for "one emission spec per regime" | `decision_process` becomes `str | list[str]` (uniform vs per-regime); validated by `HMMConfig.validate`. |
-| Per-trial lapse mixture within a regime | `p_outlier` / `lapse` rejected in v1 (decision 10.1.9) | L2 emission gains a `(1 - p_outlier) * SSM + p_outlier * lapse` wrap per regime; constructor stops rejecting the kwargs. |
+| Cross-emission models | Layer 2 (`emissions.py`) gains a path for "one emission spec per regime" | `model` becomes `str | list[str]` (uniform vs per-regime); validated by `RSSSMConfig.validate`. |
 | New SSMs | None — L2 already resolves via `make_distribution_for_supported_model` | Free. |
 
 Design principles enforced by this table:
@@ -914,21 +913,21 @@ Tracking issue should list these as separate items. Whether they ship in one PR 
 
 ### Phase 2 — Core implementation (analytical backend)
 
-**Staging note.** This phase implements the v1 model **generic in `K` and in `N` (number of participants on the balanced panel) from the first line of code** — there is no "K=2 then generalize" step. Generalizing the regime count is free: the forward recursion is a `logsumexp` over `K`, the transition matrix is `(K, K)`, the `ordered`-transform anchor is length-`K`, and the emission tensor is `(N, T, K)`. A K=2 hardcode is the identical code with a literal in place of a symbol, so a "prototype at K=2" milestone would buy nothing and a single-participant version would be throwaway scaffolding. ("Generic in N" means any number of participants on a balanced panel; **panel structure** remains balanced — that is a v1 constraint, not staging.) The feasibility prototype (Section 7.4) has *already* validated
+**Staging note.** This phase implements the v1 model **generic in `K` and in `N` (number of participants) from the first line of code** — there is no "K=2 then generalize" step. Generalizing the regime count is free: the forward recursion is a `logsumexp` over `K`, the transition matrix is `(K, K)`, the `ordered`-transform anchor is length-`K`, and the emission tensor is `(N, T, K)`. A K=2 hardcode is the identical code with a literal in place of a symbol, so a "prototype at K=2" milestone would buy nothing and a single-participant version would be throwaway scaffolding. ("Generic in N" means any number of participants; panels may be **unbalanced** — end-padding + an emission mask handle differing trial counts, see Section 3.5.) The feasibility prototype (Section 7.4) has *already* validated
 K=2 and K=3, single- and multi-participant, on this architecture — the
 architectural risk this phase would otherwise retire is already retired. What
 remains is production implementation, not a proof of concept.
 
 - `hssm/hmm/` package skeleton.
-- `HMMConfig` — the full v1 field set (Section 5.1), K-generic and N-generic;
+- `RSSSMConfig` — the full v1 field set (Section 5.1), K-generic and N-generic;
   no K=2 / single-participant special-casing.
 - L1 batched forward recursion (scalar marginal — Section 3.4) over the
   `(participant, trial)` panel: the **single batched scan** of Section 3.5
   (decision 10.1.7), with `N = 1` handled as the degenerate case, not a separate
   code path. L2 analytical SSM emission + L3 model-builder closure.
-- `HSSM_HMM.__init__` / `_build_pymc_model` — builds `pm.Model` directly
+- `RSSSM.__init__` / `_build_pymc_model` — builds `pm.Model` directly
   (decision 10.1.8; bambi deferred), including `participant_col` resolution and
-  `validate_balanced_panel`.
+  `pad_and_align_to_T_max` (end-pad + mask).
 - Label-switching: the `ordered`-transform anchor (Section 5.3), the
   `AutoOrdering` heuristic, and the `OrderByParam` / `NoOrdering` variants.
 - **First test gate: the tutorial regression test (Section 7.1)** — K=2, single
@@ -953,13 +952,13 @@ op) from the analytical `logp_ddm` call.
 - Test against tutorial FFBS outputs.
 
 ### Phase 5 — Documentation
-- User-facing tutorial notebook in `docs/tutorials/` mirroring `hmm_ddm_regime_switching.ipynb` but using `HSSM_HMM`.
+- User-facing tutorial notebook in `docs/tutorials/` mirroring `hmm_ddm_regime_switching.ipynb` but using `RSSSM`.
 - API docs entry under `docs/api/`.
 - Changelog entry.
 
 ### Phase 6+ — Deferred features (separate PRs, in priority order)
-1. Hierarchical pooling of switching params across participants.
-2. Estimable `pi0`.
+1. Hierarchical (partial) pooling of switching params across participants.
+2. Per-participant (non-global) `pi0`.
 3. Covariate-driven transitions.
 4. Per-regime priors / regressions for switching params.
 5. Cross-emission and semi-Markov support.
@@ -978,7 +977,7 @@ land a working v1 class.
 
 2. **`participant_col` default and missing-column behavior.** If the column is absent from `data`, synthesize a constant column and emit a `_logger.info` message identifying the choice. This makes single-participant usage friction-free without surprising multi-participant users. Spelled out in Section 5.4 step 5.
 
-3. **`validate_balanced_panel` location.** Import from `hssm.rl.utils` for v1 — no module churn for a single shared helper. Hoist to `hssm.utils` when a third subclass needs it. Single import seam inside `hssm/hmm/utils.py`. Spelled out in §5.4 step 6.
+3. **Panel preprocessing: `pad_and_align_to_T_max` (HMM-local, not reused from RLSSM).** Because v1 supports *unbalanced* panels, the RLSSM balance *validator* does not fit; `hssm/hmm/utils.py` ships its own `pad_and_align_to_T_max` preprocessor that end-pads each participant to `T_max` (duplicating the last in-support trial) and returns an emission mask. It validates row contiguity per participant and requires `T_max >= 2`. Spelled out in §5.4 step 6.
 
 4. **The likelihood is contributed as a scalar marginal.** v1 contributes the forward-algorithm marginal `L` to the model as a single scalar `pm.Potential` per evaluation — the form the tutorial uses and the feasibility prototype validated (chains converge to the same mode; posteriors match the tutorial bit-for-bit, R-hat ≈ 1.0). This bypasses `make_distribution`'s per-trial contract rather than satisfying it; per-trial logp for `arviz.loo` / the `log_likelihood` group is reconstructed post-hoc via `compute_log_likelihood`. Spelled out in Section 3.4 and Section 5.6.
 
@@ -1007,7 +1006,7 @@ land a working v1 class.
    consumes `P`/`pi0` that cannot exist until after the build). v1 instead
    builds `pm.Model` directly in `_build_pymc_model` (Section 5.4), declaring
    every node in dependency order — the path the feasibility prototype validated
-   end-to-end against the tutorial. `HSSM_HMM` remains an `HSSMBase` subclass
+   end-to-end against the tutorial. `RSSSM` remains an `HSSMBase` subclass
    for the non-bambi surface (save/load, panel validation, post-fit methods) and
    overrides `__init__` and `sample`.
 
@@ -1023,28 +1022,49 @@ land a working v1 class.
    response and build-order hook — through a v1 that has no regressions to
    exercise it. Spelled out in Section 5.4.
 
-9. **`p_outlier` / `lapse` are rejected in v1.** HSSM's standard lapse handling
-   is a per-trial mixture — `(1 - p_outlier) * SSM + p_outlier * lapse`, applied
-   independently to each trial. Issue #957 motivates the HMM precisely as the
-   *alternative* to that mixture: the HMM models contaminant / off-task
-   behavior structurally, as a hidden regime the subject occupies for a stretch
-   of trials (temporally clustered lapses, which a per-trial 5% mixture cannot
-   capture). Carrying `p_outlier` into the HMM would (a) silently double-model
-   lapses two incompatible ways, and (b) have nowhere to attach — the v1
-   likelihood is the forward-algorithm scalar marginal (decision 10.1.4), with no
-   per-trial `logp` for the mixture to plug into. v1 therefore rejects both:
-   `p_outlier` and `lapse` default to `None`, and any non-`None` value (`0`
-   included) raises `NotImplementedError` with a message pointing the user to
-   the regime-based approach — the same rejection pattern used for
-   `missing_data` / `deadline`. The per-regime emission mixture (a regime's own
-   SSM density carrying a per-trial mixture) is a legitimate future feature —
-   deferred; see Section 1.3 and the Section 8 extension table. Spelled out in Section 5.4 step 4.
+9. **The *global iid* `p_outlier` / `lapse` is rejected; *per-regime* `p_outlier`
+   is supported.** HSSM's standard lapse handling is a per-trial mixture —
+   `(1 - p_outlier) * SSM + p_outlier * lapse` — with a *single shared* rate.
+   Issue #957 motivates the HMM precisely as the *alternative* to that global
+   mixture: the HMM models contaminant / off-task behavior structurally, as a
+   hidden regime the subject occupies for a stretch of trials (temporally
+   clustered lapses a per-trial 5% mixture cannot capture). A single global
+   `p_outlier` would (a) double-model lapses two incompatible ways and (b) have
+   nowhere to attach cleanly. v1 therefore **rejects the global iid form**: a
+   scalar / single prior `p_outlier` not tied to a regime raises
+   `NotImplementedError`, as do the top-level `lapse` kwarg and
+   `missing_data` / `deadline`.
+
+   What v1 *does* support is a **per-regime** `p_outlier`: list it in
+   `switching_params` (inferred per regime, default `Beta(1, 15)` prior) or pass
+   a length-K vector (fixed per regime). Each regime's emission then becomes
+   `(1 - p_outlier_k) * SSM_k + p_outlier_k * lapse` with a fixed `Uniform(0, 20)`
+   lapse over RT — this attaches inside L2 (the per-regime emission), so it
+   composes with the scalar-marginal forward recursion without a per-trial logp.
+   `p_outlier` is never an auto-ordering anchor (the `ordered` transform on the
+   bounded Beta is numerically unstable). Spelled out in §1.2, §5.4 step 4, and
+   resolved from PR #968 review (Option B, generalized to all params).
+
+10. **`numpyro` is the code default sampler for `RSSSM.sample()`.** Unlike
+    `HSSM` / `RLSSM` (whose `pm.sample` default — PyMC NUTS — is kept), `RSSSM`
+    hard-codes `nuts_sampler="numpyro"`. The batched forward `pytensor.scan`
+    JIT-compiles to `jax.lax.scan` under numpyro and is dramatically faster than
+    the PyMC C backend on the recursion (the difference is large enough that the
+    PyMC default is impractical for realistic panels, and the tutorial already
+    used numpyro for this reason). `jax` / `numpyro` are core HSSM dependencies,
+    so the default is always available. This supersedes the earlier proposal
+    (former §10.2 open question 1) to keep the PyMC default and only document
+    numpyro: in practice the speed gap made numpyro the right *code* default, not
+    just a recommendation. Users can still override via `sample(nuts_sampler=...)`.
+    Spelled out in Section 6.3 and the `RSSSM.sample` docstring.
 
 ### 10.2 Open questions
 
 These remain to be resolved before Phase 2 begins (or, where noted, during implementation).
 
-1. **Sampler default for HSSM-HMM.** The tutorial uses `nuts_sampler="numpyro"` because the LAN + JAX backend makes the PyMC default very slow. `HSSM_HMM` overrides `sample()` to call `pm.sample` directly (Section 6.3; decision 10.1.8), so the question is only which default that override passes through. **Proposed:** keep `pm.sample`'s own default (the PyMC NUTS sampler) as the code default — do not hard-code `numpyro` — and document the `numpyro` recommendation in the tutorial. This keeps the code default consistent with `HSSM`/`RLSSM` while still steering users to the fast path in practice.
+1. **Sampler default for `RSSSM`.** *Resolved — see decision 10.1.10.* The code
+   hard-codes `nuts_sampler="numpyro"` rather than keeping the PyMC default: the
+   batched scan is far faster under numpyro and `jax`/`numpyro` are core deps.
 
 2. **`infer_regimes` return shape: per-draw sequences vs marginal probabilities.** Section 5.5 returns both. **Proposed:** keep both — they serve different downstream uses (per-draw for plotting credible bands, marginals for trial-level summaries).
 
@@ -1071,8 +1091,9 @@ These remain to be resolved before Phase 2 begins (or, where noted, during imple
 
 **Created:**
 - `src/hssm/hmm/__init__.py`
-- `src/hssm/hmm/hmm.py`
+- `src/hssm/hmm/rsssm.py`
 - `src/hssm/hmm/config.py`
+- `src/hssm/hmm/specs.py`
 - `src/hssm/hmm/likelihoods/__init__.py`
 - `src/hssm/hmm/likelihoods/builder.py`
 - `src/hssm/hmm/likelihoods/forward.py`
@@ -1085,6 +1106,6 @@ These remain to be resolved before Phase 2 begins (or, where noted, during imple
 - `docs/api/hmm.md` (Phase 5)
 
 **Modified:**
-- `src/hssm/__init__.py` — re-export `HSSM_HMM` and `HMMConfig`.
+- `src/hssm/__init__.py` — re-export `RSSSM` and `RSSSMConfig`.
 - `docs/changelog.md` — entry under the next release.
-- Possibly `src/hssm/utils.py` — if `validate_balanced_panel` is hoisted.
+- Possibly `src/hssm/utils.py` — if a panel preprocessor is later shared across subclasses.

@@ -142,3 +142,22 @@ class RSSSMConfig(BaseModelConfig):
                     f"Fixed-per-regime value for {name!r} has length {len(spec)}, "
                     f"expected K={self.K}."
                 )
+        # A model in which no parameter differs across regimes is degenerate: the
+        # emission is identical in every regime, so the regimes are interchangeable
+        # and the transition structure is unidentifiable.  This happens when there
+        # are no switching_params and no fixed-per-regime vectors.  It is a valid
+        # graph (and occasionally useful as a null model), so warn rather than raise.
+        has_per_regime = bool(self.switching_params) or any(
+            isinstance(spec, (list, tuple))
+            or (isinstance(spec, np.ndarray) and spec.ndim == 1)
+            for spec in self.param_specs.values()
+        )
+        if not has_per_regime:
+            _logger.warning(
+                "No parameter differs across regimes (switching_params is empty and "
+                "no fixed-per-regime values were given): the %d regimes are "
+                "interchangeable and the transition structure is unidentifiable. "
+                "Add at least one parameter to switching_params or supply a "
+                "length-K fixed value to make the regimes distinguishable.",
+                self.K,
+            )

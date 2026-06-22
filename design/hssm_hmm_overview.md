@@ -9,7 +9,7 @@ This is a short companion to the rigorous design document. Audience: applied use
 
 ## What we're building
 
-A new top-level class `HSSM_HMM` that fits **regime-switching sequential sampling models**. The model assumes:
+A new top-level class `RSSSM` that fits **regime-switching sequential sampling models**. The model assumes:
 
 - A participant's behavior in a task alternates between a small number of unobserved cognitive "regimes" (e.g. attentive vs. distracted, speed-emphasis vs. accuracy-emphasis).
 - The regime evolves trial-to-trial as a Markov chain.
@@ -34,14 +34,14 @@ Two driving use cases came up repeatedly in user requests:
 Fit a regime-switching DDM (or any SSM HSSM supports) in three lines:
 
 ```python
-model = hssm.HSSM_HMM(
+model = hssm.RSSSM(
     data=df,
-    decision_process="ddm",
+    model="ddm",
     K=2,
     switching_params=["v"],
 )
-idata = model.sample()
-regimes = model.infer_regimes(idata)
+idata   = model.sample()
+regimes = model.infer_regimes()
 ```
 
 What you get back:
@@ -57,21 +57,24 @@ We've drawn a tight boundary for v1 so the first version ships quickly and match
 
 **Included in v1:**
 - Any number of regimes `K >= 2`.
-- Any subset of SSM parameters can switch by regime.
+- Any subset of SSM parameters can switch by regime; each parameter follows a three-mode rule (shared scalar / fixed-per-regime length-K vector / inferred-per-regime prior).
 - Both analytical (DDM) and LAN-based (approximate differentiable) emission backends.
-- Balanced panels of participants — every participant must have the same number of trials.
-- Sticky-Dirichlet prior on the transition matrix (the standard "regimes persist" prior).
+- Unbalanced panels of participants — each participant may have a different number of trials (end-padding + an emission mask keep the marginal exact).
+- Full pooling (global SSM parameters, the default) and no pooling (`pooling="none"`, independent per-participant SSM parameters; `P` and `pi0` stay global).
+- Sticky-Dirichlet prior on the transition matrix (the standard "regimes persist" prior), with a Dirichlet prior surface harmonized with HSSM's prior dicts.
+- Initial-state distribution: fixed-uniform by default, with an opt-in estimable (global) Dirichlet `pi0` and a fixed-vector option.
+- Per-regime `p_outlier` lapse mixture — a regime's emission may carry `(1 - p_outlier_k) * SSM_k + p_outlier_k * lapse` when `p_outlier` is listed in `switching_params` (inferred) or supplied as a length-K vector (fixed). The *global iid* `p_outlier` mixture remains rejected (it would double-model the lapse regime).
 - Automatic handling of label-switching (no manual ordering constraint needed).
 - Forward-Filter Backward-Sample (FFBS) regime recovery as a method.
 
 **Deferred to later versions** (all with named extension hooks in the architecture):
-- Hierarchical pooling of regime-specific or transition parameters across participants.
+- Hierarchical (partial) pooling of regime-specific or transition parameters across participants.
 - Transition matrices that depend on trial-level covariates.
 - Per-regime priors or regressions for switching parameters.
-- Estimable initial-state distribution.
+- Per-participant (non-global) initial-state distribution.
 - Mixed-emission models (different regimes use different SSMs).
 - Semi-Markov regime durations.
-- The per-trial lapse mixture (`p_outlier` / `lapse`). v1 rejects these inherited arguments outright — the HMM handles lapses *structurally*, as a regime (see "Why this matters" above), so the iid mixture would double-model the same effect.
+- The *global iid* per-trial lapse mixture (`p_outlier` / `lapse` as a single shared rate). v1 rejects this inherited form outright — the HMM handles lapses *structurally*, as a regime (see "Why this matters" above), so the iid mixture would double-model the same effect. (Per-regime `p_outlier` *is* supported — see the included list.)
 
 The full design document explains how each deferred feature plugs in — they're all **additions** to the v1 architecture, not refactors of it.
 
@@ -79,7 +82,7 @@ The full design document explains how each deferred feature plugs in — they're
 
 ## How it fits in the package
 
-`HSSM_HMM` joins the family alongside `HSSM` (per-trial emission-only models) and `RLSSM` (deterministic across-trial dynamics via reinforcement learning). It subclasses `HSSMBase`, keeps the familiar `.sample()` / `.summary()` API and the same priors and data conventions, and follows `RLSSM`'s structural pattern — across-trial coupling through a custom differentiable likelihood. One deliberate difference: the HMM's regime structure (a transition matrix, regime-indexed parameter vectors) cannot be expressed through bambi's regression formulas, so the model is built directly in PyMC rather than via bambi. The rigorous doc (decision 8) explains why, and how bambi re-enters cleanly if per-regime regressions are added later.
+`RSSSM` joins the family alongside `HSSM` (per-trial emission-only models) and `RLSSM` (deterministic across-trial dynamics via reinforcement learning). It subclasses `HSSMBase`, keeps the familiar `.sample()` / `.summary()` API and the same priors and data conventions, and follows `RLSSM`'s structural pattern — across-trial coupling through a custom differentiable likelihood. One deliberate difference: the HMM's regime structure (a transition matrix, regime-indexed parameter vectors) cannot be expressed through bambi's regression formulas, so the model is built directly in PyMC rather than via bambi. The rigorous doc (decision 8) explains why, and how bambi re-enters cleanly if per-regime regressions are added later.
 
 ---
 
@@ -107,7 +110,7 @@ The design is **feasibility-validated** across the full v1 scope. Throwaway prot
 - **Likelihood.** The hidden regimes are marginalized analytically by the forward algorithm and contributed as a single scalar — the form the tutorial uses. Per-trial log-likelihood for `arviz.loo` is reconstructed post-hoc.
 - **Label-switching.** Broken automatically by an `ordered` transform on one switching parameter. (A soft penalty was tried first; it fails for K ≥ 3.)
 - **Model construction.** Built directly in PyMC. bambi — used by `HSSM`/`RLSSM` — cannot represent the HMM's regime-indexed latents, so it is deferred until per-regime regressions are scoped.
-- **Lapse handling.** v1 rejects the `p_outlier` mixture; lapses are modeled structurally, as a regime.
+- **Lapse handling.** v1 rejects the *global iid* `p_outlier` mixture; lapses are modeled structurally, as a regime. A *per-regime* `p_outlier` (inferred via `switching_params` or fixed via a length-K vector) is supported.
 - **Emission backends.** Analytical and LAN (`approx_differentiable`) are both validated; the LAN runs on the `jax` (default) and `pytensor` backends.
 - **Scaling.** Multi-participant panels run as one batched recursion, not a per-subject loop (which does not scale).
 
@@ -115,7 +118,7 @@ See Section 10 of the rigorous doc for the full list (nine decisions) and the ra
 
 ### Still open
 
-- **Default sampler.** Tutorial uses `nuts_sampler="numpyro"`; proposal is to keep PyMC NUTS as the code default (`HSSM_HMM` overrides `sample()` to call `pm.sample` directly) and document the numpyro recommendation in the tutorial.
+- **Default sampler.** *Resolved:* `RSSSM.sample()` hard-codes `nuts_sampler="numpyro"` (the batched scan is far faster under numpyro; `jax`/`numpyro` are core deps). Overridable via `sample(nuts_sampler=...)`. See decision 10.1.10 in the rigorous doc.
 - **`infer_regimes` return shape.** Proposal is to return both per-draw state sequences and marginal regime probabilities.
 - **PR scope.** Phases 2–5 = full v1; can ship as one PR or split. Decide as Phase 2 nears completion.
 

@@ -30,6 +30,7 @@ from hssm.hmm.ordering import resolve_anchor
 from hssm.hmm.specs import (
     DirichletConcentration,
     FixedInitialDistribution,
+    UniformInitialDistribution,
     resolve_initial_distribution,
     resolve_transition_prior,
 )
@@ -257,9 +258,9 @@ def test_resolve_transition_prior_dirichlet_dict():
 
 def test_resolve_initial_distribution_variants():
     assert isinstance(
-        resolve_initial_distribution("uniform").__class__(),
-        type(resolve_initial_distribution("uniform")),
+        resolve_initial_distribution("uniform"), UniformInitialDistribution
     )
+    assert isinstance(resolve_initial_distribution(None), UniformInitialDistribution)
     fixed = resolve_initial_distribution([0.7, 0.3])
     assert isinstance(fixed, FixedInitialDistribution)
     est = resolve_initial_distribution({"name": "Dirichlet", "alpha": [1, 1]})
@@ -715,6 +716,33 @@ def test_validate_requires_model_or_emission():
         cfg.validate()
 
 
+def test_validate_warns_on_degenerate_no_switching(tiny_df, caplog):
+    """No per-regime variation -> warn that regimes are unidentifiable."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="hssm"):
+        RSSSM(data=tiny_df, model="ddm", K=2, switching_params=[])
+    assert any(
+        "interchangeable" in rec.message and "unidentifiable" in rec.message
+        for rec in caplog.records
+    )
+
+
+def test_validate_no_warn_with_fixed_per_regime(tiny_df, caplog):
+    """A fixed-per-regime vector distinguishes regimes -> no degeneracy warning."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="hssm"):
+        RSSSM(
+            data=tiny_df,
+            model="ddm",
+            K=2,
+            switching_params=[],
+            v=[-1.0, 1.0],
+        )
+    assert not any("interchangeable" in rec.message for rec in caplog.records)
+
+
 def test_p_outlier_alone_is_not_an_anchor(small_single_participant):
     """`p_outlier` as the sole switching param builds (unordered), not NaN.
 
@@ -843,6 +871,26 @@ def test_vi_and_log_likelihood_raise(small_single_participant):
         m.vi()
     with pytest.raises(NotImplementedError, match="compute_log_likelihood"):
         m.log_likelihood()
+
+
+def test_predictive_family_raises_cleanly(small_single_participant):
+    """Out-of-scope predictive methods raise NotImplementedError, not AttributeError.
+
+    The inherited implementations reach through `self.model` (the bambi model
+    RSSSM never builds), which would otherwise leak a bare AttributeError. They
+    are overridden to point at the design §6.3 rationale.
+    """
+    m = RSSSM(data=small_single_participant, model="ddm", K=2, switching_params=["v"])
+    with pytest.raises(NotImplementedError, match="§6.3"):
+        m.sample_posterior_predictive()
+    with pytest.raises(NotImplementedError, match="§6.3"):
+        m.predict()
+    with pytest.raises(NotImplementedError, match="§6.3"):
+        m.sample_prior_predictive()
+    with pytest.raises(NotImplementedError, match="§6.3"):
+        m.plot_predictive()
+    with pytest.raises(NotImplementedError, match="bambi"):
+        m.set_alias({"v": "drift"})
 
 
 def test_graph_returns_graphviz(small_single_participant):

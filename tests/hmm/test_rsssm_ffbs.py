@@ -68,6 +68,55 @@ def test_ffbs_converges_to_exact_smoothing():
     assert np.max(np.abs(freq - gamma)) < 0.02
 
 
+def _brute_force_smoothing(log_lik, log_P, log_pi0):
+    """Exact ``p(s_t=k | y)`` by enumerating all ``K**T`` regime paths.
+
+    Fully independent of ``ffbs._forward_filter`` — it shares no code with the
+    filter under test, so it pins the filter itself rather than validating it
+    against its own output.
+    """
+    from itertools import product
+
+    T, K = log_lik.shape
+    paths = list(product(range(K), repeat=T))
+    joint = np.empty(len(paths))
+    for i, s in enumerate(paths):
+        lp = log_pi0[s[0]] + log_lik[0, s[0]]
+        for t in range(1, T):
+            lp += log_P[s[t - 1], s[t]] + log_lik[t, s[t]]
+        joint[i] = lp
+    log_norm = logsumexp(joint)
+    gamma = np.zeros((T, K))
+    for i, s in enumerate(paths):
+        w = np.exp(joint[i] - log_norm)
+        for t in range(T):
+            gamma[t, s[t]] += w
+    return gamma
+
+
+def test_forward_filter_smoothing_matches_brute_force():
+    """The NumPy filter's smoothing marginals match brute-force enumeration.
+
+    Guards against a bug in ``_forward_filter`` that would otherwise also corrupt
+    the reference in ``test_ffbs_converges_to_exact_smoothing`` (which derives its
+    ``gamma`` from the same filter).  Here ``gamma`` from ``alpha * beta`` is
+    checked against an independent ``K**T`` path enumeration.
+    """
+    rng = np.random.default_rng(7)
+    K, T = 3, 5
+    log_lik, log_P, log_pi0 = _random_hmm(rng, K, T)
+
+    log_alpha = ffbs._forward_filter(log_lik, log_P, log_pi0)
+    log_beta = np.zeros((T, K))
+    for t in range(T - 2, -1, -1):
+        for k in range(K):
+            log_beta[t, k] = logsumexp(log_P[k] + log_lik[t + 1] + log_beta[t + 1])
+    gamma_filter = softmax(log_alpha + log_beta, axis=1)
+
+    gamma_brute = _brute_force_smoothing(log_lik, log_P, log_pi0)
+    assert np.max(np.abs(gamma_filter - gamma_brute)) < 1e-10
+
+
 def test_numpy_forward_filter_matches_pytensor_marginal():
     """The NumPy filter's evidence equals the pytensor (scaled) forward marginal."""
     rng = np.random.default_rng(1)
