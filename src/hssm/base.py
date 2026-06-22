@@ -8,11 +8,12 @@ This file defines the entry class HSSM.
 
 import datetime
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Union, cast, get_args
+from typing import Any, Callable, Literal, Optional, Union, cast
 
 import arviz as az
 import bambi as bmb
@@ -48,6 +49,7 @@ from hssm.utils import (
 
 from . import plotting
 from .config import BaseModelConfig
+from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
 
@@ -115,10 +117,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
     model_config
-        A fully initialised :class:`~hssm.config.BaseModelConfig` instance
-         (typically :class:`~hssm.config.Config`) produced by the subclass
+        A fully initialised `hssm.config.BaseModelConfig` instance
+         (typically `hssm.config.Config`) produced by the subclass
          before calling ``super().__init__``. All likelihood, parameter, and
-         data information used by :class:`HSSMBase` is drawn from this object,
+         data information used by `HSSMBase` is drawn from this object,
          and it must provide populated ``loglik`` and ``list_params`` fields.
     p_outlier : optional
         The fixed lapse probability or the prior distribution of the lapse probability.
@@ -451,12 +453,20 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def supported_models(cls) -> tuple[SupportedModels, ...]:
         """Get a tuple of all supported models.
 
+        Deprecated in favor of ``hssm.list_models()``.
+
         Returns
         -------
         tuple[SupportedModels, ...]
             A tuple containing all supported model names.
         """
-        return get_args(SupportedModels)
+        warnings.warn(
+            "HSSM.supported_models is deprecated and will be removed in a "
+            "future release. Use hssm.list_models() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return list_models()
 
     @staticmethod
     def _store_init_args(
