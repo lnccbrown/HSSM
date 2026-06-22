@@ -58,17 +58,14 @@ def test_choice_only_default_params(
                 chains=1,
                 tune=10,
                 draws=10,
+                progressbar=False,
             )
 
         return
 
     if step is None:
         idata = model.sample(
-            sampler=sampler,
-            cores=1,
-            chains=1,
-            tune=10,
-            draws=10,
+            sampler=sampler, cores=1, chains=1, tune=10, draws=10, progressbar=False
         )
     else:
         idata = model.sample(
@@ -78,6 +75,7 @@ def test_choice_only_default_params(
             chains=1,
             tune=10,
             draws=10,
+            progressbar=False,
         )
 
     assert isinstance(idata, az.InferenceData)
@@ -112,17 +110,14 @@ def test_choice_only_beta_reg(
                 chains=1,
                 tune=10,
                 draws=10,
+                progressbar=False,
             )
 
         return
 
     if step is None:
         idata = model.sample(
-            sampler=sampler,
-            cores=1,
-            chains=1,
-            tune=10,
-            draws=10,
+            sampler=sampler, cores=1, chains=1, tune=10, draws=10, progressbar=False
         )
     else:
         idata = model.sample(
@@ -132,6 +127,7 @@ def test_choice_only_beta_reg(
             chains=1,
             tune=10,
             draws=10,
+            progressbar=False,
         )
 
     assert isinstance(idata, az.InferenceData)
@@ -166,17 +162,14 @@ def test_choice_only_logit_reg(
                 chains=1,
                 tune=10,
                 draws=10,
+                progressbar=False,
             )
 
         return
 
     if step is None:
         idata = model.sample(
-            sampler=sampler,
-            cores=1,
-            chains=1,
-            tune=10,
-            draws=10,
+            sampler=sampler, cores=1, chains=1, tune=10, draws=10, progressbar=False
         )
     else:
         idata = model.sample(
@@ -186,6 +179,7 @@ def test_choice_only_logit_reg(
             chains=1,
             tune=10,
             draws=10,
+            progressbar=False,
         )
 
     assert isinstance(idata, az.InferenceData)
@@ -227,17 +221,14 @@ def test_choice_only_multiple_reg(
                 chains=1,
                 tune=10,
                 draws=10,
+                progressbar=False,
             )
 
         return
 
     if step is None:
         idata = model.sample(
-            sampler=sampler,
-            cores=1,
-            chains=1,
-            tune=10,
-            draws=10,
+            sampler=sampler, cores=1, chains=1, tune=10, draws=10, progressbar=False
         )
     else:
         idata = model.sample(
@@ -247,6 +238,7 @@ def test_choice_only_multiple_reg(
             chains=1,
             tune=10,
             draws=10,
+            progressbar=False,
         )
 
     assert isinstance(idata, az.InferenceData)

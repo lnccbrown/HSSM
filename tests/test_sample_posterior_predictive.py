@@ -50,11 +50,12 @@ def test_sample_posterior_predictive(
             },
         ],
     )  # Doesn't matter what model or data we use here
-    delattr(cav_idata, "posterior_predictive")
+    if "posterior_predictive" in cav_idata:
+        del cav_idata["posterior_predictive"]
     cav_idata_copy = cav_idata.copy()
 
     posterior_predictive = model.sample_posterior_predictive(
-        idata=cav_idata_copy, draws=draws, safe_mode=safe_mode, inplace=inplace
+        dt=cav_idata_copy, draws=draws, safe_mode=safe_mode, inplace=inplace
     )
 
     if draws is None:

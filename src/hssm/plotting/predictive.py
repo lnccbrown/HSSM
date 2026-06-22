@@ -4,12 +4,11 @@ import logging
 from itertools import product
 from typing import Iterable, Literal, cast, overload
 
-import arviz as az
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import xarray as xr
 from matplotlib.axes import Axes
 
 from .utils import (
@@ -25,7 +24,7 @@ from .utils import (
 _logger = logging.getLogger("hssm")
 
 
-def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 100) -> np.ndarray:
+def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 100) -> pd.Series:
     return pd.Series(
         np.histogram(a, bins=bins, density=True)[0],  # type: ignore
         name="bin_n",
@@ -47,14 +46,14 @@ def _plot_predictive_1D(
     xlabel: str | None = "Response Time",
     ylabel: str | None = "Density",
     **kwargs,
-) -> mpl.axes.Axes:
+) -> Axes:
     """Plot the posterior predictive distribution against the observed data.
 
     Check the `plot_predictive` function below for docstring.
 
     Returns
     -------
-    mpl.Axes
+    Axes
         A matplotlib Axes object containing the plot.
     """
     if "color" in kwargs:
@@ -300,7 +299,7 @@ def _process_lines(
 
 def plot_predictive(
     model,
-    idata: az.InferenceData | None = None,
+    dt: xr.DataTree | None = None,
     data: pd.DataFrame | None = None,
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
@@ -331,15 +330,15 @@ def plot_predictive(
     ----------
     model : hssm.HSSM
         A fitted HSSM model.
-    idata : optional
-        The InferenceData object with posterior samples. If not provided, will use the
+    dt : optional
+        The DataTree object with posterior samples. If not provided, will use the
         traces object stored inside the model. If posterior predictive samples are not
-        present in this object, will generate posterior predictive samples using the
-        this InferenceData object and the original data.
+        present in this object, will generate posterior predictive samples using
+        this DataTree object and the original data.
     data : optional
         The observed data.
 
-        - If `data` is provided and the idata object does not contain a
+        - If `data` is provided and the `dt` object does not contain a
         `"posterior_predictive"` group, will generate posterior predictive samples using
         covariate provided in this object. If the group does exist, it is assumed that
         the posterior predictive samples are generated with the covariates provided in
@@ -348,9 +347,9 @@ def plot_predictive(
         "plot_data" is true or not. If `plot_data=True`, the plotting function will use
         the data stored in the `model` object and proceed as the case above. If
         `plot_data=False`, if posterior predictive samples are not present in the
-        `idata` object, the plotting function will generate posterior predictive samples
+        `dt` object, the plotting function will generate posterior predictive samples
         using the data stored in the `model` object. If posterior predictive samples
-        exist in the `idata` object, these samples will be used for plotting, but a
+        exist in the `dt` object, these samples will be used for plotting, but a
         ValueError will be thrown if any of `col` or `row` is not None.
     predictive_group : optional
         The type of predictive distribution to plot, by default "posterior_predictive".
@@ -358,8 +357,8 @@ def plot_predictive(
     plot_data : optional
         Whether to plot the observed data, by default True.
     n_samples : optional
-        When idata is provided, the number or proportion of posterior predictive samples
-        randomly drawn to be used from each chain for plotting. When idata is not
+        When `dt` is provided, the number or proportion of posterior predictive samples
+        randomly drawn to be used from each chain for plotting. When `dt` is not
         provided, the number or proportion of posterior samples to be used to generate
         posterior predictive samples. The number or proportion are defined as follows:
 
@@ -445,7 +444,7 @@ def plot_predictive(
 
     Returns
     -------
-    mpl.axes.Axes | sns.FacetGrid
+    Axes | sns.FacetGrid
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
     # Process hdi
@@ -468,8 +467,8 @@ def plot_predictive(
         if (
             (not extra_dims)
             and (not plot_data)
-            and (idata is not None)
-            and ("posterior_predictive" in idata)
+            and (dt is not None)
+            and ("posterior_predictive" in dt)
         ):
             # Allows data to be None only when plot_data=False and no extra_dims
             # and posterior predictive samples are available
@@ -477,12 +476,12 @@ def plot_predictive(
         else:
             data = model.data
 
-    idata, sampled = _use_traces_or_sample(
-        model, data, idata, n_samples=n_samples, predictive_group=predictive_group
+    dt, sampled = _use_traces_or_sample(
+        model, data, dt, n_samples=n_samples, predictive_group=predictive_group
     )
 
     plotting_df = _get_plotting_df(
-        idata,
+        dt,
         data,
         extra_dims=extra_dims,
         n_samples=None if sampled else n_samples,

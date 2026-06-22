@@ -2,7 +2,6 @@
 
 import pytest
 
-import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -99,9 +98,9 @@ class TestPlotting:
     def test__get_plotting_df(self, posterior, cavanagh_test):
         """Test _get_plotting_df."""
 
-        # Makes a mock InferenceData object
+        # Makes a mock DataTree object
         posterior_dataset = xr.Dataset(data_vars={"rt,response": posterior})
-        idata = az.InferenceData(posterior_predictive=posterior_dataset)
+        idata = xr.DataTree.from_dict({"posterior_predictive": posterior_dataset})
 
         df = _get_plotting_df(
             idata, cavanagh_test, extra_dims=["participant_id", "conf"]
@@ -189,14 +188,14 @@ class TestPlotting:
         ax1 = plot_predictive(model, ax=ax1)  # Should work directly
         assert len(ax1.get_lines()) == 2
 
-        delattr(model.traces, "posterior_predictive")
+        del model.traces["posterior_predictive"]
         _, ax2 = plt.subplots()
         ax2 = plot_predictive(
             model, ax=ax2, n_samples=2
         )  # Should sample posterior predictive
         assert len(ax2.get_lines()) == 2
         assert "posterior_predictive" in model.traces
-        assert model.traces.posterior_predictive.draw.size == 2
+        assert model.traces["posterior_predictive"].draw.size == 2
 
         with pytest.raises(ValueError):
             plot_predictive(model, groups="participant_id")
@@ -264,7 +263,14 @@ class TestPlotting:
         with pytest.raises(ValueError):
             _process_df_for_qp_plot(df=df, q=6, cond=1, correct=None)
 
-    @pytest.mark.parametrize("predictive_style", ["points", "ellipse", "both"])
+    @pytest.mark.parametrize(
+        "predictive_style",
+        [
+            "points",
+            "ellipse",
+            "both",
+        ],
+    )
     def test__plot_quantile_probability_1D(
         self, cav_idata, cavanagh_test, predictive_style
     ):
@@ -354,7 +360,7 @@ class TestPlotting:
         # but unclear where expectation is from.
         # assert len(ax1.get_lines()) == 9
 
-        delattr(model.traces, "posterior_predictive")
+        del model.traces["posterior_predictive"]
         ax2 = plot_quantile_probability(
             model, cond="stim", data=cavanagh_test, n_samples=2
         )  # Should sample posterior predictive
@@ -363,7 +369,7 @@ class TestPlotting:
         # but unclear where expectation is from.
         # assert len(ax2.get_lines()) == 9
         assert "posterior_predictive" in model.traces
-        assert model.traces.posterior_predictive.draw.size == 2
+        assert model.traces["posterior_predictive"].draw.size == 2
 
         with pytest.raises(ValueError):
             plot_quantile_probability(

@@ -1,6 +1,6 @@
 [project]
 name = "HSSM"
-version = "0.3.0"
+version = "0.4.0"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
@@ -25,18 +25,12 @@ classifiers = [
 dependencies = [
     "absl-py>=2.3.1",
     "bambi>=0.18.0",
-    "cloudpickle>=3.0.0",
-    "h5netcdf>=1.6.3",
-    "h5py>=3.14.0",
     "hddm-wfpt>=0.1.6",
     "huggingface-hub>=1.17.0",
     "jaxonnxruntime>=0.3.0",
     "numpyro>=0.19",
     "onnx>=1.16.0",
-    "pandas>=2.2,<3",
-    "seaborn>=0.13.2",
     "ssm-simulators>=0.12.2",
-    "tqdm>=4.66.0",
 ]
 
 [project.urls]
@@ -46,11 +40,15 @@ repository = "https://github.com/lnccbrown/HSSM"
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.5.2"]
+io = [
+    "h5netcdf>=1.8.1",
+    "h5py>=3.16.0",
+]
 
 [dependency-groups]
 dev = [
     "coverage>=7.6.4",
-    "mypy>=1.11.1",
+    "mypy>=2.1",
     "pytest-cov>=6.0.0",
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
@@ -61,6 +59,7 @@ dev = [
     "types-PyYAML",
     "pre-commit>=4.1.0",
     "onnxruntime>=1.17.1",
+    "hssm[io]",
 ]
 
 notebook = [
@@ -226,8 +225,8 @@ markers = [
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.11.21,<0.12"]
+build-backend = "uv_build"
 
 [tool.hatch.build.targets.sdist]
 exclude = [
@@ -245,3 +244,6 @@ url = "https://pypi.org/simple/"
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
+
+[tool.uv.sources]
+hssm = { workspace = true }

@@ -48,6 +48,7 @@ def sample(model, sampler, step):
             tune=10,
             draws=10,
             step=pm.Slice(model=model.pymc_model),
+            progressbar=False,
         )
     else:
         model.sample(
@@ -56,6 +57,7 @@ def sample(model, sampler, step):
             chains=1,
             tune=10,
             draws=10,
+            progressbar=False,
         )
 
 
@@ -63,7 +65,7 @@ def run_sample(model, sampler, step, expected):
     """Run the sample function and check if the expected error is raised."""
     if expected is True:
         sample(model, sampler, step)
-        assert isinstance(model.traces, az.InferenceData)
+        assert isinstance(model.traces, xr.DataTree)
 
         # make sure log_likelihood computations check out
         traces_copy = deepcopy(model.traces)
@@ -71,9 +73,9 @@ def run_sample(model, sampler, step, expected):
 
         # recomputing log-likelihood yields same results?
         model.log_likelihood(traces_copy, inplace=True)
-        assert isinstance(traces_copy, az.InferenceData)
-        assert "log_likelihood" in traces_copy.groups()
-        for group_ in traces_copy.groups():
+        assert isinstance(traces_copy, xr.DataTree)
+        assert "log_likelihood" in traces_copy
+        for group_ in traces_copy:
             xr.testing.assert_equal(traces_copy[group_], model.traces[group_])
 
     else:
@@ -134,7 +136,7 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
         summary = model.summary()
         assert summary.shape[0] == 4
 
-        model.plot_trace(show=False)
+        az.plot_trace_dist(model.traces)
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 4
 
@@ -175,7 +177,7 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
         summary = model.summary()
         assert summary.shape[0] == 6
 
-        model.plot_trace(show=False)
+        az.plot_trace_dist(model.traces)
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 6
 
@@ -245,18 +247,18 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, ex
         summary = model.summary(var_names=["~a", "~t"])
         assert summary.shape[0] == 7
 
-        model.plot_trace(show=False)
+        az.plot_trace_dist(model.traces)
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 8
 
-        model.plot_trace(show=False, var_names=["~a"])
+        az.plot_trace_dist(model.traces, var_names=["~a"])
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 8
 
-        model.plot_trace(show=False, var_names=["~t"])
+        az.plot_trace_dist(model.traces, var_names=["~t"])
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 7
 
-        model.plot_trace(show=False, var_names=["~a", "~t"])
+        az.plot_trace_dist(model.traces, var_names=["~a", "~t"])
         fig = plt.gcf()
         assert len(fig.axes) // 2 == 7
