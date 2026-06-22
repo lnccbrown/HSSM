@@ -133,7 +133,7 @@ def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
             f"~{model._parent}_mean" in model._get_deterministic_var_names(model.traces)
         )
         # test summary:
-        summary = model.summary()
+        summary = az.summary(model.traces)
         assert summary.shape[0] == 4
 
         az.plot_trace_dist(model.traces)
@@ -174,7 +174,7 @@ def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected)
     if loglik_kind == "analytical" and sampler is None:
         assert model._get_deterministic_var_names(model.traces) == ["~v"]
         # test summary:
-        summary = model.summary()
+        summary = az.summary(model.traces)
         assert summary.shape[0] == 6
 
         az.plot_trace_dist(model.traces)
@@ -235,16 +235,16 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, ex
             ["~a", "~v"]
         )
         # test summary:
-        summary = model.summary()
+        summary = az.summary(model.traces)
         assert summary.shape[0] == 8
 
-        summary = model.summary(var_names=["~a"])
+        summary = az.summary(model.traces, var_names=["~a"])
         assert summary.shape[0] == 8
 
-        summary = model.summary(var_names=["~t"])
+        summary = az.summary(model.traces, var_names=["~t"])
         assert summary.shape[0] == 7
 
-        summary = model.summary(var_names=["~a", "~t"])
+        summary = az.summary(model.traces, var_names=["~a", "~t"])
         assert summary.shape[0] == 7
 
         az.plot_trace_dist(model.traces)
