@@ -192,7 +192,7 @@ If you want to inspect the generated `sbatch` command from the CLI helper, start
 
 ```sh
 uv run python scripts/notebook_jobs.py submit-slurm \
-    --partition <your-partition> \
+    --partition batch \
     --time-limit 08:00:00 \
     --mem 16G \
     --dry-run
@@ -210,7 +210,7 @@ uv sync --group dev --group notebook
 make notebook-discover
 make notebook-submit \
     RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    PARTITION=<your-partition> \
+    PARTITION=batch \
     TIME_LIMIT=08:00:00 \
     MEM=16G
 ```
@@ -220,7 +220,7 @@ To preview the exact `sbatch` command first:
 ```sh
 make notebook-submit-dry-run \
     RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    PARTITION=<your-partition> \
+    PARTITION=batch \
     TIME_LIMIT=08:00:00 \
     MEM=16G
 ```
@@ -249,14 +249,42 @@ generated submission metadata into the chosen run directory. The most useful pat
 - `submitted/submission.json`: the generated Slurm submission details
 - `report.json` and `report.md`: aggregate report after running `aggregate`
 
+The Slurm payload script now bootstraps the runtime environment on the compute node
+before running a notebook task. It will:
+
+- source `~/.bashrc`, `~/.bash_profile`, and `~/.profile` when present
+- optionally load cluster modules listed in `HSSM_MODULES`
+- run `uv sync --group dev --group notebook` under a lock so the shared environment is built once at a time
+
+If your cluster requires module loads to make `uv` available, pass them at submission
+time as a comma-separated export. For example:
+
+```sh
+make notebook-submit \
+    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
+    PARTITION=batch \
+    MEM=64G \
+    SBATCH_EXPORTS="HSSM_MODULES=uv"
+```
+
+If your site needs more than one module, separate them with commas:
+
+```sh
+make notebook-submit \
+    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
+    PARTITION=batch \
+    MEM=64G \
+    SBATCH_EXPORTS="HSSM_MODULES=python,uv"
+```
+
 If your cluster needs a BLAS/LAPACK environment, make sure that is configured before
 submission, for example through your normal module setup or `.pytensorrc` configuration.
 The CLI submit helper forwards `PYTENSOR_FLAGS` automatically. The shell submit helper
 also forwards `PYTENSOR_FLAGS` when it is present in the environment, and you can pass
 additional exports with repeated `--export` flags.
 
-Use a real partition name from your cluster. If you do not know it yet, check on the
-cluster with:
+The default cluster examples in this repo use the `batch` partition. If you need a
+different partition on your site, check with:
 
 ```sh
 sinfo -h -o "%P"
@@ -267,7 +295,7 @@ If your site requires an account, pass it through the Make target or helper:
 ```sh
 make notebook-submit \
     RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    PARTITION=<your-partition> \
+    PARTITION=batch \
     ACCOUNT=<your-account> \
     TIME_LIMIT=08:00:00 \
     MEM=16G
@@ -278,7 +306,7 @@ environment variables through repeated `--export` flags:
 
 ```sh
 uv run python scripts/notebook_jobs.py submit-slurm \
-    --partition <your-partition> \
+    --partition batch \
     --time-limit 08:00:00 \
     --mem 16G \
     --export PYTENSOR_FLAGS=blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack \
@@ -290,7 +318,7 @@ You can also pass through scheduler-specific flags with the Python helper using
 
 ```sh
 uv run python scripts/notebook_jobs.py submit-slurm \
-    --partition <your-partition> \
+    --partition batch \
     --time-limit 08:00:00 \
     --mem 16G \
     --sbatch-arg=--constraint=icelake \
