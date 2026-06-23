@@ -34,7 +34,7 @@ from .onnx_utils.model import load_onnx_model
 
 _logger = logging.getLogger("hssm")
 
-LOGP_LB = pm.floatX(-66.1)
+LOGP_LB = pm.pytensorf.floatX(-66.1)
 
 
 def apply_param_bounds_to_loglik(
@@ -62,7 +62,10 @@ def apply_param_bounds_to_loglik(
     """
     dist_params_dict = dict(zip(list_params, dist_params))
 
-    bounds = {k: (pm.floatX(v[0]), pm.floatX(v[1])) for k, v in bounds.items()}
+    bounds = {
+        k: (pm.pytensorf.floatX(v[0]), pm.pytensorf.floatX(v[1]))
+        for k, v in bounds.items()
+    }
     out_of_bounds_mask = pt.zeros_like(logp, dtype=bool)
 
     for param_name, param in dist_params_dict.items():
@@ -486,7 +489,9 @@ def make_distribution(
     if fixed_vector_params:
         for name, vector in fixed_vector_params.items():
             idx = list_params.index(name)
-            _fixed_vector_substitutions[idx] = pt.as_tensor_variable(pm.floatX(vector))
+            _fixed_vector_substitutions[idx] = pt.as_tensor_variable(
+                pm.pytensorf.floatX(vector)
+            )
 
     if lapse is not None:
         if list_params[-1] != "p_outlier":
@@ -520,7 +525,8 @@ def make_distribution(
         @classmethod
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
             dist_params = [
-                pt.as_tensor_variable(pm.floatX(kwargs[param])) for param in cls._params
+                pt.as_tensor_variable(pm.pytensorf.floatX(kwargs[param]))
+                for param in cls._params
             ]
             other_kwargs = {k: v for k, v in kwargs.items() if k not in cls._params}
             return super().dist(dist_params, **other_kwargs)
