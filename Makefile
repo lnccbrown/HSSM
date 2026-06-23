@@ -1,6 +1,6 @@
 MANIFEST ?= notebooks.toml
 RUN_DIR ?= .cache/notebook-runs/cluster-$(shell date +%Y%m%dT%H%M%S)
-PARTITION ?=
+PARTITION ?= batch
 TIME_LIMIT ?= 08:00:00
 MEM ?= 16G
 CPUS_PER_TASK ?=

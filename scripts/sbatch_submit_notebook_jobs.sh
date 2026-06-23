@@ -9,7 +9,7 @@ cd "$REPO_ROOT"
 
 RUN_DIR=""
 MANIFEST_PATH="notebooks.toml"
-PARTITION=""
+PARTITION="batch"
 TIME_LIMIT=""
 MEMORY=""
 CPUS_PER_TASK=""
