@@ -966,9 +966,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             _logger.info(
                 "dt=None, we use the traces assigned to the HSSM object as datatree."
             )
-
-        if dt is not None:
-            if "posterior_predictive" in dt.groups():
+        else:
+            if inplace and "posterior_predictive" in dt:
                 del dt["posterior_predictive"]
                 _logger.warning(
                     "pre-existing posterior_predictive group deleted from datatree."
@@ -1002,7 +1001,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             and not np.allclose(draws, dt["posterior"].draw.values)
         ):
             # Reassign posterior to sub-sampled version
-            setattr(dt_copy, "posterior", dt["posterior"].isel(draw=draws))
+            dt_copy["posterior"] = dt["posterior"].isel(draw=draws)
 
         if kind == "response":
             # If we run kind == 'response' we actually run the observation RV
@@ -1014,31 +1013,28 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 posterior_predictive_list = []
                 for samples_tmp in split_draws:
                     tmp_posterior = dt["posterior"].sel(draw=samples_tmp)
-                    setattr(dt_copy, "posterior", tmp_posterior)
+                    dt_copy["posterior"] = tmp_posterior
                     self.model.predict(
                         dt_copy, kind, data, True, include_group_specific
                     )
                     posterior_predictive_list.append(dt_copy["posterior_predictive"])
 
                 if inplace:
-                    dt.add_groups(
-                        posterior_predictive=xr.concat(
-                            posterior_predictive_list,  # type: ignore[arg-type]
-                            dim="draw",
-                        )
+                    dt["posterior_predictive"] = xr.concat(
+                        posterior_predictive_list,  # type: ignore[arg-type]
+                        dim="draw",
                     )
                     # for inplace, we don't return anything
                     return None
                 else:
                     # Reassign original posterior to dt_copy
-                    setattr(dt_copy, "posterior", dt["posterior"])
+                    dt_copy["posterior"] = dt["posterior"]
                     # Add new posterior predictive group to dt_copy
-                    del dt_copy["posterior_predictive"]
-                    dt_copy.add_groups(
-                        posterior_predictive=xr.concat(
-                            posterior_predictive_list,  # type: ignore[arg-type]
-                            dim="draw",
-                        )
+                    if "posterior_predictive" in dt_copy:
+                        del dt_copy["posterior_predictive"]
+                    dt_copy["posterior_predictive"] = xr.concat(
+                        posterior_predictive_list,  # type: ignore[arg-type]
+                        dim="draw",
                     )
                     return dt_copy
             else:
@@ -1054,7 +1050,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     )
 
                     # posterior predictive group added to dt
-                    dt.add_groups(posterior_predictive=dt_copy["posterior_predictive"])
+                    dt["posterior_predictive"] = dt_copy["posterior_predictive"]
                     # don't return anything if inplace
                     return None
                 else:
@@ -1122,20 +1118,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # rename otherwise inconsistent dims and coords
         if "rt,response_extra_dim_0" in do_dt["prior_predictive"].dims:
-            setattr(
-                do_dt,
-                "prior_predictive",
-                do_dt["prior_predictive"].rename_dims(
-                    {"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_dims(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
             )
         if "rt,response_extra_dim_0" in do_dt["prior_predictive"].coords:
-            setattr(
-                do_dt,
-                "prior_predictive",
-                do_dt["prior_predictive"].rename_vars(
-                    name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_vars(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
             )
 
         if return_model:
@@ -1178,38 +1166,33 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # AF-COMMENT: Not sure if necessary to include the
         # mean prior here (which adds deterministics that
         # could be recomputed elsewhere)
-        prior_predictive.add_groups(posterior=prior_predictive.prior)
+        prior_predictive["posterior"] = prior_predictive["prior"]
         # Bambi >= 0.17 renamed kind="mean" to kind="response_params".
         self.model.predict(prior_predictive, kind="response_params", inplace=True)
 
         # clean
-        setattr(prior_predictive, "prior", prior_predictive["posterior"])
+        prior_predictive["prior"] = prior_predictive["posterior"]
         del prior_predictive["posterior"]
 
         if self._inference_obj is None:
             self._inference_obj = prior_predictive
         else:
-            self._inference_obj.extend(prior_predictive)
+            for group_name in list(prior_predictive.groups):
+                if group_name == "/":
+                    continue
+                self._inference_obj[group_name] = prior_predictive[group_name]
 
         # clean up `rt,response_mean` to `v`
         dt = self._drop_parent_str_from_datatree(dt=self._inference_obj)
 
         # rename otherwise inconsistent dims and coords
         if "rt,response_extra_dim_0" in dt["prior_predictive"].dims:
-            setattr(
-                dt,
-                "prior_predictive",
-                dt["prior_predictive"].rename_dims(
-                    {"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_dims(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
             )
         if "rt,response_extra_dim_0" in dt["prior_predictive"].coords:
-            setattr(
-                dt,
-                "prior_predictive",
-                dt["prior_predictive"].rename_vars(
-                    name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_vars(
+                name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
             )
 
         # Update self._inference_obj to match the cleaned datatree
@@ -1876,15 +1859,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         if dt is None:
             raise ValueError("Please provide a DataTree (traces) object.")
         else:
-            for group in dt.groups():
+            for group in dt.groups:
+                if group == "/":
+                    continue
                 if ("rt,response_mean" in dt[group].data_vars) and (
                     self._parent not in dt[group].data_vars
                 ):
-                    setattr(
-                        dt,
-                        group,
-                        dt[group].rename({"rt,response_mean": self._parent}),
-                    )
+                    dt[group] = dt[group].ds.rename({"rt,response_mean": self._parent})
             return dt
 
     def _postprocess_initvals_deterministic(

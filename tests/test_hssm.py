@@ -149,9 +149,6 @@ def test_model_definition_outside_include(data_ddm):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(
-    reason="AttributeError: 'DataTree' object has no attribute 'add_groups'"
-)
 def test_sample_prior_predictive(data_ddm_reg):
     data_ddm_reg = data_ddm_reg.iloc[:10, :]
 
@@ -228,10 +225,10 @@ def test_override_default_link(caplog, data_ddm_reg):
 @pytest.mark.slow
 def test_resampling(data_ddm):
     model = HSSM(data=data_ddm)
-    sample_1 = model.sample(draws=10, chains=1, tune=0)
+    sample_1 = model.sample(draws=10, chains=1, tune=0, progressbar=False)
     assert sample_1 is model.traces
 
-    sample_2 = model.sample(draws=10, chains=1, tune=0)
+    sample_2 = model.sample(draws=10, chains=1, tune=0, progressbar=False)
     assert sample_2 is model.traces
 
     assert sample_1 is not sample_2
@@ -241,7 +238,7 @@ def test_resampling(data_ddm):
 def test_add_likelihood_parameters_to_data(data_ddm):
     """Test if the likelihood parameters are added to the DataTree object."""
     model = HSSM(data=data_ddm)
-    sample_1 = model.sample(draws=10, chains=1, tune=10)
+    sample_1 = model.sample(draws=10, chains=1, tune=10, progressbar=False)
     sample_1_copy = deepcopy(sample_1)
     model.add_likelihood_parameters_to_datatree(inplace=True)
 
@@ -388,7 +385,7 @@ class TestFixedVectorParams:
             model="ddm",
             include=[{"name": "v", "prior": v_fixed}],
         )
-        idata = model.sample(draws=10, chains=1, tune=10)
+        idata = model.sample(draws=10, chains=1, tune=10, progressbar=False)
 
         # v must not appear in the posterior (it's a constant, not sampled)
         assert "v" not in idata.posterior.data_vars
@@ -409,7 +406,7 @@ class TestFixedVectorParams:
                 {"name": "t", "prior": t_fixed},
             ],
         )
-        idata = model.sample(draws=10, chains=1, tune=10)
+        idata = model.sample(draws=10, chains=1, tune=10, progressbar=False)
 
         # Both fixed params excluded from posterior
         assert "v" not in idata.posterior.data_vars
@@ -420,7 +417,6 @@ class TestFixedVectorParams:
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(reason="TypeError: 'tuple' object is not callable")
 def test_sample_do(data_ddm):
     model = HSSM(data=data_ddm)
     sample_do = model.sample_do(params={"v": 1.0}, draws=10)
