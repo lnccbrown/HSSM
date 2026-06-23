@@ -533,7 +533,7 @@ def check_data_for_rl(
     return sorted_data, n_participants, n_trials
 
 
-def predictive_idata_to_dataframe(
+def predictive_dt_to_dataframe(
     dt: xr.DataTree,
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
