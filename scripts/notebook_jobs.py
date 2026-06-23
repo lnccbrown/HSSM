@@ -27,6 +27,25 @@ class ManifestValidationError(ValueError):
     """Raised when the notebook manifest and on-disk inventory disagree."""
 
 
+class TeeWriter:
+    """Write text to multiple file-like objects."""
+
+    def __init__(self, *targets: Any):
+        self.targets = targets
+
+    def write(self, data: str) -> int:
+        """Write a string to every target and flush it immediately."""
+        for target in self.targets:
+            target.write(data)
+            target.flush()
+        return len(data)
+
+    def flush(self) -> None:
+        """Flush every target."""
+        for target in self.targets:
+            target.flush()
+
+
 @dataclasses.dataclass(frozen=True)
 class NotebookSpec:
     """Notebook execution settings loaded from the manifest."""
@@ -289,6 +308,8 @@ def execute_notebook(
     clean_notebook_for_execution(notebook_path, cleaned_input_path)
 
     with log_file.open("w", encoding="utf-8") as log_handle:
+        stdout_writer = TeeWriter(log_handle, sys.stdout)
+        stderr_writer = TeeWriter(log_handle, sys.stderr)
         try:
             import nbformat
 
@@ -299,8 +320,8 @@ def execute_notebook(
                 allow_errors=False,
             )
             with (
-                contextlib.redirect_stdout(log_handle),
-                contextlib.redirect_stderr(log_handle),
+                contextlib.redirect_stdout(stdout_writer),
+                contextlib.redirect_stderr(stderr_writer),
             ):
                 preprocessor.preprocess(
                     notebook,
@@ -311,15 +332,15 @@ def execute_notebook(
         except CellTimeoutError as exc:
             status = "timed_out"
             error_summary = str(exc)
-            log_handle.write("\n" + traceback.format_exc())
+            stderr_writer.write("\n" + traceback.format_exc())
         except CellExecutionError as exc:
             status = "failed"
             error_summary = str(exc)
-            log_handle.write("\n" + traceback.format_exc())
+            stderr_writer.write("\n" + traceback.format_exc())
         except Exception as exc:  # pragma: no cover - defensive classification
             status = "failed"
             error_summary = str(exc)
-            log_handle.write("\n" + traceback.format_exc())
+            stderr_writer.write("\n" + traceback.format_exc())
 
     duration_seconds = round(time.monotonic() - started_monotonic, 3)
     needs_attention = status in {"failed", "timed_out"}
