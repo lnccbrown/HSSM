@@ -551,7 +551,7 @@ def _check_sample_size(plotting_df):
         )
 
 
-def _to_idata_group(
+def _to_dt_group(
     predictive_group: Literal["posterior_predictive", "prior_predictive"],
 ) -> Literal["posterior", "prior"]:
     return "posterior" if predictive_group == "posterior_predictive" else "prior"
