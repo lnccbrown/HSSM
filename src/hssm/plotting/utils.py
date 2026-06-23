@@ -3,7 +3,6 @@
 import logging
 from typing import Any, Iterable, Literal, cast
 
-import arviz as az
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -133,7 +132,7 @@ def _hdi_to_interval(hdi: str | float | tuple[float, float]) -> tuple[float, flo
 
 
 def _get_plotting_df(
-    idata: az.InferenceData | None = None,
+    dt: xr.DataTree | None = None,
     data: pd.DataFrame | None = None,
     extra_dims: list[str] | None = None,
     quantile_by_dims: list[str] | str | None = None,
@@ -147,14 +146,14 @@ def _get_plotting_df(
 
     Parameters
     ----------
-    idata : optional
-        An InferenceData object. If not provided, the function will only return the
+    dt : optional
+        A DataTree object. If not provided, the function will only return the
         processed original data.
     data: optional
         A dataframe with the original data. If not provided, the function will only
         return the posterior samples without appending the observed data.
     extra_dims, optional
-        Extra dimensions to be added to the dataframe from `idata`, by default None
+        Extra dimensions to be added to the dataframe from `dt`, by default None
     quantile_by_dims, optional
         Extra dimensions to be used for quantiles.
     n_samples, optional
@@ -184,19 +183,19 @@ def _get_plotting_df(
                     "`quantile_by_dims` and `extra_dims` must not have any overlap."
                 )
 
-    if idata is None and data is None:
-        raise ValueError("Either idata or data must be provided.")
+    if dt is None and data is None:
+        raise ValueError("Either dt or data must be provided.")
 
     extra_dims = [] if extra_dims is None else extra_dims
 
-    if idata is None:
+    if dt is None:
         data = _process_data(data, extra_dims, quantile_by_dims)
 
         data.insert(0, "observed", "observed")
         return data
 
     # get the posterior samples
-    idata_predictive = idata[predictive_group][response_str]
+    idata_predictive = cast("xr.DataArray", dt[predictive_group][response_str])
     predictive = _xarray_to_df(idata_predictive, n_samples=n_samples)
 
     if data is None:
@@ -485,47 +484,47 @@ def _check_groups_and_groups_order(
 def _use_traces_or_sample(
     model,
     data: pd.DataFrame | None,
-    idata: az.InferenceData | None,
+    dt: xr.DataTree | None,
     n_samples: int | float | None,
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
-) -> tuple[az.InferenceData, bool]:
-    """Check if idata is provided, otherwise use traces.
+) -> tuple[xr.DataTree, bool]:
+    """Check if dt is provided, otherwise use traces.
 
     Also, if posterior predictive samples are not contained in traces, sample from
     the model.
     """
     # First, determine whether posterior predictive samples are available
     # If not, we need to sample from the posterior
-    if idata is None:
+    if dt is None:
         if model.traces is None:
             raise ValueError(
-                "No InferenceData object provided. Please provide an InferenceData "
+                "No DataTree object provided. Please provide a DataTree "
                 + "object or sample the model first using model.sample()."
             )
-        idata = model.traces
+        dt = model.traces
 
     sampled = False
 
-    if predictive_group not in idata:
+    if predictive_group not in dt:
         _logger.info(
             "No %s samples found. Generating %s samples using the provided "
-            "InferenceData object and the original data. "
-            "This will modify the provided InferenceData object, "
+            "DataTree object and the original data. "
+            "This will modify the provided DataTree object, "
             "or if not provided, the traces object stored inside the model.",
             predictive_group,
             predictive_group,
         )
         if predictive_group == "posterior_predictive":
             model.sample_posterior_predictive(
-                idata=idata,
+                dt=dt,
                 data=data,
                 inplace=True,
                 draws=n_samples,
             )
         elif predictive_group == "prior_predictive":
-            idata = model.sample_prior_predictive(
+            dt = model.sample_prior_predictive(
                 draws=n_samples,
                 omit_offsets=False,
             )
@@ -534,7 +533,7 @@ def _use_traces_or_sample(
         # AF-TODO: 'sampled' logic needs to be re-examined
         sampled = True
 
-    return cast("az.InferenceData", idata), sampled
+    return cast("xr.DataTree", dt), sampled
 
 
 def _check_sample_size(plotting_df):
