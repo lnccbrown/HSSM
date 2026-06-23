@@ -1,0 +1,140 @@
+default_timeout_seconds = 10000
+default_kernel_name = "python3"
+ignored_globs = [
+    "**/*.nbconvert.ipynb",
+    "**/.ipynb_checkpoints/*.ipynb",
+]
+
+[[notebooks]]
+path = "docs/getting_started/getting_started.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/getting_started/hierarchical_modeling.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/add_custom_rlssm_model.ipynb"
+enabled = false
+notes = "Disabled until the RLSSM custom model notebook runs reliably in automation."
+
+[[notebooks]]
+path = "docs/tutorials/bayesflow_lre_integration.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/blackbox_contribution_onnx_example.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/choice_only_models.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/compile_logp.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/do_operator.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/hmm_ddm_regime_switching.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/hssm_tutorial_workshop_1.ipynb"
+enabled = false
+notes = "Disabled until the workshop notebook is stable in non-interactive automation."
+
+[[notebooks]]
+path = "docs/tutorials/hssm_tutorial_workshop_2.ipynb"
+enabled = false
+notes = "Disabled until the workshop notebook is stable in non-interactive automation."
+
+[[notebooks]]
+path = "docs/tutorials/initial_values.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/jax_callable_contribution_onnx_example.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/lapse_prob_and_dist.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/likelihoods.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/main_tutorial.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/plotting.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/poisson_race.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/pymc.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/pymc_to_hssm.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/rlssm_quickstart.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/rlssm_rlwm_model.ipynb"
+enabled = false
+notes = "Disabled until the RLWM tutorial runs reliably in automation."
+
+[[notebooks]]
+path = "docs/tutorials/rlssm_tutorial.ipynb"
+enabled = false
+notes = "Disabled until the full RLSSM tutorial runs reliably in automation."
+
+[[notebooks]]
+path = "docs/tutorials/save_load_tutorial.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/scientific_workflow_hssm.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/tutorial_bayesian_t_test.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/tutorial_bayeux.ipynb"
+enabled = false
+notes = "Disabled until the Bayeux sampler tutorial is stable in automation."
+
+[[notebooks]]
+path = "docs/tutorials/tutorial_p_outlier_regression.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/tutorial_stim_coding.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/tutorial_trial_wise_parameters.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/variational_inference.ipynb"
+enabled = true
+
+[[notebooks]]
+path = "docs/tutorials/variational_inference_hierarchical.ipynb"
+enabled = true
