@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Slurm batch payload for one notebook array task.
 #SBATCH --job-name=hssm-notebooks
-#SBATCH --partition=cpu
 #SBATCH --time=08:00:00
 #SBATCH --mem=16G
 #SBATCH --cpus-per-task=1

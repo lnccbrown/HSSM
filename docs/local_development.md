@@ -192,7 +192,7 @@ If you want to inspect the generated `sbatch` command from the CLI helper, start
 
 ```sh
 uv run python scripts/notebook_jobs.py submit-slurm \
-    --partition cpu \
+    --partition <your-partition> \
     --time-limit 08:00:00 \
     --mem 16G \
     --dry-run
@@ -207,27 +207,37 @@ Recommended cluster workflow:
 
 ```sh
 uv sync --group dev --group notebook
-uv run python scripts/notebook_jobs.py discover --include-disabled
-bash scripts/sbatch_submit_notebook_jobs.sh \
-    --run-dir .cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    --partition cpu \
-    --time-limit 08:00:00 \
-    --mem 16G
+make notebook-discover
+make notebook-submit \
+    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
+    PARTITION=<your-partition> \
+    TIME_LIMIT=08:00:00 \
+    MEM=16G
+```
+
+To preview the exact `sbatch` command first:
+
+```sh
+make notebook-submit-dry-run \
+    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
+    PARTITION=<your-partition> \
+    TIME_LIMIT=08:00:00 \
+    MEM=16G
 ```
 
 The checked-in payload script already includes default `#SBATCH` headers for job name,
-partition, wall time, memory, CPU count, and fallback log files. The submit helper
+wall time, memory, CPU count, and fallback log files. The submit helper
 overrides the log locations so they land under `RUN_DIR/submitted/`. Override resources
 at submission time with helper flags, for example:
 
 ```sh
-bash scripts/sbatch_submit_notebook_jobs.sh \
-    --run-dir .cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    --partition largemem \
-    --time-limit 12:00:00 \
-    --mem 32G \
-    --cpus-per-task 4 \
-    --export PYTENSOR_FLAGS='blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack'
+make notebook-submit \
+    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
+    PARTITION=largemem \
+    TIME_LIMIT=12:00:00 \
+    MEM=32G \
+    CPUS_PER_TASK=4 \
+    SBATCH_EXPORTS="PYTENSOR_FLAGS=blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
 ```
 
 This writes a frozen notebook inventory, per-task logs, result JSON files, and the
@@ -245,12 +255,30 @@ The CLI submit helper forwards `PYTENSOR_FLAGS` automatically. The shell submit 
 also forwards `PYTENSOR_FLAGS` when it is present in the environment, and you can pass
 additional exports with repeated `--export` flags.
 
+Use a real partition name from your cluster. If you do not know it yet, check on the
+cluster with:
+
+```sh
+sinfo -h -o "%P"
+```
+
+If your site requires an account, pass it through the Make target or helper:
+
+```sh
+make notebook-submit \
+    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
+    PARTITION=<your-partition> \
+    ACCOUNT=<your-account> \
+    TIME_LIMIT=08:00:00 \
+    MEM=16G
+```
+
 If you prefer the Python helper that submits directly, you can still pass additional
 environment variables through repeated `--export` flags:
 
 ```sh
 uv run python scripts/notebook_jobs.py submit-slurm \
-    --partition cpu \
+    --partition <your-partition> \
     --time-limit 08:00:00 \
     --mem 16G \
     --export PYTENSOR_FLAGS=blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack \
@@ -262,7 +290,7 @@ You can also pass through scheduler-specific flags with the Python helper using
 
 ```sh
 uv run python scripts/notebook_jobs.py submit-slurm \
-    --partition cpu \
+    --partition <your-partition> \
     --time-limit 08:00:00 \
     --mem 16G \
     --sbatch-arg=--constraint=icelake \
@@ -274,6 +302,12 @@ After the array completes, rebuild the final report if needed:
 ```sh
 uv run python scripts/notebook_jobs.py aggregate \
     --run-dir .cache/notebook-runs/<run-id>
+```
+
+Equivalent Make target:
+
+```sh
+make notebook-aggregate RUN_DIR=.cache/notebook-runs/<run-id>
 ```
 
 To inspect notebooks that need attention quickly:
@@ -292,11 +326,27 @@ uv run python scripts/notebook_jobs.py run-one \
     --fail-on-error
 ```
 
+Equivalent Make target:
+
+```sh
+make notebook-rerun \
+    RUN_DIR=.cache/notebook-runs/<run-id> \
+    NOTEBOOK=docs/tutorials/plotting.ipynb
+```
+
 ```sh
 uv run python scripts/notebook_jobs.py run-one \
     --run-dir .cache/notebook-runs/<run-id> \
     --index 16 \
     --fail-on-error
+```
+
+Equivalent Make target:
+
+```sh
+make notebook-rerun \
+    RUN_DIR=.cache/notebook-runs/<run-id> \
+    NOTEBOOK_INDEX=16
 ```
 
 If you want a fresh single-notebook run instead of reusing an existing run directory,

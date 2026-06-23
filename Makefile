@@ -1,6 +1,6 @@
 MANIFEST ?= notebooks.toml
 RUN_DIR ?= .cache/notebook-runs/cluster-$(shell date +%Y%m%dT%H%M%S)
-PARTITION ?= cpu
+PARTITION ?=
 TIME_LIMIT ?= 08:00:00
 MEM ?= 16G
 CPUS_PER_TASK ?=
@@ -23,7 +23,7 @@ notebook-submit-dry-run:
 	bash scripts/sbatch_submit_notebook_jobs.sh \
 		--manifest $(MANIFEST) \
 		--run-dir $(RUN_DIR) \
-		--partition $(PARTITION) \
+		$(if $(PARTITION),--partition $(PARTITION)) \
 		--time-limit $(TIME_LIMIT) \
 		--mem $(MEM) \
 		$(if $(CPUS_PER_TASK),--cpus-per-task $(CPUS_PER_TASK)) \
@@ -37,7 +37,7 @@ notebook-submit:
 	bash scripts/sbatch_submit_notebook_jobs.sh \
 		--manifest $(MANIFEST) \
 		--run-dir $(RUN_DIR) \
-		--partition $(PARTITION) \
+		$(if $(PARTITION),--partition $(PARTITION)) \
 		--time-limit $(TIME_LIMIT) \
 		--mem $(MEM) \
 		$(if $(CPUS_PER_TASK),--cpus-per-task $(CPUS_PER_TASK)) \
