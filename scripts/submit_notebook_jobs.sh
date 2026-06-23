@@ -19,7 +19,8 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
 cd "$REPO_ROOT"
 
-RUN_DIR=${RUN_DIR:-.cache/notebook-runs/${SLURM_ARRAY_JOB_ID:-manual-run}}
+RUN_BASE=${SCRATCH:-$HOME}
+RUN_DIR=${RUN_DIR:-$RUN_BASE/hssm-notebook-runs/${SLURM_ARRAY_JOB_ID:-manual-run}}
 MANIFEST_PATH=${MANIFEST_PATH:-notebooks.toml}
 NOTEBOOK_INDEX=${NOTEBOOK_INDEX:-${SLURM_ARRAY_TASK_ID:-}}
 
