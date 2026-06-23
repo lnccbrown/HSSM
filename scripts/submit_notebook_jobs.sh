@@ -47,16 +47,15 @@ fi
 mkdir -p "$RUN_DIR"
 
 if [[ ! -f "$RUN_DIR/inventory.json" ]]; then
-	uv run python scripts/notebook_jobs.py \
+	uv run python "$REPO_ROOT/scripts/notebook_jobs.py" \
 		--manifest "$MANIFEST_PATH" \
 		prepare-run \
 		--run-dir "$RUN_DIR" >/dev/null
 fi
 
-uv sync --group dev --group notebook
-
-exec uv run python scripts/notebook_jobs.py run-one \
+exec uv run python "$REPO_ROOT/scripts/notebook_jobs.py" \
 	--manifest "$MANIFEST_PATH" \
+	run-one \
 	--run-dir "$RUN_DIR" \
 	--index "$NOTEBOOK_INDEX" \
 	--fail-on-error
