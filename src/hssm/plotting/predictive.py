@@ -444,7 +444,7 @@ def plot_predictive(
 
     Returns
     -------
-    Axes | sns.FacetGrid
+    Axes | sns.FacetGrid | list[sns.FacetGrid]
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
     # Process hdi

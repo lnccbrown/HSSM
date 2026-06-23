@@ -24,7 +24,7 @@ from .utils import (
     _get_title,
     # _hdi_to_interval, # TODO: We eventually want to add HDI plotting back in here
     _subset_df,
-    _to_idata_group,
+    _to_dt_group,
     _use_traces_or_sample,
 )
 
@@ -234,17 +234,17 @@ def _plot_model_cartoon_2D(
 
 
 def compute_merge_necessary_deterministics(
-    model, dt, idata_group: Literal["posterior", "prior"] = "posterior"
+    model, dt, dt_group: Literal["posterior", "prior"] = "posterior"
 ):
     """Compute the necessary deterministic variables for the model."""
     # Get the list of deterministic variables
     necessary_params = default_model_config[model.model_name]["list_params"]
     deterministics_list = []
-    group_ds = dt[idata_group].to_dataset()
-    idata_group_keys = list(group_ds.data_vars)
+    group_ds = dt[dt_group].to_dataset()
+    dt_group_keys = list(group_ds.data_vars)
     # Compute the deterministic variables
     for param in necessary_params:
-        if param not in idata_group_keys:
+        if param not in dt_group_keys:
             if param in [
                 deterministic.name for deterministic in model.pymc_model.deterministics
             ]:
@@ -254,13 +254,13 @@ def compute_merge_necessary_deterministics(
                     )
                 )
 
-    deterministics_idata = xr.merge(deterministics_list)
-    dt[idata_group] = xr.merge([group_ds, deterministics_idata])
+    deterministics_dt = xr.merge(deterministics_list)
+    dt[dt_group] = xr.merge([group_ds, deterministics_dt])
     return dt
 
 
 def attach_trialwise_params_to_df(
-    model, df, dt, idata_group: Literal["posterior", "prior"] = "posterior"
+    model, df, dt, dt_group: Literal["posterior", "prior"] = "posterior"
 ):
     """Attach the trial-wise parameters to the dataframe.
 
@@ -273,7 +273,7 @@ def attach_trialwise_params_to_df(
     necessary_params = default_model_config[model.model_name]["list_params"]
     df[necessary_params] = 0.0
 
-    group_ds = dt[idata_group].to_dataset()
+    group_ds = dt[dt_group].to_dataset()
     for chain_tmp, draw_tmp in {(x[0], x[1]) for x in list(df.index) if x[0] != -1}:
         n_rows = len(df.loc[(chain_tmp, draw_tmp, slice(None))])
         for param in necessary_params:
@@ -323,12 +323,12 @@ def _make_dt_mean_group(
     return dt
 
 
-def _make_idata_mean_posterior(dt: xr.DataTree) -> xr.DataTree:
+def _make_dt_mean_posterior(dt: xr.DataTree) -> xr.DataTree:
     """Create a new DataTree object containing only the posterior mean."""
     return _make_dt_mean_group(dt, "posterior")
 
 
-def _make_idata_mean_prior(dt: xr.DataTree) -> xr.DataTree:
+def _make_dt_mean_prior(dt: xr.DataTree) -> xr.DataTree:
     """Create a new DataTree object containing only the prior mean."""
     return _make_dt_mean_group(dt, "prior")
 
@@ -474,7 +474,7 @@ def plot_model_cartoon(
 
     Returns
     -------
-    Axes | FacetGrid
+    Axes | FacetGrid | list[FacetGrid]
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
     if not (plot_predictive_mean or plot_predictive_samples):
@@ -513,13 +513,13 @@ def plot_model_cartoon(
     plotting_df_mean = None
     if plot_predictive_mean:
         if predictive_group == "posterior_predictive":
-            idata_mean = _make_idata_mean_posterior(
+            dt_mean = _make_dt_mean_posterior(
                 deepcopy(model.traces if dt is None else dt)
             )
-            idata_mean, _ = _use_traces_or_sample(
+            dt_mean, _ = _use_traces_or_sample(
                 model,
                 data,
-                idata_mean,
+                dt_mean,
                 n_samples=None,
                 predictive_group="posterior_predictive",
             )
@@ -533,27 +533,25 @@ def plot_model_cartoon(
                 predictive_group=predictive_group,
             )
 
-            idata_mean = _make_idata_mean_prior(deepcopy(dt))
+            dt_mean = _make_dt_mean_prior(deepcopy(dt))
             # AF-COMMENT: This is a hack to get the prior predictive mean
             # we should find a better way to do this eventually.
             mean_dt = xr.DataTree.from_dict(
-                {"posterior": idata_mean["prior"].to_dataset()}
+                {"posterior": dt_mean["prior"].to_dataset()}
             )
-            idata_mean_tmp = model.predict(
-                **dict(
-                    idata=mean_dt,
-                    kind="response",
-                    inplace=False,
-                )
+            dt_mean_tmp = model.predict(
+                idata=mean_dt,  # bambi.Model.predict still uses idata
+                kind="response",
+                inplace=False,
             )
 
-            idata_mean["prior_predictive"] = idata_mean_tmp[
+            dt_mean["prior_predictive"] = dt_mean_tmp[
                 "posterior_predictive"
             ].to_dataset()
 
         # # Get the plotting dataframe by chain and sample
         plotting_df_mean = _get_plotting_df(
-            idata_mean,
+            dt_mean,
             data,
             extra_dims=extra_dims,
             n_samples=None,
@@ -563,15 +561,15 @@ def plot_model_cartoon(
 
         # Get plotting dataframe for predictive mean
         # df by chain and sample
-        idata_mean = compute_merge_necessary_deterministics(
-            model, idata_mean, idata_group=_to_idata_group(predictive_group)
+        dt_mean = compute_merge_necessary_deterministics(
+            model, dt_mean, dt_group=_to_dt_group(predictive_group)
         )
 
         plotting_df_mean = attach_trialwise_params_to_df(
             model,
             plotting_df_mean,
-            idata_mean,
-            idata_group=_to_idata_group(predictive_group),
+            dt_mean,
+            dt_group=_to_dt_group(predictive_group),
         )
 
         # Flip the rt values if necessary
@@ -606,14 +604,14 @@ def plot_model_cartoon(
         dt = compute_merge_necessary_deterministics(
             model,
             dt,
-            idata_group=_to_idata_group(predictive_group),
+            dt_group=_to_dt_group(predictive_group),
         )
 
         plotting_df = attach_trialwise_params_to_df(
             model,
             plotting_df,
             dt,
-            idata_group=_to_idata_group(predictive_group),
+            dt_group=_to_dt_group(predictive_group),
         )
 
         # Flip the rt values if necessary
