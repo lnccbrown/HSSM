@@ -215,6 +215,9 @@ Then submit it directly:
 sbatch scripts/submit_notebook_jobs.sh
 ```
 
+The batch script resolves the repo checkout from `SLURM_SUBMIT_DIR`, so submit it
+from the repository root on the shared filesystem.
+
 You can override the run directory or manifest path at submission time if needed:
 
 ```sh

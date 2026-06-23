@@ -14,14 +14,18 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+	REPO_ROOT=$(CDPATH= cd -- "$SLURM_SUBMIT_DIR" && pwd)
+else
+	SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+	REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+fi
 
 cd "$REPO_ROOT"
 
 RUN_BASE=${SCRATCH:-$HOME}
 RUN_DIR=${RUN_DIR:-$RUN_BASE/hssm-notebook-runs/${SLURM_ARRAY_JOB_ID:-manual-run}}
-MANIFEST_PATH=${MANIFEST_PATH:-notebooks.toml}
+MANIFEST_PATH=${MANIFEST_PATH:-$REPO_ROOT/notebooks.toml}
 NOTEBOOK_INDEX=${NOTEBOOK_INDEX:-${SLURM_ARRAY_TASK_ID:-}}
 
 if [[ -z "$NOTEBOOK_INDEX" ]]; then
