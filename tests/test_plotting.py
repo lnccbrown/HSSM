@@ -127,9 +127,9 @@ class TestPlotting:
         with pytest.raises(ValueError):
             _get_plotting_df(idata, data=None, extra_dims=["participant_id", "conf"])
 
-    def test__plot_predictive_1D(self, cav_idata, cavanagh_test):
+    def test__plot_predictive_1D(self, cav_dt, cavanagh_test):
         df = _get_plotting_df(
-            cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+            cav_dt, cavanagh_test, extra_dims=["participant_id", "conf"]
         )
         df["Response Time"] = df["rt"] * np.where(df["response"] == 0, -1, 1)
 
@@ -141,9 +141,9 @@ class TestPlotting:
         ax2 = _plot_predictive_1D(df, plot_data=False, ax=ax2)
         assert len(ax2.get_lines()) == 1
 
-    def test__plot_predictive_2D(self, cav_idata, cavanagh_test):
+    def test__plot_predictive_2D(self, cav_dt, cavanagh_test):
         df = _get_plotting_df(
-            cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+            cav_dt, cavanagh_test, extra_dims=["participant_id", "conf"]
         )
         df["Response Time"] = df["rt"] * np.where(df["response"] == 0, -1, 1)
 
@@ -183,7 +183,7 @@ class TestPlotting:
         with pytest.raises(ValueError):
             plot_predictive(model)
 
-        model._inference_obj = cav_idata.copy()
+        model._inference_obj = cav_dt.copy()
         _, ax1 = plt.subplots()
         ax1 = plot_predictive(model, ax=ax1)  # Should work directly
         assert len(ax1.get_lines()) == 2
@@ -242,9 +242,9 @@ class TestPlotting:
             cavanagh_test[cavanagh_test["conf"] == "LC"].groupby(["conf", "dbs"])
         )
 
-    def test__process_df_for_qp_plot(self, cav_idata, cavanagh_test):
+    def test__process_df_for_qp_plot(self, cav_dt, cavanagh_test):
         df = _get_plotting_df(
-            cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+            cav_dt, cavanagh_test, extra_dims=["participant_id", "conf"]
         )
 
         processed_df = _process_df_for_qp_plot(df=df, q=6, cond="conf", correct=None)
@@ -277,14 +277,14 @@ class TestPlotting:
         ],
     )
     def test__plot_quantile_probability_1D(
-        self, cav_idata, cavanagh_test, predictive_style
+        self, cav_dt, cavanagh_test, predictive_style
     ):
         """Tests the _plot_quantile_probability_1D function.
 
         Tests that the function correctly creates a 1D quantile probability plot with the
         specified predictive style and verifies the plot attributes.
         """
-        df = _get_plotting_df(cav_idata, cavanagh_test, extra_dims=["stim"])
+        df = _get_plotting_df(cav_dt, cavanagh_test, extra_dims=["stim"])
         ax = _plot_quantile_probability_1D(
             df, cond="stim", predictive_style=predictive_style
         )
@@ -296,7 +296,7 @@ class TestPlotting:
 
     @pytest.mark.parametrize("predictive_style", ["points", "ellipse", "both"])
     def test__plot_quantile_probability_2D(
-        self, cav_idata, cavanagh_test, predictive_style
+        self, cav_dt, cavanagh_test, predictive_style
     ):
         """Tests the _plot_quantile_probability_2D function.
 
@@ -304,7 +304,7 @@ class TestPlotting:
         specified predictive style and verifies the plot grid dimensions.
         """
         df = _get_plotting_df(
-            cav_idata, cavanagh_test, extra_dims=["participant_id", "stim"]
+            cav_dt, cavanagh_test, extra_dims=["participant_id", "stim"]
         )
         g = _plot_quantile_probability_2D(
             df,
@@ -316,7 +316,7 @@ class TestPlotting:
         assert len(g.figure.axes) == 10
 
         df = _get_plotting_df(
-            cav_idata, cavanagh_test, extra_dims=["participant_id", "stim", "conf"]
+            cav_dt, cavanagh_test, extra_dims=["participant_id", "stim", "conf"]
         )
         g = _plot_quantile_probability_2D(
             df,
@@ -331,9 +331,7 @@ class TestPlotting:
         reason="AttributeError: 'DataTree' object has no attribute 'posterior_predictive'"
     )
     @pytest.mark.parametrize("predictive_style", ["points", "ellipse", "both"])
-    def test_plot_quantile_probability(
-        self, cav_idata, cavanagh_test, predictive_style
-    ):
+    def test_plot_quantile_probability(self, cav_dt, cavanagh_test, predictive_style):
         """Tests the plot_quantile_probability function.
 
         Tests the main plotting function for quantile probability plots, including error cases,
@@ -359,7 +357,7 @@ class TestPlotting:
                 model, cond="stim", predictive_style=predictive_style
             )
 
-        model._inference_obj = cav_idata.copy()
+        model._inference_obj = cav_dt.copy()
         ax1 = plot_quantile_probability(
             model, cond="stim", data=cavanagh_test, predictive_style=predictive_style
         )  # Should work directly
@@ -432,7 +430,7 @@ class TestPlotting:
         # Should only have lines for observed data, no predictive samples
         # The exact number depends on how many quantiles and conditions there are
 
-    def test__process_df_for_qp_plot_with_quantile_by(self, cav_idata, cavanagh_test):
+    def test__process_df_for_qp_plot_with_quantile_by(self, cav_dt, cavanagh_test):
         """Test _process_df_for_qp_plot with quantile_by parameter.
 
         This tests the functionality where quantiles are first computed for each
@@ -440,7 +438,7 @@ class TestPlotting:
         """
         # Get plotting dataframe with participant_id as extra dimension
         df = _get_plotting_df(
-            cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+            cav_dt, cavanagh_test, extra_dims=["participant_id", "conf"]
         )
 
         # Test 1: Without quantile_by (original behavior)
@@ -514,7 +512,7 @@ class TestPlotting:
         # Might be less due to some groups having no data for certain quantiles
         assert processed_df_single.shape[0] == processed_df_no_grouping.shape[0]
 
-    def test_plot_quantile_probability_with_quantile_by(self, cav_idata, cavanagh_test):
+    def test_plot_quantile_probability_with_quantile_by(self, cav_dt, cavanagh_test):
         """Test plot_quantile_probability with quantile_by parameter.
 
         This tests the full plotting pipeline with the quantile_by functionality,
@@ -536,7 +534,7 @@ class TestPlotting:
                 },
             ],
         )
-        model._inference_obj = cav_idata.copy()
+        model._inference_obj = cav_dt.copy()
 
         # Test 1: Single plot with quantile_by as string
         ax1 = plot_quantile_probability(
@@ -601,7 +599,7 @@ class TestPlotting:
             assert ax is not None
 
     def test__process_df_for_qp_plot_quantile_by_edge_cases(
-        self, cav_idata, cavanagh_test
+        self, cav_dt, cavanagh_test
     ):
         """Test edge cases for quantile_by parameter.
 
@@ -609,7 +607,7 @@ class TestPlotting:
         functionality.
         """
         df = _get_plotting_df(
-            cav_idata, cavanagh_test, extra_dims=["participant_id", "conf"]
+            cav_dt, cavanagh_test, extra_dims=["participant_id", "conf"]
         )
 
         # Test 1: Empty list for quantile_by (should behave like None)
@@ -668,14 +666,12 @@ class TestPlotting:
         assert all(col in result2.columns for col in base_cols)
         assert all(col in result3.columns for col in base_cols)
 
-    def test__get_plotting_df_quantile_by_dims_validation(
-        self, cav_idata, cavanagh_test
-    ):
+    def test__get_plotting_df_quantile_by_dims_validation(self, cav_dt, cavanagh_test):
         """Test _get_plotting_df with various quantile_by_dims inputs for validation coverage."""
 
         # Test 0: quantile_by_dims as None (should be None)
         df_none = _get_plotting_df(
-            cav_idata,
+            cav_dt,
             cavanagh_test,
             extra_dims=["conf"],
             quantile_by_dims=None,  # None input
@@ -684,7 +680,7 @@ class TestPlotting:
 
         # Test 1: quantile_by_dims as string (should convert to list)
         df_string = _get_plotting_df(
-            cav_idata,
+            cav_dt,
             cavanagh_test,
             extra_dims=["conf"],
             quantile_by_dims="participant_id",  # String input
@@ -695,7 +691,7 @@ class TestPlotting:
 
         # Test 2: quantile_by_dims as list (normal case)
         df_list = _get_plotting_df(
-            cav_idata,
+            cav_dt,
             cavanagh_test,
             extra_dims=["conf"],
             quantile_by_dims=["participant_id"],  # List input
@@ -707,7 +703,7 @@ class TestPlotting:
             ValueError, match="`quantile_by_dims` must be a non-empty list of strings."
         ):
             _get_plotting_df(
-                cav_idata,
+                cav_dt,
                 cavanagh_test,
                 extra_dims=["conf"],
                 quantile_by_dims=[],  # Empty list
@@ -718,7 +714,7 @@ class TestPlotting:
             ValueError, match="All elements in `quantile_by_dims` must be strings."
         ):
             _get_plotting_df(
-                cav_idata,
+                cav_dt,
                 cavanagh_test,
                 extra_dims=["conf"],
                 quantile_by_dims=[1, 2],  # Non-string elements
@@ -730,20 +726,18 @@ class TestPlotting:
             match="`quantile_by_dims` and `extra_dims` must not have any overlap.",
         ):
             _get_plotting_df(
-                cav_idata,
+                cav_dt,
                 cavanagh_test,
                 extra_dims=["conf", "participant_id"],
                 quantile_by_dims=["participant_id"],  # Overlaps with extra_dims
             )
 
-    def test__get_plotting_df_quantile_by_dims_edge_cases(
-        self, cav_idata, cavanagh_test
-    ):
+    def test__get_plotting_df_quantile_by_dims_edge_cases(self, cav_dt, cavanagh_test):
         """Test additional edge cases for quantile_by_dims to ensure full coverage."""
 
         # Test 1: quantile_by_dims provided but extra_dims is None
         df1 = _get_plotting_df(
-            cav_idata,
+            cav_dt,
             cavanagh_test,
             extra_dims=None,  # No extra_dims
             quantile_by_dims=["participant_id"],
@@ -754,7 +748,7 @@ class TestPlotting:
 
         # Test 2: Both provided but NO overlap (normal successful case)
         df2 = _get_plotting_df(
-            cav_idata,
+            cav_dt,
             cavanagh_test,
             extra_dims=["conf"],  # Different from quantile_by_dims
             quantile_by_dims=["participant_id"],  # No overlap
@@ -765,7 +759,7 @@ class TestPlotting:
 
         # Test 3: Valid list of multiple quantile_by_dims (covers elif branch with valid list)
         df3 = _get_plotting_df(
-            cav_idata,
+            cav_dt,
             cavanagh_test,
             extra_dims=["conf"],
             quantile_by_dims=["participant_id", "dbs"],  # Multiple items, all valid
