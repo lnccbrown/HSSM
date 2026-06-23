@@ -181,148 +181,63 @@ uv run python scripts/notebook_jobs.py run-all \
 
 ### Submit notebook runs to Slurm
 
-You can submit the enabled notebooks as a Slurm job array in two ways:
+Use the checked-in batch script [scripts/submit_notebook_jobs.sh](../scripts/submit_notebook_jobs.sh)
+as the entrypoint for the cluster run. It is intentionally simple: load modules,
+build the environment with `uv sync`, and execute one notebook per array task.
 
-- Use the Python helper to generate and submit `sbatch` directly.
-- Use the checked-in Slurm submit helper `scripts/sbatch_submit_notebook_jobs.sh`,
-    which prepares the run directory and submits the batch payload script with
-    dynamic log paths.
+Before submitting it, adjust the `#SBATCH` header values in the script for your site,
+especially:
 
-If you want to inspect the generated `sbatch` command from the CLI helper, start with:
+- `--account`
+- `--partition`
+- `--cpus-per-task`
+- `--mem`
+- `--time`
+- `--array`
+
+The `--array` values must match the notebook indexes you want to run. Use the
+inventory command to inspect those indexes:
 
 ```sh
-uv run python scripts/notebook_jobs.py submit-slurm \
-    --partition batch \
-    --time-limit 08:00:00 \
-    --mem 16G \
-    --dry-run
+uv run python scripts/notebook_jobs.py discover --include-disabled
 ```
 
-If you want a real Slurm script workflow, use `scripts/sbatch_submit_notebook_jobs.sh`.
-It prepares the run directory, captures the enabled indexes, and submits the batch
-payload `scripts/submit_notebook_jobs.sh` with `--output` and `--error` under the
-chosen run directory.
-
-Recommended cluster workflow:
+For example, if you want to run enabled notebooks with manifest indexes `0,1,3,4`,
+set the header in `scripts/submit_notebook_jobs.sh` to:
 
 ```sh
-uv sync --group dev --group notebook
-make notebook-discover
-make notebook-submit \
-    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    PARTITION=batch \
-    TIME_LIMIT=08:00:00 \
-    MEM=16G
+#SBATCH --array=0,1,3,4
 ```
 
-To preview the exact `sbatch` command first:
+Then submit it directly:
 
 ```sh
-make notebook-submit-dry-run \
-    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    PARTITION=batch \
-    TIME_LIMIT=08:00:00 \
-    MEM=16G
+sbatch scripts/submit_notebook_jobs.sh
 ```
 
-The checked-in payload script already includes default `#SBATCH` headers for job name,
-wall time, memory, CPU count, and fallback log files. The submit helper
-overrides the log locations so they land under `RUN_DIR/submitted/`. Override resources
-at submission time with helper flags, for example:
+You can override the run directory or manifest path at submission time if needed:
 
 ```sh
-make notebook-submit \
-    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    PARTITION=largemem \
-    TIME_LIMIT=12:00:00 \
-    MEM=32G \
-    CPUS_PER_TASK=4 \
-    SBATCH_EXPORTS="PYTENSOR_FLAGS=blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
+sbatch --export=ALL,RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S),MANIFEST_PATH=notebooks.toml scripts/submit_notebook_jobs.sh
 ```
 
 This writes a frozen notebook inventory, per-task logs, result JSON files, and the
-generated submission metadata into the chosen run directory. The most useful paths are:
+aggregate report artifacts into the chosen run directory. The most useful paths are:
 
 - `inventory.json`: snapshot of the notebook inventory for that run
 - `results/`: one JSON result per notebook task
 - `logs/`: one execution log per notebook task
-- `submitted/submission.json`: the generated Slurm submission details
 - `report.json` and `report.md`: aggregate report after running `aggregate`
-
-The Slurm payload script now bootstraps the runtime environment on the compute node
-before running a notebook task. It will:
-
-- source `~/.bashrc`, `~/.bash_profile`, and `~/.profile` when present
-- optionally load cluster modules listed in `HSSM_MODULES`
-- run `uv sync --group dev --group notebook` under a lock so the shared environment is built once at a time
-
-If your cluster requires module loads to make `uv` available, pass them at submission
-time as a comma-separated export. For example:
-
-```sh
-make notebook-submit \
-    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    PARTITION=batch \
-    MEM=64G \
-    SBATCH_EXPORTS="HSSM_MODULES=uv"
-```
-
-If your site needs more than one module, separate them with commas:
-
-```sh
-make notebook-submit \
-    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    PARTITION=batch \
-    MEM=64G \
-    SBATCH_EXPORTS="HSSM_MODULES=python,uv"
-```
 
 If your cluster needs a BLAS/LAPACK environment, make sure that is configured before
 submission, for example through your normal module setup or `.pytensorrc` configuration.
-The CLI submit helper forwards `PYTENSOR_FLAGS` automatically. The shell submit helper
-also forwards `PYTENSOR_FLAGS` when it is present in the environment, and you can pass
-additional exports with repeated `--export` flags.
+Pass `PYTENSOR_FLAGS` with `sbatch --export` if needed.
 
 The default cluster examples in this repo use the `batch` partition. If you need a
 different partition on your site, check with:
 
 ```sh
 sinfo -h -o "%P"
-```
-
-If your site requires an account, pass it through the Make target or helper:
-
-```sh
-make notebook-submit \
-    RUN_DIR=.cache/notebook-runs/cluster-$(date +%Y%m%dT%H%M%S) \
-    PARTITION=batch \
-    ACCOUNT=<your-account> \
-    TIME_LIMIT=08:00:00 \
-    MEM=16G
-```
-
-If you prefer the Python helper that submits directly, you can still pass additional
-environment variables through repeated `--export` flags:
-
-```sh
-uv run python scripts/notebook_jobs.py submit-slurm \
-    --partition batch \
-    --time-limit 08:00:00 \
-    --mem 16G \
-    --export PYTENSOR_FLAGS=blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack \
-    --export MY_CLUSTER_FLAG=value
-```
-
-You can also pass through scheduler-specific flags with the Python helper using
-`--sbatch-arg`, for example:
-
-```sh
-uv run python scripts/notebook_jobs.py submit-slurm \
-    --partition batch \
-    --time-limit 08:00:00 \
-    --mem 16G \
-    --sbatch-arg=--constraint=icelake \
-    --sbatch-arg=--qos=normal
 ```
 
 After the array completes, rebuild the final report if needed:
