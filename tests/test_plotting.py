@@ -327,9 +327,6 @@ class TestPlotting:
         )
         assert len(g.figure.axes) == 5 * 4
 
-    @pytest.mark.xfail(
-        reason="AttributeError: 'DataTree' object has no attribute 'posterior_predictive'"
-    )
     @pytest.mark.parametrize("predictive_style", ["points", "ellipse", "both"])
     def test_plot_quantile_probability(self, cav_dt, cavanagh_test, predictive_style):
         """Tests the plot_quantile_probability function.
@@ -366,7 +363,7 @@ class TestPlotting:
         # but unclear where expectation is from.
         # assert len(ax1.get_lines()) == 9
 
-        delattr(model.traces, "posterior_predictive")
+        del model.traces["posterior_predictive"]
         ax2 = plot_quantile_probability(
             model, cond="stim", data=cavanagh_test, n_samples=2
         )  # Should sample posterior predictive
@@ -375,7 +372,7 @@ class TestPlotting:
         # but unclear where expectation is from.
         # assert len(ax2.get_lines()) == 9
         assert "posterior_predictive" in model.traces
-        assert model.traces.posterior_predictive.draw.size == 2
+        assert model.traces["posterior_predictive"].draw.size == 2
 
         with pytest.raises(ValueError):
             plot_quantile_probability(
