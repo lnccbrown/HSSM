@@ -254,8 +254,8 @@ def compute_merge_necessary_deterministics(
                     )
                 )
 
-    deterministics_idata = xr.merge(deterministics_list)
-    dt[dt_group] = xr.merge([group_ds, deterministics_idata])
+    deterministics_dt = xr.merge(deterministics_list)
+    dt[dt_group] = xr.merge([group_ds, deterministics_dt])
     return dt
 
 
@@ -328,7 +328,7 @@ def _make_dt_mean_posterior(dt: xr.DataTree) -> xr.DataTree:
     return _make_dt_mean_group(dt, "posterior")
 
 
-def _make_idata_mean_prior(dt: xr.DataTree) -> xr.DataTree:
+def _make_dt_mean_prior(dt: xr.DataTree) -> xr.DataTree:
     """Create a new DataTree object containing only the prior mean."""
     return _make_dt_mean_group(dt, "prior")
 
@@ -533,21 +533,19 @@ def plot_model_cartoon(
                 predictive_group=predictive_group,
             )
 
-            dt_mean = _make_idata_mean_prior(deepcopy(dt))
+            dt_mean = _make_dt_mean_prior(deepcopy(dt))
             # AF-COMMENT: This is a hack to get the prior predictive mean
             # we should find a better way to do this eventually.
             mean_dt = xr.DataTree.from_dict(
                 {"posterior": dt_mean["prior"].to_dataset()}
             )
-            idata_mean_tmp = model.predict(
-                **dict(
-                    idata=mean_dt,
-                    kind="response",
-                    inplace=False,
-                )
+            dt_mean_tmp = model.predict(
+                idata=mean_dt,  # bambi.Model.predict still uses idata
+                kind="response",
+                inplace=False,
             )
 
-            dt_mean["prior_predictive"] = idata_mean_tmp[
+            dt_mean["prior_predictive"] = dt_mean_tmp[
                 "posterior_predictive"
             ].to_dataset()
 
