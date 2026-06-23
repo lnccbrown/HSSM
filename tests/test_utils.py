@@ -233,9 +233,8 @@ def test_check_data_for_rl():
     assert n_trials == 2
 
 
-# @pytest.mark.xfail(strict=True, reason="Broken due to changes in PyMC; see #974.")
 @pytest.mark.xfail(
-    reason="TypeError when accessing idata.groups(): 'tuple' object is not callable"
+    reason="AttributeError: 'DataTree' object has no attribute 'to_dataframe'"
 )
 def test_predictive_idata_to_dataframe(data_ddm):
     model = hssm.HSSM(data=data_ddm)
