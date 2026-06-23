@@ -92,7 +92,7 @@ def run_sample(model, sampler, step, expected):
         del traces_copy["log_likelihood"]
 
         model.log_likelihood(traces_copy, inplace=True)
-        assert isinstance(traces_copy, az.InferenceData)
+        assert isinstance(traces_copy, xr.DataTree)
         assert "log_likelihood" in traces_copy
         for group_ in traces_copy:
             xr.testing.assert_equal(traces_copy[group_], model.traces[group_])

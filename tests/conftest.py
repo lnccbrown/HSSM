@@ -87,7 +87,7 @@ def data_ddm_reg_va():
 
 
 @pytest.fixture
-def cav_idata():
+def cav_dt():
     return az.from_netcdf("tests/fixtures/cavanagh_idata.nc")
 
 
