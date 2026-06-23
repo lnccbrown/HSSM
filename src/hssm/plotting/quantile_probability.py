@@ -562,7 +562,10 @@ def plot_quantile_probability(
     Returns
     -------
     Axes | FacetGrid | list[FacetGrid]
-        A seaborn FacetGrid object containing the plot.
+        If neither `row`, `col`, nor `groups` is provided, returns a single Axes object.
+        If `row` or `col` is provided (but not `groups`), returns a FacetGrid object.
+        If `groups` is provided, returns a list of FacetGrid objects, one for each
+        group.
     """
     # TODO: Should provide a few more safeguards to ensure
     # 1. quantile_by dimension is a column(s) of strings

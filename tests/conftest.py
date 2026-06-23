@@ -182,7 +182,7 @@ def intercept_only_ddm_cartoon(cavanagh_test):
         },
         coords={"chain": [0], "draw": [0, 1]},
     )
-    model._inference_obj = az.InferenceData(posterior=posterior)
+    model._inference_obj = xr.DataTree.from_dict({"posterior": posterior})
     return model
 
 
