@@ -57,7 +57,7 @@ def test_sample_posterior_predictive(
     cav_idata_copy = cav_idata.copy()
 
     posterior_predictive = model.sample_posterior_predictive(
-        idata=cav_idata_copy, draws=draws, safe_mode=safe_mode, inplace=inplace
+        dt=cav_idata_copy, draws=draws, safe_mode=safe_mode, inplace=inplace
     )
 
     if draws is None:
