@@ -165,7 +165,9 @@ class TestPlotting:
         assert len(g2.figure.axes) == 5 * 2
         assert len(g2.figure.axes[0].get_lines()) == 1
 
-    def test_plot_predictive(self, cav_idata, cavanagh_test):
+    def test_plot_predictive(self, cavanagh_test):
+        cav_idata = az.from_netcdf("tests/fixtures/cavanagh_idata.nc")
+
         # Mock model object
         model = hssm.HSSM(
             data=cavanagh_test,
