@@ -2,7 +2,6 @@
 
 import pytest
 
-import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -96,15 +95,12 @@ class TestPlotting:
             assert np.all(obs_n.value_counts() == expected // 500)
             assert df.columns[0] == "rt"
 
-    @pytest.mark.xfail(
-        reason="TypeError: DataTree.__init__() got an unexpected keyword argument 'posterior_predictive'"
-    )
     def test__get_plotting_df(self, posterior, cavanagh_test):
         """Test _get_plotting_df."""
 
-        # Makes a mock InferenceData object
+        # Makes a mock DataTree object
         posterior_dataset = xr.Dataset(data_vars={"rt,response": posterior})
-        idata = az.InferenceData(posterior_predictive=posterior_dataset)
+        idata = xr.DataTree.from_dict({"posterior_predictive": posterior_dataset})
 
         df = _get_plotting_df(
             idata, cavanagh_test, extra_dims=["participant_id", "conf"]
@@ -168,10 +164,7 @@ class TestPlotting:
         assert len(g2.figure.axes) == 5 * 2
         assert len(g2.figure.axes[0].get_lines()) == 1
 
-    @pytest.mark.xfail(
-        reason="AttributeError: 'DataTree' object has no attribute 'posterior_predictive'"
-    )
-    def test_plot_predictive(self, cav_dt, cavanagh_test):
+    def test_plot_predictive(self, cav_idata, cavanagh_test):
         # Mock model object
         model = hssm.HSSM(
             data=cavanagh_test,
@@ -195,14 +188,14 @@ class TestPlotting:
         ax1 = plot_predictive(model, ax=ax1)  # Should work directly
         assert len(ax1.get_lines()) == 2
 
-        delattr(model.traces, "posterior_predictive")
+        del model.traces["posterior_predictive"]
         _, ax2 = plt.subplots()
         ax2 = plot_predictive(
             model, ax=ax2, n_samples=2
         )  # Should sample posterior predictive
         assert len(ax2.get_lines()) == 2
         assert "posterior_predictive" in model.traces
-        assert model.traces.posterior_predictive.draw.size == 2
+        assert model.traces["posterior_predictive"].draw.size == 2
 
         with pytest.raises(ValueError):
             plot_predictive(model, groups="participant_id")
@@ -273,12 +266,7 @@ class TestPlotting:
     @pytest.mark.parametrize(
         "predictive_style",
         [
-            pytest.param(
-                "points",
-                marks=pytest.mark.xfail(
-                    reason="AssertionError: assert 'Density' == 'rt'"
-                ),
-            ),
+            "points",
             "ellipse",
             "both",
         ],
@@ -334,9 +322,6 @@ class TestPlotting:
         )
         assert len(g.figure.axes) == 5 * 4
 
-    @pytest.mark.xfail(
-        reason="AttributeError: 'DataTree' object has no attribute 'posterior_predictive'"
-    )
     @pytest.mark.parametrize("predictive_style", ["points", "ellipse", "both"])
     def test_plot_quantile_probability(self, cav_dt, cavanagh_test, predictive_style):
         """Tests the plot_quantile_probability function.
@@ -373,7 +358,7 @@ class TestPlotting:
         # but unclear where expectation is from.
         # assert len(ax1.get_lines()) == 9
 
-        delattr(model.traces, "posterior_predictive")
+        del model.traces["posterior_predictive"]
         ax2 = plot_quantile_probability(
             model, cond="stim", data=cavanagh_test, n_samples=2
         )  # Should sample posterior predictive
@@ -382,7 +367,7 @@ class TestPlotting:
         # but unclear where expectation is from.
         # assert len(ax2.get_lines()) == 9
         assert "posterior_predictive" in model.traces
-        assert model.traces.posterior_predictive.draw.size == 2
+        assert model.traces["posterior_predictive"].draw.size == 2
 
         with pytest.raises(ValueError):
             plot_quantile_probability(
