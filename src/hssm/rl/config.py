@@ -94,6 +94,14 @@ class RLSSMConfig(BaseModelConfig):
     learning_process: dict[str, Any] = field(kw_only=True)
     ssm_logp_func: Any = field(default=None, kw_only=True)
 
+    # Private metadata attached by from_ssms_model(); not constructor arguments.
+    _ssms_model_config: Any = field(default=None, init=False, repr=False)
+    _ssms_assembled_model: Any = field(default=None, init=False, repr=False)
+    _ssms_response_to_choice: dict[int, int] | None = field(
+        default=None, init=False, repr=False
+    )
+    _ssms_participant_contract: Any = field(default=None, init=False, repr=False)
+
     def __post_init__(self):  # noqa: D105
         if self.loglik_kind is None:
             self.loglik_kind = "approx_differentiable"
