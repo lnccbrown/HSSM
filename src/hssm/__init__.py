@@ -11,6 +11,7 @@ import importlib.metadata
 import logging
 import sys
 
+from .addm import aDDM, aDDMConfig
 from .config import ModelConfig
 from .datasets import load_data
 from .defaults import show_defaults
@@ -33,6 +34,8 @@ __version__ = importlib.metadata.version(__package__ or __name__)
 __all__ = [
     "HSSM",
     "RLSSM",
+    "aDDM",
+    "aDDMConfig",
     "Link",
     "load_data",
     "ModelConfig",

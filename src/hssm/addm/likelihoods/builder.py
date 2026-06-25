@@ -28,6 +28,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import jax
+import jax.numpy as jnp
 
 from hssm.distribution_utils.func_utils import make_vjp_func
 from hssm.distribution_utils.jax import make_jax_logp_ops
@@ -64,6 +65,11 @@ def make_addm_logp_func(
     def logp(data, eta, kappa, a, b, x0, r1, r2, flag, sacc_array, d, sigma):
         rt = data[:, 0]
         response = data[:, 1]
+        # sigma is the (fixed) diffusion-noise constant. The kernel vmaps over
+        # trials but treats sigma as a scalar, so a per-trial sigma column would
+        # collide with the quadrature grid. Reduce to a scalar (validated constant
+        # upstream); a scalar/0-d sigma passes through unchanged.
+        sigma = jnp.asarray(sigma).reshape(-1)[0]
         if use_default:
             # Kernel builds the drift array internally via the same
             # _build_addm_mu_array_data the default attention process delegates to.

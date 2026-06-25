@@ -1,6 +1,22 @@
 """Attentional Drift Diffusion Model (aDDM) integration for HSSM.
 
-This package will expose ``aDDM`` and ``aDDMConfig`` (added in later commits),
-mirroring ``hssm.rl``. For now it contains the vendored JAX likelihood kernel
-under ``likelihoods/jax/``.
+Exposes ``aDDM`` and ``aDDMConfig`` (peers of ``RLSSM`` / ``RLSSMConfig``) plus
+the attention-process registry. The vendored JAX likelihood kernel lives under
+``likelihoods/jax/``.
 """
+
+from .addm import aDDM
+from .attention_process import (
+    ATTENTION_PROCESSES,
+    resolve_attention_process,
+    standard_alternating,
+)
+from .config import aDDMConfig
+
+__all__ = [
+    "aDDM",
+    "aDDMConfig",
+    "ATTENTION_PROCESSES",
+    "resolve_attention_process",
+    "standard_alternating",
+]
