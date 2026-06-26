@@ -31,7 +31,7 @@ uv will handle the creation of the virtual environment with all dev and test
 dependencies with the following command:
 
 ```sh
-uv sync --group dev --group test
+uv sync --group notebook # dev group is synced by default. notebook groups is required for running the Jupyter notebook in the dev environment.
 ```
 
 This tells uv to install not only the HSSM dependencies but also the `dev` and `test`
@@ -53,85 +53,7 @@ uv sync --group dev --group test --extra cuda12
 
 Please ensure that you have a GPU that supports CUDA 12 for this installation.
 
-## Step 3. Set up a linear algebra package
-
-Different from installation through `conda`, which is what we recommend for HSSM users,
-when HSSM is installed through `uv` in a local development environment, `pytensor` does
-not usually know how to find the linear algebra acceleration library on your system, and
-when that happens, you will typically get slow inference speed using the default `pymc`
-NUTS sampler with the following warning:
-
-```
-WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.
-```
-
-If this happens, it means that we need to tell `pytensor` where the linear algebra
-library is installed on your system. There are many ways to do this, but the most
-convenient way is to create a `.pytensorrc` file in your home directory with the
-following content:
-
-```
-[blas]
-ldflags=...
-```
-
-What `...` actually is depends on your operating system and hardware architecture.
-Here's the recommendation for certain setups:
-
-### MacOS with ARM chips (M-series processors)
-
-MacOS with ARM chips comes with
-[accelerate framework](https://developer.apple.com/documentation/accelerate), and you
-just need to tell your `pytensor` to use it:
-
-```
-[blas]
-ldflags=-framework Accelerate
-```
-
-### Intel Macs, Linux and Windows (WSL) on Intel processors
-
-Intel has the oneAPI Math Kernel Library (oneMKL) that you can use as your acceleration
-library. You need to install the [oneMKL library](https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl.html#gs.now6fh)
-and then point your `.pytensorrc` file to it:
-
-```
-[blas]
-ldflags=-Lwherever/mkl/is -lmkl_core -lmkl_rt -lpthread -lm
-```
-
-Just replace `wherever/mkl/is` with the absolute path of MKL installed on your system.
-
-!!! note
-
-    If you wish to develop HSSM on Oscar, Brown University's HPC cluster, MKL is already
-    available through a module. You can [follow this instruction](https://github.com/lnccbrown/HSSM/discussions/440)
-    on how to write the `.pytensorrc` file.
-
-### Other systems
-
-On other systems, we recommend installing `openblas` or `lapack`. You can follow
-the instructions on [the openblas website](http://www.openmathlib.org/OpenBLAS/) or
-[the lapack website](https://www.netlib.org/lapack/) to install one of these libraries.
-
-If you installed `openblas`, then your `.pytensorrc` file should look like this:
-
-```
-[blas]
-ldflags=-L/path/to/openblas/lib -lopenblas
-```
-
-If you installed `openblas`, then your `.pytensorrc` file should look like this:
-
-```
-[blas]
-ldflags=-L/path/to/lapack/lib -lblas
-```
-
 ## Follow-up
-
-Once the above steps are done, you should be able to run a `pytensor` based sampler
-without any warnings.
 
 We recommend that you also configure your IDE to use the Python interpreter in the
 virtual environment created by `uv`. Typically, this virtual environment is in the

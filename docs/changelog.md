@@ -1,5 +1,21 @@
 # Changelog
 
+### 0.4.0
+
+This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
+
+#### Major new features:
+
+1. A new `RLSSM` class has been added to support reinforcement learning sequential sampling models.
+
+#### Breaking changes that requiresmigration:
+
+1. Dependencies has been streamlined to support PyMC 6.0+, ppytensor 3.0+, ArviZ 1.0+, and Bambi 0.18+.
+2. Consistent with PyMC 6.0+ and ArviZ 1,0+ expectations, the `model.sample()` by default uses `numba` as the compute backend.
+3. `model.sample()` now returns an `xarray.DataTree` object instead of the `arviz.InferenceData` object. Other functions that expect `arviz.InferenceData` objects have been updated to accept `xarray.DataTree` objects.
+4. `model.summary()` and `model.plot_trace()` methods are now removed. Use `az.summary()` and `az.plot_trace_dist()` instead.
+5. HSSM can now be installed directly from PyPI via `pip` or `uv`. Conda support is no longer provided.
+
 ### 0.3.0
 
 This version includes the following changes:
