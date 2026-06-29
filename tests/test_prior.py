@@ -212,7 +212,43 @@ def test_check_user_priors_unit():
     assert len(flagged) == 1
     assert flagged[0].parameter == "v"
     assert flagged[0].term == "1|participant_id"
+    # sigma is a hyperprior here -> the disconnected-node outcome.
+    assert "disconnected" in flagged[0].reason.lower()
 
+    assert check_user_priors_against_parameterization(fake_params, False) == []
+
+
+def test_check_user_priors_scalar_sigma_warns_about_build_failure():
+    """Scalar `sigma` + `mu` hyperprior under noncentered cannot build.
+
+    bambi's non-centered reparameterization only supports a Normal whose
+    `sigma` is itself a hyperprior. With a fixed scalar `sigma` and a `mu`
+    hyperprior, bambi raises NotImplementedError at build time, so the
+    targeted check must say the term fails to build rather than promising a
+    silent disconnected node.
+    """
+
+    class _FakeParam:
+        def __init__(self, prior, user_keys):
+            self.prior = prior
+            self._user_specified_prior_keys = user_keys
+
+    scalar_sigma_prior = {
+        "1|participant_id": bmb.Prior(
+            "Normal",
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=0.5,  # scalar sigma -> non-centered unsupported by bambi
+        ),
+    }
+    fake_params = {"v": _FakeParam(scalar_sigma_prior, {"1|participant_id"})}
+
+    flagged = check_user_priors_against_parameterization(fake_params, True)
+    assert len(flagged) == 1
+    assert flagged[0].term == "1|participant_id"
+    # Message must reflect the build-time failure, not a silent orphan node.
+    assert "build" in flagged[0].reason.lower()
+    assert "disconnected" not in flagged[0].reason.lower()
+    # Silent under centered, same as the hyperprior-sigma case.
     assert check_user_priors_against_parameterization(fake_params, False) == []
 
 

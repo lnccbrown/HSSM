@@ -111,13 +111,20 @@ def check_user_priors_against_parameterization(
     params: Params,
     noncentered: bool | dict[str, bool] | None,
 ) -> list[PriorMismatch]:
-    """Detect user priors that will be silently dropped by non-centered bambi.
+    """Detect user priors that conflict with non-centered bambi.
 
     Iterates over each :class:`RegressionParam` and inspects user-supplied
     group-specific Normal priors with nested ``mu`` hyperpriors. When the
-    effective ``noncentered`` is ``True`` for that component, the ``mu``
-    hyperprior is created as an orphan RV in the graph and ignored in the
-    deterministic ``offset * sigma`` reparameterization.
+    effective ``noncentered`` is ``True`` for that component, the outcome
+    depends on ``sigma``:
+
+    * If ``sigma`` is itself a hyperprior, bambi reparameterizes the term as
+      ``offset * sigma`` and the ``mu`` hyperprior is created as an orphan RV
+      in the graph, ignored by the likelihood (a disconnected node).
+    * If ``sigma`` is a fixed scalar, bambi's non-centered path does not apply
+      and it raises ``NotImplementedError`` at ``model.build()`` instead.
+
+    Both are flagged, with a message tailored to the actual outcome.
 
     Parameters
     ----------
@@ -154,19 +161,37 @@ def check_user_priors_against_parameterization(
             )
             if not effective_nc:
                 continue
+            # The graph outcome depends on `sigma`. bambi's non-centered path
+            # reparameterizes as `offset * sigma` only when `sigma` is itself
+            # a hyperprior; with a fixed scalar `sigma` it instead raises
+            # NotImplementedError at build time (verified on bambi 0.17.2 and
+            # 0.18.0). Tailor the message so it never promises a silent
+            # disconnected node when the build will actually fail.
+            if isinstance(prior.args.get("sigma"), bmb.Prior):
+                reason = (
+                    f"User prior for '{term_name}' on parameter "
+                    f"'{param_name}' supplies a hyperprior on `mu`, but the "
+                    "effective parameterization is non-centered. bambi will "
+                    "reparameterize this term as `offset * sigma` and drop "
+                    "the `mu` hyperprior, leaving it as a disconnected node "
+                    "in the PyMC graph."
+                )
+            else:
+                reason = (
+                    f"User prior for '{term_name}' on parameter "
+                    f"'{param_name}' supplies a hyperprior on `mu` with a "
+                    "fixed (scalar) `sigma`, but the effective "
+                    "parameterization is non-centered. bambi's non-centered "
+                    "reparameterization only supports a Normal whose `sigma` "
+                    "is itself a hyperprior, so this term cannot be built "
+                    "under non-centered: bambi raises NotImplementedError at "
+                    "model build time."
+                )
             mismatches.append(
                 PriorMismatch(
                     parameter=param_name,
                     term=term_name,
-                    reason=(
-                        f"User prior for '{term_name}' on parameter "
-                        f"'{param_name}' supplies a hyperprior on `mu`, but "
-                        "the effective parameterization is non-centered. "
-                        "bambi will reparameterize this term as "
-                        "`offset * sigma` and drop the `mu` hyperprior, "
-                        "leaving it as a disconnected node in the PyMC "
-                        "graph."
-                    ),
+                    reason=reason,
                     suggestion=(
                         "Either pass `noncentered=False` to `HSSM(...)` so "
                         "that `mu` is used in the centered Normal, or move "
