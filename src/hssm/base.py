@@ -52,8 +52,50 @@ from . import plotting
 from .config import BaseModelConfig
 from .param import Params
 from .param import UserParam as Param
+from .prior import _bambi_supports_per_parameter_noncentered
 
 _logger = logging.getLogger("hssm")
+
+
+def _scan_for_per_prior_noncentered(spec: Any) -> bool:
+    """Recursively detect a per-prior ``noncentered`` field in a user spec.
+
+    Looks for a non-``None`` ``"noncentered"`` entry anywhere inside the
+    user-supplied ``include`` / prior specifications, where it would be attached
+    to a group-specific term's prior. Walks plain ``dict``/``list`` structures
+    only; ``Param``/``Prior`` objects carry their own guard in ``hssm.Prior``.
+    """
+    if isinstance(spec, dict):
+        if spec.get("noncentered") is not None:
+            return True
+        return any(_scan_for_per_prior_noncentered(v) for v in spec.values())
+    if isinstance(spec, (list, tuple)):
+        return any(_scan_for_per_prior_noncentered(v) for v in spec)
+    return False
+
+
+def _assert_bambi_supports_noncentered(
+    *, model_level: Any, include: Any, p_outlier: Any, lapse: Any
+) -> None:
+    """Raise if per-parameter ``noncentered`` intent needs a newer bambi.
+
+    Covers the two paths that bypass ``hssm.Prior``'s own guard: a model-level
+    ``noncentered`` *dict* (per-component form) and a ``noncentered`` field
+    inside a user-supplied prior *dict*. Both come from bambi PR #983. A plain
+    ``bool`` model-level ``noncentered`` works on every bambi and is not guarded.
+    """
+    needs_support = isinstance(model_level, dict) or any(
+        _scan_for_per_prior_noncentered(s) for s in (include, p_outlier, lapse)
+    )
+    if needs_support and not _bambi_supports_per_parameter_noncentered():
+        raise ValueError(
+            "Per-parameter `noncentered` (a `noncentered` dict, or a "
+            "`noncentered` field on a prior) requires a bambi version that "
+            "includes PR #983 ('Parameter wise non centered'); the installed "
+            f"bambi ({bmb.__version__}) does not expose it. Upgrade bambi, or "
+            "use a plain `noncentered=True/False` for the whole model."
+        )
+
 
 # NOTE: Temporary mapping from old sampler names to new ones in bambi 0.16.0
 _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
@@ -177,6 +219,18 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         If `True`, the model will process the initial values. Defaults to `True`.
     initval_jitter : optional
         The jitter value for the initial values. Defaults to `0.01`.
+    noncentered : optional
+        Controls the centered vs. non-centered parameterization of
+        group-specific (hierarchical) terms. ``True`` (bambi's default) uses the
+        non-centered parameterization everywhere, ``False`` uses centered. A
+        ``dict`` keyed by HSSM parameter name (e.g. ``{"v": False, "a": True}``)
+        sets it per parameter; an unknown key raises at construction. A per-prior
+        ``noncentered`` field (inside a prior ``dict`` or on an ``hssm.Prior``)
+        overrides the model-level value for that term (precedence: per-prior >
+        model-level dict > default ``True``). The ``dict`` and per-prior forms
+        require a bambi version with PR #983. Only affects parameters that have a
+        group-specific term (e.g. ``... + (1|participant_id)``); setting it for a
+        non-hierarchical parameter is a silent no-op. Passed to ``bmb.Model``.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -319,6 +373,16 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.has_lapse = p_outlier is not None and p_outlier != 0
         self._check_lapse(lapse)
         # endregion
+
+        # Guard per-parameter / per-prior `noncentered` against an older bambi
+        # that would silently ignore it (the per-object path is guarded inside
+        # hssm.Prior; this covers the model-level dict and prior-dict forms).
+        _assert_bambi_supports_noncentered(
+            model_level=kwargs.get("noncentered"),
+            include=include,
+            p_outlier=p_outlier,
+            lapse=lapse,
+        )
 
         # Process all parameters
         self.params = Params.from_user_specs(
