@@ -14,6 +14,7 @@ import sys
 from .config import ModelConfig
 from .datasets import load_data
 from .defaults import show_defaults
+from .hmm import RSSSM
 from .hssm import HSSM
 from .link import Link
 from .modelconfig import list_models
@@ -34,6 +35,7 @@ __version__ = importlib.metadata.version(__package__ or __name__)
 __all__ = [
     "HSSM",
     "RLSSM",
+    "RSSSM",
     "Link",
     "list_models",
     "load_data",
