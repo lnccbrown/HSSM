@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
+import arviz as az
 
 import hssm
 from hssm.plotting.utils import (
@@ -164,8 +165,7 @@ class TestPlotting:
         assert len(g2.figure.axes) == 5 * 2
         assert len(g2.figure.axes[0].get_lines()) == 1
 
-    def test_plot_predictive(self, cav_idata, cavanagh_test):
-        # Mock model object
+    def test_plot_predictive(self, cav_dt, cavanagh_test):
         model = hssm.HSSM(
             data=cavanagh_test,
             include=[
