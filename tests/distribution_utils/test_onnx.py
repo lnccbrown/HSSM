@@ -6,15 +6,12 @@ import onnxruntime
 import pytest
 
 import hssm
-from hssm.distribution_utils.onnx_utils import *
 from hssm.distribution_utils.onnx import (
     make_jax_logp_funcs_from_onnx,
     make_jax_matrix_logp_funcs_from_onnx,
 )
-from hssm.distribution_utils.onnx_utils.onnx2jax import (
-    _recast_int64_to_int32,
-    make_jax_func,
-)
+from hssm.distribution_utils.onnx_utils import *
+from hssm.distribution_utils.onnx_utils.onnx2jax import make_jax_func
 
 hssm.set_floatX("float32")
 DECIMAL = 4
@@ -173,7 +170,7 @@ def _make_minimal_onnx(input_shape):
     ``input_shape`` is an iterable of ``int`` (concrete) or ``str``/``None``
     (symbolic / dynamic).
     """
-    from onnx import helper, TensorProto
+    from onnx import TensorProto, helper
 
     dims = list(input_shape)
     in_tensor = helper.make_tensor_value_info("x", TensorProto.FLOAT, dims)
@@ -198,22 +195,29 @@ def test_make_jax_func_accepts_concrete_input_dim():
     assert out.shape == (5,) or out.shape == (1, 5)  # squeeze may drop the 1
 
 
-def test_recast_int64_to_int32_rewrites_initializers():
-    """The int64 -> int32 pre-cast must rewrite int64 initializers in place."""
-    from onnx import helper, numpy_helper, TensorProto
+def test_make_jax_func_runs_int64_shape_graph():
+    """Loader runs graphs carrying int64 shape ops without the removed recast.
 
-    init = numpy_helper.from_array(np.array([1, 2, 3], dtype=np.int64), "shape")
-    in_tensor = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 3])
-    out_tensor = helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 3])
+    LAN/sbi exports carry int64 ``Reshape``/``Slice`` metadata. After dropping
+    the int64->int32 pre-cast (it corrupted flow exports by wrapping an
+    ``INT64_MAX`` sentinel to -1), ``make_jax_func`` must still load and run
+    such graphs correctly. This module runs under ``float32`` (x64 off), where
+    small int64 index/shape values truncate losslessly — the supported case.
+    """
+    from onnx import TensorProto, helper, numpy_helper
+
+    # y = Reshape(x, [5]): x is (1, 5) -> y is (5,); the shape arg is int64.
+    shape = numpy_helper.from_array(np.array([5], dtype=np.int64), "shape")
+    in_tensor = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 5])
+    out_tensor = helper.make_tensor_value_info("y", TensorProto.FLOAT, [5])
     node = helper.make_node("Reshape", inputs=["x", "shape"], outputs=["y"])
     graph = helper.make_graph(
-        [node], "minimal", [in_tensor], [out_tensor], initializer=[init]
+        [node], "reshape", [in_tensor], [out_tensor], initializer=[shape]
     )
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
 
-    assert model.graph.initializer[0].data_type == TensorProto.INT64
-    n = _recast_int64_to_int32(model)
-    assert n == 1
-    assert model.graph.initializer[0].data_type == TensorProto.INT32
-    # Idempotent: a second call is a no-op.
-    assert _recast_int64_to_int32(model) == 0
+    fn = make_jax_func(model)
+    inp = np.arange(5, dtype=np.float32).reshape(1, 5)
+    np.testing.assert_array_almost_equal(
+        np.asarray(fn(inp)), np.arange(5), decimal=DECIMAL
+    )

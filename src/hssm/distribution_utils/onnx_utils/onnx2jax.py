@@ -13,23 +13,24 @@ shapes into the returned closure, so calling that closure with a different
 shape silently produces wrong outputs for any graph that carries a
 batch-dependent intermediate (e.g. a ``torch.zeros(x.shape[0])`` log-det
 accumulator, or a ``Reshape`` whose ``-1`` resolves against the dynamic dim).
-LANs and the sbi NRE/NLE exporters in ``LANfactory.onnx`` already follow this
-contract; this guard prevents accidental violations from a future contributor.
+LANs and the sbi/bayesflow exporters in ``LANfactory.onnx`` already follow
+this contract; this guard prevents accidental violations from a future
+contributor.
 
-On precision: pytensor's JAX dispatch
-(``pytensor/link/jax/dispatch/basic.py``) sets ``jax_enable_x64`` from
-``pytensor.config.floatX`` at import time. With HSSM's default
-``floatX="float64"`` x64 is already on by the time this module loads;
-under ``hssm.set_floatX("float32")`` x64 is off. The previous version of
-this module also tried to flip ``jax_enable_x64`` at first call; that has
-been removed (it duplicated pytensor's contract, mutated global state, and
-hard-failed if JAX had already warmed up). Instead we pre-cast int64
-tensors / Cast targets to int32 in the graph at load time -- lossless for
-the index/shape values torch.onnx.export produces, and removes the silent
-truncation that ``jax_enable_x64=False`` would otherwise apply.
+On precision: HSSM's ONNX likelihoods rely on JAX x64. pytensor's JAX dispatch
+enables ``jax_enable_x64`` from ``pytensor.config.floatX`` at import time, so
+with HSSM's default ``floatX="float64"`` x64 is on by the time any ONNX graph
+is loaded, and the int64 shape/index tensors ``torch.onnx.export`` emits are
+preserved exactly. Under ``hssm.set_floatX("float32")`` x64 is off and JAX
+truncates those int64 values; flow-based exports (sbi nflows, bayesflow
+CouplingFlow) can carry an ``INT64_MAX`` open-ended-slice sentinel that
+truncates to ``-1`` and corrupts the graph, so float32 is not currently
+supported for such ONNX likelihoods. (An earlier revision rewrote int64
+tensors to int32 at load time, but that non-saturating cast wrapped the
+``INT64_MAX`` sentinel to ``-1`` and corrupted every flow export; it was
+removed in favour of relying on x64.)
 """
 
-import logging
 from typing import Callable
 
 import jax
@@ -43,56 +44,6 @@ from jaxonnxruntime import call_onnx, config
 # that check. This is safe for our use cases: those shapes are constant by
 # construction (baked at export time).
 config.update("jaxort_only_allow_initializers_as_static_args", False)
-
-_logger = logging.getLogger("hssm")
-
-
-def _recast_int64_to_int32(model: onnx.ModelProto) -> int:
-    """Rewrite int64 tensors and Cast targets in the graph to int32, in place.
-
-    torch.onnx.export carries int64 metadata (Reshape shape args, Constant
-    tensors, Cast targets) whose values are indices/shapes that always fit
-    losslessly in int32. With ``jax_enable_x64=False`` JAX truncates int64
-    to int32 implicitly and emits a UserWarning per access. Pre-casting at
-    load time:
-
-    * is bit-identical for valid index values (twos-complement of small
-      non-negative integers is preserved when the upper 32 bits are dropped),
-    * silences the JAX UserWarning,
-    * removes any dependency on global JAX state.
-
-    Returns
-    -------
-    int
-        Number of int64 sites rewritten (0 if none).
-    """
-    int64 = onnx.TensorProto.INT64
-    int32 = onnx.TensorProto.INT32
-    n_rewritten = 0
-
-    def _convert(tensor: onnx.TensorProto) -> None:
-        nonlocal n_rewritten
-        if tensor.data_type == int64:
-            arr = onnx.numpy_helper.to_array(tensor).astype(np.int32)
-            new = onnx.numpy_helper.from_array(arr, tensor.name)
-            tensor.CopyFrom(new)
-            n_rewritten += 1
-
-    for initializer in model.graph.initializer:
-        _convert(initializer)
-    for node in model.graph.node:
-        for attr in node.attribute:
-            if attr.type == onnx.AttributeProto.TENSOR:
-                _convert(attr.t)
-            elif attr.type == onnx.AttributeProto.TENSORS:
-                for t in attr.tensors:
-                    _convert(t)
-        if node.op_type == "Cast":
-            for attr in node.attribute:
-                if attr.name == "to" and attr.i == int64:
-                    attr.i = int32
-                    n_rewritten += 1
-    return n_rewritten
 
 
 def _check_single_trial_input_shape(model: onnx.ModelProto) -> None:
@@ -135,9 +86,8 @@ def make_jax_func(onnx_model: onnx.ModelProto) -> Callable:
     Parameters
     ----------
     onnx_model : onnx.ModelProto
-        The ONNX model to be converted. Will be mutated in place to recast
-        int64 tensors to int32 (lossless for index/shape values produced by
-        torch.onnx.export).
+        The ONNX model to be converted. Must have a concrete per-trial input
+        shape (no symbolic / dynamic dimensions).
 
     Returns
     -------
@@ -150,7 +100,6 @@ def make_jax_func(onnx_model: onnx.ModelProto) -> Callable:
         If the ONNX graph has any dynamic / symbolic input dimension.
     """
     _check_single_trial_input_shape(onnx_model)
-    _recast_int64_to_int32(onnx_model)
 
     model_graph = onnx_model.graph
     input_name = model_graph.input[0].name
