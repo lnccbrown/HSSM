@@ -7,6 +7,7 @@ This version contains major breaking updates for HSSM. Please read the release n
 #### Major new features:
 
 1. A new `RLSSM` class has been added to support reinforcement learning sequential sampling models.
+2. Per-parameter centered vs. non-centered parameterization. Pass `noncentered` to `HSSM(...)` as a `dict` keyed by parameter name (e.g. `noncentered={"v": False, "a": True}`), or set a per-prior `noncentered` field on a group term's prior (dict or `hssm.Prior`) to override the model-level choice. Requires Bambi with [PR #983](https://github.com/bambinos/bambi/pull/983). See the "Per-parameter centered vs. non-centered parameterization" tutorial.
 
 #### Breaking changes that requiresmigration:
 

@@ -9,6 +9,8 @@ bmb.Prior but adds the following:
 3. The ability to shorten the output of bmb.Prior.
 """
 
+import functools
+import inspect
 from copy import deepcopy
 from statistics import mean
 from typing import Any, Callable
@@ -20,6 +22,20 @@ from bambi.backend.utils import get_distribution
 from bambi.priors.prior import format_arg
 
 pymc_dist_args = ["rng", "initval", "dims", "observed", "total_size", "transform"]
+
+
+@functools.cache
+def _bambi_supports_per_parameter_noncentered() -> bool:
+    """Whether the installed bambi exposes per-parameter ``noncentered``.
+
+    bambi PR #983 ("Parameter wise non centered") added the per-``Prior``
+    ``noncentered`` field and the ``Model(noncentered={component: bool})`` form
+    together, so the presence of a ``noncentered`` parameter on
+    ``bmb.Prior.__init__`` is a sufficient signal for both. On older bambi the
+    field is silently swallowed into ``Prior.args`` (no error, wrong model), so
+    callers guard on this before forwarding a ``noncentered`` value.
+    """
+    return "noncentered" in inspect.signature(bmb.Prior.__init__).parameters
 
 
 # mypy: disable-error-code="has-type"
@@ -41,6 +57,12 @@ class Prior(bmb.Prior):  # noqa: PLW1641
         ``name``, ``dims``, and ``shape``, as well as its own keyworded arguments.
     bounds : optional
         A tuple of two floats indicating the lower and upper bounds of the prior.
+    noncentered : optional
+        For a group-specific (hierarchical) ``Normal`` prior, whether to use the
+        non-centered parameterization. ``None`` (default) inherits the
+        model-level ``noncentered`` setting; ``True``/``False`` overrides it for
+        this term. Requires a bambi version that includes PR #983; passing a
+        non-``None`` value on an older bambi raises ``ValueError``.
     """
 
     def __init__(
@@ -49,8 +71,23 @@ class Prior(bmb.Prior):  # noqa: PLW1641
         auto_scale: bool = True,
         dist: Callable | None = None,
         bounds: tuple[float, float] | None = None,
+        noncentered: bool | None = None,
         **kwargs,
     ):
+        # Forward `noncentered` to bambi only when the user set it, so the
+        # default path is byte-identical on every bambi version. On a bambi
+        # without PR #983 the field is silently swallowed into `args` (wrong
+        # model, no error), so guard against that here rather than let it pass.
+        if noncentered is not None:
+            if not _bambi_supports_per_parameter_noncentered():
+                raise ValueError(
+                    "Per-parameter `noncentered` requires a bambi version that "
+                    "includes PR #983 ('Parameter wise non centered'); the "
+                    f"installed bambi ({bmb.__version__}) does not expose it. "
+                    "Upgrade bambi, or drop `noncentered` from this prior and "
+                    "use the model-level `noncentered=True/False` instead."
+                )
+            kwargs["noncentered"] = noncentered
         bmb.Prior.__init__(self, name, auto_scale, dist, **kwargs)
         self.is_truncated = False
         self.bounds = bounds

@@ -247,3 +247,6 @@ publish-url = "https://test.pypi.org/legacy/"
 
 [tool.uv.sources]
 hssm = { workspace = true }
+# TEMP (Option B): per-parameter noncentered (#983) is unreleased; pin bambi to the
+# upstream merge commit until the next bambi release. Revert to a released pin before merge.
+bambi = { git = "https://github.com/bambinos/bambi", rev = "240008b80c818bcda1b76b193ac3019a08845191" }
