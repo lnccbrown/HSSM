@@ -21,11 +21,12 @@ def main():
     # Build the base command
     cmd = ["uv", "run", "pytest"]
 
+    # Append the dynamic arguments first so the script's fixed arguments
+    # (below) always take precedence and cannot be overridden by callers.
+    cmd.extend(extra_args)
+
     # Add any fixed arguments passed to this script
     cmd.extend(sys.argv[1:])
-
-    # Append the dynamic arguments
-    cmd.extend(extra_args)
 
     # Execute without a shell
     result = subprocess.run(cmd, check=False)
