@@ -24,11 +24,14 @@ is loaded, and the int64 shape/index tensors ``torch.onnx.export`` emits are
 preserved exactly. Under ``hssm.set_floatX("float32")`` x64 is off and JAX
 truncates those int64 values; flow-based exports (sbi nflows, bayesflow
 CouplingFlow) can carry an ``INT64_MAX`` open-ended-slice sentinel that
-truncates to ``-1`` and corrupts the graph, so float32 is not currently
-supported for such ONNX likelihoods. (An earlier revision rewrote int64
-tensors to int32 at load time, but that non-saturating cast wrapped the
-``INT64_MAX`` sentinel to ``-1`` and corrupted every flow export; it was
-removed in favour of relying on x64.)
+truncates to ``-1`` and corrupts the graph, so float32 is not supported for
+such ONNX likelihoods. This is now **enforced** at load time by
+``_check_int64_precision_safe``, which raises a clear ``ValueError`` when x64
+is off and the graph carries an int64 constant outside the int32 range --
+rather than letting the truncation silently corrupt the likelihood. (An
+earlier revision instead rewrote int64 tensors to int32 at load time, but that
+non-saturating cast wrapped the ``INT64_MAX`` sentinel to ``-1`` and corrupted
+every flow export; it was removed in favour of relying on x64 and this guard.)
 """
 
 from typing import Callable
@@ -77,6 +80,53 @@ def _check_single_trial_input_shape(model: onnx.ModelProto) -> None:
         )
 
 
+def _check_int64_precision_safe(model: onnx.ModelProto) -> None:
+    """Raise if the graph carries int64 constants that x64-off would corrupt.
+
+    Flow-based exports (sbi nflows, bayesflow ``CouplingFlow``) encode
+    open-ended slices with an ``INT64_MAX`` sentinel. When ``jax_enable_x64``
+    is off (i.e. ``hssm.set_floatX("float32")``), JAX truncates int64 to int32
+    and that sentinel wraps to ``-1``, silently corrupting the likelihood with
+    no error -- the most dangerous failure class for a likelihood. LAN /
+    analytical exports (angle, ddm) carry only small int64 shape/index values
+    that truncate losslessly, so this guard fires *only* when x64 is off **and**
+    an int64 value lies outside the int32 range; it never blocks the
+    currently-supported models. See the module docstring.
+    """
+    if jax.config.read("jax_enable_x64"):
+        return  # x64 on: int64 values are preserved exactly -- nothing to check.
+
+    int32_min, int32_max = -(2**31), 2**31 - 1
+
+    def _int64_out_of_int32_range(tensor: onnx.TensorProto) -> bool:
+        if tensor.data_type != onnx.TensorProto.INT64:
+            return False
+        arr = onnx.numpy_helper.to_array(tensor)
+        return bool(arr.size) and (arr.min() < int32_min or arr.max() > int32_max)
+
+    offenders: list[str] = []
+    for init in model.graph.initializer:
+        if _int64_out_of_int32_range(init):
+            offenders.append(f"initializer '{init.name}'")
+    for node in model.graph.node:
+        if node.op_type == "Constant":
+            for attr in node.attribute:
+                if attr.name == "value" and _int64_out_of_int32_range(attr.t):
+                    offenders.append(f"Constant node '{node.name or node.output[0]}'")
+
+    if offenders:
+        raise ValueError(
+            "ONNX model carries int64 constants outside the int32 range "
+            f"({', '.join(offenders)}) while JAX x64 is disabled "
+            "(hssm.set_floatX('float32')). JAX would truncate these to int32, "
+            "wrapping the INT64_MAX open-ended-slice sentinel that flow exports "
+            "(sbi nflows, bayesflow CouplingFlow) emit to -1 and silently "
+            "corrupting the likelihood. Enable x64 with "
+            "hssm.set_floatX('float64') (the default) -- float32 is not "
+            "supported for flow-based ONNX likelihoods."
+        )
+
+
 def make_jax_func(onnx_model: onnx.ModelProto) -> Callable:
     """Convert an ONNX model to a JAX function using jaxonnxruntime.
 
@@ -97,9 +147,12 @@ def make_jax_func(onnx_model: onnx.ModelProto) -> Callable:
     Raises
     ------
     ValueError
-        If the ONNX graph has any dynamic / symbolic input dimension.
+        If the ONNX graph has any dynamic / symbolic input dimension, or if it
+        carries int64 constants outside the int32 range while JAX x64 is off
+        (which would silently corrupt the likelihood -- see the module docstring).
     """
     _check_single_trial_input_shape(onnx_model)
+    _check_int64_precision_safe(onnx_model)
 
     model_graph = onnx_model.graph
     input_name = model_graph.input[0].name

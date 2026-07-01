@@ -221,3 +221,35 @@ def test_make_jax_func_runs_int64_shape_graph():
     np.testing.assert_array_almost_equal(
         np.asarray(fn(inp)), np.arange(5), decimal=DECIMAL
     )
+
+
+def test_make_jax_func_guards_int64_max_under_float32():
+    """x64-off must reject int64 constants that would truncate and corrupt.
+
+    Flow exports (sbi nflows, bayesflow ``CouplingFlow``) carry an ``INT64_MAX``
+    open-ended-slice sentinel. Under ``float32`` (x64 off) JAX would truncate it
+    to -1 and silently corrupt the likelihood, so ``make_jax_func`` must raise.
+    Under ``float64`` (x64 on, HSSM's default) the same graph loads fine.
+    """
+    from onnx import TensorProto, helper, numpy_helper
+
+    sentinel = numpy_helper.from_array(
+        np.array([2**63 - 1], dtype=np.int64), "sentinel"
+    )
+    in_tensor = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 5])
+    out_tensor = helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 5])
+    node = helper.make_node("Identity", inputs=["x"], outputs=["y"])
+    graph = helper.make_graph(
+        [node], "int64_max", [in_tensor], [out_tensor], initializer=[sentinel]
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+
+    try:
+        hssm.set_floatX("float32")  # x64 off -> the guard must fire
+        with pytest.raises(ValueError, match="int64"):
+            make_jax_func(model)
+
+        hssm.set_floatX("float64")  # x64 on (HSSM default) -> loads without raising
+        make_jax_func(model)
+    finally:
+        hssm.set_floatX("float32")  # restore the module default for later tests

@@ -85,6 +85,8 @@ Enforced at load time by `_check_single_trial_input_shape` in [`src/hssm/distrib
 
 LANfactory's exporters (`transform_sbi_to_onnx`, BayesFlow LRE export) already follow this convention. A new ONNX source must do the same: trace with a rank-1 dummy, no `dynamic_axes`.
 
+Two more load-time details in `onnx2jax.py`: (1) `_check_int64_precision_safe` raises when JAX x64 is off (`hssm.set_floatX("float32")`) and the graph carries int64 constants outside the int32 range — flow exports encode open-ended slices with an `INT64_MAX` sentinel that would truncate to `-1` and silently corrupt the likelihood; the guard turns that into a clear error (x64 is on by default via the `float64` default). (2) The module sets `jaxonnxruntime`'s `jaxort_only_allow_initializers_as_static_args=False` at import — a **process-wide** config mutation (needed because `torch.onnx.export` emits Reshape shapes as Constant nodes), so it loosens jaxonnxruntime strictness for the whole process, not just HSSM's calls.
+
 ### Notebook execution in CI
 
 Two separate skip mechanisms for notebooks:
