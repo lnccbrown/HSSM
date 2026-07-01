@@ -1,3 +1,7 @@
+import sys
+import types
+
+import jax.numpy as jnp
 import pytest
 
 import hssm
@@ -530,3 +534,265 @@ class TestRLSSMConfigDefaultWarnings:
         with caplog.at_level("WARNING", logger="hssm"):
             RLSSMConfig.from_rlssm_dict(_base_config_dict)
         assert not any("not specified" in m for m in caplog.messages)
+
+
+# region ssms.rl bridge (from_ssms_model)
+
+
+class _FakeSsMsModelConfig:
+    """Stand-in for an ``ssms.rl.ModelConfig`` (assembled API)."""
+
+    def __init__(self, *, gradient="available"):
+        self.gradient = gradient
+        self.validated_data = None
+
+    def validate(self):
+        return None
+
+    def assemble(self, backend="auto"):
+        return _FakeSsMsAssembledModel(self, backend=backend, gradient=self.gradient)
+
+    def participant_contract(self):
+        return {"context_fields": ["feedback"]}
+
+    def validate_data(self, data):
+        self.validated_data = data
+
+        class _Report:
+            def raise_for_errors(self):
+                return None
+
+        return _Report()
+
+
+class _FakeSsMsAssembledModel:
+    """Stand-in for an ``ssms.rl.AssembledModel``."""
+
+    def __init__(self, config, *, backend, gradient):
+        self.config = config
+        self.learning_backend = backend
+        self.gradient = gradient
+        self.model_name = "2AB_RW_Angle"
+        self.decision_process = "angle"
+        self.list_params = ["rl_alpha", "scaler", "a", "z", "t", "theta"]
+        self.bounds = {
+            "rl_alpha": (0.0, 1.0),
+            "scaler": (0.001, 10.0),
+            "a": (0.3, 3.0),
+            "z": (0.1, 0.9),
+            "t": (0.001, 2.0),
+            "theta": (-0.1, 1.3),
+        }
+        self.params_default = [0.2, 2.0, 1.5, 0.5, 0.3, 0.2]
+        self.response = ["rt", "response"]
+        self.choices = (-1, 1)
+        self.context_fields = ["feedback"]
+        self.computed_params = ["v"]
+        self.response_to_choice = {-1: 0, 1: 1}
+
+    def participant_input_fields(self):
+        return ["rl_alpha", "scaler", "response", "feedback"]
+
+    def assemble_participant_fn(self, output="array"):
+        assert output == "dict"
+
+        def compute(subject_trials):
+            responses = subject_trials[:, 2]
+            actions = jnp.where(responses == -1, 0.0, 1.0)
+            return {"v": subject_trials[:, 1] * actions}
+
+        return compute
+
+
+def _install_fake_ssms_rl(monkeypatch, *, gradient="available"):
+    config = _FakeSsMsModelConfig(gradient=gradient)
+    fake_rl = types.SimpleNamespace(
+        ModelConfig=_FakeSsMsModelConfig,
+        resolve_model=lambda model: config,
+    )
+    monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
+    return config
+
+
+def _install_fake_decision_logp(monkeypatch):
+    """Replace the registry decision-logp builder with a lightweight stub.
+
+    The real ``_get_ssm_logp`` would download/build the angle ONNX network; the
+    fast unit tests only care about the ssms bridge wiring, so we stub a base
+    annotated SSM logp with the same ``.inputs``/``.outputs`` shape.
+    """
+
+    @annotate_function(
+        inputs=["v", "a", "z", "t", "theta", "rt", "response"], outputs=["logp"]
+    )
+    def _fake_base(lan_matrix):
+        return jnp.sum(lan_matrix, axis=1)
+
+    monkeypatch.setattr(
+        "hssm.rl.registry._get_ssm_logp", lambda name: _fake_base, raising=False
+    )
+
+
+class TestRLSSMConfigFromSsMsModel:
+    def test_from_ssms_model_builds_hssm_config_from_assembled_metadata(
+        self, monkeypatch
+    ):
+        _install_fake_ssms_rl(monkeypatch)
+        _install_fake_decision_logp(monkeypatch)
+
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+        assert config.model_name == "2AB_RW_Angle"
+        assert config.decision_process == "angle"
+        assert config.decision_process_loglik_kind == "approx_differentiable"
+        assert config.learning_process_kind == "approx_differentiable"
+        assert config.list_params == ["rl_alpha", "scaler", "a", "z", "t", "theta"]
+        assert config.response == ["rt", "response"]
+        assert config.choices == (-1, 1)
+        # ssms context_fields surface through HSSM extra_fields plumbing.
+        assert config.extra_fields == ["feedback"]
+        assert set(config.ssm_logp_func.computed) == {"v"}
+        assert config.ssm_logp_func.inputs == [
+            "v",
+            "a",
+            "z",
+            "t",
+            "theta",
+            "rt",
+            "response",
+        ]
+        assert config.ssm_logp_func.computed["v"].inputs == [
+            "rl_alpha",
+            "scaler",
+            "response",
+            "feedback",
+        ]
+        assert config._ssms_response_to_choice == {-1: 0, 1: 1}
+        assert config._ssms_assembled_model is not None
+
+    def test_computed_function_uses_ssms_response_to_choice(self, monkeypatch):
+        _install_fake_ssms_rl(monkeypatch)
+        _install_fake_decision_logp(monkeypatch)
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+        compute_v = config.ssm_logp_func.computed["v"]
+        subject_trials = jnp.asarray(
+            [
+                [0.2, 2.0, -1.0, 1.0],
+                [0.2, 2.0, 1.0, 0.0],
+            ]
+        )
+
+        # response == -1 -> choice 0 -> v == 0; response == 1 -> choice 1 -> v == 2.
+        assert jnp.allclose(compute_v(subject_trials), jnp.asarray([0.0, 2.0]))
+
+    def test_from_ssms_model_rejects_unavailable_gradient(self, monkeypatch):
+        _install_fake_ssms_rl(monkeypatch, gradient="unavailable")
+        _install_fake_decision_logp(monkeypatch)
+
+        with pytest.raises(ValueError, match="gradient support"):
+            RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+    def test_from_ssms_model_requires_ssms_rl(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "ssms.rl", None)
+        with pytest.raises(ImportError, match="ssms.rl"):
+            RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+
+    def test_from_ssms_model_supports_multiple_computed_params(self, monkeypatch):
+        """The bridge must wire every assembled computed decision parameter.
+
+        Generic models can compute more than a single drift parameter (e.g.
+        ``drift -> v`` and ``threshold -> a``) and may carry context fields
+        beyond ``feedback`` (e.g. ``condition``). The bridge must not assume
+        Rescorla-Wagner, a single computed ``v``, or a privileged outcome
+        column.
+        """
+
+        class _MultiParamAssembled(_FakeSsMsAssembledModel):
+            def __init__(self, config, *, backend, gradient):
+                super().__init__(config, backend=backend, gradient=gradient)
+                self.computed_params = ["v", "a"]
+                self.context_fields = ["feedback", "condition"]
+
+            def participant_input_fields(self):
+                return ["rl_alpha", "scaler", "response", "feedback", "condition"]
+
+            def assemble_participant_fn(self, output="array"):
+                assert output == "dict"
+
+                def compute(subject_trials):
+                    return {
+                        "v": subject_trials[:, 1],
+                        "a": subject_trials[:, 0],
+                    }
+
+                return compute
+
+        class _MultiParamConfig(_FakeSsMsModelConfig):
+            def assemble(self, backend="auto"):
+                return _MultiParamAssembled(
+                    self, backend=backend, gradient=self.gradient
+                )
+
+        fake_rl = types.SimpleNamespace(
+            ModelConfig=_MultiParamConfig,
+            resolve_model=lambda model: _MultiParamConfig(),
+        )
+        monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
+        _install_fake_decision_logp(monkeypatch)
+
+        config = RLSSMConfig.from_ssms_model("multi_param_model")
+
+        # Both computed decision parameters are exposed to the annotated path.
+        assert set(config.ssm_logp_func.computed) == {"v", "a"}
+        # Context fields flow through HSSM's extra_fields plumbing, untouched —
+        # `condition` is not treated specially and `trial_id` is not injected.
+        assert config.extra_fields == ["feedback", "condition"]
+        for computed_fn in config.ssm_logp_func.computed.values():
+            assert computed_fn.inputs == [
+                "rl_alpha",
+                "scaler",
+                "response",
+                "feedback",
+                "condition",
+            ]
+
+
+class TestRLSSMConfigFromRealSsMs:
+    """Integration tests against a real, rl-capable ``ssm-simulators``.
+
+    These exercise the live ``ssms.rl`` handshake (not a stub), guarding against
+    silent contract drift (e.g. the assembled rename or the Milestone-4 rename
+    of ``extra_fields``/``response_to_action`` to ``context_fields``/
+    ``response_to_choice``). They skip automatically when the installed
+    ``ssm-simulators`` does not ship the RLSSM/JAX module.
+    """
+
+    @staticmethod
+    def _require_ssms_rl():
+        ssms_rl = pytest.importorskip(
+            "ssms.rl", reason="installed ssm-simulators has no ssms.rl module"
+        )
+        if not hasattr(ssms_rl, "resolve_model"):
+            pytest.skip("ssms.rl does not expose resolve_model")
+        return ssms_rl
+
+    def test_from_ssms_model_real_2ab_rw_angle(self):
+        self._require_ssms_rl()
+
+        config = RLSSMConfig.from_ssms_model("2AB_RW_Angle")
+        config.validate()
+
+        assert config.model_name == "2AB_RW_Angle"
+        assert config.decision_process == "angle"
+        # Canonical ssms parameter / response vocabulary.
+        assert "rl_alpha" in config.list_params
+        assert config.response == ["rt", "response"]
+        # context_fields surface through HSSM extra_fields, response mapping is
+        # keyed on raw SSM response labels.
+        assert config.extra_fields == ["feedback"]
+        assert config._ssms_response_to_choice == {-1: 0, 1: 1}
+        assert set(config.ssm_logp_func.computed) == {"v"}
+
+
+# endregion
