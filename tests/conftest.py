@@ -1,3 +1,7 @@
+import gc
+import logging
+import os
+
 import pytest
 
 import arviz as az
@@ -10,6 +14,101 @@ from ssms.basic_simulators.simulator import simulator
 import hssm
 
 mpl.use("Agg")
+
+_memory_logger = logging.getLogger("hssm.tests.memory")
+
+
+def _clear_jax_caches() -> None:
+    """Best-effort clear of JAX compilation caches.
+
+    ``jax.clear_caches`` may be absent on older JAX versions and could raise
+    depending on the backend state. Since this runs in fixture teardown, any
+    failure here must not fail the test run or mask the original result — so we
+    guard the attribute and swallow errors, logging at debug level.
+    """
+    try:
+        import jax
+    except ImportError:
+        return
+
+    clear_caches = getattr(jax, "clear_caches", None)
+    if clear_caches is None:
+        return
+
+    try:
+        clear_caches()
+    except Exception:  # noqa: BLE001 - teardown must never raise
+        _memory_logger.debug("jax.clear_caches() failed; ignoring.", exc_info=True)
+
+
+@pytest.fixture(autouse=True)
+def _slow_test_memory(request):
+    """Reclaim backend memory after each slow test and optionally log RSS.
+
+    Slow tests repeatedly build PyMC models and sample with the JAX, numpyro and
+    pytensor backends, which allocate native memory (compiled functions, device
+    buffers) that Python allocators never see. Without releasing it between tests
+    a serial run grows RSS until the process is OOM-killed. Gated on the ``slow``
+    marker so the fast suite is unaffected, and applies wherever the slow test
+    lives (not just ``tests/slow/``).
+
+    Reclamation and RSS logging live in one fixture on purpose: two separate
+    autouse fixtures have no guaranteed teardown order, so the logged RSS could
+    be sampled either before or after cleanup. Here the sequence is explicit:
+    end-of-test RSS (the leak-hunting signal) is sampled first, then cleanup
+    runs, then post-cleanup RSS is sampled to show how much was freed. RSS
+    logging is opt-in via ``HSSM_TEST_RSS_LOG`` because JAX and pytensor allocate
+    outside the Python heap, which allocation-only profilers miss.
+    """
+    is_slow = request.node.get_closest_marker("slow") is not None
+    log_rss = is_slow and os.environ.get("HSSM_TEST_RSS_LOG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+    process = None
+    rss_before = 0
+    if log_rss:
+        try:
+            import psutil
+
+            process = psutil.Process()
+            rss_before = process.memory_info().rss
+        except ImportError:
+            _memory_logger.warning("psutil not installed; skipping RSS logging.")
+
+    yield
+
+    if not is_slow:
+        return
+
+    # Sample RSS at end of test (before reclaiming). This is a point-in-time
+    # reading, not a peak — the process may have used more RSS earlier.
+    rss_end = process.memory_info().rss if process is not None else None
+
+    import matplotlib.pyplot as plt
+
+    plt.close("all")
+    _clear_jax_caches()
+    gc.collect()
+
+    if process is None:
+        return
+
+    rss_post_cleanup = process.memory_info().rss
+    mib = 1024 * 1024
+    _memory_logger.info(
+        "RSS %s: start=%.1f MiB end=%.1f MiB post_cleanup=%.1f MiB "
+        "(test delta=%+.1f MiB, freed=%+.1f MiB)",
+        request.node.nodeid,
+        rss_before / mib,
+        rss_end / mib,
+        rss_post_cleanup / mib,
+        (rss_end - rss_before) / mib,
+        (rss_end - rss_post_cleanup) / mib,
+    )
 
 
 @pytest.fixture(scope="module")
