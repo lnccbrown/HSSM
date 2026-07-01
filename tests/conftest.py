@@ -1,17 +1,18 @@
+"""Configuration and shared fixtures for the HSSM test suite."""
+
 import gc
 import logging
 import os
 
-import pytest
-
-import arviz as az
 import matplotlib as mpl
 
 mpl.use("Agg")
 
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 from ssms.basic_simulators.simulator import simulator
 
@@ -118,6 +119,7 @@ def _slow_test_memory(request):
 
 @pytest.fixture(scope="module")
 def data_ddm():
+    """Return DDM simulation data."""
     v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 0.5]
     obs_ddm = simulator([v_true, a_true, z_true, t_true], model="ddm", n_samples=100)
     obs_ddm = np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
@@ -128,6 +130,7 @@ def data_ddm():
 
 @pytest.fixture(scope="module")
 def data_angle():
+    """Return Angle simulation data."""
     v_true, a_true, z_true, t_true, theta_true = [0.5, 1.5, 0.5, 0.5, 0.3]
     obs_angle = simulator(
         [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=100
@@ -139,6 +142,7 @@ def data_angle():
 
 @pytest.fixture(scope="module")
 def data_ddm_reg():
+    """Return DDM simulation data with regression."""
     # Generate some fake simulation data
     intercept = 1.5
     x = np.random.uniform(-0.5, 0.5, size=250)
@@ -163,6 +167,7 @@ def data_ddm_reg():
 
 @pytest.fixture(scope="module")
 def data_ddm_reg_va():
+    """Return DDM simulation data with regression on v and a."""
     # Generate some fake simulation data
     intercept = 1.5
     intercept_a = 1.0
@@ -192,16 +197,19 @@ def data_ddm_reg_va():
 
 @pytest.fixture
 def cav_dt():
+    """Return Cavanagh idata."""
     return az.from_netcdf("tests/fixtures/cavanagh_idata.nc")
 
 
 @pytest.fixture
 def posterior():
+    """Return posterior predictive."""
     return xr.open_dataarray("tests/fixtures/cavanagh_idata_pps.nc")
 
 
 @pytest.fixture
 def cavanagh_test():
+    """Return Cavanagh test data."""
     return pd.read_csv("tests/fixtures/cavanagh_theta_test.csv", index_col=None)
 
 
@@ -212,6 +220,7 @@ def cavanagh_test():
 
 @pytest.fixture
 def basic_hssm_model():
+    """Return a basic HSSM model."""
     cav_data = hssm.load_data("cavanagh_theta")
     basic_hssm_model = hssm.HSSM(
         data=cav_data,
@@ -231,6 +240,7 @@ def basic_hssm_model():
 # Cartoon plot fixtures
 @pytest.fixture
 def cav_model_cartoon(cavanagh_test):
+    """Return a Cavanagh model for cartoon plots."""
     cav_model = hssm.HSSM(
         model="ddm",
         data=cavanagh_test,
@@ -292,6 +302,7 @@ def intercept_only_ddm_cartoon(cavanagh_test):
 
 @pytest.fixture
 def race_model_cartoon():
+    """Return a race model for cartoon plots."""
     my_race_data = pd.read_csv("tests/fixtures/data_race.csv")
     race_model = hssm.HSSM(
         model="race_no_bias_angle_4",
@@ -324,6 +335,7 @@ def race_model_cartoon():
 
 # Only useful if running tests serially
 def pytest_collection_modifyitems(config, items):
+    """Reorder tests so fast tests run before slow tests."""
     slow_tests = [item for item in items if "slow" in item.keywords]
     fast_tests = [item for item in items if "slow" not in item.keywords]
 
