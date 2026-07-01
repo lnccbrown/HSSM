@@ -22,6 +22,7 @@ jobs:
     if: ${{ ! contains(github.event.head_commit.message, '[skip fast tests]') }}
     env:
       PYTENSOR_FLAGS: "blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
+      HSSM_TEST_ARGS: ${{ inputs.test_args }}
 
     strategy:
       fail-fast: true
@@ -39,9 +40,6 @@ jobs:
       - name: Run fast tests
         if: ${{ !inputs.run_slow_tests }}
         run: uv run python scripts/run_pytest_safe.py -m "not slow"
-        env:
-          PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
-          HSSM_TEST_ARGS: ${{ inputs.test_args }}
 
       - name: Run all tests
         if: ${{ inputs.run_slow_tests }}
@@ -50,5 +48,3 @@ jobs:
           # Log per-test RSS to diagnose slow-test memory leaks. This step only
           # runs on the slow-test path (run_slow_tests.yml), so it stays scoped.
           HSSM_TEST_RSS_LOG: "1"
-          PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
-          HSSM_TEST_ARGS: ${{ inputs.test_args }}
