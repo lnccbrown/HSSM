@@ -1516,11 +1516,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Save traces to netcdf file
         if self._inference_obj is not None:
-            az.to_netcdf(self._inference_obj, model_path.joinpath("traces.nc"))
+            self._inference_obj.to_netcdf(model_path.joinpath("traces.nc"))
 
         # Save vi_traces to netcdf file
         if self._inference_obj_vi is not None:
-            az.to_netcdf(self._inference_obj_vi, model_path.joinpath("vi_traces.nc"))
+            self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
 
     @classmethod
     def load_model(
