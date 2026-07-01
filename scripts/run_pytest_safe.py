@@ -12,7 +12,11 @@ def main():
     test_args_str = os.environ.get("HSSM_TEST_ARGS", "")
 
     # Split safely using shell-like syntax
-    extra_args = shlex.split(test_args_str)
+    try:
+        extra_args = shlex.split(test_args_str)
+    except ValueError as e:
+        print(f"Error parsing HSSM_TEST_ARGS: {e}", file=sys.stderr)
+        sys.exit(1)
 
     # Build the base command
     cmd = ["uv", "run", "pytest"]
