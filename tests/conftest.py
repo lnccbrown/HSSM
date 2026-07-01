@@ -19,12 +19,26 @@ _memory_logger = logging.getLogger("hssm.tests.memory")
 
 
 def _clear_jax_caches() -> None:
-    """Clear JAX compilation caches if JAX is importable."""
+    """Best-effort clear of JAX compilation caches.
+
+    ``jax.clear_caches`` may be absent on older JAX versions and could raise
+    depending on the backend state. Since this runs in fixture teardown, any
+    failure here must not fail the test run or mask the original result — so we
+    guard the attribute and swallow errors, logging at debug level.
+    """
     try:
         import jax
     except ImportError:
         return
-    jax.clear_caches()
+
+    clear_caches = getattr(jax, "clear_caches", None)
+    if clear_caches is None:
+        return
+
+    try:
+        clear_caches()
+    except Exception:  # noqa: BLE001 - teardown must never raise
+        _memory_logger.debug("jax.clear_caches() failed; ignoring.", exc_info=True)
 
 
 @pytest.fixture(autouse=True)
