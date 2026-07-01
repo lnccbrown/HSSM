@@ -19,8 +19,11 @@ jobs:
   run_tests:
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    # head_commit is only populated on push events; use the PR title on
-    # pull_request events so the skip marker works in both contexts.
+    # Skip marker support depends on the trigger's event payload:
+    #   - push:         reads github.event.head_commit.message
+    #   - pull_request: reads github.event.pull_request.title
+    #   - workflow_call: neither field exists, so the marker is not detectable
+    #     and this job always runs (callers must gate skipping on their side).
     if: >-
       ${{
         ! contains(github.event.head_commit.message, '[skip fast tests]') &&
