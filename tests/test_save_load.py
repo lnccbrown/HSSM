@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import xarray as xr
 
 import hssm
 
@@ -46,6 +47,7 @@ def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
         model_name=tmp_model_name_1, base_path=tmp_path, allow_absolute_base_path=True
     )
     loaded_model = hssm.HSSM.load_model(path=tmp_path / tmp_model_name_1)
+    assert isinstance(loaded_model, hssm.HSSM)
 
     # Check that idata is attached to loaded model
     compare_hssm_class_attributes(basic_hssm_model, loaded_model)
@@ -62,6 +64,7 @@ def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
     )
 
     loaded_model = hssm.HSSM.load_model(path=tmp_path / tmp_model_name_2)
+    assert isinstance(loaded_model, hssm.HSSM)
 
     # Check that idata is attached to loaded model
     assert loaded_model._inference_obj is not None
@@ -81,7 +84,7 @@ def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
     loaded_idata = hssm.HSSM.load_model(path=tmp_path / tmp_model_name_3)
 
     # Check that idata is attached to loaded model
-    assert isinstance(loaded_idata, dict)
+    assert isinstance(loaded_idata, xr.DataTree)
     assert loaded_idata["idata_mcmc"] is not None
     assert loaded_idata["idata_vi"] is not None
 
@@ -96,6 +99,7 @@ def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
     loaded_model = hssm.HSSM.load_model(path=tmp_path / tmp_model_name_4)
 
     # Check that vi traces are not attached to loaded model
+    assert isinstance(loaded_model, hssm.HSSM)
     assert loaded_model._inference_obj_vi is None
     assert loaded_model._inference_obj is not None
     compare_hssm_class_attributes(basic_hssm_model, loaded_model)

@@ -64,10 +64,17 @@ def test_sample_map(caplog, loglik_kind, model, sampler, initvals):
             cores=1,
             draws=10,
             tune=10,
+            progressbar=False,
         )
     if initvals == "map":
         model_on.sample(
-            sampler=sampler, initvals=initvals, chains=1, cores=1, draws=10, tune=10
+            sampler=sampler,
+            initvals=initvals,
+            chains=1,
+            cores=1,
+            draws=10,
+            tune=10,
+            progressbar=False,
         )
 
 

@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytensor
 import pytest
+import xarray as xr
 from ssms.basic_simulators.simulator import simulator
 from jax import config
 
@@ -155,12 +156,12 @@ def assertions(caplog, obj, n_samples, expected):
 )
 def test__random_sample(
     caplog,
-    cav_idata,
+    cav_dt,
     n_samples,
     expected,
 ):
-    posterior = cav_idata.posterior
-    posterior_predictive = cav_idata.posterior_predictive
+    posterior = cav_dt["posterior"]
+    posterior_predictive = cav_dt["posterior_predictive"]
 
     assertions(caplog, posterior, n_samples, expected)
     assertions(caplog, posterior_predictive, n_samples, expected)
@@ -233,7 +234,8 @@ def test_check_data_for_rl():
 def test_predictive_idata_to_dataframe(data_ddm):
     model = hssm.HSSM(data=data_ddm)
     sample_do = model.sample_do(params={"v": 1.0}, draws=10)
-    df = hssm.utils.predictive_idata_to_dataframe(
+    assert isinstance(sample_do, xr.DataTree)
+    df = hssm.utils.predictive_dt_to_dataframe(
         sample_do, predictive_group="prior_predictive"
     )
     assert df is not None

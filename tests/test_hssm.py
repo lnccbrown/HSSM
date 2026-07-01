@@ -225,10 +225,10 @@ def test_override_default_link(caplog, data_ddm_reg):
 @pytest.mark.slow
 def test_resampling(data_ddm):
     model = HSSM(data=data_ddm)
-    sample_1 = model.sample(draws=10, chains=1, tune=0)
+    sample_1 = model.sample(draws=10, chains=1, tune=0, progressbar=False)
     assert sample_1 is model.traces
 
-    sample_2 = model.sample(draws=10, chains=1, tune=0)
+    sample_2 = model.sample(draws=10, chains=1, tune=0, progressbar=False)
     assert sample_2 is model.traces
 
     assert sample_1 is not sample_2
@@ -236,11 +236,11 @@ def test_resampling(data_ddm):
 
 @pytest.mark.slow
 def test_add_likelihood_parameters_to_data(data_ddm):
-    """Test if the likelihood parameters are added to the InferenceData object."""
+    """Test if the likelihood parameters are added to the DataTree object."""
     model = HSSM(data=data_ddm)
-    sample_1 = model.sample(draws=10, chains=1, tune=10)
+    sample_1 = model.sample(draws=10, chains=1, tune=10, progressbar=False)
     sample_1_copy = deepcopy(sample_1)
-    model.add_likelihood_parameters_to_idata(inplace=True)
+    model.add_likelihood_parameters_to_datatree(inplace=True)
 
     # Get distributional components (make sure to take the right aliases)
     distributional_component_names = [
@@ -249,7 +249,7 @@ def test_add_likelihood_parameters_to_data(data_ddm):
     ]
 
     # Check that after computing the likelihood parameters
-    # all respective parameters appear in the InferenceData object
+    # all respective parameters appear in the DataTree object
     assert np.all(
         [
             component_ in model.traces.posterior.data_vars
@@ -385,7 +385,7 @@ class TestFixedVectorParams:
             model="ddm",
             include=[{"name": "v", "prior": v_fixed}],
         )
-        idata = model.sample(draws=10, chains=1, tune=10)
+        idata = model.sample(draws=10, chains=1, tune=10, progressbar=False)
 
         # v must not appear in the posterior (it's a constant, not sampled)
         assert "v" not in idata.posterior.data_vars
@@ -406,7 +406,7 @@ class TestFixedVectorParams:
                 {"name": "t", "prior": t_fixed},
             ],
         )
-        idata = model.sample(draws=10, chains=1, tune=10)
+        idata = model.sample(draws=10, chains=1, tune=10, progressbar=False)
 
         # Both fixed params excluded from posterior
         assert "v" not in idata.posterior.data_vars

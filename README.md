@@ -5,7 +5,7 @@
   </a>
 </div>
 
-## HSSM - Hierarchical Sequential Sampling Modeling
+# HSSM - Hierarchical Sequential Sampling Modeling
 
 [![DOI](https://zenodo.org/badge/545006401.svg)](https://doi.org/10.5281/zenodo.17247695)
 ![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
@@ -18,7 +18,7 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![codecov](https://codecov.io/gh/lnccbrown/HSSM/branch/main/graph/badge.svg)](https://codecov.io/gh/lnccbrown/HSSM)
 
-### Overview
+## Overview
 
 HSSM is an open-source Python toolbox for computational modeling in cognitive
 neuroscience. It supports a broad range of sequential sampling models used to
@@ -29,7 +29,7 @@ probabilistic programming to enable flexible hierarchical Bayesian inference via
 modern MCMC samplers. It is user-friendly and provides the ability to rigorously
 estimate the impact of neural and other trial-by-trial covariates through
 parameter-wise mixed-effects models. HSSM is a
-<a href="https://ccbs.carney.brown.edu/brainstorm">BRAINSTORM</a> project in
+[Brainstorm](https://ccbs.carney.brown.edu/brainstorm) project in
 collaboration with the Center for Computation and Visualization and the Center
 for Computational Brain Science within the Carney Institute at Brown University.
 
@@ -41,10 +41,12 @@ for Computational Brain Science within the Carney Institute at Brown University.
 - Built on PyMC with support from the Python Bayesian ecosystem at large.
 - Incorporates Bambi's intuitive `lmer`-like regression parameter specification
   for within- and between-subject effects.
+- (💥 New in HSSM 0.4.0) Support for reinforcement learning sequential sampling models.
 - Native ArviZ support for plotting and other convenience functions to aid the
   Bayesian workflow.
 - Utilizes the ONNX format for translation of differentiable likelihood
   approximators across backends.
+- Broad ecosystem support for differentiable likelihoods sourced from the sbi and BayesFlow libraries.
 
 ### [Official documentation](https://lnccbrown.github.io/HSSM/).
 
@@ -52,7 +54,7 @@ for Computational Brain Science within the Carney Institute at Brown University.
 
 ## Cite HSSM
 
-Fengler, A., Xu, Y., Bera, K., Paniagua, C.,  Omar, A., Frank, M.J. (in preparation). HSSM: A
+Fengler, A., Xu, Y., Bera, K., Paniagua, C., Omar, A., Frank, M.J. (in preparation). HSSM: A
 widely applicable toolbox for hierarchical bayesian neurocognitive modeling.
 
 Please also use this DOI: [https://doi.org/10.5281/zenodo.17247695](https://doi.org/10.5281/zenodo.17247695)
@@ -95,47 +97,37 @@ For a deeper dive into HSSM, please follow
 
 ## Installation
 
-HSSM can be directly installed into your conda environment on Linux and MacOS.
-Installing HSSM on windows takes only one more simple step. We have a more
-detailed
-[installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/)
-for users with more specific setups.
+(💥 New in HSSM 0.4.0) HSSM supports installation directly through `pip` or `uv` on
+all platforms.
 
-### Install HSSM on Linux and MacOS (CPU only)
+### Install HSSM (CPU only)
 
 Use the following command to install HSSM into your virtual environment:
 
 ```bash
-conda install -c conda-forge hssm
+pip install hssm
 ```
 
-### Install HSSM on Linux and MacOS (with GPU Support)
+YOu can also install HSSM with `uv`:
+
+```bash
+uv add hssm
+```
+
+### Install HSSM with IO support
+
+If you need to save/load models and traces, please install HSSM with IO support:
+
+```bash
+pip install hssm[io]
+```
+
+### Install HSSM (with GPU Support)
 
 If you need to sample with GPU, please install JAX with GPU support before
 installing HSSM:
 
 ```bash
-conda install jaxlib=*=*cuda* jax cuda-nvcc -c conda-forge -c nvidia
-conda install -c conda-forge hssm
-```
-
-### Install HSSM on Windows (CPU only)
-
-Because dependencies such as `jaxlib` and `numpyro` are not up-to-date on Conda,
-the easiest way to install HSSM on Windows is to install PyMC first and install
-HSSM via `pip`:
-
-```bash
-conda install -c conda-forge pymc
-pip install hssm
-```
-
-### Install HSSM on Windows (with GPU support)
-
-You simply need to install JAX with GPU support after installing PyMC:
-
-```bash
-conda install -c conda-forge pymc
 pip install hssm[cuda12]
 ```
 
@@ -144,24 +136,6 @@ pip install hssm[cuda12]
 JAX also has support other GPUs. Please follow the
 [Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html)
 to install the correct version of JAX before installing HSSM.
-
-## Advanced Installation
-
-### Install HSSM directly with Pip
-
-HSSM is also available through PyPI. You can directly install it with pip into
-any virtual environment via:
-
-```bash
-pip install hssm
-```
-
-**Note:** While this installation is much simpler, you might encounter this
-warning message
-`WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.`
-Please refer to our
-[advanced installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/)
-for more details.
 
 ### Install the dev version of HSSM
 
@@ -184,12 +158,12 @@ Colab regardless of the backend you are using:
 ## Troubleshooting
 
 **Note:** Possible solutions to any issues with installations with hssm can be
-located [here](https://github.com/lnccbrown/HSSM/discussions). Also feel free to
-start a new discussion thread if you don't find answers there. We recommend
-installing HSSM into a new conda environment with Python 3.10 or 3.11 to prevent
+located [on GitHub Discussions](https://github.com/lnccbrown/HSSM/discussions). Also
+feel free to start a new discussion thread if you don't find answers there. We recommend
+installing HSSM into a new conda environment with Python 3.12 through 3.14 to prevent
 any problems with dependencies during the installation process. Please note that
-hssm is only tested for python 3.10, 3.11. As of HSSM v0.2.0, support for Python
-3.9 is dropped. Use unsupported python versions with caution.
+hssm is only tested for python 3.12 through 3.14. As of HSSM v0.4.0, support for Python
+3.11 or lower is dropped. Use unsupported python versions with caution.
 
 ## License
 

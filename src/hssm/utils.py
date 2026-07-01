@@ -14,10 +14,8 @@ import functools
 import itertools
 import logging
 import os
-from copy import deepcopy
 from typing import Any, Callable, Literal, cast
 
-import arviz as az
 import bambi as bmb
 import jax
 import numpy as np
@@ -28,7 +26,6 @@ import pytensor.tensor as pt
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
 from bambi.utils import get_aliased_name, response_evaluate_new_data
-from tqdm import tqdm
 
 from .param.param import Param
 
@@ -131,27 +128,29 @@ def _get_alias_dict(
 
 def _compute_log_likelihood(
     model: bmb.Model,
-    idata: az.InferenceData,
+    dt: xr.DataTree,
     data: pd.DataFrame | None,
     inplace: bool = True,
-) -> az.InferenceData | None:
+) -> xr.DataTree | None:
     """Compute the model's log-likelihood.
 
     Parameters
     ----------
-    idata : InferenceData
-        The `InferenceData` instance returned by `.fit()`.
+    model : bmb.Model
+        The fitted Bambi model for which the log-likelihood is to be computed.
+    dt : xr.DataTree
+        The `DataTree` instance returned by `.fit()`.
     data : pandas.DataFrame or None
         An optional data frame with values for the predictors and the response on which
         the model's log-likelihood function is evaluated.
         If omitted, the original dataset is used.
     inplace : bool
-        If True` it will modify `idata` in-place. Otherwise, it will return a copy of
-        `idata` with the `log_likelihood` group added.
+        If True` it will modify `dt` in-place. Otherwise, it will return a copy of
+        `dt` with the `log_likelihood` group added.
 
     Returns
     -------
-    InferenceData or None
+    xr.DataTree | None
     """
     # These are not formal parameters because it does not make sense to...
     #   1. compute the log-likelihood omitting
@@ -164,34 +163,34 @@ def _compute_log_likelihood(
     response_aliased_name = get_aliased_name(model.response_component.term)
 
     if not inplace:
-        idata = deepcopy(idata)
+        dt = dt.copy(deep=True)
 
-    # # Populate the posterior in the InferenceData object
+    # # Populate the posterior in the DataTree object
     # with the likelihood parameters
-    idata = model._compute_likelihood_params(  # pylint: disable=protected-access
-        idata, data, include_group_specific, sample_new_groups
+    dt = model._compute_likelihood_params(  # pylint: disable=protected-access
+        dt, data, include_group_specific, sample_new_groups
     )
 
-    required_kwargs = {"model": model, "posterior": idata["posterior"], "data": data}
+    required_kwargs = {"model": model, "posterior": dt["posterior"], "data": data}
+
+    if not model.family:
+        raise ValueError("Model family is not defined. Cannot compute log-likelihood.")
     log_likelihood_out = log_likelihood(model.family, **required_kwargs).to_dataset(
         name=response_aliased_name
     )
 
     # Drop the existing log_likelihood group if it exists
-    if "log_likelihood" in idata:
-        _logger.info("Replacing existing log_likelihood group in idata.")
-        del idata["log_likelihood"]
+    if "log_likelihood" in dt:
+        _logger.warning("Replacing existing log_likelihood group in dt.")
+        del dt["log_likelihood"]
 
-    # Assign the log-likelihood group to the InferenceData object
-    idata.add_groups({"log_likelihood": log_likelihood_out})
-    setattr(
-        idata,
-        "log_likelihood",
-        idata["log_likelihood"].assign_attrs(
-            modeling_interface="bambi", modeling_interface_version=bmb.__version__
-        ),
+    log_likelihood_out = log_likelihood_out.assign_attrs(
+        modeling_interface="bambi", modeling_interface_version=bmb.__version__
     )
-    return idata
+
+    # Assign the log-likelihood group to the DataTree object
+    dt["log_likelihood"] = log_likelihood_out
+    return dt
 
 
 def log_likelihood(
@@ -290,9 +289,7 @@ def log_likelihood(
         )
 
     # Loop through chain and draws
-    for ids in tqdm(
-        list(itertools.product(coords["chain"].values, coords["draw"].values))
-    ):
+    for ids in itertools.product(coords["chain"].values, coords["draw"].values):
         kwargs_tmp = {
             key_: (
                 val[ids[0], ids[1], ...]
@@ -536,20 +533,20 @@ def check_data_for_rl(
     return sorted_data, n_participants, n_trials
 
 
-def predictive_idata_to_dataframe(
-    idata: az.InferenceData,
+def predictive_dt_to_dataframe(
+    dt: xr.DataTree,
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
     response_str: str = "rt,response",
     response_dim: str = "rt,response_dim",
 ) -> pd.DataFrame:
-    """Convert a predictive InferenceData object to a dataframe.
+    """Convert a predictive DataTree object to a dataframe.
 
     Parameters
     ----------
-    idata : az.InferenceData
-        The InferenceData object to convert.
+    dt : xr.DataTree
+        The DataTree object to convert.
     predictive_group : Literal["posterior_predictive", "prior_predictive"]
         The predictive group to convert.
 
@@ -558,7 +555,7 @@ def predictive_idata_to_dataframe(
     pd.DataFrame:
         A dataframe with the predictive samples.
     """
-    df = idata[predictive_group].to_dataframe().reset_index(drop=False)
+    df = dt[predictive_group].ds.to_dataframe().reset_index(drop=False)
     df_wide = df.pivot_table(
         index=["chain", "draw", "__obs__"], columns=response_dim, values=response_str
     ).reset_index()
@@ -632,3 +629,38 @@ def annotate_function(**kwargs):
         return wrapper
 
     return decorator
+
+
+def _requires_io_backends(func: Callable) -> Callable:
+    """Decorate a function to require h5py and h5netcdf.
+
+    If h5py or h5netcdf is not installed, raise an ImportError instructing
+    the user to install hssm with the "io" extra.
+
+    Parameters
+    ----------
+    func : Callable
+        The function to wrap.
+
+    Returns
+    -------
+    Callable
+        The wrapped function.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            import h5netcdf  # noqa: F401
+            import h5py  # noqa: F401
+        except ImportError as exc:
+            raise ImportError(
+                "h5py and h5netcdf are required for I/O operations for model traces. "
+                'Please install hssm with the "io" extra: '
+                "`pip install hssm[io]` "
+                'or `uv add "hssm[io]"` if using uv.'
+            ) from exc
+
+        return func(*args, **kwargs)
+
+    return wrapper

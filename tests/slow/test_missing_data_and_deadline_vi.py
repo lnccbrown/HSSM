@@ -1,8 +1,8 @@
 import pytest
 
-import arviz as az
 import hssm
 import numpy as np
+import xarray as xr
 
 from hssm.utils import _rearrange_data
 
@@ -56,12 +56,12 @@ def run_vi(model, method, expected):
     import pymc as pm
 
     if expected == True:
-        model.vi(method, niter=1000)
-        assert isinstance(model.vi_idata, az.InferenceData)
-        assert isinstance(model.vi_approx, pm.Approximation)
+        model.vi(method, niter=1000, progressbar=False)
+        assert isinstance(model.vi_idata, xr.DataTree)
+        assert isinstance(model.vi_approx, pm.variational.Approximation)
     else:
         with pytest.raises(expected):
-            model.vi(method, niter=1000)
+            model.vi(method, niter=1000, progressbar=False)
 
 
 @pytest.mark.slow
