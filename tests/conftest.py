@@ -28,8 +28,8 @@ def _clear_jax_caches() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _reclaim_memory(request):
-    """Release native/backend memory after each slow-marked test.
+def _slow_test_memory(request):
+    """Reclaim backend memory after each slow test and optionally log RSS.
 
     Slow tests repeatedly build PyMC models and sample with the JAX, numpyro and
     pytensor backends, which allocate native memory (compiled functions, device
@@ -37,49 +37,57 @@ def _reclaim_memory(request):
     a serial run grows RSS until the process is OOM-killed. Gated on the ``slow``
     marker so the fast suite is unaffected, and applies wherever the slow test
     lives (not just ``tests/slow/``).
+
+    Reclamation and RSS logging live in one fixture on purpose: two separate
+    autouse fixtures have no guaranteed teardown order, so the logged RSS could
+    be sampled either before or after cleanup. Here the sequence is explicit:
+    end-of-test RSS (the leak-hunting signal) is sampled first, then cleanup
+    runs, then post-cleanup RSS is sampled to show how much was freed. RSS
+    logging is opt-in via ``HSSM_TEST_RSS_LOG`` because JAX and pytensor allocate
+    outside the Python heap, which allocation-only profilers miss.
     """
+    is_slow = request.node.get_closest_marker("slow") is not None
+    log_rss = is_slow and bool(os.environ.get("HSSM_TEST_RSS_LOG"))
+
+    process = None
+    rss_before = 0
+    if log_rss:
+        try:
+            import psutil
+
+            process = psutil.Process()
+            rss_before = process.memory_info().rss
+        except ImportError:
+            _memory_logger.warning("psutil not installed; skipping RSS logging.")
+
     yield
-    if request.node.get_closest_marker("slow") is None:
+
+    if not is_slow:
         return
+
+    # Sample end-of-test RSS (peak footprint) before reclaiming anything.
+    rss_end = process.memory_info().rss if process is not None else None
+
     import matplotlib.pyplot as plt
 
     plt.close("all")
     _clear_jax_caches()
     gc.collect()
 
-
-@pytest.fixture(autouse=True)
-def _log_rss(request):
-    """Log per-test RSS delta for slow tests when ``HSSM_TEST_RSS_LOG`` is set.
-
-    RSS is the primary signal here because JAX and pytensor allocate memory
-    outside the Python heap, which allocation-only profilers miss.
-    """
-    if not os.environ.get("HSSM_TEST_RSS_LOG"):
-        yield
-        return
-    if request.node.get_closest_marker("slow") is None:
-        yield
+    if process is None:
         return
 
-    try:
-        import psutil
-    except ImportError:
-        _memory_logger.warning("psutil not installed; skipping RSS logging.")
-        yield
-        return
-
-    process = psutil.Process()
-    rss_before = process.memory_info().rss
-    yield
-    rss_after = process.memory_info().rss
+    rss_post_cleanup = process.memory_info().rss
     mib = 1024 * 1024
     _memory_logger.info(
-        "RSS %s: before=%.1f MiB after=%.1f MiB delta=%+.1f MiB",
+        "RSS %s: start=%.1f MiB end=%.1f MiB post_cleanup=%.1f MiB "
+        "(test delta=%+.1f MiB, freed=%+.1f MiB)",
         request.node.nodeid,
         rss_before / mib,
-        rss_after / mib,
-        (rss_after - rss_before) / mib,
+        rss_end / mib,
+        rss_post_cleanup / mib,
+        (rss_end - rss_before) / mib,
+        (rss_post_cleanup - rss_end) / mib,
     )
 
 
