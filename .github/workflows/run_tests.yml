@@ -19,13 +19,19 @@ jobs:
   run_tests:
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    if: ${{ ! contains(github.event.head_commit.message, '[skip fast tests]') }}
+    # head_commit is only populated on push events; use the PR title on
+    # pull_request events so the skip marker works in both contexts.
+    if: >-
+      ${{
+        ! contains(github.event.head_commit.message, '[skip fast tests]') &&
+        ! contains(github.event.pull_request.title, '[skip fast tests]')
+      }}
     env:
       PYTENSOR_FLAGS: "blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
       HSSM_TEST_ARGS: ${{ inputs.test_args }}
 
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
