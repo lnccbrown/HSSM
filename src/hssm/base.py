@@ -1520,7 +1520,19 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Save vi_traces to netcdf file
         if self._inference_obj_vi is not None:
-            self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
+            # `_inference_obj_vi` is usually trace data (from `vi()`), but
+            # `restore_vi_traces()` may assign a raw `Approximation`, which has no
+            # `.to_netcdf()`. Guard so saving stays robust; the `Approximation` is
+            # still preserved in the pickled model when `save_traces_only=False`.
+            if isinstance(self._inference_obj_vi, Approximation):
+                _logger.warning(
+                    "VI traces are an Approximation object and cannot be serialized "
+                    "to netCDF; skipping vi_traces.nc. Run `vi()` to obtain sampled "
+                    "traces, or save the full model (save_traces_only=False) to "
+                    "persist the Approximation via the model pickle."
+                )
+            else:
+                self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
 
     @classmethod
     def load_model(
