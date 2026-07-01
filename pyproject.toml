@@ -25,6 +25,8 @@ classifiers = [
 dependencies = [
     "absl-py>=2.3.1",
     "bambi>=0.18.0",
+    "h5netcdf>=1.8.1",
+    "h5py>=3.16.0",
     "hddm-wfpt>=0.1.6",
     "huggingface-hub>=1.17.0",
     "jaxonnxruntime>=0.3.0",
@@ -40,10 +42,6 @@ repository = "https://github.com/lnccbrown/HSSM"
 
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.5.2"]
-io = [
-    "h5netcdf>=1.8.1",
-    "h5py>=3.16.0",
-]
 
 [dependency-groups]
 dev = [
@@ -59,7 +57,6 @@ dev = [
     "types-PyYAML",
     "pre-commit>=4.1.0",
     "onnxruntime>=1.17.1",
-    "hssm[io]",
 ]
 
 notebook = [

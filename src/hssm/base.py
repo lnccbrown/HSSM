@@ -45,7 +45,6 @@ from hssm.utils import (
     _compute_log_likelihood,
     _get_alias_dict,
     _print_prior,
-    _requires_io_backends,
     _split_array,
 )
 
@@ -1423,7 +1422,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
         return pm.model.Point(fn(None), model=self.pymc_model)
 
-    @_requires_io_backends
     def restore_traces(self, traces: DataTree | Approximation | str | PathLike) -> None:
         """Restore traces from a DataTree object or a .netcdf file.
 
@@ -1440,7 +1438,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             traces = az.from_netcdf(traces)
         self._inference_obj = cast("DataTree", traces)
 
-    @_requires_io_backends
     def restore_vi_traces(
         self, traces: DataTree | Approximation | str | PathLike
     ) -> None:
@@ -1459,7 +1456,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             traces = az.from_netcdf(traces)
         self._inference_obj_vi = cast("DataTree", traces)
 
-    @_requires_io_backends
     def save_model(
         self,
         model_name: str | None = None,
@@ -1587,7 +1583,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return model
 
     @classmethod
-    @_requires_io_backends
     def load_model_traces(cls, path: str | Path) -> dict[str, DataTree | None]:
         """Load the traces from a model directory.
 
