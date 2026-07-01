@@ -18,7 +18,7 @@ jobs:
           - batch: "Core MCMC"
             test_args: "tests/slow/test_mcmc.py tests/slow/test_choice_only.py"
           - batch: "Remaining Slow"
-            test_args: "--ignore=tests/slow/test_missing_data_mcmc.py --ignore=tests/slow/test_missing_data_and_deadline_mcmc.py --ignore=tests/slow/test_mcmc.py --ignore=tests/slow/test_choice_only.py"
+            test_args: "-m slow --ignore=tests/slow/test_missing_data_mcmc.py --ignore=tests/slow/test_missing_data_and_deadline_mcmc.py --ignore=tests/slow/test_mcmc.py --ignore=tests/slow/test_choice_only.py"
     uses: ./.github/workflows/run_tests.yml
     with:
       run_slow_tests: true
