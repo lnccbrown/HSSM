@@ -6,6 +6,9 @@ import pytest
 
 import arviz as az
 import matplotlib as mpl
+
+mpl.use("Agg")
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -13,8 +16,6 @@ import xarray as xr
 from ssms.basic_simulators.simulator import simulator
 
 import hssm
-
-mpl.use("Agg")
 
 _memory_logger = logging.getLogger("hssm.tests.memory")
 
