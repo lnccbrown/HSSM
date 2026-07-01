@@ -26,6 +26,11 @@ from inspect import signature
 from typing import Any
 
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
+from hssm.rl.likelihoods.softmax import (
+    compute_q0_subject_wise,
+    compute_q1_subject_wise,
+    softmax_logp_func,
+)
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
 
@@ -147,19 +152,24 @@ _compute_v_annotated = annotate_function(
     outputs=["v"],
 )(compute_v_subject_wise)
 
+_compute_q0_annotated = annotate_function(
+    inputs=["rl_alpha", "response", "feedback"],
+    outputs=["q0"],
+)(compute_q0_subject_wise)
+
+_compute_q1_annotated = annotate_function(
+    inputs=["rl_alpha", "response", "feedback"],
+    outputs=["q1"],
+)(compute_q1_subject_wise)
+
+_softmax_logp_annotated = annotate_function(
+    inputs=["beta", "q0", "q1", "response"],
+    outputs=["logp"],
+)(softmax_logp_func)
+
 # ---------------------------------------------------------------------------
 # SSM base log-likelihood registry
 # ---------------------------------------------------------------------------
-# This dict holds only *custom* SSM entries added at runtime via register_ssm().
-# Built-in HSSM models are resolved on demand from hssm.modelconfig — see
-# _build_ssm_spec_from_modelconfig() and _get_decision_process_spec().
-#
-# Each entry (custom or derived) provides:
-#   ssm_base_logp_func  - annotated JAX function (inputs + outputs, no computed)
-#   list_params_ssm     - ordered SSM parameter names (including computed ones)
-#   bounds_ssm          - bounds for all SSM params
-#   params_default_ssm  - default values aligned with list_params_ssm
-#   response            - data column names
 
 _SSM_REGISTRY: dict[str, dict[str, Any]] = {}
 
@@ -176,10 +186,11 @@ def _make_ssm_base_logp_from_onnx(
 ) -> Any:
     """Build and annotate a JAX log-likelihood function from an ONNX model file."""
     _raw = make_jax_matrix_logp_funcs_from_onnx(model=onnx_file)
-    return annotate_function(
+    annotated = annotate_function(
         inputs=list_params_ssm + response,
         outputs=["logp"],
     )(_raw)
+    return annotated
 
 
 def _build_ssm_spec_from_modelconfig(name: str) -> dict[str, Any]:
@@ -221,7 +232,6 @@ def _build_ssm_spec_from_modelconfig(name: str) -> dict[str, Any]:
     response: list[str] = list(mc["response"])
     onnx_file: str = str(ad["loglik"])
 
-    # Derive parameter defaults as midpoints of their respective bounds.
     params_default_ssm = [
         sum(bounds_ssm[p]) / 2 if p in bounds_ssm else 0.0 for p in list_params_ssm
     ]
@@ -258,13 +268,14 @@ def _get_decision_process_spec(
     if isinstance(decision_process, dict):
         return deepcopy(decision_process)
 
-    # Custom registry takes precedence over modelconfig.
     if decision_process in _SSM_REGISTRY:
         spec = deepcopy(_SSM_REGISTRY[decision_process])
         spec["name"] = decision_process
         return spec
 
-    # Fall back to HSSM's modelconfig for built-in SSMs.
+    if decision_process == "softmax_2AB":
+        return _build_softmax_2ab_spec()
+
     return _build_ssm_spec_from_modelconfig(decision_process)
 
 
@@ -277,18 +288,20 @@ def _get_ssm_logp(name: str) -> Any:
     if name in _SSM_LOGP_CACHE:
         return _SSM_LOGP_CACHE[name]
 
-    if name not in _SSM_REGISTRY:
-        # Build from HSSM's modelconfig for built-in SSMs.
-        spec = _build_ssm_spec_from_modelconfig(name)
-        _SSM_LOGP_CACHE[name] = spec["ssm_base_logp_func_factory"]()
+    if name in _SSM_REGISTRY:
+        entry = _SSM_REGISTRY[name]
+        if "ssm_base_logp_func_factory" in entry:
+            _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
+        else:
+            _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
         return _SSM_LOGP_CACHE[name]
 
-    entry = _SSM_REGISTRY[name]
-    if "ssm_base_logp_func_factory" in entry:
-        _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func_factory"]()
-    else:
-        # Pre-built function registered via register_ssm().
-        _SSM_LOGP_CACHE[name] = entry["ssm_base_logp_func"]
+    if name == "softmax_2AB":
+        _SSM_LOGP_CACHE[name] = _softmax_logp_annotated
+        return _SSM_LOGP_CACHE[name]
+
+    spec = _build_ssm_spec_from_modelconfig(name)
+    _SSM_LOGP_CACHE[name] = spec["ssm_base_logp_func_factory"]()
     return _SSM_LOGP_CACHE[name]
 
 
@@ -313,6 +326,30 @@ def _make_rescorla_wagner_learning_metadata() -> LearningProcessMetadata:
         extra_fields=["feedback"],
         kind="blackbox",
     )
+
+
+def _make_rescorla_wagner_softmax_learning_metadata() -> LearningProcessMetadata:
+    """Return learning metadata for the built-in choice-only softmax RLSSM."""
+    return LearningProcessMetadata(
+        learning_process={"q0": _compute_q0_annotated, "q1": _compute_q1_annotated},
+        sampled_params=["rl_alpha"],
+        bounds={"rl_alpha": (0.0, 1.0)},
+        defaults=[0.1],
+        extra_fields=["feedback"],
+        kind="blackbox",
+    )
+
+
+def _build_softmax_2ab_spec() -> dict[str, Any]:
+    """Return the built-in choice-only softmax decision-process specification."""
+    return {
+        "ssm_base_logp_func": _softmax_logp_annotated,
+        "list_params_ssm": ["beta", "q0", "q1"],
+        "bounds_ssm": {"beta": (0.0, 10.0)},
+        "params_default_ssm": [1.0, 0.5, 0.5],
+        "response": ["response"],
+        "name": "softmax_2AB",
+    }
 
 
 _RLSSM_REGISTRY: dict[str, RLSSMRegistryEntry] = {
@@ -343,6 +380,16 @@ _RLSSM_REGISTRY: dict[str, RLSSMRegistryEntry] = {
         description=(
             "RLSSM model with Rescorla-Wagner Q-learning and a "
             "Weibull-bound DDM as decision process."
+        ),
+        decision_process_loglik_kind="approx_differentiable",
+    ),
+    "2AB_RescorlaWagner_Softmax": RLSSMRegistryEntry(
+        decision_process="softmax_2AB",
+        learning_process_metadata=_make_rescorla_wagner_softmax_learning_metadata(),
+        choices=[0, 1],
+        description=(
+            "RLSSM model with Rescorla-Wagner Q-learning and a "
+            "choice-only softmax decision process."
         ),
         decision_process_loglik_kind="approx_differentiable",
     ),
@@ -467,15 +514,12 @@ def get_rlssm_model_config(
     ssm_base = _get_ssm_logp(dp)
     lp: dict[str, Any] = dict(learning_metadata.learning_process)
 
-    # Compose the full ssm_logp_func with .computed = learning_process.
     ssm_logp_func = _build_ssm_logp_func(ssm_base, lp)
 
-    # list_params = [sampled RL params] + [sampled SSM params (non-computed)]
     ssm_sampled = [p for p in ssm_entry["list_params_ssm"] if p not in lp]
     learning_process_params = list(learning_metadata.sampled_params)
     list_params = learning_process_params + ssm_sampled
 
-    # bounds: RL bounds ∪ SSM sampled bounds
     missing_bounds = [p for p in ssm_sampled if p not in ssm_entry["bounds_ssm"]]
     if missing_bounds:
         raise ValueError(

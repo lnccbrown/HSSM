@@ -139,6 +139,25 @@ class TestGetSsmLogp:
         assert second is first
         assert call_count == 1
 
+    def test_prefers_registered_softmax_over_builtin(
+        self,
+        annotated_ssm_base_logp: Any,
+    ) -> None:
+        """A registered softmax_2AB SSM should override the built-in fallback."""
+        registry._SSM_REGISTRY["softmax_2AB"] = {
+            "ssm_base_logp_func": annotated_ssm_base_logp,
+            "list_params_ssm": ["beta", "q0", "q1"],
+            "bounds_ssm": {"beta": (0.0, 10.0)},
+            "params_default_ssm": [1.0, 0.5, 0.5],
+            "response": ["response"],
+        }
+
+        result = registry._get_ssm_logp("softmax_2AB")
+
+        assert result is annotated_ssm_base_logp
+        assert result is not registry._softmax_logp_annotated
+        assert registry._SSM_LOGP_CACHE["softmax_2AB"] is annotated_ssm_base_logp
+
     def test_resolves_builtin_via_modelconfig(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -613,19 +632,26 @@ class TestGetRlssmModelConfig:
 
 class TestBuiltinModels:
     @pytest.mark.parametrize(
-        "model_name, expected_dp",
+        "model_name, expected_dp_name, expected_lp_params",
         [
-            ("2AB_RescorlaWagner_DDM", "ddm"),
-            ("2AB_RescorlaWagner_Weibull", "weibull"),
+            ("2AB_RescorlaWagner_DDM", "ddm", ["rl_alpha", "scaler"]),
+            ("2AB_RescorlaWagner_Angle", "angle", ["rl_alpha", "scaler"]),
+            ("2AB_RescorlaWagner_Weibull", "weibull", ["rl_alpha", "scaler"]),
+            ("2AB_RescorlaWagner_Softmax", "softmax_2AB", ["rl_alpha"]),
         ],
     )
-    def test_are_registered(self, model_name: str, expected_dp: str) -> None:
-        """2AB_RescorlaWagner_DDM and _Weibull must be present in the RLSSM registry."""
+    def test_are_registered(
+        self,
+        model_name: str,
+        expected_dp_name: str,
+        expected_lp_params: list[str],
+    ) -> None:
+        """Built-in RLSSM starter models must be present in the registry."""
         assert model_name in registry._RLSSM_REGISTRY
         entry = registry._RLSSM_REGISTRY[model_name]
         metadata = entry.learning_process_metadata
-        assert entry.decision_process == expected_dp
-        assert metadata.sampled_params == ["rl_alpha", "scaler"]
+        assert entry.decision_process == expected_dp_name
+        assert metadata.sampled_params == expected_lp_params
         assert metadata.extra_fields == ["feedback"]
         assert entry.choices == [0, 1]
         assert entry.decision_process_loglik_kind == "approx_differentiable"
@@ -661,7 +687,12 @@ class TestBuiltinModels:
 
     @pytest.mark.parametrize(
         "model_name",
-        ["2AB_RescorlaWagner_DDM", "2AB_RescorlaWagner_Weibull"],
+        [
+            "2AB_RescorlaWagner_DDM",
+            "2AB_RescorlaWagner_Angle",
+            "2AB_RescorlaWagner_Weibull",
+            "2AB_RescorlaWagner_Softmax",
+        ],
     )
     def test_config_structure(
         self,
@@ -670,7 +701,7 @@ class TestBuiltinModels:
         model_name: str,
     ) -> None:
         """get_rlssm_model_config should produce a well-formed RLSSMConfig for
-        both the DDM and Weibull starter-pack models."""
+        the built-in RLSSM starter-pack models."""
         import hssm.distribution_utils.onnx as onnx_module
 
         monkeypatch.setattr(
@@ -687,13 +718,24 @@ class TestBuiltinModels:
         config = registry.get_rlssm_model_config(model_name)
 
         assert isinstance(config, RLSSMConfig)
-        # RL params come first
-        assert config.list_params[:2] == ["rl_alpha", "scaler"]
+        expected_params = (
+            ["rl_alpha", "beta"]
+            if model_name == "2AB_RescorlaWagner_Softmax"
+            else ["rl_alpha", "scaler"]
+        )
+        assert config.list_params[: len(expected_params)] == expected_params
         assert "rl_alpha" in config.bounds
-        assert "scaler" in config.bounds
+        if model_name == "2AB_RescorlaWagner_Softmax":
+            assert "beta" in config.bounds
+            assert config.ssm_logp_func.computed == {
+                "q0": registry._compute_q0_annotated,
+                "q1": registry._compute_q1_annotated,
+            }
+        else:
+            assert "scaler" in config.bounds
+            assert config.ssm_logp_func.computed == {"v": registry._compute_v_annotated}
         assert config.choices == (0, 1)
         assert config.extra_fields == ["feedback"]
-        assert config.ssm_logp_func.computed == {"v": registry._compute_v_annotated}
 
 
 class TestListModels:

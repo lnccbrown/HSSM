@@ -49,49 +49,63 @@ class DataValidatorMixin:
     def _post_check_data_sanity(self):
         """Check if the data is clean enough for the model."""
         if self.is_choice_only:
-            return
-        if self.deadline or self.missing_data:
-            if -999.0 not in self.data["rt"].unique():
+            unique_responses = self.data["response"].unique()
+            # Reject non-integer values before casting: 0.5 would silently become
+            # 0 after astype(int) and pass membership checks against choices=[0, 1],
+            # then be misrouted in the softmax Q-value indexing.
+            non_integral = unique_responses[unique_responses % 1 != 0]
+            if len(non_integral):
                 raise ValueError(
-                    "You have no missing data in your dataset, "
-                    + "which is not allowed when `missing_data` or `deadline` is set to"
-                    + " True."
+                    "Non-integer response values found in your dataset: "
+                    f"{sorted(non_integral.tolist())}. "
+                    "Responses must be exact integers."
                 )
-            rt_filtered = self.data.rt[self.data.rt != -999.0]
+            unique_responses_int = unique_responses.astype(int)
         else:
-            rt_filtered = self.data.rt
+            if self.deadline or self.missing_data:
+                if -999.0 not in self.data["rt"].unique():
+                    raise ValueError(
+                        "You have no missing data in your dataset, "
+                        "which is not allowed when `missing_data` or `deadline` "
+                        "is set to True."
+                    )
+                rt_filtered = self.data.rt[self.data.rt != -999.0]
+            else:
+                rt_filtered = self.data.rt
 
-        if np.any(rt_filtered.isna(), axis=None):
-            raise ValueError(
-                "You have NaN response times in your dataset, "
-                + "which is not allowed."
-            )
+            if np.any(rt_filtered.isna(), axis=None):
+                raise ValueError(
+                    "You have NaN response times in your dataset, "
+                    + "which is not allowed."
+                )
 
-        if not np.all(rt_filtered >= 0):
-            raise ValueError(
-                "You have negative response times in your dataset, "
-                + "which is not allowed."
-            )
+            if not np.all(rt_filtered >= 0):
+                raise ValueError(
+                    "You have negative response times in your dataset, "
+                    + "which is not allowed."
+                )
 
-        valid_responses = self.data.loc[self.data["rt"] != -999.0, "response"]
-        unique_responses = valid_responses.unique().astype(int)
+            valid_responses = self.data.loc[self.data["rt"] != -999.0, "response"]
+            unique_responses_int = valid_responses.unique().astype(int)
 
-        if np.any(~np.isin(unique_responses, self.choices)):
+        if np.any(~np.isin(unique_responses_int, self.choices)):
             invalid_responses = sorted(
-                unique_responses[~np.isin(unique_responses, self.choices)].tolist()
+                unique_responses_int[
+                    ~np.isin(unique_responses_int, self.choices)
+                ].tolist()
             )
             raise ValueError(
                 f"Invalid responses found in your dataset: {invalid_responses}"
             )
 
-        if len(unique_responses) != self.n_choices:
+        if len(unique_responses_int) != self.n_choices:
             missing_responses = sorted(
-                np.setdiff1d(self.choices, unique_responses).tolist()
+                np.setdiff1d(self.choices, unique_responses_int).tolist()
             )
             warnings.warn(
                 (
-                    f"You set choices to be {self.choices}, but {missing_responses} "
-                    "are missing from your dataset."
+                    f"You set choices to be {tuple(self.choices)}, "
+                    f"but {missing_responses} are missing from your dataset."
                 ),
                 UserWarning,
                 stacklevel=2,

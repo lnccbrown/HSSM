@@ -463,6 +463,7 @@ def make_distribution(
             simulator_fun=cast("Callable[..., Any]", rv),
             list_params=list_params,
             lapse=lapse,
+            is_choice_only=is_choice_only,
         )
         rv_instance = random_variable()
     elif isinstance(rv, str):
@@ -470,6 +471,7 @@ def make_distribution(
             simulator_fun=rv,
             list_params=list_params,
             lapse=lapse,
+            is_choice_only=is_choice_only,
         )
         rv_instance = random_variable()
     else:
@@ -488,12 +490,19 @@ def make_distribution(
             idx = list_params.index(name)
             _fixed_vector_substitutions[idx] = pt.as_tensor_variable(pm.floatX(vector))
 
+    lapse_func = None
     if lapse is not None:
         if list_params[-1] != "p_outlier":
             list_params.append("p_outlier")
 
         if isinstance(lapse, float):
-            lapse_func = lambda data: np.full_like(data, lapse)
+            if not (0 < lapse <= 1):
+                raise ValueError("If `lapse` is a float, it must be between 0 and 1.")
+            # lapse is a probability; the mixture formula uses pt.exp(lapse_logp),
+            # so we must store the log probability here to be consistent with the
+            # bmb.Prior path which calls pm.logp(...).
+            _log_lapse = np.log(lapse)
+            lapse_func = lambda data: np.full_like(data, _log_lapse)
         else:
             data_vector = pt.dvector()
             lapse_logp = pm.logp(
@@ -504,8 +513,6 @@ def make_distribution(
                 [data_vector],
                 lapse_logp,
             )
-    else:
-        lapse_func = None
 
     class HSSMDistribution(pm.Distribution):
         """Wiener first-passage time (WFPT) log-likelihood for LANs."""

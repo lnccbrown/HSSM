@@ -36,6 +36,19 @@ def generate_synthetic_data():
     return data
 
 
+@pytest.fixture(scope="module")
+def generate_synthetic_data_3choice():
+    """Generate synthetic 3-choice dataset for testing."""
+    n_samples = 100
+    data = pd.DataFrame(
+        {
+            "response": np.random.choice([0, 1, 2], size=n_samples),
+            "x": np.random.randn(n_samples),
+        }
+    )
+    return data
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_choice_only_default_params(
@@ -194,11 +207,11 @@ def test_choice_only_logit_reg(
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_choice_only_multiple_reg(
-    loglik_kind, sampler, step, backend, expected, generate_synthetic_data
+    loglik_kind, sampler, step, backend, expected, generate_synthetic_data_3choice
 ):
     """Test choice-only model configuration."""
     model = hssm.HSSM(
-        data=generate_synthetic_data,
+        data=generate_synthetic_data_3choice,
         model="softmax_inv_temperature_3",
         loglik_kind=loglik_kind,
         model_config={"backend": backend},

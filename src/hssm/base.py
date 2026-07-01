@@ -1930,7 +1930,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
             else:
                 self.lapse = lapse
-            self.list_params.append("p_outlier")
+            if "p_outlier" not in self.list_params:
+                self.list_params.append("p_outlier")
             return
 
         if lapse is not None:
