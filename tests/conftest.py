@@ -1,3 +1,7 @@
+import gc
+import logging
+import os
+
 import pytest
 
 import arviz as az
@@ -10,6 +14,73 @@ from ssms.basic_simulators.simulator import simulator
 import hssm
 
 mpl.use("Agg")
+
+_memory_logger = logging.getLogger("hssm.tests.memory")
+
+
+def _clear_jax_caches() -> None:
+    """Clear JAX compilation caches if JAX is importable."""
+    try:
+        import jax
+    except ImportError:
+        return
+    jax.clear_caches()
+
+
+@pytest.fixture(autouse=True)
+def _reclaim_memory(request):
+    """Release native/backend memory after each slow-marked test.
+
+    Slow tests repeatedly build PyMC models and sample with the JAX, numpyro and
+    pytensor backends, which allocate native memory (compiled functions, device
+    buffers) that Python allocators never see. Without releasing it between tests
+    a serial run grows RSS until the process is OOM-killed. Gated on the ``slow``
+    marker so the fast suite is unaffected, and applies wherever the slow test
+    lives (not just ``tests/slow/``).
+    """
+    yield
+    if request.node.get_closest_marker("slow") is None:
+        return
+    import matplotlib.pyplot as plt
+
+    plt.close("all")
+    _clear_jax_caches()
+    gc.collect()
+
+
+@pytest.fixture(autouse=True)
+def _log_rss(request):
+    """Log per-test RSS delta for slow tests when ``HSSM_TEST_RSS_LOG`` is set.
+
+    RSS is the primary signal here because JAX and pytensor allocate memory
+    outside the Python heap, which allocation-only profilers miss.
+    """
+    if not os.environ.get("HSSM_TEST_RSS_LOG"):
+        yield
+        return
+    if request.node.get_closest_marker("slow") is None:
+        yield
+        return
+
+    try:
+        import psutil
+    except ImportError:
+        _memory_logger.warning("psutil not installed; skipping RSS logging.")
+        yield
+        return
+
+    process = psutil.Process()
+    rss_before = process.memory_info().rss
+    yield
+    rss_after = process.memory_info().rss
+    mib = 1024 * 1024
+    _memory_logger.info(
+        "RSS %s: before=%.1f MiB after=%.1f MiB delta=%+.1f MiB",
+        request.node.nodeid,
+        rss_before / mib,
+        rss_after / mib,
+        (rss_after - rss_before) / mib,
+    )
 
 
 @pytest.fixture(scope="module")
