@@ -6,6 +6,7 @@ import pytest
 
 import arviz as az
 import matplotlib as mpl
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -16,6 +17,9 @@ import hssm
 mpl.use("Agg")
 
 _memory_logger = logging.getLogger("hssm.tests.memory")
+
+MIB = 1024 * 1024
+_PSUTIL_AVAILABLE = True
 
 
 def _clear_jax_caches() -> None:
@@ -60,6 +64,8 @@ def _slow_test_memory(request):
     logging is opt-in via ``HSSM_TEST_RSS_LOG`` because JAX and pytensor allocate
     outside the Python heap, which allocation-only profilers miss.
     """
+    global _PSUTIL_AVAILABLE
+
     is_slow = request.node.get_closest_marker("slow") is not None
     log_rss = is_slow and os.environ.get("HSSM_TEST_RSS_LOG", "").strip().lower() in {
         "1",
@@ -70,13 +76,14 @@ def _slow_test_memory(request):
 
     process = None
     rss_before = 0
-    if log_rss:
+    if log_rss and _PSUTIL_AVAILABLE:
         try:
             import psutil
 
             process = psutil.Process()
             rss_before = process.memory_info().rss
         except ImportError:
+            _PSUTIL_AVAILABLE = False
             _memory_logger.warning("psutil not installed; skipping RSS logging.")
 
     yield
@@ -88,8 +95,6 @@ def _slow_test_memory(request):
     # reading, not a peak — the process may have used more RSS earlier.
     rss_end = process.memory_info().rss if process is not None else None
 
-    import matplotlib.pyplot as plt
-
     plt.close("all")
     _clear_jax_caches()
     gc.collect()
@@ -98,16 +103,15 @@ def _slow_test_memory(request):
         return
 
     rss_post_cleanup = process.memory_info().rss
-    mib = 1024 * 1024
     _memory_logger.info(
         "RSS %s: start=%.1f MiB end=%.1f MiB post_cleanup=%.1f MiB "
         "(test delta=%+.1f MiB, freed=%+.1f MiB)",
         request.node.nodeid,
-        rss_before / mib,
-        rss_end / mib,
-        rss_post_cleanup / mib,
-        (rss_end - rss_before) / mib,
-        (rss_end - rss_post_cleanup) / mib,
+        rss_before / MIB,
+        rss_end / MIB,
+        rss_post_cleanup / MIB,
+        (rss_end - rss_before) / MIB,
+        (rss_end - rss_post_cleanup) / MIB,
     )
 
 
