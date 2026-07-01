@@ -106,14 +106,6 @@ YOu can also install HSSM with `uv`:
 uv add hssm
 ```
 
-### Install HSSM with IO support
-
-If you need to save/load models and traces, please install HSSM with IO support:
-
-```bash
-pip install hssm[io]
-```
-
 ### Install HSSM (with GPU Support)
 
 If you need to sample with GPU, please install JAX with GPU support before
