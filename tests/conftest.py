@@ -47,7 +47,12 @@ def _slow_test_memory(request):
     outside the Python heap, which allocation-only profilers miss.
     """
     is_slow = request.node.get_closest_marker("slow") is not None
-    log_rss = is_slow and bool(os.environ.get("HSSM_TEST_RSS_LOG"))
+    log_rss = is_slow and os.environ.get("HSSM_TEST_RSS_LOG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
     process = None
     rss_before = 0
@@ -87,7 +92,7 @@ def _slow_test_memory(request):
         rss_end / mib,
         rss_post_cleanup / mib,
         (rss_end - rss_before) / mib,
-        (rss_post_cleanup - rss_end) / mib,
+        (rss_end - rss_post_cleanup) / mib,
     )
 
 
