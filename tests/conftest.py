@@ -70,7 +70,8 @@ def _slow_test_memory(request):
     if not is_slow:
         return
 
-    # Sample end-of-test RSS (peak footprint) before reclaiming anything.
+    # Sample RSS at end of test (before reclaiming). This is a point-in-time
+    # reading, not a peak — the process may have used more RSS earlier.
     rss_end = process.memory_info().rss if process is not None else None
 
     import matplotlib.pyplot as plt
