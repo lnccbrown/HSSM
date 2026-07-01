@@ -3,6 +3,7 @@
 import gc
 import logging
 import os
+from pathlib import Path
 
 import matplotlib as mpl
 
@@ -22,6 +23,8 @@ _memory_logger = logging.getLogger("hssm.tests.memory")
 
 MIB = 1024 * 1024
 _PSUTIL_AVAILABLE = True
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _clear_jax_caches() -> None:
@@ -144,9 +147,10 @@ def data_angle():
 def data_ddm_reg():
     """Return DDM simulation data with regression."""
     # Generate some fake simulation data
+    rng = np.random.default_rng(seed=42)
     intercept = 1.5
-    x = np.random.uniform(-0.5, 0.5, size=250)
-    y = np.random.uniform(-0.5, 0.5, size=250)
+    x = rng.uniform(-0.5, 0.5, size=250)
+    y = rng.uniform(-0.5, 0.5, size=250)
 
     v = intercept + 0.8 * x + 0.3 * y
     true_values = np.column_stack(
@@ -169,13 +173,14 @@ def data_ddm_reg():
 def data_ddm_reg_va():
     """Return DDM simulation data with regression on v and a."""
     # Generate some fake simulation data
+    rng = np.random.default_rng(seed=42)
     intercept = 1.5
     intercept_a = 1.0
-    x = np.random.uniform(-0.5, 0.5, size=100)
-    y = np.random.uniform(-0.5, 0.5, size=100)
+    x = rng.uniform(-0.5, 0.5, size=100)
+    y = rng.uniform(-0.5, 0.5, size=100)
 
-    m = np.random.uniform(-0.5, 0.5, size=100)
-    n = np.random.uniform(-0.5, 0.5, size=100)
+    m = rng.uniform(-0.5, 0.5, size=100)
+    n = rng.uniform(-0.5, 0.5, size=100)
 
     v = intercept + 0.8 * x + 0.3 * y
     a = intercept_a + 0.1 * m + 0.1 * n
@@ -184,7 +189,7 @@ def data_ddm_reg_va():
     dataset_reg_va = hssm.simulate_data(
         model="ddm",
         theta=true_values,
-        size=1,  # Generate one data point for each of the 1000 set of true values
+        size=1,  # Generate one data point for each of the 100 sets of true values
     )
 
     dataset_reg_va["x"] = x
@@ -198,24 +203,19 @@ def data_ddm_reg_va():
 @pytest.fixture
 def cav_dt():
     """Return Cavanagh idata."""
-    return az.from_netcdf("tests/fixtures/cavanagh_idata.nc")
+    return az.from_netcdf(FIXTURES / "cavanagh_idata.nc")
 
 
 @pytest.fixture
 def posterior():
     """Return posterior predictive."""
-    return xr.open_dataarray("tests/fixtures/cavanagh_idata_pps.nc")
+    return xr.load_dataarray(FIXTURES / "cavanagh_idata_pps.nc")
 
 
 @pytest.fixture
 def cavanagh_test():
     """Return Cavanagh test data."""
-    return pd.read_csv("tests/fixtures/cavanagh_theta_test.csv", index_col=None)
-
-
-# @pytest.fixture
-# def cavanagh_data():
-#     return hssm.load_data("cavanagh_theta")
+    return pd.read_csv(FIXTURES / "cavanagh_theta_test.csv", index_col=None)
 
 
 @pytest.fixture
@@ -266,7 +266,7 @@ def cav_model_cartoon(cavanagh_test):
     )
 
     # Attach trace
-    idata_cav = az.from_netcdf("tests/fixtures/idata_cavanagh_cartoon.nc")
+    idata_cav = az.from_netcdf(FIXTURES / "idata_cavanagh_cartoon.nc")
     cav_model._inference_obj = idata_cav
     return cav_model
 
@@ -303,7 +303,7 @@ def intercept_only_ddm_cartoon(cavanagh_test):
 @pytest.fixture
 def race_model_cartoon():
     """Return a race model for cartoon plots."""
-    my_race_data = pd.read_csv("tests/fixtures/data_race.csv")
+    my_race_data = pd.read_csv(FIXTURES / "data_race.csv")
     race_model = hssm.HSSM(
         model="race_no_bias_angle_4",
         data=my_race_data,
@@ -328,7 +328,7 @@ def race_model_cartoon():
         p_outlier=0.00,
     )
     # Attach trace
-    idata_race = az.from_netcdf("tests/fixtures/test_idata_race.nc")
+    idata_race = az.from_netcdf(FIXTURES / "test_idata_race.nc")
     race_model._inference_obj = idata_race
     return race_model
 
