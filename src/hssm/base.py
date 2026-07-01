@@ -1522,15 +1522,25 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         if self._inference_obj_vi is not None:
             # `_inference_obj_vi` is usually trace data (from `vi()`), but
             # `restore_vi_traces()` may assign a raw `Approximation`, which has no
-            # `.to_netcdf()`. Guard so saving stays robust; the `Approximation` is
-            # still preserved in the pickled model when `save_traces_only=False`.
+            # `.to_netcdf()`. Guard so saving stays robust.
             if isinstance(self._inference_obj_vi, Approximation):
-                _logger.warning(
-                    "VI traces are an Approximation object and cannot be serialized "
-                    "to netCDF; skipping vi_traces.nc. Run `vi()` to obtain sampled "
-                    "traces, or save the full model (save_traces_only=False) to "
-                    "persist the Approximation via the model pickle."
-                )
+                if save_traces_only:
+                    _logger.warning(
+                        "VI traces are an Approximation object and cannot be "
+                        "serialized to netCDF, and save_traces_only=True skips the "
+                        "model pickle, so the VI result will NOT be saved. Run `vi()` "
+                        "to obtain sampled traces before saving, or set "
+                        "save_traces_only=False to persist the Approximation via the "
+                        "model pickle."
+                    )
+                else:
+                    _logger.warning(
+                        "VI traces are an Approximation object and cannot be "
+                        "serialized to netCDF; skipping vi_traces.nc. The "
+                        "Approximation is still preserved in the model pickle "
+                        "(model.pkl). Run `vi()` to obtain sampled traces if you "
+                        "need a vi_traces.nc file."
+                    )
             else:
                 self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
 
