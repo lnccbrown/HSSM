@@ -1465,7 +1465,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         model_name: str | None = None,
         allow_absolute_base_path: bool = False,
         base_path: str | Path = "hssm_models",
-        save_idata_only: bool = False,
+        save_traces_only: bool = False,
     ) -> None:
         """Save a HSSM model instance and its inference results to disk.
 
@@ -1481,8 +1481,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             Base directory to save model files in.
             Must be relative path if allow_absolute_base_path=False.
             Defaults to "hssm_models".
-        save_idata_only : bool
-            If True, only saves inference data (traces), not the model pickle.
+        save_traces_only : bool
+            If True, only saves the traces, not the model pickle.
             Defaults to False (saves both model and traces).
 
         Raises
@@ -1510,7 +1510,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         model_path.mkdir(parents=True, exist_ok=True)
 
         # Save model to pickle file
-        if not save_idata_only:
+        if not save_traces_only:
             with open(model_path.joinpath("model.pkl"), "wb") as f:
                 cpickle.dump(self, f)
 
