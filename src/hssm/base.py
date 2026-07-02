@@ -8,11 +8,12 @@ This file defines the entry class HSSM.
 
 import datetime
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Union, cast, get_args
+from typing import Any, Callable, Literal, Union, cast
 
 import arviz as az
 import bambi as bmb
@@ -49,8 +50,16 @@ from hssm.utils import (
 
 from . import plotting
 from .config import BaseModelConfig
+from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
+from .param.parameterization_check import (
+    check_user_priors_against_parameterization,
+    check_user_priors_for_location_overparameterization,
+    emit_disconnected_node_warnings,
+    emit_parameterization_warnings,
+    find_disconnected_free_rvs,
+)
 
 _logger = logging.getLogger("hssm")
 
@@ -116,10 +125,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
     model_config
-        A fully initialised :class:`~hssm.config.BaseModelConfig` instance
-         (typically :class:`~hssm.config.Config`) produced by the subclass
+        A fully initialised `hssm.config.BaseModelConfig` instance
+         (typically `hssm.config.Config`) produced by the subclass
          before calling ``super().__init__``. All likelihood, parameter, and
-         data information used by :class:`HSSMBase` is drawn from this object,
+         data information used by `HSSMBase` is drawn from this object,
          and it must provide populated ``loglik`` and ``list_params`` fields.
     p_outlier : optional
         The fixed lapse probability or the prior distribution of the lapse probability.
@@ -355,6 +364,19 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self._parent,
         )
 
+        # Targeted checks against the user's prior dict:
+        #  * priors that the chosen parameterization will silently drop
+        #    (e.g. nested `mu` hyperprior on a group-specific Normal under
+        #    non-centered);
+        #  * priors whose group-specific `mu` is statistically redundant
+        #    with the common `Intercept` (location non-identifiability).
+        emit_parameterization_warnings(
+            check_user_priors_against_parameterization(
+                self.params, kwargs.get("noncentered", True)
+            )
+            + check_user_priors_for_location_overparameterization(self.params)
+        )
+
         self.model = bmb.Model(
             self.formula,
             data=self.data,
@@ -369,6 +391,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
         self.set_alias(self._aliases)
         self.model.build()
+
+        # General safety net: walk the PyMC graph and surface any free RVs
+        # that do not feed an observed RV.
+        emit_disconnected_node_warnings(find_disconnected_free_rvs(self.pymc_model))
 
         # region ===== Fix scalar deterministic dims for bambi >= 0.17 =====
         # Bambi >= 0.17 declares dims=("__obs__",) for intercept-only
@@ -452,12 +478,20 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def supported_models(cls) -> tuple[SupportedModels, ...]:
         """Get a tuple of all supported models.
 
+        Deprecated in favor of ``hssm.list_models()``.
+
         Returns
         -------
         tuple[SupportedModels, ...]
             A tuple containing all supported model names.
         """
-        return get_args(SupportedModels)
+        warnings.warn(
+            "HSSM.supported_models is deprecated and will be removed in a "
+            "future release. Use hssm.list_models() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return list_models()
 
     @staticmethod
     def _store_init_args(
@@ -1444,7 +1478,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             Must be relative path if allow_absolute_base_path=False.
             Defaults to "hssm_models".
         save_traces_only : bool
-            If True, only saves inference data (traces), not the model pickle.
+            If True, only saves the traces, not the model pickle.
             Defaults to False (saves both model and traces).
 
         Raises
@@ -1478,16 +1512,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Save traces to netcdf file
         if self._inference_obj is not None:
-            az.to_netcdf(self._inference_obj, model_path.joinpath("traces.nc"))
+            self._inference_obj.to_netcdf(model_path.joinpath("traces.nc"))
 
         # Save vi_traces to netcdf file
         if self._inference_obj_vi is not None:
-            az.to_netcdf(self._inference_obj_vi, model_path.joinpath("vi_traces.nc"))
+            self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
 
     @classmethod
-    def load_model(
-        cls, path: Union[str, Path]
-    ) -> Union["HSSMBase", dict[str, Optional[DataTree]]]:
+    def load_model(cls, path: Union[str, Path]) -> Union["HSSMBase", DataTree]:
         """Load a HSSM model instance and its inference results from disk.
 
         Parameters
@@ -1549,7 +1581,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return model
 
     @classmethod
-    def load_model_traces(cls, path: str | Path) -> dict[str, DataTree | None]:
+    def load_model_traces(cls, path: str | Path) -> DataTree:
         """Load the traces from a model directory.
 
         Parameters
@@ -1559,10 +1591,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        dict[str, DataTree | None]
-            A dictionary with keys "idata_mcmc" and "idata_vi" containing the traces
-            from the model directory. If the traces do not exist, the corresponding
-            value will be None.
+        DataTree
+            A DataTree with groups "idata_mcmc" and "idata_vi" containing the traces
+            from the model directory. Groups are only present for traces that exist
+            on disk.
         """
         dt_dict: dict[str, DataTree | None] = {}
         model_dir = Path(path)
@@ -1586,7 +1618,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         else:
             dt_dict["idata_vi"] = az.from_netcdf(vi_traces_path)
 
-        return dt_dict
+        return DataTree.from_dict(
+            {name: dt for name, dt in dt_dict.items() if dt is not None}
+        )
 
     def __getstate__(self):
         """Get the state of the model for pickling.

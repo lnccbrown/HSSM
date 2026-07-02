@@ -8,7 +8,18 @@ on:
 
 jobs:
   run_slow_tests:
-    name: Run full test suite including slow tests
+    name: Run Slow Tests (${{ matrix.batch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - batch: "Missing Data"
+            test_args: "tests/slow/test_missing_data_mcmc.py tests/slow/test_missing_data_and_deadline_mcmc.py"
+          - batch: "Core MCMC"
+            test_args: "tests/slow/test_mcmc.py tests/slow/test_choice_only.py"
+          - batch: "Remaining Slow"
+            test_args: "-m slow --ignore=tests/slow/test_missing_data_mcmc.py --ignore=tests/slow/test_missing_data_and_deadline_mcmc.py --ignore=tests/slow/test_mcmc.py --ignore=tests/slow/test_choice_only.py"
     uses: ./.github/workflows/run_tests.yml
     with:
       run_slow_tests: true
+      test_args: "${{ matrix.test_args }}"

@@ -57,6 +57,7 @@ dev = [
     "types-PyYAML",
     "pre-commit>=4.1.0",
     "onnxruntime>=1.17.1",
+    "psutil>=7.2.2",
 ]
 
 notebook = [
@@ -71,10 +72,10 @@ notebook = [
     "nbval>=0.11.0",
     "ptpython>=3.0.29",
     "pyarrow>=20.0.0",
-    "lanfactory>=0.6.1",
+    "lanfactory>=0.7.0",
     "zeus-mcmc>=2.5.4",
-    "bayesflow>=2.0.10",
-    "keras>=3",
+    "bayesflow>=2.0.12",
+    "keras>=3.12",
 ]
 
 docs = [

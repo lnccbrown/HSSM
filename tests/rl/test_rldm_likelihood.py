@@ -14,7 +14,7 @@ DECIMAL = 2
 
 @pytest.fixture
 def fixture_path():
-    return Path(__file__).parent / "fixtures"
+    return Path(__file__).parent.parent / "fixtures"
 
 
 def test_make_rldm_logp_func(fixture_path):
