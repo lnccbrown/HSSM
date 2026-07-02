@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Union, cast
+from typing import Any, Callable, Literal, Union, cast
 
 import arviz as az
 import bambi as bmb
@@ -1482,7 +1482,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             Must be relative path if allow_absolute_base_path=False.
             Defaults to "hssm_models".
         save_traces_only : bool
-            If True, only saves inference data (traces), not the model pickle.
+            If True, only saves the traces, not the model pickle.
             Defaults to False (saves both model and traces).
 
         Raises
@@ -1516,16 +1516,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Save traces to netcdf file
         if self._inference_obj is not None:
-            az.to_netcdf(self._inference_obj, model_path.joinpath("traces.nc"))
+            self._inference_obj.to_netcdf(model_path.joinpath("traces.nc"))
 
         # Save vi_traces to netcdf file
         if self._inference_obj_vi is not None:
-            az.to_netcdf(self._inference_obj_vi, model_path.joinpath("vi_traces.nc"))
+            self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
 
     @classmethod
-    def load_model(
-        cls, path: Union[str, Path]
-    ) -> Union["HSSMBase", dict[str, Optional[DataTree]]]:
+    def load_model(cls, path: Union[str, Path]) -> Union["HSSMBase", DataTree]:
         """Load a HSSM model instance and its inference results from disk.
 
         Parameters
@@ -1588,7 +1586,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
     @classmethod
     @_requires_io_backends
-    def load_model_traces(cls, path: str | Path) -> dict[str, DataTree | None]:
+    def load_model_traces(cls, path: str | Path) -> DataTree:
         """Load the traces from a model directory.
 
         Parameters
@@ -1598,10 +1596,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        dict[str, DataTree | None]
-            A dictionary with keys "idata_mcmc" and "idata_vi" containing the traces
-            from the model directory. If the traces do not exist, the corresponding
-            value will be None.
+        DataTree
+            A DataTree with groups "idata_mcmc" and "idata_vi" containing the traces
+            from the model directory. Groups are only present for traces that exist
+            on disk.
         """
         dt_dict: dict[str, DataTree | None] = {}
         model_dir = Path(path)
@@ -1625,7 +1623,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         else:
             dt_dict["idata_vi"] = az.from_netcdf(vi_traces_path)
 
-        return dt_dict
+        return DataTree.from_dict(
+            {name: dt for name, dt in dt_dict.items() if dt is not None}
+        )
 
     def __getstate__(self):
         """Get the state of the model for pickling.
