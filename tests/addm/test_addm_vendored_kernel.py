@@ -24,7 +24,13 @@ import numpy as np
 # Load the vendored jax/ subpackage in isolation (avoid full hssm import and
 # avoid shadowing the real `jax` library by using a synthetic package name).
 # ---------------------------------------------------------------------------
-_JAX_PKG_DIR = Path(__file__).resolve().parent.parent / "likelihoods" / "jax"
+# tests/addm/ -> repo root -> src/hssm/addm/likelihoods/jax (src layout). Resolved
+# from the repo root rather than the installed package so this test keeps loading
+# the vendored subpackage with only jax + numpy, without importing full hssm.
+_JAX_PKG_DIR = (
+    Path(__file__).resolve().parents[2]
+    / "src" / "hssm" / "addm" / "likelihoods" / "jax"
+)
 _PKG_NAME = "_addm_vendored_jax_under_test"
 
 
