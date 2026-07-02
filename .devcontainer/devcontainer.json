@@ -1,0 +1,31 @@
+{
+  "name": "HSSM",
+
+  // Reuse the runnable image's Dockerfile so the dev container and the published
+  // image share one definition (python 3.13, uv, graphviz, non-root `hssm` user).
+  // Building here (rather than pulling the image) means Codespaces works before the
+  // image is ever published. Swap for `"image": "ghcr.io/lnccbrown/hssm:latest"`
+  // once it's on GHCR if you'd rather pull than build.
+  "build": { "dockerfile": "../Dockerfile", "context": ".." },
+  "remoteUser": "hssm",
+
+  // Editable dev env on top of the image. `uv sync` installs the project + the
+  // default `dev` group (pytest, ruff, mypy, pre-commit) from uv.lock into .venv.
+  // ponytail: dev group only — `uv sync --group notebook` / `--group docs` are one
+  // command away when a contributor needs the heavy notebook/docs stacks.
+  // onCreateCommand runs during prebuilds, so the venv is baked in → fast startup.
+  "onCreateCommand": "uv sync",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "ms-python.mypy-type-checker"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": ".venv/bin/python"
+      }
+    }
+  }
+}
