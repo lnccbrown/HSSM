@@ -83,3 +83,16 @@ def test_oracle_defaults_are_efpt_original():
     from oracle._defaults import DEFAULT_TRUNC_NUM
 
     assert DEFAULT_TRUNC_NUM == 100
+
+
+def test_hosted_kernel_trunc_num_is_ram_bounded():
+    """Guard: the hosted JAX kernel must keep DEFAULT_TRUNC_NUM <= 6.
+
+    The kernel unrolls the FPT truncation series into the compiled graph and its
+    reverse-mode gradient materializes per-term intermediates, so a larger value
+    (e.g. efpt's upstream 100) can exhaust RAM at compile/grad time. See
+    likelihoods/jax/NOTICE.md.
+    """
+    from hssm.addm.likelihoods.jax._defaults import DEFAULT_TRUNC_NUM
+
+    assert DEFAULT_TRUNC_NUM <= 6
