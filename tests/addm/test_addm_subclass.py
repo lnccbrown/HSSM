@@ -132,9 +132,18 @@ def test_smoke_sample():
     data_arr = np.column_stack([df["rt"].to_numpy(), df["response"].to_numpy()])
     sacc2d = aDDM._stack_sacc_array(df["sacc_array"])
     logp = make_addm_logp_func()(
-        data_arr, eta, kappa, a, b, x0,
-        df["r1"].to_numpy(), df["r2"].to_numpy(), df["flag"].to_numpy(),
-        sacc2d, df["d"].to_numpy(), df["sigma"].to_numpy(),
+        data_arr,
+        eta,
+        kappa,
+        a,
+        b,
+        x0,
+        df["r1"].to_numpy(),
+        df["r2"].to_numpy(),
+        df["flag"].to_numpy(),
+        sacc2d,
+        df["d"].to_numpy(),
+        df["sigma"].to_numpy(),
     )
     assert bool(np.all(np.isfinite(np.asarray(logp)))), "init logp not finite"
 
@@ -143,7 +152,10 @@ def test_smoke_sample():
     # WAIC/LOO) re-evaluates the Op with a draw dimension on the params, which
     # the scalar-param aDDM kernel does not yet support.
     idata = model.sample(
-        draws=5, tune=5, chains=1, cores=1,
+        draws=5,
+        tune=5,
+        chains=1,
+        cores=1,
         idata_kwargs={"log_likelihood": False},
     )
     assert isinstance(idata, az.InferenceData)
@@ -157,6 +169,35 @@ def test_hierarchical_regression_builds():
         include=[{"name": "eta", "formula": "eta ~ 1 + (1|participant)"}],
     )
     assert model.model is not None  # bambi model built without error
+    # CC: a regressed core param must be flagged trial-wise (the flag dist.py uses
+    # to broadcast it to (n_obs,) so the builder maps it per trial).
+    assert model.params["eta"].is_trialwise
+
+
+def test_hierarchical_regression_samples():
+    """A hierarchical regression on eta samples cleanly (CC — the headline).
+
+    Pre-CC this crashed in ``logp``: the scalar batched kernel mis-shaped the
+    per-trial ``(n_obs,)`` eta. It now flows through the per-trial vmap path, so a
+    group-level regression both builds *and* samples, and the posterior carries
+    the participant-level structure.
+    """
+    df = make_addm_dataframe(60, seed=2, n_participants=3)
+    model = hssm.aDDM(
+        data=df,
+        include=[{"name": "eta", "formula": "eta ~ 1 + (1|participant)"}],
+    )
+    idata = model.sample(
+        draws=5,
+        tune=5,
+        chains=1,
+        cores=1,
+        idata_kwargs={"log_likelihood": False},
+    )
+    assert isinstance(idata, az.InferenceData)
+    posterior_vars = set(idata.posterior.data_vars)
+    # The group-level (per-participant) eta structure must be present.
+    assert any("participant" in v for v in posterior_vars), posterior_vars
 
 
 if __name__ == "__main__":
@@ -168,6 +209,7 @@ if __name__ == "__main__":
         test_bad_columns_raise,
         test_smoke_sample,
         test_hierarchical_regression_builds,
+        test_hierarchical_regression_samples,
     ):
         fn()
         print(f"PASSED: {fn.__name__}")

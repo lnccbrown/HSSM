@@ -34,10 +34,20 @@ from hssm.distribution_utils.func_utils import make_vjp_func
 from hssm.distribution_utils.jax import make_jax_logp_ops
 
 from ..attention_process import resolve_attention_process, standard_alternating
-from .jax import compute_addm_loglikelihoods, compute_addm_loglikelihoods_from_mu
+from .jax import (
+    compute_addm_logfptd,
+    compute_addm_loglikelihoods,
+    compute_addm_loglikelihoods_from_mu,
+)
 
 if TYPE_CHECKING:
     from pytensor.graph import Op
+
+# Core params the kernel can take per-trial (regression / hierarchical), in the
+# kernel's positional order. ``sigma`` is intentionally excluded — it stays a
+# scalar diffusion constant (per-trial sigma would collide with the quadrature
+# grid; the validator enforces this upstream).
+_CORE_PARAMS = ("eta", "kappa", "a", "b", "x0")
 
 
 def make_addm_logp_func(
@@ -58,6 +68,17 @@ def make_addm_logp_func(
     Callable
         ``logp(data, eta, kappa, a, b, x0, r1, r2, flag, sacc_array, d, sigma)``
         returning per-trial log-likelihoods of shape ``(n_trials,)``.
+
+    Notes
+    -----
+    Core params (``eta, kappa, a, b, x0``) may be either scalar (a shared prior)
+    or per-trial (a regression / hierarchical prior). A regressed param reaches
+    this closure as an ``(n_obs,)`` array — bambi's per-trial linear predictor,
+    with dist.py's trial-wise broadcast guaranteeing the shape. When *all* core
+    params are scalar we take the optimized batched kernel; when *any* is
+    per-trial we vmap the single-trial kernel with ``in_axes=0`` on exactly the
+    per-trial ones (the same trial-wise pattern as the ONNX likelihood path),
+    which keeps the vendored kernel untouched.
     """
     process = resolve_attention_process(attention_process)
     use_default = process is standard_alternating
@@ -65,21 +86,98 @@ def make_addm_logp_func(
     def logp(data, eta, kappa, a, b, x0, r1, r2, flag, sacc_array, d, sigma):
         rt = data[:, 0]
         response = data[:, 1]
-        # sigma is the (fixed) diffusion-noise constant. The kernel vmaps over
-        # trials but treats sigma as a scalar, so a per-trial sigma column would
-        # collide with the quadrature grid. Reduce to a scalar (validated constant
-        # upstream); a scalar/0-d sigma passes through unchanged.
+        n_obs = rt.shape[0]
+        # sigma is the (fixed) diffusion-noise constant — always reduced to a
+        # scalar (a per-trial sigma would collide with the quadrature grid).
         sigma = jnp.asarray(sigma).reshape(-1)[0]
-        if use_default:
-            # Kernel builds the drift array internally via the same
-            # _build_addm_mu_array_data the default attention process delegates to.
-            return compute_addm_loglikelihoods(
-                rt, response, eta, kappa, sigma, a, b, x0,
-                r1, r2, flag, sacc_array, d,
+
+        core = dict(eta=eta, kappa=kappa, a=a, b=b, x0=x0)
+
+        def _is_trialwise(p):
+            p = jnp.asarray(p)
+            # ponytail: shape[0]==n_obs is the trial-wise signal; ambiguous only
+            # for a 1-trial dataset (n_obs==1), which is not a real inference case.
+            return p.ndim >= 1 and p.shape[0] == n_obs
+
+        trialwise = {name: _is_trialwise(p) for name, p in core.items()}
+
+        if not any(trialwise.values()):
+            # Fast path: all core params scalar -> optimized batched kernel.
+            eta, kappa, a, b, x0 = (
+                jnp.asarray(core[name]).reshape(-1)[0] for name in _CORE_PARAMS
             )
-        mu = process(eta, kappa, r1, r2, flag, d, sacc_array.shape[1])
-        return compute_addm_loglikelihoods_from_mu(
-            rt, response, mu, sacc_array, d, sigma, a, b, x0,
+            if use_default:
+                # Kernel builds the drift array internally via the same
+                # _build_addm_mu_array_data the default process delegates to.
+                return compute_addm_loglikelihoods(
+                    rt,
+                    response,
+                    eta,
+                    kappa,
+                    sigma,
+                    a,
+                    b,
+                    x0,
+                    r1,
+                    r2,
+                    flag,
+                    sacc_array,
+                    d,
+                )
+            mu = process(eta, kappa, r1, r2, flag, d, sacc_array.shape[1])
+            return compute_addm_loglikelihoods_from_mu(
+                rt,
+                response,
+                mu,
+                sacc_array,
+                d,
+                sigma,
+                a,
+                b,
+                x0,
+            )
+
+        if not use_default:
+            raise NotImplementedError(
+                "Trial-wise / regression core params are supported only with the "
+                "default 'standard_alternating' attention process; a custom "
+                "attention process builds the drift batch-wise from scalar "
+                "eta/kappa. Regress under the default process, or extend the "
+                "custom process to accept per-trial eta/kappa."
+            )
+
+        # Per-trial path: vmap the single-trial kernel, mapping only the per-trial
+        # core params (in_axes=0) and passing the scalar ones unmapped (None).
+        mapped = {
+            name: (core[name] if tw else jnp.asarray(core[name]).reshape(-1)[0])
+            for name, tw in trialwise.items()
+        }
+        in_axes = (
+            0,
+            0,  # rt, response
+            *(0 if trialwise[name] else None for name in ("eta", "kappa")),
+            None,  # sigma
+            *(0 if trialwise[name] else None for name in ("a", "b", "x0")),
+            0,
+            0,
+            0,
+            0,
+            0,  # r1, r2, flag, sacc_array, d
+        )
+        return jax.vmap(compute_addm_logfptd, in_axes=in_axes)(
+            rt,
+            response,
+            mapped["eta"],
+            mapped["kappa"],
+            sigma,
+            mapped["a"],
+            mapped["b"],
+            mapped["x0"],
+            r1,
+            r2,
+            flag,
+            sacc_array,
+            d,
         )
 
     return logp

@@ -118,14 +118,15 @@ class aDDM(HSSMBase):
         list_params = self.list_params
         assert list_params is not None, "list_params must be set"
 
-        # The aDDM kernel consumes SCALAR core params (eta, kappa, a, b, x0) plus
-        # per-trial covariates — it vmaps over trials but not over these params.
-        # So we must NOT broadcast them to (n_obs,): params_is_trialwise is all
-        # False (unlike RLSSM's all-True, whose kernel expects per-trial params).
-        # (Per-trial / regression core params are therefore not yet supported by
-        # the kernel; such models build but should not be sampled.)
+        # Standard trial-wise pattern (identical to hssm.py / RLSSM): one flag per
+        # model param, True iff the user put it under a regression. dist.py then
+        # broadcasts those to (n_obs,) so the builder's logp maps them per-trial
+        # (see likelihoods/builder.py). Core params default to scalar; a regressed
+        # one (eta, kappa, a, b, x0) flows through per-trial. sigma stays scalar.
         params_is_trialwise = [
-            False for name in self.params if name != "p_outlier"
+            param.is_trialwise
+            for param_name, param in self.params.items()
+            if param_name != "p_outlier"
         ]
 
         extra_fields_data = self._addm_extra_fields_data(self.data)
@@ -153,7 +154,9 @@ class aDDM(HSSMBase):
         if new_data is None:
             new_data = self.data
         if self.extra_fields is not None:
-            self.model_distribution.extra_fields = self._addm_extra_fields_data(new_data)
+            self.model_distribution.extra_fields = self._addm_extra_fields_data(
+                new_data
+            )
 
     # ------------------------------------------------------------------ #
     # aDDM-specific data handling
@@ -227,6 +230,5 @@ class aDDM(HSSMBase):
         d = np.asarray(data["d"])
         if np.any(d < 1) or np.any(d > max_d):
             raise ValueError(
-                "each `d` must satisfy 1 <= d <= sacc_array width "
-                f"(max width {max_d})."
+                f"each `d` must satisfy 1 <= d <= sacc_array width (max width {max_d})."
             )
