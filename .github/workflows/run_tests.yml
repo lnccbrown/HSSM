@@ -44,11 +44,11 @@ jobs:
 
       - name: Run fast tests
         if: ${{ !inputs.run_slow_tests }}
-        run: uv run python scripts/run_pytest_safe.py -m "not slow"
+        run: uv run pytest -m "not slow" $HSSM_TEST_ARGS
 
       - name: Run all tests
         if: ${{ inputs.run_slow_tests }}
-        run: uv run python scripts/run_pytest_safe.py
+        run: uv run pytest $HSSM_TEST_ARGS
         env:
           # Log per-test RSS to diagnose slow-test memory leaks. This step only
           # runs on the slow-test path (run_slow_tests.yml), so it stays scoped.
