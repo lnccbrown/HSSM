@@ -19,12 +19,6 @@ jobs:
   run_tests:
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    # Skip marker support depends on the trigger's event payload:
-    #   - pull_request: reads github.event.pull_request.title
-    #   - workflow_call: no pull_request field exists, so the marker is not
-    #     detectable and this job always runs (callers gate skipping their side).
-    if: >-
-      ${{ ! contains(github.event.pull_request.title || '', '[skip fast tests]') }}
     env:
       PYTENSOR_FLAGS: "blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
       HSSM_TEST_ARGS: ${{ inputs.test_args }}
