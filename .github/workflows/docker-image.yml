@@ -1,0 +1,66 @@
+name: Docker image (GHCR)
+
+# Build the HSSM image on relevant PRs (validation only, no push) and publish it
+# to GHCR on release or manual dispatch.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - .github/workflows/docker-image.yml
+      - pyproject.toml
+      - src/**
+  release:
+    types: [published]
+
+env:
+  IMAGE: ghcr.io/lnccbrown/hssm
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from pyproject.toml
+        id: version
+        run: |
+          V=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "value=$V" >> "$GITHUB_OUTPUT"
+
+      # Push on release/dispatch; PRs only build to validate the Dockerfile.
+      - name: Decide whether to push
+        id: push
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.push.outputs.value == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          # ponytail: amd64 only until ssm-simulators + hddm-wfpt publish
+          # linux/arm64 wheels; then add ,linux/arm64 here for native multi-arch.
+          platforms: linux/amd64
+          push: ${{ steps.push.outputs.value }}
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
