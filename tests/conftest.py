@@ -1,35 +1,58 @@
+"""Configuration and shared fixtures for the HSSM test suite."""
+
 import gc
 import logging
 import os
+from pathlib import Path
 
-import pytest
+import matplotlib as mpl
+
+mpl.use("Agg")
 
 import arviz as az
-import matplotlib as mpl
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 from ssms.basic_simulators.simulator import simulator
 
 import hssm
 
-mpl.use("Agg")
-
 _memory_logger = logging.getLogger("hssm.tests.memory")
+
+MIB = 1024 * 1024
+_PSUTIL_AVAILABLE = True
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _clear_jax_caches() -> None:
-    """Clear JAX compilation caches if JAX is importable."""
+    """Best-effort clear of JAX compilation caches.
+
+    ``jax.clear_caches`` may be absent on older JAX versions and could raise
+    depending on the backend state. Since this runs in fixture teardown, any
+    failure here must not fail the test run or mask the original result — so we
+    guard the attribute and swallow errors, logging at debug level.
+    """
     try:
         import jax
     except ImportError:
         return
-    jax.clear_caches()
+
+    clear_caches = getattr(jax, "clear_caches", None)
+    if clear_caches is None:
+        return
+
+    try:
+        clear_caches()
+    except Exception:  # noqa: BLE001 - teardown must never raise
+        _memory_logger.debug("jax.clear_caches() failed; ignoring.", exc_info=True)
 
 
 @pytest.fixture(autouse=True)
-def _reclaim_memory(request):
-    """Release native/backend memory after each slow-marked test.
+def _slow_test_memory(request):
+    """Reclaim backend memory after each slow test and optionally log RSS.
 
     Slow tests repeatedly build PyMC models and sample with the JAX, numpyro and
     pytensor backends, which allocate native memory (compiled functions, device
@@ -37,54 +60,69 @@ def _reclaim_memory(request):
     a serial run grows RSS until the process is OOM-killed. Gated on the ``slow``
     marker so the fast suite is unaffected, and applies wherever the slow test
     lives (not just ``tests/slow/``).
+
+    Reclamation and RSS logging live in one fixture on purpose: two separate
+    autouse fixtures have no guaranteed teardown order, so the logged RSS could
+    be sampled either before or after cleanup. Here the sequence is explicit:
+    end-of-test RSS (the leak-hunting signal) is sampled first, then cleanup
+    runs, then post-cleanup RSS is sampled to show how much was freed. RSS
+    logging is opt-in via ``HSSM_TEST_RSS_LOG`` because JAX and pytensor allocate
+    outside the Python heap, which allocation-only profilers miss.
     """
+    global _PSUTIL_AVAILABLE
+
+    is_slow = request.node.get_closest_marker("slow") is not None
+    log_rss = is_slow and os.environ.get("HSSM_TEST_RSS_LOG", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+    process = None
+    rss_before = 0
+    if log_rss and _PSUTIL_AVAILABLE:
+        try:
+            import psutil
+
+            process = psutil.Process()
+            rss_before = process.memory_info().rss
+        except ImportError:
+            _PSUTIL_AVAILABLE = False
+            _memory_logger.warning("psutil not installed; skipping RSS logging.")
+
     yield
-    if request.node.get_closest_marker("slow") is None:
+
+    if not is_slow:
         return
-    import matplotlib.pyplot as plt
+
+    # Sample RSS at end of test (before reclaiming). This is a point-in-time
+    # reading, not a peak — the process may have used more RSS earlier.
+    rss_end = process.memory_info().rss if process is not None else None
 
     plt.close("all")
     _clear_jax_caches()
     gc.collect()
 
-
-@pytest.fixture(autouse=True)
-def _log_rss(request):
-    """Log per-test RSS delta for slow tests when ``HSSM_TEST_RSS_LOG`` is set.
-
-    RSS is the primary signal here because JAX and pytensor allocate memory
-    outside the Python heap, which allocation-only profilers miss.
-    """
-    if not os.environ.get("HSSM_TEST_RSS_LOG"):
-        yield
-        return
-    if request.node.get_closest_marker("slow") is None:
-        yield
+    if process is None:
         return
 
-    try:
-        import psutil
-    except ImportError:
-        _memory_logger.warning("psutil not installed; skipping RSS logging.")
-        yield
-        return
-
-    process = psutil.Process()
-    rss_before = process.memory_info().rss
-    yield
-    rss_after = process.memory_info().rss
-    mib = 1024 * 1024
+    rss_post_cleanup = process.memory_info().rss
     _memory_logger.info(
-        "RSS %s: before=%.1f MiB after=%.1f MiB delta=%+.1f MiB",
+        "RSS %s: start=%.1f MiB end=%.1f MiB post_cleanup=%.1f MiB "
+        "(test delta=%+.1f MiB, freed=%+.1f MiB)",
         request.node.nodeid,
-        rss_before / mib,
-        rss_after / mib,
-        (rss_after - rss_before) / mib,
+        rss_before / MIB,
+        rss_end / MIB,
+        rss_post_cleanup / MIB,
+        (rss_end - rss_before) / MIB,
+        (rss_end - rss_post_cleanup) / MIB,
     )
 
 
 @pytest.fixture(scope="module")
 def data_ddm():
+    """Return DDM simulation data."""
     v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 0.5]
     obs_ddm = simulator([v_true, a_true, z_true, t_true], model="ddm", n_samples=100)
     obs_ddm = np.column_stack([obs_ddm["rts"][:, 0], obs_ddm["choices"][:, 0]])
@@ -95,6 +133,7 @@ def data_ddm():
 
 @pytest.fixture(scope="module")
 def data_angle():
+    """Return Angle simulation data."""
     v_true, a_true, z_true, t_true, theta_true = [0.5, 1.5, 0.5, 0.5, 0.3]
     obs_angle = simulator(
         [v_true, a_true, z_true, t_true, theta_true], model="angle", n_samples=100
@@ -106,10 +145,12 @@ def data_angle():
 
 @pytest.fixture(scope="module")
 def data_ddm_reg():
+    """Return DDM simulation data with regression."""
     # Generate some fake simulation data
+    rng = np.random.default_rng(seed=42)
     intercept = 1.5
-    x = np.random.uniform(-0.5, 0.5, size=250)
-    y = np.random.uniform(-0.5, 0.5, size=250)
+    x = rng.uniform(-0.5, 0.5, size=250)
+    y = rng.uniform(-0.5, 0.5, size=250)
 
     v = intercept + 0.8 * x + 0.3 * y
     true_values = np.column_stack(
@@ -130,14 +171,16 @@ def data_ddm_reg():
 
 @pytest.fixture(scope="module")
 def data_ddm_reg_va():
+    """Return DDM simulation data with regression on v and a."""
     # Generate some fake simulation data
+    rng = np.random.default_rng(seed=42)
     intercept = 1.5
     intercept_a = 1.0
-    x = np.random.uniform(-0.5, 0.5, size=100)
-    y = np.random.uniform(-0.5, 0.5, size=100)
+    x = rng.uniform(-0.5, 0.5, size=100)
+    y = rng.uniform(-0.5, 0.5, size=100)
 
-    m = np.random.uniform(-0.5, 0.5, size=100)
-    n = np.random.uniform(-0.5, 0.5, size=100)
+    m = rng.uniform(-0.5, 0.5, size=100)
+    n = rng.uniform(-0.5, 0.5, size=100)
 
     v = intercept + 0.8 * x + 0.3 * y
     a = intercept_a + 0.1 * m + 0.1 * n
@@ -146,7 +189,7 @@ def data_ddm_reg_va():
     dataset_reg_va = hssm.simulate_data(
         model="ddm",
         theta=true_values,
-        size=1,  # Generate one data point for each of the 1000 set of true values
+        size=1,  # Generate one data point for each of the 100 sets of true values
     )
 
     dataset_reg_va["x"] = x
@@ -159,26 +202,25 @@ def data_ddm_reg_va():
 
 @pytest.fixture
 def cav_dt():
-    return az.from_netcdf("tests/fixtures/cavanagh_idata.nc")
+    """Return Cavanagh idata."""
+    return az.from_netcdf(FIXTURES / "cavanagh_idata.nc")
 
 
 @pytest.fixture
 def posterior():
-    return xr.open_dataarray("tests/fixtures/cavanagh_idata_pps.nc")
+    """Return posterior predictive."""
+    return xr.load_dataarray(FIXTURES / "cavanagh_idata_pps.nc")
 
 
 @pytest.fixture
 def cavanagh_test():
-    return pd.read_csv("tests/fixtures/cavanagh_theta_test.csv", index_col=None)
-
-
-# @pytest.fixture
-# def cavanagh_data():
-#     return hssm.load_data("cavanagh_theta")
+    """Return Cavanagh test data."""
+    return pd.read_csv(FIXTURES / "cavanagh_theta_test.csv", index_col=None)
 
 
 @pytest.fixture
 def basic_hssm_model():
+    """Return a basic HSSM model."""
     cav_data = hssm.load_data("cavanagh_theta")
     basic_hssm_model = hssm.HSSM(
         data=cav_data,
@@ -198,6 +240,7 @@ def basic_hssm_model():
 # Cartoon plot fixtures
 @pytest.fixture
 def cav_model_cartoon(cavanagh_test):
+    """Return a Cavanagh model for cartoon plots."""
     cav_model = hssm.HSSM(
         model="ddm",
         data=cavanagh_test,
@@ -223,7 +266,7 @@ def cav_model_cartoon(cavanagh_test):
     )
 
     # Attach trace
-    idata_cav = az.from_netcdf("tests/fixtures/idata_cavanagh_cartoon.nc")
+    idata_cav = az.from_netcdf(FIXTURES / "idata_cavanagh_cartoon.nc")
     cav_model._inference_obj = idata_cav
     return cav_model
 
@@ -259,7 +302,8 @@ def intercept_only_ddm_cartoon(cavanagh_test):
 
 @pytest.fixture
 def race_model_cartoon():
-    my_race_data = pd.read_csv("tests/fixtures/data_race.csv")
+    """Return a race model for cartoon plots."""
+    my_race_data = pd.read_csv(FIXTURES / "data_race.csv")
     race_model = hssm.HSSM(
         model="race_no_bias_angle_4",
         data=my_race_data,
@@ -284,13 +328,14 @@ def race_model_cartoon():
         p_outlier=0.00,
     )
     # Attach trace
-    idata_race = az.from_netcdf("tests/fixtures/test_idata_race.nc")
+    idata_race = az.from_netcdf(FIXTURES / "test_idata_race.nc")
     race_model._inference_obj = idata_race
     return race_model
 
 
 # Only useful if running tests serially
 def pytest_collection_modifyitems(config, items):
+    """Reorder tests so fast tests run before slow tests."""
     slow_tests = [item for item in items if "slow" in item.keywords]
     fast_tests = [item for item in items if "slow" not in item.keywords]
 
