@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import xarray as xr
 
 import hssm
 
@@ -75,14 +76,14 @@ def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
     tmp_model_name_3 = "hssm_model_pytest_3"
     basic_hssm_model.save_model(
         model_name=tmp_model_name_3,
-        save_traces_only=True,
+        save_idata_only=True,
         base_path=tmp_path,
         allow_absolute_base_path=True,
     )
 
     loaded_idata = hssm.HSSM.load_model(path=tmp_path / tmp_model_name_3)
 
-    assert isinstance(loaded_idata, dict)
+    assert isinstance(loaded_idata, xr.DataTree)
     assert loaded_idata["idata_mcmc"] is not None
     assert loaded_idata["idata_vi"] is not None
 
