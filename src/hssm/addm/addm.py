@@ -134,7 +134,7 @@ class aDDM(HSSMBase):
         assert self.model_config.loglik is not None, "model_config.loglik must be set"
         loglik_op = cast("Any", self.model_config.loglik)
 
-        return make_distribution(
+        dist = make_distribution(
             rv=self.model_config.model_name,
             loglik=loglik_op,
             list_params=list_params,
@@ -143,20 +143,42 @@ class aDDM(HSSMBase):
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
         )
+        # Expose the observed fixations to the RV's generative path so
+        # posterior-predictive draws condition on them (see _push_rv_extra_fields).
+        self._push_rv_extra_fields(dist, extra_fields_data)
+        return dist
+
+    def _push_rv_extra_fields(
+        self, dist: type[pm.Distribution], extra_fields_data: list[np.ndarray] | None
+    ) -> None:
+        """Set the aDDM covariates on the RV class so ``rng_fn`` conditions on them.
+
+        The likelihood already receives ``extra_fields`` (dist.py); the *generative*
+        rng_fn does not. We key the observed fixations by name and stash them on the
+        RV class (``rv_op`` is an instance, so its class carries the attr consumed by
+        the ``rng_fn`` classmethod) — used for covariate-conditioned PPC. Each aDDM
+        builds its own RV class, so this does not leak across models.
+        """
+        if extra_fields_data is None or self.extra_fields is None:
+            return
+        mapping = dict(zip(self.extra_fields, extra_fields_data))
+        type(dist.rv_op)._extra_fields = mapping
 
     def _update_extra_fields(self, new_data: pd.DataFrame | None = None) -> None:
         """Refresh the distribution's extra fields, stacking ``sacc_array`` to 2-D.
 
         Overrides ``DataValidatorMixin._update_extra_fields`` (called from
         ``sample()`` and the data-update path) so the 2-D ``sacc_array`` is
-        materialized rather than passed as a ragged object/tuple column.
+        materialized rather than passed as a ragged object/tuple column. Refreshes
+        both the likelihood extra fields and the RV's covariate-conditioned PPC
+        fixations from the (possibly new) data.
         """
         if new_data is None:
             new_data = self.data
         if self.extra_fields is not None:
-            self.model_distribution.extra_fields = self._addm_extra_fields_data(
-                new_data
-            )
+            extra_fields_data = self._addm_extra_fields_data(new_data)
+            self.model_distribution.extra_fields = extra_fields_data
+            self._push_rv_extra_fields(self.model_distribution, extra_fields_data)
 
     # ------------------------------------------------------------------ #
     # aDDM-specific data handling

@@ -238,6 +238,12 @@ def make_hssm_rv(
         _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
         _list_params = list_params
         _lapse = lapse
+        # Optional per-inference covariates forwarded to the simulator so the
+        # generative path (posterior/prior predictive) can condition on observed
+        # per-trial inputs — e.g. aDDM fixations. Populated on the RV class at PPC
+        # time (see aDDM._update_extra_fields); ``None`` keeps every existing
+        # model's generative path byte-for-byte unchanged (a plain **{} splat).
+        _extra_fields: dict | None = None
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
         # NOTE: `rng` now is a np.random.Generator instead of RandomState
@@ -284,6 +290,11 @@ def make_hssm_rv(
             size, args, kwargs = _extract_size(args, kwargs)
             arg_arrays = _create_arg_arrays(cls, args)
             p_outlier, arg_arrays = _get_p_outlier(cls, arg_arrays)
+
+            # Forward observed per-trial covariates to the simulator when the RV
+            # has been given them (covariate-conditioned PPC); a no-op otherwise.
+            if cls._extra_fields is not None:
+                kwargs.setdefault("extra_fields", cls._extra_fields)
 
             sims_out = ssms_rng_fn(
                 arg_arrays,
