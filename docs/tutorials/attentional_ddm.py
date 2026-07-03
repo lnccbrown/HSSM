@@ -5,6 +5,10 @@ aDDM **simulator** interactively, (2) *see* the covariate **handshake** that mak
 posterior-predictive checks condition on the observed fixations, and (3) fit a
 **trial-wise regression** on the attention parameter ``eta`` and recover it.
 
+The simulator is driven through ssm-simulators' high-level ``Simulator`` class —
+the same public path HSSM's posterior-predictive checks go through — so the
+covariate handshake you see here is exactly the one used under the hood.
+
 Requires the aDDM build of ssm-simulators (with ``cssm.addm``) and marimo. Until
 that ships on PyPI, run against the local build (from the HSSM worktree)::
 
@@ -37,16 +41,16 @@ def _():
     warnings.filterwarnings("ignore")
     logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)
 
-    import cssm  # the aDDM build of ssm-simulators
     import marimo as mo
     import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
+    from ssms.basic_simulators import Simulator
 
     import hssm
 
     hssm.set_floatX("float64")
-    return cssm, hssm, mo, np, pd, plt
+    return Simulator, hssm, mo, np, pd, plt
 
 
 @app.cell
@@ -61,18 +65,18 @@ def _(mo):
     be **regressed** on trial-level predictors.
 
     This notebook: **(1)** poke the simulator, **(2)** see the covariate handshake,
-    **(3)** fit a trial-wise regression and recover it.
+    **(3)** fit a trial-wise regression and recover it. The simulator is driven via
+    ssm-simulators' high-level `Simulator` class — the same path HSSM's PPC uses.
     """)
     return
 
 
 @app.cell
-def _(np):
-    # A fixed batch of observed fixation sequences reused across the exploration
-    # cells. sacc_array holds saccade onset times (column 0 anchored at 0); d is the
-    # number of active fixation stages per trial; flag says which item is fixated
-    # first; r1/r2 are the item ratings.
+def _(Simulator, np):
+    sim = Simulator("addm")  # configure the aDDM simulator once (params [eta,kappa,a,b,x0,t])
+
     def make_fixations(n, max_d=8, seed=0):
+        """A batch of observed fixation sequences (the aDDM covariates)."""
         rng = np.random.default_rng(seed)
         r1 = rng.integers(1, 6, n).astype(np.float64)
         r2 = rng.integers(1, 6, n).astype(np.float64)
@@ -83,8 +87,16 @@ def _(np):
             sacc[i, 1 : d[i]] = np.sort(rng.uniform(0.1, 1.2, d[i] - 1))
         return dict(n=n, r1=r1, r2=r2, flag=flag, d=d, sacc=sacc)
 
+    def extra_fields(fixations):
+        """Pack fixations into the extra_fields dict the simulator conditions on."""
+        n = fixations["n"]
+        return {
+            "r1": fixations["r1"], "r2": fixations["r2"], "flag": fixations["flag"],
+            "sacc_array": fixations["sacc"], "d": fixations["d"], "sigma": np.ones(n),
+        }
+
     fix = make_fixations(3000, seed=0)
-    return fix, make_fixations
+    return extra_fields, fix, make_fixations, sim
 
 
 @app.cell
@@ -111,19 +123,15 @@ def _(mo):
 
 
 @app.cell
-def _(a_s, b_s, cssm, eta_s, fix, kappa_s, np, plt):
-    def simulate(eta, kappa, a, b, fixations, n_samples=1, seed=1):
+def _(a_s, b_s, eta_s, extra_fields, fix, kappa_s, np, plt, sim):
+    def simulate(eta, kappa, a, b, fixations, seed=1):
+        # theta is (n_trials, 6) = [eta, kappa, a, b, x0, t]; one row per fixation
+        # trial (all sharing these params here), n_samples=1 draw each.
         n = fixations["n"]
-
-        def c(v):
-            return np.full(n, v, dtype=np.float64)
-
-        out = cssm.addm(
-            c(eta), c(kappa), c(a), c(b), c(0.0), c(0.0), c(999.0), c(1.0),
-            sigma=c(1.0), r1=fixations["r1"], r2=fixations["r2"],
-            flag=fixations["flag"], sacc_array=fixations["sacc"], d=fixations["d"],
-            n_samples=n_samples, n_trials=n, random_state=seed,
-            delta_t=0.001, max_t=10.0,
+        theta = np.tile([eta, kappa, a, b, 0.0, 0.0], (n, 1))
+        out = sim.simulate(
+            theta=theta, n_samples=1, random_state=seed, max_t=10.0,
+            extra_fields=extra_fields(fixations),  # Mode 2: condition on fixations
         )
         rt = np.asarray(out["rts"]).reshape(-1)
         ch = np.asarray(out["choices"]).reshape(-1)
@@ -139,7 +147,7 @@ def _(a_s, b_s, cssm, eta_s, fix, kappa_s, np, plt):
     _ax.set_title(f"P(+1) = {np.mean(_ch == 1):.3f}   (n = {_rt.size})")
     _ax.legend()
     _fig
-    return (simulate,)
+    return
 
 
 @app.cell
@@ -151,36 +159,35 @@ def _(mo):
     prior-) predictive check must reuse the *observed* gaze pattern, not invent a
     new one. The simulator supports two modes:
 
-    * **Mode 2 (conditioned)** — you pass the observed `r1, r2, flag, sacc_array, d`;
-      only the trajectory is sampled.
-    * **Mode 1 (self-sampled)** — no fixations are given, so it samples its own.
+    * **Mode 2 (conditioned)** — pass `extra_fields` with the observed `r1, r2,
+      flag, sacc_array, d`; only the trajectory is sampled.
+    * **Mode 1 (self-sampled)** — omit `extra_fields`, so it samples its own.
 
-    Below, the same parameters are simulated both ways. The distributions differ —
-    that difference is exactly what the PPC handshake preserves.
+    Below, the same `Simulator` runs both ways. The distributions differ — that
+    difference is exactly what the PPC handshake preserves.
     """)
     return
 
 
 @app.cell
-def _(cssm, fix, np, plt, simulate):
-    # Mode 2: conditioned on the observed fixations.
-    rt_cond, ch_cond = simulate(0.3, 1.5, 1.5, 0.2, fix, seed=7)
+def _(extra_fields, fix, np, plt, sim):
+    _theta = np.tile([0.3, 1.5, 1.5, 0.2, 0.0, 0.0], (fix["n"], 1))
 
-    # Mode 1: same params, but let the simulator sample its own fixations.
-    def _c(v):
-        return np.full(fix["n"], v, dtype=np.float64)
-
-    _out = cssm.addm(
-        _c(0.3), _c(1.5), _c(1.5), _c(0.2), _c(0.0), _c(0.0), _c(999.0), _c(1.0),
-        sigma=_c(1.0), n_samples=1, n_trials=fix["n"], random_state=7,
-        delta_t=0.001, max_t=10.0,  # no sacc_array -> Mode 1
+    # Mode 2: pass the observed fixations via extra_fields.
+    _cond = sim.simulate(
+        theta=_theta, n_samples=1, random_state=7, max_t=10.0,
+        extra_fields=extra_fields(fix),
     )
-    _rt = np.asarray(_out["rts"]).reshape(-1)
-    rt_self = _rt[_rt != -999.0]
+    # Mode 1: same params + seed, but no extra_fields -> self-sampled fixations.
+    _self = sim.simulate(theta=_theta, n_samples=1, random_state=7, max_t=10.0)
+
+    def _valid(out):
+        rt = np.asarray(out["rts"]).reshape(-1)
+        return rt[rt != -999.0]
 
     _fig, _ax = plt.subplots(figsize=(7, 3.2))
-    _ax.hist(rt_cond, bins=40, alpha=0.6, density=True, label="Mode 2 (observed fixations)")
-    _ax.hist(rt_self, bins=40, alpha=0.6, density=True, label="Mode 1 (self-sampled)")
+    _ax.hist(_valid(_cond), bins=40, alpha=0.6, density=True, label="Mode 2 (observed fixations)")
+    _ax.hist(_valid(_self), bins=40, alpha=0.6, density=True, label="Mode 1 (self-sampled)")
     _ax.set_xlabel("reaction time (s)")
     _ax.set_ylabel("density")
     _ax.set_title("Conditioning on the observed fixations changes the prediction")
@@ -196,15 +203,16 @@ def _(mo):
 
     The likelihood already receives the fixations (as `extra_fields`); the
     *generative* path did not, so it used to self-sample. The fix threads the
-    observed covariates through, end to end:
+    observed covariates through, end to end — the last two steps are the very
+    `Simulator`/`simulator()` API used above:
 
     ```
     aDDM._make_model_distribution / _update_extra_fields   (HSSM)
         └─ stashes {r1,r2,flag,sacc_array,d,sigma} on the RV class: rv_op._extra_fields
-    HSSMRV.rng_fn  (HSSM)               forwards _extra_fields ->
-    ssms_rng_fn    (ssm-simulators)     broadcasts them to the (draws x trials) shape ->
-    simulator(..., extra_fields=dict)   splats them into ->
-    cssm.addm(..., sacc_array=...)      Mode 2: conditions on the observed fixations
+    HSSMRV.rng_fn        (HSSM)            forwards _extra_fields ->
+    ssms_rng_fn          (ssm-simulators) broadcasts to (draws x trials) ->
+    simulator(..., extra_fields=dict)     splats into ->   (Simulator.simulate too)
+    cssm.addm(..., sacc_array=...)        Mode 2: conditions on the observed fixations
     ```
 
     You can see the stashed covariates on the built model in section 4.
@@ -226,27 +234,27 @@ def _(mo):
 
 
 @app.cell
-def _(cssm, make_fixations, np, pd):
+def _(extra_fields, make_fixations, np, pd, sim):
     _f = make_fixations(800, seed=42)
     _n = _f["n"]
     x = np.random.default_rng(1).uniform(0.0, 1.0, _n)
     _eta_true = 0.2 + 0.3 * x
 
-    def _c(v):
-        return np.full(_n, v, dtype=np.float64)
-
-    _out = cssm.addm(
-        _eta_true, _c(1.0), _c(1.5), _c(0.2), _c(0.0), _c(0.0), _c(999.0), _c(1.0),
-        sigma=_c(1.0), r1=_f["r1"], r2=_f["r2"], flag=_f["flag"],
-        sacc_array=_f["sacc"], d=_f["d"], n_samples=1, n_trials=_n,
-        random_state=2, delta_t=0.001, max_t=10.0,
+    # theta with a per-trial eta column; the rest shared.
+    _theta = np.column_stack([
+        _eta_true, np.full(_n, 1.0), np.full(_n, 1.5),
+        np.full(_n, 0.2), np.zeros(_n), np.zeros(_n),
+    ])
+    _out = sim.simulate(
+        theta=_theta, n_samples=1, random_state=2, max_t=10.0, smooth_unif=False,
+        extra_fields=extra_fields(_f),
     )
     _rt = np.asarray(_out["rts"]).reshape(-1)
     _ch = np.asarray(_out["choices"]).reshape(-1).astype(float)
     _keep = _rt != -999.0
     _rows = np.flatnonzero(_keep)
-    _sacc = _f["sacc"]
-    _d = _f["d"]
+
+    _sacc, _d = _f["sacc"], _f["d"]
     _d_obs = np.array([max(int((_sacc[i, : _d[i]] < _rt[i]).sum()), 1) for i in _rows])
     data = pd.DataFrame({
         "rt": _rt[_keep], "response": _ch[_keep], "x": x[_keep],
