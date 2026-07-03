@@ -149,9 +149,9 @@ def test_smoke_sample():
     assert bool(np.all(np.isfinite(np.asarray(logp)))), "init logp not finite"
 
     model = hssm.aDDM(data=df)
-    # log_likelihood is disabled: the post-hoc pointwise log-likelihood (for
-    # WAIC/LOO) re-evaluates the Op with a draw dimension on the params, which
-    # the scalar-param aDDM kernel does not yet support.
+    # log_likelihood is disabled here purely for speed. It IS supported (the CC
+    # trial-wise builder handles the draw-dimension re-eval) — WAIC/LOO are
+    # exercised in test_addm_waic_loo.py.
     idata = model.sample(
         draws=5,
         tune=5,
