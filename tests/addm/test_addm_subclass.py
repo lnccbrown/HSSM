@@ -128,7 +128,7 @@ def test_smoke_sample():
     df = make_addm_dataframe(200, seed=1)
 
     # Localize failures: confirm the init log-likelihood is finite before NUTS.
-    eta, kappa, a, b, x0 = aDDMConfig().params_default
+    eta, kappa, a, b, x0, t = aDDMConfig().params_default
     data_arr = np.column_stack([df["rt"].to_numpy(), df["response"].to_numpy()])
     sacc2d = aDDM._stack_sacc_array(df["sacc_array"])
     logp = make_addm_logp_func()(
@@ -138,6 +138,7 @@ def test_smoke_sample():
         a,
         b,
         x0,
+        t,
         df["r1"].to_numpy(),
         df["r2"].to_numpy(),
         df["flag"].to_numpy(),

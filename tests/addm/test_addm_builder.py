@@ -36,21 +36,22 @@ import jax.numpy as jnp  # noqa: E402
 
 TOL = 1e-6
 
-LIST_PARAMS = ["eta", "kappa", "a", "b", "x0"]
+LIST_PARAMS = ["eta", "kappa", "a", "b", "x0", "t"]
 EXTRA_FIELDS = ["r1", "r2", "flag", "sacc_array", "d", "sigma"]
 
 
 # ---------------------------------------------------------------------------
 # Fixture (10 trials) — args in the model-build order the distribution uses:
 #   data, *list_params, *extra_fields
-#   = data, eta, kappa, a, b, x0, r1, r2, flag, sacc_array, d, sigma
+#   = data, eta, kappa, a, b, x0, t, r1, r2, flag, sacc_array, d, sigma
+# t defaults to 0.0 (the identity path), so the kernel-parity tests are unaffected.
 # ---------------------------------------------------------------------------
 def _make_fixture(seed=0):
     rng = np.random.default_rng(seed)
     n_trials = 10
     max_d = 6
 
-    eta, kappa, a, b, x0, sigma = 0.3, 1.0, 1.5, 0.25, 0.0, 1.0
+    eta, kappa, a, b, x0, t, sigma = 0.3, 1.0, 1.5, 0.25, 0.0, 0.0, 1.0
 
     r1 = rng.integers(1, 6, n_trials).astype(np.float64)
     r2 = rng.integers(1, 6, n_trials).astype(np.float64)
@@ -70,19 +71,39 @@ def _make_fixture(seed=0):
 
     # Positional args after `data`, matching list_params + extra_fields order.
     args = (
-        jnp.asarray(eta), jnp.asarray(kappa), jnp.asarray(a),
-        jnp.asarray(b), jnp.asarray(x0),
-        jnp.asarray(r1), jnp.asarray(r2), jnp.asarray(flag),
-        jnp.asarray(sacc), jnp.asarray(d), jnp.asarray(sigma),
+        jnp.asarray(eta),
+        jnp.asarray(kappa),
+        jnp.asarray(a),
+        jnp.asarray(b),
+        jnp.asarray(x0),
+        jnp.asarray(t),
+        jnp.asarray(r1),
+        jnp.asarray(r2),
+        jnp.asarray(flag),
+        jnp.asarray(sacc),
+        jnp.asarray(d),
+        jnp.asarray(sigma),
     )
     return dict(
-        n_trials=n_trials, max_d=max_d,
-        data=jnp.asarray(data), args=args,
+        n_trials=n_trials,
+        max_d=max_d,
+        data=jnp.asarray(data),
+        args=args,
         # raw scalars/arrays for direct-kernel comparison
-        eta=eta, kappa=kappa, a=a, b=b, x0=x0, sigma=sigma,
-        rt=jnp.asarray(rt), choice=jnp.asarray(choice),
-        r1=jnp.asarray(r1), r2=jnp.asarray(r2),
-        flag=jnp.asarray(flag), sacc=jnp.asarray(sacc), d=jnp.asarray(d),
+        eta=eta,
+        kappa=kappa,
+        a=a,
+        b=b,
+        x0=x0,
+        t=t,
+        sigma=sigma,
+        rt=jnp.asarray(rt),
+        choice=jnp.asarray(choice),
+        r1=jnp.asarray(r1),
+        r2=jnp.asarray(r2),
+        flag=jnp.asarray(flag),
+        sacc=jnp.asarray(sacc),
+        d=jnp.asarray(d),
     )
 
 
@@ -106,9 +127,19 @@ def test_logp_matches_kernel():
 
     direct = np.asarray(
         compute_addm_loglikelihoods(
-            fx["rt"], fx["choice"], fx["eta"], fx["kappa"], fx["sigma"],
-            fx["a"], fx["b"], fx["x0"], fx["r1"], fx["r2"], fx["flag"],
-            fx["sacc"], fx["d"],
+            fx["rt"],
+            fx["choice"],
+            fx["eta"],
+            fx["kappa"],
+            fx["sigma"],
+            fx["a"],
+            fx["b"],
+            fx["x0"],
+            fx["r1"],
+            fx["r2"],
+            fx["flag"],
+            fx["sacc"],
+            fx["d"],
         )
     )
     assert np.allclose(out, direct, atol=TOL, rtol=0.0), (
@@ -143,18 +174,18 @@ def test_logp_op_matches_func():
 
 
 def test_gradients_finite():
-    """jax.grad of summed logp is finite w.r.t. eta, kappa, a, b, x0, sigma."""
+    """jax.grad of summed logp is finite w.r.t. eta, kappa, a, b, x0, t, sigma."""
     fx = _make_fixture()
     logp = make_addm_logp_func()
 
     def f(*all_args):
         return logp(*all_args).sum()
 
-    # positions in (data, eta, kappa, a, b, x0, r1, r2, flag, sacc, d, sigma)
-    #                 0    1    2     3  4  5   6   7    8     9   10  11
-    grad_fn = jax.grad(f, argnums=(1, 2, 3, 4, 5, 11))
+    # positions in (data, eta, kappa, a, b, x0, t, r1, r2, flag, sacc, d, sigma)
+    #                 0    1    2     3  4  5   6  7   8    9    10   11  12
+    grad_fn = jax.grad(f, argnums=(1, 2, 3, 4, 5, 6, 12))
     grads = grad_fn(fx["data"], *fx["args"])
-    for name, g in zip(["eta", "kappa", "a", "b", "x0", "sigma"], grads):
+    for name, g in zip(["eta", "kappa", "a", "b", "x0", "t", "sigma"], grads):
         assert bool(jnp.isfinite(g)), f"non-finite gradient for {name}: {g}"
 
 
@@ -165,6 +196,7 @@ def test_custom_attention_process():
     def scaled(c):
         def proc(eta, kappa, r1, r2, flag, d, max_d):
             return c * standard_alternating(eta, kappa, r1, r2, flag, d, max_d)
+
         return proc
 
     default = np.asarray(make_addm_logp_func()(fx["data"], *fx["args"]))

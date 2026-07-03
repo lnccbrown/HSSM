@@ -68,15 +68,16 @@ def _fixture(seed=0, n_trials=7, max_d=6):
     )
 
 
-# Scalar reference parameters.
-_ETA, _KAPPA, _SIGMA, _A, _B, _X0 = 0.3, 1.0, 1.0, 1.5, 0.25, 0.0
+# Scalar reference parameters. _T=0.0 keeps these on the non-decision-time
+# identity path so the CC trial-wise assertions are unaffected by CD.
+_ETA, _KAPPA, _SIGMA, _A, _B, _X0, _T = 0.3, 1.0, 1.0, 1.5, 0.25, 0.0, 0.0
 
 
 def _logp():
     return make_addm_logp_func("standard_alternating")
 
 
-def _call(logp, fx, eta, kappa, a, b, x0, sigma=_SIGMA):
+def _call(logp, fx, eta, kappa, a, b, x0, t=_T, sigma=_SIGMA):
     return np.asarray(
         logp(
             fx["data"],
@@ -85,6 +86,7 @@ def _call(logp, fx, eta, kappa, a, b, x0, sigma=_SIGMA):
             a,
             b,
             x0,
+            t,
             fx["r1"],
             fx["r2"],
             fx["flag"],
@@ -206,6 +208,7 @@ def test_trialwise_grad_finite():
                 _A,
                 _B,
                 _X0,
+                _T,
                 fx["r1"],
                 fx["r2"],
                 fx["flag"],
@@ -237,6 +240,7 @@ def test_custom_process_with_trialwise_is_rejected():
             _A,
             _B,
             _X0,
+            _T,
             fx["r1"],
             fx["r2"],
             fx["flag"],

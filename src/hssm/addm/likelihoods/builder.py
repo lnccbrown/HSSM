@@ -12,12 +12,13 @@ At model-build time the distribution calls ``loglik(data, *dist_params,
 ``extra_fields`` follow ``model_config.extra_fields`` order. For aDDM:
 
 - ``data[:, 0]`` = rt, ``data[:, 1]`` = response
-- ``list_params``  = ``[eta, kappa, a, b, x0]``
+- ``list_params``  = ``[eta, kappa, a, b, x0, t]``
 - ``extra_fields`` = ``[r1, r2, flag, sacc_array, d, sigma]``
 
-so ``logp`` receives ``(data, eta, kappa, a, b, x0, r1, r2, flag, sacc_array, d,
-sigma)`` and reorders them into the kernel's positional slots (note ``sigma`` is
-the last extra field but the 5th kernel argument).
+so ``logp`` receives ``(data, eta, kappa, a, b, x0, t, r1, r2, flag, sacc_array,
+d, sigma)`` and reorders them into the kernel's positional slots (note ``sigma``
+is the last extra field but the 5th kernel argument, and ``t`` is a sampled
+non-decision time applied as a decision-time shift, not a kernel argument).
 
 Unlike RLSSM, aDDM has no ``ssm_logp_func.computed`` panel machinery and no
 ``n_participants``/``n_trials`` reshaping — each trial's likelihood depends only
@@ -66,7 +67,7 @@ def make_addm_logp_func(
     Returns
     -------
     Callable
-        ``logp(data, eta, kappa, a, b, x0, r1, r2, flag, sacc_array, d, sigma)``
+        ``logp(data, eta, kappa, a, b, x0, t, r1, r2, flag, sacc_array, d, sigma)``
         returning per-trial log-likelihoods of shape ``(n_trials,)``.
 
     Notes
@@ -79,17 +80,44 @@ def make_addm_logp_func(
     per-trial we vmap the single-trial kernel with ``in_axes=0`` on exactly the
     per-trial ones (the same trial-wise pattern as the ONNX likelihood path),
     which keeps the vendored kernel untouched.
+
+    Non-decision time ``t`` (scalar or per-trial) is applied in this builder — not
+    the vendored kernel — by shifting into *decision time* before any kernel call:
+    ``rt_eff = rt - t`` and every fixation onset slides back by ``t`` with the
+    first anchored at 0, so the only live effect is to shorten the first stage by
+    ``t`` (``t=0`` is a bit-for-bit identity). A per-trial constraint (``t`` must
+    fall inside the first fixation and leave ``rt - t > 0``) rejects offending
+    trials with ``-inf``; the kernel is evaluated on a clamped, in-support ``t``
+    so gradients stay finite even for rejected trials.
     """
     process = resolve_attention_process(attention_process)
     use_default = process is standard_alternating
 
-    def logp(data, eta, kappa, a, b, x0, r1, r2, flag, sacc_array, d, sigma):
+    def logp(data, eta, kappa, a, b, x0, t, r1, r2, flag, sacc_array, d, sigma):
         rt = data[:, 0]
         response = data[:, 1]
         n_obs = rt.shape[0]
         # sigma is the (fixed) diffusion-noise constant — always reduced to a
         # scalar (a per-trial sigma would collide with the quadrature grid).
         sigma = jnp.asarray(sigma).reshape(-1)[0]
+
+        # --- non-decision time t: shift into decision time (builder-side) ------
+        # t may be scalar (shared) or (n_obs,) (regressed). Reject is computed
+        # from the ORIGINAL t; the kernel is fed a clamped, in-support t_safe so
+        # rejected trials never produce NaNs whose gradient could leak through the
+        # jnp.where mask. First fixation ends at the 2nd onset (d>=2); a d==1 trial
+        # has no interior fixation, so only the rt>t clause gates it.
+        t = jnp.asarray(t)
+        max_d = sacc_array.shape[1]
+        first_fix_end = jnp.where(d >= 2, sacc_array[:, 1], jnp.inf)
+        reject = (t < 0.0) | (t >= first_fix_end) | (rt - t <= 0.0)
+        reject = jnp.broadcast_to(reject, (n_obs,))
+        eps = 1e-6
+        t_safe = jnp.clip(t, 0.0, first_fix_end - eps)  # -> (n_obs,) after broadcast
+        rt_eff = rt - t_safe
+        col = jnp.arange(max_d)
+        valid_col = (col[None, :] >= 1) & (col[None, :] < d[:, None])
+        sacc_eff = jnp.where(valid_col, sacc_array - t_safe[:, None], sacc_array)
 
         core = dict(eta=eta, kappa=kappa, a=a, b=b, x0=x0)
 
@@ -109,8 +137,8 @@ def make_addm_logp_func(
             if use_default:
                 # Kernel builds the drift array internally via the same
                 # _build_addm_mu_array_data the default process delegates to.
-                return compute_addm_loglikelihoods(
-                    rt,
+                ll = compute_addm_loglikelihoods(
+                    rt_eff,
                     response,
                     eta,
                     kappa,
@@ -121,21 +149,25 @@ def make_addm_logp_func(
                     r1,
                     r2,
                     flag,
-                    sacc_array,
+                    sacc_eff,
                     d,
                 )
-            mu = process(eta, kappa, r1, r2, flag, d, sacc_array.shape[1])
-            return compute_addm_loglikelihoods_from_mu(
-                rt,
+                return jnp.where(reject, -jnp.inf, ll)
+            # Drift is built from the ORIGINAL covariates (unaffected by the
+            # decision-time shift); only rt/sacc are shifted for the FPT kernel.
+            mu = process(eta, kappa, r1, r2, flag, d, max_d)
+            ll = compute_addm_loglikelihoods_from_mu(
+                rt_eff,
                 response,
                 mu,
-                sacc_array,
+                sacc_eff,
                 d,
                 sigma,
                 a,
                 b,
                 x0,
             )
+            return jnp.where(reject, -jnp.inf, ll)
 
         if not use_default:
             raise NotImplementedError(
@@ -164,8 +196,8 @@ def make_addm_logp_func(
             0,
             0,  # r1, r2, flag, sacc_array, d
         )
-        return jax.vmap(compute_addm_logfptd, in_axes=in_axes)(
-            rt,
+        out = jax.vmap(compute_addm_logfptd, in_axes=in_axes)(
+            rt_eff,
             response,
             mapped["eta"],
             mapped["kappa"],
@@ -176,9 +208,10 @@ def make_addm_logp_func(
             r1,
             r2,
             flag,
-            sacc_array,
+            sacc_eff,
             d,
         )
+        return jnp.where(reject, -jnp.inf, out)
 
     return logp
 

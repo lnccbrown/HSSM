@@ -24,9 +24,11 @@ from .attention_process import resolve_attention_process
 class aDDMConfig(BaseModelConfig):
     """Config for the attentional DDM (subclass formulation).
 
-    Parameters (sampled) are ``[eta, kappa, a, b, x0]``; the per-trial covariates
-    ``[r1, r2, flag, sacc_array, d, sigma]`` are supplied as ``extra_fields`` (not
-    sampled), ordered to match the kernel's positional covariate slots.
+    Parameters (sampled) are ``[eta, kappa, a, b, x0, t]``, where ``t`` is the
+    non-decision time (default ``0.0``, i.e. the stock model sits on the exact
+    ``t=0`` identity path); the per-trial covariates ``[r1, r2, flag, sacc_array,
+    d, sigma]`` are supplied as ``extra_fields`` (not sampled), ordered to match
+    the kernel's positional covariate slots.
     """
 
     model_name: str = "addm"
@@ -34,7 +36,7 @@ class aDDMConfig(BaseModelConfig):
     response: list[str] = field(default_factory=lambda: ["rt", "response"])
     choices: tuple[int, ...] = (-1, 1)
     list_params: list[str] = field(
-        default_factory=lambda: ["eta", "kappa", "a", "b", "x0"]
+        default_factory=lambda: ["eta", "kappa", "a", "b", "x0", "t"]
     )
     bounds: dict[str, tuple[float, float]] = field(
         default_factory=lambda: {
@@ -43,6 +45,9 @@ class aDDMConfig(BaseModelConfig):
             "a": (0.1, 3.0),
             "b": (0.0, 3.0),
             "x0": (-1.0, 1.0),
+            # Generous NDT ceiling; the load-bearing per-trial gate (t must sit
+            # inside the first fixation) is enforced dynamically in the builder.
+            "t": (0.0, 2.0),
         }
     )
     extra_fields: list[str] | None = field(
@@ -50,7 +55,7 @@ class aDDMConfig(BaseModelConfig):
     )
     loglik_kind: str = "approx_differentiable"
     params_default: list[float] = field(
-        default_factory=lambda: [0.3, 1.0, 1.0, 2.0, 0.0]
+        default_factory=lambda: [0.3, 1.0, 1.0, 2.0, 0.0, 0.0]
     )
     attention_process: str | Callable = "standard_alternating"
     # ``loglik`` and ``backend`` are inherited (default ``None``) and injected by

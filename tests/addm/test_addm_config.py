@@ -13,7 +13,7 @@ Patterned after tests/test_rlssm_config.py.
 from hssm.addm.config import aDDMConfig
 from hssm.config import BaseModelConfig
 
-EXPECTED_LIST_PARAMS = ["eta", "kappa", "a", "b", "x0"]
+EXPECTED_LIST_PARAMS = ["eta", "kappa", "a", "b", "x0", "t"]
 EXPECTED_EXTRA_FIELDS = ["r1", "r2", "flag", "sacc_array", "d", "sigma"]
 
 
