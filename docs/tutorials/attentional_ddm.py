@@ -311,6 +311,16 @@ def _(mo):
 @app.cell
 def _(mo, model, run_inference):
     mo.stop(not run_inference.value, mo.md("*Click the button above to sample.*"))
+    # aDDM auto-selects the JAX numpyro NUTS sampler (approx_differentiable + jax
+    # backend), so this already samples in JAX. cores=1 is deliberate: the FPT
+    # likelihood is heavy and a single JAX chain already saturates every CPU core,
+    # so there is no idle parallelism for a 2nd chain to use. cores>1 only hurts —
+    # PyMC fork + JAX threads deadlock, and numpyro chain_method="parallel" hangs
+    # spawning workers; even chain_method="vectorized" just batches (~2x compute),
+    # measured slower, not faster. So on CPU the chains run sequentially by design.
+    # For genuinely parallel chains, run on a GPU with
+    # nuts_sampler_kwargs={"chain_method": "vectorized"} (one device, both chains
+    # vmapped) — that is where the JAX sampler's chain parallelism pays off.
     idata = model.sample(
         draws=500, tune=500, chains=2, cores=1,
         idata_kwargs={"log_likelihood": False},
