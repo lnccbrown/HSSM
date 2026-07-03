@@ -36,6 +36,10 @@ dependencies = [
     "pandas>=2.2,<3",
     "pymc>=5.26.0",
     "seaborn>=0.13.2",
+    # aDDM inference needs no ssm-simulators (it uses HSSM's vendored JAX
+    # likelihood); aDDM posterior-predictive / simulation needs `cssm.addm`.
+    # TODO(release): bump this floor to the ssm-simulators release that ships the
+    # aDDM model once it is published.
     "ssm-simulators>=0.12.2",
     "tqdm>=4.66.0",
 ]

@@ -14,6 +14,7 @@ This version includes the following changes:
 8. `DataValidator` refactored to `DataValidatorMixin` for improved extensibility.
 9. Bug fixes: default prior assignment, dimensionality errors with Bambi 0.17.0, negative-RT checks on missing data, flaky tests.
 10. Infrastructure: Python 3.13 support, restructured CI test workflows with coverage reporting, updated `model.sample()` API to match Bambi conventions.
+11. **Attentional Drift Diffusion Model (aDDM)**: new `hssm.aDDM` model (with `aDDMConfig`) built on a vendored, differentiable JAX first-passage-time likelihood. Supports per-trial fixation covariates (`r1, r2, flag, sacc_array, d, sigma`), **trial-wise regression / hierarchical priors** on the core parameters (`eta, kappa, a, b, x0`), a sampled non-decision time `t`, and posterior-predictive checks conditioned on the observed fixations (via the aDDM simulator in ssm-simulators). See `scripts/addm_parameter_recovery.py` for an end-to-end recovery check.
 
 ### 0.2.12
 
