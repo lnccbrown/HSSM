@@ -41,6 +41,7 @@ def _():
     warnings.filterwarnings("ignore")
     logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)
 
+    import arviz as az
     import marimo as mo
     import matplotlib.pyplot as plt
     import numpy as np
@@ -50,7 +51,7 @@ def _():
     import hssm
 
     hssm.set_floatX("float64")
-    return Simulator, hssm, mo, np, pd, plt
+    return Simulator, az, hssm, mo, np, pd, plt
 
 
 @app.cell
@@ -235,7 +236,7 @@ def _(mo):
 
 @app.cell
 def _(extra_fields, make_fixations, np, pd, sim):
-    _f = make_fixations(800, seed=42)
+    _f = make_fixations(300, seed=42)
     _n = _f["n"]
     x = np.random.default_rng(1).uniform(0.0, 1.0, _n)
     _eta_true = 0.2 + 0.3 * x
@@ -303,7 +304,7 @@ def _(mo, model, np):
 
 @app.cell
 def _(mo):
-    run_inference = mo.ui.run_button(label="Run inference (samples, ~1 min)")
+    run_inference = mo.ui.run_button(label="Run inference (samples, ~2-3 min)")
     mo.md(f"## 5. Fit and recover\n\n{run_inference}")
     return (run_inference,)
 
@@ -312,32 +313,78 @@ def _(mo):
 def _(mo, model, run_inference):
     mo.stop(not run_inference.value, mo.md("*Click the button above to sample.*"))
     # aDDM auto-selects the JAX numpyro NUTS sampler (approx_differentiable + jax
-    # backend), so this already samples in JAX. cores=1 is deliberate: the FPT
-    # likelihood is heavy and a single JAX chain already saturates every CPU core,
-    # so there is no idle parallelism for a 2nd chain to use. cores>1 only hurts —
-    # PyMC fork + JAX threads deadlock, and numpyro chain_method="parallel" hangs
-    # spawning workers; even chain_method="vectorized" just batches (~2x compute),
-    # measured slower, not faster. So on CPU the chains run sequentially by design.
-    # For genuinely parallel chains, run on a GPU with
-    # nuts_sampler_kwargs={"chain_method": "vectorized"} (one device, both chains
-    # vmapped) — that is where the JAX sampler's chain parallelism pays off.
+    # backend), so this already samples in JAX. cores=1 keeps the chains sequential
+    # — measured to be the right call on CPU. A single chain uses only ~6 of 18
+    # cores, but the FPT gradient is memory-bandwidth-bound (it materializes
+    # per-term intermediates — the reason for TRUNC_NUM<=6), not core-bound, so the
+    # idle cores don't convert to speed and a 2nd chain just contends for the memory
+    # bus. Measured on 18 cores: 2 chains via spawn 1.97x, numpyro
+    # chain_method="vectorized" 2.86x, forced-device "parallel" 2.24x; PyMC fork
+    # (cores>1) deadlocks. Genuinely parallel chains want a GPU (numpyro
+    # chain_method="vectorized" vmaps both chains onto the one device).
     idata = model.sample(
-        draws=500, tune=500, chains=2, cores=1,
+        draws=300, tune=300, chains=2, cores=1,
         idata_kwargs={"log_likelihood": False},
     )
     return (idata,)
 
 
 @app.cell
-def _(idata):
-    import arviz as az
-
-    # Truth: eta_Intercept ~ 0.2, eta_x ~ 0.3.
+def _(az, idata):
+    # Truth: eta_Intercept ~ 0.2, eta_x ~ 0.3, kappa 1, a 1.5, b 0.2, x0 0, t 0.
     az.summary(
         idata,
         var_names=["eta", "kappa", "a", "b", "x0", "t"],
         filter_vars="like",
     )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ### Diagnostics — is everything working as expected?
+
+    - **Recovery** (below): each posterior should cover its orange ground-truth line.
+    - **Trace**: the two chains should overlap and look like white noise (good mixing);
+      also check `r_hat ~ 1.0` and `ess_bulk` in the summary above.
+    - **Pair**: look for funnels / tight ridges (hard geometry) and any divergences.
+    - **Posterior predictive** (§6): predicted RTs should track the observed ones.
+    """)
+    return
+
+
+@app.cell
+def _(az, idata, plt):
+    # Recovery: posteriors vs the ground-truth values used to simulate the data.
+    _truth = {
+        "eta_Intercept": 0.2, "eta_x": 0.3, "kappa": 1.0,
+        "a": 1.5, "b": 0.2, "x0": 0.0, "t": 0.0,
+    }
+    az.plot_posterior(idata, var_names=list(_truth), ref_val=list(_truth.values()))
+    plt.gcf()
+    return
+
+
+@app.cell
+def _(az, idata, plt):
+    # Trace: chain mixing / convergence for a few key parameters.
+    az.plot_trace(idata, var_names=["eta_Intercept", "eta_x", "a", "t"])
+    plt.tight_layout()
+    plt.gcf()
+    return
+
+
+@app.cell
+def _(az, idata, plt):
+    # Pair: posterior geometry + correlations; divergences (if any) show in green.
+    az.plot_pair(
+        idata,
+        var_names=["eta_Intercept", "eta_x", "a", "t"],
+        kind="kde",
+        divergences=True,
+    )
+    plt.gcf()
     return
 
 
@@ -355,9 +402,12 @@ def _(mo):
 
 
 @app.cell
-def _(idata, model):
+def _(idata, model, plt):
     model.sample_posterior_predictive(idata, kind="response", draws=100)
-    idata.posterior_predictive
+    # Observed (pink) vs predicted (blue) RT densities. rt is signed by choice;
+    # x_range zooms in past the p_outlier lapse tail.
+    model.plot_predictive(x_range=(-4, 4))
+    plt.gcf()
     return
 
 
