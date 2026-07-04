@@ -539,7 +539,7 @@ class TestRLSSMConfigDefaultWarnings:
 # region ssms.rl bridge (from_ssms_model)
 
 
-class _FakeSsMsModelConfig:
+class _FakeSSMSModelConfig:
     """Stand-in for an ``ssms.rl.ModelConfig`` (assembled API)."""
 
     def __init__(self, *, gradient="available"):
@@ -550,7 +550,7 @@ class _FakeSsMsModelConfig:
         return None
 
     def assemble(self, backend="auto"):
-        return _FakeSsMsAssembledModel(self, backend=backend, gradient=self.gradient)
+        return _FakeSSMSAssembledModel(self, backend=backend, gradient=self.gradient)
 
     def participant_contract(self):
         return {"context_fields": ["feedback"]}
@@ -565,7 +565,7 @@ class _FakeSsMsModelConfig:
         return _Report()
 
 
-class _FakeSsMsAssembledModel:
+class _FakeSSMSAssembledModel:
     """Stand-in for an ``ssms.rl.AssembledModel``."""
 
     def __init__(self, config, *, backend, gradient):
@@ -605,9 +605,9 @@ class _FakeSsMsAssembledModel:
 
 
 def _install_fake_ssms_rl(monkeypatch, *, gradient="available"):
-    config = _FakeSsMsModelConfig(gradient=gradient)
+    config = _FakeSSMSModelConfig(gradient=gradient)
     fake_rl = types.SimpleNamespace(
-        ModelConfig=_FakeSsMsModelConfig,
+        ModelConfig=_FakeSSMSModelConfig,
         resolve_model=lambda model: config,
     )
     monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
@@ -633,7 +633,7 @@ def _install_fake_decision_logp(monkeypatch):
     )
 
 
-class TestRLSSMConfigFromSsMsModel:
+class TestRLSSMConfigFromSSMSModel:
     def test_from_ssms_model_builds_hssm_config_from_assembled_metadata(
         self, monkeypatch
     ):
@@ -708,7 +708,7 @@ class TestRLSSMConfigFromSsMsModel:
         column.
         """
 
-        class _MultiParamAssembled(_FakeSsMsAssembledModel):
+        class _MultiParamAssembled(_FakeSSMSAssembledModel):
             def __init__(self, config, *, backend, gradient):
                 super().__init__(config, backend=backend, gradient=gradient)
                 self.computed_params = ["v", "a"]
@@ -728,7 +728,7 @@ class TestRLSSMConfigFromSsMsModel:
 
                 return compute
 
-        class _MultiParamConfig(_FakeSsMsModelConfig):
+        class _MultiParamConfig(_FakeSSMSModelConfig):
             def assemble(self, backend="auto"):
                 return _MultiParamAssembled(
                     self, backend=backend, gradient=self.gradient
@@ -758,7 +758,7 @@ class TestRLSSMConfigFromSsMsModel:
             ]
 
 
-class TestRLSSMConfigFromRealSsMs:
+class TestRLSSMConfigFromRealSSMS:
     """Integration tests against a real, rl-capable ``ssm-simulators``.
 
     These exercise the live ``ssms.rl`` handshake (not a stub), guarding against
@@ -777,6 +777,7 @@ class TestRLSSMConfigFromRealSsMs:
             pytest.skip("ssms.rl does not expose resolve_model")
         return ssms_rl
 
+    @pytest.mark.slow
     def test_from_ssms_model_real_2ab_rw_angle(self):
         self._require_ssms_rl()
 
