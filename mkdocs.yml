@@ -45,6 +45,10 @@ nav:
       - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
+      - RLSSM — Basic tutorial: tutorials/rlssm_basic.ipynb
+      - RLSSM — Custom models with ssms.rl: tutorials/rlssm_advanced.ipynb
+      - RLSSM — Restless learner: tutorials/rlssm_restless_learner.ipynb
+      - RLSSM — Registering custom models in HSSM: tutorials/rlssm_hssm_custom_models.ipynb
       - RLSSM Quickstart: tutorials/rlssm_quickstart.ipynb
       - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
       - BayesFlow LRE Integration: tutorials/bayesflow_lre_integration.ipynb
@@ -99,6 +103,10 @@ plugins:
         - tutorials/hmm_ddm_regime_switching.ipynb
         - tutorials/hssm_tutorial_workshop_1.ipynb
         - tutorials/hssm_tutorial_workshop_2.ipynb
+        - tutorials/rlssm_basic.ipynb
+        - tutorials/rlssm_advanced.ipynb
+        - tutorials/rlssm_restless_learner.ipynb
+        - tutorials/rlssm_hssm_custom_models.ipynb
         - tutorials/rlssm_quickstart.ipynb
         - tutorials/lapse_prob_and_dist.ipynb
         - tutorials/plotting.ipynb
