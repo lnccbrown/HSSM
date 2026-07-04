@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup environment
         uses: ./.github/setup-env
@@ -32,7 +32,7 @@ jobs:
           PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           verbose: true
         env:

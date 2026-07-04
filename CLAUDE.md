@@ -77,6 +77,16 @@ uv run ruff format .
 
 `HSSM.sample()` passes `**kwargs` through to `bambi.Model.fit()`, which in turn passes them to PyMC's `pm.sample()`. So parameters like `cores`, `chains`, `nuts_sampler`, `target_accept`, etc. are valid even though they don't appear in HSSM's own signature. Similarly, the HSSM constructor passes `**kwargs` to `bambi.Model()`, so bambi parameters like `noncentered` are valid.
 
+### ONNX likelihoods are single-trial + `jax.vmap`
+
+Every ONNX graph consumed by HSSM must be exported with a concrete single-trial input shape (no `dynamic_axes`). Per-trial batching happens at the HSSM layer via `jax.vmap` over trials — see [`src/hssm/distribution_utils/onnx.py:115-138`](src/hssm/distribution_utils/onnx.py#L115-L138), where `logp(*inputs)` builds one flat per-trial vector and `make_vmap_func` lifts it.
+
+Enforced at load time by `_check_single_trial_input_shape` in [`src/hssm/distribution_utils/onnx_utils/onnx2jax.py`](src/hssm/distribution_utils/onnx_utils/onnx2jax.py), which raises a `ValueError` on any symbolic input dim. The constraint exists because `jaxonnxruntime` traces against the construction-time dummy and bakes those shapes into the returned closure — calling that closure at a different batch size silently produces wrong outputs for graphs with batch-dependent intermediates (log-det accumulators, `Reshape` with `-1`).
+
+LANfactory's exporters (`transform_sbi_to_onnx`, BayesFlow LRE export) already follow this convention. A new ONNX source must do the same: trace with a rank-1 dummy, no `dynamic_axes`.
+
+Two more load-time details in `onnx2jax.py`: (1) `_check_int64_precision_safe` raises when JAX x64 is off (`hssm.set_floatX("float32")`) and the graph carries int64 constants outside the int32 range — flow exports encode open-ended slices with an `INT64_MAX` sentinel that would truncate to `-1` and silently corrupt the likelihood; the guard turns that into a clear error (x64 is on by default via the `float64` default). (2) The module sets `jaxonnxruntime`'s `jaxort_only_allow_initializers_as_static_args=False` at import — a **process-wide** config mutation (needed because `torch.onnx.export` emits Reshape shapes as Constant nodes), so it loosens jaxonnxruntime strictness for the whole process, not just HSSM's calls.
+
 ### Notebook execution in CI
 
 Two separate skip mechanisms for notebooks:
