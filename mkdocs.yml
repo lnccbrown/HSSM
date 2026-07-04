@@ -49,7 +49,6 @@ nav:
       - RLSSM — Custom models with ssms.rl: tutorials/rlssm_advanced.ipynb
       - RLSSM — Restless learner: tutorials/rlssm_restless_learner.ipynb
       - RLSSM — Registering custom models in HSSM: tutorials/rlssm_hssm_custom_models.ipynb
-      - RLSSM Quickstart: tutorials/rlssm_quickstart.ipynb
       - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
       - BayesFlow LRE Integration: tutorials/bayesflow_lre_integration.ipynb
       - BayesFlow NLE Integration (ONNX): tutorials/bayesflow_nle_onnx_integration.ipynb
@@ -107,7 +106,6 @@ plugins:
         - tutorials/rlssm_advanced.ipynb
         - tutorials/rlssm_restless_learner.ipynb
         - tutorials/rlssm_hssm_custom_models.ipynb
-        - tutorials/rlssm_quickstart.ipynb
         - tutorials/lapse_prob_and_dist.ipynb
         - tutorials/plotting.ipynb
         - tutorials/scientific_workflow_hssm.ipynb
