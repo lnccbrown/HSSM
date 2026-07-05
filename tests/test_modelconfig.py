@@ -104,9 +104,18 @@ def test_get_ornstein_config():
     }
 
 
-@pytest.mark.parametrize("model", hssm.HSSM.supported_models)
+@pytest.mark.parametrize("model", hssm.list_models())
 def test_load_all_supported_model_configs(model):
     assert isinstance(get_default_model_config(model), dict)
+
+
+def test_hssm_list_models_matches_supported_models():
+    with pytest.deprecated_call(
+        match=r"HSSM\.supported_models is deprecated.*Use hssm\.list_models\(\) instead\."
+    ):
+        supported_models = hssm.HSSM.supported_models
+
+    assert hssm.list_models() == supported_models
 
 
 def test_get_default_model_config_invalid():

@@ -6,11 +6,12 @@ import onnxruntime
 import pytest
 
 import hssm
-from hssm.distribution_utils.onnx_utils import *
 from hssm.distribution_utils.onnx import (
     make_jax_logp_funcs_from_onnx,
     make_jax_matrix_logp_funcs_from_onnx,
 )
+from hssm.distribution_utils.onnx_utils import *
+from hssm.distribution_utils.onnx_utils.onnx2jax import make_jax_func
 
 hssm.set_floatX("float32")
 DECIMAL = 4
@@ -156,3 +157,99 @@ def test_make_simple_jax_logp_funcs_from_onnx(fixture_path):
         result_simple,
         decimal=DECIMAL,
     )
+
+
+# ---------------------------------------------------------------------------
+# Guards introduced when removing the auto-x64 flip in onnx2jax.py.
+# ---------------------------------------------------------------------------
+
+
+def _make_minimal_onnx(input_shape):
+    """Construct a minimal Identity-graph ONNX model with the requested shape.
+
+    ``input_shape`` is an iterable of ``int`` (concrete) or ``str``/``None``
+    (symbolic / dynamic).
+    """
+    from onnx import TensorProto, helper
+
+    dims = list(input_shape)
+    in_tensor = helper.make_tensor_value_info("x", TensorProto.FLOAT, dims)
+    out_tensor = helper.make_tensor_value_info("y", TensorProto.FLOAT, dims)
+    node = helper.make_node("Identity", inputs=["x"], outputs=["y"])
+    graph = helper.make_graph([node], "minimal", [in_tensor], [out_tensor])
+    return helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+
+
+def test_make_jax_func_rejects_dynamic_input_dim():
+    """Dynamic input dims would silently produce wrong outputs -- must raise."""
+    model = _make_minimal_onnx(["batch", 5])  # symbolic batch dim
+    with pytest.raises(ValueError, match="dynamic"):
+        make_jax_func(model)
+
+
+def test_make_jax_func_accepts_concrete_input_dim():
+    """Concrete-shape models pass the guard and produce a callable."""
+    model = _make_minimal_onnx([1, 5])
+    fn = make_jax_func(model)
+    out = np.asarray(fn(np.ones((1, 5), dtype=np.float32)))
+    assert out.shape == (5,) or out.shape == (1, 5)  # squeeze may drop the 1
+
+
+def test_make_jax_func_runs_int64_shape_graph():
+    """Loader runs graphs carrying int64 shape ops without the removed recast.
+
+    LAN/sbi exports carry int64 ``Reshape``/``Slice`` metadata. After dropping
+    the int64->int32 pre-cast (it corrupted flow exports by wrapping an
+    ``INT64_MAX`` sentinel to -1), ``make_jax_func`` must still load and run
+    such graphs correctly. This module runs under ``float32`` (x64 off), where
+    small int64 index/shape values truncate losslessly — the supported case.
+    """
+    from onnx import TensorProto, helper, numpy_helper
+
+    # y = Reshape(x, [5]): x is (1, 5) -> y is (5,); the shape arg is int64.
+    shape = numpy_helper.from_array(np.array([5], dtype=np.int64), "shape")
+    in_tensor = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 5])
+    out_tensor = helper.make_tensor_value_info("y", TensorProto.FLOAT, [5])
+    node = helper.make_node("Reshape", inputs=["x", "shape"], outputs=["y"])
+    graph = helper.make_graph(
+        [node], "reshape", [in_tensor], [out_tensor], initializer=[shape]
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+
+    fn = make_jax_func(model)
+    inp = np.arange(5, dtype=np.float32).reshape(1, 5)
+    np.testing.assert_array_almost_equal(
+        np.asarray(fn(inp)), np.arange(5), decimal=DECIMAL
+    )
+
+
+def test_make_jax_func_guards_int64_max_under_float32():
+    """x64-off must reject int64 constants that would truncate and corrupt.
+
+    Flow exports (sbi nflows, bayesflow ``CouplingFlow``) carry an ``INT64_MAX``
+    open-ended-slice sentinel. Under ``float32`` (x64 off) JAX would truncate it
+    to -1 and silently corrupt the likelihood, so ``make_jax_func`` must raise.
+    Under ``float64`` (x64 on, HSSM's default) the same graph loads fine.
+    """
+    from onnx import TensorProto, helper, numpy_helper
+
+    sentinel = numpy_helper.from_array(
+        np.array([2**63 - 1], dtype=np.int64), "sentinel"
+    )
+    in_tensor = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 5])
+    out_tensor = helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 5])
+    node = helper.make_node("Identity", inputs=["x"], outputs=["y"])
+    graph = helper.make_graph(
+        [node], "int64_max", [in_tensor], [out_tensor], initializer=[sentinel]
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+
+    try:
+        hssm.set_floatX("float32")  # x64 off -> the guard must fire
+        with pytest.raises(ValueError, match="int64"):
+            make_jax_func(model)
+
+        hssm.set_floatX("float64")  # x64 on (HSSM default) -> loads without raising
+        make_jax_func(model)
+    finally:
+        hssm.set_floatX("float32")  # restore the module default for later tests
