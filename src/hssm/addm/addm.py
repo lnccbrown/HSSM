@@ -13,7 +13,7 @@ materializing the 2-D ``sacc_array`` covariate (:meth:`_stack_sacc_array`).
 """
 
 from dataclasses import replace
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import bambi as bmb
 import numpy as np
@@ -53,7 +53,7 @@ class aDDM(HSSMBase):
         include: list[dict[str, Any] | Any] | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
         lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
-        prior_settings: str | None = "safe",
+        prior_settings: Literal["safe"] | None = "safe",
         missing_data: bool | float = False,
         deadline: bool | str = False,
         **kwargs: Any,

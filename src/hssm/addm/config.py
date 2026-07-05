@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, fields
 from typing import Any
 
+from .._types import LoglikKind
 from ..config import BaseModelConfig
 from .attention_process import resolve_attention_process
 
@@ -53,7 +54,7 @@ class aDDMConfig(BaseModelConfig):
     extra_fields: list[str] | None = field(
         default_factory=lambda: ["r1", "r2", "flag", "sacc_array", "d", "sigma"]
     )
-    loglik_kind: str = "approx_differentiable"
+    loglik_kind: LoglikKind | None = "approx_differentiable"
     params_default: list[float] = field(
         default_factory=lambda: [0.3, 1.0, 1.0, 2.0, 0.0, 0.0]
     )
