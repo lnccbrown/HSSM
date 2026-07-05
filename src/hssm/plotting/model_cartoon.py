@@ -52,6 +52,23 @@ class PlotFunctionProtocol(Protocol):
         ...
 
 
+def _cartoon_model_meta(model) -> tuple[list[str], list[int]]:
+    """Return ``(list_params, choices)`` for a fitted model.
+
+    Built-in models live in ``default_model_config`` (dict, keyed by the
+    ``SupportedModels`` literal). ``HSSMBase`` subclasses (aDDM, RLSSM) are absent
+    from that registry — they carry their config on ``model.model_config`` (an
+    ``aDDMConfig``/``RLSSMConfig`` dataclass with ``list_params`` + ``choices``), so
+    fall back to it. Generalizing the registry to hold subclass models is tracked
+    in lnccbrown/HSSM#1031; until then this is the single source of truth.
+    """
+    cfg = default_model_config.get(model.model_name)
+    if cfg is not None:
+        return list(cfg["list_params"]), list(cfg["choices"])
+    mc = model.model_config
+    return list(mc.list_params), list(mc.choices)
+
+
 def _plot_model_cartoon_1D(
     data: pd.DataFrame,
     model_name: str,
@@ -65,6 +82,8 @@ def _plot_model_cartoon_1D(
     title: str | None = "Model Plots",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
+    list_params: list[str] | None = None,
+    choices: list[int] | None = None,
     **kwargs,
 ) -> mpl.axes.Axes:
     """Plot the posterior predictive distribution against the observed data.
@@ -91,10 +110,17 @@ def _plot_model_cartoon_1D(
     else:
         ax = plt.gca()
 
-    config_tmp = default_model_config[cast("SupportedModels", model_name)]
-    model_params = config_tmp["list_params"]
+    # list_params/choices are resolved by plot_model_cartoon via _cartoon_model_meta
+    # (model.model_config) so HSSMBase subclasses (aDDM/RLSSM) — absent from
+    # default_model_config — work. Fall back to the registry for built-in models
+    # called without them.
+    if list_params is None or choices is None:
+        config_tmp = default_model_config[cast("SupportedModels", model_name)]
+        list_params = list_params or config_tmp["list_params"]
+        choices = choices or config_tmp["choices"]
+    model_params = list_params
 
-    n_choices = len(config_tmp["choices"])
+    n_choices = len(choices)
 
     is_predictive_mean = data.source == predictive_group + "_mean"
     is_predictive_samples = data.source == predictive_group
@@ -125,6 +151,9 @@ def _plot_model_cartoon_1D(
             "The model plot works only for >=2 choice models at the moment"
         )
 
+    # plot_func_model (2-choice) derives choices from sim metadata; only the
+    # >2-choice renderer needs choices threaded in (avoids its registry lookup).
+    plot_function_kwargs = {} if n_choices == 2 else {"choices": choices}
     ax = plot_function(
         model_name=model_name,
         axis=ax,
@@ -137,6 +166,7 @@ def _plot_model_cartoon_1D(
             if not plot_data or data_observed is None
             else data_observed.reset_index()
         ),
+        **plot_function_kwargs,
         **kwargs,
     )
 
@@ -172,6 +202,8 @@ def _plot_model_cartoon_2D(
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
     grid_kwargs: dict | None = None,
+    list_params: list[str] | None = None,
+    choices: list[int] | None = None,
     **kwargs,
 ) -> sns.FacetGrid:
     """Plot the posterior predictive distribution against the observed data.
@@ -195,6 +227,8 @@ def _plot_model_cartoon_2D(
     g.map_dataframe(
         _plot_model_cartoon_1D,
         model_name=model_name,
+        list_params=list_params,
+        choices=choices,
         plot_data=plot_data,
         plot_mean=plot_mean,
         plot_samples=plot_samples,
@@ -240,7 +274,7 @@ def compute_merge_necessary_deterministics(
 ):
     """Compute the necessary deterministic variables for the model."""
     # Get the list of deterministic variables
-    necessary_params = default_model_config[model.model_name]["list_params"]
+    necessary_params, _ = _cartoon_model_meta(model)
     deterministics_list = []
     idata_group_keys = list(idata[idata_group].keys())
     # Compute the deterministic variables
@@ -271,7 +305,7 @@ def attach_trialwise_params_to_df(
     models where Bambi >= 0.17 no longer broadcasts the intercept to all
     observations).
     """
-    necessary_params = default_model_config[model.model_name]["list_params"]
+    necessary_params, _ = _cartoon_model_meta(model)
     df[necessary_params] = 0.0
 
     for chain_tmp, draw_tmp in {(x[0], x[1]) for x in list(df.index) if x[0] != -1}:
@@ -646,10 +680,16 @@ def plot_model_cartoon(
     # Then, plot the posterior predictive distribution against the observed data
     # Determine whether we are producing a single plot or a grid of plots
 
+    # Resolve (list_params, choices) once from the model so subclass models
+    # (aDDM/RLSSM, absent from default_model_config) render like built-ins.
+    _list_params, _choices = _cartoon_model_meta(model)
+
     if not extra_dims:
         ax = _plot_model_cartoon_1D(
             data=plotting_df,
             model_name=model.model_name,
+            list_params=_list_params,
+            choices=_choices,
             plot_data=plot_data,
             plot_mean=plot_predictive_mean,
             plot_samples=plot_predictive_samples,
@@ -680,6 +720,8 @@ def plot_model_cartoon(
         g = _plot_model_cartoon_2D(
             data=plotting_df,
             model_name=model.model_name,
+            list_params=_list_params,
+            choices=_choices,
             plot_data=plot_data,
             plot_mean=plot_predictive_mean,
             plot_samples=plot_predictive_samples,
@@ -722,6 +764,8 @@ def plot_model_cartoon(
         g = _plot_model_cartoon_2D(
             data=df,
             model_name=model.model_name,
+            list_params=_list_params,
+            choices=_choices,
             plot_data=plot_data,
             plot_mean=plot_predictive_mean,
             plot_samples=plot_predictive_samples,
@@ -1545,6 +1589,7 @@ def plot_func_model_n(
     alpha_trajectories: float = 0.5,
     keep_frame: bool = False,
     random_state: int | None = None,
+    choices: list[int] | None = None,
     **kwargs,
 ) -> Axes:
     """Calculate and plot posterior predictive for a model.
@@ -1709,7 +1754,10 @@ def plot_func_model_n(
 
     # ADD HISTOGRAMS
     # -------------------------------
-    choices = default_model_config[cast("SupportedModels", model_name)]["choices"]
+    # choices is threaded in by _plot_model_cartoon_1D (from model.model_config);
+    # fall back to the registry for built-in models called directly.
+    if choices is None:
+        choices = default_model_config[cast("SupportedModels", model_name)]["choices"]
     cnt_cumul = 0
 
     # POSTERIOR MEAN BASED HISTOGRAM
