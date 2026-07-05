@@ -224,7 +224,6 @@ class aDDM(HSSMBase):
     @staticmethod
     def _validate_addm_columns(data: pd.DataFrame, model_config: aDDMConfig) -> None:
         """Validate that the DataFrame carries well-formed aDDM covariates."""
-        n = len(data)
         for col in ("r1", "r2", "d", "flag", "sigma", "sacc_array"):
             if col not in data.columns:
                 raise ValueError(f"aDDM data is missing required column {col!r}.")
@@ -242,13 +241,8 @@ class aDDM(HSSMBase):
                 "per-trial sigma is not supported by the kernel."
             )
 
-        rows = [np.asarray(x).ravel() for x in data["sacc_array"]]
-        if len(rows) != n:
-            raise ValueError(
-                "`sacc_array` must have one entry per trial "
-                f"(got {len(rows)} for {n} trials)."
-            )
-        max_d = max(r.size for r in rows)
+        # Reuse the single sacc-parsing path; its width is the max stage count.
+        max_d = aDDM._stack_sacc_array(data["sacc_array"]).shape[1]
         d = np.asarray(data["d"])
         if np.any(d < 1) or np.any(d > max_d):
             raise ValueError(

@@ -10,19 +10,13 @@ pulls in the ``hssm`` package, so run in the repo's uv venv::
 Patterned after tests/test_rlssm_config.py.
 """
 
+import pytest
+
 from hssm.addm.config import aDDMConfig
 from hssm.config import BaseModelConfig
 
 EXPECTED_LIST_PARAMS = ["eta", "kappa", "a", "b", "x0", "t"]
 EXPECTED_EXTRA_FIELDS = ["r1", "r2", "flag", "sacc_array", "d", "sigma"]
-
-
-def _assert_raises(fn, exc=ValueError):
-    try:
-        fn()
-    except exc:
-        return
-    raise AssertionError(f"expected {exc.__name__} to be raised")
 
 
 def test_defaults():
@@ -57,15 +51,18 @@ def test_validate_ok():
 
 
 def test_validate_rejects_unknown_attention_process():
-    _assert_raises(lambda: aDDMConfig(attention_process="bogus").validate())
+    with pytest.raises(ValueError):
+        aDDMConfig(attention_process="bogus").validate()
 
 
 def test_validate_rejects_bounds_param_mismatch():
-    _assert_raises(lambda: aDDMConfig(bounds={"eta": (0.0, 1.0)}).validate())
+    with pytest.raises(ValueError):
+        aDDMConfig(bounds={"eta": (0.0, 1.0)}).validate()
 
 
 def test_validate_rejects_params_default_mismatch():
-    _assert_raises(lambda: aDDMConfig(params_default=[0.3]).validate())
+    with pytest.raises(ValueError):
+        aDDMConfig(params_default=[0.3]).validate()
 
 
 def test_get_defaults():

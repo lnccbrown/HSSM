@@ -14,6 +14,7 @@ collapses near t≈a/b=0.5), so the init log-likelihood is finite.
 import arviz as az
 import numpy as np
 import pandas as pd
+import pytest
 from pytensor.graph import Op
 
 import hssm
@@ -68,14 +69,6 @@ def make_addm_dataframe(n_trials, seed=0, n_participants=1):
     return df
 
 
-def _assert_raises(fn, exc=ValueError):
-    try:
-        fn()
-    except exc:
-        return
-    raise AssertionError(f"expected {exc.__name__} to be raised")
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -114,14 +107,17 @@ def test_bad_columns_raise():
 
     bad_flag = base.copy()
     bad_flag.loc[0, "flag"] = 2
-    _assert_raises(lambda: hssm.aDDM(data=bad_flag))
+    with pytest.raises(ValueError):
+        hssm.aDDM(data=bad_flag)
 
     bad_d = base.copy()
     bad_d.loc[0, "d"] = MAX_D + 1
-    _assert_raises(lambda: hssm.aDDM(data=bad_d))
+    with pytest.raises(ValueError):
+        hssm.aDDM(data=bad_d)
 
     missing_col = base.drop(columns=["r1"])
-    _assert_raises(lambda: hssm.aDDM(data=missing_col))
+    with pytest.raises(ValueError):
+        hssm.aDDM(data=missing_col)
 
 
 def test_smoke_sample():
