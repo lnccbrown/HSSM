@@ -90,8 +90,14 @@ docs = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
-exclude = ["*.ipynb"]
+target-version = "py312"
+exclude = [
+    ".git",
+    "__pycache__",
+    "venv",
+    ".venv",
+    "notebooks",
+]
 
 [tool.ruff.format]
 docstring-code-format = true
