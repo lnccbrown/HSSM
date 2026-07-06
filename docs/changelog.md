@@ -17,6 +17,13 @@ This version contains major breaking updates for HSSM. Please read the release n
 5. `model.summary()` and `model.plot_trace()` methods are now removed. Use `az.summary()` and `az.plot_trace_dist()` instead.
 6. HSSM can now be installed directly from PyPI via `pip` or `uv`. Conda support is no longer provided.
 
+### 0.3.1
+
+This version includes the following changes:
+
+1. **sbi NRE ONNX integration**: train an sbi Neural Ratio Estimator (NRE), export it to ONNX via `lanfactory.onnx.transform_sbi_to_onnx`, and load it into HSSM's `loglik_kind="approx_differentiable"` pipeline for MCMC inference (keystone tutorial `sbi_nre_integration.ipynb`).
+2. **ONNX loader hardening**: `onnx2jax` now rejects ONNX graphs with dynamic/symbolic input dimensions (enforcing the single-trial + `jax.vmap` contract), and raises a clear error when JAX x64 is disabled and a graph carries int64 constants that would be truncated (guarding against silent likelihood corruption from flow-export sentinels). Applies across all ONNX exporters (LANfactory, BayesFlow, sbi).
+
 ### 0.3.0
 
 This version includes the following changes:

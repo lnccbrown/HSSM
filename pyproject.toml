@@ -77,6 +77,8 @@ notebook = [
     "zeus-mcmc>=2.5.4",
     "bayesflow>=2.0.12",
     "keras>=3.12",
+    "sbi>=0.26",
+    "nflows>=0.14",
 ]
 
 docs = [

@@ -121,7 +121,7 @@ def make_jax_logp_ops(
                 else:
                     results = lan_logp_vjp_op(None, *inputs, gz=output_gradients[0])
 
-            output = results
+            output = list(results) if isinstance(results, (list, tuple)) else [results]
 
             if self.has_data:
                 output = [
@@ -129,9 +129,11 @@ def make_jax_logp_ops(
                 ] + output
 
             if self.n_params is not None:
-                start_idx = self.n_params + 1 if self.has_data else 0
-                for i in range(start_idx, len(output)):
-                    output[i] = pytensor.gradient.grad_undefined(self, i, inputs[i])
+                start_idx = self.n_params + (1 if self.has_data else 0)
+                output[start_idx:] = [
+                    pytensor.gradient.grad_undefined(self, i, inputs[i])
+                    for i in range(start_idx, len(inputs))
+                ]
 
             return output
 
@@ -163,12 +165,17 @@ def make_jax_logp_ops(
                 inputs += [pt.as_tensor_variable(gz)]
 
             if self.has_data:
-                outputs = [inp.type() for inp in inputs[1:-1]]
+                grad_inputs = inputs[1:-1]
             else:
                 if self.is_scalars_only:
-                    outputs = [inp.type() for inp in inputs]
+                    grad_inputs = inputs
                 else:
-                    outputs = [inp.type() for inp in inputs[:-1]]
+                    grad_inputs = inputs[:-1]
+
+            if n_params is not None:
+                grad_inputs = grad_inputs[:n_params]
+
+            outputs = [inp.type() for inp in grad_inputs]
 
             return Apply(self, inputs, outputs)
 

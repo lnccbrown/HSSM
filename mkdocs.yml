@@ -51,6 +51,7 @@ nav:
       - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
       - BayesFlow LRE Integration: tutorials/bayesflow_lre_integration.ipynb
       - BayesFlow NLE Integration (ONNX): tutorials/bayesflow_nle_onnx_integration.ipynb
+      - sbi NRE Integration (ONNX): tutorials/sbi_nre_integration.ipynb
       - Custom models from onnx files: tutorials/blackbox_contribution_onnx_example.ipynb
       - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
       - Saving and loading models: tutorials/save_load_tutorial.ipynb
@@ -111,6 +112,7 @@ plugins:
         - tutorials/tutorial_bayeux.ipynb
         - tutorials/bayesflow_lre_integration.ipynb
         - tutorials/bayesflow_nle_onnx_integration.ipynb
+        - tutorials/sbi_nre_integration.ipynb
         - tutorials/poisson_race.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
