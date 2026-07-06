@@ -438,12 +438,15 @@ def _(az, idata, plt):
 @app.cell
 def _(mo):
     mo.md("""
-    ## 6. Posterior predictive, conditioned on the observed fixations
+    ## 6. Posterior predictive checks
 
-    `sample_posterior_predictive` draws new (rt, choice) from the posterior **using
-    each trial's real fixation sequence** — the handshake from section 2 feeds the
-    observed `r1, r2, flag, sacc_array, d` to the simulator, so the check is faithful
+    `sample_posterior_predictive` draws new (rt, choice) from the posterior. By default it
+    conditions on **each trial's observed fixation sequence** — the handshake from section 2
+    feeds the observed `r1, r2, flag, sacc_array, d` to the simulator, so the check is faithful
     to the gaze pattern that produced the data.
+
+    Observed (pink) vs predicted (blue) RT densities below; `rt` is signed by choice, and
+    `x_range` zooms past the `p_outlier` lapse tail.
     """)
     return
 
@@ -451,9 +454,80 @@ def _(mo):
 @app.cell
 def _(idata, model, plt):
     model.sample_posterior_predictive(idata, kind="response", draws=100)
-    # Observed (pink) vs predicted (blue) RT densities. rt is signed by choice;
-    # x_range zooms in past the p_outlier lapse tail.
     model.plot_predictive(x_range=(-4, 4))
+    plt.gcf()
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ### Fixation-continuation policies
+
+    A re-simulated particle may still be undecided when it reaches the **last observed
+    fixation** — the observed gaze sequence is right-censored at the response, so its last
+    fixation was cut short. How the fixation process is *continued* past that point is a
+    modelling choice, selectable **per PPC call** on the same fitted model (no re-fit) via
+    `continuation_mode` / `continuation_params`:
+
+    - **`prolong_last_fixation`** (default) — hold the last gaze's drift to `max_t`. The classic
+      behaviour; byte-identical to before this option existed.
+    - **`sample_continuation`** — draw the continuation (tail) fixation durations from a chosen
+      positive distribution and keep alternating gaze. This resamples the censored last fixation
+      to a natural (uncensored) duration instead of freezing it.
+    - **`resample_all_fixations`** — ignore the observed fixation schedule entirely and
+      self-sample the whole fixation behaviour (first gaze + durations), keeping only the
+      observed stimulus (`r1`, `r2`). A fully generative check of the model's fixation process.
+
+    Distributions come from a `scipy.stats` positive-distribution factory (gamma, lognormal,
+    weibull, invgauss, …); `dist_params` are scipy-native (gamma's shape is `a`, so
+    `{"a": 6.0, "scale": 0.1}` is `Gamma(shape=6, scale=0.1)`).
+    """)
+    return
+
+
+@app.cell
+def _(idata, model, plt):
+    # Same fitted model, a different continuation policy — chosen per call, no re-fit.
+    _gamma = {"dist": "gamma", "dist_params": {"a": 6.0, "scale": 0.1}}
+    model.sample_posterior_predictive(
+        idata,
+        kind="response",
+        draws=100,
+        continuation_mode="sample_continuation",
+        continuation_params=_gamma,
+    )
+    model.plot_predictive(x_range=(-4, 4))
+    plt.gcf()
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## 7. Model cartoon
+
+    `hssm.plotting.plot_model_cartoon` renders the fitted aDDM as a *cartoon*: the collapsing
+    decision bounds $\pm(a - b\,t)$, the drift path from the starting point $x_0$, a few
+    stochastic sample trajectories, the non-decision time, and the choice-split RT histograms
+    (observed vs predicted). It reads the geometry from *simulator* metadata, so it works for
+    the aDDM exactly as it does for the built-in SSMs.
+    """)
+    return
+
+
+@app.cell
+def _(hssm, idata, model, plt):
+    hssm.plotting.plot_model_cartoon(
+        model,
+        idata=idata,
+        n_samples=8,
+        n_trajectories=5,
+        bins=25,
+        plot_predictive_mean=True,
+        plot_predictive_samples=False,
+        title="aDDM model cartoon",
+    )
     plt.gcf()
     return
 
