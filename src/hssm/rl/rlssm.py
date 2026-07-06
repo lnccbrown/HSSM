@@ -26,6 +26,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
+import numpy as np
 import pandas as pd
 import pymc as pm
 
@@ -145,6 +146,23 @@ class _RLSSM(HSSMBase):
         # Validate config (ensures ssm_logp_func is present, etc.)
         model_config.validate()
 
+        # Custom choice labels are only safe for choice-only models, where the
+        # response is consumed purely as an action index. For SSM-backed RLSSMs
+        # (DDM/Angle/Weibull) the same response column is also fed to the LAN with
+        # its own choice coding, so a remap would silently corrupt that input.
+        # Require 0-based contiguous labels there and fail loudly otherwise.
+        if not model_config.is_choice_only and model_config.choices is not None:
+            declared = list(model_config.choices)
+            if declared != list(range(len(declared))):
+                raise ValueError(
+                    f"Custom choice labels {declared} are not supported for "
+                    "SSM-backed RLSSM models (e.g. the DDM/Angle/Weibull decision "
+                    "processes): the response column is also fed to the SSM "
+                    "likelihood with its own coding. Use 0-based contiguous action "
+                    "indices (e.g. [0, 1]). Arbitrary choice labels are currently "
+                    "supported only for the choice-only softmax model."
+                )
+
         # RLSSM reshapes rows into (n_participants, n_trials, ...) by position,
         # so _rearrange_data (which moves missing/deadline rows to the front)
         # would scramble per-participant trial sequences and corrupt RL dynamics.
@@ -227,6 +245,35 @@ class _RLSSM(HSSMBase):
             process_initvals=process_initvals,
             initval_jitter=initval_jitter,
             **kwargs,
+        )
+
+    def _remap_choice_only_responses(self) -> None:
+        """Map declared ``choices`` labels to internal 0..N-1 action indices.
+
+        The choice-only softmax logp and the Rescorla-Wagner Q-value scan consume
+        the response purely as a 0-based action index, so arbitrary integer
+        ``choices`` (e.g. ``[1, 2]`` or ``[-1, 1]``) are supported by remapping the
+        response column to its position in the declared ``choices`` list. This
+        operates on ``self.data`` (already a copy of the user's frame, so the
+        caller's DataFrame is untouched) and runs after ``_post_check_data_sanity``
+        — which validates/warns against the *declared* labels — and before the
+        distribution and ``bmb.Model`` are built. SSM-backed RLSSMs are not
+        choice-only and are rejected in ``__init__`` if given non-0-based labels.
+        """
+        if not self.is_choice_only:
+            return
+        declared = list(self.choices)  # type: ignore[arg-type]
+        if declared == list(range(len(declared))):
+            return  # already 0..N-1; nothing to remap
+        response_col = self.model_config.response[0]  # type: ignore[index]
+        remap = {int(label): idx for idx, label in enumerate(declared)}
+        original = self.data[response_col].to_numpy()
+        # Responses passed _post_check_data_sanity (integral, in `choices`), so
+        # rounding to int for the lookup is safe; keep the original column dtype.
+        int_responses = np.rint(original).astype(int)
+        self.data = self.data.copy()
+        self.data[response_col] = np.vectorize(remap.__getitem__)(int_responses).astype(
+            original.dtype
         )
 
     def _make_model_distribution(self) -> type[pm.Distribution]:

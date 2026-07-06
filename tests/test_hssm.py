@@ -475,16 +475,14 @@ def test_is_choice_only_and_deadline(data_ddm):
     assert model.response_c == "response"
     assert model.response_str == "response"
 
+    # Choice-only models have no RT column to censor, so a deadline is rejected.
     data_deadline = data_ddm.copy()
     data_deadline["deadline"] = 0
 
-    model_with_deadline = HSSM(
-        data=data_deadline, model="ddm", model_config=config_choice_only, deadline=True
-    )
-
-    assert model_with_deadline.is_choice_only
-    assert model_with_deadline.deadline
-    assert model_with_deadline.response is not None
-    assert len(model_with_deadline.response) == 2
-    assert model_with_deadline.response_c == "c(response, deadline)"
-    assert model_with_deadline.response_str == "response,deadline"
+    with pytest.raises(ValueError, match="Choice-only models cannot have a deadline"):
+        HSSM(
+            data=data_deadline,
+            model="ddm",
+            model_config=config_choice_only,
+            deadline=True,
+        )

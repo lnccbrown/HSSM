@@ -12,6 +12,7 @@ from hssm.distribution_utils.dist import (
     ensure_positive_ndt,
     make_distribution,
     make_distribution_for_supported_model,
+    _apply_lapse_model,
     _create_arg_arrays,
     _extract_size,
     _get_p_outlier,
@@ -420,3 +421,63 @@ class TestGetPOutlier:
 
         assert p_outlier is None
         assert new_arg_arrays is arg_arrays
+
+
+# ---------------------------------------------------------------------------
+# Tests for _apply_lapse_model with float lapse_dist (choice-only models)
+# ---------------------------------------------------------------------------
+# Choice-only models pass a float `lapse_dist` (1/n_choices). The float branch
+# in _apply_lapse_model must not try `lapse_dist.args` (a float has none) and
+# must keep the 1-column choice shape instead of stacking a 2-column rt/choice
+# mask. Both shapes (1-D and (n_obs, 1)) are exercised below.
+# ---------------------------------------------------------------------------
+
+
+def test_apply_lapse_model_float_lapse_1d_does_not_crash():
+    """Float lapse_dist with 1-D sims_out (choice-only) must not crash."""
+    rng = np.random.default_rng(0)
+    choices = [0, 1]
+    # 1-D input: shape (n_obs,) — pure choice-only output from ssms_rng_fn
+    sims_out = np.array([0, 1, 0, 1, 0], dtype=float)
+    # p_outlier=1.0 forces every trial to be replaced, guaranteeing replace_n > 0
+    # and that the lapse branch is reached every time.
+    result = _apply_lapse_model(
+        sims_out=sims_out,
+        p_outlier=1.0,
+        rng=rng,
+        lapse_dist=0.5,  # float — 1/n_choices for a 2-choice model
+        choices=choices,
+    )
+    assert result.shape == sims_out.shape
+    assert set(result).issubset(set(choices))
+
+
+def test_apply_lapse_model_float_lapse_2d_correct_shape():
+    """Float lapse_dist with 2-D (n_obs, 1) sims_out must return same shape."""
+    rng = np.random.default_rng(0)
+    choices = [0, 1]
+    # 2-D input: shape (n_obs, 1) — choice column only
+    sims_out = np.array([[0], [1], [0], [1], [0]], dtype=float)
+    result = _apply_lapse_model(
+        sims_out=sims_out,
+        p_outlier=1.0,
+        rng=rng,
+        lapse_dist=0.5,
+        choices=choices,
+    )
+    assert result.shape == sims_out.shape
+    assert set(result[:, -1]).issubset(set(choices))
+
+
+def test_apply_lapse_model_float_lapse_no_replacement_returns_input():
+    """With p_outlier=0 no trial lapses; the input is returned unchanged."""
+    rng = np.random.default_rng(0)
+    sims_out = np.array([0, 1, 0, 1, 0], dtype=float)
+    result = _apply_lapse_model(
+        sims_out=sims_out,
+        p_outlier=0.0,
+        rng=rng,
+        lapse_dist=0.5,
+        choices=[0, 1],
+    )
+    np.testing.assert_array_equal(result, sims_out)
