@@ -25,14 +25,14 @@ _logger = logging.getLogger("hssm")
 class RLSSMConfig(BaseModelConfig):
     """Config for reinforcement learning + sequential sampling models.
 
-    Extends :class:`BaseModelConfig` with the fields required by the RLSSM
+    Extends `BaseModelConfig` with the fields required by the RLSSM
     likelihood pipeline.  The key extra fields are:
 
     - ``ssm_logp_func``: the annotated JAX SSM log-likelihood function (see
       below) whose ``computed`` dict drives per-parameter RL computations.
     - ``learning_process``: a mapping that declares *how* each computed
       parameter is specified (see below).
-    - ``decision_process``: the name (string) or :class:`ModelConfig` instance
+    - ``decision_process``: the name (string) or `ModelConfig` instance
       that identifies the SSM decision process (e.g. ``"ddm"``, ``"angle"``).
     - ``decision_process_loglik_kind`` / ``learning_process_kind``: string
       tags that record which kind of likelihood and which kind of learning rule

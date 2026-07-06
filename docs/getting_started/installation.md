@@ -29,14 +29,6 @@ HSSM can also be installed directly through `pip`. You can install HSSM into any
 pip install hssm
 ```
 
-### Install HSSM with IO support
-
-If you need to save/load models and traces, please install HSSM with IO support:
-
-```bash
-pip install hssm[io]
-```
-
 ### Install HSSM (with GPU Support)
 
 If you need to sample with GPU, please install JAX with GPU support before

@@ -339,7 +339,7 @@ def _normalize_model_config_with_choices(
 ) -> "ModelConfig":
     """Normalize a user-supplied model_config and apply choices.
 
-    Returns a fresh :class:`ModelConfig` instance and does not mutate the
+    Returns a fresh `ModelConfig` instance and does not mutate the
     caller's objects. If both ``model_config`` and ``choices`` are provided
     and ``model_config`` already contains ``choices``, the value from
     ``model_config`` wins (and a log entry is emitted).

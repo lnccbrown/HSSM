@@ -1,10 +1,12 @@
 """Test plotting module."""
 
-import pytest
+import sys
 
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 import hssm
@@ -164,8 +166,12 @@ class TestPlotting:
         assert len(g2.figure.axes) == 5 * 2
         assert len(g2.figure.axes[0].get_lines()) == 1
 
-    def test_plot_predictive(self, cav_idata, cavanagh_test):
-        # Mock model object
+    @pytest.mark.xfail(
+        sys.version_info >= (3, 14),
+        reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
+        strict=True,  # This will let us know in the future when this is fixed
+    )
+    def test_plot_predictive(self, cav_dt, cavanagh_test):
         model = hssm.HSSM(
             data=cavanagh_test,
             include=[
@@ -322,6 +328,11 @@ class TestPlotting:
         )
         assert len(g.figure.axes) == 5 * 4
 
+    @pytest.mark.xfail(
+        sys.version_info >= (3, 14),
+        reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
+        strict=True,  # This will let us know in the future when this is fixed
+    )
     @pytest.mark.parametrize("predictive_style", ["points", "ellipse", "both"])
     def test_plot_quantile_probability(self, cav_dt, cavanagh_test, predictive_style):
         """Tests the plot_quantile_probability function.

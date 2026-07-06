@@ -2,7 +2,7 @@
     <a href="https://ccbs.carney.brown.edu/brainstorm" style="display: block; float: right; padding: 10px">
         <img src="images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
     </a>
-    <img src="images/mainlogo.png" style="width: 250px;">
+    <img src="images/mainlogo.png" style="width: 175px;">
 </div>
 
 ![PyPI](https://img.shields.io/pypi/v/hssm)
@@ -104,14 +104,6 @@ YOu can also install HSSM with `uv`:
 
 ```bash
 uv add hssm
-```
-
-### Install HSSM with IO support
-
-If you need to save/load models and traces, please install HSSM with IO support:
-
-```bash
-pip install hssm[io]
 ```
 
 ### Install HSSM (with GPU Support)

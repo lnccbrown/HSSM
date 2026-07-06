@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 import pandas as pd
 import pytensor
@@ -231,6 +233,11 @@ def test_check_data_for_rl():
     assert n_trials == 2
 
 
+@pytest.mark.xfail(
+    sys.version_info >= (3, 14),
+    reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
+    strict=True,  # This will let us know in the future when this is fixed
+)
 def test_predictive_idata_to_dataframe(data_ddm):
     model = hssm.HSSM(data=data_ddm)
     sample_do = model.sample_do(params={"v": 1.0}, draws=10)
