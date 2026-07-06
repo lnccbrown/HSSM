@@ -18,7 +18,7 @@ from pymc.distributions.dist_math import check_parameters
 
 from ..distribution_utils.dist import make_distribution
 
-LOGP_LB = pm.floatX(-66.1)
+LOGP_LB = pm.pytensorf.floatX(-66.1)
 
 π = np.pi
 τ = 2 * π
@@ -751,8 +751,8 @@ def logp_poisson_race(
         inside a PyMC/PyTensor model the returned object is a symbolic tensor,
         and evaluating/compiling the graph yields an ndarray.
     """
-    epsilon = pm.floatX(epsilon)
-    one = pm.floatX(1.0)
+    epsilon = pm.pytensorf.floatX(epsilon)
+    one = pm.pytensorf.floatX(1.0)
     data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
 
     rt = pt.abs(data[:, 0])
