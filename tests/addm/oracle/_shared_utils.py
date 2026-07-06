@@ -91,10 +91,7 @@ def resolve_quadrature_orders(order_mid, order_last, order=None):
     - mixing ``order`` with non-default split orders: raise ``ValueError``
     """
     if order is not None:
-        if (
-            order_mid != DEFAULT_MID_QUAD_ORDER
-            or order_last != DEFAULT_LAST_QUAD_ORDER
-        ):
+        if order_mid != DEFAULT_MID_QUAD_ORDER or order_last != DEFAULT_LAST_QUAD_ORDER:
             raise ValueError(
                 "pass either legacy order or split order_mid/order_last, not both"
             )
@@ -125,4 +122,5 @@ def get_cpu_name():
     except FileNotFoundError:
         pass
     import platform
+
     return platform.processor() or platform.machine() or "unknown"

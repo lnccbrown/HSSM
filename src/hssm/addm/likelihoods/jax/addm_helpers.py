@@ -27,7 +27,14 @@ def _build_addm_mu_array_data(eta, kappa, r1_data, r2_data, flag_data, d_data, m
     dtype = jnp.result_type(r1_data, r2_data, get_jax_dtype())
     trial_mu = vmap(
         lambda r1, r2, flag, d: _build_addm_mu_array(
-            eta, kappa, r1, r2, flag, d, max_d, dtype,
+            eta,
+            kappa,
+            r1,
+            r2,
+            flag,
+            d,
+            max_d,
+            dtype,
         )
     )
     return trial_mu(r1_data, r2_data, flag_data, d_data)

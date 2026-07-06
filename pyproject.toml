@@ -40,7 +40,7 @@ dependencies = [
     # likelihood); aDDM posterior-predictive / simulation needs `cssm.addm`.
     # TODO(release): bump this floor to the ssm-simulators release that ships the
     # aDDM model once it is published.
-    "ssm-simulators>=0.12.2",
+    "ssm-simulators>=0.12.4",
     "tqdm>=4.66.0",
 ]
 
@@ -80,10 +80,12 @@ notebook = [
     "nbval>=0.11.0",
     "ptpython>=3.0.29",
     "pyarrow>=20.0.0",
-    "lanfactory>=0.6.1",
+    "lanfactory>=0.7.0",
     "zeus-mcmc>=2.5.4",
-    "bayesflow>=2.0.10",
-    "keras>=3",
+    "bayesflow>=2.0.12",
+    "keras>=3.12",
+    "sbi>=0.26",
+    "nflows>=0.14",
 ]
 
 docs = [

@@ -73,6 +73,7 @@ class RegressionParam(Param):
     """
 
     terms: list[str]
+    _user_specified_prior_keys: set[str]
 
     def __init__(
         self,
@@ -87,6 +88,12 @@ class RegressionParam(Param):
             name, prior, formula, link, bounds=bounds, user_param=user_param
         )
         self.terms = []
+        # Snapshot of the prior keys the user explicitly supplied, taken
+        # before make_safe_priors merges defaults in. Used by the
+        # parameterization-mismatch check to scope warnings to user intent.
+        self._user_specified_prior_keys = (
+            set(prior.keys()) if isinstance(prior, dict) else set()
+        )
 
     @classmethod
     def from_defaults(

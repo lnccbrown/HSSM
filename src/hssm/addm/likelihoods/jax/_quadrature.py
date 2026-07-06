@@ -7,7 +7,6 @@ reference arrays are exposed as module-level constants for the common case.
 
 import numpy as np
 
-
 # Cache keyed by order; pre-populated with commonly used orders.
 _GAUSS_LEGENDRE_CACHE = {
     n: np.polynomial.legendre.leggauss(n)
