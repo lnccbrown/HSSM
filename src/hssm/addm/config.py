@@ -21,6 +21,33 @@ from ..config import BaseModelConfig
 from .attention_process import resolve_attention_process
 
 
+def _validate_continuation(mode: str, params: dict | None) -> None:
+    """Validate a fixation-continuation mode + params against ssm-sim's registries.
+
+    Reused by ``aDDMConfig.validate`` and the per-call PPC override. Defensive: if the
+    installed ssm-simulators predates the continuation module, validation is skipped;
+    the simulator validates authoritatively at PPC time.
+    """
+    try:
+        from ssms.basic_simulators.fixation_continuation import (
+            resolve_continuation_mode,
+            resolve_distribution,
+        )
+    except ImportError:
+        return
+    resolve_continuation_mode(mode)  # raises ValueError on an unknown mode
+    if mode == "prolong_last_fixation":
+        if params is not None:
+            raise ValueError("prolong_last_fixation takes no continuation_params.")
+        return
+    if not isinstance(params, dict) or "dist" not in params:
+        raise ValueError(
+            f"continuation_mode={mode!r} requires "
+            "continuation_params={'dist': <name>, 'dist_params': {...}}."
+        )
+    resolve_distribution(params["dist"])  # raises ValueError on an unknown distribution
+
+
 @dataclass
 class aDDMConfig(BaseModelConfig):
     """Config for the attentional DDM (subclass formulation).
@@ -59,6 +86,11 @@ class aDDMConfig(BaseModelConfig):
         default_factory=lambda: [0.3, 1.0, 1.0, 2.0, 0.0, 0.0]
     )
     attention_process: str | Callable = "standard_alternating"
+    # Fixation-continuation policy for posterior predictive (Mode-2 tail behaviour). The
+    # default reproduces the pre-feature "hold the last gaze"; override per PPC call via
+    # aDDM.sample_posterior_predictive. See ssms.basic_simulators.fixation_continuation.
+    continuation_mode: str = "prolong_last_fixation"
+    continuation_params: dict | None = None
     # ``loglik`` and ``backend`` are inherited (default ``None``) and injected by
     # ``aDDM.__init__`` via ``dataclasses.replace`` in Commit 4 — not redeclared here.
 
@@ -68,6 +100,7 @@ class aDDMConfig(BaseModelConfig):
             raise ValueError("Please provide `list_params` in the configuration.")
         # Raises ValueError (unknown name) / TypeError (bad type) on failure.
         resolve_attention_process(self.attention_process)
+        _validate_continuation(self.continuation_mode, self.continuation_params)
         if self.params_default and len(self.params_default) != len(self.list_params):
             raise ValueError(
                 f"params_default length ({len(self.params_default)}) doesn't match "

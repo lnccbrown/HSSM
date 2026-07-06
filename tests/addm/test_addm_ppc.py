@@ -60,7 +60,10 @@ def test_addm_rv_extra_fields_populated():
     model = hssm.aDDM(data=df)
     ef = type(model.model_distribution.rv_op)._extra_fields
     assert ef is not None
-    assert set(ef.keys()) == {"r1", "r2", "flag", "sacc_array", "d", "sigma"}
+    # The 6 observed covariates plus the fixation-continuation policy (default = prolong).
+    assert {"r1", "r2", "flag", "sacc_array", "d", "sigma"} <= set(ef.keys())
+    assert ef["continuation_mode"] == "prolong_last_fixation"
+    assert ef["continuation_params"] is None
     assert np.asarray(ef["sacc_array"]).shape[0] == len(df)
     assert np.array_equal(np.asarray(ef["r1"]), df["r1"].to_numpy())
 

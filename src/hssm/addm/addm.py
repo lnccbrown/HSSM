@@ -15,6 +15,7 @@ materializing the 2-D ``sacc_array`` covariate (:meth:`_stack_sacc_array`).
 from dataclasses import replace
 from typing import Any, Literal, cast
 
+import arviz as az
 import bambi as bmb
 import numpy as np
 import pandas as pd
@@ -23,7 +24,7 @@ import pymc as pm
 from ..base import HSSMBase
 from ..distribution_utils import make_distribution
 from .attention_process import resolve_attention_process
-from .config import aDDMConfig
+from .config import _validate_continuation, aDDMConfig
 from .likelihoods.builder import make_addm_logp_op
 
 
@@ -161,8 +162,23 @@ class aDDM(HSSMBase):
         """
         if extra_fields_data is None or self.extra_fields is None:
             return
-        mapping = dict(zip(self.extra_fields, extra_fields_data))
+        mapping: dict[str, Any] = dict(zip(self.extra_fields, extra_fields_data))
+        # Continuation policy for the generative rng_fn: a per-call override
+        # (set by sample_posterior_predictive) if present, else the aDDMConfig default.
+        # Resolved here (not written once at build) so the base PPC path's
+        # _update_extra_fields refresh keeps an active override, not the config default.
+        mode, params = self._continuation_setting()
+        mapping["continuation_mode"] = mode
+        mapping["continuation_params"] = params
         type(dist.rv_op)._extra_fields = mapping
+
+    def _continuation_setting(self) -> tuple[str, dict | None]:
+        """(mode, params): a live per-call override if set, else the config default."""
+        override = getattr(self, "_continuation_override", None)
+        if override is not None:
+            return override
+        cfg = cast("aDDMConfig", self.model_config)
+        return cfg.continuation_mode, cfg.continuation_params
 
     def _update_extra_fields(self, new_data: pd.DataFrame | None = None) -> None:
         """Refresh the distribution's extra fields, stacking ``sacc_array`` to 2-D.
@@ -179,6 +195,49 @@ class aDDM(HSSMBase):
             extra_fields_data = self._addm_extra_fields_data(new_data)
             self.model_distribution.extra_fields = extra_fields_data
             self._push_rv_extra_fields(self.model_distribution, extra_fields_data)
+
+    def sample_posterior_predictive(
+        self,
+        idata: az.InferenceData | None = None,
+        data: pd.DataFrame | None = None,
+        inplace: bool = True,
+        include_group_specific: bool = True,
+        kind: Literal["response", "response_params"] = "response",
+        draws: int | float | list[int] | np.ndarray | None = None,
+        safe_mode: bool = True,
+        continuation_mode: str | None = None,
+        continuation_params: dict | None = None,
+    ) -> az.InferenceData | None:
+        """Posterior-predictive draws with a per-call fixation-continuation policy.
+
+        ``continuation_mode`` / ``continuation_params`` (default: the ``aDDMConfig``
+        values) select how fixations continue past the observed ones, for THIS call
+        only (see ``ssms.basic_simulators.fixation_continuation`` for the modes). They
+        rewrite the RV class attr the generative ``rng_fn`` reads at draw time, so one
+        fitted model can be swept across policies with no rebuild/re-fit; each call sets
+        them explicitly, so calls never leak. Other args match the base method.
+        """
+        cfg = cast("aDDMConfig", self.model_config)
+        mode = (
+            continuation_mode
+            if continuation_mode is not None
+            else cfg.continuation_mode
+        )
+        params = (
+            continuation_params
+            if continuation_params is not None
+            else cfg.continuation_params
+        )
+        _validate_continuation(mode, params)
+        # Set the live override; the base PPC's _update_extra_fields re-pushes it onto
+        # the RV before drawing. Restore after so calls don't leak into each other.
+        self._continuation_override: tuple[str, dict | None] | None = (mode, params)
+        try:
+            return super().sample_posterior_predictive(
+                idata, data, inplace, include_group_specific, kind, draws, safe_mode
+            )
+        finally:
+            self._continuation_override = None
 
     # ------------------------------------------------------------------ #
     # aDDM-specific data handling
