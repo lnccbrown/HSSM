@@ -9,7 +9,7 @@ import hssm
 
 hssm.set_floatX("float32")
 
-pytestmark = xfail_mark = pytest.mark.xfail(
+pytestmark = pytest.mark.xfail(
     sys.version_info >= (3, 14),
     reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
 )
