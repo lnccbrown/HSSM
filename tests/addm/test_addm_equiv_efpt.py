@@ -73,8 +73,12 @@ def test_fptd_single_array_matches_oracle():
     t = np.linspace(0.15, 3.0, 40)
     common = dict(trunc_num=TRUNC)
     mu, sigma, a1, b1, a2, b2, x0, bdy = 0.8, 1.2, 1.5, -0.25, -1.5, 0.25, 0.1, 1
-    got = np.asarray(jax_ss.fptd_single(t, mu, sigma, a1, b1, a2, b2, x0, bdy, **common))
-    ref = np.asarray(oracle.fptd_single(t, mu, sigma, a1, b1, a2, b2, x0, bdy, **common))
+    got = np.asarray(
+        jax_ss.fptd_single(t, mu, sigma, a1, b1, a2, b2, x0, bdy, **common)
+    )
+    ref = np.asarray(
+        oracle.fptd_single(t, mu, sigma, a1, b1, a2, b2, x0, bdy, **common)
+    )
     np.testing.assert_allclose(got, ref, rtol=RTOL, atol=ATOL)
 
 

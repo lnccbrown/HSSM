@@ -29,7 +29,11 @@ import numpy as np
 # the vendored subpackage with only jax + numpy, without importing full hssm.
 _JAX_PKG_DIR = (
     Path(__file__).resolve().parents[2]
-    / "src" / "hssm" / "addm" / "likelihoods" / "jax"
+    / "src"
+    / "hssm"
+    / "addm"
+    / "likelihoods"
+    / "jax"
 )
 _PKG_NAME = "_addm_vendored_jax_under_test"
 
@@ -102,9 +106,19 @@ def _make_fixture(seed=0):
 
 def _batched(fx):
     return vjax.compute_addm_loglikelihoods(
-        fx["rt"], fx["choice"], fx["eta"], fx["kappa"], fx["sigma"],
-        fx["a"], fx["b"], fx["x0"], fx["r1"], fx["r2"], fx["flag"],
-        fx["sacc"], fx["d"],
+        fx["rt"],
+        fx["choice"],
+        fx["eta"],
+        fx["kappa"],
+        fx["sigma"],
+        fx["a"],
+        fx["b"],
+        fx["x0"],
+        fx["r1"],
+        fx["r2"],
+        fx["flag"],
+        fx["sacc"],
+        fx["d"],
     )
 
 
@@ -143,10 +157,19 @@ def test_batched_matches_per_trial():
         [
             float(
                 vjax.compute_addm_logfptd(
-                    fx["rt"][i], fx["choice"][i], fx["eta"], fx["kappa"],
-                    fx["sigma"], fx["a"], fx["b"], fx["x0"],
-                    fx["r1"][i], fx["r2"][i], fx["flag"][i],
-                    fx["sacc"][i], fx["d"][i],
+                    fx["rt"][i],
+                    fx["choice"][i],
+                    fx["eta"],
+                    fx["kappa"],
+                    fx["sigma"],
+                    fx["a"],
+                    fx["b"],
+                    fx["x0"],
+                    fx["r1"][i],
+                    fx["r2"][i],
+                    fx["flag"][i],
+                    fx["sacc"][i],
+                    fx["d"][i],
                 )
             )
             for i in range(fx["n_trials"])
@@ -161,13 +184,25 @@ def test_from_mu_matches_default():
     """from_mu with the default drift array equals the default kernel."""
     fx = _make_fixture()
     mu_array = vjax._build_addm_mu_array_data(
-        fx["eta"], fx["kappa"], fx["r1"], fx["r2"], fx["flag"], fx["d"],
+        fx["eta"],
+        fx["kappa"],
+        fx["r1"],
+        fx["r2"],
+        fx["flag"],
+        fx["d"],
         fx["max_d"],
     )
     ll_from_mu = np.asarray(
         vjax.compute_addm_loglikelihoods_from_mu(
-            fx["rt"], fx["choice"], mu_array, fx["sacc"], fx["d"],
-            fx["sigma"], fx["a"], fx["b"], fx["x0"],
+            fx["rt"],
+            fx["choice"],
+            mu_array,
+            fx["sacc"],
+            fx["d"],
+            fx["sigma"],
+            fx["a"],
+            fx["b"],
+            fx["x0"],
         )
     )
     ll_default = np.asarray(_batched(fx))

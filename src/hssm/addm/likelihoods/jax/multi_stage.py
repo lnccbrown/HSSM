@@ -41,20 +41,24 @@ import jax.numpy as jnp
 from jax import jit, lax, vmap
 from jax.scipy.special import logsumexp
 
-from .addm_helpers import _build_addm_mu_array
-from .single_stage import fptd_single, q_single, log_fptd_single
-from .utils import get_gauss_legendre_ref, _DUMMY_STAGE_DURATION, positive_log
 from ._defaults import (
     DEFAULT_LAST_QUAD_ORDER,
     DEFAULT_MID_QUAD_ORDER,
     DEFAULT_TRUNC_NUM,
 )
-from .utils import resolve_quadrature_orders
-
+from .addm_helpers import _build_addm_mu_array
+from .single_stage import fptd_single, log_fptd_single, q_single
+from .utils import (
+    _DUMMY_STAGE_DURATION,
+    get_gauss_legendre_ref,
+    positive_log,
+    resolve_quadrature_orders,
+)
 
 # ---------------------------------------------------------------------------
 # Tiny numeric helpers
 # ---------------------------------------------------------------------------
+
 
 def _safe_stage_durations(node_array, d):
     """Build a numerically safe duration vector from a padded stage-time array.
@@ -149,7 +153,7 @@ def _effective_addm_schedule(sacc_array, d, a, b):
     Notes
     -----
     The multistage aDDM kernel uses ``a_starts[k]`` to place quadrature nodes at
-    the start of stage ``k`` and uses ``upper_slope_array[k]`` / ``lower_slope_array[k]``
+    the start of stage ``k`` and uses ``upper_slope_array`` / ``lower_slope_array``
     to propagate the boundaries through the corresponding duration.
 
     Example
@@ -265,6 +269,7 @@ def _effective_general_schedule(node_array, d, a1, b1_array, a2, b2_array):
 
 def _propagate_ws_pv(P_all, ws_all, ws_pv_init, num_active, log_space):
     """Propagate ws_pv across precomputed stage transitions.
+
     ws_pv = ws * pv (elementwise product),
     where ws is the quadrature weight and pv is non-passive density.
 
@@ -652,7 +657,9 @@ def _addm_logfptd_precomputed(
 
     if max_d == 2:
         return first_stage_last(None)
-    return lax.cond(safe_d_idx == 1, first_stage_last, multi_stage_from_mid, operand=None)
+    return lax.cond(
+        safe_d_idx == 1, first_stage_last, multi_stage_from_mid, operand=None
+    )
 
 
 def compute_addm_logfptd_precomputed(
@@ -918,7 +925,9 @@ def _heterog_multistage_logfptd_precomputed(
 
     if max_d == 2:
         return first_stage_last(None)
-    return lax.cond(safe_d_idx == 1, first_stage_last, multi_stage_from_mid, operand=None)
+    return lax.cond(
+        safe_d_idx == 1, first_stage_last, multi_stage_from_mid, operand=None
+    )
 
 
 def compute_heterog_multistage_logfptd_precomputed(
@@ -1201,7 +1210,9 @@ def _addm_logfptd_stagescan(
         xs_mid_final, ws_pv_mid_final = middle_stages(carry)
         return last_stage_from_mid(xs_mid_final, ws_pv_mid_final)
 
-    return lax.cond(safe_d_idx == 1, first_stage_last, multi_stage_from_mid, operand=None)
+    return lax.cond(
+        safe_d_idx == 1, first_stage_last, multi_stage_from_mid, operand=None
+    )
 
 
 def compute_addm_logfptd_stagescan(
@@ -1512,7 +1523,9 @@ def _heterog_multistage_logfptd_stagescan(
         xs_mid_final, ws_pv_mid_final = middle_stages(carry)
         return last_stage_from_mid(xs_mid_final, ws_pv_mid_final)
 
-    return lax.cond(safe_d_idx == 1, first_stage_last, multi_stage_from_mid, operand=None)
+    return lax.cond(
+        safe_d_idx == 1, first_stage_last, multi_stage_from_mid, operand=None
+    )
 
 
 def compute_heterog_multistage_logfptd_stagescan(
@@ -1612,4 +1625,6 @@ compute_heterog_multistage_logfptd_stagescan_jit = jit(
 compute_addm_logfptd = compute_addm_logfptd_precomputed
 compute_addm_logfptd_jit = compute_addm_logfptd_precomputed_jit
 compute_heterog_multistage_logfptd = compute_heterog_multistage_logfptd_precomputed
-compute_heterog_multistage_logfptd_jit = compute_heterog_multistage_logfptd_precomputed_jit
+compute_heterog_multistage_logfptd_jit = (
+    compute_heterog_multistage_logfptd_precomputed_jit
+)

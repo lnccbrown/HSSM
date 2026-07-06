@@ -14,6 +14,7 @@ boundaries. Sequential analysis, 16(4), 345-352.
 """
 
 import jax.numpy as jnp
+
 from .utils import get_jax_dtype, positive_log
 
 
@@ -346,9 +347,7 @@ def q_single(x, mu, sigma, a1, b1, a2, b2, T, x0, *, trunc_num=100):
 
 def log_fptd_basic(t, mu, a1, b1, a2, b2, bdy, *, trunc_num=100):
     """Safe log of :func:`fptd_basic`."""
-    return positive_log(
-        fptd_basic(t, mu, a1, b1, a2, b2, bdy, trunc_num=trunc_num)
-    )
+    return positive_log(fptd_basic(t, mu, a1, b1, a2, b2, bdy, trunc_num=trunc_num))
 
 
 def log_q_basic(x, mu, a1, b1, a2, b2, T, *, trunc_num=100):

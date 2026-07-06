@@ -9,16 +9,21 @@ Wraps shared Gauss-Legendre quadrature constants as JAX arrays.
 Provides a precision switch (float64 by default, configurable to float32).
 """
 
-import numpy as np
 import jax
 import jax.numpy as jnp
+import numpy as np
+
 from ._defaults import (
     DEFAULT_LAST_QUAD_ORDER,
     DEFAULT_MID_QUAD_ORDER,
 )
 from ._quadrature import (
-    GAUSS_LEGENDRE_30_X as _NP_GL30_X,
     GAUSS_LEGENDRE_30_W as _NP_GL30_W,
+)
+from ._quadrature import (
+    GAUSS_LEGENDRE_30_X as _NP_GL30_X,
+)
+from ._quadrature import (
     lgwt_lookup_table as _np_lgwt,
 )
 
@@ -50,10 +55,7 @@ def resolve_quadrature_orders(order_mid, order_last, order=None):
     - mixing ``order`` with non-default split orders: raise ``ValueError``
     """
     if order is not None:
-        if (
-            order_mid != DEFAULT_MID_QUAD_ORDER
-            or order_last != DEFAULT_LAST_QUAD_ORDER
-        ):
+        if order_mid != DEFAULT_MID_QUAD_ORDER or order_last != DEFAULT_LAST_QUAD_ORDER:
             raise ValueError(
                 "pass either legacy order or split order_mid/order_last, not both"
             )
@@ -69,9 +71,11 @@ def resolve_quadrature_orders(order_mid, order_last, order=None):
         )
     return order_mid, order_last
 
+
 # ---------------------------------------------------------------------------
 # Precision control
 # ---------------------------------------------------------------------------
+
 
 def _current_jax_dtype():
     """Return the active JAX floating-point dtype without mutating config."""
@@ -110,7 +114,7 @@ def set_jax_precision(use_x64: bool = True):
     compiling or benchmarking JAX workloads when a specific precision mode is
     required.
     """
-    global _dtype, _QUAD_CACHE
+    global _dtype
     jax.config.update("jax_enable_x64", use_x64)
     _dtype = _current_jax_dtype()
     _QUAD_CACHE.clear()

@@ -31,7 +31,10 @@ def test_addm_log_likelihood_enables_waic_loo():
     model = hssm.aDDM(data=df)
 
     idata = model.sample(
-        draws=12, tune=12, chains=2, cores=1,
+        draws=12,
+        tune=12,
+        chains=2,
+        cores=1,
         idata_kwargs={"log_likelihood": True},
     )
 

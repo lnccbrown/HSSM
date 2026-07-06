@@ -48,21 +48,24 @@ import numpy as np
 from jax import jit, lax, remat, vmap
 from jax.scipy.special import logsumexp
 
-from .addm_helpers import _build_addm_mu_array_data
-from .multi_stage import (
-    compute_addm_logfptd,
-    _reduce_final_stage_fptds,
-    _symmetric_stage_grid,
-)
-from .single_stage import fptd_single, q_single, log_fptd_single
-from .utils import get_gauss_legendre_ref, _DUMMY_STAGE_DURATION, positive_log
 from ._defaults import (
     DEFAULT_LAST_QUAD_ORDER,
     DEFAULT_MID_QUAD_ORDER,
     DEFAULT_TRUNC_NUM,
 )
-from .utils import resolve_quadrature_orders
-
+from .addm_helpers import _build_addm_mu_array_data
+from .multi_stage import (
+    _reduce_final_stage_fptds,
+    _symmetric_stage_grid,
+    compute_addm_logfptd,
+)
+from .single_stage import fptd_single, log_fptd_single, q_single
+from .utils import (
+    _DUMMY_STAGE_DURATION,
+    get_gauss_legendre_ref,
+    positive_log,
+    resolve_quadrature_orders,
+)
 
 # ---------------------------------------------------------------------------
 # Warning and NLL reduction helpers
@@ -367,7 +370,6 @@ def compute_addm_loglikelihoods_batchvmap(
     If ``use_remat=True``, rematerialize the vmapped single-trial production
     kernel to trade extra compute for lower reverse-mode memory use.
     """
-
     order_mid, order_last = resolve_quadrature_orders(
         order_mid=order_mid,
         order_last=order_last,
@@ -519,9 +521,7 @@ def _compute_addm_loglikelihoods_batchscan_core(
     def first_stage_batch():
         a_1 = a_starts_data[:, 1]
         xs_init_mid, ws_init_mid = _symmetric_stage_grid(x_ref_mid, w_ref_mid, a_1)
-        xs_init_last, ws_init_last = _symmetric_stage_grid(
-            x_ref_last, w_ref_last, a_1
-        )
+        xs_init_last, ws_init_last = _symmetric_stage_grid(x_ref_last, w_ref_last, a_1)
         ws_pv_init_mid = _batch_addm_first_stage_to_grid(
             xs_init_mid,
             ws_init_mid,
@@ -561,17 +561,19 @@ def _compute_addm_loglikelihoods_batchscan_core(
                 ws = w_ref_mid[None, :] * a_curr[:, None]
 
                 P = vmap(
-                    lambda xs_row, mu, a_prev_val, upper_slope, lower_slope, dt, xs_prev_row: q_single(
-                        xs_row[:, None],
-                        mu,
-                        sigma,
-                        a_prev_val,
-                        upper_slope,
-                        -a_prev_val,
-                        lower_slope,
-                        dt,
-                        xs_prev_row[None, :],
-                        trunc_num=trunc_num,
+                    lambda xs_row, mu, a_prev_val, upper_slope, lower_slope, dt, xs_prev_row: (  # noqa: E501
+                        q_single(
+                            xs_row[:, None],
+                            mu,
+                            sigma,
+                            a_prev_val,
+                            upper_slope,
+                            -a_prev_val,
+                            lower_slope,
+                            dt,
+                            xs_prev_row[None, :],
+                            trunc_num=trunc_num,
+                        )
                     )
                 )(
                     xs,
@@ -604,17 +606,19 @@ def _compute_addm_loglikelihoods_batchscan_core(
                 ws = w_ref_mid[None, :] * a_curr[:, None]
 
                 P = vmap(
-                    lambda xs_row, mu, a_prev_val, upper_slope, lower_slope, dt, xs_prev_row: q_single(
-                        xs_row[:, None],
-                        mu,
-                        sigma,
-                        a_prev_val,
-                        upper_slope,
-                        -a_prev_val,
-                        lower_slope,
-                        dt,
-                        xs_prev_row[None, :],
-                        trunc_num=trunc_num,
+                    lambda xs_row, mu, a_prev_val, upper_slope, lower_slope, dt, xs_prev_row: (  # noqa: E501
+                        q_single(
+                            xs_row[:, None],
+                            mu,
+                            sigma,
+                            a_prev_val,
+                            upper_slope,
+                            -a_prev_val,
+                            lower_slope,
+                            dt,
+                            xs_prev_row[None, :],
+                            trunc_num=trunc_num,
+                        )
                     )
                 )(
                     xs,
@@ -672,17 +676,19 @@ def _compute_addm_loglikelihoods_batchscan_core(
         ).squeeze(axis=1)
 
         P_last = vmap(
-            lambda xs_last_row, mu, a_prev_val, upper_slope, lower_slope, dt, xs_prev_row: q_single(
-                xs_last_row[:, None],
-                mu,
-                sigma,
-                a_prev_val,
-                upper_slope,
-                -a_prev_val,
-                lower_slope,
-                dt,
-                xs_prev_row[None, :],
-                trunc_num=trunc_num,
+            lambda xs_last_row, mu, a_prev_val, upper_slope, lower_slope, dt, xs_prev_row: (  # noqa: E501
+                q_single(
+                    xs_last_row[:, None],
+                    mu,
+                    sigma,
+                    a_prev_val,
+                    upper_slope,
+                    -a_prev_val,
+                    lower_slope,
+                    dt,
+                    xs_prev_row[None, :],
+                    trunc_num=trunc_num,
+                )
             )
         )(
             xs_final,
@@ -730,9 +736,7 @@ def _compute_addm_loglikelihoods_batchscan_core(
             trunc_num=trunc_num,
         )
         fptds = jnp.where(choice_data[:, None] == 1, upper, lower)
-        return _reduce_final_stage_fptds(
-            fptds, ws_pv_final, log_space, axis=1
-        )
+        return _reduce_final_stage_fptds(fptds, ws_pv_final, log_space, axis=1)
 
     xs_init_mid, ws_pv_init_mid, ws_pv_init_last = first_stage_batch()
     xs_mid_final, ws_pv_mid_final = middle_stages_batch((xs_init_mid, ws_pv_init_mid))
@@ -1126,6 +1130,7 @@ def make_addm_nll_function_batchscan(
         use_remat=use_remat,
         invalid_policy=invalid_policy,
     )
+
 
 # ---------------------------------------------------------------------------
 # Public aliases and JIT wrappers

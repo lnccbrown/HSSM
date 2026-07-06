@@ -23,6 +23,7 @@ def _scalar_or_array(out):
     out = np.asarray(out, dtype=np.float64)
     return float(out) if out.ndim == 0 else out
 
+
 def fptd_basic(
     t,
     mu,

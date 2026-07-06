@@ -38,6 +38,7 @@ def _logsumexp(a, axis=None):
     out = np.where(np.isneginf(max_val), -np.inf, out)
     return np.squeeze(out, axis=axis)
 
+
 def compute_homog_multistage_logfptds_and_lognpd(
     t_grid,
     T,

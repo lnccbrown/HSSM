@@ -74,7 +74,9 @@ def _(mo):
 
 @app.cell
 def _(Simulator, np):
-    sim = Simulator("addm")  # configure the aDDM simulator once (params [eta,kappa,a,b,x0,t])
+    sim = Simulator(
+        "addm"
+    )  # configure the aDDM simulator once (params [eta,kappa,a,b,x0,t])
 
     def make_fixations(n, max_d=8, seed=0):
         """A batch of observed fixation sequences (the aDDM covariates)."""
@@ -92,8 +94,12 @@ def _(Simulator, np):
         """Pack fixations into the extra_fields dict the simulator conditions on."""
         n = fixations["n"]
         return {
-            "r1": fixations["r1"], "r2": fixations["r2"], "flag": fixations["flag"],
-            "sacc_array": fixations["sacc"], "d": fixations["d"], "sigma": np.ones(n),
+            "r1": fixations["r1"],
+            "r2": fixations["r2"],
+            "flag": fixations["flag"],
+            "sacc_array": fixations["sacc"],
+            "d": fixations["d"],
+            "sigma": np.ones(n),
         }
 
     fix = make_fixations(3000, seed=0)
@@ -131,7 +137,10 @@ def _(a_s, b_s, eta_s, extra_fields, fix, kappa_s, np, plt, sim):
         n = fixations["n"]
         theta = np.tile([eta, kappa, a, b, 0.0, 0.0], (n, 1))
         out = sim.simulate(
-            theta=theta, n_samples=1, random_state=seed, max_t=10.0,
+            theta=theta,
+            n_samples=1,
+            random_state=seed,
+            max_t=10.0,
             extra_fields=extra_fields(fixations),  # Mode 2: condition on fixations
         )
         rt = np.asarray(out["rts"]).reshape(-1)
@@ -176,7 +185,10 @@ def _(extra_fields, fix, np, plt, sim):
 
     # Mode 2: pass the observed fixations via extra_fields.
     _cond = sim.simulate(
-        theta=_theta, n_samples=1, random_state=7, max_t=10.0,
+        theta=_theta,
+        n_samples=1,
+        random_state=7,
+        max_t=10.0,
         extra_fields=extra_fields(fix),
     )
     # Mode 1: same params + seed, but no extra_fields -> self-sampled fixations.
@@ -187,8 +199,16 @@ def _(extra_fields, fix, np, plt, sim):
         return rt[rt != -999.0]
 
     _fig, _ax = plt.subplots(figsize=(7, 3.2))
-    _ax.hist(_valid(_cond), bins=40, alpha=0.6, density=True, label="Mode 2 (observed fixations)")
-    _ax.hist(_valid(_self), bins=40, alpha=0.6, density=True, label="Mode 1 (self-sampled)")
+    _ax.hist(
+        _valid(_cond),
+        bins=40,
+        alpha=0.6,
+        density=True,
+        label="Mode 2 (observed fixations)",
+    )
+    _ax.hist(
+        _valid(_self), bins=40, alpha=0.6, density=True, label="Mode 1 (self-sampled)"
+    )
     _ax.set_xlabel("reaction time (s)")
     _ax.set_ylabel("density")
     _ax.set_title("Conditioning on the observed fixations changes the prediction")
@@ -242,12 +262,22 @@ def _(extra_fields, make_fixations, np, pd, sim):
     _eta_true = 0.2 + 0.3 * x
 
     # theta with a per-trial eta column; the rest shared.
-    _theta = np.column_stack([
-        _eta_true, np.full(_n, 1.0), np.full(_n, 1.5),
-        np.full(_n, 0.2), np.zeros(_n), np.zeros(_n),
-    ])
+    _theta = np.column_stack(
+        [
+            _eta_true,
+            np.full(_n, 1.0),
+            np.full(_n, 1.5),
+            np.full(_n, 0.2),
+            np.zeros(_n),
+            np.zeros(_n),
+        ]
+    )
     _out = sim.simulate(
-        theta=_theta, n_samples=1, random_state=2, max_t=10.0, smooth_unif=False,
+        theta=_theta,
+        n_samples=1,
+        random_state=2,
+        max_t=10.0,
+        smooth_unif=False,
         extra_fields=extra_fields(_f),
     )
     _rt = np.asarray(_out["rts"]).reshape(-1)
@@ -257,11 +287,18 @@ def _(extra_fields, make_fixations, np, pd, sim):
 
     _sacc, _d = _f["sacc"], _f["d"]
     _d_obs = np.array([max(int((_sacc[i, : _d[i]] < _rt[i]).sum()), 1) for i in _rows])
-    data = pd.DataFrame({
-        "rt": _rt[_keep], "response": _ch[_keep], "x": x[_keep],
-        "r1": _f["r1"][_keep], "r2": _f["r2"][_keep], "flag": _f["flag"][_keep].astype(int),
-        "d": _d_obs, "sigma": np.full(_rows.size, 1.0),
-    })
+    data = pd.DataFrame(
+        {
+            "rt": _rt[_keep],
+            "response": _ch[_keep],
+            "x": x[_keep],
+            "r1": _f["r1"][_keep],
+            "r2": _f["r2"][_keep],
+            "flag": _f["flag"][_keep].astype(int),
+            "d": _d_obs,
+            "sigma": np.full(_rows.size, 1.0),
+        }
+    )
     data["sacc_array"] = pd.Series([_sacc[i].copy() for i in _rows], index=data.index)
     data.head()
     return (data,)
@@ -298,7 +335,9 @@ def _(mo, model, np):
         f"    {k:<11} shape {tuple(np.asarray(v).shape)}  dtype {np.asarray(v).dtype}"
         for k, v in _ef.items()
     )
-    mo.md(f"**`rv_op._extra_fields`** (observed fixations wired into PPC):\n\n```\n{_rows}\n```")
+    mo.md(
+        f"**`rv_op._extra_fields`** (observed fixations wired into PPC):\n\n```\n{_rows}\n```"
+    )
     return
 
 
@@ -323,7 +362,10 @@ def _(mo, model, run_inference):
     # (cores>1) deadlocks. Genuinely parallel chains want a GPU (numpyro
     # chain_method="vectorized" vmaps both chains onto the one device).
     idata = model.sample(
-        draws=300, tune=300, chains=2, cores=1,
+        draws=300,
+        tune=300,
+        chains=2,
+        cores=1,
         idata_kwargs={"log_likelihood": False},
     )
     return (idata,)
@@ -358,8 +400,13 @@ def _(mo):
 def _(az, idata, plt):
     # Recovery: posteriors vs the ground-truth values used to simulate the data.
     _truth = {
-        "eta_Intercept": 0.2, "eta_x": 0.3, "kappa": 1.0,
-        "a": 1.5, "b": 0.2, "x0": 0.0, "t": 0.0,
+        "eta_Intercept": 0.2,
+        "eta_x": 0.3,
+        "kappa": 1.0,
+        "a": 1.5,
+        "b": 0.2,
+        "x0": 0.0,
+        "t": 0.0,
     }
     az.plot_posterior(idata, var_names=list(_truth), ref_val=list(_truth.values()))
     plt.gcf()
