@@ -783,6 +783,48 @@ class TestRldmLikelihoodBuilder:
         expected = np.asarray([-5.9, 5.2, -3.7], dtype=np.float32)
         np.testing.assert_allclose(result, expected, rtol=1e-6)
 
+    def test_make_rl_logp_func_accepts_1d_response_only_data(self):
+        """Response-only observed data may arrive as a scalar 1D vector."""
+
+        @annotate_function(
+            inputs=["rl_alpha", "response", "feedback"],
+            outputs=["q0", "q1"],
+        )
+        def compute_qs(subject_trials):
+            rl_alpha = subject_trials[:, 0]
+            feedback = subject_trials[:, 2]
+            return {
+                "q0": rl_alpha + feedback,
+                "q1": rl_alpha - feedback,
+            }
+
+        @annotate_function(
+            inputs=["beta", "q0", "q1", "response"],
+            outputs=["logp"],
+            computed={"q0": compute_qs, "q1": compute_qs},
+        )
+        def ssm_logp_func(lan_matrix):
+            beta, q0, q1, response = lan_matrix.T
+            return beta + q0 + 10.0 * q1 + response
+
+        logp_fn = make_rl_logp_func(
+            ssm_logp_func,
+            n_participants=1,
+            n_trials=3,
+            data_cols=["response"],
+            list_params=["beta", "rl_alpha"],
+            extra_fields=["feedback"],
+        )
+        data = np.asarray([0.0, 1.0, 0.0], dtype=np.float32)
+        beta = np.asarray([2.0, 2.0, 2.0], dtype=np.float32)
+        rl_alpha = np.asarray([0.1, 0.2, 0.3], dtype=np.float32)
+        feedback = np.asarray([1.0, 0.0, 1.0], dtype=np.float32)
+
+        result = logp_fn(data, beta, rl_alpha, feedback)
+
+        expected = np.asarray([-5.9, 5.2, -3.7], dtype=np.float32)
+        np.testing.assert_allclose(result, expected, rtol=1e-6)
+
     def test_make_rl_logp_func(self, rldm_setup):
         result = rldm_setup.logp_fn(rldm_setup.values, *rldm_setup.args)
         assert result.shape[0] == rldm_setup.total_trials

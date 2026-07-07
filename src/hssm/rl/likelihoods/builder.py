@@ -674,6 +674,9 @@ def make_rl_logp_func(
         np.ndarray
             The computed log-likelihoods for each trial, reshaped as a 2D array.
         """
+        if data_cols == ["response"] and data.ndim == 1:
+            data = data.reshape((-1, 1))
+
         # Validate inputs
         _validate_inputs(
             data, args, n_participants, n_trials, data_cols, list_params, extra_fields

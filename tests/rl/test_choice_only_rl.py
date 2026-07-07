@@ -149,29 +149,43 @@ class TestChoiceOnlyRealSSMSSmoke:
     """Smoke tests against a real ssms install when the new presets are present."""
 
     @staticmethod
-    def _require_choice_only_ssms_model():
+    def _require_choice_only_ssms_model(model_name):
         ssms_rl = pytest.importorskip(
             "ssms.rl", reason="installed ssm-simulators has no ssms.rl module"
         )
         if not hasattr(ssms_rl, "resolve_model"):
             pytest.skip("ssms.rl does not expose resolve_model")
         try:
-            ssms_rl.resolve_model("2AB_RW_InvTempSoftmax")
+            ssms_rl.resolve_model(model_name)
         except Exception:
-            pytest.skip("installed ssms.rl does not expose 2AB_RW_InvTempSoftmax")
+            pytest.skip(f"installed ssms.rl does not expose {model_name}")
 
+    @pytest.mark.parametrize(
+        ("model_name", "n_choices"),
+        [
+            ("2AB_RW_InvTempSoftmax", 2),
+            ("3AB_RW_InvTempSoftmax", 3),
+        ],
+    )
     @pytest.mark.slow
-    def test_real_ssms_choice_only_rlssm_compiles_finite_no_lapse_logp(self):
+    def test_real_ssms_choice_only_rlssm_compiles_finite_no_lapse_logp(
+        self, model_name, n_choices
+    ):
         """A real ssms choice-only preset can compile a finite no-lapse logp."""
-        self._require_choice_only_ssms_model()
+        self._require_choice_only_ssms_model(model_name)
         hssm.set_floatX("float32", update_jax=True)
 
-        config = RLSSMConfig.from_ssms_model("2AB_RW_InvTempSoftmax")
+        config = RLSSMConfig.from_ssms_model(model_name)
+        expected_qs = {f"q{i}" for i in range(n_choices)}
+        assert config.response == ["response"]
+        assert config.decision_process == f"inv_temp_softmax_{n_choices}"
+        assert config.list_params == ["rl_alpha", "beta"]
+        assert set(config.ssm_logp_func.computed) == expected_qs
         data = pd.DataFrame(
             {
-                "participant_id": [0, 0, 0, 1, 1, 1],
-                "response": [0, 1, 1, 1, 0, 1],
-                "feedback": [1, 0, 1, 0, 1, 1],
+                "participant_id": np.repeat([0, 1], n_choices * 2),
+                "response": np.tile(np.arange(n_choices), 4),
+                "feedback": np.tile([1, 0], n_choices * 2),
             }
         )
 
