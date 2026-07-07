@@ -341,14 +341,14 @@ def _make_ssms_computed_functions(assembled: Any) -> dict[str, Any]:
         param_name = computed_params[0]
 
         @annotate_function(inputs=input_fields, outputs=[param_name])
-        def compute(subject_trials):
+        def compute_single_param(subject_trials):
             return participant_fn(subject_trials)[param_name]
 
-        return {param_name: compute}
+        return {param_name: compute_single_param}
 
     @annotate_function(inputs=input_fields, outputs=computed_params)
-    def compute(subject_trials):
+    def compute_multi_param(subject_trials):
         values = participant_fn(subject_trials)
         return {param_name: values[param_name] for param_name in computed_params}
 
-    return {param_name: compute for param_name in computed_params}
+    return {param_name: compute_multi_param for param_name in computed_params}
