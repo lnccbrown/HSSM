@@ -2,15 +2,52 @@
 
 from __future__ import annotations
 
+import bambi as bmb
 import jax.numpy as jnp
 import numpy as np
 import pandas as pd
+import pymc as pm
 import pytest
 
 import hssm
 from hssm.rl import RLSSMConfig, registry
 from hssm.rl.rlssm import _RLSSM
 from hssm.utils import annotate_function
+
+
+@annotate_function(inputs=["beta", "response"], outputs=["logp"], computed={})
+def _fake_choice_only_logp(lan_matrix):
+    """Small response-only logp for constructor validation tests."""
+    return -jnp.zeros(lan_matrix.shape[0])
+
+
+def _fake_choice_only_config(choices=None):
+    """Build a minimal choice-only RLSSMConfig without depending on ssms."""
+    return RLSSMConfig(
+        model_name="ddm",
+        loglik_kind="approx_differentiable",
+        decision_process="inv_temp_softmax_2",
+        decision_process_loglik_kind="approx_differentiable",
+        learning_process_kind="approx_differentiable",
+        list_params=["beta"],
+        bounds={"beta": (0.0, 20.0)},
+        params_default=[2.0],
+        learning_process={},
+        response=["response"],
+        choices=[0, 1] if choices is None else choices,
+        extra_fields=[],
+        ssm_logp_func=_fake_choice_only_logp,
+    )
+
+
+def _fake_choice_only_data(responses):
+    """Return a balanced response-only panel for validation tests."""
+    return pd.DataFrame(
+        {
+            "participant_id": np.repeat([0, 1], len(responses) // 2),
+            "response": responses,
+        }
+    )
 
 
 @pytest.mark.parametrize(
@@ -103,8 +140,50 @@ def test_inv_temp_softmax_rejects_invalid_response_labels(decision_process, matr
     assert jnp.all(jnp.isneginf(result))
 
 
-def test_choice_only_rlssm_passes_choice_only_flag_to_distribution(monkeypatch):
-    """The RLSSM distribution builder receives the choice-only config flag."""
+@pytest.mark.parametrize(
+    ("responses", "match"),
+    [
+        ([0, 1.5, 0, 1], "integral"),
+        ([0, "left", 0, 1], "numeric"),
+        ([0, np.inf, 0, 1], "finite"),
+        ([0, 2, 0, 1], "Invalid responses"),
+    ],
+)
+def test_choice_only_rlssm_validates_response_labels(responses, match):
+    """Choice-only RLSSM response labels are checked before logp evaluation."""
+    with pytest.raises(ValueError, match=match):
+        hssm.RLSSM(
+            data=_fake_choice_only_data(responses),
+            model_config=_fake_choice_only_config(),
+            p_outlier=None,
+            prior_settings=None,
+        )
+
+
+def test_choice_only_rlssm_warns_for_missing_declared_choices():
+    """Declared choice labels may be absent, but users should be warned."""
+    with pytest.warns(UserWarning, match="missing from your dataset"):
+        hssm.RLSSM(
+            data=_fake_choice_only_data([0, 0, 0, 0]),
+            model_config=_fake_choice_only_config(),
+            p_outlier=None,
+            prior_settings=None,
+        )
+
+
+def _make_shell_rlssm(config, lapse):
+    """Build an _RLSSM shell for distribution-construction unit tests."""
+    model = _RLSSM.__new__(_RLSSM)
+    model.list_params = [*config.list_params, "p_outlier"]
+    model.model_config = config
+    model.bounds = dict(config.bounds)
+    model.lapse = lapse
+    model.data = pd.DataFrame({"response": [0, 1], "rt": [0.5, 0.6]})
+    return model
+
+
+def test_choice_only_rlssm_converts_scalar_lapse_for_distribution(monkeypatch):
+    """Choice-only RLSSM passes scalar lapse probabilities as log probabilities."""
 
     @annotate_function(inputs=["beta", "q0", "q1", "response"], outputs=["logp"])
     def _fake_base_logp(lan_matrix):
@@ -126,12 +205,7 @@ def test_choice_only_rlssm_passes_choice_only_flag_to_distribution(monkeypatch):
         ssm_logp_func=_fake_base_logp,
         loglik=lambda *args: jnp.zeros(1),
     )
-    model = _RLSSM.__new__(_RLSSM)
-    model.list_params = list(config.list_params)
-    model.model_config = config
-    model.bounds = dict(config.bounds)
-    model.lapse = None
-    model.data = pd.DataFrame({"response": [0, 1]})
+    model = _make_shell_rlssm(config, lapse=0.5)
     captured = {}
 
     def _capture_make_distribution(**kwargs):
@@ -143,6 +217,41 @@ def test_choice_only_rlssm_passes_choice_only_flag_to_distribution(monkeypatch):
     model._make_model_distribution()
 
     assert captured["is_choice_only"] is True
+    assert captured["lapse"] == pytest.approx(np.log(0.5))
+
+
+def test_rt_choice_rlssm_passes_lapse_prior_through(monkeypatch):
+    """RT+choice RLSSM does not convert Bambi lapse priors."""
+    config = RLSSMConfig(
+        model_name="rt_choice_test",
+        loglik_kind="approx_differentiable",
+        decision_process="angle",
+        decision_process_loglik_kind="approx_differentiable",
+        learning_process_kind="approx_differentiable",
+        list_params=["v", "a"],
+        bounds={"v": (-5.0, 5.0), "a": (0.0, 5.0)},
+        params_default=[0.0, 1.0],
+        learning_process={},
+        response=["rt", "response"],
+        choices=[0, 1],
+        extra_fields=[],
+        ssm_logp_func=lambda *args: jnp.zeros(1),
+        loglik=lambda *args: jnp.zeros(1),
+    )
+    lapse_prior = bmb.Prior("Uniform", lower=0.0, upper=20.0)
+    model = _make_shell_rlssm(config, lapse=lapse_prior)
+    captured = {}
+
+    def _capture_make_distribution(**kwargs):
+        captured.update(kwargs)
+        return object
+
+    monkeypatch.setattr("hssm.rl.rlssm.make_distribution", _capture_make_distribution)
+
+    model._make_model_distribution()
+
+    assert captured["is_choice_only"] is False
+    assert captured["lapse"] is lapse_prior
 
 
 class TestChoiceOnlyRealSSMSSmoke:
@@ -168,10 +277,10 @@ class TestChoiceOnlyRealSSMSSmoke:
         ],
     )
     @pytest.mark.slow
-    def test_real_ssms_choice_only_rlssm_compiles_finite_no_lapse_logp(
+    def test_real_ssms_choice_only_rlssm_compiles_finite_active_lapse_logp(
         self, model_name, n_choices
     ):
-        """A real ssms choice-only preset can compile a finite no-lapse logp."""
+        """A real ssms choice-only preset can compile a finite active-lapse logp."""
         self._require_choice_only_ssms_model(model_name)
         hssm.set_floatX("float32", update_jax=True)
 
@@ -192,10 +301,21 @@ class TestChoiceOnlyRealSSMSSmoke:
         model = hssm.RLSSM(
             data=data,
             model_config=config,
-            p_outlier=None,
             prior_settings=None,
         )
         logp_fn = model.compile_logp()
         logp = logp_fn(model.initial_point(transformed=False))
+        dist_logp = pm.logp(
+            model.model_distribution.dist(
+                rl_alpha=0.5,
+                beta=2.0,
+                p_outlier=0.05,
+            ),
+            data["response"].to_numpy(),
+        ).eval()
 
+        assert model.lapse == pytest.approx(1 / n_choices)
+        assert "p_outlier" in model.params
         assert np.isfinite(logp)
+        assert np.all(np.isfinite(dist_logp))
+        assert np.all(dist_logp <= 0.0)
