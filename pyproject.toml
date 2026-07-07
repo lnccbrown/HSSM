@@ -59,6 +59,7 @@ dev = [
     "psutil>=7.2.2",
     "prek>=0.4.8",
     "pyrefly>=1.1.1",
+    "onnxruntime>=1.27.0",
 ]
 
 notebook = [
