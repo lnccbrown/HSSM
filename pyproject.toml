@@ -56,9 +56,10 @@ dev = [
     "pytest-timeout>=2.3.1",
     "ruff>=0.15.0",
     "types-PyYAML",
-    "pre-commit>=4.1.0",
-    "onnxruntime>=1.17.1",
     "psutil>=7.2.2",
+    "prek>=0.4.8",
+    "pyrefly>=1.1.1",
+    "onnxruntime>=1.27.0",
 ]
 
 notebook = [
@@ -90,8 +91,14 @@ docs = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
-exclude = ["*.ipynb"]
+target-version = "py312"
+exclude = [
+    ".git",
+    "__pycache__",
+    "venv",
+    ".venv",
+    "notebooks",
+]
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -228,14 +235,6 @@ markers = [
 [build-system]
 requires = ["uv_build>=0.11.21,<0.12"]
 build-backend = "uv_build"
-
-[tool.hatch.build.targets.sdist]
-exclude = [
-    "docs/**", # remove all docs content from the source tarball
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/hssm"] # keep as-is so only package code goes into the wheel
 
 [[tool.uv.index]]
 name = "pypi"

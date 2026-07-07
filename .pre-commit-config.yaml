@@ -1,10 +1,12 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.13
+    rev: v0.15.20
     hooks:
-      - id: ruff
+      - id: ruff-check
+        types_or: [python, jupyter, pyproject]
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
+        types_or: [python, jupyter, pyproject]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -14,11 +16,11 @@ repos:
       - id: check-yaml
         exclude: ^mkdocs\.yml$
       - id: check-added-large-files
-        args: ['--maxkb=99900']
+        args: ["--maxkb=99900"]
       - id: check-merge-conflict
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+    rev: v2.1.0
     hooks:
       - id: mypy
         args: [--no-strict-optional, --ignore-missing-imports]
