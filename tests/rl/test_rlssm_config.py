@@ -633,8 +633,7 @@ class _FakeChoiceOnlySSMSAssembledModel:
             rl_alpha = subject_trials[:, 0]
             feedback = subject_trials[:, 2]
             return {
-                f"q{i}": rl_alpha + feedback + float(i)
-                for i in range(self.n_choices)
+                f"q{i}": rl_alpha + feedback + float(i) for i in range(self.n_choices)
             }
 
         return compute
