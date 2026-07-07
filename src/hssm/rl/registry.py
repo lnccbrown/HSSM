@@ -25,6 +25,9 @@ from dataclasses import dataclass, field
 from inspect import signature
 from typing import Any
 
+import jax.numpy as jnp
+from jax.scipy.special import logsumexp
+
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
@@ -167,6 +170,51 @@ _SSM_REGISTRY: dict[str, dict[str, Any]] = {}
 # _get_ssm_logp, or immediately by register_ssm when a pre-built func is
 # supplied by the caller).
 _SSM_LOGP_CACHE: dict[str, Any] = {}
+
+
+def _make_inv_temp_softmax_base_logp(n_choices: int) -> Any:
+    """Return a JAX base logp for ssms choice-only inverse-temperature softmax."""
+    inputs = ["beta", *(f"q{i}" for i in range(n_choices)), "response"]
+
+    @annotate_function(inputs=inputs, outputs=["logp"])
+    def _base_logp(lan_matrix):
+        lan_matrix = jnp.asarray(lan_matrix, dtype=jnp.float32)
+        beta = lan_matrix[:, 0]
+        q_values = lan_matrix[:, 1 : 1 + n_choices]
+        response = lan_matrix[:, -1]
+
+        response_is_finite = jnp.isfinite(response)
+        response_is_integral = response == jnp.floor(response)
+        response_int = jnp.where(response_is_finite, response, 0.0).astype(jnp.int32)
+        valid_response = (
+            response_is_finite
+            & response_is_integral
+            & (response_int >= 0)
+            & (response_int < n_choices)
+        )
+
+        logits = beta[:, None] * q_values
+        safe_response = jnp.clip(response_int, 0, n_choices - 1)
+        chosen_logits = jnp.take_along_axis(
+            logits, safe_response[:, None], axis=1
+        ).squeeze(axis=1)
+        logp = chosen_logits - logsumexp(logits, axis=1)
+        return jnp.where(valid_response, logp, -jnp.inf)
+
+    return _base_logp
+
+
+for _n_choices in (2, 3):
+    _SSM_REGISTRY[f"inv_temp_softmax_{_n_choices}"] = {
+        "ssm_base_logp_func": _make_inv_temp_softmax_base_logp(_n_choices),
+        "list_params_ssm": [
+            "beta",
+            *(f"q{i}" for i in range(_n_choices)),
+        ],
+        "bounds_ssm": {"beta": (0.0, jnp.inf)},
+        "params_default_ssm": [1.0, *([0.0] * _n_choices)],
+        "response": ["response"],
+    }
 
 
 def _make_ssm_base_logp_from_onnx(

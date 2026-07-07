@@ -289,6 +289,7 @@ class _RLSSM(HSSMBase):
             lapse=self.lapse,
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
+            is_choice_only=self.model_config.is_choice_only,
         )
 
 
