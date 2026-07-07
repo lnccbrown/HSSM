@@ -178,7 +178,7 @@ def _make_inv_temp_softmax_base_logp(n_choices: int) -> Any:
 
     @annotate_function(inputs=inputs, outputs=["logp"])
     def _base_logp(lan_matrix):
-        lan_matrix = jnp.asarray(lan_matrix, dtype=jnp.float32)
+        lan_matrix = jnp.asarray(lan_matrix)
         beta = lan_matrix[:, 0]
         q_values = lan_matrix[:, 1 : 1 + n_choices]
         response = lan_matrix[:, -1]

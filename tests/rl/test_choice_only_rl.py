@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import pymc as pm
+import pytensor
 import pytest
 
 import hssm
@@ -138,6 +139,27 @@ def test_inv_temp_softmax_rejects_invalid_response_labels(decision_process, matr
     result = base_logp(matrix)
 
     assert jnp.all(jnp.isneginf(result))
+
+
+def test_inv_temp_softmax_preserves_lan_matrix_float_dtype():
+    """Choice-only softmax logp should not downcast incoming floating values."""
+    prev_floatx = pytensor.config.floatX
+    hssm.set_floatX("float64", update_jax=True)
+    try:
+        matrix = jnp.asarray(
+            [
+                [1.0, 0.2, 1.2, 1.0],
+                [1.0, 0.2, 1.2, 0.0],
+            ],
+            dtype=jnp.float64,
+        )
+        base_logp = registry._get_ssm_logp("inv_temp_softmax_2")
+
+        result = base_logp(matrix)
+
+        assert result.dtype == matrix.dtype
+    finally:
+        hssm.set_floatX(prev_floatx, update_jax=True)
 
 
 @pytest.mark.parametrize(
@@ -282,40 +304,43 @@ class TestChoiceOnlyRealSSMSSmoke:
     ):
         """A real ssms choice-only preset can compile a finite active-lapse logp."""
         self._require_choice_only_ssms_model(model_name)
+        prev_floatx = pytensor.config.floatX
         hssm.set_floatX("float32", update_jax=True)
+        try:
+            config = RLSSMConfig.from_ssms_model(model_name)
+            expected_qs = {f"q{i}" for i in range(n_choices)}
+            assert config.response == ["response"]
+            assert config.decision_process == f"inv_temp_softmax_{n_choices}"
+            assert config.list_params == ["rl_alpha", "beta"]
+            assert set(config.ssm_logp_func.computed) == expected_qs
+            data = pd.DataFrame(
+                {
+                    "participant_id": np.repeat([0, 1], n_choices * 2),
+                    "response": np.tile(np.arange(n_choices), 4),
+                    "feedback": np.tile([1, 0], n_choices * 2),
+                }
+            )
 
-        config = RLSSMConfig.from_ssms_model(model_name)
-        expected_qs = {f"q{i}" for i in range(n_choices)}
-        assert config.response == ["response"]
-        assert config.decision_process == f"inv_temp_softmax_{n_choices}"
-        assert config.list_params == ["rl_alpha", "beta"]
-        assert set(config.ssm_logp_func.computed) == expected_qs
-        data = pd.DataFrame(
-            {
-                "participant_id": np.repeat([0, 1], n_choices * 2),
-                "response": np.tile(np.arange(n_choices), 4),
-                "feedback": np.tile([1, 0], n_choices * 2),
-            }
-        )
+            model = hssm.RLSSM(
+                data=data,
+                model_config=config,
+                prior_settings=None,
+            )
+            logp_fn = model.compile_logp()
+            logp = logp_fn(model.initial_point(transformed=False))
+            dist_logp = pm.logp(
+                model.model_distribution.dist(
+                    rl_alpha=0.5,
+                    beta=2.0,
+                    p_outlier=0.05,
+                ),
+                data["response"].to_numpy(),
+            ).eval()
 
-        model = hssm.RLSSM(
-            data=data,
-            model_config=config,
-            prior_settings=None,
-        )
-        logp_fn = model.compile_logp()
-        logp = logp_fn(model.initial_point(transformed=False))
-        dist_logp = pm.logp(
-            model.model_distribution.dist(
-                rl_alpha=0.5,
-                beta=2.0,
-                p_outlier=0.05,
-            ),
-            data["response"].to_numpy(),
-        ).eval()
-
-        assert model.lapse == pytest.approx(1 / n_choices)
-        assert "p_outlier" in model.params
-        assert np.isfinite(logp)
-        assert np.all(np.isfinite(dist_logp))
-        assert np.all(dist_logp <= 0.0)
+            assert model.lapse == pytest.approx(1 / n_choices)
+            assert "p_outlier" in model.params
+            assert np.isfinite(logp)
+            assert np.all(np.isfinite(dist_logp))
+            assert np.all(dist_logp <= 0.0)
+        finally:
+            hssm.set_floatX(prev_floatx, update_jax=True)
