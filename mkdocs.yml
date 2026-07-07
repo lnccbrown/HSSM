@@ -38,6 +38,7 @@ nav:
       - Main tutorial: tutorials/main_tutorial.ipynb
       - Hierarchical DDM: tutorials/ddm_hierarchical_tutorial.ipynb
       - Choice-only models: tutorials/choice_only_models.ipynb
+      - Choice-only RLSSM: tutorials/choice_only_rlssm.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
       - Plotting: tutorials/plotting.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
@@ -84,6 +85,7 @@ plugins:
         - tutorials/main_tutorial.ipynb
         - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
+        - tutorials/choice_only_rlssm.ipynb
         - tutorials/likelihoods.ipynb
         - tutorials/variational_inference.ipynb
         - tutorials/variational_inference_hierarchical.ipynb
