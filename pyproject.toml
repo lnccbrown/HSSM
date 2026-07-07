@@ -56,9 +56,9 @@ dev = [
     "pytest-timeout>=2.3.1",
     "ruff>=0.15.0",
     "types-PyYAML",
-    "onnxruntime>=1.17.1",
     "psutil>=7.2.2",
     "prek>=0.4.8",
+    "pyrefly>=1.1.1",
 ]
 
 notebook = [
@@ -234,14 +234,6 @@ markers = [
 [build-system]
 requires = ["uv_build>=0.11.21,<0.12"]
 build-backend = "uv_build"
-
-[tool.hatch.build.targets.sdist]
-exclude = [
-    "docs/**", # remove all docs content from the source tarball
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/hssm"] # keep as-is so only package code goes into the wheel
 
 [[tool.uv.index]]
 name = "pypi"
