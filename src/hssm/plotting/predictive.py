@@ -90,7 +90,9 @@ def _plot_predictive_1D(
         bin_edges[:-1],
         hists_mean,
         drawstyle="steps" if step else "default",
-        **styles,
+        color=styles["color"],
+        linestyle=styles["linestyle"],
+        linewidth=styles["linewidth"],
         **kwargs,
     )
 
@@ -116,12 +118,14 @@ def _plot_predictive_1D(
         )
 
         observed = data.loc[data["observed"] == "observed", "rt"]
-        data_hist = _histogram(observed.values, bins=bin_edges)
+        data_hist = _histogram(observed.to_numpy(), bins=bin_edges)
         ax.plot(
             bin_edges[:-1],
             data_hist,
             drawstyle="steps" if step else "default",
-            **styles,
+            color=styles["color"],
+            linestyle=styles["linestyle"],
+            linewidth=styles["linewidth"],
             **kwargs,
         )
 
@@ -250,13 +254,18 @@ def _process_lines(
         else:
             raise ValueError(f"Invalid type: {check_type}")
     elif isinstance(line_attrs, (list, tuple)):
-        line_attrs = list(line_attrs)
-        if not all(isinstance(la, check_type) for la in line_attrs):
+        line_attrs_list = list(line_attrs)
+        if not all(isinstance(la, check_type) for la in line_attrs_list):
             raise ValueError(
                 f"The `{mode}` argument must be a string or a list of strings.or 2."
             )
-        elif len(line_attrs) in {1, 2}:
-            return line_attrs * 2 if len(line_attrs) == 1 else line_attrs
+        elif len(line_attrs_list) in {1, 2}:
+            if check_type is str:
+                str_list = cast("list[str]", line_attrs_list)
+                return str_list * 2 if len(str_list) == 1 else str_list
+            else:
+                float_list = cast("list[float]", line_attrs_list)
+                return float_list * 2 if len(float_list) == 1 else float_list
         else:
             raise ValueError(
                 f"The `{mode}` argument must be a string or a list of strings."
@@ -269,26 +278,16 @@ def _process_lines(
             )
         else:
             if mode == "linestyles":
+                line_attrs_str = cast("dict[str, str]", line_attrs)
                 return [
-                    cast(
-                        "str",
-                        line_attrs.get("predicted", dict_defaults_ls["predicted"]),
-                    ),
-                    cast(
-                        "str",
-                        line_attrs.get("observed", dict_defaults_ls["observed"]),
-                    ),
+                    line_attrs_str.get("predicted", dict_defaults_ls["predicted"]),
+                    line_attrs_str.get("observed", dict_defaults_ls["observed"]),
                 ]
             elif mode == "linewidths":
+                line_attrs_float = cast("dict[str, float]", line_attrs)
                 return [
-                    cast(
-                        "float",
-                        line_attrs.get("predicted", dict_defaults_lw["predicted"]),
-                    ),
-                    cast(
-                        "float",
-                        line_attrs.get("observed", dict_defaults_lw["observed"]),
-                    ),
+                    line_attrs_float.get("predicted", dict_defaults_lw["predicted"]),
+                    line_attrs_float.get("observed", dict_defaults_lw["observed"]),
                 ]
     else:
         raise ValueError(
