@@ -1774,7 +1774,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 "no variational posterior attached."
             )
 
-        return cast("DataTree", self._inference_obj_vi)
+        if not isinstance(self._inference_obj_vi, DataTree):
+            raise ValueError(
+                "The attached variational inference object is an `Approximation`, "
+                "not sampled traces. Use `vi_approx` to access it, or run "
+                "variational inference with `return_idata=True` to obtain a `DataTree`."
+            )
+
+        return self._inference_obj_vi
 
     @property
     def vi_approx(self) -> Approximation:
