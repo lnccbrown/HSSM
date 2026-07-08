@@ -189,6 +189,7 @@ def _get_plotting_df(
     extra_dims = [] if extra_dims is None else extra_dims
 
     if dt is None:
+        assert data is not None, "Either dt or data must be provided."
         data = _process_data(data, extra_dims, quantile_by_dims)
 
         data.insert(0, "observed", "observed")
@@ -290,12 +291,15 @@ def _subset_df(
     pd.DataFrame
         A subset dataframe.
     """
-    row_mask = np.column_stack(
-        [
-            _row_mask_with_error(df, col, col_value)
-            for col, col_value in zip(cols, col_values)
-        ]
-    ).all(axis=1)
+    row_mask = cast(
+        "np.ndarray",
+        np.column_stack(
+            [
+                _row_mask_with_error(df, col, col_value)
+                for col, col_value in zip(cols, col_values)
+            ]
+        ).all(axis=1),
+    )
 
     return df.loc[row_mask, :]
 
@@ -365,7 +369,9 @@ def _process_df_for_qp_plot(
                 + " ideal for visualizing the data.",
                 q,
             )
-        q = np.linspace(0, 1, q)[1:-1]
+        q_arr = np.linspace(0, 1, q)[1:-1]
+    else:
+        q_arr = np.asarray(list(q), dtype=float)
 
     if not isinstance(cond, str):
         raise ValueError("`cond` must be a string.")
@@ -395,7 +401,7 @@ def _process_df_for_qp_plot(
 
         # Compute quantiles with the extra grouping variables
         quantiles = (
-            df.groupby(base_groups + quantile_by)["rt"].quantile(q=q).reset_index()
+            df.groupby(base_groups + quantile_by)["rt"].quantile(q=q_arr).reset_index()
         )
 
         # Find and rename the level_* column
@@ -417,7 +423,7 @@ def _process_df_for_qp_plot(
         # Original behavior: compute quantiles directly
         quantiles = (
             df.groupby(["observed", "chain", "draw", cond, "is_correct"])["rt"]
-            .quantile(q=q)
+            .quantile(q=q_arr)
             .reset_index()
         )
 
