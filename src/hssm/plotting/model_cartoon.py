@@ -30,7 +30,7 @@ from .utils import (
 
 _logger = logging.getLogger("hssm")
 
-TRAJ_COLOR_DEFAULT_DICT = {
+TRAJ_COLOR_DEFAULT_DICT: dict[float, str] = {
     -1: "black",
     0: "black",
     1: "green",
@@ -629,6 +629,12 @@ def plot_model_cartoon(
     elif plotting_df_mean is not None:
         plotting_df = plotting_df_mean
 
+    if plotting_df is None:
+        raise ValueError(
+            "No data available to plot. Please check `plot_data`, "
+            "`plot_predictive_mean`, and `plot_predictive_samples` settings."
+        )
+
     # return plotting_df
 
     # Then, plot the posterior predictive distribution against the observed data
@@ -931,8 +937,8 @@ def plot_func_model(
     hist_histtype = kwargs.get("hist_histtype", "step")
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
-    axis_twin_up: Axes = cast("Axes", axis.twinx())
-    axis_twin_down: Axes = cast("Axes", axis.twinx())
+    axis_twin_up: Axes = axis.twinx()
+    axis_twin_down: Axes = axis.twinx()
     axis_twin_up.set_ylim(ylim_low, ylim_high)
     axis_twin_up.set_yticks([])
     axis_twin_down.set_ylim(ylim_high, ylim_low)
@@ -1005,8 +1011,8 @@ def plot_func_model(
 
     # Add histograms for real data
     if data is not None:
-        data_up = data.query(f"rt != {-999} and response == {1}")["rt"].values
-        data_down = data.query(f"rt != {-999} and response != {1}")["rt"].values
+        data_up = data.query(f"rt != {-999} and response == {1}")["rt"].to_numpy()
+        data_down = data.query(f"rt != {-999} and response != {1}")["rt"].to_numpy()
         add_histograms_to_twin_axes(
             data_up=data_up,
             data_down=data_down,
@@ -1170,10 +1176,10 @@ def _add_trajectories(
     highlight_rt_choice: bool = True,
     markersize_rt_choice: float | int = 50,
     markertype_rt_choice: str = "*",
-    markercolor_rt_choice: str | list[str] | dict[str, str] = "red",
+    markercolor_rt_choice: str | list[str] | dict[float, str] = "red",
     linewidth: float | int = 1,
     alpha: float | int = 0.5,
-    colors: str | list[str] | dict[str, str] = "black",
+    colors: str | list[str] | dict[float, str] = "black",
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1211,6 +1217,7 @@ def _add_trajectories(
         Additional keyword arguments passed to plotting functions.
     """
     # Check markercolor type
+    markercolor_rt_choice_dict: dict[float, str]
     if isinstance(markercolor_rt_choice, str):
         markercolor_rt_choice_dict = {
             value_: markercolor_rt_choice
@@ -1230,8 +1237,8 @@ def _add_trajectories(
         )
 
     # Check trajectory color type
+    colors_dict: dict[float, str] = {}
     if isinstance(colors, str):
-        colors_dict = {}
         for value_ in sample[0]["metadata"]["possible_choices"]:
             colors_dict[value_] = colors
     elif isinstance(colors, list):
@@ -1883,7 +1890,7 @@ def plot_func_model_n(
             custom_titles,
             fontsize=legend_fontsize,
             shadow=legend_shadow,
-            loc=legend_location,
+            loc=cast("Any", legend_location),
         )  # type: ignore
 
     # FRAME
@@ -1904,7 +1911,7 @@ def _add_trajectories_n(
     marker_type_rt_choice: str = "*",
     linewidth: float = 1,
     alpha: float = 0.5,
-    colors: str | list[str] | dict[str, str] | dict[int, str] = TRAJ_COLOR_DEFAULT_DICT,
+    colors: str | list[str] | dict[float, str] = TRAJ_COLOR_DEFAULT_DICT,
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1946,6 +1953,7 @@ def _add_trajectories_n(
     process leading to a decision.
     """
     # Check trajectory color type
+    colors_dict: dict[float, str]
     if isinstance(colors, str):
         colors_dict = {
             value_: colors for value_ in sample[0]["metadata"]["possible_choices"]
