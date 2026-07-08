@@ -413,7 +413,7 @@ class HSSM(HSSMBase):
                 is_choice_only=True,
             )
 
-        self.data = _rearrange_data(self.data)
+        self.data = typing_cast("pd.DataFrame", _rearrange_data(self.data))
 
         # Collect fixed-vector params to substitute in the distribution logp
         fixed_vector_params = {
@@ -436,7 +436,10 @@ class HSSM(HSSMBase):
             extra_fields=(
                 None
                 if not self.extra_fields
-                else [deepcopy(self.data[field].values) for field in self.extra_fields]
+                else [
+                    deepcopy(np.asarray(self.data[field].values))
+                    for field in self.extra_fields
+                ]
             ),
             fixed_vector_params=fixed_vector_params if fixed_vector_params else None,
             params_is_trialwise=params_is_trialwise_base,
