@@ -295,8 +295,9 @@ class RLSSMConfig(BaseModelConfig):
                 f"Missing attribute(s): {missing_attrs}. "
             )
 
-        if not isinstance(logpfunc.computed, dict) or not all(
-            callable(v) for v in logpfunc.computed.values()
+        computed = getattr(logpfunc, "computed")  # noqa: B009
+        if not isinstance(computed, dict) or not all(
+            callable(v) for v in computed.values()
         ):
             raise ValueError(
                 "`ssm_logp_func.computed` must be a dictionary with callable values."
