@@ -8,7 +8,7 @@ from ..likelihoods.analytical import (
 
 def get_lba4_config() -> DefaultConfig:
     """
-    Get the default configuration for the Levy-Beard Model 4 (LBA4).
+    Get the default configuration for the Linear Ballistic Accumulator 4 (LBA4).
 
     Returns
     -------
