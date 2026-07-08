@@ -50,6 +50,7 @@ def make_jax_logp_ops(
             """Keep PyTensor from trying to precompute opaque JAX-backed outputs."""
             return False
 
+        # pyrefly: ignore[bad-override]
         def make_node(self, data, *dist_params):
             """Take the inputs to the Op and puts them in a list.
 
@@ -144,6 +145,7 @@ def make_jax_logp_ops(
             """Keep PyTensor from trying to precompute opaque JAX-backed outputs."""
             return False
 
+        # pyrefly: ignore[bad-override]
         def make_node(self, data, *dist_params, gz):
             """Take the inputs to the Op and puts them in a list.
 
