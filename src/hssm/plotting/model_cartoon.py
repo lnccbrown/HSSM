@@ -412,6 +412,14 @@ def plot_model_cartoon(
 ) -> Axes | sns.FacetGrid | list[sns.FacetGrid]:
     """Plot the posterior predictive distribution against the observed data.
 
+    Note (aDDM / covariate models): this cartoon re-simulates at the posterior-mean
+    parameters with the simulator self-sampling its own fixation sequence (Mode 1)
+    and regenerates its predictive with the model's default continuation policy. It
+    does NOT condition on the observed fixations, and a ``continuation_mode`` passed
+    to ``sample_posterior_predictive`` does not reach it, so it is a schematic of the
+    fitted drift/boundary geometry, not the fixation-conditioned predictive check.
+    Tracked in lnccbrown/HSSM#1039.
+
     Parameters
     ----------
     model : hssm.HSSM

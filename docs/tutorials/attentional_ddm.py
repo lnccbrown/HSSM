@@ -512,6 +512,14 @@ def _(mo):
     stochastic sample trajectories, the non-decision time, and the choice-split RT histograms
     (observed vs predicted). It reads the geometry from *simulator* metadata, so it works for
     the aDDM exactly as it does for the built-in SSMs.
+
+    > **Caveat — this is not the §6 PPC.** For the aDDM the cartoon re-simulates at the
+    > posterior-mean parameters with the simulator *self-sampling* its own gaze sequence
+    > (Mode 1), and its predictive uses the **default** continuation policy — the
+    > `continuation_mode` you set above does **not** reach it. Read the cartoon as a schematic
+    > of the fitted drift/boundary geometry, not as the fixation-conditioned predictive check
+    > of §6. Conditioning the cartoon on the observed fixations is tracked in
+    > [issue #1039](https://github.com/lnccbrown/HSSM/issues/1039).
     """)
     return
 
