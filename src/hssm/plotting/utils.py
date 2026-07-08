@@ -365,13 +365,14 @@ def _process_df_for_qp_plot(
             raise ValueError("All elements in `q` must be between 0 and 1.")
 
     if isinstance(q, numbers.Integral):
-        if q >= 10:
+        q_int = int(q)
+        if q_int >= 10:
             _logger.warning(
                 "The number of quantiles (%d) is high. Generally 4-5 quantiles are"
                 + " ideal for visualizing the data.",
-                q,
+                q_int,
             )
-        q_arr = np.linspace(0, 1, q)[1:-1]
+        q_arr = np.linspace(0, 1, q_int)[1:-1]
     else:
         q_arr = np.asarray(list(cast("Iterable[float]", q)), dtype=float)
 
