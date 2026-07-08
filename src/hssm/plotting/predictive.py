@@ -257,7 +257,8 @@ def _process_lines(
         line_attrs_list = list(line_attrs)
         if not all(isinstance(la, check_type) for la in line_attrs_list):
             raise ValueError(
-                f"The `{mode}` argument must be a string or a list of strings.or 2."
+                f"The `{mode}` argument must be a {check_type.__name__} or a list "
+                f"of {check_type.__name__}s."
             )
         elif len(line_attrs_list) in {1, 2}:
             if check_type is str:
@@ -268,7 +269,8 @@ def _process_lines(
                 return float_list * 2 if len(float_list) == 1 else float_list
         else:
             raise ValueError(
-                f"The `{mode}` argument must be a string or a list of strings."
+                f"The `{mode}` argument must be a {check_type.__name__} or a list "
+                f"of 1 or 2 {check_type.__name__}s."
             )
     elif isinstance(line_attrs, dict):
         if not set(line_attrs.keys()).issubset({"predicted", "observed"}):
