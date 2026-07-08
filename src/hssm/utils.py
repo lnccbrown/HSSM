@@ -14,7 +14,7 @@ import functools
 import itertools
 import logging
 import os
-from typing import Any, Callable, Literal, cast
+from typing import Any, Callable, Literal
 
 import bambi as bmb
 import jax
@@ -91,7 +91,7 @@ def _get_alias_dict(
     dict[str, str | dict]
         A dict that indicates how Bambi should alias its parameters.
     """
-    parent_name = cast("str", parent.name)
+    parent_name = parent.name
     alias_dict: dict[str, Any] = {response_c: response_str}
 
     if len(model.distributional_components) == 1:
@@ -261,6 +261,7 @@ def log_likelihood(
     # are substituted with constants inside HSSMDistribution.logp(), making
     # the corresponding input variable unused in the compiled graph.
     if not response_term.is_constrained:
+        # pyrefly: ignore[no-matching-overload]
         rv_logp = pm.logp(response_dist.dist(**pt_dict), y_values)
         logp_compiled = pm.compile(
             [val for key_, val in pt_dict.items()],
@@ -305,7 +306,7 @@ def log_likelihood(
     return xr.DataArray(output_array, coords=coords)
 
 
-def get_response_dist(family: bmb.Family) -> pm.Distribution:
+def get_response_dist(family: bmb.Family) -> type[pm.Distribution]:
     """Get the PyMC distribution for the response.
 
     Parameters
@@ -315,8 +316,8 @@ def get_response_dist(family: bmb.Family) -> pm.Distribution:
 
     Returns
     -------
-    pm.Distribution
-        The response distribution
+    type[pm.Distribution]
+        The response distribution class
     """
     mapping = {"Cumulative": pm.Categorical, "StoppingRatio": pm.Categorical}
 
