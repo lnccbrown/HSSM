@@ -1,6 +1,7 @@
 """Plotting utilities for HSSM."""
 
 import logging
+import numbers
 from typing import Any, Iterable, Literal, cast
 
 import numpy as np
@@ -363,7 +364,7 @@ def _process_df_for_qp_plot(
         if any(q_elem < 0 or q_elem > 1 for q_elem in q):
             raise ValueError("All elements in `q` must be between 0 and 1.")
 
-    if isinstance(q, int):
+    if isinstance(q, numbers.Integral):
         if q >= 10:
             _logger.warning(
                 "The number of quantiles (%d) is high. Generally 4-5 quantiles are"
@@ -372,7 +373,7 @@ def _process_df_for_qp_plot(
             )
         q_arr = np.linspace(0, 1, q)[1:-1]
     else:
-        q_arr = np.asarray(list(q), dtype=float)
+        q_arr = np.asarray(list(cast("Iterable[float]", q)), dtype=float)
 
     if not isinstance(cond, str):
         raise ValueError("`cond` must be a string.")
