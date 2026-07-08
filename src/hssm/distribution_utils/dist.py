@@ -132,7 +132,7 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
 
 class _RandomVariable(Protocol):  # for mypy
     _list_params: list[str]
-    _lapse: bmb.Prior | None
+    _lapse: bmb.Prior | float | None
 
 
 def _extract_size(args, kwargs):
@@ -193,7 +193,7 @@ def _get_p_outlier(cls: type[_RandomVariable], arg_arrays):
 def make_hssm_rv(
     simulator_fun: Callable | str,
     list_params: list[str],
-    lapse: bmb.Prior | None = None,
+    lapse: bmb.Prior | float | None = None,
     is_choice_only: bool = False,
 ) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
@@ -315,7 +315,7 @@ def _apply_lapse_model(
     sims_out: np.ndarray,
     p_outlier: np.ndarray | float | None,
     rng: np.random.Generator,
-    lapse_dist: bmb.Prior | None,
+    lapse_dist: bmb.Prior | float | None,
     choices: list,
 ) -> np.ndarray:
     """Apply lapse model to the simulation output.
@@ -345,6 +345,16 @@ def _apply_lapse_model(
         raise ValueError(
             "You have specified `p_outlier`, the probability of the lapse "
             "distribution but did not specify the distribution."
+        )
+
+    if not isinstance(lapse_dist, bmb.Prior):
+        # A numeric `lapse` (e.g. `1 / n_choices` for choice-only models) has no
+        # reaction-time distribution to draw lapse RTs from, so it cannot drive
+        # simulation via this RT/response path.
+        raise TypeError(
+            "Lapse simulation is not supported for choice-only models with a "
+            f"numeric lapse ({lapse_dist!r}). Provide a `bmb.Prior` lapse "
+            "distribution to simulate lapses, or disable `p_outlier`."
         )
 
     out_shape = sims_out.shape[:-1]
@@ -468,14 +478,14 @@ def make_distribution(
         random_variable = make_hssm_rv(
             simulator_fun=cast("Callable[..., Any]", rv),
             list_params=list_params,
-            lapse=cast("bmb.Prior | None", lapse),
+            lapse=lapse,
         )
         rv_instance = random_variable()
     elif isinstance(rv, str):
         random_variable = make_hssm_rv(
             simulator_fun=rv,
             list_params=list_params,
-            lapse=cast("bmb.Prior | None", lapse),
+            lapse=lapse,
         )
         rv_instance = random_variable()
     else:
