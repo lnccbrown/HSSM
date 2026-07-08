@@ -247,3 +247,8 @@ publish-url = "https://test.pypi.org/legacy/"
 
 [tool.uv.sources]
 hssm = { workspace = true }
+
+[tool.pyrefly]
+preset = "legacy"
+project-includes = ["src/hssm"]
+ignore-missing-imports = ["*"]
