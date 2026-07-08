@@ -19,9 +19,10 @@ repos:
         args: ["--maxkb=99900"]
       - id: check-merge-conflict
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.1.0
+  - repo: https://github.com/facebook/pyrefly-pre-commit
+    rev: 1.1.1
     hooks:
-      - id: mypy
-        args: [--no-strict-optional, --ignore-missing-imports]
-        additional_dependencies: [types-PyYAML]
+      - id: pyrefly-check
+        name: Pyrefly (type checking)
+        pass_filenames: false
+        language: system
