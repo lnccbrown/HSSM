@@ -301,8 +301,11 @@ def logp_ddm(
         - 2.0 * pt.log(a),
     )
 
+    # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(logp, a >= 0, msg="a >= 0")
+    # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(checked_logp, z >= 0, msg="z >= 0")
+    # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(checked_logp, z <= 1, msg="z <= 1")
     return checked_logp
 
@@ -379,9 +382,13 @@ def logp_ddm_sdv(
         - 2 * pt.log(a),
     )
 
+    # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(logp, a >= 0, msg="a >= 0")
+    # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(checked_logp, z >= 0, msg="z >= 0")
+    # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(checked_logp, z <= 1, msg="z <= 1")
+    # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(checked_logp, sv > 0, msg="sv > 0")
     return checked_logp
 
@@ -648,6 +655,7 @@ def logp_lba2(
     response = data[:, 1]
     response_int = pt.cast(response, "int32")
     logp = _pt_lba2_ll(rt, response_int, A, b, v0, v1).squeeze()
+    # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(logp, b > A, msg="b > A")
     return checked_logp
 
@@ -666,6 +674,7 @@ def logp_lba3(
     response = data[:, 1]
     response_int = pt.cast(response, "int32")
     logp = _pt_lba3_ll(rt, response_int, A, b, v0, v1, v2).squeeze()
+    # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(logp, b > A, msg="b > A")
     return checked_logp
 
@@ -784,10 +793,15 @@ def logp_poisson_race(
     logp = log_pdf + log_survival
     logp = pt.switch(negative_rt, LOGP_LB, logp)
 
+    # pyrefly: ignore[bad-argument-type]
     checked = check_parameters(logp, r1 > 0, msg="r1 > 0")
+    # pyrefly: ignore[bad-argument-type]
     checked = check_parameters(checked, r2 > 0, msg="r2 > 0")
+    # pyrefly: ignore[bad-argument-type]
     checked = check_parameters(checked, k1 > 0, msg="k1 > 0")
+    # pyrefly: ignore[bad-argument-type]
     checked = check_parameters(checked, k2 > 0, msg="k2 > 0")
+    # pyrefly: ignore[bad-argument-type]
     checked = check_parameters(checked, t >= 0, msg="t >= 0")
     return checked
 
