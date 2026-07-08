@@ -22,6 +22,7 @@ nav:
           - hssm.ModelConfig: api/model_config.md
           - hssm.Prior: api/prior.md
           - hssm.Link: api/link.md
+          - hssm.rl: api/rl.md
       - Useful functions:
           - hssm.load_data: api/load_data.md
           - hssm.simulate_data: api/simulate_data.md
