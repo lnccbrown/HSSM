@@ -15,6 +15,8 @@ get_lba2_config() -> DefaultConfig
 
 get_lba3_config() -> DefaultConfig
 
+get_lba4_config() -> DefaultConfig
+
 get_angle_config() -> DefaultConfig
 
 get_levy_config() -> DefaultConfig
