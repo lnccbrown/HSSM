@@ -16,7 +16,10 @@ on:
       - .dockerignore
       - .github/workflows/docker-image.yml
       - pyproject.toml
+      - README.md
+      - LICENSE
       - src/**
+      - docs/tutorials/**
   release:
     types: [published]
 

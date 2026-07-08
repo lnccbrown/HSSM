@@ -17,8 +17,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends graphviz \
     && rm -rf /var/lib/apt/lists/*
 
-# uv for fast, reproducible installs (ecosystem standard).
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# uv for fast installs (ecosystem standard). Pinned for reproducible builds.
+COPY --from=ghcr.io/astral-sh/uv:0.11.28 /uv /usr/local/bin/uv
 
 # Non-root user.
 RUN useradd --create-home --uid 1000 hssm
@@ -26,6 +26,8 @@ WORKDIR /home/hssm/build
 
 # Install HSSM from this checkout (not PyPI): the image matches the built ref
 # exactly and there is no release-timing race. Dependencies still arrive as wheels.
+# Deliberately resolves latest-compatible deps (not uv.lock) — this is the runnable
+# demo image; the reproducible/locked path is the dev container (`uv sync`).
 # ponytail: core + a minimal notebook UI only. The heavy optional stacks
 # (bayesflow, sbi, lanfactory, keras) are NOT included — add them at run time
 # (`uv pip install ...`) or in a follow-up "full" image if a tutorial needs them.
@@ -41,6 +43,8 @@ USER hssm
 WORKDIR /home/hssm/tutorials
 EXPOSE 8888
 
-# ponytail: tokenless is convenient for a local demo container; the server only
-# listens inside the container's network. Set a token if you expose the port publicly.
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--IdentityProvider.token="]
+# Secure by default: Jupyter generates a token and prints the full URL (with token)
+# to the container logs — copy it from `docker run` output. For a frictionless
+# tokenless server on a trusted local network, override the command and append
+# `--IdentityProvider.token=`.
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser"]

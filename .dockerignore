@@ -11,3 +11,6 @@ tests
 .pytest_cache
 .ruff_cache
 .mypy_cache
+# Only docs/tutorials is copied into the image; drop the rest of docs/ from context.
+docs/*
+!docs/tutorials

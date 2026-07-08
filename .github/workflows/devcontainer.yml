@@ -12,6 +12,8 @@ on:
       - Dockerfile
       - pyproject.toml
       - uv.lock
+      - README.md
+      - LICENSE
       - src/**
       - .github/workflows/devcontainer.yml
 
@@ -20,6 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # devcontainers/ci mounts the workspace into the container; don't leave
+          # the GITHUB_TOKEN in .git/config where the container could read it.
+          persist-credentials: false
 
       - name: Build dev container and smoke-test the env
         uses: devcontainers/ci@v0.3
