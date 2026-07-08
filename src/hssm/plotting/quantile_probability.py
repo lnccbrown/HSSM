@@ -2,7 +2,7 @@
 
 import logging
 from itertools import product
-from typing import Any, Iterable, Literal
+from typing import TYPE_CHECKING, Any, Iterable, Literal, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,6 +13,9 @@ from matplotlib.axes import Axes
 from matplotlib.patches import Ellipse
 from scipy.stats import chi2
 from seaborn import FacetGrid
+
+if TYPE_CHECKING:
+    from matplotlib.lines import Line2D
 
 from .utils import (
     _check_groups_and_groups_order,
@@ -198,7 +201,7 @@ def _plot_quantile_probability_1D(
         y=y,
         hue=hue,
         ax=ax,
-        **data_kwargs,
+        **data_kwargs,  # pyrefly: ignore[bad-argument-type]
     )
 
     if plot_predictive:
@@ -227,7 +230,7 @@ def _plot_quantile_probability_1D(
                 y=y,
                 hue=hue,
                 ax=ax,
-                **predictive_samples_kwargs,
+                **predictive_samples_kwargs,  # pyrefly: ignore[bad-argument-type]
             )
 
         # Plot ellipses if requested
@@ -251,7 +254,8 @@ def _plot_quantile_probability_1D(
             # The line plot has already been created, so we can extract colors from it
             handles, labels = ax.get_legend_handles_labels()
             color_map = {
-                label: handle.get_color() for handle, label in zip(handles, labels)
+                label: cast("Line2D", handle).get_color()
+                for handle, label in zip(handles, labels)
             }
 
             # Group by quantile, condition, and x-value
