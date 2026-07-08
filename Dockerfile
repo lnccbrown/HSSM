@@ -2,11 +2,9 @@
 #   docker run --rm -p 8888:8888 ghcr.io/lnccbrown/hssm:latest
 # Built and published from .github/workflows/docker-image.yml.
 #
-# ponytail: amd64 only for now. ssm-simulators and hddm-wfpt ship no linux/arm64
-# wheels yet, so a native arm64 build would have to compile them from source
-# (GSL/OpenMP). Apple Silicon runs this image fine under emulation. Flip to
-# multi-arch by adding linux/arm64 to the workflow's `platforms` once both
-# packages publish aarch64 Linux wheels (tracked upstream).
+# Multi-arch (linux/amd64,linux/arm64) is driven by the workflow's `platforms`.
+# arm64 works because ssm-simulators (>=0.12.5) and hddm-wfpt (>=0.1.7) now ship
+# manylinux aarch64 wheels, so nothing compiles from source on either arch.
 
 FROM python:3.13-slim
 

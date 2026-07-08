@@ -1,0 +1,34 @@
+name: Dev container
+
+# Build the Codespaces/VS Code dev container exactly as Codespaces does (image
+# build + onCreateCommand `uv sync`) and smoke-test that the contributor env is
+# wired up. This covers what the image-only build check can't: the lifecycle,
+# the `hssm` remote user, and the uv-synced .venv.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .devcontainer/**
+      - Dockerfile
+      - pyproject.toml
+      - uv.lock
+      - src/**
+      - .github/workflows/devcontainer.yml
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build dev container and smoke-test the env
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          # Verify the env, not the repo's cleanliness: hssm is importable from the
+          # uv-synced venv, and the dev-group tools are present. Deliberately avoids
+          # `ruff check .` / `pytest` so unrelated lint/test debt can't fail this job.
+          runCmd: |
+            uv run python -c "import hssm; print('hssm', hssm.__version__)"
+            uv run ruff --version
+            uv run pytest --version
