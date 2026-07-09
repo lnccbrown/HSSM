@@ -44,7 +44,7 @@ from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase, classproperty
 from .config import RLSSMConfig
-from .registry import get_rlssm_model_config, list_models
+from .registry import DEFAULT_RLSSM_MODEL, get_rlssm_model_config, list_models
 
 _logger = logging.getLogger(__name__)
 
@@ -423,7 +423,8 @@ class RLSSM(_RLSSM):
     data : pd.DataFrame
         Trial-level data (balanced panel required).
     model : str | None, optional
-        Name of a registered RLSSM model. Defaults to ``"2AB_RescorlaWagner_DDM"``.
+        Name of an ``ssms.rl`` preset or custom registered RLSSM model. Defaults
+        to ``"2AB_RW_DDM"``.
     choices : list[int] | None, optional
         Override the choice values in the registry. ``None`` uses the registry
         default.
@@ -484,7 +485,7 @@ class RLSSM(_RLSSM):
     def __init__(
         self,
         data: pd.DataFrame,
-        model: str | None = "2AB_RescorlaWagner_DDM",
+        model: str | None = DEFAULT_RLSSM_MODEL,
         choices: list[int] | None = None,
         include: list[dict[str, Any] | Any] | None = None,
         model_config: RLSSMConfig | None = None,
@@ -506,7 +507,7 @@ class RLSSM(_RLSSM):
         _my_init_args = self._store_init_args(locals(), kwargs)
 
         ignored_overrides_provided = (
-            model != "2AB_RescorlaWagner_DDM"
+            model != DEFAULT_RLSSM_MODEL
             or learning_process is not None
             or decision_process is not None
             or choices is not None
@@ -518,7 +519,7 @@ class RLSSM(_RLSSM):
             )
 
         model_config = model_config or get_rlssm_model_config(
-            model=model or "2AB_RescorlaWagner_DDM",
+            model=model or DEFAULT_RLSSM_MODEL,
             choices=choices,
             learning_process=learning_process,
             decision_process=decision_process,
@@ -571,6 +572,6 @@ class RLSSM(_RLSSM):
         --------
         >>> from hssm.rl import RLSSM
         >>> RLSSM.list_models
-        {'2AB_RescorlaWagner_DDM': 'RLSSM model with ...', ...}
+        {'2AB_RW_DDM': 'Two-armed bandit with ...', ...}
         """
         return list_models()

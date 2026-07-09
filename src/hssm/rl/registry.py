@@ -8,9 +8,9 @@ This module provides:
     likelihood) are resolved automatically from
     `hssm.modelconfig.get_default_model_config` and do not need to be
     pre-registered here.
-- `_RLSSM_REGISTRY` — maps named RLSSM model strings (for example,
-    `"2AB_RescorlaWagner_DDM"`) to their default decision process,
-    learning process, and parameter info.
+- `_RLSSM_REGISTRY` — maps custom HSSM-side RLSSM model strings to their
+    default decision process, learning process, and parameter info. Built-in
+    public RLSSM presets are discovered dynamically from ``ssms.rl.preset``.
 - `get_rlssm_model_config` — builds an `RLSSMConfig` from a named model
     string with optional overrides.
 - `register_rlssm_model` — registers a custom named RLSSM model.
@@ -19,6 +19,7 @@ This module provides:
 
 from __future__ import annotations
 
+import importlib
 import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -36,6 +37,8 @@ from hssm.utils import annotate_function
 from .config import RLSSMConfig
 
 _logger = logging.getLogger(__name__)
+
+DEFAULT_RLSSM_MODEL = "2AB_RW_DDM"
 
 
 @dataclass
@@ -350,58 +353,14 @@ def _get_ssm_logp(name: str) -> Any:
 # ---------------------------------------------------------------------------
 # RLSSM named model registry
 # ---------------------------------------------------------------------------
-# Each entry provides:
+# Each custom entry provides:
 #   decision_process            - key into _SSM_REGISTRY
 #   learning_process_metadata   - LearningProcessMetadata for RL params and LP inputs
 #   choices                     - response choice values
 #   description                 - human-readable description
 #   decision_process_loglik_kind
 
-
-def _make_rescorla_wagner_learning_metadata() -> LearningProcessMetadata:
-    """Return the shared learning metadata for built-in Rescorla-Wagner RLSSMs."""
-    return LearningProcessMetadata(
-        learning_process={"v": _compute_v_annotated},
-        sampled_params=["rl_alpha", "scaler"],
-        bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
-        defaults=[0.1, 1.0],
-        extra_fields=["feedback"],
-        kind="blackbox",
-    )
-
-
-_RLSSM_REGISTRY: dict[str, RLSSMRegistryEntry] = {
-    "2AB_RescorlaWagner_DDM": RLSSMRegistryEntry(
-        decision_process="ddm",
-        learning_process_metadata=_make_rescorla_wagner_learning_metadata(),
-        choices=[0, 1],
-        description=(
-            "RLSSM model with Rescorla-Wagner Q-learning and the "
-            "standard DDM as decision process."
-        ),
-        decision_process_loglik_kind="approx_differentiable",
-    ),
-    "2AB_RescorlaWagner_Angle": RLSSMRegistryEntry(
-        decision_process="angle",
-        learning_process_metadata=_make_rescorla_wagner_learning_metadata(),
-        choices=[0, 1],
-        description=(
-            "RLSSM model with Rescorla-Wagner Q-learning and a "
-            "collapsing-bound DDM (angle model) as decision process."
-        ),
-        decision_process_loglik_kind="approx_differentiable",
-    ),
-    "2AB_RescorlaWagner_Weibull": RLSSMRegistryEntry(
-        decision_process="weibull",
-        learning_process_metadata=_make_rescorla_wagner_learning_metadata(),
-        choices=[0, 1],
-        description=(
-            "RLSSM model with Rescorla-Wagner Q-learning and a "
-            "Weibull-bound DDM as decision process."
-        ),
-        decision_process_loglik_kind="approx_differentiable",
-    ),
-}
+_RLSSM_REGISTRY: dict[str, RLSSMRegistryEntry] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -459,13 +418,79 @@ def _derive_lp_params(
     return learning_process_params
 
 
+def _get_ssms_rl_module() -> Any | None:
+    """Return the installed ``ssms.rl`` module when available."""
+    try:
+        return importlib.import_module("ssms.rl")
+    except ImportError:
+        return None
+
+
+def _list_ssms_presets() -> dict[str, str | None]:
+    """Return public ssms RL preset names and descriptions.
+
+    ssms owns the public preset library. HSSM treats this list as a dynamic
+    discovery surface while retaining `_RLSSM_REGISTRY` for custom HSSM-side
+    registrations.
+    """
+    ssms_rl = _get_ssms_rl_module()
+    if ssms_rl is None:
+        return {}
+
+    preset_module = getattr(ssms_rl, "preset", None)
+    list_func = getattr(preset_module, "list", None)
+    if not callable(list_func):
+        return {}
+
+    try:
+        names = list(list_func())
+    except Exception as exc:  # pragma: no cover - defensive against old ssms builds
+        _logger.debug("Could not list ssms RL presets: %s", exc)
+        return {}
+
+    info_func = getattr(preset_module, "info", None)
+    presets: dict[str, str | None] = {}
+    for name in names:
+        description = None
+        if callable(info_func):
+            try:
+                info = info_func(name)
+            except Exception as exc:  # pragma: no cover - defensive
+                _logger.debug(
+                    "Could not read ssms RL preset info for %s: %s", name, exc
+                )
+            else:
+                if isinstance(info, dict):
+                    raw_description = info.get("description")
+                    if raw_description is not None:
+                        description = str(raw_description)
+        presets[str(name)] = description
+    return presets
+
+
+def _resolve_ssms_model(model: str) -> Any | None:
+    """Resolve *model* through ssms without raising for unknown names."""
+    ssms_rl = _get_ssms_rl_module()
+    if ssms_rl is None:
+        return None
+
+    resolve_model = getattr(ssms_rl, "resolve_model", None)
+    if not callable(resolve_model):
+        return None
+
+    try:
+        return resolve_model(model)
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Public factory
 # ---------------------------------------------------------------------------
 
 
 def get_rlssm_model_config(
-    model: str = "2AB_RescorlaWagner_DDM",
+    model: str = DEFAULT_RLSSM_MODEL,
     choices: list[int] | None = None,
     learning_process: dict[str, Any] | None = None,
     decision_process: str | None = None,
@@ -475,7 +500,8 @@ def get_rlssm_model_config(
     Parameters
     ----------
     model:
-        Name of a registered RLSSM model (e.g. ``"2AB_RescorlaWagner_DDM"``).
+        Name of an ``ssms.rl`` preset (e.g. ``"2AB_RW_DDM"``) or a custom
+        HSSM-side model registered with `register_rlssm_model`.
     choices:
         Override the response choice values stored in the registry.
     learning_process:
@@ -494,9 +520,25 @@ def get_rlssm_model_config(
         If *model* or the resolved *decision_process* is not registered.
     """
     if model not in _RLSSM_REGISTRY:
-        available = list(_RLSSM_REGISTRY.keys())
+        ssms_model = _resolve_ssms_model(model)
+        if ssms_model is not None:
+            if (
+                choices is not None
+                or learning_process is not None
+                or decision_process is not None
+            ):
+                raise ValueError(
+                    "choices, learning_process, and decision_process overrides are "
+                    "only supported for HSSM-registered custom RLSSM models. "
+                    "For ssms presets, customize the ssms ModelConfig and pass it "
+                    "to RLSSMConfig.from_ssms_model(), or pass model_config= "
+                    "directly to RLSSM()."
+                )
+            return RLSSMConfig.from_ssms_model(ssms_model)
+
+        available = list(list_models().keys())
         raise ValueError(
-            f"Model '{model}' not found in the RLSSM registry. "
+            f"Model '{model}' not found in the RLSSM registry or ssms presets. "
             f"Available models: {available}. "
             "To add a custom model, use register_rlssm_model() "
             "(and register_ssm() for custom decision processes), "
@@ -578,10 +620,12 @@ def get_rlssm_model_config(
 
 
 def list_models() -> dict[str, str | None]:
-    """Return the names and descriptions of all registered RLSSM models.
+    """Return names and descriptions of available RLSSM models.
 
     This is the recommended starting point for new users who want to discover
-    which models are available out of the box.
+    which models are available. Built-in public presets are discovered from
+    ``ssms.rl.preset`` at call time; HSSM-side custom registrations are merged
+    in afterwards and take precedence on name conflicts.
 
     Returns
     -------
@@ -593,9 +637,11 @@ def list_models() -> dict[str, str | None]:
     --------
     >>> import hssm
     >>> hssm.rl.list_models()
-    {'2AB_RescorlaWagner_DDM': 'RLSSM model with Rescorla-Wagner ...', ...}
+    {'2AB_RW_DDM': 'Two-armed bandit with ...', ...}
     """
-    return {name: entry.description for name, entry in _RLSSM_REGISTRY.items()}
+    models = _list_ssms_presets()
+    models.update({name: entry.description for name, entry in _RLSSM_REGISTRY.items()})
+    return models
 
 
 # ---------------------------------------------------------------------------
@@ -648,6 +694,12 @@ def register_rlssm_model(
     if name in _RLSSM_REGISTRY:
         _logger.warning(
             "Model '%s' is already in the RLSSM registry and will be overwritten.",
+            name,
+        )
+    elif name in _list_ssms_presets():
+        _logger.warning(
+            "Model '%s' is an ssms RL preset and will be shadowed by this "
+            "HSSM-side custom registration.",
             name,
         )
     learning_process_metadata = LearningProcessMetadata(
