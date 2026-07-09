@@ -11,6 +11,7 @@ from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
 
+import bambi as bmb
 import cloudpickle
 import jax.numpy as jnp
 import numpy as np
@@ -19,9 +20,8 @@ import pytensor
 import pytest
 
 import hssm
-from hssm.rl import registry
 from hssm.distribution_utils import make_distribution as real_make_distribution
-from hssm.rl import RLSSM, RLSSMConfig, register_rlssm_model
+from hssm.rl import RLSSM, RLSSMConfig, register_rlssm_model, registry
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.rl.rlssm import _RLSSM
 from hssm.utils import annotate_function
@@ -57,7 +57,8 @@ def _set_floatx_float32() -> Generator[None, None, None]:
         hssm.set_floatX(prev_floatx, update_jax=True)
 
 
-# runs before every test function to isolate the RLSSM registry state, preventing test bleed-through
+# Runs before every test function to isolate the RLSSM registry state,
+# preventing test bleed-through.
 @pytest.fixture(autouse=True)
 def isolated_registries(monkeypatch: pytest.MonkeyPatch) -> None:
     """Isolate RL registries so simplified-interface tests do not leak state."""
@@ -103,7 +104,7 @@ def rlssm_config() -> RLSSMConfig:
 
 
 class TestRLSSMInit:
-    """Basic construction, attribute checks, and invalid-input guards at construction time."""
+    """Basic construction and invalid-input guards at construction time."""
 
     def test_rlssm_init(self, rldm_data, rlssm_config) -> None:
         """Basic RLSSM initialisation should succeed and return an RLSSM instance."""
@@ -134,7 +135,7 @@ class TestRLSSMInit:
             RLSSM(data=unbalanced, model_config=rlssm_config)
 
     def test_rlssm_nan_participant_id_raises(self, rldm_data, rlssm_config) -> None:
-        """NaN in participant_id column should raise ValueError before groupby silently drops rows."""
+        """NaN participant_id should raise before groupby silently drops rows."""
         nan_data = rldm_data.copy()
         nan_data.loc[nan_data.index[0], "participant_id"] = float("nan")
         with pytest.raises(ValueError, match="NaN"):
@@ -183,12 +184,12 @@ class TestRLSSMInit:
             RLSSM(data=rldm_data, model_config=bad_config)
 
     def test_rlssm_missing_data_raises(self, rldm_data, rlssm_config) -> None:
-        """Passing missing_data!=False should raise NotImplementedError with 'missing_data' in msg."""
+        """Passing missing_data!=False should raise NotImplementedError."""
         with pytest.raises(NotImplementedError, match="missing_data"):
             RLSSM(data=rldm_data, model_config=rlssm_config, missing_data=True)
 
     def test_rlssm_deadline_raises(self, rldm_data, rlssm_config) -> None:
-        """Passing deadline!=False should raise NotImplementedError with 'deadline' in msg."""
+        """Passing deadline!=False should raise NotImplementedError."""
         with pytest.raises(NotImplementedError, match="deadline"):
             RLSSM(data=rldm_data, model_config=rlssm_config, deadline=True)
 
@@ -209,10 +210,10 @@ class TestRLSSMInit:
 
 
 class TestRLSSMModelStructure:
-    """Internal model anatomy after construction: params, prefix, lapse, bambi/pymc, extra_fields."""
+    """Internal model anatomy after construction."""
 
     def test_rlssm_params_is_trialwise_aligned(self, rldm_data, rlssm_config) -> None:
-        """params_is_trialwise must align with list_params (same length, p_outlier=False)."""
+        """params_is_trialwise must align with list_params."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
         assert model.model_config.list_params is not None
         params_is_trialwise = [
@@ -244,9 +245,21 @@ class TestRLSSMModelStructure:
         """Setting p_outlier=None should remove p_outlier from params."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config, p_outlier=None)
         assert "p_outlier" not in model.params
+        assert model.lapse is None
+
+    def test_rlssm_default_rt_choice_active_lapse_prior(
+        self, rldm_data, rlssm_config
+    ) -> None:
+        """RT+choice RLSSM keeps the default Uniform lapse prior."""
+        model = RLSSM(data=rldm_data, model_config=rlssm_config)
+
+        assert "p_outlier" in model.params
+        assert isinstance(model.lapse, bmb.Prior)
+        assert model.lapse.name == "Uniform"
+        assert model.lapse.args == {"lower": 0.0, "upper": 20.0}
 
     def test_rlssm_model_built(self, rldm_data, rlssm_config) -> None:
-        """The bambi model should be built and the computed param 'v' absent from params."""
+        """The bambi model should be built without computed param 'v'."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
         assert model.model is not None
         # rl_alpha is a free (sampled) parameter
@@ -361,7 +374,7 @@ class TestRLSSMSampling:
 
 
 class TestRLSSMSimplifiedInterface:
-    """Public model= kwarg API: registry lookups, register_rlssm_model, unsupported-feature properties."""
+    """Public model= kwarg API coverage."""
 
     def test_rlssm_is_subclass_of_internal(self) -> None:
         """RLSSM must be a subclass of _RLSSM."""
@@ -404,25 +417,25 @@ class TestRLSSMSimplifiedInterface:
             RLSSM(data=rldm_data, model="model_not_in_registry")
 
     def test_rlssm_missing_data_property_raises(self, rldm_data) -> None:
-        """Accessing .missing_data on a built RLSSM instance must raise NotImplementedError."""
+        """Accessing .missing_data on a built RLSSM must raise."""
         model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
         with pytest.raises(NotImplementedError, match="missing_data"):
             _ = model.missing_data
 
     def test_rlssm_deadline_property_raises(self, rldm_data) -> None:
-        """Accessing .deadline on a built RLSSM instance must raise NotImplementedError."""
+        """Accessing .deadline on a built RLSSM must raise."""
         model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
         with pytest.raises(NotImplementedError, match="deadline"):
             _ = model.deadline
 
     def test_rlssm_loglik_missing_data_property_raises(self, rldm_data) -> None:
-        """Accessing .loglik_missing_data on a built RLSSM instance must raise NotImplementedError."""
+        """Accessing .loglik_missing_data on a built RLSSM must raise."""
         model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
         with pytest.raises(NotImplementedError, match="loglik_missing_data"):
             _ = model.loglik_missing_data
 
     def test_register_rlssm_model(self, rldm_data) -> None:
-        """A user-registered model should be instantiable via the simplified interface."""
+        """A user-registered model should instantiate via the simplified API."""
         # Re-use the existing annotated learning function and ssm logp from the
         # module-level helpers defined at the top of this test file.
         register_rlssm_model(
@@ -474,7 +487,7 @@ class TestRLSSMSimplifiedInterface:
     def test_rlssm_learning_process_override_keeps_matching_metadata(
         self, rldm_data
     ) -> None:
-        """Public RLSSM constructor should accept LP overrides with the same sampled params."""
+        """Public RLSSM accepts LP overrides with the same sampled params."""
 
         @annotate_function(
             inputs=["rl_alpha", "scaler", "response", "feedback"],

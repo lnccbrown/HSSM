@@ -604,6 +604,52 @@ class _FakeSSMSAssembledModel:
         return compute
 
 
+class _FakeChoiceOnlySSMSAssembledModel:
+    """Stand-in for ssms choice-only inverse-temperature softmax presets."""
+
+    def __init__(self, config, *, backend, gradient, n_choices):
+        self.config = config
+        self.learning_backend = backend
+        self.gradient = gradient
+        self.n_choices = n_choices
+        self.model_name = f"{n_choices}AB_RW_InvTempSoftmax"
+        self.decision_process = f"inv_temp_softmax_{n_choices}"
+        self.list_params = ["rl_alpha", "beta"]
+        self.bounds = {"rl_alpha": (0.0, 1.0), "beta": (0.001, 20.0)}
+        self.params_default = [0.2, 2.0]
+        self.response = ["response"]
+        self.choices = tuple(range(n_choices))
+        self.context_fields = ["feedback"]
+        self.computed_params = [f"q{i}" for i in range(n_choices)]
+        self.response_to_choice = {i: i for i in range(n_choices)}
+
+    def participant_input_fields(self):
+        return ["rl_alpha", "response", "feedback"]
+
+    def assemble_participant_fn(self, output="array"):
+        assert output == "dict"
+
+        def compute(subject_trials):
+            rl_alpha = subject_trials[:, 0]
+            feedback = subject_trials[:, 2]
+            return {
+                f"q{i}": rl_alpha + feedback + float(i) for i in range(self.n_choices)
+            }
+
+        return compute
+
+
+class _FakeChoiceOnlySSMSModelConfig(_FakeSSMSModelConfig):
+    def __init__(self, *, gradient="available", n_choices=2):
+        super().__init__(gradient=gradient)
+        self.n_choices = n_choices
+
+    def assemble(self, backend="auto"):
+        return _FakeChoiceOnlySSMSAssembledModel(
+            self, backend=backend, gradient=self.gradient, n_choices=self.n_choices
+        )
+
+
 def _install_fake_ssms_rl(monkeypatch, *, gradient="available"):
     config = _FakeSSMSModelConfig(gradient=gradient)
     fake_rl = types.SimpleNamespace(
@@ -625,6 +671,18 @@ def _install_fake_decision_logp(monkeypatch):
     @annotate_function(
         inputs=["v", "a", "z", "t", "theta", "rt", "response"], outputs=["logp"]
     )
+    def _fake_base(lan_matrix):
+        return jnp.sum(lan_matrix, axis=1)
+
+    monkeypatch.setattr(
+        "hssm.rl.registry._get_ssm_logp", lambda name: _fake_base, raising=False
+    )
+
+
+def _install_fake_choice_only_decision_logp(monkeypatch, n_choices):
+    inputs = ["beta", *(f"q{i}" for i in range(n_choices)), "response"]
+
+    @annotate_function(inputs=inputs, outputs=["logp"])
     def _fake_base(lan_matrix):
         return jnp.sum(lan_matrix, axis=1)
 
@@ -745,6 +803,8 @@ class TestRLSSMConfigFromSSMSModel:
 
         # Both computed decision parameters are exposed to the annotated path.
         assert set(config.ssm_logp_func.computed) == {"v", "a"}
+        assert config.ssm_logp_func.computed["v"] is config.ssm_logp_func.computed["a"]
+        assert config.ssm_logp_func.computed["v"].outputs == ["v", "a"]
         # Context fields flow through HSSM's extra_fields plumbing, untouched —
         # `condition` is not treated specially and `trial_id` is not injected.
         assert config.extra_fields == ["feedback", "condition"]
@@ -756,6 +816,38 @@ class TestRLSSMConfigFromSSMSModel:
                 "feedback",
                 "condition",
             ]
+
+    @pytest.mark.parametrize("n_choices", [2, 3])
+    def test_from_ssms_model_choice_only_inv_temp_softmax_metadata(
+        self, monkeypatch, n_choices
+    ):
+        config_obj = _FakeChoiceOnlySSMSModelConfig(n_choices=n_choices)
+        fake_rl = types.SimpleNamespace(
+            ModelConfig=_FakeChoiceOnlySSMSModelConfig,
+            resolve_model=lambda model: config_obj,
+        )
+        monkeypatch.setitem(sys.modules, "ssms.rl", fake_rl)
+        _install_fake_choice_only_decision_logp(monkeypatch, n_choices)
+
+        config = RLSSMConfig.from_ssms_model(f"{n_choices}AB_RW_InvTempSoftmax")
+
+        expected_qs = {f"q{i}" for i in range(n_choices)}
+        assert config.response == ["response"]
+        assert config.decision_process == f"inv_temp_softmax_{n_choices}"
+        assert config.list_params == ["rl_alpha", "beta"]
+        assert set(config.ssm_logp_func.computed) == expected_qs
+        assert set(config.learning_process) == expected_qs
+        assert config.ssm_logp_func.inputs == [
+            "beta",
+            *(f"q{i}" for i in range(n_choices)),
+            "response",
+        ]
+        first_compute = config.ssm_logp_func.computed["q0"]
+        assert first_compute.outputs == [f"q{i}" for i in range(n_choices)]
+        assert all(
+            compute_func is first_compute
+            for compute_func in config.ssm_logp_func.computed.values()
+        )
 
 
 class TestRLSSMConfigFromRealSSMS:

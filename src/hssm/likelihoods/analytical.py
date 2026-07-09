@@ -622,6 +622,53 @@ def _pt_lba3_ll(t, ch, A, b, v0, v1, v2):
     return pt.log(pt.clip(like[running_idx, ch] / (1 - prob_neg), __min, __max))
 
 
+def _pt_lba4_ll(t, ch, A, b, v0, v1, v2, v3):
+    s = 0.1
+    __min = pt.exp(LOGP_LB)
+    __max = pt.exp(-LOGP_LB)
+    k = len([0, 1, 2, 3])
+    like = pt.zeros((*t.shape, k))
+    running_idx = pt.arange(t.shape[0])
+
+    like_1 = (
+        _pt_tpdf(t, A, b, v0, s)
+        * (1 - _pt_tcdf(t, A, b, v1, s))
+        * (1 - _pt_tcdf(t, A, b, v2, s))
+        * (1 - _pt_tcdf(t, A, b, v3, s))
+    )
+    like_2 = (
+        (1 - _pt_tcdf(t, A, b, v0, s))
+        * _pt_tpdf(t, A, b, v1, s)
+        * (1 - _pt_tcdf(t, A, b, v2, s))
+        * (1 - _pt_tcdf(t, A, b, v3, s))
+    )
+    like_3 = (
+        (1 - _pt_tcdf(t, A, b, v0, s))
+        * (1 - _pt_tcdf(t, A, b, v1, s))
+        * _pt_tpdf(t, A, b, v2, s)
+        * (1 - _pt_tcdf(t, A, b, v3, s))
+    )
+    like_4 = (
+        (1 - _pt_tcdf(t, A, b, v0, s))
+        * (1 - _pt_tcdf(t, A, b, v1, s))
+        * (1 - _pt_tcdf(t, A, b, v2, s))
+        * _pt_tpdf(t, A, b, v3, s)
+    )
+
+    like = pt.stack([like_1, like_2, like_3, like_4], axis=-1)
+
+    # One should RETURN this because otherwise it will be pruned from graph
+    # like_printed = pytensor.printing.Print('like')(like)
+
+    prob_neg = (
+        _pt_normcdf(-v0 / s)
+        * _pt_normcdf(-v1 / s)
+        * _pt_normcdf(-v2 / s)
+        * _pt_normcdf(-v3 / s)
+    )
+    return pt.log(pt.clip(like[running_idx, ch] / (1 - prob_neg), __min, __max))
+
+
 def _pt_lba2_ll(t, ch, A, b, v0, v1):
     s = 0.1
     __min = pt.exp(LOGP_LB)
@@ -679,8 +726,28 @@ def logp_lba3(
     return checked_logp
 
 
+def logp_lba4(
+    data: np.ndarray,
+    A: float,
+    b: float,
+    v0: float,
+    v1: float,
+    v2: float,
+    v3: float,
+) -> np.ndarray:
+    """Compute the log-likelihood of the LBA model with 4 drift rates."""
+    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+    rt = pt.abs(data[:, 0])
+    response = data[:, 1]
+    response_int = pt.cast(response, "int32")
+    logp = _pt_lba4_ll(rt, response_int, A, b, v0, v1, v2, v3).squeeze()
+    checked_logp = check_parameters(logp, b > A, msg="b > A")
+    return checked_logp
+
+
 lba2_params = ["A", "b", "v0", "v1"]
 lba3_params = ["A", "b", "v0", "v1", "v2"]
+lba4_params = ["A", "b", "v0", "v1", "v2", "v3"]
 
 lba2_bounds = {
     "A": (0.0, inf),
@@ -697,6 +764,15 @@ lba3_bounds = {
     "v2": (0.0, inf),
 }
 
+lba4_bounds = {
+    "A": (0.0, inf),
+    "b": (0.2, inf),
+    "v0": (0.0, inf),
+    "v1": (0.0, inf),
+    "v2": (0.0, inf),
+    "v3": (0.0, inf),
+}
+
 LBA2: type[pm.Distribution] = make_distribution(
     rv="lba2",
     loglik=logp_lba2,
@@ -709,6 +785,13 @@ LBA3: type[pm.Distribution] = make_distribution(
     loglik=logp_lba3,
     list_params=lba3_params,
     bounds=lba3_bounds,
+)
+
+LBA4: type[pm.Distribution] = make_distribution(
+    rv="lba4",
+    loglik=logp_lba4,
+    list_params=lba4_params,
+    bounds=lba4_bounds,
 )
 
 
