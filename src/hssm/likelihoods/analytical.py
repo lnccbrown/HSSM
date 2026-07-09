@@ -741,6 +741,7 @@ def logp_lba4(
     response = data[:, 1]
     response_int = pt.cast(response, "int32")
     logp = _pt_lba4_ll(rt, response_int, A, b, v0, v1, v2, v3).squeeze()
+    # pyrefly: ignore[bad-argument-type]
     checked_logp = check_parameters(logp, b > A, msg="b > A")
     return checked_logp
 
