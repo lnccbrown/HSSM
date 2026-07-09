@@ -1,22 +1,24 @@
+from unittest.mock import patch
+
 import bambi as bmb
 import numpy as np
 import pymc as pm
-import pytest
 import pytensor.tensor as pt
-from unittest.mock import patch
+import pytest
 
 import hssm
 from hssm import distribution_utils
+from hssm.distribution_utils import dist as dist_module
 from hssm.distribution_utils.dist import (
+    _create_arg_arrays,
+    _extract_size,
+    _get_p_outlier,
     apply_param_bounds_to_loglik,
     ensure_positive_ndt,
     make_distribution,
     make_distribution_for_supported_model,
-    _create_arg_arrays,
-    _extract_size,
-    _get_p_outlier,
 )
-from hssm.likelihoods.analytical import logp_ddm, DDM
+from hssm.likelihoods.analytical import DDM, logp_ddm
 
 hssm.set_floatX("float32")
 
@@ -84,6 +86,32 @@ def test_lapse_distribution():
     random_sample_b = rv.rng_fn(rng2, *[0.5, 0.5, 0.5, 0.3], 0.05, 10)
 
     np.testing.assert_array_equal(random_sample_a, random_sample_b)
+
+
+@pytest.mark.parametrize("rv", ["choice_only_model", lambda *args, **kwargs: None])
+def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv):
+    """Generated RVs must keep the choice-only support-shape contract."""
+    captured = {}
+
+    def fake_make_hssm_rv(simulator_fun, list_params, lapse=None, is_choice_only=False):
+        captured["is_choice_only"] = is_choice_only
+
+        class FakeRV:
+            def __call__(self):
+                return object()
+
+        return FakeRV
+
+    monkeypatch.setattr(dist_module, "make_hssm_rv", fake_make_hssm_rv)
+
+    make_distribution(
+        rv=rv,
+        loglik=lambda data, beta: data,
+        list_params=["beta"],
+        is_choice_only=True,
+    )
+
+    assert captured["is_choice_only"] is True
 
 
 @pytest.mark.slow
