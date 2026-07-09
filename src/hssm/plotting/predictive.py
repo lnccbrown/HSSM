@@ -264,9 +264,9 @@ def _process_lines(
             if check_type is str:
                 str_list = cast("list[str]", line_attrs_list)
                 return str_list * 2 if len(str_list) == 1 else str_list
-            else:
-                float_list = cast("list[float]", line_attrs_list)
-                return float_list * 2 if len(float_list) == 1 else float_list
+
+            float_list = cast("list[float]", line_attrs_list)
+            return float_list * 2 if len(float_list) == 1 else float_list
         else:
             raise ValueError(
                 f"The `{mode}` argument must be a {check_type.__name__} or a list "
