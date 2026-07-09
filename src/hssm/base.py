@@ -43,6 +43,7 @@ from hssm.distribution_utils import (
 from hssm.missing_data_mixin import MissingDataMixin
 from hssm.utils import (
     _compute_log_likelihood,
+    _force_jax_nuts_no_jitter,
     _get_alias_dict,
     _print_prior,
     _split_array,
@@ -566,6 +567,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             Note that the old sampler names such as "mcmc", "nuts_numpyro",
             "nuts_blackjax" will be deprecated and removed in future releases. A warning
             will be raised if any of these old names are used.
+            For the JAX samplers ("numpyro"/"blackjax"), HSSM disables the
+            sampler's built-in initial-value jitter and uses its own controlled
+            `initval_jitter` instead.
         init: optional
             Initialization method to use for the sampler. If any of the NUTS samplers
             is used, defaults to `"adapt_diag"`. Otherwise, defaults to `"auto"`.
@@ -671,22 +675,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 init = "auto"
 
-        # TODO: add back jitter after knowing what to do
-        # If sampler is finally `numpyro` make sure
-        # the jitter argument is set to False
-        # if sampler == "numpyro":
-        #     if "nuts" in kwargs:
-        #         if kwargs["nuts"].get("jitter"):
-        #             _logger.warning(
-        #                 "The jitter argument is set to True. "
-        #                 + "This argument is not supported "
-        #                 + "by the numpyro backend. "
-        #                 + "The jitter argument will be set to False."
-        #             )
-        #         kwargs["nuts"]["jitter"] = False
-        #     else:
-        #         kwargs["nuts"] = {"jitter": False}
-
         if sampler != "pymc" and "step" in kwargs:
             raise ValueError(
                 "`step` samplers (enabled by the `step` argument) are only supported "
@@ -714,13 +702,18 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # which silently downgraded user choice — surfaced via the sbi NLE
         # tutorial where sampler="numpyro" still went through PyMC's multiprocess
         # path and tripped cloudpickle on the ONNX ModelProto.
-        self._inference_obj = self.model.fit(
-            inference_method=sampler,
-            init=init,
-            include_response_params=include_response_params,
-            omit_offsets=omit_offsets,
-            **kwargs,
-        )
+        # PyMC 6's JAX-NUTS samplers ("numpyro"/"blackjax") always jitter initial
+        # values and expose no supported switch; HSSM already applies its own
+        # controlled `initval_jitter`, so disable the sampler's jitter for them
+        # (issue #999; see also the upstream pymc gap this works around).
+        with _force_jax_nuts_no_jitter(active=sampler in ("numpyro", "blackjax")):
+            self._inference_obj = self.model.fit(
+                inference_method=sampler,
+                init=init,
+                include_response_params=include_response_params,
+                omit_offsets=omit_offsets,
+                **kwargs,
+            )
 
         # Separate out log likelihood computation
         if compute_likelihood:
