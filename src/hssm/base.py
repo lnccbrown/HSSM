@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Literal, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Literal, Union, cast
 
 import arviz as az
 import bambi as bmb
@@ -30,6 +30,11 @@ from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
 from pymc.variational import Approximation
 from xarray import DataTree
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from pytensor.tensor.variable import TensorVariable
 
 from hssm._types import SupportedModels
 from hssm.data_validator import DataValidatorMixin
@@ -265,7 +270,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # region ===== Inference Results (initialized to None/empty) =====
         self._inference_obj: DataTree | None = None
-        self._inference_obj_vi: Approximation | None = None
+        self._inference_obj_vi: DataTree | Approximation | None = None
         self._vi_approx = None
         self._map_dict = None
         # endregion
@@ -297,7 +302,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # endregion
 
         # TODO: add to HSSMBase
-        self.response = cast("list[str]", self.response)
         self.is_choice_only: bool = self.model_config.is_choice_only
 
         if self.choices is None:
@@ -768,6 +772,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             vi_kwargs["start"] = self._initvals
 
         # Run variational inference directly from pymc model
+        # pyrefly: ignore[bad-context-manager]
         with self.pymc_model:
             self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
 
@@ -776,11 +781,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 self._inference_obj_vi = self._vi_approx.sample(draws)
 
         # Post-processing
-        self._clean_posterior_group(dt=self._inference_obj_vi)
+        self._clean_posterior_group(dt=cast("DataTree | None", self._inference_obj_vi))
 
         # Return the DataTree object if return_idata is True
         if return_idata:
-            return self._inference_obj_vi
+            return cast("Approximation | DataTree", self._inference_obj_vi)
         # Otherwise return the appromation object directly
         return self.vi_approx
 
@@ -1046,7 +1051,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     posterior_predictive_list.append(dt_copy["posterior_predictive"])
 
                 if inplace:
-                    dt["posterior_predictive"] = xr.concat(
+                    dt["posterior_predictive"] = xr.concat(  # pyrefly: ignore[no-matching-overload]
                         posterior_predictive_list,  # type: ignore[arg-type]
                         dim="draw",
                     )
@@ -1058,7 +1063,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     # Add new posterior predictive group to dt_copy
                     if "posterior_predictive" in dt_copy:
                         del dt_copy["posterior_predictive"]
-                    dt_copy["posterior_predictive"] = xr.concat(
+                    dt_copy["posterior_predictive"] = xr.concat(  # pyrefly: ignore[no-matching-overload]
                         posterior_predictive_list,  # type: ignore[arg-type]
                         dim="draw",
                     )
@@ -1100,7 +1105,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         else:
             raise ValueError("`kind` must be either 'response' or 'response_params'.")
 
-    def plot_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
+    def plot_predictive(
+        self, **kwargs
+    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
         """Produce a posterior predictive plot.
 
         Equivalent to calling `hssm.plotting.plot_predictive()` with the
@@ -1109,12 +1116,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        mpl.axes.Axes | sns.FacetGrid
+        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
             The matplotlib axis or seaborn FacetGrid object containing the plot.
         """
         return plotting.plot_predictive(self, **kwargs)
 
-    def plot_quantile_probability(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
+    def plot_quantile_probability(
+        self, **kwargs
+    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
         """Produce a quantile probability plot.
 
         Equivalent to calling `hssm.plotting.plot_quantile_probability()` with the
@@ -1123,7 +1132,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        mpl.axes.Axes | sns.FacetGrid
+        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
             The matplotlib axis or seaborn FacetGrid object containing the plot.
         """
         return plotting.plot_quantile_probability(self, **kwargs)
@@ -1136,7 +1145,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self, params: dict[str, Any], draws: int = 100, return_model=False, **kwargs
     ) -> DataTree | tuple[DataTree, pm.Model]:
         """Generate samples from the predictive distribution using the `do-operator`."""
-        do_model = do(self.pymc_model, params)
+        do_model = do(
+            self.pymc_model, cast("Mapping[str | TensorVariable, Any]", params)
+        )
         do_dt = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
 
         # clean up `rt,response_mean` to `v`
@@ -1429,7 +1440,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         if isinstance(traces, (str, PathLike)):
             traces = az.from_netcdf(traces)
-        self._inference_obj = cast("DataTree", traces)
+        self._inference_obj = traces
 
     def restore_vi_traces(
         self, traces: DataTree | Approximation | str | PathLike
@@ -1447,7 +1458,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         if isinstance(traces, (str, PathLike)):
             traces = az.from_netcdf(traces)
-        self._inference_obj_vi = cast("DataTree", traces)
+        self._inference_obj_vi = traces
 
     def save_model(
         self,
@@ -1508,7 +1519,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self._inference_obj.to_netcdf(model_path.joinpath("traces.nc"))
 
         # Save vi_traces to netcdf file
-        if self._inference_obj_vi is not None:
+        if isinstance(self._inference_obj_vi, DataTree):
             self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
 
     @classmethod
@@ -1756,6 +1767,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 "no variational posterior attached."
             )
 
+        if not isinstance(self._inference_obj_vi, DataTree):
+            raise ValueError(
+                "The attached variational inference object is an `Approximation`, "
+                "not sampled traces. Use `vi_approx` to access it, or run "
+                "variational inference with `return_idata=True` to obtain a `DataTree`."
+            )
+
         return self._inference_obj_vi
 
     @property
@@ -1965,7 +1983,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self,
         name_str: str,
         return_value: bool = False,
-    ) -> bool | float | int | np.ndarray | dict[str, Any] | None:
+    ) -> bool | float | int | np.ndarray | dict[str, Any] | bmb.Prior | None:
         """Check if initial value is user-supplied."""
         # The function assumes that the name_str is either raw parameter name
         # or `paramname_Intercept`, because we only really provide special default
