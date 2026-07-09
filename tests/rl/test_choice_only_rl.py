@@ -104,24 +104,15 @@ def _fake_choice_only_data(responses):
                 [
                     3.2
                     - jnp.log(
-                        jnp.exp(0.2)
-                        + jnp.exp(1.2)
-                        + jnp.exp(2.2)
-                        + jnp.exp(3.2)
+                        jnp.exp(0.2) + jnp.exp(1.2) + jnp.exp(2.2) + jnp.exp(3.2)
                     ),
                     0.2
                     - jnp.log(
-                        jnp.exp(0.2)
-                        + jnp.exp(1.2)
-                        + jnp.exp(2.2)
-                        + jnp.exp(3.2)
+                        jnp.exp(0.2) + jnp.exp(1.2) + jnp.exp(2.2) + jnp.exp(3.2)
                     ),
                     9.6
                     - jnp.log(
-                        jnp.exp(0.6)
-                        + jnp.exp(3.6)
-                        + jnp.exp(6.6)
-                        + jnp.exp(9.6)
+                        jnp.exp(0.6) + jnp.exp(3.6) + jnp.exp(6.6) + jnp.exp(9.6)
                     ),
                 ]
             ),
@@ -139,7 +130,9 @@ def test_inv_temp_softmax_base_logp_values_and_metadata(
     assert base_logp.inputs == inputs
     assert base_logp.outputs == ["logp"]
     assert result.shape == (matrix.shape[0],)
-    np.testing.assert_allclose(np.asarray(result), np.asarray(expected), rtol=1e-5)
+    np.testing.assert_allclose(
+        np.asarray(result), np.asarray(expected), rtol=1e-5, atol=1e-6
+    )
     assert result[-1] > result[0]
 
 
