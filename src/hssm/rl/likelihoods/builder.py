@@ -556,7 +556,7 @@ def make_rl_logp_func(
     # decision parameters (for example q0, q1, q2).
     vmapped_compute_funcs = (
         {
-            id(compute_func): jax.vmap(compute_func, in_axes=0)
+            compute_func: jax.vmap(compute_func, in_axes=0)
             for compute_func in set(ssm_logp_func.computed.values())
         }
         if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed
@@ -632,7 +632,7 @@ def make_rl_logp_func(
     ) -> dict[str, jnp.ndarray]:
         """Compute all requested outputs from one shared compute function."""
         compute_func = ssm_logp_func.computed[param_names[0]]
-        vmapped_func = vmapped_compute_funcs[id(compute_func)]
+        vmapped_func = vmapped_compute_funcs[compute_func]
 
         # Prepare data for computation
         subj_trials = _prepare_subj_trials(compute_func, data, args)
@@ -696,10 +696,10 @@ def make_rl_logp_func(
 
         computed_param_values: dict[str, jnp.ndarray] = {}
         if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed:
-            computed_groups: dict[int, list[str]] = {}
+            computed_groups: dict[AnnotatedFunction, list[str]] = {}
             for param_name in ssm_logp_func_colidxs.computed:
                 compute_func = ssm_logp_func.computed[param_name]
-                computed_groups.setdefault(id(compute_func), []).append(param_name)
+                computed_groups.setdefault(compute_func, []).append(param_name)
 
             for param_names in computed_groups.values():
                 computed_param_values.update(

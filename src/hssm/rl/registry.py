@@ -204,17 +204,20 @@ def _make_inv_temp_softmax_base_logp(n_choices: int) -> Any:
     return _base_logp
 
 
-for _n_choices in (2, 3):
-    _SSM_REGISTRY[f"inv_temp_softmax_{_n_choices}"] = {
-        "ssm_base_logp_func": _make_inv_temp_softmax_base_logp(_n_choices),
-        "list_params_ssm": [
-            "beta",
-            *(f"q{i}" for i in range(_n_choices)),
-        ],
+def _register_inv_temp_softmax_ssm(n_choices: int) -> None:
+    """Register a choice-only inverse-temperature softmax decision process."""
+    q_params = [f"q{i}" for i in range(n_choices)]
+    _SSM_REGISTRY[f"inv_temp_softmax_{n_choices}"] = {
+        "ssm_base_logp_func": _make_inv_temp_softmax_base_logp(n_choices),
+        "list_params_ssm": ["beta", *q_params],
         "bounds_ssm": {"beta": (0.0, jnp.inf)},
-        "params_default_ssm": [1.0, *([0.0] * _n_choices)],
+        "params_default_ssm": [1.0, *([0.0] * n_choices)],
         "response": ["response"],
     }
+
+
+_register_inv_temp_softmax_ssm(2)
+_register_inv_temp_softmax_ssm(3)
 
 
 def _make_ssm_base_logp_from_onnx(
