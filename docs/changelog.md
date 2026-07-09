@@ -17,6 +17,10 @@ This version contains major breaking updates for HSSM. Please read the release n
 5. `model.summary()` and `model.plot_trace()` methods are now removed. Use `az.summary()` and `az.plot_trace_dist()` instead.
 6. HSSM can now be installed directly from PyPI via `pip` or `uv`. Conda support is no longer provided.
 
+#### Bug fixes:
+
+1. **Restore JAX-NUTS jitter control**: HSSM again disables the built-in initial-value jitter of the `numpyro`/`blackjax` samplers (PyMC 6 removed the public switch that made this possible), so sampling starts from HSSM's own controlled `initval_jitter` instead of an extra uniform jitter (#999).
+
 ### 0.3.1
 
 This version includes the following changes:
