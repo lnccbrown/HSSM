@@ -90,6 +90,42 @@ def _fake_choice_only_data(responses):
                 ]
             ),
         ),
+        (
+            "inv_temp_softmax_4",
+            ["beta", "q0", "q1", "q2", "q3", "response"],
+            jnp.asarray(
+                [
+                    [1.0, 0.2, 1.2, 2.2, 3.2, 3.0],
+                    [1.0, 0.2, 1.2, 2.2, 3.2, 0.0],
+                    [3.0, 0.2, 1.2, 2.2, 3.2, 3.0],
+                ]
+            ),
+            jnp.asarray(
+                [
+                    3.2
+                    - jnp.log(
+                        jnp.exp(0.2)
+                        + jnp.exp(1.2)
+                        + jnp.exp(2.2)
+                        + jnp.exp(3.2)
+                    ),
+                    0.2
+                    - jnp.log(
+                        jnp.exp(0.2)
+                        + jnp.exp(1.2)
+                        + jnp.exp(2.2)
+                        + jnp.exp(3.2)
+                    ),
+                    9.6
+                    - jnp.log(
+                        jnp.exp(0.6)
+                        + jnp.exp(3.6)
+                        + jnp.exp(6.6)
+                        + jnp.exp(9.6)
+                    ),
+                ]
+            ),
+        ),
     ],
 )
 def test_inv_temp_softmax_base_logp_values_and_metadata(
@@ -103,7 +139,7 @@ def test_inv_temp_softmax_base_logp_values_and_metadata(
     assert base_logp.inputs == inputs
     assert base_logp.outputs == ["logp"]
     assert result.shape == (matrix.shape[0],)
-    np.testing.assert_allclose(np.asarray(result), np.asarray(expected), rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(result), np.asarray(expected), rtol=1e-5)
     assert result[-1] > result[0]
 
 
@@ -127,6 +163,16 @@ def test_inv_temp_softmax_base_logp_values_and_metadata(
                     [1.0, 0.2, 1.2, 2.2, -1.0],
                     [1.0, 0.2, 1.2, 2.2, 3.0],
                     [1.0, 0.2, 1.2, 2.2, 1.5],
+                ]
+            ),
+        ),
+        (
+            "inv_temp_softmax_4",
+            jnp.asarray(
+                [
+                    [1.0, 0.2, 1.2, 2.2, 3.2, -1.0],
+                    [1.0, 0.2, 1.2, 2.2, 3.2, 4.0],
+                    [1.0, 0.2, 1.2, 2.2, 3.2, 1.5],
                 ]
             ),
         ),

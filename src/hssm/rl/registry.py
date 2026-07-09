@@ -26,6 +26,7 @@ from inspect import signature
 from typing import Any
 
 import jax.numpy as jnp
+from jax import config as jax_config
 from jax.scipy.special import logsumexp
 
 from hssm.distribution_utils.onnx import make_jax_matrix_logp_funcs_from_onnx
@@ -179,6 +180,8 @@ def _make_inv_temp_softmax_base_logp(n_choices: int) -> Any:
     @annotate_function(inputs=inputs, outputs=["logp"])
     def _base_logp(lan_matrix):
         lan_matrix = jnp.asarray(lan_matrix)
+        if lan_matrix.dtype == jnp.float64 and not jax_config.read("jax_enable_x64"):
+            lan_matrix = lan_matrix.astype(jnp.float32)
         beta = lan_matrix[:, 0]
         q_values = lan_matrix[:, 1 : 1 + n_choices]
         response = lan_matrix[:, -1]
@@ -218,6 +221,7 @@ def _register_inv_temp_softmax_ssm(n_choices: int) -> None:
 
 _register_inv_temp_softmax_ssm(2)
 _register_inv_temp_softmax_ssm(3)
+_register_inv_temp_softmax_ssm(4)
 
 
 def _make_ssm_base_logp_from_onnx(
