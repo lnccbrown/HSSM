@@ -21,7 +21,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # devcontainers/ci mounts the workspace into the container; don't leave
           # the GITHUB_TOKEN in .git/config where the container could read it.
