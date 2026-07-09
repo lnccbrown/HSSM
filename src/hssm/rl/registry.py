@@ -24,7 +24,7 @@ import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
 from inspect import signature
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import jax.numpy as jnp
 from jax import config as jax_config
@@ -39,6 +39,9 @@ from .config import RLSSMConfig
 _logger = logging.getLogger(__name__)
 
 DEFAULT_RLSSM_MODEL = "2AB_RW_DDM"
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
 
 
 @dataclass
@@ -443,7 +446,7 @@ def _list_ssms_presets() -> dict[str, str | None]:
         return {}
 
     try:
-        names = list(list_func())
+        names = list(cast("Callable[[], Iterable[Any]]", list_func)())
     except Exception as exc:  # pragma: no cover - defensive against old ssms builds
         _logger.debug("Could not list ssms RL presets: %s", exc)
         return {}
