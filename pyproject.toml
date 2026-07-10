@@ -33,7 +33,7 @@ dependencies = [
     "jaxonnxruntime>=0.3.0",
     "numpyro>=0.19",
     "onnx>=1.16.0",
-    "ssm-simulators>=0.12.4",
+    "ssm-simulators>=0.12.4,<0.13",
 ]
 
 [project.urls]
@@ -72,6 +72,7 @@ notebook = [
     "nbconvert>=7.16.5",
     "nb-clean>=4.0.1",
     "nbval>=0.11.0",
+    "onnxruntime>=1.27.0",
     "ptpython>=3.0.29",
     "pyarrow>=20.0.0",
     "lanfactory>=0.7.0",
