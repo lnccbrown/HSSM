@@ -3,6 +3,7 @@
 import logging
 from copy import deepcopy
 from itertools import product
+from types import MappingProxyType
 from typing import Any, Iterable, Literal, Protocol, cast
 
 import arviz as az
@@ -32,16 +33,18 @@ from .utils import (
 
 _logger = logging.getLogger("hssm")
 
-TRAJ_COLOR_DEFAULT_DICT = {
-    -1: "black",
-    0: "black",
-    1: "green",
-    2: "blue",
-    3: "red",
-    4: "orange",
-    5: "purple",
-    6: "brown",
-}
+TRAJ_COLOR_DEFAULT_DICT: MappingProxyType[int, str] = MappingProxyType(
+    {
+        -1: "black",
+        0: "black",
+        1: "green",
+        2: "blue",
+        3: "red",
+        4: "orange",
+        5: "purple",
+        6: "brown",
+    }
+)
 
 
 class PlotFunctionProtocol(Protocol):
@@ -1185,7 +1188,7 @@ def _add_trajectories(
     markercolor_rt_choice: str | list[str] | dict[str, str] = "red",
     linewidth: float | int = 1,
     alpha: float | int = 0.5,
-    colors: str | list[str] | dict[str, str] = "black",
+    colors: str | list[str] | dict[str, str] | None = None,
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1216,9 +1219,10 @@ def _add_trajectories(
         Line width for trajectories, by default 1.
     alpha : float or int, optional
         Opacity of trajectories, by default 0.5.
-    colors : str, list or dict, optional
+    colors : str, list, dict, or None, optional
         Color(s) for trajectories. Can be a single color, list of colors,
-        or dict mapping choices to colors. By default "black".
+        or dict mapping choices to colors. When ``None`` (default), uses
+        ``TRAJ_COLOR_DEFAULT_DICT``.
     **kwargs
         Additional keyword arguments passed to plotting functions.
     """
@@ -1242,7 +1246,9 @@ def _add_trajectories(
         )
 
     # Check trajectory color type
-    if isinstance(colors, str):
+    if colors is None:
+        colors_dict: dict[Any, str] = dict(TRAJ_COLOR_DEFAULT_DICT)
+    elif isinstance(colors, str):
         colors_dict = {}
         for value_ in sample[0]["metadata"]["possible_choices"]:
             colors_dict[value_] = colors
@@ -1600,17 +1606,6 @@ def plot_func_model_n(
     histograms of response times, and model cartoons. It can show both the mean
     prediction and uncertainty from posterior samples.
     """
-    color_dict = {
-        -1: "black",
-        0: "black",
-        1: "green",
-        2: "blue",
-        3: "red",
-        4: "orange",
-        5: "purple",
-        6: "brown",
-    }
-
     ylim_low, ylim_high = kwargs.get("ylims", (0, 5))
     xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
@@ -1744,7 +1739,7 @@ def plot_func_model_n(
                 weights=weights,
                 histtype="step",
                 alpha=alpha_mean,
-                color=color_dict[choice],
+                color=TRAJ_COLOR_DEFAULT_DICT[choice],
                 zorder=cnt_cumul,
                 label=tmp_label,
                 linewidth=linewidth_histogram,
@@ -1792,7 +1787,7 @@ def plot_func_model_n(
                     weights=weights,
                     histtype="step",
                     alpha=alpha_predictive,
-                    color=color_dict[choice],
+                    color=TRAJ_COLOR_DEFAULT_DICT[choice],
                     zorder=cnt_cumul,
                     label=tmp_label,
                     linewidth=linewidth_histogram,
@@ -1821,7 +1816,7 @@ def plot_func_model_n(
                 weights=weights,
                 histtype="step",
                 alpha=1,
-                color=color_dict[choice],
+                color=TRAJ_COLOR_DEFAULT_DICT[choice],
                 zorder=cnt_cumul,
                 label="Data",
                 linewidth=linewidth_histogram,
@@ -1846,7 +1841,7 @@ def plot_func_model_n(
                 linestyle="-",
                 ylim=ylim_high,
                 t_s=t_s,
-                color_dict=color_dict,
+                color_dict=TRAJ_COLOR_DEFAULT_DICT,
                 zorder_cnt=z_cnt,
             )
             z_cnt += 1
@@ -1863,7 +1858,7 @@ def plot_func_model_n(
             linestyle="-",
             ylim=ylim_high,
             t_s=t_s,
-            color_dict=color_dict,
+            color_dict=TRAJ_COLOR_DEFAULT_DICT,
             zorder_cnt=z_cnt + 1,
         )
 
@@ -1884,7 +1879,8 @@ def plot_func_model_n(
 
     if add_legend:
         custom_elems = [
-            Line2D([0], [0], color=color_dict[choice], lw=1) for choice in choices
+            Line2D([0], [0], color=TRAJ_COLOR_DEFAULT_DICT[choice], lw=1)
+            for choice in choices
         ]
         custom_titles = ["response: " + str(choice) for choice in choices]
 
@@ -1916,7 +1912,6 @@ def _add_trajectories_n(
     marker_type_rt_choice: str = "*",
     linewidth: float = 1,
     alpha: float = 0.5,
-    colors: str | list[str] | dict[str, str] | dict[int, str] = TRAJ_COLOR_DEFAULT_DICT,
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1943,11 +1938,6 @@ def _add_trajectories_n(
         Line width for trajectory paths
     alpha : float, default=0.5
         Transparency of trajectory paths
-    colors : str or list or dict, default="black"
-        Color(s) for trajectories. Can be:
-        - str: Single color for all trajectories
-        - list: List of colors mapped to possible choices
-        - dict: Mapping of choices to colors
     **kwargs
         Additional keyword arguments passed to plotting functions
 
@@ -1955,24 +1945,10 @@ def _add_trajectories_n(
     -----
     This function visualizes multiple simulated decision paths, optionally highlighting
     the response times and choices. Each trajectory shows the evidence accumulation
-    process leading to a decision.
+    process leading to a decision. Trajectory colors are taken from
+    ``TRAJ_COLOR_DEFAULT_DICT``.
     """
-    # Check trajectory color type
-    if isinstance(colors, str):
-        colors_dict = {
-            value_: colors for value_ in sample[0]["metadata"]["possible_choices"]
-        }
-    elif isinstance(colors, list):
-        colors_dict = {
-            value_: colors[i]
-            for i, value_ in enumerate(sample[0]["metadata"]["possible_choices"])
-        }
-    elif isinstance(colors, dict):
-        colors_dict = colors
-    else:
-        raise ValueError(
-            "The `color_trajectories` argument must be a string, list, or dict."
-        )
+    colors_dict = TRAJ_COLOR_DEFAULT_DICT
 
     # Make bounds
     b = np.maximum(sample[0]["metadata"]["boundary"], 0)
