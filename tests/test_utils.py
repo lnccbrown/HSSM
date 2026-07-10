@@ -1,3 +1,5 @@
+"""Tests for HSSM utility helpers."""
+
 import sys
 from types import SimpleNamespace
 
@@ -22,6 +24,7 @@ hssm.set_floatX("float32")
 
 @pytest.mark.slow
 def test_get_alias_dict():
+    """Build aliases for default and regression parameterizations."""
     # Simulate some data:
     v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 0.5]
     obs_ddm = simulator([v_true, a_true, z_true, t_true], model="ddm", n_samples=1000)
@@ -85,6 +88,7 @@ def test_get_alias_dict():
 
 
 def test_set_floatX():
+    """Synchronize floating-point precision across computational backends."""
     # Should raise error when wrong value is passed.
     with pytest.raises(ValueError):
         set_floatX("bad_value")
@@ -228,6 +232,7 @@ def test__generate_random_indice(caplog, n_samples, n_draws, expected):
 
 
 def assertions(caplog, obj, n_samples, expected):
+    """Assert random-sampling behavior for one xarray object."""
     if expected == "error":
         with pytest.raises(ValueError):
             sampled_obj = _random_sample(obj, n_samples=n_samples)
@@ -235,7 +240,7 @@ def assertions(caplog, obj, n_samples, expected):
         sampled_obj = _random_sample(obj, n_samples=n_samples)
         assert sampled_obj.draw.size == expected
         assert sampled_obj.chain.size == 2
-        assert type(sampled_obj) == type(obj)
+        assert type(sampled_obj) is type(obj)
         if n_samples and n_samples > obj.draw.size:
             assert "n_samples > n_draws" in caplog.text
 
@@ -260,6 +265,7 @@ def test__random_sample(
     n_samples,
     expected,
 ):
+    """Subsample posterior groups for supported sample specifications."""
     posterior = cav_dt["posterior"]
     posterior_predictive = cav_dt["posterior_predictive"]
 
@@ -268,6 +274,7 @@ def test__random_sample(
 
 
 def test_check_data_for_rl():
+    """Validate and sort reinforcement-learning trial data."""
     # Valid DataFrame
     data_valid = pd.DataFrame(
         {
@@ -337,6 +344,7 @@ def test_check_data_for_rl():
     strict=True,  # This will let us know in the future when this is fixed
 )
 def test_predictive_idata_to_dataframe(data_ddm):
+    """Convert prior-predictive draws to a tidy DataFrame."""
     model = hssm.HSSM(data=data_ddm)
     sample_do = model.sample_do(params={"v": 1.0}, draws=10)
     assert isinstance(sample_do, xr.DataTree)

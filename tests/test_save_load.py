@@ -1,3 +1,5 @@
+"""Tests for HSSM model and trace serialization."""
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -7,6 +9,7 @@ import hssm
 
 # Check some attributes are the same
 def compare_hssm_class_attributes(model_a, model_b):
+    """Assert that persisted and restored models share core state."""
     a = np.array([type(v) for k, v in model_a._init_args.items()])
     b = np.array([type(v) for k, v in model_b._init_args.items()])
     assert (a == b).all(), "Init arg types not the same"
@@ -24,6 +27,7 @@ def compare_hssm_class_attributes(model_a, model_b):
 
 @pytest.mark.slow
 def test_save_load_model_only(basic_hssm_model, tmp_path):
+    """Round-trip a model without attached traces."""
     tmp_model_name = "hssm_model_pytest"
     basic_hssm_model.save_model(
         model_name=tmp_model_name, base_path=tmp_path, allow_absolute_base_path=True
@@ -34,6 +38,7 @@ def test_save_load_model_only(basic_hssm_model, tmp_path):
 
 @pytest.mark.slow
 def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
+    """Round-trip model and trace directories across MCMC and VI states."""
     # Sample to attach vi and mcmc traces to model
     # Using minimal parameters since we only need traces to exist, not be accurate
     basic_hssm_model.sample(

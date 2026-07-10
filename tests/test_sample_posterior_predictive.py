@@ -1,3 +1,5 @@
+"""Tests for HSSM posterior-predictive sampling."""
+
 import sys
 
 import numpy as np

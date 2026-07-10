@@ -1,3 +1,5 @@
+"""Tests for the HSSM public model interface."""
+
 import sys
 from copy import deepcopy
 from unittest.mock import Mock
@@ -29,22 +31,22 @@ param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "include, should_raise_exception",
+    "include, expected_exception",
     [
         (
             [param_v],
-            False,
+            None,
         ),
         (
             [
                 param_v,
                 param_a,
             ],
-            False,
+            None,
         ),
         (
             [{"name": "invalid_param", "prior": "invalid_param"}],
-            True,
+            ValueError,
         ),
         (
             [
@@ -57,7 +59,7 @@ param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
                     "invalid_key": "identity",
                 }
             ],
-            True,
+            TypeError,
         ),
         (
             [
@@ -69,13 +71,14 @@ param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
                     "formula": "invalid_formula",
                 }
             ],
-            True,
+            IndexError,
         ),
     ],
 )
-def test_transform_params_general(data_ddm_reg, include, should_raise_exception):
-    if should_raise_exception:
-        with pytest.raises(Exception):
+def test_transform_params_general(data_ddm_reg, include, expected_exception):
+    """Validate include specifications and reject malformed entries."""
+    if expected_exception is not None:
+        with pytest.raises(expected_exception):
             HSSM(data=data_ddm_reg, include=include)
     else:
         model = HSSM(data=data_ddm_reg, include=include)
@@ -88,6 +91,7 @@ def test_transform_params_general(data_ddm_reg, include, should_raise_exception)
 
 @pytest.mark.slow
 def test_custom_model(data_ddm):
+    """Validate custom-model configuration requirements."""
     with pytest.raises(
         ValueError, match="When using a custom model, please provide a `loglik_kind.`"
     ):
@@ -135,6 +139,7 @@ def test_custom_model(data_ddm):
 
 @pytest.mark.slow
 def test_model_definition_outside_include(data_ddm):
+    """Accept parameter definitions outside include and reject duplicates."""
     model_with_one_param_fixed = HSSM(data_ddm, a=0.5)
 
     assert "a" in model_with_one_param_fixed.params
@@ -160,6 +165,7 @@ def test_model_definition_outside_include(data_ddm):
 )
 @pytest.mark.slow
 def test_sample_prior_predictive(data_ddm_reg):
+    """Generate prior-predictive DataTrees across regression structures."""
     data_ddm_reg = data_ddm_reg.iloc[:10, :]
 
     model_no_regression = HSSM(data=data_ddm_reg)
@@ -169,6 +175,12 @@ def test_sample_prior_predictive(data_ddm_reg):
     prior_predictive_2 = model_no_regression.sample_prior_predictive(
         draws=10, random_seed=rng
     )
+    for prior_predictive in (prior_predictive_1, prior_predictive_2):
+        assert isinstance(prior_predictive, xr.DataTree)
+        assert {"prior", "prior_predictive", "observed_data"} <= set(
+            prior_predictive.children
+        )
+        assert prior_predictive["prior_predictive"].sizes["draw"] == 10
 
     model_regression = HSSM(
         data=data_ddm_reg, include=[dict(name="v", formula="v ~ 1 + x")]
@@ -203,6 +215,7 @@ def test_sample_prior_predictive(data_ddm_reg):
 
 @pytest.mark.slow
 def test_override_default_link(caplog, data_ddm_reg):
+    """Honor custom links while warning about unusual bounds."""
     param_v = {
         "name": "v",
         "prior": {
@@ -234,6 +247,7 @@ def test_override_default_link(caplog, data_ddm_reg):
 
 @pytest.mark.slow
 def test_resampling(data_ddm):
+    """Replace attached traces when a model is sampled again."""
     model = HSSM(data=data_ddm)
     sample_1 = model.sample(draws=10, chains=1, tune=0, progressbar=False)
     assert sample_1 is model.traces
@@ -361,6 +375,7 @@ def test_add_likelihood_parameters_accepts_explicit_datatree(data_ddm, monkeypat
 # Setting any parameter to a fixed value should work:
 @pytest.mark.slow
 def test_model_creation_constant_parameter(data_ddm):
+    """Allow any non-parent parameter to be fixed."""
     for param_name in ["v", "a", "z", "t"]:
         model = HSSM(data=data_ddm, **{param_name: 1.0})
         assert model._parent != param_name
@@ -374,6 +389,7 @@ def test_model_creation_constant_parameter(data_ddm):
     [("v", "Normal"), ("a", "Gamma"), ("z", "Beta"), ("t", "Gamma")],
 )
 def test_model_creation_single_regression(data_ddm_reg, param_name, dist_name):
+    """Use bounded default priors for one regression parameter."""
     model = HSSM(
         data=data_ddm_reg,
         include=[{"name": param_name, "formula": f"{param_name} ~ 1 + x"}],
@@ -384,6 +400,7 @@ def test_model_creation_single_regression(data_ddm_reg, param_name, dist_name):
 
 # Setting all parameters to fixed values should throw an error:
 def test_model_creation_all_parameters_constant(data_ddm):
+    """Reject models without any free parameters."""
     with pytest.raises(ValueError):
         HSSM(data=data_ddm, v=1.0, a=1.0, z=1.0, t=1.0)
 
@@ -391,6 +408,7 @@ def test_model_creation_all_parameters_constant(data_ddm):
 # Prior settings
 @pytest.mark.slow
 def test_prior_settings_basic(cavanagh_test):
+    """Apply requested prior-setting modes."""
     model_1 = HSSM(
         data=cavanagh_test,
         global_formula="y ~ 1 + (1|participant_id)",
@@ -414,6 +432,7 @@ def test_prior_settings_basic(cavanagh_test):
 
 @pytest.mark.slow
 def test_compile_logp(cavanagh_test):
+    """Compile log probability at the model's initial point."""
     model_1 = HSSM(
         data=cavanagh_test,
         global_formula="y ~ 1 + (1|participant_id)",
@@ -512,6 +531,7 @@ class TestFixedVectorParams:
 )
 @pytest.mark.slow
 def test_sample_do(data_ddm):
+    """Return intervention samples and the intervened PyMC model."""
     model = HSSM(data=data_ddm)
     sample_do, do_model = model.sample_do(
         params={"v": 1.0}, draws=10, return_model=True
@@ -610,6 +630,7 @@ def test_drop_parent_str_renames_response_mean(data_ddm):
 
 
 def test_is_choice_only_and_deadline(data_ddm):
+    """Expose choice-only and deadline response metadata."""
     config_choice_only = {"response": ["response"]}
 
     model = HSSM(data=data_ddm, model="ddm", model_config=config_choice_only)
