@@ -103,6 +103,23 @@ def rlssm_config() -> RLSSMConfig:
     )
 
 
+def _register_custom_rldm(
+    name: str = "rldm_custom_test",
+    decision_process: str = "angle",
+) -> None:
+    """Register a small HSSM-side RLSSM template for simplified-interface tests."""
+    register_rlssm_model(
+        name=name,
+        decision_process=decision_process,
+        learning_process={"v": _compute_v_annotated},
+        learning_process_params=["rl_alpha", "scaler"],
+        learning_process_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
+        learning_process_params_default=[0.1, 1.0],
+        extra_fields=["feedback"],
+        choices=[0, 1],
+    )
+
+
 class TestRLSSMInit:
     """Basic construction and invalid-input guards at construction time."""
 
@@ -380,31 +397,56 @@ class TestRLSSMSimplifiedInterface:
         """RLSSM must be a subclass of _RLSSM."""
         assert issubclass(RLSSM, _RLSSM)
 
-    @pytest.mark.parametrize(
-        "model_name, expected_dp",
-        [
-            ("2AB_RescorlaWagner_DDM", "ddm"),
-            ("2AB_RescorlaWagner_Angle", "angle"),
-            ("2AB_RescorlaWagner_Weibull", "weibull"),
-        ],
-    )
-    def test_rlssm_builtin_models_instantiate(
-        self, rldm_data, model_name: str, expected_dp: str
+    def test_rlssm_model_arg_delegates_to_registry(
+        self,
+        rldm_data,
+        rlssm_config,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """All built-in 2AB_RescorlaWagner_* models should instantiate correctly."""
-        model = RLSSM(data=rldm_data, model=model_name)
+        """The public model= argument should be delegated to the registry factory."""
+        import hssm.rl.rlssm as rlssm_module
+
+        called_with = {}
+
+        def _fake_get_rlssm_model_config(**kwargs):  # type: ignore[no-untyped-def]
+            called_with.update(kwargs)
+            return rlssm_config
+
+        monkeypatch.setattr(
+            rlssm_module, "get_rlssm_model_config", _fake_get_rlssm_model_config
+        )
+
+        model = RLSSM(data=rldm_data, model="2AB_RW_DDM")
+
         assert isinstance(model, RLSSM)
-        assert model.model_config.decision_process == expected_dp
+        assert called_with["model"] == "2AB_RW_DDM"
+        assert model.model_config.model_name == rlssm_config.model_name
         assert "rl_alpha" in model.params
         assert "scaler" in model.params
-        assert "a" in model.params
-        assert "v" not in model.params
 
-    def test_rlssm_default_model_is_ddm(self, rldm_data) -> None:
-        """Omitting model should default to '2AB_RescorlaWagner_DDM'."""
+    def test_rlssm_default_model_is_canonical_ssms_ddm(
+        self,
+        rldm_data,
+        rlssm_config,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Omitting model should default to the canonical ssms `2AB_RW_DDM` name."""
+        import hssm.rl.rlssm as rlssm_module
+
+        called_with = {}
+
+        def _fake_get_rlssm_model_config(**kwargs):  # type: ignore[no-untyped-def]
+            called_with.update(kwargs)
+            return rlssm_config
+
+        monkeypatch.setattr(
+            rlssm_module, "get_rlssm_model_config", _fake_get_rlssm_model_config
+        )
+
         model = RLSSM(data=rldm_data)
+
         assert isinstance(model, RLSSM)
-        assert model.model_config.decision_process == "ddm"
+        assert called_with["model"] == registry.DEFAULT_RLSSM_MODEL
 
     def test_rlssm_model_config_provided(self, rldm_data, rlssm_config) -> None:
         """Passing model_config= directly should bypass the registry."""
@@ -413,51 +455,57 @@ class TestRLSSMSimplifiedInterface:
 
     def test_rlssm_unregistered_model_raises(self, rldm_data) -> None:
         """Using an unknown model name should raise ValueError."""
-        with pytest.raises(ValueError, match="not found in the RLSSM registry"):
+        with pytest.raises(
+            ValueError, match="not found in the RLSSM registry or ssms presets"
+        ):
             RLSSM(data=rldm_data, model="model_not_in_registry")
 
-    def test_rlssm_missing_data_property_raises(self, rldm_data) -> None:
+    def test_rlssm_missing_data_property_raises(self, rldm_data, rlssm_config) -> None:
         """Accessing .missing_data on a built RLSSM must raise."""
-        model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
+        model = RLSSM(data=rldm_data, model_config=rlssm_config)
         with pytest.raises(NotImplementedError, match="missing_data"):
             _ = model.missing_data
 
-    def test_rlssm_deadline_property_raises(self, rldm_data) -> None:
+    def test_rlssm_deadline_property_raises(self, rldm_data, rlssm_config) -> None:
         """Accessing .deadline on a built RLSSM must raise."""
-        model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
+        model = RLSSM(data=rldm_data, model_config=rlssm_config)
         with pytest.raises(NotImplementedError, match="deadline"):
             _ = model.deadline
 
-    def test_rlssm_loglik_missing_data_property_raises(self, rldm_data) -> None:
+    def test_rlssm_loglik_missing_data_property_raises(
+        self, rldm_data, rlssm_config
+    ) -> None:
         """Accessing .loglik_missing_data on a built RLSSM must raise."""
-        model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
+        model = RLSSM(data=rldm_data, model_config=rlssm_config)
         with pytest.raises(NotImplementedError, match="loglik_missing_data"):
             _ = model.loglik_missing_data
 
     def test_register_rlssm_model(self, rldm_data) -> None:
         """A user-registered model should instantiate via the simplified API."""
-        # Re-use the existing annotated learning function and ssm logp from the
-        # module-level helpers defined at the top of this test file.
-        register_rlssm_model(
-            name="rldm_custom_test",
-            decision_process="angle",
-            learning_process={"v": _compute_v_annotated},
-            learning_process_params=["rl_alpha", "scaler"],
-            learning_process_bounds={"rl_alpha": (0.0, 1.0), "scaler": (0.0, 10.0)},
-            learning_process_params_default=[0.1, 1.0],
-            extra_fields=["feedback"],
-            choices=[0, 1],
-        )
+        _register_custom_rldm()
         model = RLSSM(data=rldm_data, model="rldm_custom_test")
         assert isinstance(model, RLSSM)
         assert "rl_alpha" in model.params
         assert "v" not in model.params
 
-    def test_rlssm_init_args_uses_simplified_interface(self, rldm_data) -> None:
+    def test_rlssm_init_args_uses_simplified_interface(
+        self,
+        rldm_data,
+        rlssm_config,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """_init_args should reflect the simplified constructor, not model_config."""
-        model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
+        import hssm.rl.rlssm as rlssm_module
+
+        monkeypatch.setattr(
+            rlssm_module,
+            "get_rlssm_model_config",
+            lambda **_: rlssm_config,
+        )
+
+        model = RLSSM(data=rldm_data)
         assert "model" in model._init_args
-        assert model._init_args["model"] == "2AB_RescorlaWagner_DDM"
+        assert model._init_args["model"] == registry.DEFAULT_RLSSM_MODEL
         # model_config should not be baked in as a hard reference
         assert "model_config" in model._init_args
         assert model._init_args["model_config"] is None
@@ -488,6 +536,7 @@ class TestRLSSMSimplifiedInterface:
         self, rldm_data
     ) -> None:
         """Public RLSSM accepts LP overrides with the same sampled params."""
+        _register_custom_rldm("rldm_custom_for_lp_override", decision_process="ddm")
 
         @annotate_function(
             inputs=["rl_alpha", "scaler", "response", "feedback"],
@@ -498,7 +547,7 @@ class TestRLSSMSimplifiedInterface:
 
         model = RLSSM(
             data=rldm_data,
-            model="2AB_RescorlaWagner_DDM",
+            model="rldm_custom_for_lp_override",
             learning_process={"v": alt_compute_v},
         )
 
@@ -510,17 +559,20 @@ class TestRLSSMSimplifiedInterface:
         self, rldm_data
     ) -> None:
         """Public RLSSM constructor should respect decision_process overrides."""
+        _register_custom_rldm("rldm_custom_for_dp_override", decision_process="ddm")
+
         model = RLSSM(
             data=rldm_data,
-            model="2AB_RescorlaWagner_DDM",
+            model="rldm_custom_for_dp_override",
             decision_process="angle",
         )
 
         assert model.model_config.decision_process == "angle"
         assert "theta" in model.params
 
-    def test_rlssm_builtin_model_re_resolves_registered_ssm(self, rldm_data) -> None:
-        """Built-in RLSSM models should pick up later register_ssm() overrides."""
+    def test_rlssm_custom_model_re_resolves_registered_ssm(self, rldm_data) -> None:
+        """Custom HSSM RLSSM models should pick up later register_ssm() overrides."""
+        _register_custom_rldm("rldm_custom_ddm", decision_process="ddm")
 
         @annotate_function(
             inputs=["v", "custom_a", "rt", "response"],
@@ -538,7 +590,7 @@ class TestRLSSMSimplifiedInterface:
             response=["rt", "response"],
         )
 
-        model = RLSSM(data=rldm_data, model="2AB_RescorlaWagner_DDM")
+        model = RLSSM(data=rldm_data, model="rldm_custom_ddm")
 
         assert model.model_config.decision_process == "ddm"
         assert "rl_alpha" in model.params

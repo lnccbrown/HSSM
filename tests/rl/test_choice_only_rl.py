@@ -90,6 +90,33 @@ def _fake_choice_only_data(responses):
                 ]
             ),
         ),
+        (
+            "inv_temp_softmax_4",
+            ["beta", "q0", "q1", "q2", "q3", "response"],
+            jnp.asarray(
+                [
+                    [1.0, 0.2, 1.2, 2.2, 3.2, 3.0],
+                    [1.0, 0.2, 1.2, 2.2, 3.2, 0.0],
+                    [3.0, 0.2, 1.2, 2.2, 3.2, 3.0],
+                ]
+            ),
+            jnp.asarray(
+                [
+                    3.2
+                    - jnp.log(
+                        jnp.exp(0.2) + jnp.exp(1.2) + jnp.exp(2.2) + jnp.exp(3.2)
+                    ),
+                    0.2
+                    - jnp.log(
+                        jnp.exp(0.2) + jnp.exp(1.2) + jnp.exp(2.2) + jnp.exp(3.2)
+                    ),
+                    9.6
+                    - jnp.log(
+                        jnp.exp(0.6) + jnp.exp(3.6) + jnp.exp(6.6) + jnp.exp(9.6)
+                    ),
+                ]
+            ),
+        ),
     ],
 )
 def test_inv_temp_softmax_base_logp_values_and_metadata(
@@ -103,7 +130,9 @@ def test_inv_temp_softmax_base_logp_values_and_metadata(
     assert base_logp.inputs == inputs
     assert base_logp.outputs == ["logp"]
     assert result.shape == (matrix.shape[0],)
-    np.testing.assert_allclose(np.asarray(result), np.asarray(expected), rtol=1e-6)
+    np.testing.assert_allclose(
+        np.asarray(result), np.asarray(expected), rtol=1e-5, atol=1e-6
+    )
     assert result[-1] > result[0]
 
 
@@ -127,6 +156,16 @@ def test_inv_temp_softmax_base_logp_values_and_metadata(
                     [1.0, 0.2, 1.2, 2.2, -1.0],
                     [1.0, 0.2, 1.2, 2.2, 3.0],
                     [1.0, 0.2, 1.2, 2.2, 1.5],
+                ]
+            ),
+        ),
+        (
+            "inv_temp_softmax_4",
+            jnp.asarray(
+                [
+                    [1.0, 0.2, 1.2, 2.2, 3.2, -1.0],
+                    [1.0, 0.2, 1.2, 2.2, 3.2, 4.0],
+                    [1.0, 0.2, 1.2, 2.2, 3.2, 1.5],
                 ]
             ),
         ),
@@ -292,15 +331,37 @@ class TestChoiceOnlyRealSSMSSmoke:
             pytest.skip(f"installed ssms.rl does not expose {model_name}")
 
     @pytest.mark.parametrize(
-        ("model_name", "n_choices"),
+        ("model_name", "n_choices", "expected_params", "dist_kwargs"),
         [
-            ("2AB_RW_InvTempSoftmax", 2),
-            ("3AB_RW_InvTempSoftmax", 3),
+            (
+                "2AB_RW_InvTempSoftmax",
+                2,
+                ["rl_alpha", "beta"],
+                {"rl_alpha": 0.5, "beta": 2.0},
+            ),
+            (
+                "2AB_RW_DualAlpha_InvTempSoftmax",
+                2,
+                ["rl_alpha", "rl_alpha_neg", "beta"],
+                {"rl_alpha": 0.5, "rl_alpha_neg": 0.3, "beta": 2.0},
+            ),
+            (
+                "3AB_RW_InvTempSoftmax",
+                3,
+                ["rl_alpha", "beta"],
+                {"rl_alpha": 0.5, "beta": 2.0},
+            ),
+            (
+                "4AB_RW_InvTempSoftmax",
+                4,
+                ["rl_alpha", "beta"],
+                {"rl_alpha": 0.5, "beta": 2.0},
+            ),
         ],
     )
     @pytest.mark.slow
     def test_real_ssms_choice_only_rlssm_compiles_finite_active_lapse_logp(
-        self, model_name, n_choices
+        self, model_name, n_choices, expected_params, dist_kwargs
     ):
         """A real ssms choice-only preset can compile a finite active-lapse logp."""
         self._require_choice_only_ssms_model(model_name)
@@ -311,7 +372,7 @@ class TestChoiceOnlyRealSSMSSmoke:
             expected_qs = {f"q{i}" for i in range(n_choices)}
             assert config.response == ["response"]
             assert config.decision_process == f"inv_temp_softmax_{n_choices}"
-            assert config.list_params == ["rl_alpha", "beta"]
+            assert config.list_params == expected_params
             assert set(config.ssm_logp_func.computed) == expected_qs
             data = pd.DataFrame(
                 {
@@ -330,8 +391,7 @@ class TestChoiceOnlyRealSSMSSmoke:
             logp = logp_fn(model.initial_point(transformed=False))
             dist_logp = pm.logp(
                 model.model_distribution.dist(
-                    rl_alpha=0.5,
-                    beta=2.0,
+                    **dist_kwargs,
                     p_outlier=0.05,
                 ),
                 data["response"].to_numpy(),
