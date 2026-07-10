@@ -1,11 +1,12 @@
 import numpy as np
 import pytest
 
+import hssm
+from hssm.likelihoods.analytical import lba4_bounds, logp_lba4
 from hssm.modelconfig import get_default_model_config
 from hssm.modelconfig._softmax_inv_temperature_config import (
     softmax_inv_temperature_config,
 )
-import hssm
 
 
 def test_get_ddm_sdv_config():
@@ -102,6 +103,23 @@ def test_get_ornstein_config():
         "g": (-1.0, 1.0),
         "t": (1e-3, 2.0),
     }
+
+
+def test_get_lba4_config():
+    lba4_model_config = get_default_model_config("lba4")
+    assert lba4_model_config["response"] == ["rt", "response"]
+    assert lba4_model_config["choices"] == [0, 1, 2, 3]
+    assert lba4_model_config["list_params"] == ["A", "b", "v0", "v1", "v2", "v3"]
+    assert lba4_model_config["description"] == (
+        "Linear Ballistic Accumulator 4 Choices (LBA4)"
+    )
+
+    likelihood = lba4_model_config["likelihoods"]["analytical"]
+    assert likelihood["loglik"] is logp_lba4
+    assert likelihood["backend"] is None
+    assert likelihood["default_priors"] == {}
+    assert likelihood["bounds"] == lba4_bounds
+    assert likelihood["extra_fields"] is None
 
 
 @pytest.mark.parametrize("model", hssm.list_models())

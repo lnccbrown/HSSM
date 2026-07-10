@@ -1,3 +1,5 @@
+import sys
+
 import hssm
 import pytest
 import numpy as np
@@ -29,11 +31,14 @@ PARAMETER_GRID = [
 ]
 
 
+@pytest.mark.xfail(
+    sys.version_info >= (3, 14),
+    reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
+    strict=True,  # This will let us know in the future when this is fixed
+)
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-def test_sample_posterior_predictive(
-    cav_idata, cavanagh_test, draws, safe_mode, inplace
-):
+def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, inplace):
     """Test sample_posterior_predictive method."""
 
     model = hssm.HSSM(
@@ -50,11 +55,12 @@ def test_sample_posterior_predictive(
             },
         ],
     )  # Doesn't matter what model or data we use here
-    delattr(cav_idata, "posterior_predictive")
-    cav_idata_copy = cav_idata.copy()
+    if "posterior_predictive" in cav_dt:
+        del cav_dt["posterior_predictive"]
+    cav_dt_copy = cav_dt.copy()
 
     posterior_predictive = model.sample_posterior_predictive(
-        idata=cav_idata_copy, draws=draws, safe_mode=safe_mode, inplace=inplace
+        dt=cav_dt_copy, draws=draws, safe_mode=safe_mode, inplace=inplace
     )
 
     if draws is None:
@@ -70,11 +76,11 @@ def test_sample_posterior_predictive(
 
     try:
         if inplace:
-            assert "posterior_predictive" in cav_idata_copy
-            assert cav_idata_copy.posterior_predictive.draw.size == size
+            assert "posterior_predictive" in cav_dt_copy
+            assert cav_dt_copy.posterior_predictive.draw.size == size
         else:
             assert posterior_predictive is not None
-            assert "posterior_predictive" not in cav_idata_copy
+            assert "posterior_predictive" not in cav_dt_copy
             assert posterior_predictive.posterior_predictive.draw.size == size
     except AssertionError:
         raise

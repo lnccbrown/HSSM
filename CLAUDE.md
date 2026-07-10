@@ -31,8 +31,10 @@ docs/              # MkDocs documentation source
 - **Package manager:** uv (with `uv.lock`)
 - **Python:** >=3.11, <3.14
 - **Linting/formatting:** ruff (via pre-commit)
-- **Type checking:** mypy
-- **Pre-commit hooks:** end-of-file-fixer, trailing-whitespace, ruff, ruff-format, mypy
+- **Type checking:** pyrefly (main; via pre-commit) + mypy (kept in CI)
+- **Pre-commit runner:** `prek` (not the `pre-commit` CLI). Run hooks with `uv run prek run --all-files` (or `uv run prek run <hook-id>`). The pyrefly hook uses `language: system`, so it relies on the pyrefly installed in the uv-managed environment — always invoke via `uv run prek`.
+- **Pre-commit hooks:** end-of-file-fixer, trailing-whitespace, ruff, ruff-format, pyrefly-check, mypy
+- **If `git commit` fails to run the hooks** (e.g. a hook binary "not found", or the config looks out of date), the installed git hook is stale — re-sync it with `uv run prek install -f`, then commit again. Do **not** work around it by manually putting the uv env on `PATH`.
 
 ## Dependency Management
 

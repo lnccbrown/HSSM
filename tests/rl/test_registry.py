@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -55,8 +56,10 @@ def annotated_ssm_base_logp() -> Any:
 
 
 class TestBuildSsmSpecFromModelconfig:
+    """Tests for deriving SSM specs from HSSM modelconfig entries."""
+
     def test_unknown_model_raises(self) -> None:
-        """Completely unknown names should raise ValueError from the modelconfig bridge."""
+        """Unknown names should raise ValueError from the modelconfig bridge."""
         with pytest.raises(ValueError, match="not a registered custom SSM"):
             registry._build_ssm_spec_from_modelconfig("totally_unknown_model")
 
@@ -88,8 +91,7 @@ class TestBuildSsmSpecFromModelconfig:
         monkeypatch: pytest.MonkeyPatch,
         annotated_ssm_base_logp: Any,
     ) -> None:
-        """The lazy factory should call make_jax_matrix_logp_funcs_from_onnx with the
-        correct filename."""
+        """Call make_jax_matrix_logp_funcs_from_onnx with the correct filename."""
         import hssm.distribution_utils.onnx as onnx_module
 
         called_with: list[str] = []
@@ -115,6 +117,8 @@ class TestBuildSsmSpecFromModelconfig:
 
 
 class TestGetSsmLogp:
+    """Tests for lazy SSM logp resolution and caching."""
+
     def test_builds_lazy_factory_once(self, annotated_ssm_base_logp: Any) -> None:
         """Lazy SSM factories should only build and cache one function instance."""
         call_count = 0
@@ -167,12 +171,14 @@ class TestGetSsmLogp:
 
 
 class TestBuildSsmLogpFunc:
+    """Tests for adding RL computed functions to SSM logp callables."""
+
     def test_raises_if_already_computed(
         self,
         annotated_ssm_base_logp: Any,
         learning_process: dict[str, Any],
     ) -> None:
-        """_build_ssm_logp_func must refuse functions that already have .computed set."""
+        """Refuse functions that already have .computed set."""
         precomputed = annotate_function(
             inputs=annotated_ssm_base_logp.inputs,
             outputs=annotated_ssm_base_logp.outputs,
@@ -184,6 +190,8 @@ class TestBuildSsmLogpFunc:
 
 
 class TestDeriveRlParams:
+    """Tests for deriving sampled RL parameters from learning functions."""
+
     def test_excludes_response_and_extra_fields(
         self,
         learning_process: dict[str, Any],
@@ -198,7 +206,7 @@ class TestDeriveRlParams:
         assert derived == ["rl_alpha"]
 
     def test_warns_for_unannotated_lp_func(self) -> None:
-        """A learning-process function without .inputs should log a warning and be skipped."""
+        """A learning-process function without .inputs should be skipped."""
 
         def unannotated_func(x):  # type: ignore[no-untyped-def]
             return x
@@ -214,6 +222,8 @@ class TestDeriveRlParams:
 
 
 class TestRegisterSsm:
+    """Tests for registering custom SSM decision processes."""
+
     def test_caches_prebuilt_function(self, annotated_ssm_base_logp: Any) -> None:
         """Registering a pre-built SSM should populate the cache immediately."""
         registry.register_ssm(
@@ -232,7 +242,7 @@ class TestRegisterSsm:
         annotated_ssm_base_logp: Any,
         learning_process: dict[str, Any],
     ) -> None:
-        """SSM registration should reject functions that already carry computed params."""
+        """Reject functions that already carry computed params."""
         precomputed_logp = annotate_function(
             inputs=annotated_ssm_base_logp.inputs,
             outputs=annotated_ssm_base_logp.outputs,
@@ -335,6 +345,8 @@ class TestRegisterSsm:
 
 
 class TestRegisterRlssmModel:
+    """Tests for registering custom HSSM-side RLSSM model templates."""
+
     def test_copies_mutable_inputs(
         self,
         learning_process: dict[str, Any],
@@ -416,6 +428,8 @@ class TestRegisterRlssmModel:
 
 
 class TestGetRlssmModelConfig:
+    """Tests for materializing RLSSMConfig objects from registry names."""
+
     def test_builds_expected_config(
         self,
         annotated_ssm_base_logp: Any,
@@ -491,7 +505,9 @@ class TestGetRlssmModelConfig:
 
     def test_unknown_model_raises(self) -> None:
         """Unknown RLSSM model names should fail with a clear error."""
-        with pytest.raises(ValueError, match="not found in the RLSSM registry"):
+        with pytest.raises(
+            ValueError, match="not found in the RLSSM registry or ssms presets"
+        ):
             registry.get_rlssm_model_config("does_not_exist")
 
     def test_learning_process_override_with_matching_metadata(
@@ -611,99 +627,138 @@ class TestGetRlssmModelConfig:
             registry.get_rlssm_model_config("no_bounds_model")
 
 
-class TestBuiltinModels:
-    @pytest.mark.parametrize(
-        "model_name, expected_dp",
-        [
-            ("2AB_RescorlaWagner_DDM", "ddm"),
-            ("2AB_RescorlaWagner_Weibull", "weibull"),
-        ],
-    )
-    def test_are_registered(self, model_name: str, expected_dp: str) -> None:
-        """2AB_RescorlaWagner_DDM and _Weibull must be present in the RLSSM registry."""
-        assert model_name in registry._RLSSM_REGISTRY
-        entry = registry._RLSSM_REGISTRY[model_name]
-        metadata = entry.learning_process_metadata
-        assert entry.decision_process == expected_dp
-        assert metadata.sampled_params == ["rl_alpha", "scaler"]
-        assert metadata.extra_fields == ["feedback"]
-        assert entry.choices == [0, 1]
-        assert entry.decision_process_loglik_kind == "approx_differentiable"
-        assert metadata.kind == "blackbox"
+class TestSsMsPresetDiscovery:
+    """Tests for dynamic ssms preset discovery and resolution."""
 
-    def test_builtin_model_re_resolves_registered_ssm(
-        self,
+    @staticmethod
+    def _install_fake_ssms(monkeypatch: pytest.MonkeyPatch):
+        names = [
+            "2AB_RW_DDM",
+            "2AB_RW_Angle",
+            "2AB_RW_Weibull",
+            "2AB_RW_DualAlpha_Angle",
+            "2AB_RW_InvTempSoftmax",
+            "2AB_RW_DualAlpha_InvTempSoftmax",
+            "3AB_RW_InvTempSoftmax",
+            "4AB_RW_InvTempSoftmax",
+        ]
+
+        def _info(name: str) -> dict[str, str]:
+            if name not in names:
+                raise ValueError(name)
+            return {"description": f"Description for {name}"}
+
+        def _resolve_model(name: str) -> object:
+            if name not in names:
+                raise ValueError(name)
+            return SimpleNamespace(model_name=name)
+
+        fake_ssms_rl = SimpleNamespace(
+            preset=SimpleNamespace(list=lambda: list(names), info=_info),
+            resolve_model=_resolve_model,
+        )
+        monkeypatch.setattr(registry, "_get_ssms_rl_module", lambda: fake_ssms_rl)
+        return fake_ssms_rl
+
+    def test_list_models_uses_dynamic_ssms_presets(
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Built-in starter models should pick up later register_ssm() overrides."""
+        """Ssms presets should surface dynamically in HSSM discovery."""
+        self._install_fake_ssms(monkeypatch)
 
-        @annotate_function(
-            inputs=["v", "custom_a", "rt", "response"],
-            outputs=["logp"],
-        )
-        def custom_ddm_logp(lan_matrix):
-            return lan_matrix[:, 1]
+        result = registry.list_models()
 
-        registry.register_ssm(
-            name="ddm",
-            ssm_base_logp_func=custom_ddm_logp,
-            list_params_ssm=["v", "custom_a"],
-            bounds_ssm={"custom_a": (0.3, 3.0)},
-            params_default_ssm=[0.0, 1.5],
-            response=["rt", "response"],
+        assert "2AB_RW_DDM" in result
+        assert "2AB_RW_DualAlpha_Angle" in result
+        assert "2AB_RW_DualAlpha_InvTempSoftmax" in result
+        assert "4AB_RW_InvTempSoftmax" in result
+        assert "2AB_RescorlaWagner_DDM" not in result
+        assert result["4AB_RW_InvTempSoftmax"] == (
+            "Description for 4AB_RW_InvTempSoftmax"
         )
 
-        config = registry.get_rlssm_model_config("2AB_RescorlaWagner_DDM")
-
-        assert config.decision_process == "ddm"
-        assert config.list_params == ["rl_alpha", "scaler", "custom_a"]
-        assert config.bounds["custom_a"] == (0.3, 3.0)
-        assert config.params_default[-1] == 1.5
-
-    @pytest.mark.parametrize(
-        "model_name",
-        ["2AB_RescorlaWagner_DDM", "2AB_RescorlaWagner_Weibull"],
-    )
-    def test_config_structure(
+    def test_list_models_merges_custom_hssm_registrations(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        annotated_ssm_base_logp: Any,
-        model_name: str,
+        learning_process: dict[str, Any],
     ) -> None:
-        """get_rlssm_model_config should produce a well-formed RLSSMConfig for
-        both the DDM and Weibull starter-pack models."""
-        import hssm.distribution_utils.onnx as onnx_module
-
-        monkeypatch.setattr(
-            onnx_module,
-            "make_jax_matrix_logp_funcs_from_onnx",
-            lambda model: annotated_ssm_base_logp,
-        )
-        monkeypatch.setattr(
-            registry,
-            "make_jax_matrix_logp_funcs_from_onnx",
-            lambda model: annotated_ssm_base_logp,
+        """User-registered HSSM models should still appear alongside ssms presets."""
+        self._install_fake_ssms(monkeypatch)
+        registry.register_rlssm_model(
+            name="custom_hssm_rlssm",
+            decision_process="angle",
+            learning_process=learning_process,
+            learning_process_params=["rl_alpha"],
+            learning_process_bounds={"rl_alpha": (0.0, 1.0)},
+            learning_process_params_default=[0.2],
+            description="Custom HSSM-side model",
         )
 
-        config = registry.get_rlssm_model_config(model_name)
+        result = registry.list_models()
 
-        assert isinstance(config, RLSSMConfig)
-        # RL params come first
-        assert config.list_params[:2] == ["rl_alpha", "scaler"]
-        assert "rl_alpha" in config.bounds
-        assert "scaler" in config.bounds
-        assert config.choices == (0, 1)
-        assert config.extra_fields == ["feedback"]
-        assert config.ssm_logp_func.computed == {"v": registry._compute_v_annotated}
+        assert result["2AB_RW_Angle"] == "Description for 2AB_RW_Angle"
+        assert result["custom_hssm_rlssm"] == "Custom HSSM-side model"
+
+    def test_get_rlssm_model_config_delegates_ssms_presets(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Canonical ssms names should delegate to RLSSMConfig.from_ssms_model."""
+        self._install_fake_ssms(monkeypatch)
+        called_with = []
+        sentinel_config = object()
+
+        def _fake_from_ssms_model(cls, ssms_model):  # type: ignore[no-untyped-def]
+            called_with.append(ssms_model.model_name)
+            return sentinel_config
+
+        monkeypatch.setattr(
+            RLSSMConfig,
+            "from_ssms_model",
+            classmethod(_fake_from_ssms_model),
+        )
+
+        result = registry.get_rlssm_model_config("2AB_RW_DualAlpha_Angle")
+
+        assert result is sentinel_config
+        assert called_with == ["2AB_RW_DualAlpha_Angle"]
+
+    def test_ssms_preset_overrides_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """HSSM-side overrides are intentionally limited to custom registry entries."""
+        self._install_fake_ssms(monkeypatch)
+
+        with pytest.raises(ValueError, match="only supported for HSSM-registered"):
+            registry.get_rlssm_model_config("2AB_RW_DDM", choices=[-1, 1])
+
+    def test_legacy_long_names_are_not_aliases(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Old HSSM-owned built-in names should not be kept as brittle aliases."""
+        self._install_fake_ssms(monkeypatch)
+
+        with pytest.raises(
+            ValueError, match="not found in the RLSSM registry or ssms presets"
+        ):
+            registry.get_rlssm_model_config("2AB_RescorlaWagner_DDM")
 
 
 class TestListModels:
+    """Tests for the public RLSSM discovery helper."""
+
     def test_returns_all_names(self) -> None:
-        """list_models should return every key in _RLSSM_REGISTRY with its description."""
+        """list_models should include custom registry entries with descriptions."""
+        registry.register_rlssm_model(
+            name="listed_custom_model",
+            decision_process="angle",
+            learning_process={},
+            learning_process_params=[],
+            learning_process_bounds={},
+            learning_process_params_default=[],
+            description="Custom listed model",
+        )
+
         result = registry.list_models()
 
-        assert set(result.keys()) == set(registry._RLSSM_REGISTRY.keys())
-        for name, desc in result.items():
-            assert desc == registry._RLSSM_REGISTRY[name].description
+        assert result["listed_custom_model"] == "Custom listed model"
 
     def test_public_rl_api_matches_registry(self) -> None:
         """The public hssm.rl and RLSSM accessors should delegate to the registry."""

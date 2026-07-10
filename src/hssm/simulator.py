@@ -9,7 +9,7 @@ from ssms.config import model_config
 
 def simulate_data(
     model: str,
-    theta: dict[str, ArrayLike] | list[float] | ArrayLike,
+    theta: dict[str, ArrayLike] | list[float] | np.ndarray,
     size: int,
     random_state: int | None = None,
     output_df: bool = True,

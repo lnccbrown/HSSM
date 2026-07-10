@@ -18,8 +18,6 @@ Use `hssm.HSSM` class to construct an HSSM model.
             - vi
             - find_MAP
             - log_likelihood
-            - summary
-            - plot_trace
             - graph
             - plot_predictive
             - plot_quantile_probability
