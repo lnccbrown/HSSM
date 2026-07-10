@@ -33,7 +33,7 @@ from .utils import (
 
 _logger = logging.getLogger("hssm")
 
-TRAJ_COLOR_DEFAULT_DICT: Mapping[int, str] = MappingProxyType(
+TRAJ_COLOR_DEFAULT_DICT: Mapping[Any, str] = MappingProxyType(
     {
         -1: "black",
         0: "black",
@@ -1185,10 +1185,10 @@ def _add_trajectories(
     highlight_rt_choice: bool = True,
     markersize_rt_choice: float | int = 50,
     markertype_rt_choice: str = "*",
-    markercolor_rt_choice: str | list[str] | dict[str, str] = "red",
+    markercolor_rt_choice: str | list[str] | Mapping[Any, str] = "red",
     linewidth: float | int = 1,
     alpha: float | int = 0.5,
-    colors: str | list[str] | dict[str, str] | None = None,
+    colors: str | list[str] | Mapping[Any, str] | None = None,
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1227,43 +1227,48 @@ def _add_trajectories(
         Additional keyword arguments passed to plotting functions.
     """
     # Check markercolor type
+    possible_choices = sample[0]["metadata"]["possible_choices"]
     if isinstance(markercolor_rt_choice, str):
-        markercolor_rt_choice_dict = {
-            value_: markercolor_rt_choice
-            for value_ in sample[0]["metadata"]["possible_choices"]
+        markercolor_rt_choice_dict: Mapping[Any, str] = {
+            value_: markercolor_rt_choice for value_ in possible_choices
         }
     elif isinstance(markercolor_rt_choice, list):
+        if len(markercolor_rt_choice) < len(possible_choices):
+            raise ValueError(
+                "The `markercolor_rt_choice` list must have at least as many "
+                f"entries as possible choices ({len(possible_choices)}), "
+                f"but got {len(markercolor_rt_choice)}."
+            )
         markercolor_rt_choice_dict = {
             value_: markercolor_rt_choice[cnt]
-            for cnt, value_ in enumerate(sample[0]["metadata"]["possible_choices"])
+            for cnt, value_ in enumerate(possible_choices)
         }
-    elif isinstance(markercolor_rt_choice, dict):
+    elif isinstance(markercolor_rt_choice, Mapping):
         markercolor_rt_choice_dict = markercolor_rt_choice
     else:
         raise ValueError(
-            "The `markercolor_trajectory_rt_choice`"
-            " argument must be a string, list, or dict."
+            "The `markercolor_rt_choice` argument must be a string, list, or mapping."
         )
 
     # Check trajectory color type
     if colors is None:
-        colors_dict: dict[Any, str] = dict(TRAJ_COLOR_DEFAULT_DICT)
+        colors_dict: Mapping[Any, str] = dict(TRAJ_COLOR_DEFAULT_DICT)
     elif isinstance(colors, str):
-        colors_dict = {}
-        for value_ in sample[0]["metadata"]["possible_choices"]:
-            colors_dict[value_] = colors
+        colors_dict = {value_: colors for value_ in possible_choices}
     elif isinstance(colors, list):
-        colors_dict = {}
-        cnt = 0
-        for value_ in sample[0]["metadata"]["possible_choices"]:
-            colors_dict[value_] = colors[cnt]
-            cnt += 1
-    elif isinstance(colors, dict):
+        if len(colors) < len(possible_choices):
+            raise ValueError(
+                "The `colors` list must have at least as many entries as "
+                f"possible choices ({len(possible_choices)}), "
+                f"but got {len(colors)}."
+            )
+        colors_dict = {
+            value_: colors[cnt] for cnt, value_ in enumerate(possible_choices)
+        }
+    elif isinstance(colors, Mapping):
         colors_dict = colors
     else:
-        raise ValueError(
-            "The `color_trajectories` argument must be a string, list, or dict."
-        )
+        raise ValueError("The `colors` argument must be a string, list, or mapping.")
 
     # Make bounds
     (b_high, b_low) = (
@@ -2013,7 +2018,7 @@ def _add_model_n_cartoon_to_ax(
     linestyle: str,
     ylim: float,
     t_s: np.ndarray,
-    color_dict: dict,
+    color_dict: Mapping[Any, str],
     zorder_cnt: int,
     alpha: float | None = None,
     keep_boundary: bool = True,

@@ -29,5 +29,7 @@ def test_add_trajectories_accepts_color_lists():
         colors=["green", "black"],
     )
 
-    assert ax.lines[0].get_color() == "green"
-    plt.close(fig)
+    try:
+        assert ax.lines[0].get_color() == "green"
+    finally:
+        plt.close(fig)
