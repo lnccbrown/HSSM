@@ -33,7 +33,7 @@ dependencies = [
     "jaxonnxruntime>=0.3.0",
     "numpyro>=0.19",
     "onnx>=1.16.0",
-    "ssm-simulators>=0.12.4",
+    "ssm-simulators>=0.12.4,<0.13",
 ]
 
 [project.urls]
