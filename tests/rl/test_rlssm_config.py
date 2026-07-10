@@ -8,7 +8,6 @@ import hssm
 from hssm.config import (
     DEFAULT_SSM_CHOICES,
     DEFAULT_SSM_OBSERVED_DATA,
-    Config,
     ModelConfig,
 )
 from hssm.rl import RLSSMConfig
@@ -816,6 +815,18 @@ class TestRLSSMConfigFromSSMSModel:
                 "feedback",
                 "condition",
             ]
+
+        subject_trials = jnp.asarray(
+            [
+                [0.2, 2.0, -1.0, 1.0, 0.0],
+                [0.4, 3.0, 1.0, 0.0, 1.0],
+            ]
+        )
+        result = config.ssm_logp_func.computed["v"](subject_trials)
+
+        assert set(result) == {"v", "a"}
+        assert jnp.allclose(result["v"], jnp.asarray([2.0, 3.0]))
+        assert jnp.allclose(result["a"], jnp.asarray([0.2, 0.4]))
 
     @pytest.mark.parametrize("n_choices", [2, 3])
     def test_from_ssms_model_choice_only_inv_temp_softmax_metadata(

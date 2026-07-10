@@ -12,6 +12,8 @@ from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
 
+import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from hssm.rl import registry
@@ -168,6 +170,32 @@ class TestGetSsmLogp:
         assert "angle" in registry._SSM_LOGP_CACHE
         # Second call returns cached value without re-building.
         assert registry._get_ssm_logp("angle") is result
+
+
+class TestInvTempSoftmaxBaseLogp:
+    """Tests for the built-in inverse-temperature softmax base logp."""
+
+    def test_float64_input_downcasts_when_jax_x64_is_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The softmax logp should produce finite float32 values under x64-off JAX."""
+        logp = registry._make_inv_temp_softmax_base_logp(2)
+        lan_matrix = np.asarray(
+            [
+                [2.0, 0.1, 0.4, 1.0],
+                [2.0, 0.6, 0.2, 0.0],
+            ],
+            dtype=np.float64,
+        )
+
+        monkeypatch.setattr(registry.jax_config, "read", lambda key: False)
+        monkeypatch.setattr(registry.jnp, "asarray", np.asarray)
+
+        result = logp(lan_matrix)
+
+        assert result.shape == (2,)
+        assert result.dtype == jnp.float32
+        assert np.isfinite(np.asarray(result)).all()
 
 
 class TestBuildSsmLogpFunc:
@@ -739,6 +767,60 @@ class TestSsMsPresetDiscovery:
             ValueError, match="not found in the RLSSM registry or ssms presets"
         ):
             registry.get_rlssm_model_config("2AB_RescorlaWagner_DDM")
+
+    def test_discovery_is_empty_when_ssms_rl_is_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing ssms.rl should make discovery and resolution safe no-ops."""
+        monkeypatch.setattr(registry, "_get_ssms_rl_module", lambda: None)
+
+        assert registry._list_ssms_presets() == {}
+        assert registry._resolve_ssms_model("2AB_RW_DDM") is None
+
+    def test_get_ssms_rl_module_returns_none_on_import_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The low-level ssms.rl import helper should absorb ImportError."""
+
+        def _raise_import_error(name: str) -> object:
+            raise ImportError(name)
+
+        monkeypatch.setattr(registry.importlib, "import_module", _raise_import_error)
+
+        assert registry._get_ssms_rl_module() is None
+
+    def test_discovery_is_empty_without_callable_preset_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Old ssms builds without preset.list/resolve_model are ignored safely."""
+        fake_ssms_rl = SimpleNamespace(preset=SimpleNamespace(list=None))
+        monkeypatch.setattr(registry, "_get_ssms_rl_module", lambda: fake_ssms_rl)
+
+        assert registry._list_ssms_presets() == {}
+        assert registry._resolve_ssms_model("2AB_RW_DDM") is None
+
+    def test_register_model_warns_when_shadowing_ssms_preset(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """Custom HSSM registrations may shadow ssms presets, but log a warning."""
+        self._install_fake_ssms(monkeypatch)
+
+        with caplog.at_level(logging.WARNING, logger="hssm.rl.registry"):
+            registry.register_rlssm_model(
+                name="2AB_RW_DDM",
+                decision_process="angle",
+                learning_process=learning_process,
+                learning_process_params=["rl_alpha"],
+                learning_process_bounds={"rl_alpha": (0.0, 1.0)},
+                learning_process_params_default=[0.2],
+                extra_fields=["feedback"],
+                choices=[0, 1],
+            )
+
+        assert "is an ssms RL preset and will be shadowed" in caplog.text
 
 
 class TestListModels:

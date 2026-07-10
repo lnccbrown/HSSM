@@ -9,6 +9,7 @@ import logging
 from collections.abc import Generator
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import bambi as bmb
@@ -347,6 +348,48 @@ class TestRLSSMModelStructure:
             model._make_model_distribution()
 
         assert captured.get("extra_fields") is None
+
+    def test_choice_only_response_validation_exits_when_metadata_is_incomplete(
+        self,
+    ) -> None:
+        """Choice-only validation is a no-op until response metadata is complete."""
+        data = pd.DataFrame({"response": [0, 1], "feedback": [1.0, 0.0]})
+
+        assert (
+            _RLSSM._validate_choice_only_responses(
+                data, SimpleNamespace(response=[], choices=[0, 1])
+            )
+            is None
+        )
+        assert (
+            _RLSSM._validate_choice_only_responses(
+                data, SimpleNamespace(response=["missing"], choices=[0, 1])
+            )
+            is None
+        )
+        assert (
+            _RLSSM._validate_choice_only_responses(
+                data, SimpleNamespace(response=["response"], choices=None)
+            )
+            is None
+        )
+
+    def test_choice_only_scalar_lapse_must_be_probability(self) -> None:
+        """Choice-only scalar lapse values must satisfy the documented bounds."""
+        model = object.__new__(_RLSSM)
+        model.list_params = ["rl_alpha", "beta", "p_outlier"]
+        model.model_config = SimpleNamespace(
+            extra_fields=[],
+            loglik=lambda *args: jnp.zeros(1),
+            model_name="choice_only_test",
+            is_choice_only=True,
+        )
+        model.data = pd.DataFrame({"response": [0, 1]})
+        model.bounds = {"rl_alpha": (0.0, 1.0), "beta": (0.001, 20.0)}
+        model.lapse = 0.0
+
+        with pytest.raises(ValueError, match="0 < lapse <= 1"):
+            model._make_model_distribution()
 
 
 class TestRLSSMSerialization:
