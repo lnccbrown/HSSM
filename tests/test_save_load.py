@@ -102,3 +102,38 @@ def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
     assert loaded_model._inference_obj_vi is None
     assert loaded_model._inference_obj is not None
     compare_hssm_class_attributes(basic_hssm_model, loaded_model)
+
+
+@pytest.mark.parametrize(
+    ("existing_filename", "loaded_group", "missing_filename"),
+    [
+        ("traces.nc", "idata_mcmc", "vi_traces.nc"),
+        ("vi_traces.nc", "idata_vi", "traces.nc"),
+    ],
+)
+def test_load_model_traces_tolerates_each_missing_file(
+    caplog,
+    tmp_path,
+    existing_filename,
+    loaded_group,
+    missing_filename,
+):
+    """Either trace file can be loaded when its counterpart is absent."""
+    traces = xr.DataTree.from_dict(
+        {
+            "posterior": xr.Dataset(
+                {"theta": (("chain", "draw"), np.array([[0.25, 0.75]]))},
+                coords={"chain": [0], "draw": [0, 1]},
+            )
+        }
+    )
+    traces.to_netcdf(tmp_path / existing_filename)
+
+    loaded = hssm.HSSM.load_model_traces(tmp_path)
+
+    assert set(loaded.children) == {loaded_group}
+    xr.testing.assert_identical(
+        loaded[f"{loaded_group}/posterior"].ds,
+        traces["posterior"].ds,
+    )
+    assert f"{missing_filename} file does not exist" in caplog.text

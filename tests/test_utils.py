@@ -1,18 +1,20 @@
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pytensor
 import pytest
 import xarray as xr
-from ssms.basic_simulators.simulator import simulator
 from jax import config
+from ssms.basic_simulators.simulator import simulator
 
 import hssm
 from hssm.utils import (
-    set_floatX,
+    _compute_log_likelihood,
     _generate_random_indices,
     _random_sample,
+    set_floatX,
 )
 
 hssm.set_floatX("float32")
@@ -94,6 +96,102 @@ def test_set_floatX():
     set_floatX("float64")
     assert pytensor.config.floatX == "float64"
     assert config.read("jax_enable_x64")
+
+
+def _minimal_log_likelihood_datatree(include_log_likelihood=False):
+    groups = {
+        "posterior": xr.Dataset(
+            {"theta": (("chain", "draw"), np.array([[0.25, 0.75]]))},
+            coords={"chain": [0], "draw": [0, 1]},
+        )
+    }
+    if include_log_likelihood:
+        groups["log_likelihood"] = xr.Dataset(
+            {
+                "rt,response": (
+                    ("chain", "draw", "__obs__"),
+                    np.full((1, 2, 1), -99.0),
+                )
+            },
+            coords={"chain": [0], "draw": [0, 1], "__obs__": [0]},
+        )
+    return xr.DataTree.from_dict(groups)
+
+
+def _log_likelihood_model(family):
+    def compute_likelihood_params(
+        dt,
+        data,
+        include_group_specific,
+        sample_new_groups,
+    ):
+        assert data is None
+        assert include_group_specific is True
+        assert sample_new_groups is False
+        return dt
+
+    return SimpleNamespace(
+        response_component=SimpleNamespace(
+            term=SimpleNamespace(alias="rt,response", name="c(rt, response)")
+        ),
+        family=family,
+        _compute_likelihood_params=compute_likelihood_params,
+    )
+
+
+def _fake_log_likelihood(family, **kwargs):
+    assert family is kwargs["model"].family
+    assert kwargs["data"] is None
+    assert kwargs["posterior"].name == "posterior"
+    return xr.DataArray(
+        np.array([[[-1.0], [-2.0]]]),
+        dims=("chain", "draw", "__obs__"),
+        coords={"chain": [0], "draw": [0, 1], "__obs__": [0]},
+    )
+
+
+def test_compute_log_likelihood_returns_deep_copy(monkeypatch):
+    """Non-in-place computation leaves the supplied posterior untouched."""
+    model = _log_likelihood_model(family=object())
+    traces = _minimal_log_likelihood_datatree()
+    monkeypatch.setattr("hssm.utils.log_likelihood", _fake_log_likelihood)
+
+    result = _compute_log_likelihood(model, traces, data=None, inplace=False)
+
+    assert result is not traces
+    assert isinstance(result, xr.DataTree)
+    assert "log_likelihood" in result
+    assert "log_likelihood" not in traces
+    result["posterior"]["theta"].values[0, 0] = 10.0
+    assert traces["posterior"]["theta"].values[0, 0] == 0.25
+
+
+def test_compute_log_likelihood_rejects_missing_family():
+    """Log-likelihood computation requires a configured model family."""
+    model = _log_likelihood_model(family=None)
+    traces = _minimal_log_likelihood_datatree()
+
+    with pytest.raises(
+        ValueError,
+        match="Model family is not defined. Cannot compute log-likelihood.",
+    ):
+        _compute_log_likelihood(model, traces, data=None)
+
+
+def test_compute_log_likelihood_warns_and_replaces_existing_group(caplog, monkeypatch):
+    """Recomputation replaces stale log-likelihood values in-place."""
+    model = _log_likelihood_model(family=object())
+    traces = _minimal_log_likelihood_datatree(include_log_likelihood=True)
+    monkeypatch.setattr("hssm.utils.log_likelihood", _fake_log_likelihood)
+
+    result = _compute_log_likelihood(model, traces, data=None, inplace=True)
+
+    assert result is traces
+    np.testing.assert_array_equal(
+        traces["log_likelihood"]["rt,response"].values,
+        np.array([[[-1.0], [-2.0]]]),
+    )
+    assert "Replacing existing log_likelihood group in dt." in caplog.text
 
 
 @pytest.mark.parametrize(
