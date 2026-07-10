@@ -4,7 +4,7 @@ import logging
 from copy import deepcopy
 from itertools import product
 from types import MappingProxyType
-from typing import Any, Iterable, Literal, Protocol, cast
+from typing import Any, Iterable, Literal, Mapping, Protocol, cast
 
 import arviz as az
 import matplotlib as mpl
@@ -33,7 +33,7 @@ from .utils import (
 
 _logger = logging.getLogger("hssm")
 
-TRAJ_COLOR_DEFAULT_DICT: MappingProxyType[int, str] = MappingProxyType(
+TRAJ_COLOR_DEFAULT_DICT: Mapping[int, str] = MappingProxyType(
     {
         -1: "black",
         0: "black",
@@ -1253,6 +1253,7 @@ def _add_trajectories(
         for value_ in sample[0]["metadata"]["possible_choices"]:
             colors_dict[value_] = colors
     elif isinstance(colors, list):
+        colors_dict = {}
         cnt = 0
         for value_ in sample[0]["metadata"]["possible_choices"]:
             colors_dict[value_] = colors[cnt]
