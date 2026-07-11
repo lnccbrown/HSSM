@@ -102,24 +102,28 @@ def test_set_floatX():
     assert config.read("jax_enable_x64")
 
 
-def _minimal_log_likelihood_datatree(include_log_likelihood=False):
-    groups = {
-        "posterior": xr.Dataset(
-            {"theta": (("chain", "draw"), np.array([[0.25, 0.75]]))},
-            coords={"chain": [0], "draw": [0, 1]},
+@pytest.fixture
+def minimal_log_likelihood_datatree(minimal_posterior_datatree):
+    """Return a factory for compact log-likelihood DataTrees."""
+
+    def _make(include_log_likelihood=False):
+        traces = minimal_posterior_datatree(
+            posterior_var="theta",
+            posterior_values=np.array([[0.25, 0.75]]),
         )
-    }
-    if include_log_likelihood:
-        groups["log_likelihood"] = xr.Dataset(
-            {
-                "rt,response": (
-                    ("chain", "draw", "__obs__"),
-                    np.full((1, 2, 1), -99.0),
-                )
-            },
-            coords={"chain": [0], "draw": [0, 1], "__obs__": [0]},
-        )
-    return xr.DataTree.from_dict(groups)
+        if include_log_likelihood:
+            traces["log_likelihood"] = xr.Dataset(
+                {
+                    "rt,response": (
+                        ("chain", "draw", "__obs__"),
+                        np.full((1, 2, 1), -99.0),
+                    )
+                },
+                coords={"chain": [0], "draw": [0, 1], "__obs__": [0]},
+            )
+        return traces
+
+    return _make
 
 
 def _log_likelihood_model(family):
@@ -154,10 +158,12 @@ def _fake_log_likelihood(family, **kwargs):
     )
 
 
-def test_compute_log_likelihood_returns_deep_copy(monkeypatch):
+def test_compute_log_likelihood_returns_deep_copy(
+    minimal_log_likelihood_datatree, monkeypatch
+):
     """Non-in-place computation leaves the supplied posterior untouched."""
     model = _log_likelihood_model(family=object())
-    traces = _minimal_log_likelihood_datatree()
+    traces = minimal_log_likelihood_datatree()
     monkeypatch.setattr("hssm.utils.log_likelihood", _fake_log_likelihood)
 
     result = _compute_log_likelihood(model, traces, data=None, inplace=False)
@@ -170,10 +176,12 @@ def test_compute_log_likelihood_returns_deep_copy(monkeypatch):
     assert traces["posterior"]["theta"].values[0, 0] == 0.25
 
 
-def test_compute_log_likelihood_rejects_missing_family():
+def test_compute_log_likelihood_rejects_missing_family(
+    minimal_log_likelihood_datatree,
+):
     """Log-likelihood computation requires a configured model family."""
     model = _log_likelihood_model(family=None)
-    traces = _minimal_log_likelihood_datatree()
+    traces = minimal_log_likelihood_datatree()
 
     with pytest.raises(
         ValueError,
@@ -182,10 +190,12 @@ def test_compute_log_likelihood_rejects_missing_family():
         _compute_log_likelihood(model, traces, data=None)
 
 
-def test_compute_log_likelihood_warns_and_replaces_existing_group(caplog, monkeypatch):
+def test_compute_log_likelihood_warns_and_replaces_existing_group(
+    caplog, minimal_log_likelihood_datatree, monkeypatch
+):
     """Recomputation replaces stale log-likelihood values in-place."""
     model = _log_likelihood_model(family=object())
-    traces = _minimal_log_likelihood_datatree(include_log_likelihood=True)
+    traces = minimal_log_likelihood_datatree(include_log_likelihood=True)
     monkeypatch.setattr("hssm.utils.log_likelihood", _fake_log_likelihood)
 
     result = _compute_log_likelihood(model, traces, data=None, inplace=True)

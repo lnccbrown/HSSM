@@ -172,30 +172,27 @@ class TestGetSsmLogp:
         assert registry._get_ssm_logp("angle") is result
 
 
-class TestInvTempSoftmaxBaseLogp:
-    """Tests for the built-in inverse-temperature softmax base logp."""
+def test_inv_temp_softmax_base_logp_downcasts_float64_when_jax_x64_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The softmax logp should produce finite float32 values under x64-off JAX."""
+    logp = registry._make_inv_temp_softmax_base_logp(2)
+    lan_matrix = np.asarray(
+        [
+            [2.0, 0.1, 0.4, 1.0],
+            [2.0, 0.6, 0.2, 0.0],
+        ],
+        dtype=np.float64,
+    )
 
-    def test_float64_input_downcasts_when_jax_x64_is_disabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The softmax logp should produce finite float32 values under x64-off JAX."""
-        logp = registry._make_inv_temp_softmax_base_logp(2)
-        lan_matrix = np.asarray(
-            [
-                [2.0, 0.1, 0.4, 1.0],
-                [2.0, 0.6, 0.2, 0.0],
-            ],
-            dtype=np.float64,
-        )
+    monkeypatch.setattr(registry.jax_config, "read", lambda key: False)
+    monkeypatch.setattr(registry.jnp, "asarray", np.asarray)
 
-        monkeypatch.setattr(registry.jax_config, "read", lambda key: False)
-        monkeypatch.setattr(registry.jnp, "asarray", np.asarray)
+    result = logp(lan_matrix)
 
-        result = logp(lan_matrix)
-
-        assert result.shape == (2,)
-        assert result.dtype == jnp.float32
-        assert np.isfinite(np.asarray(result)).all()
+    assert result.shape == (2,)
+    assert result.dtype == jnp.float32
+    assert np.isfinite(np.asarray(result)).all()
 
 
 class TestBuildSsmLogpFunc:

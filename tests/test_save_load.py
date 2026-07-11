@@ -132,13 +132,17 @@ def test_load_model_traces_tolerates_each_missing_file(
             )
         }
     )
-    traces.to_netcdf(tmp_path / existing_filename)
+    trace_path = tmp_path / existing_filename
+    traces.to_netcdf(trace_path)
 
-    loaded = hssm.HSSM.load_model_traces(tmp_path)
+    try:
+        loaded = hssm.HSSM.load_model_traces(tmp_path)
 
-    assert set(loaded.children) == {loaded_group}
-    xr.testing.assert_identical(
-        loaded[f"{loaded_group}/posterior"].ds,
-        traces["posterior"].ds,
-    )
-    assert f"{missing_filename} file does not exist" in caplog.text
+        assert set(loaded.children) == {loaded_group}
+        xr.testing.assert_identical(
+            loaded[f"{loaded_group}/posterior"].ds,
+            traces["posterior"].ds,
+        )
+        assert f"{missing_filename} file does not exist" in caplog.text
+    finally:
+        trace_path.unlink(missing_ok=True)

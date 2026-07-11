@@ -89,27 +89,12 @@ def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, in
         raise
 
 
-def _minimal_posterior_datatree(include_posterior_predictive=False):
-    groups = {
-        "posterior": xr.Dataset(
-            {"v": (("chain", "draw"), np.array([[0.4, 0.6]]))},
-            coords={"chain": [0], "draw": [0, 1]},
-        )
-    }
-    if include_posterior_predictive:
-        groups["posterior_predictive"] = xr.Dataset(
-            {"prediction": (("chain", "draw"), np.array([[-1.0, -1.0]]))},
-            coords={"chain": [0], "draw": [0, 1]},
-        )
-    return xr.DataTree.from_dict(groups)
-
-
 def test_sample_posterior_predictive_uses_attached_traces_for_response_params(
-    data_ddm, monkeypatch
+    data_ddm, minimal_posterior_datatree, monkeypatch
 ):
     """Response-parameter prediction delegates with attached traces by default."""
     model = hssm.HSSM(data=data_ddm)
-    traces = _minimal_posterior_datatree()
+    traces = minimal_posterior_datatree()
     expected = traces.copy(deep=True)
     model._inference_obj = traces
     calls = []
@@ -133,11 +118,11 @@ def test_sample_posterior_predictive_uses_attached_traces_for_response_params(
 
 
 def test_sample_posterior_predictive_replaces_existing_group_inplace(
-    caplog, data_ddm, monkeypatch
+    caplog, data_ddm, minimal_posterior_datatree, monkeypatch
 ):
     """An explicit in-place prediction removes stale draws before replacement."""
     model = hssm.HSSM(data=data_ddm)
-    traces = _minimal_posterior_datatree(include_posterior_predictive=True)
+    traces = minimal_posterior_datatree(include_posterior_predictive=True)
     replacement = xr.Dataset(
         {"prediction": (("chain", "draw"), np.array([[1.0, 2.0]]))},
         coords={"chain": [0], "draw": [0, 1]},
