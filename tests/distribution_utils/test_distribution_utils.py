@@ -1,3 +1,5 @@
+"""Tests for HSSM distribution utility helpers."""
+
 from unittest.mock import patch
 
 import bambi as bmb
@@ -25,6 +27,7 @@ hssm.set_floatX("float32")
 
 
 def test_make_hssm_rv():
+    """Check that generated HSSM random variables sample deterministically."""
     params = ["v", "a", "z", "t"]
     seed = 42
 
@@ -60,6 +63,7 @@ def test_make_hssm_rv():
 
 
 def test_lapse_distribution():
+    """Check lapse sampling shape, support, and reproducibility."""
     lapse_dist = bmb.Prior("Uniform", lower=0.0, upper=1.0)
     rv = distribution_utils.make_hssm_rv("ddm", ["v", "a", "z", "t"], lapse=lapse_dist)
     random_sample = rv.rng_fn(np.random.default_rng(), *[0.5, 0.5, 0.5, 0.3], 0.05, 10)
@@ -173,6 +177,8 @@ def test_apply_param_bounds_to_loglik():
 
 @pytest.mark.slow
 def test_make_distribution():
+    """Check custom distribution logp values and parameter-bound masking."""
+
     def fake_logp_function(data, param1, param2):
         """Make up a fake log likelihood function for this test only."""
         return data[:, 0] * param1 * param2
@@ -218,6 +224,7 @@ def test_make_distribution():
 
 @pytest.mark.slow
 def test_make_distribution_for_supported_model():
+    """Check supported-model distribution creation and unsupported-model errors."""
     data = np.zeros((10, 2))
     data[:, 0] = np.random.normal(size=10)
 
@@ -234,6 +241,7 @@ def test_make_distribution_for_supported_model():
 
 @pytest.mark.slow
 def test_extra_fields(data_ddm):
+    """Check extra likelihood fields are forwarded through generated distributions."""
     ones = np.ones(data_ddm.shape[0])
     x = ones * 0.5
     y = ones * 4.0
@@ -301,6 +309,7 @@ def test_extra_fields(data_ddm):
 
 @pytest.mark.slow
 def test_ensure_positive_ndt():
+    """Check that non-decision times above RT receive the sentinel logp."""
     data = np.zeros((1000, 2))
     data[:, 0] = np.random.uniform(size=1000)
 

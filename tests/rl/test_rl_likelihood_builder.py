@@ -1,3 +1,5 @@
+"""Tests for RL likelihood builder helpers."""
+
 from pathlib import Path
 from typing import Callable, NamedTuple
 
@@ -81,6 +83,7 @@ class RLDMSetup(NamedTuple):
 
 @pytest.fixture
 def fixture_path():
+    """Return the shared fixture directory."""
     return Path(__file__).parent.parent / "fixtures"
 
 
@@ -180,6 +183,8 @@ def rldm_setup(rldm_data, model_config, param_arrays, annotated_ssm_logp_func):
 
 
 class TestGetDataColumnsFromDataArgs:
+    """Tests for data-column and argument-array lookup helpers."""
+
     def test_get_column_indices(self):
         """Test column indexing and data collection from data matrix and args.
 
@@ -313,7 +318,11 @@ class TestGetDataColumnsFromDataArgs:
 
 
 class TestAnnotateFunction:
+    """Tests for the annotate_function helper."""
+
     def test_decorator_adds_attributes(self):
+        """Check that decorator metadata is attached to the wrapped function."""
+
         @annotate_function(inputs=["input1", "input2"], outputs=["output1"], other=42)
         def sample_function():
             return
@@ -740,6 +749,8 @@ class TestValidateInputs:
 
 
 class TestRldmLikelihoodBuilder:
+    """Tests for RLDM likelihood construction and execution."""
+
     def test_make_rl_logp_func_extracts_shared_multi_output_computed_params(self):
         """Shared computed functions can produce several decision parameters."""
 
@@ -971,6 +982,7 @@ class TestRldmLikelihoodBuilder:
         np.testing.assert_allclose(result, expected, rtol=1e-6)
 
     def test_make_rl_logp_func(self, rldm_setup):
+        """Check the fixture-backed RL logp function shape and aggregate value."""
         result = rldm_setup.logp_fn(rldm_setup.values, *rldm_setup.args)
         assert result.shape[0] == rldm_setup.total_trials
         np.testing.assert_almost_equal(result.sum(), -6879.15, decimal=DECIMAL)
