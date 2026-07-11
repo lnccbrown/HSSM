@@ -631,8 +631,8 @@ def plot_model_cartoon(
 
     if plotting_df is None:
         raise ValueError(
-            "No data available to plot. Please check `plot_data`, "
-            "`plot_predictive_mean`, and `plot_predictive_samples` settings."
+            "At least one of `plot_predictive_samples` or `plot_predictive_mean` "
+            "must be True."
         )
 
     # return plotting_df

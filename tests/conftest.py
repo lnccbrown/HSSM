@@ -279,6 +279,34 @@ def intercept_only_ddm_cartoon(cavanagh_test):
 
 
 @pytest.fixture
+def minimal_posterior_datatree():
+    """Return a factory for compact posterior DataTrees."""
+
+    def _make(
+        include_posterior_predictive=False,
+        posterior_var="v",
+        posterior_values=None,
+    ):
+        posterior_values = (
+            np.array([[0.4, 0.6]]) if posterior_values is None else posterior_values
+        )
+        groups = {
+            "posterior": xr.Dataset(
+                {posterior_var: (("chain", "draw"), posterior_values)},
+                coords={"chain": [0], "draw": [0, 1]},
+            )
+        }
+        if include_posterior_predictive:
+            groups["posterior_predictive"] = xr.Dataset(
+                {"prediction": (("chain", "draw"), np.array([[-1.0, -1.0]]))},
+                coords={"chain": [0], "draw": [0, 1]},
+            )
+        return xr.DataTree.from_dict(groups)
+
+    return _make
+
+
+@pytest.fixture
 def race_model_cartoon():
     """Return a race model for cartoon plots."""
     my_race_data = pd.read_csv(FIXTURES / "data_race.csv")

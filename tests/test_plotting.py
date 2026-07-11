@@ -2,7 +2,6 @@
 
 import sys
 
-import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -10,17 +9,10 @@ import pytest
 import xarray as xr
 
 import hssm
-from hssm.plotting.utils import (
-    _get_plotting_df,
-    _xarray_to_df,
-    _get_title,
-    _subset_df,
-    _row_mask_with_error,
-    _process_df_for_qp_plot,
-)
 from hssm.plotting.predictive import (
     _plot_predictive_1D,
     _plot_predictive_2D,
+    _process_lines,
     plot_predictive,
 )
 from hssm.plotting.quantile_probability import (
@@ -28,12 +20,20 @@ from hssm.plotting.quantile_probability import (
     _plot_quantile_probability_2D,
     plot_quantile_probability,
 )
+from hssm.plotting.utils import (
+    _get_plotting_df,
+    _get_title,
+    _process_df_for_qp_plot,
+    _row_mask_with_error,
+    _subset_df,
+    _xarray_to_df,
+)
 
 hssm.set_floatX("float32")
 
 
 def has_twin(ax):
-    """Checks if an axes has a twin axes with the same bounds.
+    """Check whether an axes has a twin axes with the same bounds.
 
     Credit: https://stackoverflow.com/questions/36209575/how-to-detect-if-a-twin-axis-has-been-generated-for-a-matplotlib-axis
     """
@@ -50,10 +50,12 @@ class TestPlotting:
     """Grouping all plotting tests into a single slow pytest class."""
 
     def test__get_title(self):
+        """Check grouped title formatting."""
         assert _get_title(("a"), ("b")) == "a = b"
         assert _get_title(("a", "b"), ("c", "d")) == "a = c | b = d"
 
     def test__subset_df(self, cavanagh_test):
+        """Check dataframe subsetting and invalid group values."""
         with pytest.raises(ValueError):
             _row_mask_with_error(cavanagh_test, "conf", "Bad value")
         cav_subset = cavanagh_test.loc[
@@ -99,7 +101,6 @@ class TestPlotting:
 
     def test__get_plotting_df(self, posterior, cavanagh_test):
         """Test _get_plotting_df."""
-
         # Makes a mock DataTree object
         posterior_dataset = xr.Dataset(data_vars={"rt,response": posterior})
         idata = xr.DataTree.from_dict({"posterior_predictive": posterior_dataset})
@@ -129,7 +130,25 @@ class TestPlotting:
         with pytest.raises(ValueError):
             _get_plotting_df(idata, data=None, extra_dims=["participant_id", "conf"])
 
+        with pytest.raises(ValueError, match="Either dt or data must be provided"):
+            _get_plotting_df(dt=None, data=None)
+
+    def test__process_lines(self):
+        """Line style and width helpers normalize sequences and dictionaries."""
+        assert _process_lines(["--"], mode="linestyles") == ["--", "--"]
+        assert _process_lines(("--", ":"), mode="linestyles") == ["--", ":"]
+        assert _process_lines([1.5], mode="linewidths") == [1.5, 1.5]
+        assert _process_lines((1.0, 2.0), mode="linewidths") == [1.0, 2.0]
+        assert _process_lines({"predicted": "--"}, mode="linestyles") == ["--", "-"]
+        assert _process_lines({"observed": 2.0}, mode="linewidths") == [1.25, 2.0]
+
+        with pytest.raises(ValueError, match="Invalid mode"):
+            _process_lines("-", mode="colors")
+        with pytest.raises(ValueError, match="must be a str or a list of strs"):
+            _process_lines(["-", 1], mode="linestyles")
+
     def test__plot_predictive_1D(self, cav_dt, cavanagh_test):
+        """Check one-dimensional predictive plotting line counts."""
         df = _get_plotting_df(
             cav_dt, cavanagh_test, extra_dims=["participant_id", "conf"]
         )
@@ -144,6 +163,7 @@ class TestPlotting:
         assert len(ax2.get_lines()) == 1
 
     def test__plot_predictive_2D(self, cav_dt, cavanagh_test):
+        """Check two-dimensional predictive plotting facet and line counts."""
         df = _get_plotting_df(
             cav_dt, cavanagh_test, extra_dims=["participant_id", "conf"]
         )
@@ -172,6 +192,7 @@ class TestPlotting:
         strict=True,  # This will let us know in the future when this is fixed
     )
     def test_plot_predictive(self, cav_dt, cavanagh_test):
+        """Check public predictive plotting across direct and sampled inputs."""
         model = hssm.HSSM(
             data=cavanagh_test,
             include=[
@@ -249,6 +270,7 @@ class TestPlotting:
         )
 
     def test__process_df_for_qp_plot(self, cav_dt, cavanagh_test):
+        """Check quantile-probability dataframe preparation and errors."""
         df = _get_plotting_df(
             cav_dt, cavanagh_test, extra_dims=["participant_id", "conf"]
         )
@@ -268,6 +290,17 @@ class TestPlotting:
         # Test 2: passing cond not as str
         with pytest.raises(ValueError):
             _process_df_for_qp_plot(df=df, q=6, cond=1, correct=None)
+
+        iterable_quantiles = _process_df_for_qp_plot(
+            df=df,
+            q=[0.25, 0.5, 0.75],
+            cond="conf",
+            correct=None,
+        )
+        np.testing.assert_allclose(
+            sorted(iterable_quantiles["quantile"].unique()),
+            [0.25, 0.5, 0.75],
+        )
 
     @pytest.mark.parametrize(
         "predictive_style",
@@ -671,7 +704,6 @@ class TestPlotting:
 
     def test__get_plotting_df_quantile_by_dims_validation(self, cav_dt, cavanagh_test):
         """Test _get_plotting_df with various quantile_by_dims inputs for validation coverage."""
-
         # Test 0: quantile_by_dims as None (should be None)
         df_none = _get_plotting_df(
             cav_dt,
@@ -737,7 +769,6 @@ class TestPlotting:
 
     def test__get_plotting_df_quantile_by_dims_edge_cases(self, cav_dt, cavanagh_test):
         """Test additional edge cases for quantile_by_dims to ensure full coverage."""
-
         # Test 1: quantile_by_dims provided but extra_dims is None
         df1 = _get_plotting_df(
             cav_dt,

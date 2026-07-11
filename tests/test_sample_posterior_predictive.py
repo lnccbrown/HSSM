@@ -1,8 +1,12 @@
+"""Tests for HSSM posterior-predictive sampling."""
+
 import sys
 
-import hssm
-import pytest
 import numpy as np
+import pytest
+import xarray as xr
+
+import hssm
 
 hssm.set_floatX("float32")
 
@@ -40,7 +44,6 @@ PARAMETER_GRID = [
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, inplace):
     """Test sample_posterior_predictive method."""
-
     model = hssm.HSSM(
         data=cavanagh_test,
         include=[
@@ -84,3 +87,67 @@ def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, in
             assert posterior_predictive.posterior_predictive.draw.size == size
     except AssertionError:
         raise
+
+
+def test_sample_posterior_predictive_uses_attached_traces_for_response_params(
+    data_ddm, minimal_posterior_datatree, monkeypatch
+):
+    """Response-parameter prediction delegates with attached traces by default."""
+    model = hssm.HSSM(data=data_ddm)
+    traces = minimal_posterior_datatree()
+    expected = traces.copy(deep=True)
+    model._inference_obj = traces
+    calls = []
+
+    def fake_predict(dt, kind, data, inplace, include_group_specific):
+        calls.append((dt, kind, data, inplace, include_group_specific))
+        return expected
+
+    monkeypatch.setattr(model.model, "predict", fake_predict)
+
+    result = model.sample_posterior_predictive(
+        kind="response_params",
+        inplace=False,
+        include_group_specific=False,
+    )
+
+    assert result is expected
+    assert len(calls) == 1
+    assert calls[0][0] is traces
+    assert calls[0][1:] == ("response_params", None, False, False)
+
+
+def test_sample_posterior_predictive_replaces_existing_group_inplace(
+    caplog, data_ddm, minimal_posterior_datatree, monkeypatch
+):
+    """An explicit in-place prediction removes stale draws before replacement."""
+    model = hssm.HSSM(data=data_ddm)
+    traces = minimal_posterior_datatree(include_posterior_predictive=True)
+    replacement = xr.Dataset(
+        {"prediction": (("chain", "draw"), np.array([[1.0, 2.0]]))},
+        coords={"chain": [0], "draw": [0, 1]},
+    )
+    calls = []
+
+    def fake_predict(dt, kind, data, inplace, include_group_specific):
+        calls.append((dt, kind, data, inplace, include_group_specific))
+        assert "posterior_predictive" not in dt
+        dt["posterior_predictive"] = replacement
+
+    monkeypatch.setattr(model.model, "predict", fake_predict)
+
+    result = model.sample_posterior_predictive(
+        dt=traces,
+        kind="response_params",
+        inplace=True,
+    )
+
+    assert result is None
+    assert len(calls) == 1
+    assert calls[0][0] is traces
+    assert calls[0][1:] == ("response_params", None, True, True)
+    np.testing.assert_array_equal(
+        traces["posterior_predictive"]["prediction"].values,
+        np.array([[1.0, 2.0]]),
+    )
+    assert "pre-existing posterior_predictive group deleted" in caplog.text

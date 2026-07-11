@@ -191,7 +191,7 @@ def _get_plotting_df(
 
     if dt is None:
         if data is None:
-            raise ValueError("Either dt or data must be provided.")
+            raise ValueError("`data` must be provided when `dt` is not provided.")
         data = _process_data(data, extra_dims, quantile_by_dims)
 
         data.insert(0, "observed", "observed")

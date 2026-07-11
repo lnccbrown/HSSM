@@ -1,13 +1,18 @@
-import sys
+"""Tests for the HSSM public model interface."""
 
-import bambi as bmb
+import sys
+from copy import deepcopy
+from unittest.mock import Mock
+
 import numpy as np
+import pymc as pm
 import pytest
+import xarray as xr
+from pymc.variational import Approximation
 
 import hssm
 from hssm import HSSM
 from hssm.likelihoods import DDM, logp_ddm
-from copy import deepcopy
 
 hssm.set_floatX("float32", update_jax=True)
 
@@ -26,22 +31,22 @@ param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "include, should_raise_exception",
+    "include, expected_exception",
     [
         (
             [param_v],
-            False,
+            None,
         ),
         (
             [
                 param_v,
                 param_a,
             ],
-            False,
+            None,
         ),
         (
             [{"name": "invalid_param", "prior": "invalid_param"}],
-            True,
+            ValueError,
         ),
         (
             [
@@ -54,7 +59,7 @@ param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
                     "invalid_key": "identity",
                 }
             ],
-            True,
+            TypeError,
         ),
         (
             [
@@ -66,13 +71,14 @@ param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
                     "formula": "invalid_formula",
                 }
             ],
-            True,
+            IndexError,
         ),
     ],
 )
-def test_transform_params_general(data_ddm_reg, include, should_raise_exception):
-    if should_raise_exception:
-        with pytest.raises(Exception):
+def test_transform_params_general(data_ddm_reg, include, expected_exception):
+    """Validate include specifications and reject malformed entries."""
+    if expected_exception is not None:
+        with pytest.raises(expected_exception):
             HSSM(data=data_ddm_reg, include=include)
     else:
         model = HSSM(data=data_ddm_reg, include=include)
@@ -85,6 +91,7 @@ def test_transform_params_general(data_ddm_reg, include, should_raise_exception)
 
 @pytest.mark.slow
 def test_custom_model(data_ddm):
+    """Validate custom-model configuration requirements."""
     with pytest.raises(
         ValueError, match="When using a custom model, please provide a `loglik_kind.`"
     ):
@@ -132,6 +139,7 @@ def test_custom_model(data_ddm):
 
 @pytest.mark.slow
 def test_model_definition_outside_include(data_ddm):
+    """Accept parameter definitions outside include and reject duplicates."""
     model_with_one_param_fixed = HSSM(data_ddm, a=0.5)
 
     assert "a" in model_with_one_param_fixed.params
@@ -157,6 +165,7 @@ def test_model_definition_outside_include(data_ddm):
 )
 @pytest.mark.slow
 def test_sample_prior_predictive(data_ddm_reg):
+    """Generate prior-predictive DataTrees across regression structures."""
     data_ddm_reg = data_ddm_reg.iloc[:10, :]
 
     model_no_regression = HSSM(data=data_ddm_reg)
@@ -166,6 +175,12 @@ def test_sample_prior_predictive(data_ddm_reg):
     prior_predictive_2 = model_no_regression.sample_prior_predictive(
         draws=10, random_seed=rng
     )
+    for prior_predictive in (prior_predictive_1, prior_predictive_2):
+        assert isinstance(prior_predictive, xr.DataTree)
+        assert {"prior", "prior_predictive", "observed_data"} <= set(
+            prior_predictive.children
+        )
+        assert prior_predictive["prior_predictive"].sizes["draw"] == 10
 
     model_regression = HSSM(
         data=data_ddm_reg, include=[dict(name="v", formula="v ~ 1 + x")]
@@ -200,6 +215,7 @@ def test_sample_prior_predictive(data_ddm_reg):
 
 @pytest.mark.slow
 def test_override_default_link(caplog, data_ddm_reg):
+    """Honor custom links while warning about unusual bounds."""
     param_v = {
         "name": "v",
         "prior": {
@@ -231,6 +247,7 @@ def test_override_default_link(caplog, data_ddm_reg):
 
 @pytest.mark.slow
 def test_resampling(data_ddm):
+    """Replace attached traces when a model is sampled again."""
     model = HSSM(data=data_ddm)
     sample_1 = model.sample(draws=10, chains=1, tune=0, progressbar=False)
     assert sample_1 is model.traces
@@ -276,9 +293,89 @@ def test_add_likelihood_parameters_to_data(data_ddm):
     )
 
 
+def test_log_likelihood_uses_attached_traces_and_returns_copy(data_ddm, monkeypatch):
+    """Attached traces are the default input without being mutated."""
+    model = HSSM(data=data_ddm)
+    traces = xr.DataTree.from_dict(
+        {"posterior": xr.Dataset({"v": (("chain", "draw"), np.array([[0.5]]))})}
+    )
+    model._inference_obj = traces
+    calls = []
+
+    def fake_compute_log_likelihood(bambi_model, dt, data, inplace):
+        calls.append((bambi_model, dt, data, inplace))
+        result = dt.copy(deep=True)
+        result["log_likelihood"] = xr.Dataset(
+            {"rt,response": (("chain", "draw"), np.array([[-1.0]]))}
+        )
+        return result
+
+    monkeypatch.setattr(
+        "hssm.base._compute_log_likelihood", fake_compute_log_likelihood
+    )
+
+    result = model.log_likelihood(
+        inplace=False,
+        keep_likelihood_params=True,
+    )
+
+    assert len(calls) == 1
+    assert calls[0][0] is model.model
+    assert calls[0][1] is traces
+    assert calls[0][2] is None
+    assert calls[0][3] is False
+    assert result is not traces
+    assert isinstance(result, xr.DataTree)
+    assert "log_likelihood" in result
+    assert "log_likelihood" not in traces
+
+
+def test_add_likelihood_parameters_requires_traces(data_ddm):
+    """Likelihood parameters need supplied or previously attached traces."""
+    model = HSSM(data=data_ddm)
+
+    with pytest.raises(
+        ValueError,
+        match="No datatree provided and model not yet sampled!",
+    ):
+        model.add_likelihood_parameters_to_datatree()
+
+
+def test_add_likelihood_parameters_accepts_explicit_datatree(data_ddm, monkeypatch):
+    """An explicit DataTree is copied before likelihood parameters are added."""
+    model = HSSM(data=data_ddm)
+    traces = xr.DataTree.from_dict(
+        {"posterior": xr.Dataset({"v": (("chain", "draw"), np.array([[0.5]]))})}
+    )
+    received = []
+
+    def fake_compute_likelihood_params(dt):
+        received.append(dt)
+        dt["posterior"] = dt["posterior"].ds.assign(
+            v_mean=(("chain", "draw"), np.array([[0.5]]))
+        )
+        return dt
+
+    monkeypatch.setattr(
+        model.model,
+        "_compute_likelihood_params",
+        fake_compute_likelihood_params,
+    )
+
+    result = model.add_likelihood_parameters_to_datatree(dt=traces, inplace=False)
+
+    assert len(received) == 1
+    assert received[0] is not traces
+    assert result is received[0]
+    assert isinstance(result, xr.DataTree)
+    assert "v_mean" in result["posterior"].data_vars
+    assert "v_mean" not in traces["posterior"].data_vars
+
+
 # Setting any parameter to a fixed value should work:
 @pytest.mark.slow
 def test_model_creation_constant_parameter(data_ddm):
+    """Allow any non-parent parameter to be fixed."""
     for param_name in ["v", "a", "z", "t"]:
         model = HSSM(data=data_ddm, **{param_name: 1.0})
         assert model._parent != param_name
@@ -292,6 +389,7 @@ def test_model_creation_constant_parameter(data_ddm):
     [("v", "Normal"), ("a", "Gamma"), ("z", "Beta"), ("t", "Gamma")],
 )
 def test_model_creation_single_regression(data_ddm_reg, param_name, dist_name):
+    """Use bounded default priors for one regression parameter."""
     model = HSSM(
         data=data_ddm_reg,
         include=[{"name": param_name, "formula": f"{param_name} ~ 1 + x"}],
@@ -302,6 +400,7 @@ def test_model_creation_single_regression(data_ddm_reg, param_name, dist_name):
 
 # Setting all parameters to fixed values should throw an error:
 def test_model_creation_all_parameters_constant(data_ddm):
+    """Reject models without any free parameters."""
     with pytest.raises(ValueError):
         HSSM(data=data_ddm, v=1.0, a=1.0, z=1.0, t=1.0)
 
@@ -309,6 +408,7 @@ def test_model_creation_all_parameters_constant(data_ddm):
 # Prior settings
 @pytest.mark.slow
 def test_prior_settings_basic(cavanagh_test):
+    """Apply requested prior-setting modes."""
     model_1 = HSSM(
         data=cavanagh_test,
         global_formula="y ~ 1 + (1|participant_id)",
@@ -332,6 +432,7 @@ def test_prior_settings_basic(cavanagh_test):
 
 @pytest.mark.slow
 def test_compile_logp(cavanagh_test):
+    """Compile log probability at the model's initial point."""
     model_1 = HSSM(
         data=cavanagh_test,
         global_formula="y ~ 1 + (1|participant_id)",
@@ -430,8 +531,12 @@ class TestFixedVectorParams:
 )
 @pytest.mark.slow
 def test_sample_do(data_ddm):
+    """Return intervention samples and the intervened PyMC model."""
     model = HSSM(data=data_ddm)
-    sample_do = model.sample_do(params={"v": 1.0}, draws=10)
+    sample_do, do_model = model.sample_do(
+        params={"v": 1.0}, draws=10, return_model=True
+    )
+    assert isinstance(do_model, pm.Model)
     assert sample_do is not None
     assert "v_mean" in sample_do.prior.data_vars
     assert set(sample_do.prior_predictive.dims) == {
@@ -449,7 +554,83 @@ def test_sample_do(data_ddm):
     assert np.unique(sample_do.prior["v_mean"].values) == [1.0]
 
 
+@pytest.mark.parametrize(
+    ("method_name", "expected_message"),
+    [
+        (
+            "plot_trace",
+            "HSSM.plot_trace has been deprecated. Please use az.plot_trace_dist from "
+            "ArviZ directly. For example: "
+            "`az.plot_trace_dist(model.traces, var_names=[...])`.",
+        ),
+        (
+            "summary",
+            "HSSM.summary has been deprecated. Please use az.summary from ArviZ "
+            "directly. For example: `az.summary(model.traces, var_names=[...])`.",
+        ),
+    ],
+)
+def test_deprecated_inference_helpers_raise_documented_error(
+    data_ddm, method_name, expected_message
+):
+    """Removed inference helpers direct users to their ArviZ replacements."""
+    model = HSSM(data=data_ddm)
+
+    with pytest.raises(NotImplementedError) as error:
+        getattr(model, method_name)()
+
+    assert str(error.value) == expected_message
+
+
+def test_vi_idata_rejects_attached_approximation(data_ddm):
+    """VI approximations must be sampled before they can be exposed as DataTrees."""
+    model = HSSM(data=data_ddm)
+    model._inference_obj_vi = Mock(spec=Approximation)
+
+    with pytest.raises(ValueError, match="attached variational inference object"):
+        _ = model.vi_idata
+
+
+def test_drop_parent_str_requires_datatree(data_ddm):
+    """Posterior cleanup rejects a missing trace object."""
+    model = HSSM(data=data_ddm)
+
+    with pytest.raises(
+        ValueError,
+        match=r"Please provide a DataTree \(traces\) object\.",
+    ):
+        model._drop_parent_str_from_datatree(None)
+
+
+def test_drop_parent_str_renames_response_mean(data_ddm):
+    """Posterior cleanup restores the model's response-parameter name."""
+    model = HSSM(data=data_ddm)
+    traces = xr.DataTree.from_dict(
+        {
+            "posterior": xr.Dataset(
+                {
+                    "rt,response_mean": (
+                        ("chain", "draw"),
+                        np.array([[0.5]]),
+                    )
+                }
+            )
+        }
+    )
+
+    result = model._drop_parent_str_from_datatree(traces)
+
+    assert result is traces
+    assert model._parent in result["posterior"].data_vars
+    assert "rt,response_mean" not in result["posterior"].data_vars
+    np.testing.assert_array_equal(
+        result["posterior"][model._parent].values,
+        np.array([[0.5]]),
+    )
+
+
 def test_is_choice_only_and_deadline(data_ddm):
+    """Expose choice-only and deadline response metadata."""
     config_choice_only = {"response": ["response"]}
 
     model = HSSM(data=data_ddm, model="ddm", model_config=config_choice_only)
