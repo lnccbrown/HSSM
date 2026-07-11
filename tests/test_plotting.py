@@ -2,7 +2,6 @@
 
 import sys
 
-import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -10,23 +9,24 @@ import pytest
 import xarray as xr
 
 import hssm
-from hssm.plotting.utils import (
-    _get_plotting_df,
-    _xarray_to_df,
-    _get_title,
-    _subset_df,
-    _row_mask_with_error,
-    _process_df_for_qp_plot,
-)
 from hssm.plotting.predictive import (
     _plot_predictive_1D,
     _plot_predictive_2D,
+    _process_lines,
     plot_predictive,
 )
 from hssm.plotting.quantile_probability import (
     _plot_quantile_probability_1D,
     _plot_quantile_probability_2D,
     plot_quantile_probability,
+)
+from hssm.plotting.utils import (
+    _get_plotting_df,
+    _get_title,
+    _process_df_for_qp_plot,
+    _row_mask_with_error,
+    _subset_df,
+    _xarray_to_df,
 )
 
 hssm.set_floatX("float32")
@@ -128,6 +128,23 @@ class TestPlotting:
 
         with pytest.raises(ValueError):
             _get_plotting_df(idata, data=None, extra_dims=["participant_id", "conf"])
+
+        with pytest.raises(ValueError, match="Either dt or data must be provided"):
+            _get_plotting_df(dt=None, data=None)
+
+    def test__process_lines(self):
+        """Line style and width helpers normalize sequences and dictionaries."""
+        assert _process_lines(["--"], mode="linestyles") == ["--", "--"]
+        assert _process_lines(("--", ":"), mode="linestyles") == ["--", ":"]
+        assert _process_lines([1.5], mode="linewidths") == [1.5, 1.5]
+        assert _process_lines((1.0, 2.0), mode="linewidths") == [1.0, 2.0]
+        assert _process_lines({"predicted": "--"}, mode="linestyles") == ["--", "-"]
+        assert _process_lines({"observed": 2.0}, mode="linewidths") == [1.25, 2.0]
+
+        with pytest.raises(ValueError, match="Invalid mode"):
+            _process_lines("-", mode="colors")
+        with pytest.raises(ValueError, match="must be a str or a list of strs"):
+            _process_lines(["-", 1], mode="linestyles")
 
     def test__plot_predictive_1D(self, cav_dt, cavanagh_test):
         df = _get_plotting_df(
@@ -268,6 +285,17 @@ class TestPlotting:
         # Test 2: passing cond not as str
         with pytest.raises(ValueError):
             _process_df_for_qp_plot(df=df, q=6, cond=1, correct=None)
+
+        iterable_quantiles = _process_df_for_qp_plot(
+            df=df,
+            q=[0.25, 0.5, 0.75],
+            cond="conf",
+            correct=None,
+        )
+        np.testing.assert_allclose(
+            sorted(iterable_quantiles["quantile"].unique()),
+            [0.25, 0.5, 0.75],
+        )
 
     @pytest.mark.parametrize(
         "predictive_style",

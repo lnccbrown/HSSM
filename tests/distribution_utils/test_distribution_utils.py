@@ -10,6 +10,7 @@ import hssm
 from hssm import distribution_utils
 from hssm.distribution_utils import dist as dist_module
 from hssm.distribution_utils.dist import (
+    _apply_lapse_model,
     _create_arg_arrays,
     _extract_size,
     _get_p_outlier,
@@ -86,6 +87,21 @@ def test_lapse_distribution():
     random_sample_b = rv.rng_fn(rng2, *[0.5, 0.5, 0.5, 0.3], 0.05, 10)
 
     np.testing.assert_array_equal(random_sample_a, random_sample_b)
+
+
+def test_apply_lapse_model_rejects_numeric_lapse_distribution():
+    """Numeric choice-only lapse values cannot simulate RT lapse samples."""
+    sims_out = np.asarray([[0.2, 0.0], [0.3, 1.0]], dtype=float)
+    rng = np.random.default_rng(42)
+
+    with pytest.raises(TypeError, match="numeric lapse"):
+        _apply_lapse_model(
+            sims_out=sims_out,
+            p_outlier=0.5,
+            rng=rng,
+            lapse_dist=0.5,
+            choices=[0, 1],
+        )
 
 
 @pytest.mark.parametrize("rv", ["choice_only_model", lambda *args, **kwargs: None])

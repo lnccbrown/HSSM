@@ -629,11 +629,7 @@ def plot_model_cartoon(
     elif plotting_df_mean is not None:
         plotting_df = plotting_df_mean
 
-    if plotting_df is None:
-        raise ValueError(
-            "No data available to plot. Please check `plot_data`, "
-            "`plot_predictive_mean`, and `plot_predictive_samples` settings."
-        )
+    assert plotting_df is not None
 
     # return plotting_df
 
