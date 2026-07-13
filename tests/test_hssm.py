@@ -578,6 +578,8 @@ def test_deprecated_inference_helpers_raise_documented_error(
         ("jax", None, "jax"),
         ("pytensor", None, "c"),
         ("jax", "numba", "numba"),
+        ("pytensor", "numba", "numba"),
+        ("pytensor", "jax", "jax"),
     ],
 )
 def test_vi_passes_backend_to_pm_fit(
