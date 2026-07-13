@@ -3,7 +3,8 @@
 import logging
 from copy import deepcopy
 from itertools import product
-from typing import Any, Iterable, Literal, Protocol, cast
+from types import MappingProxyType
+from typing import Any, Iterable, Literal, Mapping, Protocol, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -30,16 +31,18 @@ from .utils import (
 
 _logger = logging.getLogger("hssm")
 
-TRAJ_COLOR_DEFAULT_DICT: dict[float, str] = {
-    -1: "black",
-    0: "black",
-    1: "green",
-    2: "blue",
-    3: "red",
-    4: "orange",
-    5: "purple",
-    6: "brown",
-}
+TRAJ_COLOR_DEFAULT_DICT: Mapping[Any, str] = MappingProxyType(
+    {
+        -1: "black",
+        0: "black",
+        1: "green",
+        2: "blue",
+        3: "red",
+        4: "orange",
+        5: "purple",
+        6: "brown",
+    }
+)
 
 
 class PlotFunctionProtocol(Protocol):
@@ -1230,10 +1233,10 @@ def _add_trajectories(
     highlight_rt_choice: bool = True,
     markersize_rt_choice: float | int = 50,
     markertype_rt_choice: str = "*",
-    markercolor_rt_choice: str | list[str] | dict[float, str] = "red",
+    markercolor_rt_choice: str | list[str] | Mapping[Any, str] = "red",
     linewidth: float | int = 1,
     alpha: float | int = 0.5,
-    colors: str | list[str] | dict[float, str] = "black",
+    colors: str | list[str] | Mapping[Any, str] | None = None,
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1264,48 +1267,56 @@ def _add_trajectories(
         Line width for trajectories, by default 1.
     alpha : float or int, optional
         Opacity of trajectories, by default 0.5.
-    colors : str, list or dict, optional
+    colors : str, list, dict, or None, optional
         Color(s) for trajectories. Can be a single color, list of colors,
-        or dict mapping choices to colors. By default "black".
+        or dict mapping choices to colors. When ``None`` (default), uses
+        ``TRAJ_COLOR_DEFAULT_DICT``.
     **kwargs
         Additional keyword arguments passed to plotting functions.
     """
     # Check markercolor type
-    markercolor_rt_choice_dict: dict[float, str]
+    possible_choices = sample[0]["metadata"]["possible_choices"]
     if isinstance(markercolor_rt_choice, str):
-        markercolor_rt_choice_dict = {
-            value_: markercolor_rt_choice
-            for value_ in sample[0]["metadata"]["possible_choices"]
+        markercolor_rt_choice_dict: Mapping[Any, str] = {
+            value_: markercolor_rt_choice for value_ in possible_choices
         }
     elif isinstance(markercolor_rt_choice, list):
+        if len(markercolor_rt_choice) < len(possible_choices):
+            raise ValueError(
+                "The `markercolor_rt_choice` list must have at least as many "
+                f"entries as possible choices ({len(possible_choices)}), "
+                f"but got {len(markercolor_rt_choice)}."
+            )
         markercolor_rt_choice_dict = {
             value_: markercolor_rt_choice[cnt]
-            for cnt, value_ in enumerate(sample[0]["metadata"]["possible_choices"])
+            for cnt, value_ in enumerate(possible_choices)
         }
-    elif isinstance(markercolor_rt_choice, dict):
+    elif isinstance(markercolor_rt_choice, Mapping):
         markercolor_rt_choice_dict = markercolor_rt_choice
     else:
         raise ValueError(
-            "The `markercolor_trajectory_rt_choice`"
-            " argument must be a string, list, or dict."
+            "The `markercolor_rt_choice` argument must be a string, list, or mapping."
         )
 
     # Check trajectory color type
-    colors_dict: dict[float, str] = {}
-    if isinstance(colors, str):
-        for value_ in sample[0]["metadata"]["possible_choices"]:
-            colors_dict[value_] = colors
+    if colors is None:
+        colors_dict: Mapping[Any, str] = dict(TRAJ_COLOR_DEFAULT_DICT)
+    elif isinstance(colors, str):
+        colors_dict = {value_: colors for value_ in possible_choices}
     elif isinstance(colors, list):
-        cnt = 0
-        for value_ in sample[0]["metadata"]["possible_choices"]:
-            colors_dict[value_] = colors[cnt]
-            cnt += 1
-    elif isinstance(colors, dict):
+        if len(colors) < len(possible_choices):
+            raise ValueError(
+                "The `colors` list must have at least as many entries as "
+                f"possible choices ({len(possible_choices)}), "
+                f"but got {len(colors)}."
+            )
+        colors_dict = {
+            value_: colors[cnt] for cnt, value_ in enumerate(possible_choices)
+        }
+    elif isinstance(colors, Mapping):
         colors_dict = colors
     else:
-        raise ValueError(
-            "The `color_trajectories` argument must be a string, list, or dict."
-        )
+        raise ValueError("The `colors` argument must be a string, list, or mapping.")
 
     # Make bounds
     (b_high, b_low) = (
@@ -1650,17 +1661,6 @@ def plot_func_model_n(
     histograms of response times, and model cartoons. It can show both the mean
     prediction and uncertainty from posterior samples.
     """
-    color_dict = {
-        -1: "black",
-        0: "black",
-        1: "green",
-        2: "blue",
-        3: "red",
-        4: "orange",
-        5: "purple",
-        6: "brown",
-    }
-
     ylim_low, ylim_high = kwargs.get("ylims", (0, 5))
     xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
@@ -1797,7 +1797,7 @@ def plot_func_model_n(
                 weights=weights,
                 histtype="step",
                 alpha=alpha_mean,
-                color=color_dict[choice],
+                color=TRAJ_COLOR_DEFAULT_DICT[choice],
                 zorder=cnt_cumul,
                 label=tmp_label,
                 linewidth=linewidth_histogram,
@@ -1845,7 +1845,7 @@ def plot_func_model_n(
                     weights=weights,
                     histtype="step",
                     alpha=alpha_predictive,
-                    color=color_dict[choice],
+                    color=TRAJ_COLOR_DEFAULT_DICT[choice],
                     zorder=cnt_cumul,
                     label=tmp_label,
                     linewidth=linewidth_histogram,
@@ -1874,7 +1874,7 @@ def plot_func_model_n(
                 weights=weights,
                 histtype="step",
                 alpha=1,
-                color=color_dict[choice],
+                color=TRAJ_COLOR_DEFAULT_DICT[choice],
                 zorder=cnt_cumul,
                 label="Data",
                 linewidth=linewidth_histogram,
@@ -1899,7 +1899,7 @@ def plot_func_model_n(
                 linestyle="-",
                 ylim=ylim_high,
                 t_s=t_s,
-                color_dict=color_dict,
+                color_dict=TRAJ_COLOR_DEFAULT_DICT,
                 zorder_cnt=z_cnt,
             )
             z_cnt += 1
@@ -1916,7 +1916,7 @@ def plot_func_model_n(
             linestyle="-",
             ylim=ylim_high,
             t_s=t_s,
-            color_dict=color_dict,
+            color_dict=TRAJ_COLOR_DEFAULT_DICT,
             zorder_cnt=z_cnt + 1,
         )
 
@@ -1937,7 +1937,8 @@ def plot_func_model_n(
 
     if add_legend:
         custom_elems = [
-            Line2D([0], [0], color=color_dict[choice], lw=1) for choice in choices
+            Line2D([0], [0], color=TRAJ_COLOR_DEFAULT_DICT[choice], lw=1)
+            for choice in choices
         ]
         custom_titles = ["response: " + str(choice) for choice in choices]
 
@@ -1969,7 +1970,6 @@ def _add_trajectories_n(
     marker_type_rt_choice: str = "*",
     linewidth: float = 1,
     alpha: float = 0.5,
-    colors: str | list[str] | dict[float, str] = TRAJ_COLOR_DEFAULT_DICT,
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1996,11 +1996,6 @@ def _add_trajectories_n(
         Line width for trajectory paths
     alpha : float, default=0.5
         Transparency of trajectory paths
-    colors : str or list or dict, default="black"
-        Color(s) for trajectories. Can be:
-        - str: Single color for all trajectories
-        - list: List of colors mapped to possible choices
-        - dict: Mapping of choices to colors
     **kwargs
         Additional keyword arguments passed to plotting functions
 
@@ -2008,25 +2003,10 @@ def _add_trajectories_n(
     -----
     This function visualizes multiple simulated decision paths, optionally highlighting
     the response times and choices. Each trajectory shows the evidence accumulation
-    process leading to a decision.
+    process leading to a decision. Trajectory colors are taken from
+    ``TRAJ_COLOR_DEFAULT_DICT``.
     """
-    # Check trajectory color type
-    colors_dict: dict[float, str]
-    if isinstance(colors, str):
-        colors_dict = {
-            value_: colors for value_ in sample[0]["metadata"]["possible_choices"]
-        }
-    elif isinstance(colors, list):
-        colors_dict = {
-            value_: colors[i]
-            for i, value_ in enumerate(sample[0]["metadata"]["possible_choices"])
-        }
-    elif isinstance(colors, dict):
-        colors_dict = colors
-    else:
-        raise ValueError(
-            "The `color_trajectories` argument must be a string, list, or dict."
-        )
+    colors_dict = TRAJ_COLOR_DEFAULT_DICT
 
     # Make bounds
     b = np.maximum(sample[0]["metadata"]["boundary"], 0)
@@ -2090,7 +2070,7 @@ def _add_model_n_cartoon_to_ax(
     linestyle: str,
     ylim: float,
     t_s: np.ndarray,
-    color_dict: dict,
+    color_dict: Mapping[Any, str],
     zorder_cnt: int,
     alpha: float | None = None,
     keep_boundary: bool = True,
