@@ -116,6 +116,11 @@ pip install hssm[cuda12]  # CUDA 12
 pip install hssm[cuda13]  # CUDA 13
 ```
 
+!!! note
+
+    JAX's CUDA wheels are Linux-only and require a compatible NVIDIA driver
+    (>= 525 for CUDA 12, >= 580 for CUDA 13).
+
 ### Support for Apple Silicon, AMD, and other GPUs
 
 JAX also has support other GPUs. Please follow the

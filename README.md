@@ -72,6 +72,9 @@ uv add "hssm[cuda12]"  # CUDA 12
 uv add "hssm[cuda13]"  # CUDA 13
 ```
 
+> **Note:** JAX's CUDA wheels are Linux-only and require a compatible NVIDIA
+> driver (>= 525 for CUDA 12, >= 580 for CUDA 13).
+
 ### Apple Silicon, AMD, and Other Accelerators
 
 JAX supports several accelerator backends. Follow the
