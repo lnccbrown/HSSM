@@ -14,6 +14,7 @@
 #### Bug fixes:
 
 1. **Python 3.14: posterior/prior predictive sampling fixed.** On 3.14, the dynamically created SSM random-variable class carried PEP 649 annotation metadata that numba's vendored cloudpickle could not serialize (`TypeError: cannot pickle '_abc._abc_data' object`), breaking `sample_posterior_predictive` and related plotting under the numba backend. The class attributes are now un-annotated plain assignments, and the previous 3.14 xfail markers on the predictive/plotting tests have been removed.
+2. **LAN gradient Op is now JAX-convertible.** The `LANLogpVJPOp` emitted when PyTensor differentiates a LAN likelihood symbolically (e.g. ADVI via `model.vi(..., backend="jax")`) had no `jax_funcify` registration, so compiling the gradient graph with the JAX linker raised `NotImplementedError` (#1056). The VJP Op now has a JAX conversion, with gradients verified identical to the C-backend path. `LANLogpOp` was also migrated from the deprecated `grad` hook to PyTensor 3's `pullback` API, removing the `FutureWarning` emitted on every symbolic differentiation. Note: end-to-end `vi(backend="jax")` additionally requires two upstream PyMC fixes (VI approximation parameters lack static shapes; JAX-backend fits leave `jax.Array`s in shared-variable storage) — until those land, use `backend="c"` for VI (~1.4x slower per ADVI iteration on CPU).
 
 ### 0.4.0
 

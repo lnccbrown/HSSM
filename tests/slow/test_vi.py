@@ -112,3 +112,26 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, method, expected)
         a=param_reg_a,
     )
     run_vi(model, method, expected)
+
+
+@pytest.mark.slow
+@pytest.mark.xfail(
+    strict=True,
+    reason="pm.fit(backend='jax') is blocked upstream: PyMC's meanfield "
+    "approximation parameters lack static shapes (JAX tracing TypeError), "
+    "and a JAX-backend fit leaves jax arrays in shared storage, breaking "
+    "the numba-compiled approx.sample(). See lnccbrown/HSSM#1056 for the "
+    "upstream issue links. Remove this marker once the pinned pymc "
+    "includes both fixes.",
+)
+def test_vi_jax_compile_backend(data_ddm):
+    """End-to-end reproducer for #1056: VI compiled through the JAX linker.
+
+    The HSSM-side fix (jax_funcify for LANLogpVJPOp) gets past the original
+    NotImplementedError; the remaining failures are upstream. ``strict=True``
+    turns this into a hard failure the moment an upstream bump makes it pass,
+    signalling that the marker should be removed.
+    """
+    model = hssm.HSSM(data_ddm, model="angle", p_outlier=0.0)
+    model.vi(method="advi", niter=1, draws=1, backend="jax", progressbar=False)
+    assert isinstance(model.vi_idata, xr.DataTree)
