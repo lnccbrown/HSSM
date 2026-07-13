@@ -96,15 +96,20 @@ def make_jax_logp_ops(
             result = logp(*inputs)
             output_storage[0][0] = np.asarray(result, dtype=node.outputs[0].dtype)
 
-        def grad(self, inputs, output_gradients):
-            """Perform the pytensor.grad() operation.
+        def pullback(self, inputs, outputs, cotangents):
+            """Construct the graph for the VJP (reverse-mode gradient) of the Op.
+
+            Called by `pytensor.grad` when building the symbolic gradient graph.
 
             Parameters
             ----------
             inputs
                 The same as the inputs produced in `make_node`.
-            output_gradients
-                Holds the results of the perform `perform` method.
+            outputs
+                The symbolic outputs of the node (unused; the VJP is computed
+                from the inputs directly).
+            cotangents
+                The cotangents (upstream gradients) for each output.
 
             Notes
             -----
@@ -113,14 +118,12 @@ def make_jax_logp_ops(
                 is y*grad(x).
             """
             if self.has_data:
-                results = lan_logp_vjp_op(
-                    inputs[0], *inputs[1:], gz=output_gradients[0]
-                )
+                results = lan_logp_vjp_op(inputs[0], *inputs[1:], gz=cotangents[0])
             else:
                 if self.is_scalars_only:
                     results = lan_logp_vjp_op(None, *inputs, gz=None)
                 else:
-                    results = lan_logp_vjp_op(None, *inputs, gz=output_gradients[0])
+                    results = lan_logp_vjp_op(None, *inputs, gz=cotangents[0])
 
             output = list(results) if isinstance(results, (list, tuple)) else [results]
 
