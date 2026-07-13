@@ -1155,7 +1155,7 @@ requires-dist = [
     { name = "cloudpickle", specifier = ">=3.0.0" },
     { name = "hddm-wfpt", specifier = ">=0.1.6" },
     { name = "huggingface-hub", specifier = ">=0.34.0" },
-    { name = "jax", extras = ["cuda12"], marker = "extra == 'cuda12'", specifier = ">=0.5.2" },
+    { name = "jax", extras = ["cuda12"], marker = "extra == 'cuda12'", specifier = ">=0.7.0" },
     { name = "jax", extras = ["cuda13"], marker = "extra == 'cuda13'", specifier = ">=0.7.0" },
     { name = "jaxonnxruntime", specifier = ">=0.3.0" },
     { name = "numpyro", specifier = ">=0.19" },
