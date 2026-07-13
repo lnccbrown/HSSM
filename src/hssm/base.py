@@ -745,6 +745,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         draws: int = 1000,
         return_idata: bool = True,
         ignore_mcmc_start_point_defaults=False,
+        backend: Literal["numba", "c", "jax"] | None = None,
         **vi_kwargs,
     ) -> Approximation | DataTree:
         """Perform Variational Inference.
@@ -762,6 +763,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return_idata : bool
             If True, returns a DataTree object. Otherwise, returns the
             approximation object directly. Defaults to True.
+        backend : {"numba", "c", "jax"}, optional
+            The computational backend passed to ``pm.fit``. If None (the
+            default), the backend is inferred from the model's
+            ``model_config.backend``: a "jax" model config uses the "jax"
+            backend, a "pytensor" model config uses the "c" backend, and if the
+            model config backend is also None, the "numba" backend is used.
 
         Returns
         -------
@@ -782,10 +789,24 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             _logger.info("Using MCMC starting point defaults.")
             vi_kwargs["start"] = self._initvals
 
+        # Resolve the computational backend passed to `pm.fit`. If not given
+        # explicitly, infer it from the model's configured backend so that a
+        # jax model config actually uses the jax backend for VI.
+        if backend is None:
+            config_backend = self.model_config.backend
+            if config_backend == "jax":
+                backend = "jax"
+            elif config_backend == "pytensor":
+                backend = "c"
+            else:
+                backend = "numba"
+
         # Run variational inference directly from pymc model
         # pyrefly: ignore[bad-context-manager]
         with self.pymc_model:
-            self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
+            self._vi_approx = pm.fit(
+                n=niter, method=method, backend=backend, **vi_kwargs
+            )
 
             # Sample from the approximate posterior
             if self._vi_approx is not None:
