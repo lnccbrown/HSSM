@@ -332,13 +332,13 @@ class TestChoiceOnlyRealSSMSSmoke:
         # HSSM's RV path resolves models through ssms' `model_config` registry,
         # where the ssms.rl presets are not registered yet — building the model
         # falls back to an unsupported RV and fails at logp compile. Skip until
-        # the RLSSM wiring lands (#1000).
+        # the preset wiring lands (#1052).
         from ssms.config import model_config
 
         if model_name not in model_config:
             pytest.skip(
                 f"{model_name} exists in ssms.rl but is not registered in ssms "
-                "model_config; HSSM's RV path cannot build it yet (#1000)"
+                "model_config; HSSM's RV path cannot build it yet (#1052)"
             )
 
     @pytest.mark.parametrize(
