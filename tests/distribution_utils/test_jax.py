@@ -1,12 +1,16 @@
+import warnings
 from pathlib import Path
 
+import jax
 import numpy as np
 import onnx
 import pytensor
 import pytensor.tensor as pt
 import pytest
+from pytensor.gradient import NullTypeGradError
 
 import hssm
+from hssm.distribution_utils.func_utils import make_vjp_func
 from hssm.distribution_utils.jax import (
     make_jax_logp_ops,
     make_jax_logp_funcs_from_callable,
@@ -168,26 +172,36 @@ def test_make_jax_logp_funcs_from_callable():
         )
 
 
+def _rt_choice_data(seed: int, n: int = 10) -> np.ndarray:
+    """Build a two-column [rt, choice] array for gradient tests."""
+    rng = np.random.default_rng(seed)
+    return np.stack(
+        [rng.uniform(0.4, 1.5, n), rng.choice([-1.0, 1.0], n)], axis=1
+    ).astype(np.float32)
+
+
+def _assert_jax_matches_default(inputs, grads, values):
+    """Assert mode="JAX" gradients match the default (perform) backend."""
+    f_default = pytensor.function(inputs, grads)
+    f_jax = pytensor.function(inputs, grads, mode="JAX")
+    for g_default, g_jax in zip(f_default(*values), f_jax(*values)):
+        np.testing.assert_array_almost_equal(
+            np.asarray(g_jax), np.asarray(g_default), decimal=DECIMAL
+        )
+
+
 def test_lan_logp_vjp_op_jax_linker_data_params(fixture_path):
     """Gradient graphs containing LANLogpVJPOp compile under the JAX linker.
 
     Regression test for #1056: VI (``pm.fit``) differentiates LANLogpOp
     symbolically, emitting LANLogpVJPOp into the compiled graph, so the VJP
-    Op needs its own ``jax_funcify`` registration. Compares gradients from a
-    ``mode="JAX"`` function against the default backend (which runs
-    ``perform``) for the standard data + mixed scalar/regression case.
+    Op needs its own ``jax_funcify`` registration. This covers the standard
+    data + mixed scalar/regression case.
     """
     model = onnx.load(fixture_path / "angle.onnx")
     logp_op = make_jax_logp_ops(
         *make_jax_logp_funcs_from_onnx(model, params_is_reg=[True] + [False] * 4)
     )
-
-    rng = np.random.default_rng(42)
-    n = 10
-    data_np = np.stack(
-        [rng.uniform(0.4, 1.5, n), rng.choice([-1.0, 1.0], n)], axis=1
-    ).astype(np.float32)
-    v_np = rng.normal(0.5, 0.1, n).astype(np.float32)
 
     data = pt.matrix("data")
     v = pt.vector("v")
@@ -196,20 +210,18 @@ def test_lan_logp_vjp_op_jax_linker_data_params(fixture_path):
     grads = pytensor.grad(
         logp_op(data, v, a, z, t, theta).sum(), wrt=[v, a, z, t, theta]
     )
-    inputs = [data, v, a, z, t, theta]
-    values = [data_np, v_np, *(np.float32(x) for x in (1.2, 0.5, 0.2, 0.1))]
+    rng = np.random.default_rng(42)
+    values = [
+        _rt_choice_data(42),
+        rng.normal(0.5, 0.1, 10).astype(np.float32),
+        *(np.float32(x) for x in (1.2, 0.5, 0.2, 0.1)),
+    ]
 
-    f_default = pytensor.function(inputs, grads)
-    f_jax = pytensor.function(inputs, grads, mode="JAX")
-
-    for g_default, g_jax in zip(f_default(*values), f_jax(*values)):
-        np.testing.assert_array_almost_equal(
-            np.asarray(g_jax), np.asarray(g_default), decimal=DECIMAL
-        )
+    _assert_jax_matches_default([data, v, a, z, t, theta], grads, values)
 
 
 def test_lan_logp_vjp_op_jax_linker_scalars_only(fixture_path):
-    """The scalars-only CPN branch (``gz=None``) compiles under the JAX linker."""
+    """The scalars-only CPN branch compiles under the JAX linker."""
     model = onnx.load(fixture_path / "ddm_cpn.onnx")
     logp_op = make_jax_logp_ops(
         *make_jax_logp_funcs_from_onnx(
@@ -221,12 +233,74 @@ def test_lan_logp_vjp_op_jax_linker_scalars_only(fixture_path):
     grads = pytensor.grad(logp_op(None, v, a, z, t).sum(), wrt=[v, a, z, t])
     values = [np.float32(x) for x in (0.5, 1.2, 0.5, 0.2)]
 
-    f_default = pytensor.function([v, a, z, t], grads)
-    f_jax = pytensor.function([v, a, z, t], grads, mode="JAX")
+    _assert_jax_matches_default([v, a, z, t], grads, values)
 
-    for g_default, g_jax in zip(f_default(*values), f_jax(*values)):
+
+def test_lan_logp_vjp_op_jax_linker_params_only_regression(fixture_path):
+    """The no-data + regression-params CPN branch compiles under the JAX linker."""
+    model = onnx.load(fixture_path / "ddm_cpn.onnx")
+    logp_op = make_jax_logp_ops(
+        *make_jax_logp_funcs_from_onnx(
+            model, params_is_reg=[True] + [False] * 3, params_only=True
+        )
+    )
+
+    v = pt.vector("v")
+    a, z, t = (pt.scalar(name) for name in ["a", "z", "t"])
+    grads = pytensor.grad(logp_op(None, v, a, z, t).sum(), wrt=[v, a, z, t])
+    values = [
+        np.linspace(0.2, 0.8, 5).astype(np.float32),
+        *(np.float32(x) for x in (1.2, 0.5, 0.2)),
+    ]
+
+    _assert_jax_matches_default([v, a, z, t], grads, values)
+
+
+@pytest.mark.parametrize("mode", [None, "JAX"])
+def test_lan_logp_op_cotangent_flows(fixture_path, mode):
+    """Non-unit cotangents are applied by the VJP (chain rule holds).
+
+    Guards against the VJP silently dropping the upstream gradient: the
+    gradient of ``(2 * logp).sum()`` must be exactly twice the gradient of
+    ``logp.sum()``, on every backend and for both the data-based and the
+    scalars-only CPN paths. An equivalence test alone cannot catch this,
+    because both backends would drop the cotangent identically.
+    """
+    angle = onnx.load(fixture_path / "angle.onnx")
+    angle_op = make_jax_logp_ops(
+        *make_jax_logp_funcs_from_onnx(angle, params_is_reg=[True] + [False] * 4)
+    )
+    cpn = onnx.load(fixture_path / "ddm_cpn.onnx")
+    cpn_op = make_jax_logp_ops(
+        *make_jax_logp_funcs_from_onnx(cpn, params_is_reg=[False] * 4, params_only=True)
+    )
+
+    data = pt.matrix("data")
+    v = pt.vector("v")
+    a, z, t, theta = (pt.scalar(name) for name in ["a", "z", "t", "theta"])
+    rng = np.random.default_rng(0)
+    angle_inputs = [data, v, a, z, t, theta]
+    angle_values = [
+        _rt_choice_data(0),
+        rng.normal(0.5, 0.1, 10).astype(np.float32),
+        *(np.float32(x) for x in (1.2, 0.5, 0.2, 0.1)),
+    ]
+
+    vs, as_, zs, ts = (pt.scalar(name) for name in ["vs", "as", "zs", "ts"])
+    cpn_inputs = [vs, as_, zs, ts]
+    cpn_values = [np.float32(x) for x in (0.5, 1.2, 0.5, 0.2)]
+
+    for logp, inputs, values, wrt in [
+        (angle_op(data, v, a, z, t, theta), angle_inputs, angle_values, v),
+        (cpn_op(None, vs, as_, zs, ts), cpn_inputs, cpn_values, vs),
+    ]:
+        g1 = pytensor.grad(logp.sum(), wrt=wrt)
+        g2 = pytensor.grad((2.0 * logp).sum(), wrt=wrt)
+        kwargs = {} if mode is None else {"mode": mode}
+        f = pytensor.function(inputs, [g1, g2], **kwargs)
+        out1, out2 = f(*values)
         np.testing.assert_array_almost_equal(
-            np.asarray(g_jax), np.asarray(g_default), decimal=DECIMAL
+            np.asarray(out2), 2.0 * np.asarray(out1), decimal=DECIMAL
         )
 
 
@@ -248,24 +322,12 @@ def test_lan_logp_vjp_op_jax_linker_single_output():
     )
 
     rng = np.random.default_rng(7)
-    n = 10
-    data_np = np.stack(
-        [rng.uniform(0.4, 1.5, n), rng.choice([-1.0, 1.0], n)], axis=1
-    ).astype(np.float32)
-    v_np = rng.normal(0.5, 0.1, n).astype(np.float32)
-
     data = pt.matrix("data")
     v = pt.vector("v")
-    grad_v = pytensor.grad(logp_op(data, v).sum(), wrt=v)
+    grads = pytensor.grad(logp_op(data, v).sum(), wrt=[v])
+    values = [_rt_choice_data(7), rng.normal(0.5, 0.1, 10).astype(np.float32)]
 
-    f_default = pytensor.function([data, v], grad_v)
-    f_jax = pytensor.function([data, v], grad_v, mode="JAX")
-
-    np.testing.assert_array_almost_equal(
-        np.asarray(f_jax(data_np, v_np)),
-        np.asarray(f_default(data_np, v_np)),
-        decimal=DECIMAL,
-    )
+    _assert_jax_matches_default([data, v], grads, values)
 
 
 def test_lan_logp_vjp_op_jax_linker_n_params():
@@ -275,11 +337,6 @@ def test_lan_logp_vjp_op_jax_linker_n_params():
     with ``n_params``, and an Op whose gradient is undefined for the extra
     trial-wise field.
     """
-    import jax
-    from pytensor.gradient import NullTypeGradError
-
-    from hssm.distribution_utils.func_utils import make_vjp_func
-
     n_params = 2
 
     def jax_callable(data, p1, p2, extra):
@@ -295,29 +352,45 @@ def test_lan_logp_vjp_op_jax_linker_n_params():
     )
 
     rng = np.random.default_rng(11)
-    n = 10
-    data_np = np.stack(
-        [rng.uniform(0.4, 1.5, n), rng.choice([-1.0, 1.0], n)], axis=1
-    ).astype(np.float32)
-    extra_np = rng.normal(0.0, 1.0, n).astype(np.float32)
-
     data = pt.matrix("data")
     p1, p2 = (pt.scalar(name) for name in ["p1", "p2"])
     extra = pt.vector("extra")
 
     loglik = logp_op(data, p1, p2, extra)
     grads = pytensor.grad(loglik.sum(), wrt=[p1, p2])
-    inputs = [data, p1, p2, extra]
-    values = [data_np, np.float32(0.5), np.float32(1.5), extra_np]
+    values = [
+        _rt_choice_data(11),
+        np.float32(0.5),
+        np.float32(1.5),
+        rng.normal(0.0, 1.0, 10).astype(np.float32),
+    ]
 
-    f_default = pytensor.function(inputs, grads)
-    f_jax = pytensor.function(inputs, grads, mode="JAX")
-
-    for g_default, g_jax in zip(f_default(*values), f_jax(*values)):
-        np.testing.assert_array_almost_equal(
-            np.asarray(g_jax), np.asarray(g_default), decimal=DECIMAL
-        )
+    _assert_jax_matches_default([data, p1, p2, extra], grads, values)
 
     # The extra field sits past n_params, so its gradient is undefined.
     with pytest.raises(NullTypeGradError):
         pytensor.grad(loglik.sum(), wrt=extra)
+
+
+def test_lan_logp_op_pullback_no_future_warning():
+    """Differentiating LANLogpOp emits no PyTensor deprecation FutureWarning.
+
+    Guards the grad -> pullback migration: if the Op reverts to the
+    deprecated ``grad``/``L_op`` hooks, PyTensor 3 warns on every symbolic
+    differentiation.
+    """
+
+    def jax_callable(data, v):
+        return -((data[..., 0] - v) ** 2)
+
+    logp_op = make_jax_logp_ops(
+        *make_jax_logp_funcs_from_callable(
+            jax_callable, vmap=True, params_is_reg=[True]
+        )
+    )
+
+    data = pt.matrix("data")
+    v = pt.vector("v")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        pytensor.grad(logp_op(data, v).sum(), wrt=v)

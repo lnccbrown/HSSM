@@ -11,10 +11,11 @@ import jax.numpy as jnp
 import numpy as np
 import onnx
 import pytensor.tensor as pt
-from jax import grad, jit
+from jax import jit
 from numpy.typing import ArrayLike
 
 from .._types import LogLikeFunc, LogLikeGrad
+from .func_utils import make_vjp_func
 from .jax import make_vmap_func
 from .onnx_utils.model import load_onnx_model
 from .onnx_utils.onnx2jax import make_jax_func
@@ -116,12 +117,16 @@ def make_jax_logp_funcs_from_onnx(
 
         return jax_func(input_vector)
 
-    # Special handling if parameters are scalars only
+    # Special handling if parameters are scalars only. The VJP is built from
+    # the vector-shaped logp so the upstream cotangent is applied (a plain
+    # `grad` would silently drop the chain-rule factor for non-unit
+    # cotangents, e.g. under a p_outlier mixture).
     if params_only and scalars_only:
         logp_vec = lambda *inputs: logp(*inputs).reshape((1,))
+        vjp_logp_vec = make_vjp_func(logp_vec, params_only=True)
         if return_jit:
-            return jit(logp_vec), jit(grad(logp)), logp_vec
-        return logp_vec, grad(logp)
+            return jit(logp_vec), jit(vjp_logp_vec), logp_vec
+        return logp_vec, vjp_logp_vec
 
     in_axes: list[int | None] = [
         0 if is_regression else None for is_regression in params_is_reg

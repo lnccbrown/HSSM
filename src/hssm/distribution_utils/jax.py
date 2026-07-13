@@ -14,6 +14,232 @@ from .._types import LogLikeFunc, LogLikeGrad
 from .func_utils import make_vjp_func, make_vmap_func
 
 
+class LANLogpVJPOp(Op):  # pylint: disable=W0223
+    """Wraps the VJP of a JAX log-likelihood function in a pytensor Op.
+
+    Parameters
+    ----------
+    logp_vjp
+        A JAX function computing the VJP of the log-likelihood, with signature
+        `logp_vjp(data, *params, gz)` (or `logp_vjp(*params, gz)` when there is
+        no data), where `gz` is the cotangent at the output.
+    n_params : optional
+        Number of parameters used in the likelihood computation. Only required
+        when `extra_fields` are used, in which case the Op will not produce
+        gradient outputs for the extra fields.
+    """
+
+    def __init__(self, logp_vjp: LogLikeGrad, n_params: int | None = None):
+        self.logp_vjp = logp_vjp
+        self.n_params = n_params
+
+    def do_constant_folding(self, fgraph, node):
+        """Keep PyTensor from trying to precompute opaque JAX-backed outputs."""
+        return False
+
+    # pyrefly: ignore[bad-override]
+    def make_node(self, data, *dist_params, gz):
+        """Take the inputs to the Op and puts them in a list.
+
+        Also specifies the output types in a list, then feed them to the Apply node.
+
+        Parameters
+        ----------
+        data:
+            A two-column numpy array with response time and response, or `None`
+            for likelihoods computed from parameters only.
+        dist_params:
+            A list of parameters used in the likelihood computation.
+        gz:
+            The cotangent (upstream gradient) at the forward Op's output.
+        """
+        has_data = data is not None
+        inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
+        if has_data:
+            inputs = [pt.as_tensor_variable(data)] + inputs
+        inputs += [pt.as_tensor_variable(gz)]
+
+        grad_inputs = inputs[1:-1] if has_data else inputs[:-1]
+        if self.n_params is not None:
+            grad_inputs = grad_inputs[: self.n_params]
+
+        outputs = [inp.type() for inp in grad_inputs]
+
+        return Apply(self, inputs, outputs)
+
+    def perform(self, node, inputs, output_storage):
+        """Perform the Apply node.
+
+        Parameters
+        ----------
+        inputs
+            This is a list of data from which the values stored in
+            `output_storage` are to be computed using non-symbolic language.
+        output_storage
+            This is a list of storage cells where the output
+            is to be stored. A storage cell is a one-element list. It is
+            forbidden to change the length of the list(s) contained in
+            output_storage. There is one storage cell for each output of
+            the Op.
+        """
+        results = self.logp_vjp(*inputs[:-1], gz=inputs[-1])
+
+        for i, result in enumerate(results):
+            output_storage[i][0] = np.asarray(result, dtype=node.outputs[i].dtype)
+
+
+class LANLogpOp(Op):  # pylint: disable=W0223
+    """Wraps a JAX log-likelihood function in a pytensor Op.
+
+    Parameters
+    ----------
+    logp
+        A JAX function that represents the feed-forward operation of the LAN
+        network.
+    logp_nojit
+        The non-jit version of logp, used when the whole graph is compiled
+        with the JAX linker.
+    vjp_op
+        The `LANLogpVJPOp` emitted by `pullback` for reverse-mode gradients.
+    n_params : optional
+        Number of parameters used in the likelihood computation. Only required
+        when `extra_fields` are used, in which case the resulting Op will not
+        compute gradients with respect to the extra fields.
+    """
+
+    def __init__(
+        self,
+        logp: LogLikeFunc,
+        logp_nojit: LogLikeFunc,
+        vjp_op: LANLogpVJPOp,
+        n_params: int | None = None,
+    ):
+        self.logp = logp
+        self.logp_nojit = logp_nojit
+        self.vjp_op = vjp_op
+        self.n_params = n_params
+
+    def do_constant_folding(self, fgraph, node):
+        """Keep PyTensor from trying to precompute opaque JAX-backed outputs."""
+        return False
+
+    # pyrefly: ignore[bad-override]
+    def make_node(self, data, *dist_params):
+        """Take the inputs to the Op and puts them in a list.
+
+        Also specifies the output types in a list, then feed them to the Apply node.
+
+        Parameters
+        ----------
+        data
+            A two-column numpy array with response time and response. Can be `None`
+            for which case the log-likelihood is computed only from the parameters,
+            which is required for choice-probability networks with binary choices.
+        dist_params
+            A list of parameters used in the likelihood computation. The parameters
+            can be a mix of scalars and arrays.
+        """
+        inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
+        self.has_data = data is not None
+
+        if self.has_data:
+            inputs = [pt.as_tensor_variable(data)] + inputs
+
+        outputs = [pt.vector()]
+
+        return Apply(self, inputs, outputs)
+
+    def perform(self, node, inputs, output_storage):
+        """Perform the Apply node.
+
+        Parameters
+        ----------
+        inputs
+            This is a list of data from which the values stored in
+            output_storage are to be computed using non-symbolic language.
+        output_storage
+            This is a list of storage cells where the output
+            is to be stored. A storage cell is a one-element list. It is
+            forbidden to change the length of the list(s) contained in
+            output_storage. There is one storage cell for each output of
+            the Op.
+        """
+        result = self.logp(*inputs)
+        output_storage[0][0] = np.asarray(result, dtype=node.outputs[0].dtype)
+
+    def pullback(self, inputs, outputs, cotangents):
+        """Construct the graph for the VJP (reverse-mode gradient) of the Op.
+
+        Called by `pytensor.grad` when building the symbolic gradient graph.
+        The cotangent is always passed through to the VJP so the chain rule
+        holds for any downstream graph, not just unit cotangents.
+
+        Parameters
+        ----------
+        inputs
+            The same as the inputs produced in `make_node`.
+        outputs
+            The symbolic outputs of the node (unused; the VJP is computed
+            from the inputs directly).
+        cotangents
+            The cotangents (upstream gradients) for each output.
+
+        Notes
+        -----
+            It should output the VJP of the Op. In other words, if this `Op`
+            outputs `y`, and the gradient at `y` is grad(x), the required output
+            is y*grad(x).
+        """
+        if self.has_data:
+            results = self.vjp_op(inputs[0], *inputs[1:], gz=cotangents[0])
+        else:
+            results = self.vjp_op(None, *inputs, gz=cotangents[0])
+
+        output = list(results) if isinstance(results, (list, tuple)) else [results]
+
+        if self.has_data:
+            output = [
+                pytensor.gradient.grad_not_implemented(self, 0, inputs[0]),
+            ] + output
+
+        if self.n_params is not None:
+            start_idx = self.n_params + (1 if self.has_data else 0)
+            output[start_idx:] = [
+                pytensor.gradient.grad_undefined(self, i, inputs[i])
+                for i in range(start_idx, len(inputs))
+            ]
+
+        return output
+
+
+# Unwraps the JAX function for compilation with the JAX linker (e.g. sampling
+# through numpyro/blackjax, or pm.fit / pm.sample with backend="jax").
+@jax_funcify.register(LANLogpOp)
+def lan_logp_op_dispatch(op, **kwargs):  # pylint: disable=W0613
+    """Return the non-jitted forward function for the JAX linker."""
+    return op.logp_nojit
+
+
+# Required when PyTensor differentiates LANLogpOp symbolically (e.g. ADVI
+# via `pm.fit(..., backend="jax")`) and then compiles the gradient graph
+# with the JAX linker. Mirrors the input contract of LANLogpVJPOp.perform.
+@jax_funcify.register(LANLogpVJPOp)
+def lan_logp_vjp_op_dispatch(op, node, **kwargs):  # pylint: disable=W0613
+    """Wrap the VJP function for the JAX linker.
+
+    PyTensor's generated code tuple-unpacks multi-output nodes but assigns
+    single-output nodes directly, so the wrapper returns a bare array when
+    the node has exactly one output.
+    """
+    n_outputs = len(node.outputs)
+
+    def lan_logp_vjp_jax(*inputs):
+        results = op.logp_vjp(*inputs[:-1], gz=inputs[-1])
+        return tuple(results) if n_outputs > 1 else results[0]
+
+    return lan_logp_vjp_jax
+
+
 def make_jax_logp_ops(
     logp: LogLikeFunc,
     logp_vjp: LogLikeGrad,
@@ -28,7 +254,9 @@ def make_jax_logp_ops(
         A JAX function that represents the feed-forward operation of the LAN
         network.
     logp_vjp
-        The Jax function that calculates the VJP of the logp function.
+        The Jax function that calculates the VJP of the logp function. Its
+        signature is `logp_vjp(data, *params, gz)` (or `logp_vjp(*params, gz)`
+        for likelihoods without data), where `gz` is the cotangent.
     logp_nojit
         The non-jit version of logp.
     n_params : optional
@@ -42,203 +270,7 @@ def make_jax_logp_ops(
         An pytensor op that wraps the feed-forward operation and can be used with
         pytensor.grad.
     """
-
-    class LANLogpOp(Op):  # pylint: disable=W0223
-        """Wraps a JAX function in an pytensor Op."""
-
-        def do_constant_folding(self, fgraph, node):
-            """Keep PyTensor from trying to precompute opaque JAX-backed outputs."""
-            return False
-
-        # pyrefly: ignore[bad-override]
-        def make_node(self, data, *dist_params):
-            """Take the inputs to the Op and puts them in a list.
-
-            Also specifies the output types in a list, then feed them to the Apply node.
-
-            Parameters
-            ----------
-            data
-                A two-column numpy array with response time and response. Can be `None`
-                for which case the log-likelihood is computed only from the parameters,
-                which is required for choice-probability networks with binary choices.
-            dist_params
-                A list of parameters used in the likelihood computation. The parameters
-                can be a mix of scalars and arrays.
-            """
-            inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
-            self.is_scalars_only = all(inp.ndim == 0 for inp in inputs)
-            self.has_data = data is not None
-            self.n_params = n_params
-
-            if self.has_data:
-                inputs = [pt.as_tensor_variable(data)] + inputs
-
-            outputs = [pt.vector()]
-
-            return Apply(self, inputs, outputs)
-
-        def perform(self, node, inputs, output_storage):
-            """Perform the Apply node.
-
-            Parameters
-            ----------
-            inputs
-                This is a list of data from which the values stored in
-                output_storage are to be computed using non-symbolic language.
-            output_storage
-                This is a list of storage cells where the output
-                is to be stored. A storage cell is a one-element list. It is
-                forbidden to change the length of the list(s) contained in
-                output_storage. There is one storage cell for each output of
-                the Op.
-            """
-            result = logp(*inputs)
-            output_storage[0][0] = np.asarray(result, dtype=node.outputs[0].dtype)
-
-        def pullback(self, inputs, outputs, cotangents):
-            """Construct the graph for the VJP (reverse-mode gradient) of the Op.
-
-            Called by `pytensor.grad` when building the symbolic gradient graph.
-
-            Parameters
-            ----------
-            inputs
-                The same as the inputs produced in `make_node`.
-            outputs
-                The symbolic outputs of the node (unused; the VJP is computed
-                from the inputs directly).
-            cotangents
-                The cotangents (upstream gradients) for each output.
-
-            Notes
-            -----
-                It should output the VJP of the Op. In other words, if this `Op`
-                outputs `y`, and the gradient at `y` is grad(x), the required output
-                is y*grad(x).
-            """
-            if self.has_data:
-                results = lan_logp_vjp_op(inputs[0], *inputs[1:], gz=cotangents[0])
-            else:
-                if self.is_scalars_only:
-                    results = lan_logp_vjp_op(None, *inputs, gz=None)
-                else:
-                    results = lan_logp_vjp_op(None, *inputs, gz=cotangents[0])
-
-            output = list(results) if isinstance(results, (list, tuple)) else [results]
-
-            if self.has_data:
-                output = [
-                    pytensor.gradient.grad_not_implemented(self, 0, inputs[0]),
-                ] + output
-
-            if self.n_params is not None:
-                start_idx = self.n_params + (1 if self.has_data else 0)
-                output[start_idx:] = [
-                    pytensor.gradient.grad_undefined(self, i, inputs[i])
-                    for i in range(start_idx, len(inputs))
-                ]
-
-            return output
-
-    class LANLogpVJPOp(Op):  # pylint: disable=W0223
-        """Wraps the VJP operation of a jax function in an pytensor op."""
-
-        def do_constant_folding(self, fgraph, node):
-            """Keep PyTensor from trying to precompute opaque JAX-backed outputs."""
-            return False
-
-        # pyrefly: ignore[bad-override]
-        def make_node(self, data, *dist_params, gz):
-            """Take the inputs to the Op and puts them in a list.
-
-            Also specifies the output types in a list, then feed them to the Apply node.
-
-            Parameters
-            ----------
-            data:
-                A two-column numpy array with response time and response.
-            dist_params:
-                A list of parameters used in the likelihood computation.
-            """
-            self.has_data = data is not None
-            self.is_scalars_only = gz is None
-            inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
-            if self.has_data:
-                inputs = [pt.as_tensor_variable(data)] + inputs
-            if not self.is_scalars_only:
-                inputs += [pt.as_tensor_variable(gz)]
-
-            if self.has_data:
-                grad_inputs = inputs[1:-1]
-            else:
-                if self.is_scalars_only:
-                    grad_inputs = inputs
-                else:
-                    grad_inputs = inputs[:-1]
-
-            if n_params is not None:
-                grad_inputs = grad_inputs[:n_params]
-
-            outputs = [inp.type() for inp in grad_inputs]
-
-            return Apply(self, inputs, outputs)
-
-        def perform(self, node, inputs, outputs):
-            """Perform the Apply node.
-
-            Parameters
-            ----------
-            inputs
-                This is a list of data from which the values stored in
-                `output_storage` are to be computed using non-symbolic language.
-            output_storage
-                This is a list of storage cells where the output
-                is to be stored. A storage cell is a one-element list. It is
-                forbidden to change the length of the list(s) contained in
-                output_storage. There is one storage cell for each output of
-                the Op.
-            """
-            if self.has_data:
-                results = logp_vjp(*inputs[:-1], gz=inputs[-1])
-            else:
-                if self.is_scalars_only:
-                    # NOTE: this looks like a bug, but it's not. The inputs are
-                    # passed as a list so that the gradient are returned as a list.
-                    # The reason why this works is that JAX can handle inputs as a
-                    # list of scalars.
-                    results = logp_vjp(inputs)
-                else:
-                    results = logp_vjp(*inputs[:-1], gz=inputs[-1])
-
-            for i, result in enumerate(results):
-                outputs[i][0] = np.asarray(result, dtype=node.outputs[i].dtype)
-
-    lan_logp_op = LANLogpOp()
-    lan_logp_vjp_op = LANLogpVJPOp()
-
-    # Unwraps the JAX function for sampling with JAX backend.
-    @jax_funcify.register(LANLogpOp)
-    def logp_op_dispatch(op, **kwargs):  # pylint: disable=W0612,W0613
-        return logp_nojit
-
-    # Required when PyTensor differentiates LANLogpOp symbolically (e.g. ADVI
-    # via `pm.fit(..., backend="jax")`) and then compiles the gradient graph
-    # with the JAX linker. Mirrors the input contract of LANLogpVJPOp.perform.
-    @jax_funcify.register(LANLogpVJPOp)
-    def logp_vjp_op_dispatch(op, node, **kwargs):  # pylint: disable=W0612,W0613
-        n_outputs = len(node.outputs)
-
-        def logp_vjp_jax(*inputs):
-            if op.is_scalars_only and not op.has_data:
-                results = logp_vjp(list(inputs))
-            else:
-                results = logp_vjp(*inputs[:-1], gz=inputs[-1])
-            return tuple(results) if n_outputs > 1 else results[0]
-
-        return logp_vjp_jax
-
-    return lan_logp_op
+    return LANLogpOp(logp, logp_nojit, LANLogpVJPOp(logp_vjp, n_params), n_params)
 
 
 @overload

@@ -117,21 +117,32 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, method, expected)
 @pytest.mark.slow
 @pytest.mark.xfail(
     strict=True,
+    raises=TypeError,
     reason="pm.fit(backend='jax') is blocked upstream: PyMC's meanfield "
     "approximation parameters lack static shapes (JAX tracing TypeError), "
     "and a JAX-backend fit leaves jax arrays in shared storage, breaking "
     "the numba-compiled approx.sample(). See lnccbrown/HSSM#1056 for the "
     "upstream issue links. Remove this marker once the pinned pymc "
-    "includes both fixes.",
+    "includes both fixes. raises=TypeError is deliberate: an HSSM-side "
+    "regression (e.g. NotImplementedError from a missing jax_funcify "
+    "registration) must fail the test, not xfail it.",
 )
 def test_vi_jax_compile_backend(data_ddm):
-    """End-to-end reproducer for #1056: VI compiled through the JAX linker.
-
-    The HSSM-side fix (jax_funcify for LANLogpVJPOp) gets past the original
-    NotImplementedError; the remaining failures are upstream. ``strict=True``
-    turns this into a hard failure the moment an upstream bump makes it pass,
-    signalling that the marker should be removed.
-    """
+    """End-to-end reproducer for #1056: VI compiled through the JAX linker."""
     model = hssm.HSSM(data_ddm, model="angle", p_outlier=0.0)
     model.vi(method="advi", niter=1, draws=1, backend="jax", progressbar=False)
     assert isinstance(model.vi_idata, xr.DataTree)
+
+
+@pytest.mark.slow
+def test_vi_c_compile_backend(data_ddm):
+    """VI with the explicit C compile backend (the documented #1056 workaround).
+
+    The parametrized tests above exercise only pymc's default compile mode;
+    this pins the `backend="c"` path, which runs the LAN Ops' perform/VJP
+    through the C VM.
+    """
+    model = hssm.HSSM(data_ddm, model="angle", p_outlier=0.0)
+    model.vi(method="advi", niter=100, backend="c", progressbar=False)
+    assert isinstance(model.vi_idata, xr.DataTree)
+    assert isinstance(model.vi_approx, pm.variational.Approximation)
