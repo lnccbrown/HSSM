@@ -1,6 +1,5 @@
 """Tests for HSSM utility helpers."""
 
-import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -348,11 +347,6 @@ def test_check_data_for_rl():
     assert n_trials == 2
 
 
-@pytest.mark.xfail(
-    sys.version_info >= (3, 14),
-    reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
-    strict=True,  # This will let us know in the future when this is fixed
-)
 def test_predictive_idata_to_dataframe(data_ddm):
     """Convert prior-predictive draws to a tidy DataFrame."""
     model = hssm.HSSM(data=data_ddm)
