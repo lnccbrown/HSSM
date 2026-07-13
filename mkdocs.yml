@@ -39,16 +39,19 @@ nav:
       - Main tutorial: tutorials/main_tutorial.ipynb
       - Hierarchical DDM: tutorials/ddm_hierarchical_tutorial.ipynb
       - Choice-only models: tutorials/choice_only_models.ipynb
+      - Choice-only RLSSM: tutorials/choice_only_rlssm.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
       - Plotting: tutorials/plotting.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
       - Variational Inference: tutorials/variational_inference.ipynb
       - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
+      - Per-parameter centered vs. non-centered parameterization: tutorials/parameterization_per_parameter.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
-      - Reinforcement Learning - Sequential Sampling Models (RLSSM): tutorials/rlssm_tutorial.ipynb
-      - RLSSM Quickstart: tutorials/rlssm_quickstart.ipynb
-      - Add custom RLSSM models: tutorials/add_custom_rlssm_model.ipynb
+      - RLSSM — Basic tutorial: tutorials/rlssm_basic.ipynb
+      - RLSSM — Custom models with ssms.rl: tutorials/rlssm_advanced.ipynb
+      - RLSSM — Restless learner: tutorials/rlssm_restless_learner.ipynb
+      - RLSSM — Registering custom models in HSSM: tutorials/rlssm_hssm_custom_models.ipynb
       - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
       - BayesFlow LRE Integration: tutorials/bayesflow_lre_integration.ipynb
       - BayesFlow NLE Integration (ONNX): tutorials/bayesflow_nle_onnx_integration.ipynb
@@ -84,10 +87,12 @@ plugins:
         - tutorials/main_tutorial.ipynb
         - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
+        - tutorials/choice_only_rlssm.ipynb
         - tutorials/likelihoods.ipynb
         - tutorials/variational_inference.ipynb
         - tutorials/variational_inference_hierarchical.ipynb
         - tutorials/centered_vs_noncentered_basic_logic.ipynb
+        - tutorials/parameterization_per_parameter.ipynb
         - tutorials/initial_values.ipynb
         - tutorials/pymc.ipynb
         - tutorials/jax_callable_contribution_onnx_example.ipynb
@@ -102,14 +107,14 @@ plugins:
         - tutorials/hmm_ddm_regime_switching.ipynb
         - tutorials/hssm_tutorial_workshop_1.ipynb
         - tutorials/hssm_tutorial_workshop_2.ipynb
-        - tutorials/add_custom_rlssm_model.ipynb
-        - tutorials/rlssm_tutorial.ipynb
-        - tutorials/rlssm_quickstart.ipynb
+        - tutorials/rlssm_basic.ipynb
+        - tutorials/rlssm_advanced.ipynb
+        - tutorials/rlssm_restless_learner.ipynb
+        - tutorials/rlssm_hssm_custom_models.ipynb
         - tutorials/lapse_prob_and_dist.ipynb
         - tutorials/plotting.ipynb
         - tutorials/scientific_workflow_hssm.ipynb
         - tutorials/pymc_to_hssm.ipynb
-        - tutorials/rlssm_rlwm_model.ipynb
         - tutorials/tutorial_bayeux.ipynb
         - tutorials/bayesflow_lre_integration.ipynb
         - tutorials/bayesflow_nle_onnx_integration.ipynb

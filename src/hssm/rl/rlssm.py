@@ -22,10 +22,12 @@ The key difference from `hssm.hssm.HSSM` is the likelihood:
 """
 
 import logging
+import warnings
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Callable, Literal, cast
 
 import bambi as bmb
+import numpy as np
 import pandas as pd
 import pymc as pm
 
@@ -42,7 +44,7 @@ from hssm.rl.utils import validate_balanced_panel
 
 from ..base import HSSMBase, classproperty
 from .config import RLSSMConfig
-from .registry import get_rlssm_model_config, list_models
+from .registry import DEFAULT_RLSSM_MODEL, get_rlssm_model_config, list_models
 
 _logger = logging.getLogger(__name__)
 
@@ -87,7 +89,7 @@ class _RLSSM(HSSMBase):
     p_outlier : float | dict | bmb.Prior | None, optional
         Lapse probability specification. Defaults to ``0.05``.
     lapse : dict | bmb.Prior | None, optional
-        Lapse distribution. Defaults to ``Uniform(0, 20)``.
+        Lapse distribution. Defaults to ``None``.
     link_settings : Literal["log_logit"] | None, optional
         Link-function preset. Defaults to ``None``.
     prior_settings : Literal["safe"] | None, optional
@@ -127,7 +129,7 @@ class _RLSSM(HSSMBase):
         participant_col: str = "participant_id",
         include: list[dict[str, Any] | Any] | None = None,
         p_outlier: float | dict | bmb.Prior | None = 0.05,
-        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
+        lapse: float | dict | bmb.Prior | None = None,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
         extra_namespace: dict[str, Any] | None = None,
@@ -175,6 +177,8 @@ class _RLSSM(HSSMBase):
         # Infer panel structure and validate balance BEFORE calling super so any
         # error surfaces before the expensive model-build steps.
         n_participants, n_trials = validate_balanced_panel(data, participant_col)
+        if model_config.is_choice_only:
+            self._validate_choice_only_responses(data, model_config)
 
         # Store RL-specific state on self BEFORE super().__init__() so that
         # _make_model_distribution() (called from super) can access them.
@@ -228,6 +232,59 @@ class _RLSSM(HSSMBase):
             **kwargs,
         )
 
+    @staticmethod
+    def _validate_choice_only_responses(
+        data: pd.DataFrame,
+        model_config: RLSSMConfig,
+    ) -> None:
+        """Validate response labels for RLSSM choice-only observed data."""
+        if not model_config.response:
+            return
+        response_col = model_config.response[0]
+        if response_col not in data.columns:
+            return
+        if model_config.choices is None:
+            return
+
+        responses = data[response_col]
+        numeric_responses = pd.to_numeric(responses, errors="coerce")
+        non_numeric = numeric_responses.isna() & ~responses.isna()
+        if non_numeric.any():
+            raise ValueError(
+                "Choice-only RLSSM response labels must be numeric. "
+                f"Invalid values: {responses[non_numeric].unique().tolist()}"
+            )
+
+        response_values = numeric_responses.to_numpy(dtype=float)
+        if not np.all(np.isfinite(response_values)):
+            raise ValueError("Choice-only RLSSM response labels must be finite.")
+
+        if not np.all(np.equal(response_values, np.round(response_values))):
+            raise ValueError("Choice-only RLSSM response labels must be integral.")
+
+        response_ints = response_values.astype(int)
+        unique_responses = np.unique(response_ints)
+        choices = np.asarray(model_config.choices, dtype=int)
+
+        if np.any(~np.isin(unique_responses, choices)):
+            invalid_responses = sorted(
+                unique_responses[~np.isin(unique_responses, choices)].tolist()
+            )
+            raise ValueError(
+                f"Invalid responses found in your dataset: {invalid_responses}"
+            )
+
+        missing_responses = sorted(np.setdiff1d(choices, unique_responses).tolist())
+        if missing_responses:
+            warnings.warn(
+                (
+                    f"You set choices to be {model_config.choices}, but "
+                    f"{missing_responses} are missing from your dataset."
+                ),
+                UserWarning,
+                stacklevel=2,
+            )
+
     def _make_model_distribution(self) -> type[pm.Distribution]:
         """Build a pm.Distribution using the pre-built RL log-likelihood Op.
 
@@ -280,15 +337,29 @@ class _RLSSM(HSSMBase):
 
         # RLSSMConfig carries no `rv` field; use model_name as the rv identifier.
         rv_name = self.model_config.model_name
+        lapse = self.lapse
+        if self.model_config.is_choice_only and isinstance(
+            lapse, int | float | np.floating
+        ):
+            if not 0 < float(lapse) <= 1:
+                raise ValueError(
+                    "Choice-only RLSSM scalar lapse probabilities must satisfy "
+                    "0 < lapse <= 1."
+                )
+            # Base._check_lapse() supplies choice-only scalar lapse as
+            # 1 / n_choices, while make_distribution() expects float lapse
+            # values to already be log probabilities.
+            lapse = float(np.log(lapse))
 
         return make_distribution(
             rv=rv_name,
             loglik=loglik_op,
             list_params=list_params,
             bounds=self.bounds,
-            lapse=self.lapse,
+            lapse=lapse,
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
+            is_choice_only=self.model_config.is_choice_only,
         )
 
 
@@ -352,7 +423,8 @@ class RLSSM(_RLSSM):
     data : pd.DataFrame
         Trial-level data (balanced panel required).
     model : str | None, optional
-        Name of a registered RLSSM model. Defaults to ``"2AB_RescorlaWagner_DDM"``.
+        Name of an ``ssms.rl`` preset or custom registered RLSSM model. Defaults
+        to ``"2AB_RW_DDM"``.
     choices : list[int] | None, optional
         Override the choice values in the registry. ``None`` uses the registry
         default.
@@ -373,7 +445,7 @@ class RLSSM(_RLSSM):
     p_outlier : float | dict | bmb.Prior | None, optional
         Lapse probability. Defaults to ``0.05``.
     lapse : dict | bmb.Prior | None, optional
-        Lapse distribution. Defaults to ``Uniform(0, 20)``.
+        Lapse distribution. Defaults to ``None``.
     link_settings : Literal["log_logit"] | None, optional
         Link-function preset. Defaults to ``None``.
     prior_settings : Literal["safe"] | None, optional
@@ -413,7 +485,7 @@ class RLSSM(_RLSSM):
     def __init__(
         self,
         data: pd.DataFrame,
-        model: str | None = "2AB_RescorlaWagner_DDM",
+        model: str | None = DEFAULT_RLSSM_MODEL,
         choices: list[int] | None = None,
         include: list[dict[str, Any] | Any] | None = None,
         model_config: RLSSMConfig | None = None,
@@ -421,7 +493,7 @@ class RLSSM(_RLSSM):
         decision_process: str | None = None,
         participant_col: str = "participant_id",
         p_outlier: float | dict | bmb.Prior | None = 0.05,
-        lapse: dict | bmb.Prior | None = bmb.Prior("Uniform", lower=0.0, upper=20.0),
+        lapse: float | dict | bmb.Prior | None = None,
         link_settings: Literal["log_logit"] | None = None,
         prior_settings: Literal["safe"] | None = "safe",
         extra_namespace: dict[str, Any] | None = None,
@@ -435,7 +507,7 @@ class RLSSM(_RLSSM):
         _my_init_args = self._store_init_args(locals(), kwargs)
 
         ignored_overrides_provided = (
-            model != "2AB_RescorlaWagner_DDM"
+            model != DEFAULT_RLSSM_MODEL
             or learning_process is not None
             or decision_process is not None
             or choices is not None
@@ -447,7 +519,7 @@ class RLSSM(_RLSSM):
             )
 
         model_config = model_config or get_rlssm_model_config(
-            model=model or "2AB_RescorlaWagner_DDM",
+            model=model or DEFAULT_RLSSM_MODEL,
             choices=choices,
             learning_process=learning_process,
             decision_process=decision_process,
@@ -500,6 +572,6 @@ class RLSSM(_RLSSM):
         --------
         >>> from hssm.rl import RLSSM
         >>> RLSSM.list_models
-        {'2AB_RescorlaWagner_DDM': 'RLSSM model with ...', ...}
+        {'2AB_RW_DDM': 'Two-armed bandit with ...', ...}
         """
         return list_models()

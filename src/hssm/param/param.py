@@ -188,7 +188,11 @@ class Param:
 
     def parse_bambi(
         self,
-    ) -> tuple[str | None, dict[str, Any] | bmb.Prior | None, str | bmb.Link | None]:
+    ) -> tuple[
+        str | None,
+        dict[str, Any] | bmb.Prior | float | np.ndarray | None,
+        str | bmb.Link | None,
+    ]:
         """Parse the parameter for Bambi.
 
         Returns

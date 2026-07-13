@@ -2,6 +2,9 @@
 hssm_section_notebooks/
 hssm_paper/
 
+# marimo notebook session cache
+__marimo__/
+
 # CLAUDE
 .claude/worktrees/
 .claude/settings.json
@@ -92,3 +95,4 @@ explorations/
 pypi-token
 pre-commit
 .github/copilot-instructions.md
+uv.lock

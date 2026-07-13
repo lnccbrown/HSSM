@@ -1,11 +1,15 @@
+"""Tests for HSSM model and trace serialization."""
+
 import numpy as np
 import pytest
+import xarray as xr
 
 import hssm
 
 
 # Check some attributes are the same
 def compare_hssm_class_attributes(model_a, model_b):
+    """Assert that persisted and restored models share core state."""
     a = np.array([type(v) for k, v in model_a._init_args.items()])
     b = np.array([type(v) for k, v in model_b._init_args.items()])
     assert (a == b).all(), "Init arg types not the same"
@@ -23,6 +27,7 @@ def compare_hssm_class_attributes(model_a, model_b):
 
 @pytest.mark.slow
 def test_save_load_model_only(basic_hssm_model, tmp_path):
+    """Round-trip a model without attached traces."""
     tmp_model_name = "hssm_model_pytest"
     basic_hssm_model.save_model(
         model_name=tmp_model_name, base_path=tmp_path, allow_absolute_base_path=True
@@ -33,6 +38,7 @@ def test_save_load_model_only(basic_hssm_model, tmp_path):
 
 @pytest.mark.slow
 def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
+    """Round-trip model and trace directories across MCMC and VI states."""
     # Sample to attach vi and mcmc traces to model
     # Using minimal parameters since we only need traces to exist, not be accurate
     basic_hssm_model.sample(
@@ -46,6 +52,7 @@ def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
         model_name=tmp_model_name_1, base_path=tmp_path, allow_absolute_base_path=True
     )
     loaded_model = hssm.HSSM.load_model(path=tmp_path / tmp_model_name_1)
+    assert isinstance(loaded_model, hssm.HSSM)
 
     # Check that idata is attached to loaded model
     compare_hssm_class_attributes(basic_hssm_model, loaded_model)
@@ -62,6 +69,7 @@ def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
     )
 
     loaded_model = hssm.HSSM.load_model(path=tmp_path / tmp_model_name_2)
+    assert isinstance(loaded_model, hssm.HSSM)
 
     # Check that idata is attached to loaded model
     assert loaded_model._inference_obj is not None
@@ -73,15 +81,14 @@ def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
     tmp_model_name_3 = "hssm_model_pytest_3"
     basic_hssm_model.save_model(
         model_name=tmp_model_name_3,
-        save_idata_only=True,
+        save_traces_only=True,
         base_path=tmp_path,
         allow_absolute_base_path=True,
     )
 
     loaded_idata = hssm.HSSM.load_model(path=tmp_path / tmp_model_name_3)
 
-    # Check that idata is attached to loaded model
-    assert isinstance(loaded_idata, dict)
+    assert isinstance(loaded_idata, xr.DataTree)
     assert loaded_idata["idata_mcmc"] is not None
     assert loaded_idata["idata_vi"] is not None
 
@@ -96,6 +103,46 @@ def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
     loaded_model = hssm.HSSM.load_model(path=tmp_path / tmp_model_name_4)
 
     # Check that vi traces are not attached to loaded model
+    assert isinstance(loaded_model, hssm.HSSM)
     assert loaded_model._inference_obj_vi is None
     assert loaded_model._inference_obj is not None
     compare_hssm_class_attributes(basic_hssm_model, loaded_model)
+
+
+@pytest.mark.parametrize(
+    ("existing_filename", "loaded_group", "missing_filename"),
+    [
+        ("traces.nc", "idata_mcmc", "vi_traces.nc"),
+        ("vi_traces.nc", "idata_vi", "traces.nc"),
+    ],
+)
+def test_load_model_traces_tolerates_each_missing_file(
+    caplog,
+    tmp_path,
+    existing_filename,
+    loaded_group,
+    missing_filename,
+):
+    """Either trace file can be loaded when its counterpart is absent."""
+    traces = xr.DataTree.from_dict(
+        {
+            "posterior": xr.Dataset(
+                {"theta": (("chain", "draw"), np.array([[0.25, 0.75]]))},
+                coords={"chain": [0], "draw": [0, 1]},
+            )
+        }
+    )
+    trace_path = tmp_path / existing_filename
+    traces.to_netcdf(trace_path)
+
+    try:
+        loaded = hssm.HSSM.load_model_traces(tmp_path)
+
+        assert set(loaded.children) == {loaded_group}
+        xr.testing.assert_identical(
+            loaded[f"{loaded_group}/posterior"].ds,
+            traces["posterior"].ds,
+        )
+        assert f"{missing_filename} file does not exist" in caplog.text
+    finally:
+        trace_path.unlink(missing_ok=True)

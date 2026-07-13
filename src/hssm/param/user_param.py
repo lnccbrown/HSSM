@@ -106,7 +106,7 @@ class UserParam:
         cls,
         name: str,
         # Using Union here because "UserParam" is a forward reference
-        param: Union[float, np.ndarray, dict[str, Any], bmb.Prior, "UserParam"],
+        param: Union[float, np.ndarray, dict[str, Any], bmb.Prior, "UserParam", None],
     ) -> "UserParam":
         """Create a Param object from keyword arguments.
 

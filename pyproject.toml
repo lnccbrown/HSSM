@@ -1,6 +1,6 @@
 [project]
 name = "HSSM"
-version = "0.3.0"
+version = "0.4.0"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
@@ -14,30 +14,27 @@ readme = "README.md"
 license = { file = "LICENSE" }
 keywords = ["HSSM", "sequential sampling models", "bayesian", "bayes", "mcmc"]
 
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.12,<3.15"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 
 dependencies = [
     "absl-py>=2.3.1",
-    "arviz>=0.22.0",
-    "bambi>=0.17.2",
-    "cloudpickle>=3.0.0",
+    "bambi>=0.19.0",
+    "h5netcdf>=1.8.1",
+    "h5py>=3.16.0",
     "hddm-wfpt>=0.1.6",
-    "huggingface-hub>=0.34.0",
+    "huggingface-hub>=1.17.0",
     "jaxonnxruntime>=0.3.0",
     "numpyro>=0.19",
     "onnx>=1.16.0",
-    "pandas>=2.2,<3",
-    "pymc>=5.26.0",
-    "seaborn>=0.13.2",
-    "ssm-simulators>=0.12.4",
-    "tqdm>=4.66.0",
+    # 0.13.1 ships the aDDM engine + fixation_continuation (used by aDDM PPC).
+    "ssm-simulators>=0.13.1",
 ]
 
 [project.urls]
@@ -52,7 +49,7 @@ cuda13 = ["jax[cuda13]>=0.7.0"]
 [dependency-groups]
 dev = [
     "coverage>=7.6.4",
-    "mypy>=1.11.1",
+    "mypy>=2.1",
     "pytest-cov>=6.0.0",
     "pytest-xdist>=3.6.1",
     "pytest>=8.3.1",
@@ -61,8 +58,10 @@ dev = [
     "pytest-timeout>=2.3.1",
     "ruff>=0.15.0",
     "types-PyYAML",
-    "pre-commit>=4.1.0",
-    "onnxruntime>=1.17.1",
+    "psutil>=7.2.2",
+    "prek>=0.4.8",
+    "pyrefly>=1.1.1",
+    "onnxruntime>=1.27.0",
 ]
 
 notebook = [
@@ -75,6 +74,7 @@ notebook = [
     "nbconvert>=7.16.5",
     "nb-clean>=4.0.1",
     "nbval>=0.11.0",
+    "onnxruntime>=1.27.0",
     "ptpython>=3.0.29",
     "pyarrow>=20.0.0",
     "lanfactory>=0.7.0",
@@ -94,8 +94,14 @@ docs = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
-exclude = ["*.ipynb"]
+target-version = "py312"
+exclude = [
+    ".git",
+    "__pycache__",
+    "venv",
+    ".venv",
+    "notebooks",
+]
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -230,16 +236,8 @@ markers = [
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.sdist]
-exclude = [
-    "docs/**", # remove all docs content from the source tarball
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/hssm"] # keep as-is so only package code goes into the wheel
+requires = ["uv_build>=0.11.21,<0.12"]
+build-backend = "uv_build"
 
 [[tool.uv.index]]
 name = "pypi"
@@ -249,3 +247,11 @@ url = "https://pypi.org/simple/"
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
+
+[tool.uv.sources]
+hssm = { workspace = true }
+
+[tool.pyrefly]
+preset = "legacy"
+project-includes = ["src/hssm"]
+ignore-missing-imports = ["*"]

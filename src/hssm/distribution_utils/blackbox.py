@@ -27,6 +27,7 @@ def make_blackbox_op(logp: Callable) -> Op:
     class BlackBoxOp(Op):  # pylint: disable=W0223
         """Wraps an arbitrary function in a pytensor Op."""
 
+        # pyrefly: ignore[bad-override]
         def make_node(self, data, *dist_params):
             """Take the inputs to the Op and puts them in a list.
 
