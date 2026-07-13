@@ -29,7 +29,7 @@ docs/              # MkDocs documentation source
 
 - **Build system:** hatchling
 - **Package manager:** uv (with `uv.lock`)
-- **Python:** >=3.11, <3.14
+- **Python:** >=3.12, <3.15
 - **Linting/formatting:** ruff (via pre-commit)
 - **Type checking:** pyrefly (main; via pre-commit) + mypy (kept in CI)
 - **Pre-commit runner:** `prek` (not the `pre-commit` CLI). Run hooks with `uv run prek run --all-files` (or `uv run prek run <hook-id>`). The pyrefly hook uses `language: system`, so it relies on the pyrefly installed in the uv-managed environment — always invoke via `uv run prek`.
