@@ -39,7 +39,7 @@ docs/              # MkDocs documentation source
 HSSM uses PEP 735 dependency groups alongside traditional optional-dependencies:
 
 - **Core deps** (`[project.dependencies]`): pymc, bambi, numpyro, jax, arviz, etc.
-- **Optional extras** (`[project.optional-dependencies]`): `cuda12`
+- **Optional extras** (`[project.optional-dependencies]`): `cuda12`, `cuda13` (GPU-enabled JAX; e.g. `pip install hssm[cuda13]` or `uv sync --extra cuda13`)
 - **Dependency groups** (`[dependency-groups]`):
   - `dev` — pytest, ruff, mypy, pre-commit, coverage
   - `notebook` — jupyterlab, nbconvert, graphviz, bayesflow (dev branch), keras
@@ -111,6 +111,12 @@ Two separate skip mechanisms for notebooks:
 | `build_docs.yml` | Build documentation |
 | `build_and_publish.yml` | Release to PyPI (triggered on release publish) |
 | `prepare-release.yml` | Release preparation automation |
+
+## Repo Etiquette for AI Agents
+
+- **PR messages must be succinct and use bullet points.** State what changed and why in a few bullets — no long prose, no restating the diff. Link the issue being addressed (e.g., `Closes #NNNN`).
+- Reference the relevant issue in commit messages and make small, incremental commits.
+- Do not commit directly to `main`; work on an issue-numbered branch (e.g., `1053-add-cuda13-support`).
 
 ## Known Issues / Notes
 
