@@ -1,5 +1,16 @@
 # Changelog
 
+### Unreleased
+
+#### Major new features:
+
+1. Per-parameter centered vs. non-centered parameterization. Pass `noncentered` to `HSSM(...)` as a `dict` keyed by parameter name (e.g. `noncentered={"v": False, "a": True}`), or set a per-prior `noncentered` field on a group term's prior (dict or `hssm.Prior`) to override the model-level choice. Requires Bambi >= 0.19. See the "Per-parameter centered vs. non-centered parameterization" tutorial.
+2. **Attentional Drift Diffusion Model (aDDM)**: new `hssm.aDDM` model (with `aDDMConfig`) built on a vendored, differentiable JAX first-passage-time likelihood. Supports per-trial fixation covariates (`r1, r2, flag, sacc_array, d, sigma`), **trial-wise regression / hierarchical priors** on the core parameters (`eta, kappa, a, b, x0`), a sampled non-decision time `t`, and posterior-predictive checks conditioned on the observed fixations (via the aDDM simulator in ssm-simulators). See the "Attentional DDM" tutorial and `scripts/addm_parameter_recovery.py` for an end-to-end recovery check.
+
+#### Dependency changes:
+
+1. `bambi` floor raised to `>=0.19.0` (per-parameter non-centered support); `ssm-simulators` floor raised to `>=0.13.1` (aDDM engine + fixation continuation).
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
@@ -7,11 +18,10 @@ This version contains major breaking updates for HSSM. Please read the release n
 #### Major new features:
 
 1. A new `RLSSM` class has been added to support reinforcement learning sequential sampling models.
-2. Per-parameter centered vs. non-centered parameterization. Pass `noncentered` to `HSSM(...)` as a `dict` keyed by parameter name (e.g. `noncentered={"v": False, "a": True}`), or set a per-prior `noncentered` field on a group term's prior (dict or `hssm.Prior`) to override the model-level choice. Requires Bambi >= 0.19. See the "Per-parameter centered vs. non-centered parameterization" tutorial.
 
 #### Breaking changes that require migration:
 
-1. Dependencies have been streamlined to support PyMC 6.0+, pytensor 3.0+, ArviZ 1.0+, and Bambi 0.19+.
+1. Dependencies have been streamlined to support PyMC 6.0+, pytensor 3.0+, ArviZ 1.0+, and Bambi 0.18+.
 2. We added support for Python 3.14. However, `sample_posterior_predictive` sometimes fails due to a `cloudpickle` issue. Use Python 3.14 with caution if you have to perform posterior predictive sampling.
 3. Consistent with PyMC 6.0+ and ArviZ 1,0+ expectations, the `model.sample()` by default uses `numba` as the compute backend.
 4. `model.sample()` now returns an `xarray.DataTree` object instead of the `arviz.InferenceData` object. Other functions that expect `arviz.InferenceData` objects have been updated to accept `xarray.DataTree` objects.
@@ -43,7 +53,6 @@ This version includes the following changes:
 8. `DataValidator` refactored to `DataValidatorMixin` for improved extensibility.
 9. Bug fixes: default prior assignment, dimensionality errors with Bambi 0.17.0, negative-RT checks on missing data, flaky tests.
 10. Infrastructure: Python 3.13 support, restructured CI test workflows with coverage reporting, updated `model.sample()` API to match Bambi conventions.
-11. **Attentional Drift Diffusion Model (aDDM)**: new `hssm.aDDM` model (with `aDDMConfig`) built on a vendored, differentiable JAX first-passage-time likelihood. Supports per-trial fixation covariates (`r1, r2, flag, sacc_array, d, sigma`), **trial-wise regression / hierarchical priors** on the core parameters (`eta, kappa, a, b, x0`), a sampled non-decision time `t`, and posterior-predictive checks conditioned on the observed fixations (via the aDDM simulator in ssm-simulators). See `scripts/addm_parameter_recovery.py` for an end-to-end recovery check.
 
 ### 0.2.12
 

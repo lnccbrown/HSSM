@@ -9,21 +9,18 @@ The simulator is driven through ssm-simulators' high-level ``Simulator`` class �
 the same public path HSSM's posterior-predictive checks go through — so the
 covariate handshake you see here is exactly the one used under the hood.
 
-Requires the aDDM build of ssm-simulators (with ``cssm.addm``) and marimo. Until
-that ships on PyPI, run against the local build (from the HSSM worktree)::
+Requires ssm-simulators >= 0.13.1 (ships the aDDM engine + fixation
+continuation; installed by a plain ``uv sync``) and marimo::
 
-    uv pip install -e ../../ssm-simulators/addm-sim --no-deps --force-reinstall
-    uv pip install marimo
-    uv run --no-sync marimo edit docs/tutorials/attentional_ddm.py
+    uv run --with marimo marimo edit docs/tutorials/attentional_ddm.py
 
-``--no-sync`` is important: a plain ``uv run`` re-syncs HSSM's pinned
-ssm-simulators and would undo the local aDDM build. Sampling is gated behind a
-button, so the simulator/handshake sections are instant on load.
+Sampling is gated behind a button, so the simulator/handshake sections are
+instant on load.
 
-To publish into the docs once ssm-simulators ships the aDDM model, export with
-outputs and wire into mkdocs (see the marimo-notebooks skill)::
+To publish into the docs, export with outputs and wire into mkdocs (see the
+marimo-notebooks skill)::
 
-    uv run marimo export ipynb docs/tutorials/attentional_ddm.py \
+    uv run --with marimo marimo export ipynb docs/tutorials/attentional_ddm.py \
         -o docs/tutorials/attentional_ddm.ipynb --include-outputs
 """
 
@@ -391,7 +388,7 @@ def _(mo):
     - **Recovery** (below): each posterior should cover its orange ground-truth line.
     - **Trace**: the two chains should overlap and look like white noise (good mixing);
       also check `r_hat ~ 1.0` and `ess_bulk` in the summary above.
-    - **Pair**: look for funnels / tight ridges (hard geometry) and any divergences.
+    - **Pair**: look for funnels / tight ridges (hard geometry).
     - **Posterior predictive** (§6): predicted RTs should track the observed ones.
     """)
     return
@@ -409,10 +406,14 @@ def _(az, idata, plt):
         "x0": 0.0,
         "t": 0.0,
     }
-    # arviz 1.x dropped `plot_posterior`; forest intervals show the same recovery
-    # (compare each posterior against its true value in `_truth`).
+    # arviz 1.x dropped `plot_posterior`/`ref_val`; forest intervals with the
+    # true values in the title give the same recovery-at-a-glance check.
     az.plot_forest(idata, var_names=list(_truth), combined=True)
-    plt.gcf()
+    _fig = plt.gcf()
+    _fig.suptitle(
+        "truth: " + ", ".join(f"{k}={v}" for k, v in _truth.items()), fontsize=9
+    )
+    _fig
     return
 
 
@@ -427,12 +428,11 @@ def _(az, idata, plt):
 
 @app.cell
 def _(az, idata, plt):
-    # Pair: posterior geometry + correlations; divergences (if any) show in green.
+    # Pair: posterior geometry + correlations. (arviz 1.x plot_pair dropped the
+    # `kind`/`divergences` kwargs.)
     az.plot_pair(
         idata,
         var_names=["eta_Intercept", "eta_x", "a", "t"],
-        kind="kde",
-        divergences=True,
     )
     plt.gcf()
     return
@@ -531,7 +531,7 @@ def _(mo):
 def _(hssm, idata, model, plt):
     hssm.plotting.plot_model_cartoon(
         model,
-        idata=idata,
+        dt=idata,
         n_samples=8,
         n_trajectories=5,
         bins=25,
