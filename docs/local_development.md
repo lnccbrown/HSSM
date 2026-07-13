@@ -51,7 +51,14 @@ or
 uv sync --group dev --group test --extra cuda12
 ```
 
-Please ensure that you have a GPU that supports CUDA 12 for this installation.
+or, for CUDA 13:
+
+```sh
+uv sync --group dev --group test --extra cuda13
+```
+
+Please ensure that you have a GPU that supports CUDA 12 or CUDA 13,
+respectively, for this installation.
 
 ## Step 3. Set up a linear algebra package
 

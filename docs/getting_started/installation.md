@@ -54,6 +54,13 @@ pip install jax[cuda12]
 conda install -c conda-forge hssm
 ```
 
+Or, for GPUs on CUDA 13:
+
+```bash
+pip install jax[cuda13]
+conda install -c conda-forge hssm
+```
+
 ### Support for Apple Silicon, AMD, and other GPUs
 
 JAX also has support other GPUs. Please follow the [Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) to install the correct version of JAX before installing HSSM.

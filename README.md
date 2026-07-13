@@ -139,6 +139,13 @@ conda install -c conda-forge pymc
 pip install hssm[cuda12]
 ```
 
+Or, for GPUs on CUDA 13:
+
+```bash
+conda install -c conda-forge pymc
+pip install hssm[cuda13]
+```
+
 ### Support for Apple Silicon, AMD, and other GPUs
 
 JAX also has support other GPUs. Please follow the
