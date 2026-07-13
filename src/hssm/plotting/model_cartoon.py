@@ -31,7 +31,6 @@ from .utils import (
 
 _logger = logging.getLogger("hssm")
 
-<<<<<<< HEAD
 TRAJ_COLOR_DEFAULT_DICT: Mapping[Any, str] = MappingProxyType(
     {
         -1: "black",
@@ -44,18 +43,6 @@ TRAJ_COLOR_DEFAULT_DICT: Mapping[Any, str] = MappingProxyType(
         6: "brown",
     }
 )
-=======
-TRAJ_COLOR_DEFAULT_DICT: dict[float, str] = {
-    -1: "black",
-    0: "black",
-    1: "green",
-    2: "blue",
-    3: "red",
-    4: "orange",
-    5: "purple",
-    6: "brown",
-}
->>>>>>> origin/main
 
 
 class PlotFunctionProtocol(Protocol):
@@ -1246,17 +1233,10 @@ def _add_trajectories(
     highlight_rt_choice: bool = True,
     markersize_rt_choice: float | int = 50,
     markertype_rt_choice: str = "*",
-<<<<<<< HEAD
     markercolor_rt_choice: str | list[str] | Mapping[Any, str] = "red",
     linewidth: float | int = 1,
     alpha: float | int = 0.5,
     colors: str | list[str] | Mapping[Any, str] | None = None,
-=======
-    markercolor_rt_choice: str | list[str] | dict[float, str] = "red",
-    linewidth: float | int = 1,
-    alpha: float | int = 0.5,
-    colors: str | list[str] | dict[float, str] = "black",
->>>>>>> origin/main
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1295,11 +1275,7 @@ def _add_trajectories(
         Additional keyword arguments passed to plotting functions.
     """
     # Check markercolor type
-<<<<<<< HEAD
     possible_choices = sample[0]["metadata"]["possible_choices"]
-=======
-    markercolor_rt_choice_dict: dict[float, str]
->>>>>>> origin/main
     if isinstance(markercolor_rt_choice, str):
         markercolor_rt_choice_dict: Mapping[Any, str] = {
             value_: markercolor_rt_choice for value_ in possible_choices
@@ -1323,17 +1299,10 @@ def _add_trajectories(
         )
 
     # Check trajectory color type
-<<<<<<< HEAD
     if colors is None:
         colors_dict: Mapping[Any, str] = dict(TRAJ_COLOR_DEFAULT_DICT)
     elif isinstance(colors, str):
         colors_dict = {value_: colors for value_ in possible_choices}
-=======
-    colors_dict: dict[float, str] = {}
-    if isinstance(colors, str):
-        for value_ in sample[0]["metadata"]["possible_choices"]:
-            colors_dict[value_] = colors
->>>>>>> origin/main
     elif isinstance(colors, list):
         if len(colors) < len(possible_choices):
             raise ValueError(
@@ -2001,10 +1970,6 @@ def _add_trajectories_n(
     marker_type_rt_choice: str = "*",
     linewidth: float = 1,
     alpha: float = 0.5,
-<<<<<<< HEAD
-=======
-    colors: str | list[str] | dict[float, str] = TRAJ_COLOR_DEFAULT_DICT,
->>>>>>> origin/main
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -2041,27 +2006,7 @@ def _add_trajectories_n(
     process leading to a decision. Trajectory colors are taken from
     ``TRAJ_COLOR_DEFAULT_DICT``.
     """
-<<<<<<< HEAD
     colors_dict = TRAJ_COLOR_DEFAULT_DICT
-=======
-    # Check trajectory color type
-    colors_dict: dict[float, str]
-    if isinstance(colors, str):
-        colors_dict = {
-            value_: colors for value_ in sample[0]["metadata"]["possible_choices"]
-        }
-    elif isinstance(colors, list):
-        colors_dict = {
-            value_: colors[i]
-            for i, value_ in enumerate(sample[0]["metadata"]["possible_choices"])
-        }
-    elif isinstance(colors, dict):
-        colors_dict = colors
-    else:
-        raise ValueError(
-            "The `color_trajectories` argument must be a string, list, or dict."
-        )
->>>>>>> origin/main
 
     # Make bounds
     b = np.maximum(sample[0]["metadata"]["boundary"], 0)
