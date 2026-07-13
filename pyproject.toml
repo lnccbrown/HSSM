@@ -33,7 +33,8 @@ dependencies = [
     "jaxonnxruntime>=0.3.0",
     "numpyro>=0.19",
     "onnx>=1.16.0",
-    "ssm-simulators>=0.12.4,<0.13",
+    # 0.13.1 ships the aDDM engine + fixation_continuation (used by aDDM PPC).
+    "ssm-simulators>=0.13.1",
 ]
 
 [project.urls]

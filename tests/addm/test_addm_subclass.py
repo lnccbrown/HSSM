@@ -1,0 +1,220 @@
+"""Commit 4 — verify the aDDM(HSSMBase) subclass end to end.
+
+Runs in the repo's uv venv (full hssm stack)::
+
+    cd .../HSSM && source .venv/bin/activate
+    JAX_PLATFORMS=cpu python src/hssm/addm/commit_tests/test_commit4_subclass.py
+    # or: pytest src/hssm/addm/commit_tests/test_commit4_subclass.py -v
+
+The synthetic data is built directly with numpy (no efficient_fpt dependency).
+``rt`` is drawn in-support for the default params (with a=1.0, b=2.0 the bound
+collapses near t≈a/b=0.5), so the init log-likelihood is finite.
+"""
+
+import numpy as np
+import pandas as pd
+import pytest
+from pytensor.graph import Op
+from xarray import DataTree
+
+import hssm
+from hssm.addm.addm import aDDM
+from hssm.addm.config import aDDMConfig
+from hssm.addm.likelihoods.builder import make_addm_logp_func
+from hssm.addm.likelihoods.jax import set_jax_precision
+from hssm.base import HSSMBase
+
+set_jax_precision(True)
+
+MAX_D = 6
+
+
+def make_addm_dataframe(n_trials, seed=0, n_participants=1):
+    """Synthetic aDDM dataset with a per-row ``sacc_array`` (object) column."""
+    rng = np.random.default_rng(seed)
+    rt = rng.uniform(0.05, 0.45, n_trials)  # in-support for default b=2.0
+    response = rng.choice([-1.0, 1.0], n_trials)
+    r1 = rng.integers(1, 6, n_trials).astype(float)
+    r2 = rng.integers(1, 6, n_trials).astype(float)
+    flag = rng.integers(0, 2, n_trials).astype(int)
+    d = rng.integers(2, MAX_D + 1, n_trials).astype(int)
+    sigma = np.ones(n_trials)
+
+    sacc = []
+    for i in range(n_trials):
+        onsets = np.sort(rng.uniform(0.0, rt[i], d[i] - 1))
+        row = np.zeros(MAX_D)
+        row[1 : d[i]] = onsets  # row[0] = 0.0 (stage-0 onset)
+        sacc.append(row)
+
+    participant = (
+        rng.integers(0, n_participants, n_trials)
+        if n_participants > 1
+        else np.zeros(n_trials, dtype=int)
+    )
+
+    df = pd.DataFrame(
+        {
+            "rt": rt,
+            "response": response,
+            "r1": r1,
+            "r2": r2,
+            "flag": flag,
+            "d": d,
+            "sigma": sigma,
+            "participant": participant,
+        }
+    )
+    df["sacc_array"] = pd.Series(sacc, index=df.index)  # object column of arrays
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+def test_construct_default_config():
+    """aDDM constructs from a dataframe with the default config."""
+    df = make_addm_dataframe(20)
+    model = hssm.aDDM(data=df)
+    assert isinstance(model, aDDM)
+
+
+def test_construct_explicit_config():
+    """aDDM accepts an explicit ``aDDMConfig()``."""
+    df = make_addm_dataframe(20)
+    model = hssm.aDDM(data=df, model_config=aDDMConfig())
+    assert isinstance(model, aDDM)
+
+
+def test_is_hssmbase_subclass():
+    """``aDDM`` is an ``HSSMBase`` subclass."""
+    assert issubclass(hssm.aDDM, HSSMBase)
+    model = hssm.aDDM(data=make_addm_dataframe(20))
+    for attr in ("sample", "bounds", "model"):
+        assert hasattr(model, attr), f"missing HSSMBase API: {attr}"
+
+
+def test_loglik_op_injected():
+    """The JAX log-likelihood ``Op`` is injected into the config at construction."""
+    cfg = aDDMConfig()
+    assert cfg.loglik is None and cfg.backend is None
+    model = hssm.aDDM(data=make_addm_dataframe(20), model_config=cfg)
+    assert model.model_config.loglik is not None
+    assert isinstance(model.model_config.loglik, Op)
+    assert model.model_config.backend == "jax"
+    # Caller's config object must be untouched by dataclasses.replace.
+    assert cfg.loglik is None and cfg.backend is None
+
+
+def test_bad_columns_raise():
+    """Missing or invalid aDDM covariate columns raise at construction."""
+    base = make_addm_dataframe(20)
+
+    bad_flag = base.copy()
+    bad_flag.loc[0, "flag"] = 2
+    with pytest.raises(ValueError):
+        hssm.aDDM(data=bad_flag)
+
+    bad_d = base.copy()
+    bad_d.loc[0, "d"] = MAX_D + 1
+    with pytest.raises(ValueError):
+        hssm.aDDM(data=bad_d)
+
+    missing_col = base.drop(columns=["r1"])
+    with pytest.raises(ValueError):
+        hssm.aDDM(data=missing_col)
+
+
+def test_smoke_sample():
+    """aDDM samples end-to-end without error (smoke test)."""
+    df = make_addm_dataframe(200, seed=1)
+
+    # Localize failures: confirm the init log-likelihood is finite before NUTS.
+    eta, kappa, a, b, x0, t = aDDMConfig().params_default
+    data_arr = np.column_stack([df["rt"].to_numpy(), df["response"].to_numpy()])
+    sacc2d = aDDM._stack_sacc_array(df["sacc_array"])
+    logp = make_addm_logp_func()(
+        data_arr,
+        eta,
+        kappa,
+        a,
+        b,
+        x0,
+        t,
+        df["r1"].to_numpy(),
+        df["r2"].to_numpy(),
+        df["flag"].to_numpy(),
+        sacc2d,
+        df["d"].to_numpy(),
+        df["sigma"].to_numpy(),
+    )
+    assert bool(np.all(np.isfinite(np.asarray(logp)))), "init logp not finite"
+
+    model = hssm.aDDM(data=df)
+    # log_likelihood is disabled here purely for speed. It IS supported (the CC
+    # trial-wise builder handles the draw-dimension re-eval) — WAIC/LOO are
+    # exercised in test_addm_waic_loo.py.
+    idata = model.sample(
+        draws=5,
+        tune=5,
+        chains=1,
+        cores=1,
+        idata_kwargs={"log_likelihood": False},
+    )
+    assert isinstance(idata, DataTree)
+    assert "posterior" in idata
+
+
+def test_hierarchical_regression_builds():
+    """aDDM builds with a hierarchical regression on its parameters."""
+    df = make_addm_dataframe(60, seed=2, n_participants=3)
+    model = hssm.aDDM(
+        data=df,
+        include=[{"name": "eta", "formula": "eta ~ 1 + (1|participant)"}],
+    )
+    assert model.model is not None  # bambi model built without error
+    # CC: a regressed core param must be flagged trial-wise (the flag dist.py uses
+    # to broadcast it to (n_obs,) so the builder maps it per trial).
+    assert model.params["eta"].is_trialwise
+
+
+def test_hierarchical_regression_samples():
+    """A hierarchical regression on eta samples cleanly (CC — the headline).
+
+    Pre-CC this crashed in ``logp``: the scalar batched kernel mis-shaped the
+    per-trial ``(n_obs,)`` eta. It now flows through the per-trial vmap path, so a
+    group-level regression both builds *and* samples, and the posterior carries
+    the participant-level structure.
+    """
+    df = make_addm_dataframe(60, seed=2, n_participants=3)
+    model = hssm.aDDM(
+        data=df,
+        include=[{"name": "eta", "formula": "eta ~ 1 + (1|participant)"}],
+    )
+    idata = model.sample(
+        draws=5,
+        tune=5,
+        chains=1,
+        cores=1,
+        idata_kwargs={"log_likelihood": False},
+    )
+    assert isinstance(idata, DataTree)
+    posterior_vars = set(idata.posterior.data_vars)
+    # The group-level (per-participant) eta structure must be present.
+    assert any("participant" in v for v in posterior_vars), posterior_vars
+
+
+if __name__ == "__main__":
+    for fn in (
+        test_construct_default_config,
+        test_construct_explicit_config,
+        test_is_hssmbase_subclass,
+        test_loglik_op_injected,
+        test_bad_columns_raise,
+        test_smoke_sample,
+        test_hierarchical_regression_builds,
+        test_hierarchical_regression_samples,
+    ):
+        fn()
+        print(f"PASSED: {fn.__name__}")
+    print("\nAll Commit 4 subclass checks passed.")
