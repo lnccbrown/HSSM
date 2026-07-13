@@ -100,7 +100,7 @@ Use the following command to install HSSM into your virtual environment:
 pip install hssm
 ```
 
-YOu can also install HSSM with `uv`:
+You can also install HSSM with `uv`:
 
 ```bash
 uv add hssm
@@ -118,7 +118,6 @@ pip install hssm[cuda12]
 Or, for GPUs on CUDA 13:
 
 ```bash
-conda install -c conda-forge pymc
 pip install hssm[cuda13]
 ```
 
