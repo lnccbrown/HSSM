@@ -39,22 +39,17 @@ dependency groups defined in `pyproject.toml`.
 
 ### Optional: Set up JAX for GPU
 
-If you need JAX to support GPU, you can install the GPU version of JAX through:
+If you need JAX to support GPU, choose exactly one CUDA extra (the `cuda12` and
+`cuda13` extras are mutually exclusive, so do not use `--all-extras`):
 
 ```sh
-uv sync --all-groups --all-extras
-```
-
-or
-
-```sh
-uv sync --group dev --group test --extra cuda12
+uv sync --group dev --extra cuda12
 ```
 
 or, for CUDA 13:
 
 ```sh
-uv sync --group dev --group test --extra cuda13
+uv sync --group dev --extra cuda13
 ```
 
 Please ensure that you have a GPU that supports CUDA 12 or CUDA 13,
