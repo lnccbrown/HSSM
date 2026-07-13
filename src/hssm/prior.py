@@ -41,6 +41,10 @@ class Prior(bmb.Prior):  # noqa: PLW1641
         ``name``, ``dims``, and ``shape``, as well as its own keyworded arguments.
     bounds : optional
         A tuple of two floats indicating the lower and upper bounds of the prior.
+    noncentered : optional
+        For a group-specific (hierarchical) ``Normal`` prior, whether to use the
+        non-centered parameterization. ``None`` (default) inherits the model-level
+        ``noncentered`` setting; ``True``/``False`` overrides it for this term.
     """
 
     def __init__(
@@ -49,8 +53,13 @@ class Prior(bmb.Prior):  # noqa: PLW1641
         auto_scale: bool = True,
         dist: Callable | None = None,
         bounds: tuple[float, float] | None = None,
+        noncentered: bool | None = None,
         **kwargs,
     ):
+        # Forward the per-term non-centered override (bambi >= 0.19, PR #983) to
+        # bambi only when set, so the default path is unchanged.
+        if noncentered is not None:
+            kwargs["noncentered"] = noncentered
         bmb.Prior.__init__(self, name, auto_scale, dist, **kwargs)
         self.is_truncated = False
         self.bounds = bounds

@@ -7,10 +7,11 @@ This version contains major breaking updates for HSSM. Please read the release n
 #### Major new features:
 
 1. A new `RLSSM` class has been added to support reinforcement learning sequential sampling models.
+2. Per-parameter centered vs. non-centered parameterization. Pass `noncentered` to `HSSM(...)` as a `dict` keyed by parameter name (e.g. `noncentered={"v": False, "a": True}`), or set a per-prior `noncentered` field on a group term's prior (dict or `hssm.Prior`) to override the model-level choice. Requires Bambi >= 0.19. See the "Per-parameter centered vs. non-centered parameterization" tutorial.
 
 #### Breaking changes that requires migration:
 
-1. Dependencies has been streamlined to support PyMC 6.0+, pytensor 3.0+, ArviZ 1.0+, and Bambi 0.18+.
+1. Dependencies has been streamlined to support PyMC 6.0+, pytensor 3.0+, ArviZ 1.0+, and Bambi 0.19+.
 2. We added support for Python 3.14. However, `sample_posterior_predictive` sometimes fails due to a `cloudpickle` issue. Use Python 3.14 with caution if you have to perform posterior predictive sampling.
 3. Consistent with PyMC 6.0+ and ArviZ 1,0+ expectations, the `model.sample()` by default uses `numba` as the compute backend.
 4. `model.sample()` now returns an `xarray.DataTree` object instead of the `arviz.InferenceData` object. Other functions that expect `arviz.InferenceData` objects have been updated to accept `xarray.DataTree` objects.
