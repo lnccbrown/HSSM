@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
     from pytensor.tensor.variable import TensorVariable
 
+from hssm import _vi_compat
 from hssm._types import SupportedModels
 from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import (
@@ -785,10 +786,19 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # Run variational inference directly from pymc model
         # pyrefly: ignore[bad-context-manager]
         with self.pymc_model:
-            self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
+            if vi_kwargs.get("backend") == "jax":
+                # Two PyMC bugs currently break backend="jax" for every
+                # model; these scoped, self-disabling shims work around them
+                # until the pinned PyMC includes the upstream fixes
+                # (see hssm._vi_compat and #1056).
+                with _vi_compat.static_shape_vi_params():
+                    self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
+            else:
+                self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
 
             # Sample from the approximate posterior
             if self._vi_approx is not None:
+                _vi_compat.coerce_approx_params_to_numpy(self._vi_approx)
                 self._inference_obj_vi = self._vi_approx.sample(draws)
 
         # Post-processing

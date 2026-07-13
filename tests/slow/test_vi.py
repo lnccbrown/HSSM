@@ -115,23 +115,18 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, method, expected)
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(
-    strict=True,
-    raises=TypeError,
-    reason="pm.fit(backend='jax') is blocked upstream: PyMC's meanfield "
-    "approximation parameters lack static shapes (JAX tracing TypeError), "
-    "and a JAX-backend fit leaves jax arrays in shared storage, breaking "
-    "the numba-compiled approx.sample(). See lnccbrown/HSSM#1056 for the "
-    "upstream issue links. Remove this marker once the pinned pymc "
-    "includes both fixes. raises=TypeError is deliberate: an HSSM-side "
-    "regression (e.g. NotImplementedError from a missing jax_funcify "
-    "registration) must fail the test, not xfail it.",
-)
-def test_vi_jax_compile_backend(data_ddm):
-    """End-to-end reproducer for #1056: VI compiled through the JAX linker."""
+@pytest.mark.parametrize("method", ["advi", "fullrank_advi"])
+def test_vi_jax_compile_backend(data_ddm, method):
+    """End-to-end regression test for #1056: VI compiled through the JAX linker.
+
+    Exercises the LANLogpVJPOp jax_funcify registration plus the scoped
+    PyMC compatibility shims in `hssm._vi_compat` (static parameter shapes;
+    numpy coercion before `approx.sample`).
+    """
     model = hssm.HSSM(data_ddm, model="angle", p_outlier=0.0)
-    model.vi(method="advi", niter=1, draws=1, backend="jax", progressbar=False)
+    model.vi(method=method, niter=100, draws=10, backend="jax", progressbar=False)
     assert isinstance(model.vi_idata, xr.DataTree)
+    assert isinstance(model.vi_approx, pm.variational.Approximation)
 
 
 @pytest.mark.slow
