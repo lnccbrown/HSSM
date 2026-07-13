@@ -118,6 +118,12 @@ class LANLogpOp(Op):  # pylint: disable=W0223
         self.logp_nojit = logp_nojit
         self.vjp_op = vjp_op
         self.n_params = n_params
+        # Locked on first make_node call. The wrapped JAX callables have a
+        # single calling convention (with or without data) baked in, so one
+        # Op instance cannot serve both configurations; locking turns
+        # conflicting reuse into an explicit error instead of silently
+        # wrong gradients in `pullback`.
+        self.has_data: bool | None = None
 
     def do_constant_folding(self, fgraph, node):
         """Keep PyTensor from trying to precompute opaque JAX-backed outputs."""
@@ -140,9 +146,21 @@ class LANLogpOp(Op):  # pylint: disable=W0223
             can be a mix of scalars and arrays.
         """
         inputs = [pt.as_tensor_variable(dist_param) for dist_param in dist_params]
-        self.has_data = data is not None
+        has_data = data is not None
 
-        if self.has_data:
+        if self.has_data is None:
+            self.has_data = has_data
+        elif self.has_data != has_data:
+            raise ValueError(
+                "This LANLogpOp instance was previously applied "
+                f"{'with' if self.has_data else 'without'} data and is now "
+                f"being applied {'with' if has_data else 'without'} data. "
+                "The wrapped JAX callables support a single calling "
+                "convention; create a separate Op via `make_jax_logp_ops` "
+                "for each configuration."
+            )
+
+        if has_data:
             inputs = [pt.as_tensor_variable(data)] + inputs
 
         outputs = [pt.vector()]

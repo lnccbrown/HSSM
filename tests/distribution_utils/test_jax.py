@@ -394,3 +394,28 @@ def test_lan_logp_op_pullback_no_future_warning():
     with warnings.catch_warnings():
         warnings.simplefilter("error", FutureWarning)
         pytensor.grad(logp_op(data, v).sum(), wrt=v)
+
+
+def test_lan_logp_op_locks_data_configuration():
+    """Conflicting reuse of one Op (with and without data) raises loudly.
+
+    ``pullback`` reads the configuration locked at first use; the wrapped
+    JAX callables only support one calling convention, so mixed reuse must
+    be an explicit error rather than silently wrong gradients.
+    """
+
+    def jax_callable(data, v):
+        return -((data[..., 0] - v) ** 2)
+
+    logp_op = make_jax_logp_ops(
+        *make_jax_logp_funcs_from_callable(
+            jax_callable, vmap=True, params_is_reg=[True]
+        )
+    )
+
+    data = pt.matrix("data")
+    v = pt.vector("v")
+    logp_op(data, v)
+
+    with pytest.raises(ValueError, match="previously applied with data"):
+        logp_op(None, v)
