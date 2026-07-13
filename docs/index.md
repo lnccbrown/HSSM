@@ -108,17 +108,12 @@ uv add hssm
 
 ### Install HSSM (with GPU Support)
 
-If you need to sample with GPU, please install JAX with GPU support before
-installing HSSM:
+To sample on an NVIDIA GPU, install HSSM with the CUDA extra matching your CUDA
+version. This pulls in the GPU-enabled build of JAX for you:
 
 ```bash
-pip install hssm[cuda12]
-```
-
-Or, for GPUs on CUDA 13:
-
-```bash
-pip install hssm[cuda13]
+pip install hssm[cuda12]  # CUDA 12
+pip install hssm[cuda13]  # CUDA 13
 ```
 
 ### Support for Apple Silicon, AMD, and other GPUs
