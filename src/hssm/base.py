@@ -763,13 +763,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return_idata : bool
             If True, returns a DataTree object. Otherwise, returns the
             approximation object directly. Defaults to True.
-        backend : {"numba", "c", "jax"} | None
-            The computational backend passed to ``pm.fit`` (one of "numba",
-            "c", or "jax"). If None (the default), the backend is inferred from
-            the model's ``model_config.backend``: a "jax" model config uses the
-            "jax" backend, a "pytensor" model config uses the "c" backend, and
-            if the model config backend is also None, the "numba" backend is
-            used.
+        backend : {"numba", "c", "jax"}, optional
+            The computational backend passed to ``pm.fit``. If None (the
+            default), the backend is inferred from the model's
+            ``model_config.backend``: a "jax" model config uses the "jax"
+            backend, a "pytensor" model config uses the "c" backend, and if the
+            model config backend is also None, the "numba" backend is used.
 
         Returns
         -------
