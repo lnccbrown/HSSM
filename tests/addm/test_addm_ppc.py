@@ -39,6 +39,7 @@ import hssm  # noqa: E402
 # --------------------------------------------------------------------------- #
 @needs_addm_sim
 def test_make_hssm_rv_addm_builds_real_rv(recwarn):
+    """``make_hssm_rv('addm')`` resolves a real RV with no 'unsupported' warning."""
     from hssm.distribution_utils.dist import make_hssm_rv
 
     rv = make_hssm_rv("addm", list_params=["eta", "kappa", "a", "b", "x0", "t"])
@@ -60,7 +61,8 @@ def test_addm_rv_extra_fields_populated():
     model = hssm.aDDM(data=df)
     ef = type(model.model_distribution.rv_op)._extra_fields
     assert ef is not None
-    # The 6 observed covariates plus the fixation-continuation policy (default = prolong).
+    # The 6 observed covariates plus the fixation-continuation policy
+    # (default = prolong_last_fixation).
     assert {"r1", "r2", "flag", "sacc_array", "d", "sigma"} <= set(ef.keys())
     assert ef["continuation_mode"] == "prolong_last_fixation"
     assert ef["continuation_params"] is None
@@ -69,7 +71,7 @@ def test_addm_rv_extra_fields_populated():
 
 
 def test_backward_compat_non_addm_rv_has_no_extra_fields():
-    """A non-covariate model's RV keeps _extra_fields None (generative path unchanged)."""
+    """A non-covariate model's RV keeps ``_extra_fields`` None (path unchanged)."""
     data = hssm.simulate_data(model="ddm", theta=[0.5, 1.5, 0.5, 0.5], size=50)
     m = hssm.HSSM(data=data, model="ddm")
     assert type(m.model_distribution.rv_op)._extra_fields is None
@@ -91,6 +93,7 @@ def test_addm_sim_likelihood_recovery():
 
     jax.config.update("jax_enable_x64", True)
     import cssm
+
     from hssm.addm.likelihoods.builder import make_addm_logp_func
 
     rng = np.random.default_rng(0)
@@ -181,6 +184,7 @@ def test_addm_sim_likelihood_recovery():
 @needs_addm_sim
 @pytest.mark.slow
 def test_addm_ppc_conditions_on_observed_fixations():
+    """PPC conditions on observed fixations; dropping them shifts the drawn RTs."""
     df = make_addm_dataframe(40, seed=2)
     model = hssm.aDDM(data=df)
     idata = model.sample(
@@ -195,7 +199,7 @@ def test_addm_ppc_conditions_on_observed_fixations():
 
     # Conditioned PPC (uses observed fixations).
     model.sample_posterior_predictive(idata, kind="response", draws=10)
-    assert "posterior_predictive" in idata.groups()
+    assert "posterior_predictive" in idata
     cond = _rt(idata)
 
     # Force self-sampling (drop the covariates) and re-draw with the same posterior.

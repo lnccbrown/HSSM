@@ -11,11 +11,11 @@ The synthetic data is built directly with numpy (no efficient_fpt dependency).
 collapses near t≈a/b=0.5), so the init log-likelihood is finite.
 """
 
-import arviz as az
 import numpy as np
 import pandas as pd
 import pytest
 from pytensor.graph import Op
+from xarray import DataTree
 
 import hssm
 from hssm.addm.addm import aDDM
@@ -73,18 +73,21 @@ def make_addm_dataframe(n_trials, seed=0, n_participants=1):
 # Tests
 # ---------------------------------------------------------------------------
 def test_construct_default_config():
+    """aDDM constructs from a dataframe with the default config."""
     df = make_addm_dataframe(20)
     model = hssm.aDDM(data=df)
     assert isinstance(model, aDDM)
 
 
 def test_construct_explicit_config():
+    """aDDM accepts an explicit ``aDDMConfig()``."""
     df = make_addm_dataframe(20)
     model = hssm.aDDM(data=df, model_config=aDDMConfig())
     assert isinstance(model, aDDM)
 
 
 def test_is_hssmbase_subclass():
+    """``aDDM`` is an ``HSSMBase`` subclass."""
     assert issubclass(hssm.aDDM, HSSMBase)
     model = hssm.aDDM(data=make_addm_dataframe(20))
     for attr in ("sample", "bounds", "model"):
@@ -92,6 +95,7 @@ def test_is_hssmbase_subclass():
 
 
 def test_loglik_op_injected():
+    """The JAX log-likelihood ``Op`` is injected into the config at construction."""
     cfg = aDDMConfig()
     assert cfg.loglik is None and cfg.backend is None
     model = hssm.aDDM(data=make_addm_dataframe(20), model_config=cfg)
@@ -103,6 +107,7 @@ def test_loglik_op_injected():
 
 
 def test_bad_columns_raise():
+    """Missing or invalid aDDM covariate columns raise at construction."""
     base = make_addm_dataframe(20)
 
     bad_flag = base.copy()
@@ -121,6 +126,7 @@ def test_bad_columns_raise():
 
 
 def test_smoke_sample():
+    """aDDM samples end-to-end without error (smoke test)."""
     df = make_addm_dataframe(200, seed=1)
 
     # Localize failures: confirm the init log-likelihood is finite before NUTS.
@@ -155,11 +161,12 @@ def test_smoke_sample():
         cores=1,
         idata_kwargs={"log_likelihood": False},
     )
-    assert isinstance(idata, az.InferenceData)
-    assert "posterior" in idata.groups()
+    assert isinstance(idata, DataTree)
+    assert "posterior" in idata
 
 
 def test_hierarchical_regression_builds():
+    """aDDM builds with a hierarchical regression on its parameters."""
     df = make_addm_dataframe(60, seed=2, n_participants=3)
     model = hssm.aDDM(
         data=df,
@@ -191,7 +198,7 @@ def test_hierarchical_regression_samples():
         cores=1,
         idata_kwargs={"log_likelihood": False},
     )
-    assert isinstance(idata, az.InferenceData)
+    assert isinstance(idata, DataTree)
     posterior_vars = set(idata.posterior.data_vars)
     # The group-level (per-participant) eta structure must be present.
     assert any("participant" in v for v in posterior_vars), posterior_vars

@@ -15,11 +15,11 @@ materializing the 2-D ``sacc_array`` covariate (:meth:`_stack_sacc_array`).
 from dataclasses import replace
 from typing import Any, Literal, cast
 
-import arviz as az
 import bambi as bmb
 import numpy as np
 import pandas as pd
 import pymc as pm
+from xarray import DataTree
 
 from ..base import HSSMBase
 from ..distribution_utils import make_distribution
@@ -198,7 +198,7 @@ class aDDM(HSSMBase):
 
     def sample_posterior_predictive(
         self,
-        idata: az.InferenceData | None = None,
+        dt: DataTree | None = None,
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         include_group_specific: bool = True,
@@ -207,7 +207,7 @@ class aDDM(HSSMBase):
         safe_mode: bool = True,
         continuation_mode: str | None = None,
         continuation_params: dict | None = None,
-    ) -> az.InferenceData | None:
+    ) -> DataTree | None:
         """Posterior-predictive draws with a per-call fixation-continuation policy.
 
         ``continuation_mode`` / ``continuation_params`` (default: the ``aDDMConfig``
@@ -234,7 +234,7 @@ class aDDM(HSSMBase):
         self._continuation_override: tuple[str, dict | None] | None = (mode, params)
         try:
             return super().sample_posterior_predictive(
-                idata, data, inplace, include_group_specific, kind, draws, safe_mode
+                dt, data, inplace, include_group_specific, kind, draws, safe_mode
             )
         finally:
             self._continuation_override = None

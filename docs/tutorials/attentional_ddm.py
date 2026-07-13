@@ -27,6 +27,7 @@ outputs and wire into mkdocs (see the marimo-notebooks skill)::
         -o docs/tutorials/attentional_ddm.ipynb --include-outputs
 """
 
+# ruff: noqa: E501, B018, D401, PLR1711  (generated marimo notebook: prose, cell display exprs + bare cell returns)
 import marimo
 
 __generated_with = "0.23.13"
@@ -408,7 +409,9 @@ def _(az, idata, plt):
         "x0": 0.0,
         "t": 0.0,
     }
-    az.plot_posterior(idata, var_names=list(_truth), ref_val=list(_truth.values()))
+    # arviz 1.x dropped `plot_posterior`; forest intervals show the same recovery
+    # (compare each posterior against its true value in `_truth`).
+    az.plot_forest(idata, var_names=list(_truth), combined=True)
     plt.gcf()
     return
 

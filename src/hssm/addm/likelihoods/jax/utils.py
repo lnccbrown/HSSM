@@ -144,7 +144,7 @@ GAUSS_LEGENDRE_30_X = None
 GAUSS_LEGENDRE_30_W = None
 _refresh_quadrature_constants()
 
-_QUAD_CACHE = {}
+_QUAD_CACHE: dict[int, tuple] = {}
 
 
 def get_gauss_legendre_ref(order: int):

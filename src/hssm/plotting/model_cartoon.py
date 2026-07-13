@@ -151,7 +151,9 @@ def _plot_model_cartoon_1D(
 
     # plot_func_model (2-choice) derives choices from sim metadata; only the
     # >2-choice renderer needs choices threaded in (avoids its registry lookup).
-    plot_function_kwargs = {} if n_choices == 2 else {"choices": choices}
+    plot_function_kwargs: dict[str, Any] = (
+        {} if n_choices == 2 else {"choices": choices}
+    )
     ax = plot_function(
         model_name=model_name,
         axis=ax,

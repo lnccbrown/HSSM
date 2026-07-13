@@ -24,17 +24,15 @@ from .attention_process import resolve_attention_process
 def _validate_continuation(mode: str, params: dict | None) -> None:
     """Validate a fixation-continuation mode + params against ssm-sim's registries.
 
-    Reused by ``aDDMConfig.validate`` and the per-call PPC override. Defensive: if the
-    installed ssm-simulators predates the continuation module, validation is skipped;
-    the simulator validates authoritatively at PPC time.
+    Reused by ``aDDMConfig.validate`` and the per-call PPC override. Requires
+    ssm-simulators >= 0.13.1 (the fixation-continuation module, guaranteed by the
+    pin); the simulator validates authoritatively again at PPC time.
     """
-    try:
-        from ssms.basic_simulators.fixation_continuation import (
-            resolve_continuation_mode,
-            resolve_distribution,
-        )
-    except ImportError:
-        return
+    from ssms.basic_simulators.fixation_continuation import (
+        resolve_continuation_mode,
+        resolve_distribution,
+    )
+
     resolve_continuation_mode(mode)  # raises ValueError on an unknown mode
     if mode == "prolong_last_fixation":
         if params is not None:
