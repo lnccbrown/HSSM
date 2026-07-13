@@ -1,6 +1,12 @@
-import hssm
-import pytest
+"""Tests for HSSM posterior-predictive sampling."""
+
+import sys
+
 import numpy as np
+import pytest
+import xarray as xr
+
+import hssm
 
 hssm.set_floatX("float32")
 
@@ -29,13 +35,15 @@ PARAMETER_GRID = [
 ]
 
 
+@pytest.mark.xfail(
+    sys.version_info >= (3, 14),
+    reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
+    strict=True,  # This will let us know in the future when this is fixed
+)
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-def test_sample_posterior_predictive(
-    cav_idata, cavanagh_test, draws, safe_mode, inplace
-):
+def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, inplace):
     """Test sample_posterior_predictive method."""
-
     model = hssm.HSSM(
         data=cavanagh_test,
         include=[
@@ -50,11 +58,12 @@ def test_sample_posterior_predictive(
             },
         ],
     )  # Doesn't matter what model or data we use here
-    delattr(cav_idata, "posterior_predictive")
-    cav_idata_copy = cav_idata.copy()
+    if "posterior_predictive" in cav_dt:
+        del cav_dt["posterior_predictive"]
+    cav_dt_copy = cav_dt.copy()
 
     posterior_predictive = model.sample_posterior_predictive(
-        idata=cav_idata_copy, draws=draws, safe_mode=safe_mode, inplace=inplace
+        dt=cav_dt_copy, draws=draws, safe_mode=safe_mode, inplace=inplace
     )
 
     if draws is None:
@@ -70,11 +79,75 @@ def test_sample_posterior_predictive(
 
     try:
         if inplace:
-            assert "posterior_predictive" in cav_idata_copy
-            assert cav_idata_copy.posterior_predictive.draw.size == size
+            assert "posterior_predictive" in cav_dt_copy
+            assert cav_dt_copy.posterior_predictive.draw.size == size
         else:
             assert posterior_predictive is not None
-            assert "posterior_predictive" not in cav_idata_copy
+            assert "posterior_predictive" not in cav_dt_copy
             assert posterior_predictive.posterior_predictive.draw.size == size
     except AssertionError:
         raise
+
+
+def test_sample_posterior_predictive_uses_attached_traces_for_response_params(
+    data_ddm, minimal_posterior_datatree, monkeypatch
+):
+    """Response-parameter prediction delegates with attached traces by default."""
+    model = hssm.HSSM(data=data_ddm)
+    traces = minimal_posterior_datatree()
+    expected = traces.copy(deep=True)
+    model._inference_obj = traces
+    calls = []
+
+    def fake_predict(dt, kind, data, inplace, include_group_specific):
+        calls.append((dt, kind, data, inplace, include_group_specific))
+        return expected
+
+    monkeypatch.setattr(model.model, "predict", fake_predict)
+
+    result = model.sample_posterior_predictive(
+        kind="response_params",
+        inplace=False,
+        include_group_specific=False,
+    )
+
+    assert result is expected
+    assert len(calls) == 1
+    assert calls[0][0] is traces
+    assert calls[0][1:] == ("response_params", None, False, False)
+
+
+def test_sample_posterior_predictive_replaces_existing_group_inplace(
+    caplog, data_ddm, minimal_posterior_datatree, monkeypatch
+):
+    """An explicit in-place prediction removes stale draws before replacement."""
+    model = hssm.HSSM(data=data_ddm)
+    traces = minimal_posterior_datatree(include_posterior_predictive=True)
+    replacement = xr.Dataset(
+        {"prediction": (("chain", "draw"), np.array([[1.0, 2.0]]))},
+        coords={"chain": [0], "draw": [0, 1]},
+    )
+    calls = []
+
+    def fake_predict(dt, kind, data, inplace, include_group_specific):
+        calls.append((dt, kind, data, inplace, include_group_specific))
+        assert "posterior_predictive" not in dt
+        dt["posterior_predictive"] = replacement
+
+    monkeypatch.setattr(model.model, "predict", fake_predict)
+
+    result = model.sample_posterior_predictive(
+        dt=traces,
+        kind="response_params",
+        inplace=True,
+    )
+
+    assert result is None
+    assert len(calls) == 1
+    assert calls[0][0] is traces
+    assert calls[0][1:] == ("response_params", None, True, True)
+    np.testing.assert_array_equal(
+        traces["posterior_predictive"]["prediction"].values,
+        np.array([[1.0, 2.0]]),
+    )
+    assert "pre-existing posterior_predictive group deleted" in caplog.text

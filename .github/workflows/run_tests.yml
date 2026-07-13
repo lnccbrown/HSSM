@@ -9,19 +9,24 @@ on:
         required: false
         default: false
         type: boolean
+      test_args:
+        description: "Additional arguments or paths to pass to pytest"
+        required: false
+        default: ""
+        type: string
 
 jobs:
   run_tests:
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    if: ${{ ! contains(github.event.head_commit.message, '[skip fast tests]') }}
     env:
       PYTENSOR_FLAGS: "blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
+      HSSM_TEST_ARGS: ${{ inputs.test_args }}
 
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -33,12 +38,12 @@ jobs:
 
       - name: Run fast tests
         if: ${{ !inputs.run_slow_tests }}
-        run: uv run pytest -m "not slow"
-        env:
-          PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
+        run: uv run pytest -m "not slow" $HSSM_TEST_ARGS
 
       - name: Run all tests
         if: ${{ inputs.run_slow_tests }}
-        run: uv run pytest
+        run: uv run pytest $HSSM_TEST_ARGS
         env:
-          PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
+          # Log per-test RSS to diagnose slow-test memory leaks. This step only
+          # runs on the slow-test path (run_slow_tests.yml), so it stays scoped.
+          HSSM_TEST_RSS_LOG: "1"

@@ -6,16 +6,14 @@ from itertools import product
 from types import MappingProxyType
 from typing import Any, Iterable, Literal, Mapping, Protocol, cast
 
-import arviz as az
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
-import seaborn as sns
 import xarray as xr
 from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
+from seaborn import FacetGrid
 from ssms.basic_simulators.simulator import simulator
 
 # Original model cartoon plot from gui
@@ -27,12 +25,13 @@ from .utils import (
     _get_title,
     # _hdi_to_interval, # TODO: We eventually want to add HDI plotting back in here
     _subset_df,
-    _to_idata_group,
+    _to_dt_group,
     _use_traces_or_sample,
 )
 
 _logger = logging.getLogger("hssm")
 
+<<<<<<< HEAD
 TRAJ_COLOR_DEFAULT_DICT: Mapping[Any, str] = MappingProxyType(
     {
         -1: "black",
@@ -45,6 +44,18 @@ TRAJ_COLOR_DEFAULT_DICT: Mapping[Any, str] = MappingProxyType(
         6: "brown",
     }
 )
+=======
+TRAJ_COLOR_DEFAULT_DICT: dict[float, str] = {
+    -1: "black",
+    0: "black",
+    1: "green",
+    2: "blue",
+    3: "red",
+    4: "orange",
+    5: "purple",
+    6: "brown",
+}
+>>>>>>> origin/main
 
 
 class PlotFunctionProtocol(Protocol):
@@ -53,6 +64,23 @@ class PlotFunctionProtocol(Protocol):
     def __call__(self, *args, **kwargs) -> Axes:
         """Plot function."""
         ...
+
+
+def _cartoon_model_meta(model) -> tuple[list[str], list[int]]:
+    """Return ``(list_params, choices)`` for a fitted model.
+
+    Built-in models live in ``default_model_config`` (dict, keyed by the
+    ``SupportedModels`` literal). ``HSSMBase`` subclasses (aDDM, RLSSM) are absent
+    from that registry — they carry their config on ``model.model_config`` (an
+    ``aDDMConfig``/``RLSSMConfig`` dataclass with ``list_params`` + ``choices``), so
+    fall back to it. Generalizing the registry to hold subclass models is tracked
+    in lnccbrown/HSSM#1031; until then this is the single source of truth.
+    """
+    cfg = default_model_config.get(model.model_name)
+    if cfg is not None:
+        return list(cfg["list_params"]), list(cfg["choices"])
+    mc = model.model_config
+    return list(mc.list_params), list(mc.choices)
 
 
 def _plot_model_cartoon_1D(
@@ -68,8 +96,10 @@ def _plot_model_cartoon_1D(
     title: str | None = "Model Plots",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
+    list_params: list[str] | None = None,
+    choices: list[int] | None = None,
     **kwargs,
-) -> mpl.axes.Axes:
+) -> Axes:
     """Plot the posterior predictive distribution against the observed data.
 
     Check the `plot_model_cartoon` function below for docstring.
@@ -94,10 +124,17 @@ def _plot_model_cartoon_1D(
     else:
         ax = plt.gca()
 
-    config_tmp = default_model_config[cast("SupportedModels", model_name)]
-    model_params = config_tmp["list_params"]
+    # list_params/choices are resolved by plot_model_cartoon via _cartoon_model_meta
+    # (model.model_config) so HSSMBase subclasses (aDDM/RLSSM) — absent from
+    # default_model_config — work. Fall back to the registry for built-in models
+    # called without them.
+    if list_params is None or choices is None:
+        config_tmp = default_model_config[cast("SupportedModels", model_name)]
+        list_params = list_params or config_tmp["list_params"]
+        choices = choices or config_tmp["choices"]
+    model_params = list_params
 
-    n_choices = len(config_tmp["choices"])
+    n_choices = len(choices)
 
     is_predictive_mean = data.source == predictive_group + "_mean"
     is_predictive_samples = data.source == predictive_group
@@ -128,6 +165,11 @@ def _plot_model_cartoon_1D(
             "The model plot works only for >=2 choice models at the moment"
         )
 
+    # plot_func_model (2-choice) derives choices from sim metadata; only the
+    # >2-choice renderer needs choices threaded in (avoids its registry lookup).
+    plot_function_kwargs: dict[str, Any] = (
+        {} if n_choices == 2 else {"choices": choices}
+    )
     ax = plot_function(
         model_name=model_name,
         axis=ax,
@@ -140,6 +182,7 @@ def _plot_model_cartoon_1D(
             if not plot_data or data_observed is None
             else data_observed.reset_index()
         ),
+        **plot_function_kwargs,
         **kwargs,
     )
 
@@ -175,18 +218,20 @@ def _plot_model_cartoon_2D(
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
     grid_kwargs: dict | None = None,
+    list_params: list[str] | None = None,
+    choices: list[int] | None = None,
     **kwargs,
-) -> sns.FacetGrid:
+) -> FacetGrid:
     """Plot the posterior predictive distribution against the observed data.
 
     Check the function below for docstring.
 
     Returns
     -------
-    sns.FacetGrid
+    FacetGrid
         A seaborn FacetGrid object containing the plot.
     """
-    g = sns.FacetGrid(
+    g = FacetGrid(
         data=data,
         col=col,
         row=row,
@@ -198,6 +243,8 @@ def _plot_model_cartoon_2D(
     g.map_dataframe(
         _plot_model_cartoon_1D,
         model_name=model_name,
+        list_params=list_params,
+        choices=choices,
         plot_data=plot_data,
         plot_mean=plot_mean,
         plot_samples=plot_samples,
@@ -239,32 +286,33 @@ def _plot_model_cartoon_2D(
 
 
 def compute_merge_necessary_deterministics(
-    model, idata, idata_group: Literal["posterior", "prior"] = "posterior"
+    model, dt, dt_group: Literal["posterior", "prior"] = "posterior"
 ):
     """Compute the necessary deterministic variables for the model."""
     # Get the list of deterministic variables
-    necessary_params = default_model_config[model.model_name]["list_params"]
+    necessary_params, _ = _cartoon_model_meta(model)
     deterministics_list = []
-    idata_group_keys = list(idata[idata_group].keys())
+    group_ds = dt[dt_group].to_dataset()
+    dt_group_keys = list(group_ds.data_vars)
     # Compute the deterministic variables
     for param in necessary_params:
-        if param not in idata_group_keys:
+        if param not in dt_group_keys:
             if param in [
                 deterministic.name for deterministic in model.pymc_model.deterministics
             ]:
                 deterministics_list.append(
                     pm.compute_deterministics(
-                        idata[idata_group], model=model.pymc_model, var_names=[param]
+                        group_ds, model=model.pymc_model, var_names=[param]
                     )
                 )
 
-    deterministics_idata = xr.merge(deterministics_list)
-    setattr(idata, idata_group, xr.merge([idata[idata_group], deterministics_idata]))
-    return idata
+    deterministics_dt = xr.merge(deterministics_list)
+    dt[dt_group] = xr.merge([group_ds, deterministics_dt])
+    return dt
 
 
 def attach_trialwise_params_to_df(
-    model, df, idata, idata_group: Literal["posterior", "prior"] = "posterior"
+    model, df, dt, dt_group: Literal["posterior", "prior"] = "posterior"
 ):
     """Attach the trial-wise parameters to the dataframe.
 
@@ -274,15 +322,14 @@ def attach_trialwise_params_to_df(
     models where Bambi >= 0.17 no longer broadcasts the intercept to all
     observations).
     """
-    necessary_params = default_model_config[model.model_name]["list_params"]
+    necessary_params, _ = _cartoon_model_meta(model)
     df[necessary_params] = 0.0
 
+    group_ds = dt[dt_group].to_dataset()
     for chain_tmp, draw_tmp in {(x[0], x[1]) for x in list(df.index) if x[0] != -1}:
         n_rows = len(df.loc[(chain_tmp, draw_tmp, slice(None))])
         for param in necessary_params:
-            values = (
-                idata[idata_group].sel(chain=chain_tmp, draw=draw_tmp)[param].values
-            )
+            values = group_ds.sel(chain=chain_tmp, draw=draw_tmp)[param].values
             # Handle scalar / intercept-only params that don't have the
             # full observation dimension. Bambi >= 0.17 returns shape (1,)
             # for intercept-only deterministics; directly-sampled scalars
@@ -293,67 +340,54 @@ def attach_trialwise_params_to_df(
     return df
 
 
-def _make_idata_mean_posterior(idata: az.InferenceData) -> az.InferenceData:
-    """Create a new InferenceData object containing only the posterior mean.
+def _make_dt_mean_group(
+    dt: xr.DataTree, group: Literal["posterior", "prior"]
+) -> xr.DataTree:
+    """Create a new DataTree containing only the mean of a given group.
 
-    Takes an InferenceData object and computes the mean across chains and draws,
-    then restructures it to have a single chain and draw. Removes posterior
-    predictive samples if present.
-
-    Parameters
-    ----------
-    idata : arviz.InferenceData
-        The InferenceData object to process
-
-    Returns
-    -------
-    arviz.InferenceData
-        A new InferenceData object containing only the posterior mean
-    """
-    setattr(idata, "posterior", idata["posterior"].mean(dim=["chain", "draw"]))
-    setattr(idata, "posterior", idata["posterior"].assign_coords(chain=[0], draw=[0]))
-    for data_var in list(idata["posterior"].data_vars):
-        idata["posterior"][data_var] = idata["posterior"][data_var].expand_dims(
-            dim=["chain", "draw"], axis=[0, 1]
-        )
-
-    if "posterior_predictive" in idata:
-        del idata["posterior_predictive"]
-    return idata
-
-
-def _make_idata_mean_prior(idata: az.InferenceData) -> az.InferenceData:
-    """Create a new InferenceData object containing only the prior mean.
-
-    Takes an InferenceData object and computes the mean across chains and draws,
-    then restructures it to have a single chain and draw. Removes prior
-    predictive samples if present.
+    Takes a DataTree object and computes the mean across chains and draws of the
+    requested group (``"posterior"`` or ``"prior"``), then restructures it to have
+    a single chain and draw. Removes the corresponding predictive samples if present.
 
     Parameters
     ----------
-    idata : arviz.InferenceData
-        The InferenceData object to process
+    dt : xarray.DataTree
+        The DataTree object to process.
+    group : {"posterior", "prior"}
+        The group to reduce to its mean.
 
     Returns
     -------
-    arviz.InferenceData
-        A new InferenceData object containing only the posterior mean
+    xarray.DataTree
+        A new DataTree object containing only the mean of the requested group.
     """
-    setattr(idata, "prior", idata["prior"].mean(dim=["chain", "draw"]))
-    setattr(idata, "prior", idata["prior"].assign_coords(chain=[0], draw=[0]))
-    for data_var in list(idata["prior"].data_vars):
-        idata["prior"][data_var] = idata["prior"][data_var].expand_dims(
+    group_ds = dt[group].to_dataset().mean(dim=["chain", "draw"])
+    group_ds = group_ds.assign_coords(chain=[0], draw=[0])
+    for data_var in list(group_ds.data_vars):
+        group_ds[data_var] = group_ds[data_var].expand_dims(
             dim=["chain", "draw"], axis=[0, 1]
         )
+    dt[group] = group_ds
 
-    if "prior_predictive" in idata:
-        del idata["prior_predictive"]
-    return idata
+    predictive_group = group + "_predictive"
+    if predictive_group in dt:
+        del dt[predictive_group]
+    return dt
+
+
+def _make_dt_mean_posterior(dt: xr.DataTree) -> xr.DataTree:
+    """Create a new DataTree object containing only the posterior mean."""
+    return _make_dt_mean_group(dt, "posterior")
+
+
+def _make_dt_mean_prior(dt: xr.DataTree) -> xr.DataTree:
+    """Create a new DataTree object containing only the prior mean."""
+    return _make_dt_mean_group(dt, "prior")
 
 
 def plot_model_cartoon(
     model,
-    idata: az.InferenceData | None = None,
+    dt: xr.DataTree | None = None,
     data: pd.DataFrame | None = None,
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
@@ -378,22 +412,30 @@ def plot_model_cartoon(
     ylabel: str | None = "",
     grid_kwargs: dict | None = None,
     **kwargs,
-) -> Axes | sns.FacetGrid | list[sns.FacetGrid]:
+) -> Axes | FacetGrid | list[FacetGrid]:
     """Plot the posterior predictive distribution against the observed data.
+
+    Note (aDDM / covariate models): this cartoon re-simulates at the posterior-mean
+    parameters with the simulator self-sampling its own fixation sequence (Mode 1)
+    and regenerates its predictive with the model's default continuation policy. It
+    does NOT condition on the observed fixations, and a ``continuation_mode`` passed
+    to ``sample_posterior_predictive`` does not reach it, so it is a schematic of the
+    fitted drift/boundary geometry, not the fixation-conditioned predictive check.
+    Tracked in lnccbrown/HSSM#1039.
 
     Parameters
     ----------
     model : hssm.HSSM
         A fitted HSSM model.
-    idata : optional
-        The InferenceData object with posterior samples. If not provided, will use the
+    dt : optional
+        The DataTree object with posterior samples. If not provided, will use the
         traces object stored inside the model. If posterior predictive samples are not
         present in this object, will generate posterior predictive samples using the
-        this InferenceData object and the original data.
+        this DataTree object and the original data.
     data : optional
         The observed data.
 
-        - If `data` is provided and the idata object does not contain a
+        - If `data` is provided and the `dt` object does not contain a
         `"posterior_predictive"` group, will generate posterior predictive samples using
         covariate provided in this object. If the group does exist, it is assumed that
         the posterior predictive samples are generated with the covariates provided in
@@ -402,9 +444,9 @@ def plot_model_cartoon(
         "plot_data" is true or not. If `plot_data=True`, the plotting function will use
         the data stored in the `model` object and proceed as the case above. If
         `plot_data=False`, if posterior predictive samples are not present in the
-        `idata` object, the plotting function will generate posterior predictive samples
+        `dt` object, the plotting function will generate posterior predictive samples
         using the data stored in the `model` object. If posterior predictive samples
-        exist in the `idata` object, these samples will be used for plotting, but a
+        exist in the `dt` object, these samples will be used for plotting, but a
         ValueError will be thrown if any of `col` or `row` is not None.
     predictive_group : optional
         The type of predictive distribution to plot, by default "posterior_predictive".
@@ -412,8 +454,8 @@ def plot_model_cartoon(
     plot_data : optional
         Whether to plot the observed data, by default True.
     n_samples : optional
-        When idata is provided, the number or proportion of predictive samples
-        randomly drawn to be used from each chain for plotting. When idata is not
+        When dt is provided, the number or proportion of predictive samples
+        randomly drawn to be used from each chain for plotting. When dt is not
         provided, the number or proportion of posterior/prior
         samples to be used to generate predictive samples.
         The number or proportion are defined as follows:
@@ -483,7 +525,7 @@ def plot_model_cartoon(
     ylabel : optional
         The label for the y-axis, by default "Density".
     grid_kwargs : optional
-        Additional keyword arguments are passed to the [`sns.FacetGrid` constructor]
+        Additional keyword arguments are passed to the [`FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
         when any of row or col is provided. When producing a single plot, these
         arguments are ignored.
@@ -492,7 +534,7 @@ def plot_model_cartoon(
 
     Returns
     -------
-    mpl.axes.Axes | sns.FacetGrid
+    Axes | FacetGrid | list[FacetGrid]
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
     if not (plot_predictive_mean or plot_predictive_samples):
@@ -518,8 +560,8 @@ def plot_model_cartoon(
         if (
             (not extra_dims)
             and (not plot_data)
-            and (idata is not None)
-            and (predictive_group in idata)
+            and (dt is not None)
+            and (predictive_group in dt)
         ):
             # Allows data to be None only when plot_data=False and no extra_dims
             # and posterior predictive samples are available
@@ -531,42 +573,45 @@ def plot_model_cartoon(
     plotting_df_mean = None
     if plot_predictive_mean:
         if predictive_group == "posterior_predictive":
-            idata_mean = _make_idata_mean_posterior(
-                deepcopy(model.traces if idata is None else idata)
+            dt_mean = _make_dt_mean_posterior(
+                deepcopy(model.traces if dt is None else dt)
             )
-            idata_mean, _ = _use_traces_or_sample(
+            dt_mean, _ = _use_traces_or_sample(
                 model,
                 data,
-                idata_mean,
+                dt_mean,
                 n_samples=None,
                 predictive_group="posterior_predictive",
             )
         else:
             # Need to sample from prior predictive here to get samples from the prior
-            idata, _ = _use_traces_or_sample(
+            dt, _ = _use_traces_or_sample(
                 model,
                 data,
-                idata,
+                dt,
                 n_samples=n_samples_prior,
                 predictive_group=predictive_group,
             )
 
-            idata_mean = _make_idata_mean_prior(deepcopy(idata))
+            dt_mean = _make_dt_mean_prior(deepcopy(dt))
             # AF-COMMENT: This is a hack to get the prior predictive mean
             # we should find a better way to do this eventually.
-            idata_mean_tmp = model.predict(
-                **dict(
-                    idata=az.InferenceData(posterior=idata_mean["prior"]),
-                    kind="response",
-                    inplace=False,
-                )
+            mean_dt = xr.DataTree.from_dict(
+                {"posterior": dt_mean["prior"].to_dataset()}
+            )
+            dt_mean_tmp = model.predict(
+                idata=mean_dt,  # bambi.Model.predict still uses idata
+                kind="response",
+                inplace=False,
             )
 
-            idata_mean.add_groups(prior_predictive=idata_mean_tmp.posterior_predictive)
+            dt_mean["prior_predictive"] = dt_mean_tmp[
+                "posterior_predictive"
+            ].to_dataset()
 
         # # Get the plotting dataframe by chain and sample
         plotting_df_mean = _get_plotting_df(
-            idata_mean,
+            dt_mean,
             data,
             extra_dims=extra_dims,
             n_samples=None,
@@ -576,15 +621,15 @@ def plot_model_cartoon(
 
         # Get plotting dataframe for predictive mean
         # df by chain and sample
-        idata_mean = compute_merge_necessary_deterministics(
-            model, idata_mean, idata_group=_to_idata_group(predictive_group)
+        dt_mean = compute_merge_necessary_deterministics(
+            model, dt_mean, dt_group=_to_dt_group(predictive_group)
         )
 
         plotting_df_mean = attach_trialwise_params_to_df(
             model,
             plotting_df_mean,
-            idata_mean,
-            idata_group=_to_idata_group(predictive_group),
+            dt_mean,
+            dt_group=_to_dt_group(predictive_group),
         )
 
         # Flip the rt values if necessary
@@ -600,13 +645,13 @@ def plot_model_cartoon(
         plotting_df_mean["source"] = predictive_group + "_mean"
 
     if plot_predictive_samples:
-        idata, sampled = _use_traces_or_sample(
-            model, data, idata, n_samples=n_samples, predictive_group=predictive_group
+        dt, sampled = _use_traces_or_sample(
+            model, data, dt, n_samples=n_samples, predictive_group=predictive_group
         )
 
         # Get the plotting dataframe by chain and sample
         plotting_df = _get_plotting_df(
-            idata,
+            dt,
             data,
             extra_dims=extra_dims,
             n_samples=None if sampled else n_samples,
@@ -616,17 +661,17 @@ def plot_model_cartoon(
 
         # Get plotting dataframe for posterior mean
         # df by chain and sample
-        idata = compute_merge_necessary_deterministics(
+        dt = compute_merge_necessary_deterministics(
             model,
-            idata,
-            idata_group=_to_idata_group(predictive_group),
+            dt,
+            dt_group=_to_dt_group(predictive_group),
         )
 
         plotting_df = attach_trialwise_params_to_df(
             model,
             plotting_df,
-            idata,
-            idata_group=_to_idata_group(predictive_group),
+            dt,
+            dt_group=_to_dt_group(predictive_group),
         )
 
         # Flip the rt values if necessary
@@ -644,15 +689,27 @@ def plot_model_cartoon(
     elif plotting_df_mean is not None:
         plotting_df = plotting_df_mean
 
+    if plotting_df is None:
+        raise ValueError(
+            "At least one of `plot_predictive_samples` or `plot_predictive_mean` "
+            "must be True."
+        )
+
     # return plotting_df
 
     # Then, plot the posterior predictive distribution against the observed data
     # Determine whether we are producing a single plot or a grid of plots
 
+    # Resolve (list_params, choices) once from the model so subclass models
+    # (aDDM/RLSSM, absent from default_model_config) render like built-ins.
+    _list_params, _choices = _cartoon_model_meta(model)
+
     if not extra_dims:
         ax = _plot_model_cartoon_1D(
             data=plotting_df,
             model_name=model.model_name,
+            list_params=_list_params,
+            choices=_choices,
             plot_data=plot_data,
             plot_mean=plot_predictive_mean,
             plot_samples=plot_predictive_samples,
@@ -683,6 +740,8 @@ def plot_model_cartoon(
         g = _plot_model_cartoon_2D(
             data=plotting_df,
             model_name=model.model_name,
+            list_params=_list_params,
+            choices=_choices,
             plot_data=plot_data,
             plot_mean=plot_predictive_mean,
             plot_samples=plot_predictive_samples,
@@ -725,6 +784,8 @@ def plot_model_cartoon(
         g = _plot_model_cartoon_2D(
             data=df,
             model_name=model.model_name,
+            list_params=_list_params,
+            choices=_choices,
             plot_data=plot_data,
             plot_mean=plot_predictive_mean,
             plot_samples=plot_predictive_samples,
@@ -946,8 +1007,8 @@ def plot_func_model(
     hist_histtype = kwargs.get("hist_histtype", "step")
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
-    axis_twin_up: Axes = cast("Axes", axis.twinx())
-    axis_twin_down: Axes = cast("Axes", axis.twinx())
+    axis_twin_up: Axes = axis.twinx()
+    axis_twin_down: Axes = axis.twinx()
     axis_twin_up.set_ylim(ylim_low, ylim_high)
     axis_twin_up.set_yticks([])
     axis_twin_down.set_ylim(ylim_high, ylim_low)
@@ -1020,8 +1081,8 @@ def plot_func_model(
 
     # Add histograms for real data
     if data is not None:
-        data_up = data.query(f"rt != {-999} and response == {1}")["rt"].values
-        data_down = data.query(f"rt != {-999} and response != {1}")["rt"].values
+        data_up = data.query(f"rt != {-999} and response == {1}")["rt"].to_numpy()
+        data_down = data.query(f"rt != {-999} and response != {1}")["rt"].to_numpy()
         add_histograms_to_twin_axes(
             data_up=data_up,
             data_down=data_down,
@@ -1185,10 +1246,17 @@ def _add_trajectories(
     highlight_rt_choice: bool = True,
     markersize_rt_choice: float | int = 50,
     markertype_rt_choice: str = "*",
+<<<<<<< HEAD
     markercolor_rt_choice: str | list[str] | Mapping[Any, str] = "red",
     linewidth: float | int = 1,
     alpha: float | int = 0.5,
     colors: str | list[str] | Mapping[Any, str] | None = None,
+=======
+    markercolor_rt_choice: str | list[str] | dict[float, str] = "red",
+    linewidth: float | int = 1,
+    alpha: float | int = 0.5,
+    colors: str | list[str] | dict[float, str] = "black",
+>>>>>>> origin/main
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1227,7 +1295,11 @@ def _add_trajectories(
         Additional keyword arguments passed to plotting functions.
     """
     # Check markercolor type
+<<<<<<< HEAD
     possible_choices = sample[0]["metadata"]["possible_choices"]
+=======
+    markercolor_rt_choice_dict: dict[float, str]
+>>>>>>> origin/main
     if isinstance(markercolor_rt_choice, str):
         markercolor_rt_choice_dict: Mapping[Any, str] = {
             value_: markercolor_rt_choice for value_ in possible_choices
@@ -1251,10 +1323,17 @@ def _add_trajectories(
         )
 
     # Check trajectory color type
+<<<<<<< HEAD
     if colors is None:
         colors_dict: Mapping[Any, str] = dict(TRAJ_COLOR_DEFAULT_DICT)
     elif isinstance(colors, str):
         colors_dict = {value_: colors for value_ in possible_choices}
+=======
+    colors_dict: dict[float, str] = {}
+    if isinstance(colors, str):
+        for value_ in sample[0]["metadata"]["possible_choices"]:
+            colors_dict[value_] = colors
+>>>>>>> origin/main
     elif isinstance(colors, list):
         if len(colors) < len(possible_choices):
             raise ValueError(
@@ -1557,6 +1636,7 @@ def plot_func_model_n(
     alpha_trajectories: float = 0.5,
     keep_frame: bool = False,
     random_state: int | None = None,
+    choices: list[int] | None = None,
     **kwargs,
 ) -> Axes:
     """Calculate and plot posterior predictive for a model.
@@ -1710,7 +1790,10 @@ def plot_func_model_n(
 
     # ADD HISTOGRAMS
     # -------------------------------
-    choices = default_model_config[cast("SupportedModels", model_name)]["choices"]
+    # choices is threaded in by _plot_model_cartoon_1D (from model.model_config);
+    # fall back to the registry for built-in models called directly.
+    if choices is None:
+        choices = default_model_config[cast("SupportedModels", model_name)]["choices"]
     cnt_cumul = 0
 
     # POSTERIOR MEAN BASED HISTOGRAM
@@ -1897,8 +1980,8 @@ def plot_func_model_n(
             custom_titles,
             fontsize=legend_fontsize,
             shadow=legend_shadow,
-            loc=legend_location,
-        )
+            loc=cast("Any", legend_location),
+        )  # type: ignore
 
     # FRAME
     if not keep_frame:
@@ -1918,6 +2001,10 @@ def _add_trajectories_n(
     marker_type_rt_choice: str = "*",
     linewidth: float = 1,
     alpha: float = 0.5,
+<<<<<<< HEAD
+=======
+    colors: str | list[str] | dict[float, str] = TRAJ_COLOR_DEFAULT_DICT,
+>>>>>>> origin/main
     **kwargs,
 ):
     """Add simulated decision trajectories to a given matplotlib axis.
@@ -1954,7 +2041,27 @@ def _add_trajectories_n(
     process leading to a decision. Trajectory colors are taken from
     ``TRAJ_COLOR_DEFAULT_DICT``.
     """
+<<<<<<< HEAD
     colors_dict = TRAJ_COLOR_DEFAULT_DICT
+=======
+    # Check trajectory color type
+    colors_dict: dict[float, str]
+    if isinstance(colors, str):
+        colors_dict = {
+            value_: colors for value_ in sample[0]["metadata"]["possible_choices"]
+        }
+    elif isinstance(colors, list):
+        colors_dict = {
+            value_: colors[i]
+            for i, value_ in enumerate(sample[0]["metadata"]["possible_choices"])
+        }
+    elif isinstance(colors, dict):
+        colors_dict = colors
+    else:
+        raise ValueError(
+            "The `color_trajectories` argument must be a string, list, or dict."
+        )
+>>>>>>> origin/main
 
     # Make bounds
     b = np.maximum(sample[0]["metadata"]["boundary"], 0)

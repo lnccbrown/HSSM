@@ -13,13 +13,12 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Literal, Union, cast
 
 import arviz as az
 import bambi as bmb
 import cloudpickle as cpickle
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -29,6 +28,13 @@ import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
+from pymc.variational import Approximation
+from xarray import DataTree
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from pytensor.tensor.variable import TensorVariable
 
 from hssm._types import SupportedModels
 from hssm.data_validator import DataValidatorMixin
@@ -42,6 +48,7 @@ from hssm.distribution_utils import (
 from hssm.missing_data_mixin import MissingDataMixin
 from hssm.utils import (
     _compute_log_likelihood,
+    _force_jax_nuts_no_jitter,
     _get_alias_dict,
     _print_prior,
     _split_array,
@@ -184,6 +191,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         If `True`, the model will process the initial values. Defaults to `True`.
     initval_jitter : optional
         The jitter value for the initial values. Defaults to `0.01`.
+    noncentered : optional
+        Controls the centered vs. non-centered parameterization of
+        group-specific (hierarchical) terms. ``True`` (bambi's default) uses the
+        non-centered parameterization everywhere, ``False`` uses centered. A
+        ``dict`` keyed by HSSM parameter name (e.g. ``{"v": False, "a": True}``)
+        sets it per parameter; an unknown key raises at construction. A per-prior
+        ``noncentered`` field (inside a prior ``dict`` or on an ``hssm.Prior``)
+        overrides the model-level value for that term (precedence: per-prior >
+        model-level dict > default ``True``). Only affects parameters that have a
+        group-specific term (e.g. ``... + (1|participant_id)``); setting it for a
+        non-hierarchical parameter is a silent no-op. Passed to ``bmb.Model``.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -262,8 +280,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.additional_namespace = additional_namespace
 
         # region ===== Inference Results (initialized to None/empty) =====
-        self._inference_obj: az.InferenceData | None = None
-        self._inference_obj_vi: pm.Approximation | None = None
+        self._inference_obj: DataTree | None = None
+        self._inference_obj_vi: DataTree | Approximation | None = None
         self._vi_approx = None
         self._map_dict = None
         # endregion
@@ -295,7 +313,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # endregion
 
         # TODO: add to HSSMBase
-        self.response = cast("list[str]", self.response)
         self.is_choice_only: bool = self.model_config.is_choice_only
 
         if self.choices is None:
@@ -549,7 +566,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         initvals: str | dict | None = None,
         include_response_params: bool = False,
         **kwargs,
-    ) -> az.InferenceData | pm.Approximation:
+    ) -> DataTree | Approximation:
         """Perform sampling using the `fit` method via bambi.Model.
 
         Parameters
@@ -565,6 +582,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             Note that the old sampler names such as "mcmc", "nuts_numpyro",
             "nuts_blackjax" will be deprecated and removed in future releases. A warning
             will be raised if any of these old names are used.
+            For the JAX samplers ("numpyro"/"blackjax"), HSSM disables the
+            sampler's built-in initial-value jitter and uses its own controlled
+            `initval_jitter` instead.
         init: optional
             Initialization method to use for the sampler. If any of the NUTS samplers
             is used, defaults to `"adapt_diag"`. Otherwise, defaults to `"auto"`.
@@ -584,9 +604,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        az.InferenceData | pm.Approximation
+        DataTree | Approximation
             A reference to the `model.traces` object, which stores the traces of the
-            last call to `model.sample()`. `model.traces` is an ArviZ `InferenceData`
+            last call to `model.sample()`. `model.traces` is a `DataTree`
             instance if `sampler` is `"pymc"` (default), `"numpyro"`,
             `"blackjax"` or "`laplace".
         """
@@ -670,21 +690,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 init = "auto"
 
-        # If sampler is finally `numpyro` make sure
-        # the jitter argument is set to False
-        if sampler == "numpyro":
-            if "nuts_sampler_kwargs" in kwargs:
-                if kwargs["nuts_sampler_kwargs"].get("jitter"):
-                    _logger.warning(
-                        "The jitter argument is set to True. "
-                        + "This argument is not supported "
-                        + "by the numpyro backend. "
-                        + "The jitter argument will be set to False."
-                    )
-                kwargs["nuts_sampler_kwargs"]["jitter"] = False
-            else:
-                kwargs["nuts_sampler_kwargs"] = {"jitter": False}
-
         if sampler != "pymc" and "step" in kwargs:
             raise ValueError(
                 "`step` samplers (enabled by the `step` argument) are only supported "
@@ -712,20 +717,25 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # which silently downgraded user choice — surfaced via the sbi NLE
         # tutorial where sampler="numpyro" still went through PyMC's multiprocess
         # path and tripped cloudpickle on the ONNX ModelProto.
-        self._inference_obj = self.model.fit(
-            inference_method=sampler,
-            init=init,
-            include_response_params=include_response_params,
-            omit_offsets=omit_offsets,
-            **kwargs,
-        )
+        # PyMC 6's JAX-NUTS samplers ("numpyro"/"blackjax") always jitter initial
+        # values and expose no supported switch; HSSM already applies its own
+        # controlled `initval_jitter`, so disable the sampler's jitter for them
+        # (issue #999; see also the upstream pymc gap this works around).
+        with _force_jax_nuts_no_jitter(active=sampler in ("numpyro", "blackjax")):
+            self._inference_obj = self.model.fit(
+                inference_method=sampler,
+                init=init,
+                include_response_params=include_response_params,
+                omit_offsets=omit_offsets,
+                **kwargs,
+            )
 
         # Separate out log likelihood computation
         if compute_likelihood:
             self.log_likelihood(self._inference_obj, inplace=True)
 
         # Subset data vars in posterior
-        self._clean_posterior_group(idata=self._inference_obj)
+        self._clean_posterior_group(dt=self._inference_obj)
         return self.traces
 
     def vi(
@@ -736,7 +746,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return_idata: bool = True,
         ignore_mcmc_start_point_defaults=False,
         **vi_kwargs,
-    ) -> pm.Approximation | az.InferenceData:
+    ) -> Approximation | DataTree:
         """Perform Variational Inference.
 
         Parameters
@@ -750,12 +760,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             The number of samples to draw from the posterior distribution.
             Defaults to 1000.
         return_idata : bool
-            If True, returns an InferenceData object. Otherwise, returns the
+            If True, returns a DataTree object. Otherwise, returns the
             approximation object directly. Defaults to True.
 
         Returns
         -------
-            pm.Approximation or az.InferenceData: The mean field approximation object.
+            Approximation or DataTree: The mean field approximation object.
         """
         if self.loglik_kind == "analytical":
             _logger.warning(
@@ -773,51 +783,52 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             vi_kwargs["start"] = self._initvals
 
         # Run variational inference directly from pymc model
+        # pyrefly: ignore[bad-context-manager]
         with self.pymc_model:
             self._vi_approx = pm.fit(n=niter, method=method, **vi_kwargs)
 
-        # Sample from the approximate posterior
-        if self._vi_approx is not None:
-            self._inference_obj_vi = self._vi_approx.sample(draws)
+            # Sample from the approximate posterior
+            if self._vi_approx is not None:
+                self._inference_obj_vi = self._vi_approx.sample(draws)
 
         # Post-processing
-        self._clean_posterior_group(idata=self._inference_obj_vi)
+        self._clean_posterior_group(dt=cast("DataTree | None", self._inference_obj_vi))
 
-        # Return the InferenceData object if return_idata is True
+        # Return the DataTree object if return_idata is True
         if return_idata:
-            return self._inference_obj_vi
+            return cast("Approximation | DataTree", self._inference_obj_vi)
         # Otherwise return the appromation object directly
         return self.vi_approx
 
-    def _clean_posterior_group(self, idata: az.InferenceData | None = None):
-        """Clean up the posterior group of the InferenceData object.
+    def _clean_posterior_group(self, dt: DataTree | None = None):
+        """Clean up the posterior group of the DataTree object.
 
         Parameters
         ----------
-        idata : az.InferenceData
-            The InferenceData object to clean up. If None, the last InferenceData object
+        dt : DataTree | None
+            The DataTree object to clean up. If None, the last DataTree object
             will be used.
         """
-        # # Logic behind which variables to keep:
-        # # We essentially want to get rid of
-        # # all the trial-wise variables.
+        # Logic behind which variables to keep:
+        # We essentially want to get rid of all the trial-wise variables.
 
-        # # We drop all distributional components, IF they are deterministics
-        # # (in which case they will be trial wise systematically)
-        # # and we keep distributional components, IF they are
-        # # basic random-variabels (in which case they should never
-        # # appear trial-wise).
-        if idata is None:
+        # We drop all distributional components, IF they are deterministics
+        # (in which case they will be trial wise systematically)
+        # and we keep distributional components, IF they are
+        # basic random-variables (in which case they should never
+        # appear trial-wise).
+        if dt is None:
             raise ValueError(
-                "The InferenceData object is None. Cannot clean up the posterior group."
-            )
-        elif not hasattr(idata, "posterior"):
-            raise ValueError(
-                "The InferenceData object does not have a posterior group. "
-                + "Cannot clean up the posterior group."
+                "The DataTree object is None. Cannot clean up the posterior group."
             )
 
-        vars_to_keep = set(idata["posterior"].data_vars.keys()).difference(
+        if "posterior" not in dt:
+            raise ValueError(
+                "The DataTree object does not have a posterior group. "
+                "Cannot clean up the posterior group."
+            )
+
+        vars_to_keep = set(dt["posterior"].data_vars.keys()).difference(
             set(
                 key_
                 for key_ in self.model.distributional_components.keys()
@@ -829,129 +840,126 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             for var_ in vars_to_keep
             if isinstance(var_, str) and "_mean" not in var_
         ]
-
-        setattr(
-            idata,
-            "posterior",
-            idata["posterior"][vars_to_keep_clean],
-        )
+        dt["posterior"] = dt["posterior"].to_dataset()[vars_to_keep_clean]
 
     def log_likelihood(
         self,
-        idata: az.InferenceData | None = None,
+        dt: DataTree | None = None,
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         keep_likelihood_params: bool = False,
-    ) -> az.InferenceData | None:
+    ) -> DataTree | None:
         """Compute the log likelihood of the model.
 
         Parameters
         ----------
-        idata : optional
-            The `InferenceData` object returned by `HSSM.sample()`. If not provided,
+        dt : optional
+            The trace object returned by `HSSM.sample()`. If not provided,
         data : optional
             A pandas DataFrame with values for the predictors that are used to obtain
             out-of-sample predictions. If omitted, the original dataset is used.
         inplace : optional
-            If `True` will modify idata in-place and append a `log_likelihood` group to
-            `idata`. Otherwise, it will return a copy of idata with the predictions
+            If `True` will modify dt in-place and append a `log_likelihood` group to
+            `dt`. Otherwise, it will return a copy of dt with the predictions
             added, by default True.
         keep_likelihood_params : optional
             If `True`, the trial wise likelihood parameters that are computed
-            on route to getting the log likelihood are kept in the `idata` object.
-            Defaults to False. See also the method `add_likelihood_parameters_to_idata`.
+            on route to getting the log likelihood are kept in the `dt` object.
+            Defaults to False. See also the method
+            `add_likelihood_parameters_to_datatree`.
 
         Returns
         -------
-        az.InferenceData | None
-            InferenceData or None
+        DataTree | None
+            The DataTree object with the log likelihood computed and added to it, or
+            None if inplace is True.
         """
-        if self._inference_obj is None and idata is None:
+        if self._inference_obj is None and dt is None:
             raise ValueError(
                 "Neither has the model been sampled yet nor"
-                + " an idata object has been provided."
+                + " a DataTree object has been provided."
             )
 
-        if idata is None:
+        if dt is None:
             if self._inference_obj is None:
                 raise ValueError(
                     "The model has not been sampled yet. "
-                    + "Please provide an idata object."
+                    + "Please provide a DataTree object."
                 )
             else:
-                idata = self._inference_obj
+                dt = self._inference_obj
 
         # Actual likelihood computation
-        idata = _compute_log_likelihood(self.model, idata, data, inplace)
+        dt = _compute_log_likelihood(self.model, dt, data, inplace)
 
         # clean up posterior:
         if not keep_likelihood_params:
-            self._clean_posterior_group(idata=idata)
+            self._clean_posterior_group(dt=dt)
 
         if inplace:
             return None
         else:
-            return idata
+            return dt
 
-    def add_likelihood_parameters_to_idata(
+    def add_likelihood_parameters_to_datatree(
         self,
-        idata: az.InferenceData | None = None,
+        dt: DataTree | None = None,
         inplace: bool = False,
-    ) -> az.InferenceData | None:
-        """Add likelihood parameters to the InferenceData object.
+    ) -> DataTree | None:
+        """Add likelihood parameters to the DataTree object.
 
         Parameters
         ----------
-        idata : az.InferenceData
-            The InferenceData object returned by HSSM.sample().
+        dt : DataTree
+            The trace object returned by HSSM.sample().
         inplace : bool
-            If True, the likelihood parameters are added to idata in-place. Otherwise,
-            a copy of idata with the likelihood parameters added is returned.
-            Defaults to False.
+            If True, the likelihood parameters are added to datatree in-place.
+            Otherwise, a copy of datatree with the likelihood parameters added is
+            returned. Defaults to False.
 
         Returns
         -------
-        az.InferenceData | None
-            InferenceData or None
+        DataTree | None
+            DataTree object with likelihood parameters added or None if inplace is True.
         """
-        if idata is None:
+        if dt is None:
             if self._inference_obj is None:
-                raise ValueError("No idata provided and model not yet sampled!")
+                raise ValueError("No datatree provided and model not yet sampled!")
             else:
-                idata = self.model._compute_likelihood_params(  # pylint: disable=protected-access
+                dt = self.model._compute_likelihood_params(  # pylint: disable=protected-access
                     deepcopy(self._inference_obj)
                     if not inplace
                     else self._inference_obj
                 )
         else:
-            idata = self.model._compute_likelihood_params(  # pylint: disable=protected-access
-                deepcopy(idata) if not inplace else idata
+            dt = self.model._compute_likelihood_params(  # pylint: disable=protected-access
+                deepcopy(dt) if not inplace else dt
             )
-        return idata
+        return dt
 
     def sample_posterior_predictive(
         self,
-        idata: az.InferenceData | None = None,
+        dt: DataTree | None = None,
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         include_group_specific: bool = True,
         kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
-    ) -> az.InferenceData | None:
+    ) -> DataTree | None:
         """Perform posterior predictive sampling from the HSSM model.
 
         Parameters
         ----------
-        idata : optional
-            The `InferenceData` object returned by `HSSM.sample()`. If not provided,
-            the `InferenceData` from the last time `sample()` is called will be used.
+        dt : optional
+            The `DataTree` object returned by `HSSM.sample()`. If not provided,
+            the `DataTree` from the last time `sample()` is called will be used.
         data : optional
             An optional data frame with values for the predictors that are used to
             obtain out-of-sample predictions. If omitted, the original dataset is used.
         inplace : optional
-            If `True` will modify idata in-place and append a `posterior_predictive`
-            group to `idata`. Otherwise, it will return a copy of idata with the
+            If `True` will modify datatree in-place and append a `posterior_predictive`
+            group to `datatree`. Otherwise, it will return a copy of datatree with the
             predictions added, by default True.
         include_group_specific : optional
             If `True` will make predictions including the group specific effects.
@@ -982,29 +990,29 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         Raises
         ------
         ValueError
-            If the model has not been sampled yet and idata is not provided.
+            If the model has not been sampled yet and datatree is not provided.
 
         Returns
         -------
-        az.InferenceData | None
-            InferenceData or None
+        DataTree | None
+            A DataTree object with the posterior predictive samples added,
+            or None if inplace is True.
         """
-        if idata is None:
+        if dt is None:
             if self._inference_obj is None:
                 raise ValueError(
                     "The model has not been sampled yet. "
-                    + "Please either provide an idata object or sample the model first."
+                    "Please either provide a datatree object or sample the model first."
                 )
-            idata = self._inference_obj
+            dt = self._inference_obj
             _logger.info(
-                "idata=None, we use the traces assigned to the HSSM object as idata."
+                "dt=None, we use the traces assigned to the HSSM object as datatree."
             )
-
-        if idata is not None:
-            if "posterior_predictive" in idata.groups():
-                del idata["posterior_predictive"]
+        else:
+            if inplace and "posterior_predictive" in dt:
+                del dt["posterior_predictive"]
                 _logger.warning(
-                    "pre-existing posterior_predictive group deleted from idata. \n"
+                    "pre-existing posterior_predictive group deleted from datatree."
                 )
 
         if self._check_extra_fields(data):
@@ -1017,7 +1025,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         elif isinstance(draws, int | float):
             draws = np.arange(int(draws))
         elif draws is None:
-            draws = idata["posterior"].draw.values
+            draws = dt["posterior"].draw.values
         else:
             raise ValueError(
                 "draws must be an integer, " + "a list of integers, or a numpy array."
@@ -1025,80 +1033,75 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         assert isinstance(draws, np.ndarray)
 
-        # Make a copy of idata, set the `posterior` group to be a random sub-sample
+        # Make a copy of dt, set the `posterior` group to be a random sub-sample
         # of the original (draw dimension gets sub-sampled)
 
-        idata_copy = idata.copy()
+        dt_copy = dt.copy()
 
-        if (draws.shape != idata["posterior"].draw.values.shape) or (
-            (draws.shape == idata["posterior"].draw.values.shape)
-            and not np.allclose(draws, idata["posterior"].draw.values)
+        if (draws.shape != dt["posterior"].draw.values.shape) or (
+            (draws.shape == dt["posterior"].draw.values.shape)
+            and not np.allclose(draws, dt["posterior"].draw.values)
         ):
             # Reassign posterior to sub-sampled version
-            setattr(idata_copy, "posterior", idata["posterior"].isel(draw=draws))
+            dt_copy["posterior"] = dt["posterior"].isel(draw=draws)
 
         if kind == "response":
             # If we run kind == 'response' we actually run the observation RV
             if safe_mode:
                 # safe mode splits the draws into chunks of 10 to avoid
                 # memory issues (TODO: Figure out the source of memory issues)
-                split_draws = _split_array(
-                    idata_copy["posterior"].draw.values, divisor=10
-                )
+                split_draws = _split_array(dt_copy["posterior"].draw.values, divisor=10)
 
                 posterior_predictive_list = []
                 for samples_tmp in split_draws:
-                    tmp_posterior = idata["posterior"].sel(draw=samples_tmp)
-                    setattr(idata_copy, "posterior", tmp_posterior)
+                    tmp_posterior = dt["posterior"].sel(draw=samples_tmp)
+                    dt_copy["posterior"] = tmp_posterior
                     self.model.predict(
-                        idata_copy, kind, data, True, include_group_specific
+                        dt_copy, kind, data, True, include_group_specific
                     )
-                    posterior_predictive_list.append(idata_copy["posterior_predictive"])
+                    posterior_predictive_list.append(dt_copy["posterior_predictive"])
 
                 if inplace:
-                    idata.add_groups(
-                        posterior_predictive=xr.concat(
-                            posterior_predictive_list, dim="draw"
-                        )
+                    dt["posterior_predictive"] = xr.concat(  # pyrefly: ignore[no-matching-overload]
+                        posterior_predictive_list,  # type: ignore[arg-type]
+                        dim="draw",
                     )
                     # for inplace, we don't return anything
                     return None
                 else:
-                    # Reassign original posterior to idata_copy
-                    setattr(idata_copy, "posterior", idata["posterior"])
-                    # Add new posterior predictive group to idata_copy
-                    del idata_copy["posterior_predictive"]
-                    idata_copy.add_groups(
-                        posterior_predictive=xr.concat(
-                            posterior_predictive_list, dim="draw"
-                        )
+                    # Reassign original posterior to dt_copy
+                    dt_copy["posterior"] = dt["posterior"]
+                    # Add new posterior predictive group to dt_copy
+                    if "posterior_predictive" in dt_copy:
+                        del dt_copy["posterior_predictive"]
+                    dt_copy["posterior_predictive"] = xr.concat(  # pyrefly: ignore[no-matching-overload]
+                        posterior_predictive_list,  # type: ignore[arg-type]
+                        dim="draw",
                     )
-                    return idata_copy
+                    return dt_copy
             else:
                 if inplace:
                     # If not safe-mode
                     # We call .predict() directly without any
                     # chunking of data.
 
-                    # .predict() is called on the copy of idata
+                    # .predict() is called on the copy of dt
                     # since we still subsampled (or assigned) the draws
                     self.model.predict(
-                        idata_copy, kind, data, True, include_group_specific
+                        dt_copy, kind, data, True, include_group_specific
                     )
 
-                    # posterior predictive group added to idata
-                    idata.add_groups(
-                        posterior_predictive=idata_copy["posterior_predictive"]
-                    )
+                    # posterior predictive group added to dt
+                    dt["posterior_predictive"] = dt_copy["posterior_predictive"]
                     # don't return anything if inplace
                     return None
                 else:
                     # Not safe mode and not inplace
                     # Function acts as very thin wrapper around
                     # .predict(). It just operates on the
-                    # idata_copy object
+                    # dt_copy object
                     return self.model.predict(
-                        idata_copy, kind, data, False, include_group_specific
+                        dt_copy, kind, data, False, include_group_specific
                     )
         elif kind == "response_params":
             # If kind == 'response_params', we don't need to run the RV directly,
@@ -1109,13 +1112,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 "The kind argument is set to 'mean', but 'draws' argument "
                 + "is not None: The draws argument will be ignored!"
             )
-            return self.model.predict(
-                idata, kind, data, inplace, include_group_specific
-            )
+            return self.model.predict(dt, kind, data, inplace, include_group_specific)
         else:
             raise ValueError("`kind` must be either 'response' or 'response_params'.")
 
-    def plot_predictive(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
+    def plot_predictive(
+        self, **kwargs
+    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
         """Produce a posterior predictive plot.
 
         Equivalent to calling `hssm.plotting.plot_predictive()` with the
@@ -1124,12 +1127,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        mpl.axes.Axes | sns.FacetGrid
+        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
             The matplotlib axis or seaborn FacetGrid object containing the plot.
         """
         return plotting.plot_predictive(self, **kwargs)
 
-    def plot_quantile_probability(self, **kwargs) -> mpl.axes.Axes | sns.FacetGrid:
+    def plot_quantile_probability(
+        self, **kwargs
+    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
         """Produce a quantile probability plot.
 
         Equivalent to calling `hssm.plotting.plot_quantile_probability()` with the
@@ -1138,46 +1143,40 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        mpl.axes.Axes | sns.FacetGrid
+        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
             The matplotlib axis or seaborn FacetGrid object containing the plot.
         """
         return plotting.plot_quantile_probability(self, **kwargs)
 
-    def predict(self, **kwargs) -> az.InferenceData:
+    def predict(self, **kwargs) -> DataTree:
         """Generate samples from the predictive distribution."""
         return self.model.predict(**kwargs)
 
     def sample_do(
         self, params: dict[str, Any], draws: int = 100, return_model=False, **kwargs
-    ) -> az.InferenceData | tuple[az.InferenceData, pm.Model]:
+    ) -> DataTree | tuple[DataTree, pm.Model]:
         """Generate samples from the predictive distribution using the `do-operator`."""
-        do_model = do(self.pymc_model, params)
-        do_idata = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
+        do_model = do(
+            self.pymc_model, cast("Mapping[str | TensorVariable, Any]", params)
+        )
+        do_dt = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
 
         # clean up `rt,response_mean` to `v`
-        do_idata = self._drop_parent_str_from_idata(idata=do_idata)
+        do_dt = self._drop_parent_str_from_datatree(dt=do_dt)
 
         # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in do_idata["prior_predictive"].dims:
-            setattr(
-                do_idata,
-                "prior_predictive",
-                do_idata["prior_predictive"].rename_dims(
-                    {"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].dims:
+            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_dims(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
             )
-        if "rt,response_extra_dim_0" in do_idata["prior_predictive"].coords:
-            setattr(
-                do_idata,
-                "prior_predictive",
-                do_idata["prior_predictive"].rename_vars(
-                    name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].coords:
+            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_vars(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
             )
 
         if return_model:
-            return do_idata, do_model
-        return do_idata
+            return do_dt, do_model
+        return do_dt
 
     def sample_prior_predictive(
         self,
@@ -1185,7 +1184,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         var_names: str | list[str] | None = None,
         omit_offsets: bool = True,
         random_seed: np.random.Generator | None = None,
-    ) -> az.InferenceData:
+    ) -> DataTree:
         """Generate samples from the prior predictive distribution.
 
         Parameters
@@ -1195,18 +1194,18 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             to 500.
         var_names
             A list of names of variables for which to compute the prior predictive
-            distribution. Defaults to ``None`` which means both observed and unobserved
+            distribution. Defaults to `None` which means both observed and unobserved
             RVs.
         omit_offsets
-            Whether to omit offset terms. Defaults to ``True``.
+            Whether to omit offset terms. Defaults to `True`.
         random_seed
             Seed for the random number generator.
 
         Returns
         -------
-        az.InferenceData
-            ``InferenceData`` object with the groups ``prior``, ``prior_predictive`` and
-            ``observed_data``.
+        DataTree
+            `DataTree` object with the groups `prior`, `prior_predictive` and
+            `observed_data`.
         """
         prior_predictive = self.model.prior_predictive(
             draws, var_names, omit_offsets, random_seed
@@ -1215,42 +1214,37 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # AF-COMMENT: Not sure if necessary to include the
         # mean prior here (which adds deterministics that
         # could be recomputed elsewhere)
-        prior_predictive.add_groups(posterior=prior_predictive.prior)
+        prior_predictive["posterior"] = prior_predictive["prior"]
         # Bambi >= 0.17 renamed kind="mean" to kind="response_params".
         self.model.predict(prior_predictive, kind="response_params", inplace=True)
 
         # clean
-        setattr(prior_predictive, "prior", prior_predictive["posterior"])
+        prior_predictive["prior"] = prior_predictive["posterior"]
         del prior_predictive["posterior"]
 
         if self._inference_obj is None:
             self._inference_obj = prior_predictive
         else:
-            self._inference_obj.extend(prior_predictive)
+            for group_name in list(prior_predictive.groups):
+                if group_name == "/":
+                    continue
+                self._inference_obj[group_name] = prior_predictive[group_name]
 
         # clean up `rt,response_mean` to `v`
-        idata = self._drop_parent_str_from_idata(idata=self._inference_obj)
+        dt = self._drop_parent_str_from_datatree(dt=self._inference_obj)
 
         # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in idata["prior_predictive"].dims:
-            setattr(
-                idata,
-                "prior_predictive",
-                idata["prior_predictive"].rename_dims(
-                    {"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+        if "rt,response_extra_dim_0" in dt["prior_predictive"].dims:
+            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_dims(
+                {"rt,response_extra_dim_0": "rt,response_dim"}
             )
-        if "rt,response_extra_dim_0" in idata["prior_predictive"].coords:
-            setattr(
-                idata,
-                "prior_predictive",
-                idata["prior_predictive"].rename_vars(
-                    name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-                ),
+        if "rt,response_extra_dim_0" in dt["prior_predictive"].coords:
+            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_vars(
+                name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
             )
 
-        # Update self._inference_obj to match the cleaned idata
-        self._inference_obj = idata
+        # Update self._inference_obj to match the cleaned datatree
+        self._inference_obj = dt
         return deepcopy(self._inference_obj)
 
     @property
@@ -1384,112 +1378,44 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
     def plot_trace(
         self,
-        data: az.InferenceData | None = None,
+        data: DataTree | None = None,
         include_deterministic: bool = False,
         tight_layout: bool = True,
         **kwargs,
     ) -> None:
-        """Generate trace plot with ArviZ but with additional convenience features.
+        """Deprecate the `plot_trace` method and remove its functionality.
 
-        This is a simple wrapper for the az.plot_trace() function. By default, it
-        filters out the deterministic values from the plot. Please see the
-        [arviz documentation]
-        (https://arviz-devs.github.io/arviz/api/generated/arviz.plot_trace.html)
-        for additional parameters that can be specified.
-
-        Parameters
-        ----------
-        data : optional
-            An ArviZ InferenceData object. If None, the traces stored in the model will
-            be used.
-        include_deterministic : optional
-            Whether to include deterministic variables in the plot. Defaults to False.
-            Note that if include deterministic is set to False and and `var_names` is
-            provided, the `var_names` provided will be modified to also exclude the
-            deterministic values. If this is not desirable, set
-            `include deterministic` to True.
-        tight_layout : optional
-            Whether to call plt.tight_layout() after plotting. Defaults to True.
+        This method has been deprecated and its functionality has been removed.
+        Please use `az.plot_trace_dist` from ArviZ instead. For more information,
+        see the
+        [arviz documentation](
+        https://python.arviz.org/projects/plots/en/latest/api/generated
+        /arviz_plots.plot_trace_dist.html#arviz_plots.plot_trace_dist).
         """
-        data = data or self.traces
-        if not isinstance(data, az.InferenceData):
-            raise TypeError("data must be an InferenceData object.")
-
-        if not include_deterministic:
-            var_names = list(
-                set([var.name for var in self.pymc_model.free_RVs]).intersection(
-                    set(list(data["posterior"].data_vars.keys()))
-                )
-            )
-            # var_names = self._get_deterministic_var_names(data)
-            if var_names:
-                if "var_names" in kwargs:
-                    if isinstance(kwargs["var_names"], str):
-                        if kwargs["var_names"] not in var_names:
-                            var_names.append(kwargs["var_names"])
-                        kwargs["var_names"] = var_names
-                    elif isinstance(kwargs["var_names"], list):
-                        kwargs["var_names"] = list(
-                            set(var_names) | set(kwargs["var_names"])
-                        )
-                    elif kwargs["var_names"] is None:
-                        kwargs["var_names"] = var_names
-                    else:
-                        raise ValueError(
-                            "`var_names` must be a string, a list of strings, or None."
-                        )
-                else:
-                    kwargs["var_names"] = var_names
-        az.plot_trace(data, **kwargs)
-
-        if tight_layout:
-            plt.tight_layout()
+        raise NotImplementedError(
+            "HSSM.plot_trace has been deprecated. Please use az.plot_trace_dist from "
+            "ArviZ directly. For example: "
+            "`az.plot_trace_dist(model.traces, var_names=[...])`."
+        )
 
     def summary(
         self,
-        data: az.InferenceData | None = None,
+        data: DataTree | None = None,
         include_deterministic: bool = False,
         **kwargs,
     ) -> pd.DataFrame | xr.Dataset:
-        """Produce a summary table with ArviZ but with additional convenience features.
+        """Deprecate the `summary` method and remove its functionality.
 
-        This is a simple wrapper for the az.summary() function. By default, it
-        filters out the deterministic values from the plot. Please see the
-        [arviz documentation]
-        (https://arviz-devs.github.io/arviz/api/generated/arviz.summary.html)
-        for additional parameters that can be specified.
-
-        Parameters
-        ----------
-        data
-            An ArviZ InferenceData object. If None, the traces stored in the model will
-            be used.
-        include_deterministic : optional
-            Whether to include deterministic variables in the plot. Defaults to False.
-            Note that if include_deterministic is set to False and and `var_names` is
-            provided, the `var_names` provided will be modified to also exclude the
-            deterministic values. If this is not desirable, set
-            `include_deterministic` to True.
-
-        Returns
-        -------
-        pd.DataFrame | xr.Dataset
-            A pandas DataFrame or xarray Dataset containing the summary statistics.
+        This method has been deprecated and its functionality has been removed.
+        Please use `az.summary` from ArviZ instead. For more information, see the
+        [arviz documentation](
+        https://python.arviz.org/projects/stats/en/stable/api/generated
+        /arviz_stats.summary.html).
         """
-        data = data or self.traces
-        if not isinstance(data, az.InferenceData):
-            raise TypeError("data must be an InferenceData object.")
-
-        if not include_deterministic:
-            var_names = list(
-                set([var.name for var in self.pymc_model.free_RVs]).intersection(
-                    set(list(data["posterior"].data_vars.keys()))
-                )
-            )
-            # var_names = self._get_deterministic_var_names(data)
-            if var_names:
-                kwargs["var_names"] = list(set(var_names + kwargs.get("var_names", [])))
-        return az.summary(data, **kwargs)
+        raise NotImplementedError(
+            "HSSM.summary has been deprecated. Please use az.summary from ArviZ "
+            "directly. For example: `az.summary(model.traces, var_names=[...])`."
+        )
 
     def initial_point(self, transformed: bool = False) -> dict[str, np.ndarray]:
         """Compute the initial point of the model.
@@ -1511,48 +1437,46 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
         return pm.model.Point(fn(None), model=self.pymc_model)
 
-    def restore_traces(
-        self, traces: az.InferenceData | pm.Approximation | str | PathLike
-    ) -> None:
-        """Restore traces from an InferenceData object or a .netcdf file.
+    def restore_traces(self, traces: DataTree | Approximation | str | PathLike) -> None:
+        """Restore traces from a DataTree object or a .netcdf file.
 
         Parameters
         ----------
         traces
-            An InferenceData object or a path to a file containing the traces.
+            A DataTree object or a path to a file containing the traces.
         """
-        if isinstance(traces, pm.Approximation):
+        if isinstance(traces, Approximation):
             self._inference_obj_vi = traces
             return
 
         if isinstance(traces, (str, PathLike)):
             traces = az.from_netcdf(traces)
-        self._inference_obj = cast("az.InferenceData", traces)
+        self._inference_obj = traces
 
     def restore_vi_traces(
-        self, traces: az.InferenceData | pm.Approximation | str | PathLike
+        self, traces: DataTree | Approximation | str | PathLike
     ) -> None:
-        """Restore VI traces from an InferenceData object or a .netcdf file.
+        """Restore VI traces from a DataTree object or a .netcdf file.
 
         Parameters
         ----------
         traces
-            An InferenceData object or a path to a file containing the VI traces.
+            A DataTree object or a path to a file containing the VI traces.
         """
-        if isinstance(traces, pm.Approximation):
+        if isinstance(traces, Approximation):
             self._inference_obj_vi = traces
             return
 
         if isinstance(traces, (str, PathLike)):
             traces = az.from_netcdf(traces)
-        self._inference_obj_vi = cast("az.InferenceData", traces)
+        self._inference_obj_vi = traces
 
     def save_model(
         self,
         model_name: str | None = None,
         allow_absolute_base_path: bool = False,
         base_path: str | Path = "hssm_models",
-        save_idata_only: bool = False,
+        save_traces_only: bool = False,
     ) -> None:
         """Save a HSSM model instance and its inference results to disk.
 
@@ -1568,8 +1492,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             Base directory to save model files in.
             Must be relative path if allow_absolute_base_path=False.
             Defaults to "hssm_models".
-        save_idata_only : bool
-            If True, only saves inference data (traces), not the model pickle.
+        save_traces_only : bool
+            If True, only saves the traces, not the model pickle.
             Defaults to False (saves both model and traces).
 
         Raises
@@ -1597,22 +1521,20 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         model_path.mkdir(parents=True, exist_ok=True)
 
         # Save model to pickle file
-        if not save_idata_only:
+        if not save_traces_only:
             with open(model_path.joinpath("model.pkl"), "wb") as f:
                 cpickle.dump(self, f)
 
         # Save traces to netcdf file
         if self._inference_obj is not None:
-            az.to_netcdf(self._inference_obj, model_path.joinpath("traces.nc"))
+            self._inference_obj.to_netcdf(model_path.joinpath("traces.nc"))
 
         # Save vi_traces to netcdf file
-        if self._inference_obj_vi is not None:
-            az.to_netcdf(self._inference_obj_vi, model_path.joinpath("vi_traces.nc"))
+        if isinstance(self._inference_obj_vi, DataTree):
+            self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
 
     @classmethod
-    def load_model(
-        cls, path: Union[str, Path]
-    ) -> Union["HSSMBase", dict[str, Optional[az.InferenceData]]]:
+    def load_model(cls, path: Union[str, Path]) -> Union["HSSMBase", DataTree]:
         """Load a HSSM model instance and its inference results from disk.
 
         Parameters
@@ -1623,9 +1545,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        HSSMBase or dict[str, az.InferenceData | None]
+        HSSMBase or dict[str, DataTree | None]
             The loaded model instance (with inference results attached if available),
-            or a dictionary of traces-only InferenceData objects when no model.pkl is
+            or a dictionary of traces-only DataTree objects when no model.pkl is
             found.
         """
         # Convert path to Path object
@@ -1655,8 +1577,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             ):
                 raise FileNotFoundError(f"No traces found in {model_dir}.")
             else:
-                idata_dict = cls.load_model_idata(model_dir)
-                return idata_dict
+                dt_dict = cls.load_model_traces(model_dir)
+                return dt_dict
         else:
             # Load model from pickle file
             with open(model_path, "rb") as f:
@@ -1674,7 +1596,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return model
 
     @classmethod
-    def load_model_idata(cls, path: str | Path) -> dict[str, az.InferenceData | None]:
+    def load_model_traces(cls, path: str | Path) -> DataTree:
         """Load the traces from a model directory.
 
         Parameters
@@ -1684,12 +1606,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        dict[str, az.InferenceData | None]
-            A dictionary with keys "idata_mcmc" and "idata_vi" containing the traces
-            from the model directory. If the traces do not exist, the corresponding
-            value will be None.
+        DataTree
+            A DataTree with groups "idata_mcmc" and "idata_vi" containing the traces
+            from the model directory. Groups are only present for traces that exist
+            on disk.
         """
-        idata_dict: dict[str, az.InferenceData | None] = {}
+        dt_dict: dict[str, DataTree | None] = {}
         model_dir = Path(path)
         # check if path exists
         if not model_dir.exists():
@@ -1699,19 +1621,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         traces_path = model_dir.joinpath("traces.nc")
         if not traces_path.exists():
             _logger.warning(f"traces.nc file does not exist in {model_dir}.")
-            idata_dict["idata_mcmc"] = None
+            dt_dict["idata_mcmc"] = None
         else:
-            idata_dict["idata_mcmc"] = az.from_netcdf(traces_path)
+            dt_dict["idata_mcmc"] = az.from_netcdf(traces_path)
 
         # check if vi_traces.nc exists
         vi_traces_path = model_dir.joinpath("vi_traces.nc")
         if not vi_traces_path.exists():
             _logger.warning(f"vi_traces.nc file does not exist in {model_dir}.")
-            idata_dict["idata_vi"] = None
+            dt_dict["idata_vi"] = None
         else:
-            idata_dict["idata_vi"] = az.from_netcdf(vi_traces_path)
+            dt_dict["idata_vi"] = az.from_netcdf(vi_traces_path)
 
-        return idata_dict
+        return DataTree.from_dict(
+            {name: dt for name, dt in dt_dict.items() if dt is not None}
+        )
 
     def __getstate__(self):
         """Get the state of the model for pickling.
@@ -1816,7 +1740,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return self.__repr__()
 
     @property
-    def traces(self) -> az.InferenceData | pm.Approximation:
+    def traces(self) -> DataTree | Approximation:
         """Return the trace of the model after sampling.
 
         Raises
@@ -1826,7 +1750,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        az.InferenceData | pm.Approximation
+        DataTree | Approximation
             The trace of the model after the last call to `sample()`.
         """
         if not self._inference_obj:
@@ -1835,7 +1759,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return self._inference_obj
 
     @property
-    def vi_idata(self) -> az.InferenceData:
+    def vi_idata(self) -> DataTree:
         """Return the variational inference approximation object.
 
         Raises
@@ -1845,7 +1769,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        az.InferenceData
+        DataTree
             The variational inference approximation object.
         """
         if not self._inference_obj_vi:
@@ -1854,10 +1778,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 "no variational posterior attached."
             )
 
+        if not isinstance(self._inference_obj_vi, DataTree):
+            raise ValueError(
+                "The attached variational inference object is an `Approximation`, "
+                "not sampled traces. Use `vi_approx` to access it, or run "
+                "variational inference with `return_idata=True` to obtain a `DataTree`."
+            )
+
         return self._inference_obj_vi
 
     @property
-    def vi_approx(self) -> pm.Approximation:
+    def vi_approx(self) -> Approximation:
         """Return the variational inference approximation object.
 
         Raises
@@ -1867,7 +1798,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        pm.Approximation
+        Approximation
             The variational inference approximation object.
         """
         if not self._vi_approx:
@@ -1941,7 +1872,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             )
         self.lapse = None
 
-    def _get_deterministic_var_names(self, idata) -> list[str]:
+    def _get_deterministic_var_names(self, dt) -> list[str]:
         """Filter out the deterministic variables in var_names."""
         var_names = [
             f"~{param_name}"
@@ -1949,48 +1880,44 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             if (param.is_regression)
         ]
 
-        if f"{self._parent}_mean" in idata["posterior"].data_vars:
+        if f"{self._parent}_mean" in dt["posterior"].data_vars:
             var_names.append(f"~{self._parent}_mean")
 
         # Parent parameters (always regression implicitly)
         # which don't have a formula attached
         # should be dropped from var_names, since the actual
         # parent name shows up as a regression.
-        if f"{self._parent}" in idata["posterior"].data_vars:
+        if f"{self._parent}" in dt["posterior"].data_vars:
             if self.params[self._parent].formula is None:
                 # Drop from var_names
                 var_names = [var for var in var_names if var != f"~{self._parent}"]
 
         return var_names
 
-    def _drop_parent_str_from_idata(
-        self, idata: az.InferenceData | None
-    ) -> az.InferenceData:
-        """Drop the parent_str variable from an InferenceData object.
+    def _drop_parent_str_from_datatree(self, dt: DataTree | None) -> DataTree:
+        """Drop the parent_str variable from a DataTree object.
 
         Parameters
         ----------
-        idata
-            The InferenceData object to be modified.
+        dt
+            The DataTree object to be modified.
 
         Returns
         -------
         xr.Dataset
-            The modified InferenceData object.
+            The modified DataTree object.
         """
-        if idata is None:
-            raise ValueError("Please provide an InferenceData object.")
+        if dt is None:
+            raise ValueError("Please provide a DataTree (traces) object.")
         else:
-            for group in idata.groups():
-                if ("rt,response_mean" in idata[group].data_vars) and (
-                    self._parent not in idata[group].data_vars
+            for group in dt.groups:
+                if group == "/":
+                    continue
+                if ("rt,response_mean" in dt[group].data_vars) and (
+                    self._parent not in dt[group].data_vars
                 ):
-                    setattr(
-                        idata,
-                        group,
-                        idata[group].rename({"rt,response_mean": self._parent}),
-                    )
-            return idata
+                    dt[group] = dt[group].ds.rename({"rt,response_mean": self._parent})
+            return dt
 
     def _postprocess_initvals_deterministic(
         self, initval_settings: dict = INITVAL_SETTINGS
@@ -2067,7 +1994,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self,
         name_str: str,
         return_value: bool = False,
-    ) -> bool | float | int | np.ndarray | dict[str, Any] | None:
+    ) -> bool | float | int | np.ndarray | dict[str, Any] | bmb.Prior | None:
         """Check if initial value is user-supplied."""
         # The function assumes that the name_str is either raw parameter name
         # or `paramname_Intercept`, because we only really provide special default

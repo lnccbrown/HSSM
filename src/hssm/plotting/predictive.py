@@ -4,12 +4,11 @@ import logging
 from itertools import product
 from typing import Iterable, Literal, cast, overload
 
-import arviz as az
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import xarray as xr
 from matplotlib.axes import Axes
 
 from .utils import (
@@ -25,7 +24,7 @@ from .utils import (
 _logger = logging.getLogger("hssm")
 
 
-def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 100) -> np.ndarray:
+def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 100) -> pd.Series:
     return pd.Series(
         np.histogram(a, bins=bins, density=True)[0],  # type: ignore
         name="bin_n",
@@ -47,14 +46,14 @@ def _plot_predictive_1D(
     xlabel: str | None = "Response Time",
     ylabel: str | None = "Density",
     **kwargs,
-) -> mpl.axes.Axes:
+) -> Axes:
     """Plot the posterior predictive distribution against the observed data.
 
     Check the `plot_predictive` function below for docstring.
 
     Returns
     -------
-    mpl.Axes
+    Axes
         A matplotlib Axes object containing the plot.
     """
     if "color" in kwargs:
@@ -91,7 +90,9 @@ def _plot_predictive_1D(
         bin_edges[:-1],
         hists_mean,
         drawstyle="steps" if step else "default",
-        **styles,
+        color=styles["color"],
+        linestyle=styles["linestyle"],
+        linewidth=styles["linewidth"],
         **kwargs,
     )
 
@@ -117,12 +118,14 @@ def _plot_predictive_1D(
         )
 
         observed = data.loc[data["observed"] == "observed", "rt"]
-        data_hist = _histogram(observed.values, bins=bin_edges)
+        data_hist = _histogram(observed.to_numpy(), bins=bin_edges)
         ax.plot(
             bin_edges[:-1],
             data_hist,
             drawstyle="steps" if step else "default",
-            **styles,
+            color=styles["color"],
+            linestyle=styles["linestyle"],
+            linewidth=styles["linewidth"],
             **kwargs,
         )
 
@@ -251,16 +254,23 @@ def _process_lines(
         else:
             raise ValueError(f"Invalid type: {check_type}")
     elif isinstance(line_attrs, (list, tuple)):
-        line_attrs = list(line_attrs)
-        if not all(isinstance(la, check_type) for la in line_attrs):
+        line_attrs_list = list(line_attrs)
+        if not all(isinstance(la, check_type) for la in line_attrs_list):
             raise ValueError(
-                f"The `{mode}` argument must be a string or a list of strings.or 2."
+                f"The `{mode}` argument must be a {check_type.__name__} or a list "
+                f"of {check_type.__name__}s."
             )
-        elif len(line_attrs) in {1, 2}:
-            return line_attrs * 2 if len(line_attrs) == 1 else line_attrs
+        elif len(line_attrs_list) in {1, 2}:
+            if check_type is str:
+                str_list = cast("list[str]", line_attrs_list)
+                return str_list * 2 if len(str_list) == 1 else str_list
+
+            float_list = cast("list[float]", line_attrs_list)
+            return float_list * 2 if len(float_list) == 1 else float_list
         else:
             raise ValueError(
-                f"The `{mode}` argument must be a string or a list of strings."
+                f"The `{mode}` argument must be a {check_type.__name__} or a list "
+                f"of 1 or 2 {check_type.__name__}s."
             )
     elif isinstance(line_attrs, dict):
         if not set(line_attrs.keys()).issubset({"predicted", "observed"}):
@@ -270,26 +280,16 @@ def _process_lines(
             )
         else:
             if mode == "linestyles":
+                line_attrs_str = cast("dict[str, str]", line_attrs)
                 return [
-                    cast(
-                        "str",
-                        line_attrs.get("predicted", dict_defaults_ls["predicted"]),
-                    ),
-                    cast(
-                        "str",
-                        line_attrs.get("observed", dict_defaults_ls["observed"]),
-                    ),
+                    line_attrs_str.get("predicted", dict_defaults_ls["predicted"]),
+                    line_attrs_str.get("observed", dict_defaults_ls["observed"]),
                 ]
             elif mode == "linewidths":
+                line_attrs_float = cast("dict[str, float]", line_attrs)
                 return [
-                    cast(
-                        "float",
-                        line_attrs.get("predicted", dict_defaults_lw["predicted"]),
-                    ),
-                    cast(
-                        "float",
-                        line_attrs.get("observed", dict_defaults_lw["observed"]),
-                    ),
+                    line_attrs_float.get("predicted", dict_defaults_lw["predicted"]),
+                    line_attrs_float.get("observed", dict_defaults_lw["observed"]),
                 ]
     else:
         raise ValueError(
@@ -300,7 +300,7 @@ def _process_lines(
 
 def plot_predictive(
     model,
-    idata: az.InferenceData | None = None,
+    dt: xr.DataTree | None = None,
     data: pd.DataFrame | None = None,
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
@@ -331,15 +331,15 @@ def plot_predictive(
     ----------
     model : hssm.HSSM
         A fitted HSSM model.
-    idata : optional
-        The InferenceData object with posterior samples. If not provided, will use the
+    dt : optional
+        The DataTree object with posterior samples. If not provided, will use the
         traces object stored inside the model. If posterior predictive samples are not
-        present in this object, will generate posterior predictive samples using the
-        this InferenceData object and the original data.
+        present in this object, will generate posterior predictive samples using
+        this DataTree object and the original data.
     data : optional
         The observed data.
 
-        - If `data` is provided and the idata object does not contain a
+        - If `data` is provided and the `dt` object does not contain a
         `"posterior_predictive"` group, will generate posterior predictive samples using
         covariate provided in this object. If the group does exist, it is assumed that
         the posterior predictive samples are generated with the covariates provided in
@@ -348,9 +348,9 @@ def plot_predictive(
         "plot_data" is true or not. If `plot_data=True`, the plotting function will use
         the data stored in the `model` object and proceed as the case above. If
         `plot_data=False`, if posterior predictive samples are not present in the
-        `idata` object, the plotting function will generate posterior predictive samples
+        `dt` object, the plotting function will generate posterior predictive samples
         using the data stored in the `model` object. If posterior predictive samples
-        exist in the `idata` object, these samples will be used for plotting, but a
+        exist in the `dt` object, these samples will be used for plotting, but a
         ValueError will be thrown if any of `col` or `row` is not None.
     predictive_group : optional
         The type of predictive distribution to plot, by default "posterior_predictive".
@@ -358,8 +358,8 @@ def plot_predictive(
     plot_data : optional
         Whether to plot the observed data, by default True.
     n_samples : optional
-        When idata is provided, the number or proportion of posterior predictive samples
-        randomly drawn to be used from each chain for plotting. When idata is not
+        When `dt` is provided, the number or proportion of posterior predictive samples
+        randomly drawn to be used from each chain for plotting. When `dt` is not
         provided, the number or proportion of posterior samples to be used to generate
         posterior predictive samples. The number or proportion are defined as follows:
 
@@ -445,7 +445,7 @@ def plot_predictive(
 
     Returns
     -------
-    mpl.axes.Axes | sns.FacetGrid
+    Axes | sns.FacetGrid | list[sns.FacetGrid]
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
     # Process hdi
@@ -468,8 +468,8 @@ def plot_predictive(
         if (
             (not extra_dims)
             and (not plot_data)
-            and (idata is not None)
-            and ("posterior_predictive" in idata)
+            and (dt is not None)
+            and ("posterior_predictive" in dt)
         ):
             # Allows data to be None only when plot_data=False and no extra_dims
             # and posterior predictive samples are available
@@ -477,12 +477,12 @@ def plot_predictive(
         else:
             data = model.data
 
-    idata, sampled = _use_traces_or_sample(
-        model, data, idata, n_samples=n_samples, predictive_group=predictive_group
+    dt, sampled = _use_traces_or_sample(
+        model, data, dt, n_samples=n_samples, predictive_group=predictive_group
     )
 
     plotting_df = _get_plotting_df(
-        idata,
+        dt,
         data,
         extra_dims=extra_dims,
         n_samples=None if sampled else n_samples,

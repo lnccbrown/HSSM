@@ -295,8 +295,9 @@ class RLSSMConfig(BaseModelConfig):
                 f"Missing attribute(s): {missing_attrs}. "
             )
 
-        if not isinstance(logpfunc.computed, dict) or not all(
-            callable(v) for v in logpfunc.computed.values()
+        computed = getattr(logpfunc, "computed")  # noqa: B009
+        if not isinstance(computed, dict) or not all(
+            callable(v) for v in computed.values()
         ):
             raise ValueError(
                 "`ssm_logp_func.computed` must be a dictionary with callable values."
@@ -335,15 +336,20 @@ def _make_ssms_computed_functions(assembled: Any) -> dict[str, Any]:
     """
     input_fields = list(assembled.participant_input_fields())
     participant_fn = assembled.assemble_participant_fn(output="dict")
+    computed_params = list(assembled.computed_params)
 
-    def _make_compute_func(param_name: str):
+    if len(computed_params) == 1:
+        param_name = computed_params[0]
+
         @annotate_function(inputs=input_fields, outputs=[param_name])
-        def compute(subject_trials):
+        def compute_single_param(subject_trials):
             return participant_fn(subject_trials)[param_name]
 
-        return compute
+        return {param_name: compute_single_param}
 
-    return {
-        param_name: _make_compute_func(param_name)
-        for param_name in assembled.computed_params
-    }
+    @annotate_function(inputs=input_fields, outputs=computed_params)
+    def compute_multi_param(subject_trials):
+        values = participant_fn(subject_trials)
+        return {param_name: values[param_name] for param_name in computed_params}
+
+    return {param_name: compute_multi_param for param_name in computed_params}

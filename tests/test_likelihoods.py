@@ -15,7 +15,7 @@ import pytensor
 import pytensor.tensor as pt
 import pytest
 
-from pytensor.compile.nanguardmode import NanGuardMode
+from pytensor.compile.debug.nanguardmode import NanGuardMode
 
 import hssm
 
