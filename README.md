@@ -95,54 +95,30 @@ For a deeper dive into HSSM, please follow
 
 ## Installation
 
-HSSM can be directly installed into your conda environment on Linux and MacOS.
-Installing HSSM on windows takes only one more simple step. We have a more
-detailed
+HSSM is installed via `pip`. We have a more detailed
 [installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/)
 for users with more specific setups.
 
-### Install HSSM on Linux and MacOS (CPU only)
+### Install HSSM (CPU only)
 
 Use the following command to install HSSM into your virtual environment:
 
 ```bash
-conda install -c conda-forge hssm
-```
-
-### Install HSSM on Linux and MacOS (with GPU Support)
-
-If you need to sample with GPU, please install JAX with GPU support before
-installing HSSM:
-
-```bash
-conda install jaxlib=*=*cuda* jax cuda-nvcc -c conda-forge -c nvidia
-conda install -c conda-forge hssm
-```
-
-### Install HSSM on Windows (CPU only)
-
-Because dependencies such as `jaxlib` and `numpyro` are not up-to-date on Conda,
-the easiest way to install HSSM on Windows is to install PyMC first and install
-HSSM via `pip`:
-
-```bash
-conda install -c conda-forge pymc
 pip install hssm
 ```
 
-### Install HSSM on Windows (with GPU support)
+### Install HSSM (with GPU support)
 
-You simply need to install JAX with GPU support after installing PyMC:
+If you need to sample with an NVIDIA GPU, install HSSM with the extra matching
+your CUDA version:
 
 ```bash
-conda install -c conda-forge pymc
 pip install hssm[cuda12]
 ```
 
 Or, for GPUs on CUDA 13:
 
 ```bash
-conda install -c conda-forge pymc
 pip install hssm[cuda13]
 ```
 
@@ -154,17 +130,7 @@ to install the correct version of JAX before installing HSSM.
 
 ## Advanced Installation
 
-### Install HSSM directly with Pip
-
-HSSM is also available through PyPI. You can directly install it with pip into
-any virtual environment via:
-
-```bash
-pip install hssm
-```
-
-**Note:** While this installation is much simpler, you might encounter this
-warning message
+**Note:** You might encounter this warning message
 `WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.`
 Please refer to our
 [advanced installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/)
@@ -193,10 +159,9 @@ Colab regardless of the backend you are using:
 **Note:** Possible solutions to any issues with installations with hssm can be
 located [here](https://github.com/lnccbrown/HSSM/discussions). Also feel free to
 start a new discussion thread if you don't find answers there. We recommend
-installing HSSM into a new conda environment with Python 3.10 or 3.11 to prevent
+installing HSSM into a fresh virtual environment to prevent
 any problems with dependencies during the installation process. Please note that
-hssm is only tested for python 3.10, 3.11. As of HSSM v0.2.0, support for Python
-3.9 is dropped. Use unsupported python versions with caution.
+HSSM requires Python 3.11–3.13. Use unsupported Python versions with caution.
 
 ## License
 
