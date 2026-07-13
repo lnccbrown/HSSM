@@ -219,6 +219,22 @@ def make_jax_logp_ops(
     def logp_op_dispatch(op, **kwargs):  # pylint: disable=W0612,W0613
         return logp_nojit
 
+    # Required when PyTensor differentiates LANLogpOp symbolically (e.g. ADVI
+    # via `pm.fit(..., backend="jax")`) and then compiles the gradient graph
+    # with the JAX linker. Mirrors the input contract of LANLogpVJPOp.perform.
+    @jax_funcify.register(LANLogpVJPOp)
+    def logp_vjp_op_dispatch(op, node, **kwargs):  # pylint: disable=W0612,W0613
+        n_outputs = len(node.outputs)
+
+        def logp_vjp_jax(*inputs):
+            if op.is_scalars_only and not op.has_data:
+                results = logp_vjp(list(inputs))
+            else:
+                results = logp_vjp(*inputs[:-1], gz=inputs[-1])
+            return tuple(results) if n_outputs > 1 else results[0]
+
+        return logp_vjp_jax
+
     return lan_logp_op
 
 
