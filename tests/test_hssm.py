@@ -571,6 +571,36 @@ def test_deprecated_inference_helpers_raise_documented_error(
     assert str(error.value) == expected_message
 
 
+@pytest.mark.parametrize(
+    "config_backend, backend_arg, expected_backend",
+    [
+        (None, None, "numba"),
+        ("jax", None, "jax"),
+        ("pytensor", None, "c"),
+        ("jax", "numba", "numba"),
+    ],
+)
+def test_vi_passes_backend_to_pm_fit(
+    data_ddm, monkeypatch, config_backend, backend_arg, expected_backend
+):
+    """The resolved backend is forwarded to `pm.fit`."""
+    model = HSSM(data=data_ddm, model="ddm")
+    model.model_config.backend = config_backend
+
+    captured = {}
+
+    def fake_fit(*args, **kwargs):
+        captured["backend"] = kwargs.get("backend")
+
+    monkeypatch.setattr("hssm.base.pm.fit", fake_fit)
+    # Skip post-processing since fake_fit returns no approximation object.
+    monkeypatch.setattr(model, "_clean_posterior_group", lambda dt=None: None)
+
+    model.vi(niter=1, draws=1, backend=backend_arg)
+
+    assert captured["backend"] == expected_backend
+
+
 def test_vi_idata_rejects_attached_approximation(data_ddm):
     """VI approximations must be sampled before they can be exposed as DataTrees."""
     model = HSSM(data=data_ddm)
