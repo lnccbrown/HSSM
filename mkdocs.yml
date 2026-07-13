@@ -46,6 +46,7 @@ nav:
       - Variational Inference: tutorials/variational_inference.ipynb
       - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
+      - Per-parameter centered vs. non-centered parameterization: tutorials/parameterization_per_parameter.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
       - RLSSM — Basic tutorial: tutorials/rlssm_basic.ipynb
       - RLSSM — Custom models with ssms.rl: tutorials/rlssm_advanced.ipynb
@@ -91,6 +92,7 @@ plugins:
         - tutorials/variational_inference.ipynb
         - tutorials/variational_inference_hierarchical.ipynb
         - tutorials/centered_vs_noncentered_basic_logic.ipynb
+        - tutorials/parameterization_per_parameter.ipynb
         - tutorials/initial_values.ipynb
         - tutorials/pymc.ipynb
         - tutorials/jax_callable_contribution_onnx_example.ipynb
