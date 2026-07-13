@@ -6,10 +6,11 @@ model (see lnccbrown/HSSM#1056 for the full diagnosis):
 1. VI approximation parameters (e.g. meanfield ``mu``/``rho``) are created
    without static shapes, producing a runtime-shape ``Alloc`` that the JAX
    backend cannot trace (``TypeError: Shapes must be 1D sequences of
-   concrete values``).
+   concrete values``). Upstream: pymc-devs/pymc#8359.
 2. A JAX-compiled step function writes raw ``jax.Array`` objects into the
    shared-variable storage, which breaks any later default-backend (numba)
-   compiled function — notably ``approx.sample()``.
+   compiled function — notably ``approx.sample()``. Upstream:
+   pymc-devs/pymc#8360.
 
 Both helpers here are self-disabling: they detect an already-fixed PyMC and
 do nothing, so they are safe to keep until the pinned PyMC includes the
