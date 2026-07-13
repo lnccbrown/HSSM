@@ -68,7 +68,7 @@ def test_plot_model_cartoon_addm_posterior():
 
     ax = hssm.plotting.plot_model_cartoon(
         model,
-        idata=idata,
+        dt=idata,
         n_samples=5,
         bins=20,
         plot_predictive_mean=True,

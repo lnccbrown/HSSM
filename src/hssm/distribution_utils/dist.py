@@ -222,9 +222,24 @@ def make_hssm_rv(
 
     # pylint: disable=W0511, R0903
     class HSSMRV(RandomVariable):
-        """HSSMRV random variable."""
+        """HSSMRV random variable.
 
-        name: str = model_name + "_RV"
+        The class attributes below are deliberately NOT type-annotated. On
+        Python 3.14, class-body annotations generate a PEP 649
+        ``__annotate_func__`` whose closure references the class namespace —
+        including ABCMeta's unpicklable ``_abc_impl`` (``HSSMRV``'s metaclass
+        chain is rooted in ``ABCMeta`` via pytensor's ``MetaType``). This
+        dynamic ``<locals>`` class is pickled by value by numba's vendored
+        cloudpickle whenever the numba backend object-mode-lifts an RV
+        ``perform`` (posterior/prior predictive sampling), and that vendored
+        cloudpickle cannot serialize the annotate function:
+        ``TypeError: cannot pickle '_abc._abc_data' object``. Plain
+        assignments create no ``__annotate_func__`` and pickle cleanly.
+        Types, for reference: ``name``/``signature``/``dtype``: ``str``;
+        ``_print_name``: ``tuple[str, str]``; ``_extra_fields``: ``dict | None``.
+        """
+
+        name = model_name + "_RV"
         # New in PyMC 5.16+: instead of using `ndims_supp`, we use `signature` to define
         # the signature of the random variable. The string to the left of the `->` sign
         # describes the input signature, which is `()` for each parameter, meaning each
@@ -235,10 +250,10 @@ def make_hssm_rv(
         # Override the output from ssm_simulator based on whether the model is
         # choice-only.
         output = "()" if is_choice_only else f"({obs_dim_int})"
-        signature: str = f"{','.join(['()'] * len(list_params))}->{output}"
+        signature = f"{','.join(['()'] * len(list_params))}->{output}"
 
-        dtype: str = "floatX"
-        _print_name: tuple[str, str] = ("SSM", "\\operatorname{SSM}")
+        dtype = "floatX"
+        _print_name = ("SSM", "\\operatorname{SSM}")
         _list_params = list_params
         _lapse = lapse
         # Optional per-inference covariates forwarded to the simulator so the
@@ -246,7 +261,7 @@ def make_hssm_rv(
         # per-trial inputs — e.g. aDDM fixations. Populated on the RV class at PPC
         # time (see aDDM._update_extra_fields); ``None`` keeps every existing
         # model's generative path byte-for-byte unchanged (a plain **{} splat).
-        _extra_fields: dict | None = None
+        _extra_fields = None
 
         # pylint: disable=arguments-renamed,bad-option-value,W0221
         # NOTE: `rng` now is a np.random.Generator instead of RandomState

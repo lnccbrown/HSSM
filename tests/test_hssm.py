@@ -1,6 +1,5 @@
 """Tests for the HSSM public model interface."""
 
-import sys
 from copy import deepcopy
 from unittest.mock import Mock
 
@@ -158,11 +157,6 @@ def test_model_definition_outside_include(data_ddm):
         HSSM(data_ddm, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
 
-@pytest.mark.xfail(
-    sys.version_info >= (3, 14),
-    reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
-    strict=True,  # This will let us know in the future when this is fixed
-)
 @pytest.mark.slow
 def test_sample_prior_predictive(data_ddm_reg):
     """Generate prior-predictive DataTrees across regression structures."""
@@ -524,11 +518,6 @@ class TestFixedVectorParams:
         assert "z" in idata.posterior.data_vars
 
 
-@pytest.mark.xfail(
-    sys.version_info >= (3, 14),
-    reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
-    strict=True,  # This will let us know in the future when this is fixed
-)
 @pytest.mark.slow
 def test_sample_do(data_ddm):
     """Return intervention samples and the intervened PyMC model."""

@@ -1,18 +1,11 @@
 """Test plotting module."""
 
-import sys
-
-import pytest
 import numpy as np
+import pytest
 
 import hssm
 
 hssm.set_floatX("float32")
-
-pytestmark = pytest.mark.xfail(
-    sys.version_info >= (3, 14),
-    reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
-)
 
 
 # I want to parameter
@@ -96,7 +89,7 @@ def test_plot_model_cartoon_2_choice(
                 assert np.all(ax.row_names == cav_model_cartoon.data[row].unique())
             if col is not None:
                 assert np.all(ax.col_names == cav_model_cartoon.data[col].unique())
-        elif groups is ["dbs"]:
+        elif groups == ["dbs"]:
             assert isinstance(ax, list)
             assert len(ax) == len(cav_model_cartoon.data[groups[0]].unique())
 
@@ -162,7 +155,6 @@ def test_plot_model_cartoon_3_choice(
     col,
 ):
     """Test plot_model_cartoon for 3-choice data."""
-
     if (not plot_predictive_mean) and (not plot_predictive_samples):
         with pytest.raises(ValueError):
             ax = hssm.plotting.plot_model_cartoon(

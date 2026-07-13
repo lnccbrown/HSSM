@@ -1,7 +1,5 @@
 """Tests for HSSM posterior-predictive sampling."""
 
-import sys
-
 import numpy as np
 import pytest
 import xarray as xr
@@ -35,11 +33,6 @@ PARAMETER_GRID = [
 ]
 
 
-@pytest.mark.xfail(
-    sys.version_info >= (3, 14),
-    reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
-    strict=True,  # This will let us know in the future when this is fixed
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, inplace):

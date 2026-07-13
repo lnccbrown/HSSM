@@ -11,6 +11,10 @@
 
 1. `bambi` floor raised to `>=0.19.0` (per-parameter non-centered support); `ssm-simulators` floor raised to `>=0.13.1` (aDDM engine + fixation continuation).
 
+#### Bug fixes:
+
+1. **Python 3.14: posterior/prior predictive sampling fixed.** On 3.14, the dynamically created SSM random-variable class carried PEP 649 annotation metadata that numba's vendored cloudpickle could not serialize (`TypeError: cannot pickle '_abc._abc_data' object`), breaking `sample_posterior_predictive` and related plotting under the numba backend. The class attributes are now un-annotated plain assignments, and the previous 3.14 xfail markers on the predictive/plotting tests have been removed.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
