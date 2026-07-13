@@ -99,23 +99,38 @@ class Prior(bmb.Prior):  # noqa: PLW1641
 
     def __eq__(self, other) -> bool:
         """Test equality."""
+        # `noncentered` lives outside `.args` (it changes the group-term
+        # parameterization), so it must be part of equality in every path.
         if isinstance(other, Prior):
             if self.is_truncated and other.is_truncated:
                 return (
                     self.name == other.name
                     and self._args == other._args
                     and self.bounds == other.bounds
+                    and self.noncentered == other.noncentered
                 )
             if not self.is_truncated and not other.is_truncated:
-                return self.name == other.name and self.args == other.args
+                return (
+                    self.name == other.name
+                    and self.args == other.args
+                    and self.noncentered == other.noncentered
+                )
             return False
 
         if isinstance(other, bmb.Prior):
             if self.is_truncated:
                 return False
             if self.dist is not None:
-                return self.name == other.name and self.dist == other.dist
-            return self.name == other.name and self.args == other.args
+                return (
+                    self.name == other.name
+                    and self.dist == other.dist
+                    and self.noncentered == other.noncentered
+                )
+            return (
+                self.name == other.name
+                and self.args == other.args
+                and self.noncentered == other.noncentered
+            )
 
         return False
 

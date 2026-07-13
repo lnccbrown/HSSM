@@ -21,11 +21,18 @@ GS = "1|participant_id"
 
 def _offset_params(model) -> set[str]:
     """HSSM params whose group term carries a non-centered ``*_offset`` RV."""
-    return {
-        name.split("_")[0]
-        for name in (rv.name for rv in model.pymc_model.free_RVs)
-        if "_offset" in name
-    }
+    # Offset RVs are named ``{param}_{group_term}_offset``; match the longest
+    # param prefix so names with underscores (e.g. ``rl_alpha``) are preserved.
+    params = sorted(model.list_params, key=len, reverse=True)
+    result: set[str] = set()
+    for name in (rv.name for rv in model.pymc_model.free_RVs):
+        if not name.endswith("_offset"):
+            continue
+        for param in params:  # longest first
+            if name.startswith(f"{param}_"):
+                result.add(param)
+                break
+    return result
 
 
 def _hierarchical_v(prior=None) -> list[dict]:
@@ -101,3 +108,13 @@ def test_per_prior_object_overrides_model_dict(cavanagh_test, flag, expect_offse
     assert prior[GS].noncentered is flag  # captured as a named attr, not in .args
     model = _build(cavanagh_test, _hierarchical_v(prior), noncentered={"v": not flag})
     assert ("v" in _offset_params(model)) is expect_offset
+
+
+def test_prior_equality_includes_noncentered():
+    """Priors differing only in `noncentered` must not compare equal."""
+    centered = Prior("Normal", mu=0.0, sigma=1.0, noncentered=False)
+    noncentered = Prior("Normal", mu=0.0, sigma=1.0, noncentered=True)
+    assert centered != noncentered
+    # ... but priors that agree on `noncentered` (including the default) still are.
+    assert Prior("Normal", mu=0.0, sigma=1.0) == Prior("Normal", mu=0.0, sigma=1.0)
+    assert centered == Prior("Normal", mu=0.0, sigma=1.0, noncentered=False)
