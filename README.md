@@ -1,207 +1,179 @@
 <div style="position: relative; width: 100%;">
-  <img src="docs/images/mainlogo.png" style="width: 175px;">
+  <img src="docs/images/mainlogo.png" alt="HSSM logo" style="width: 175px;">
   <a href="https://ccbs.carney.brown.edu/brainstorm" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%);">
-    <img src="docs/images/Brain-Bolt-%2B-Circuits.gif" style="width: 100px;">
+    <img src="docs/images/Brain-Bolt-%2B-Circuits.gif" alt="BRAINSTORM logo" style="width: 100px;">
   </a>
 </div>
 
-## HSSM - Hierarchical Sequential Sampling Modeling
+# HSSM - Hierarchical Sequential Sampling Modeling
 
-[![DOI](https://zenodo.org/badge/545006401.svg)](https://doi.org/10.5281/zenodo.17247695)
-![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
-![PyPI](https://img.shields.io/pypi/v/hssm)
-[![Conda Version](https://img.shields.io/conda/vn/conda-forge/hssm.svg)](https://anaconda.org/conda-forge/hssm)
-![PyPI - Downloads](https://img.shields.io/pypi/dm/HSSM?link=https%3A%2F%2Fpypi.org%2Fproject%2Fhssm%2F)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/hssm)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/lnccbrown/HSSM)
-[![CI](https://github.com/lnccbrown/HSSM/actions/workflows/run_tests.yml/badge.svg)](https://github.com/lnccbrown/HSSM/actions/workflows/run_tests.yml)
+[![Paper DOI](https://img.shields.io/badge/paper-10.64898%2F2026.06.05.730398-blue)](https://doi.org/10.64898/2026.06.05.730398)
+[![PyPI](https://img.shields.io/pypi/v/hssm)](https://pypi.org/project/hssm/)
+[![Downloads](https://static.pepy.tech/badge/hssm/month)](https://pepy.tech/projects/hssm)
+[![GitHub stars](https://img.shields.io/github/stars/lnccbrown/HSSM)](https://github.com/lnccbrown/HSSM/stargazers)
+![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
+[![Run tests](https://github.com/lnccbrown/HSSM/actions/workflows/run_tests.yml/badge.svg)](https://github.com/lnccbrown/HSSM/actions/workflows/run_tests.yml)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License](https://img.shields.io/github/license/lnccbrown/HSSM)](LICENSE)
 [![codecov](https://codecov.io/gh/lnccbrown/HSSM/branch/main/graph/badge.svg)](https://codecov.io/gh/lnccbrown/HSSM)
 
-### Overview
+HSSM is a Python toolbox for hierarchical Bayesian neurocognitive modeling of
+choice, response time, and covariate-rich trial data.
 
-HSSM is an open-source Python toolbox for computational modeling in cognitive
-neuroscience. It supports a broad range of sequential sampling models used to
-study decision-making, learning, and other cognitive processes — from basic
-research to the analysis of clinical effects. Under the hood, HSSM combines
-state-of-the-art likelihood approximation methods with the wider ecosystem of
-probabilistic programming to enable flexible hierarchical Bayesian inference via
-modern MCMC samplers. It is user-friendly and provides the ability to rigorously
-estimate the impact of neural and other trial-by-trial covariates through
-parameter-wise mixed-effects models. HSSM is a
-<a href="https://ccbs.carney.brown.edu/brainstorm">BRAINSTORM</a> project in
+It supports a broad family of sequential-sampling models, reinforcement
+learning sequential-sampling models (RLSSMs), behavioral, neural,
+eye-tracking, and SCR covariates, hierarchical regression, posterior
+diagnostics, posterior predictive checks, and Bayesian model comparison.
+
+HSSM is a [BRAINSTORM](https://ccbs.carney.brown.edu/brainstorm) project in
 collaboration with the Center for Computation and Visualization and the Center
 for Computational Brain Science within the Carney Institute at Brown University.
 
-- Allows approximate hierarchical Bayesian inference via various likelihood
-  approximators.
-- Estimate impact of neural and other trial-by-trial covariates via native
-  hierarchical mixed-regression support.
-- Extensible for users to add novel models with corresponding likelihoods.
-- Built on PyMC with support from the Python Bayesian ecosystem at large.
-- Incorporates Bambi's intuitive `lmer`-like regression parameter specification
-  for within- and between-subject effects.
-- Native ArviZ support for plotting and other convenience functions to aid the
-  Bayesian workflow.
-- Utilizes the ONNX format for translation of differentiable likelihood
-  approximators across backends.
+## At a Glance
 
-### [Official documentation](https://lnccbrown.github.io/HSSM/).
-
-### [Explore the behavior of Sequential Sampling Models](https://franklab-ssms-gui.hf.space/).
-
-## Cite HSSM
-
-Fengler, A., Xu, Y., Bera, K., Paniagua, C.,  Omar, A., Frank, M.J. (in preparation). HSSM: A
-widely applicable toolbox for hierarchical bayesian neurocognitive modeling.
-
-Please also use this DOI: [https://doi.org/10.5281/zenodo.17247695](https://doi.org/10.5281/zenodo.17247695)
-
-## Example
-
-Here is a simple example of how to use HSSM:
-
-```python
-import hssm
-
-# Load a package-supplied dataset
-cav_data = hssm.load_data("cavanagh_theta")
-
-# Define a basic hierarchical model with trial-level covariates
-model = hssm.HSSM(
-    model="ddm",
-    data=cav_data,
-    include=[
-        {
-            "name": "v",
-            "prior": {
-                "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 0.1},
-                "theta": {"name": "Normal", "mu": 0.0, "sigma": 0.1},
-            },
-            "formula": "v ~ theta + (1|participant_id)",
-            "link": "identity",
-        },
-    ],
-)
-
-# Sample from the posterior for this model
-model.sample()
-```
-
-To quickly get started with HSSM, please follow
-[this tutorial](https://lnccbrown.github.io/HSSM/getting_started/getting_started/).
-For a deeper dive into HSSM, please follow
-[our main tutorial](https://lnccbrown.github.io/HSSM/tutorials/main_tutorial/).
+| Use HSSM to... | What this means in practice |
+| --- | --- |
+| Fit sequential-sampling models | Build DDM, LBA, race, angle, and related choice/RT models from a high-level Python API. |
+| Model behavioral, neural, and other trial-wise covariates | Regress model parameters on trial-level predictors such as EEG, eye-tracking, SCR, task condition, or stimulus features. |
+| Use hierarchical and mixed-effects parameter models | Estimate participant-level variation and within- or between-subject effects with Bambi-style formulas. |
+| Work with RLSSMs | Combine reinforcement-learning dynamics with sequential-sampling decision models. |
+| Diagnose and compare Bayesian models | Use ArviZ summaries, trace diagnostics, posterior predictive checks, and model-comparison workflows. |
+| Extend models with custom likelihoods | Register new models and likelihoods when built-in model definitions are not enough. |
 
 ## Installation
 
-HSSM can be directly installed into your conda environment on Linux and MacOS.
-Installing HSSM on windows takes only one more simple step. We have a more
-detailed
-[installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/)
-for users with more specific setups.
+Install HSSM in a fresh virtual environment with Python 3.12, 3.13, or 3.14.
 
-### Install HSSM on Linux and MacOS (CPU only)
-
-Use the following command to install HSSM into your virtual environment:
-
-```bash
-conda install -c conda-forge hssm
-```
-
-### Install HSSM on Linux and MacOS (with GPU Support)
-
-If you need to sample with GPU, please install JAX with GPU support before
-installing HSSM:
-
-```bash
-conda install jaxlib=*=*cuda* jax cuda-nvcc -c conda-forge -c nvidia
-conda install -c conda-forge hssm
-```
-
-### Install HSSM on Windows (CPU only)
-
-Because dependencies such as `jaxlib` and `numpyro` are not up-to-date on Conda,
-the easiest way to install HSSM on Windows is to install PyMC first and install
-HSSM via `pip`:
-
-```bash
-conda install -c conda-forge pymc
-pip install hssm
-```
-
-### Install HSSM on Windows (with GPU support)
-
-You simply need to install JAX with GPU support after installing PyMC:
-
-```bash
-conda install -c conda-forge pymc
-pip install hssm[cuda12]
-```
-
-### Support for Apple Silicon, AMD, and other GPUs
-
-JAX also has support other GPUs. Please follow the
-[Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html)
-to install the correct version of JAX before installing HSSM.
-
-## Advanced Installation
-
-### Install HSSM directly with Pip
-
-HSSM is also available through PyPI. You can directly install it with pip into
-any virtual environment via:
+### CPU
 
 ```bash
 pip install hssm
 ```
 
-**Note:** While this installation is much simpler, you might encounter this
-warning message
-`WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.`
-Please refer to our
-[advanced installation guide](https://lnccbrown.github.io/HSSM/getting_started/installation/)
-for more details.
+You can also add HSSM to a `uv` project:
 
-### Install the dev version of HSSM
+```bash
+uv add hssm
+```
 
-You can install the dev version of `hssm` directly from this repo:
+### CUDA
+
+For NVIDIA GPUs, install HSSM with the CUDA 12 extra:
+
+```bash
+pip install "hssm[cuda12]"
+```
+
+or with `uv`:
+
+```bash
+uv add "hssm[cuda12]"
+```
+
+### Apple Silicon, AMD, and Other Accelerators
+
+JAX supports several accelerator backends. Follow the
+[official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html)
+for your platform, then install HSSM in the same environment.
+
+### Development Version
+
+Install the current development version directly from GitHub:
 
 ```bash
 pip install git+https://github.com/lnccbrown/HSSM.git
 ```
 
-### Install HSSM on Google Colab
+With `uv`:
 
-Google Colab comes with PyMC and JAX pre-configured. That holds true even if you
-are using the GPU and TPU backend, so you simply need to install HSSM via pip on
-Colab regardless of the backend you are using:
+```bash
+uv add git+https://github.com/lnccbrown/HSSM.git
+```
+
+### Google Colab
+
+Google Colab already includes PyMC and JAX, so a standard pip install is enough:
 
 ```bash
 !pip install hssm
 ```
 
-## Troubleshooting
+### Troubleshooting
 
-**Note:** Possible solutions to any issues with installations with hssm can be
-located [here](https://github.com/lnccbrown/HSSM/discussions). Also feel free to
-start a new discussion thread if you don't find answers there. We recommend
-installing HSSM into a new conda environment with Python 3.10 or 3.11 to prevent
-any problems with dependencies during the installation process. Please note that
-hssm is only tested for python 3.10, 3.11. As of HSSM v0.2.0, support for Python
-3.9 is dropped. Use unsupported python versions with caution.
+HSSM is tested on Python 3.12, 3.13, and 3.14. If installation fails, start from
+a fresh virtual environment using one of those Python versions and check
+[GitHub Discussions](https://github.com/lnccbrown/HSSM/discussions) for known
+platform-specific fixes.
 
-## License
+## Quick Start
 
-HSSM is licensed under
-[Copyright 2023, Brown University, Providence, RI](LICENSE)
+```python
+import arviz as az
+import hssm
+
+# Load a package-supplied choice/response-time dataset.
+data = hssm.load_data("cavanagh_theta")
+
+# Build a basic drift-diffusion model.
+model = hssm.HSSM(data=data, model="ddm")
+
+# Draw posterior samples. Increase draws/tune/chains for publication analyses.
+idata = model.sample(draws=1000, tune=1000, chains=4)
+
+# Inspect convergence and posterior summaries with ArviZ.
+az.summary(idata)
+az.plot_trace_dist(idata)
+```
+
+For diagnostics, interpretation, regression formulas, and model comparison, see
+the [getting started guide](https://lnccbrown.github.io/HSSM/getting_started/getting_started/)
+and the [main tutorial](https://lnccbrown.github.io/HSSM/tutorials/main_tutorial/).
+
+## Where HSSM Fits
+
+HSSM is the user-facing modeling layer in the HSSM ecosystem. It builds on
+[PyMC](https://www.pymc.io/) for Bayesian inference,
+[Bambi](https://bambinos.github.io/bambi/) for formula-based and hierarchical
+regression, [ArviZ](https://python.arviz.org/) for diagnostics and model
+comparison, and JAX/PyTensor for computation.
+
+Within the broader ecosystem,
+[ssm-simulators](https://github.com/lnccbrown/ssm-simulators) supplies simulator
+and model definitions, while
+[LANfactory](https://github.com/lnccbrown/LANfactory) supports likelihood
+approximation workflows used to develop new likelihoods.
+
+## Citation
+
+Please cite the current HSSM paper:
+
+Fengler, A., Xu, Y., Bera, K., Paniagua, C., Omar, A., and Frank, M. J.
+HSSM: A Widely Applicable Toolbox for Hierarchical Bayesian Neurocognitive
+Modeling. bioRxiv 2026.06.05.730398.
+
+- DOI: [https://doi.org/10.64898/2026.06.05.730398](https://doi.org/10.64898/2026.06.05.730398)
+- bioRxiv: [https://www.biorxiv.org/content/10.1101/2026.06.05.730398v1](https://www.biorxiv.org/content/10.1101/2026.06.05.730398v1)
+- Software archive DOI, when needed for reproducibility:
+  [https://doi.org/10.5281/zenodo.17247695](https://doi.org/10.5281/zenodo.17247695)
+
+## Next Steps
+
+- [Documentation](https://lnccbrown.github.io/HSSM/)
+- [Getting started](https://lnccbrown.github.io/HSSM/getting_started/getting_started/)
+- [Main tutorial](https://lnccbrown.github.io/HSSM/tutorials/main_tutorial/)
+- [Scientific workflow tutorial](https://lnccbrown.github.io/HSSM/tutorials/scientific_workflow_hssm/)
+- [RLSSM basic tutorial](https://lnccbrown.github.io/HSSM/tutorials/rlssm_basic/)
+- [RLSSM custom models](https://lnccbrown.github.io/HSSM/tutorials/rlssm_advanced/)
+- [Plotting and model checking](https://lnccbrown.github.io/HSSM/tutorials/plotting/)
+- [GitHub Discussions](https://github.com/lnccbrown/HSSM/discussions)
+- [Contribution guide](docs/CONTRIBUTING.md)
 
 ## Support
 
-For questions, please feel free to
+For questions, please
 [open a discussion](https://github.com/lnccbrown/HSSM/discussions).
 
-For bug reports and feature requests, please feel free to
+For bug reports and feature requests, please
 [open an issue](https://github.com/lnccbrown/HSSM/issues) using the
 corresponding template.
 
@@ -210,16 +182,13 @@ corresponding template.
 If you want to contribute to this project, please follow our
 [contribution guidelines](docs/CONTRIBUTING.md).
 
+## License
+
+HSSM is licensed under
+[Copyright 2023, Brown University, Providence, RI](LICENSE).
+
 ## Acknowledgements
 
-We would like to extend our gratitude to the following individuals for their
-valuable contributions to the development of the HSSM package:
-
-- [Bambi](https://github.com/bambinos/bambi) - A special thanks to the Bambi
-  project for providing inspiration, guidance, and support throughout the
-  development process. [Tomás Capretto](https://github.com/tomicapretto), a key
-  contributor to Bambi, provided invaluable assistance in the development of the
-  HSSM package.
-
-Those contributions have greatly enhanced the functionality and quality of the
-HSSM.
+We are grateful to the Bambi project for inspiration, guidance, and support.
+[Tomas Capretto](https://github.com/tomicapretto), a key contributor to Bambi,
+provided invaluable assistance during HSSM development.

@@ -1,15 +1,22 @@
+"""Tests for HSSM utility helpers."""
+
+import sys
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytensor
 import pytest
-from ssms.basic_simulators.simulator import simulator
+import xarray as xr
 from jax import config
+from ssms.basic_simulators.simulator import simulator
 
 import hssm
 from hssm.utils import (
-    set_floatX,
+    _compute_log_likelihood,
     _generate_random_indices,
     _random_sample,
+    set_floatX,
 )
 
 hssm.set_floatX("float32")
@@ -17,6 +24,7 @@ hssm.set_floatX("float32")
 
 @pytest.mark.slow
 def test_get_alias_dict():
+    """Build aliases for default and regression parameterizations."""
     # Simulate some data:
     v_true, a_true, z_true, t_true = [0.5, 1.5, 0.5, 0.5]
     obs_ddm = simulator([v_true, a_true, z_true, t_true], model="ddm", n_samples=1000)
@@ -80,6 +88,7 @@ def test_get_alias_dict():
 
 
 def test_set_floatX():
+    """Synchronize floating-point precision across computational backends."""
     # Should raise error when wrong value is passed.
     with pytest.raises(ValueError):
         set_floatX("bad_value")
@@ -91,6 +100,112 @@ def test_set_floatX():
     set_floatX("float64")
     assert pytensor.config.floatX == "float64"
     assert config.read("jax_enable_x64")
+
+
+@pytest.fixture
+def minimal_log_likelihood_datatree(minimal_posterior_datatree):
+    """Return a factory for compact log-likelihood DataTrees."""
+
+    def _make(include_log_likelihood=False):
+        traces = minimal_posterior_datatree(
+            posterior_var="theta",
+            posterior_values=np.array([[0.25, 0.75]]),
+        )
+        if include_log_likelihood:
+            traces["log_likelihood"] = xr.Dataset(
+                {
+                    "rt,response": (
+                        ("chain", "draw", "__obs__"),
+                        np.full((1, 2, 1), -99.0),
+                    )
+                },
+                coords={"chain": [0], "draw": [0, 1], "__obs__": [0]},
+            )
+        return traces
+
+    return _make
+
+
+def _log_likelihood_model(family):
+    def compute_likelihood_params(
+        dt,
+        data,
+        include_group_specific,
+        sample_new_groups,
+    ):
+        assert data is None
+        assert include_group_specific is True
+        assert sample_new_groups is False
+        return dt
+
+    return SimpleNamespace(
+        response_component=SimpleNamespace(
+            term=SimpleNamespace(alias="rt,response", name="c(rt, response)")
+        ),
+        family=family,
+        _compute_likelihood_params=compute_likelihood_params,
+    )
+
+
+def _fake_log_likelihood(family, **kwargs):
+    assert family is kwargs["model"].family
+    assert kwargs["data"] is None
+    assert kwargs["posterior"].name == "posterior"
+    return xr.DataArray(
+        np.array([[[-1.0], [-2.0]]]),
+        dims=("chain", "draw", "__obs__"),
+        coords={"chain": [0], "draw": [0, 1], "__obs__": [0]},
+    )
+
+
+def test_compute_log_likelihood_returns_deep_copy(
+    minimal_log_likelihood_datatree, monkeypatch
+):
+    """Non-in-place computation leaves the supplied posterior untouched."""
+    model = _log_likelihood_model(family=object())
+    traces = minimal_log_likelihood_datatree()
+    monkeypatch.setattr("hssm.utils.log_likelihood", _fake_log_likelihood)
+
+    result = _compute_log_likelihood(model, traces, data=None, inplace=False)
+
+    assert result is not traces
+    assert isinstance(result, xr.DataTree)
+    assert "log_likelihood" in result
+    assert "log_likelihood" not in traces
+    result["posterior"]["theta"].values[0, 0] = 10.0
+    assert traces["posterior"]["theta"].values[0, 0] == 0.25
+
+
+def test_compute_log_likelihood_rejects_missing_family(
+    minimal_log_likelihood_datatree,
+):
+    """Log-likelihood computation requires a configured model family."""
+    model = _log_likelihood_model(family=None)
+    traces = minimal_log_likelihood_datatree()
+
+    with pytest.raises(
+        ValueError,
+        match="Model family is not defined. Cannot compute log-likelihood.",
+    ):
+        _compute_log_likelihood(model, traces, data=None)
+
+
+def test_compute_log_likelihood_warns_and_replaces_existing_group(
+    caplog, minimal_log_likelihood_datatree, monkeypatch
+):
+    """Recomputation replaces stale log-likelihood values in-place."""
+    model = _log_likelihood_model(family=object())
+    traces = minimal_log_likelihood_datatree(include_log_likelihood=True)
+    monkeypatch.setattr("hssm.utils.log_likelihood", _fake_log_likelihood)
+
+    result = _compute_log_likelihood(model, traces, data=None, inplace=True)
+
+    assert result is traces
+    np.testing.assert_array_equal(
+        traces["log_likelihood"]["rt,response"].values,
+        np.array([[[-1.0], [-2.0]]]),
+    )
+    assert "Replacing existing log_likelihood group in dt." in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -127,6 +242,7 @@ def test__generate_random_indice(caplog, n_samples, n_draws, expected):
 
 
 def assertions(caplog, obj, n_samples, expected):
+    """Assert random-sampling behavior for one xarray object."""
     if expected == "error":
         with pytest.raises(ValueError):
             sampled_obj = _random_sample(obj, n_samples=n_samples)
@@ -134,7 +250,7 @@ def assertions(caplog, obj, n_samples, expected):
         sampled_obj = _random_sample(obj, n_samples=n_samples)
         assert sampled_obj.draw.size == expected
         assert sampled_obj.chain.size == 2
-        assert type(sampled_obj) == type(obj)
+        assert type(sampled_obj) is type(obj)
         if n_samples and n_samples > obj.draw.size:
             assert "n_samples > n_draws" in caplog.text
 
@@ -155,18 +271,20 @@ def assertions(caplog, obj, n_samples, expected):
 )
 def test__random_sample(
     caplog,
-    cav_idata,
+    cav_dt,
     n_samples,
     expected,
 ):
-    posterior = cav_idata.posterior
-    posterior_predictive = cav_idata.posterior_predictive
+    """Subsample posterior groups for supported sample specifications."""
+    posterior = cav_dt["posterior"]
+    posterior_predictive = cav_dt["posterior_predictive"]
 
     assertions(caplog, posterior, n_samples, expected)
     assertions(caplog, posterior_predictive, n_samples, expected)
 
 
 def test_check_data_for_rl():
+    """Validate and sort reinforcement-learning trial data."""
     # Valid DataFrame
     data_valid = pd.DataFrame(
         {
@@ -230,10 +348,17 @@ def test_check_data_for_rl():
     assert n_trials == 2
 
 
+@pytest.mark.xfail(
+    sys.version_info >= (3, 14),
+    reason="sample_posterior_predictive fails on 3.14 with cpickle issue",
+    strict=True,  # This will let us know in the future when this is fixed
+)
 def test_predictive_idata_to_dataframe(data_ddm):
+    """Convert prior-predictive draws to a tidy DataFrame."""
     model = hssm.HSSM(data=data_ddm)
     sample_do = model.sample_do(params={"v": 1.0}, draws=10)
-    df = hssm.utils.predictive_idata_to_dataframe(
+    assert isinstance(sample_do, xr.DataTree)
+    df = hssm.utils.predictive_dt_to_dataframe(
         sample_do, predictive_group="prior_predictive"
     )
     assert df is not None

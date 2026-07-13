@@ -193,6 +193,17 @@ class HSSM(HSSMBase):
         If `True`, the model will process the initial values. Defaults to `True`.
     initval_jitter : optional
         The jitter value for the initial values. Defaults to `0.01`.
+    noncentered : optional
+        Controls the centered vs. non-centered parameterization of
+        group-specific (hierarchical) terms. ``True`` (bambi's default) uses the
+        non-centered parameterization everywhere, ``False`` uses centered. A
+        ``dict`` keyed by HSSM parameter name (e.g. ``{"v": False, "a": True}``)
+        sets it per parameter; an unknown key raises at construction. A per-prior
+        ``noncentered`` field (inside a prior ``dict`` or on an ``hssm.Prior``)
+        overrides the model-level value for that term (precedence: per-prior >
+        model-level dict > default ``True``). Only affects parameters that have a
+        group-specific term (e.g. ``... + (1|participant_id)``); setting it for a
+        non-hierarchical parameter is a silent no-op. Passed to ``bmb.Model``.
     **kwargs
         Additional arguments passed to the `bmb.Model` object.
 
@@ -413,7 +424,7 @@ class HSSM(HSSMBase):
                 is_choice_only=True,
             )
 
-        self.data = _rearrange_data(self.data)
+        self.data = typing_cast("pd.DataFrame", _rearrange_data(self.data))
 
         # Collect fixed-vector params to substitute in the distribution logp
         fixed_vector_params = {
@@ -436,7 +447,10 @@ class HSSM(HSSMBase):
             extra_fields=(
                 None
                 if not self.extra_fields
-                else [deepcopy(self.data[field].values) for field in self.extra_fields]
+                else [
+                    deepcopy(np.asarray(self.data[field].values))
+                    for field in self.extra_fields
+                ]
             ),
             fixed_vector_params=fixed_vector_params if fixed_vector_params else None,
             params_is_trialwise=params_is_trialwise_base,

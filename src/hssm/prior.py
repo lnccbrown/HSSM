@@ -41,6 +41,10 @@ class Prior(bmb.Prior):  # noqa: PLW1641
         ``name``, ``dims``, and ``shape``, as well as its own keyworded arguments.
     bounds : optional
         A tuple of two floats indicating the lower and upper bounds of the prior.
+    noncentered : optional
+        For a group-specific (hierarchical) ``Normal`` prior, whether to use the
+        non-centered parameterization. ``None`` (default) inherits the model-level
+        ``noncentered`` setting; ``True``/``False`` overrides it for this term.
     """
 
     def __init__(
@@ -49,8 +53,13 @@ class Prior(bmb.Prior):  # noqa: PLW1641
         auto_scale: bool = True,
         dist: Callable | None = None,
         bounds: tuple[float, float] | None = None,
+        noncentered: bool | None = None,
         **kwargs,
     ):
+        # Forward the per-term non-centered override (bambi >= 0.19, PR #983) to
+        # bambi only when set, so the default path is unchanged.
+        if noncentered is not None:
+            kwargs["noncentered"] = noncentered
         bmb.Prior.__init__(self, name, auto_scale, dist, **kwargs)
         self.is_truncated = False
         self.bounds = bounds
@@ -90,23 +99,38 @@ class Prior(bmb.Prior):  # noqa: PLW1641
 
     def __eq__(self, other) -> bool:
         """Test equality."""
+        # `noncentered` lives outside `.args` (it changes the group-term
+        # parameterization), so it must be part of equality in every path.
         if isinstance(other, Prior):
             if self.is_truncated and other.is_truncated:
                 return (
                     self.name == other.name
                     and self._args == other._args
                     and self.bounds == other.bounds
+                    and self.noncentered == other.noncentered
                 )
             if not self.is_truncated and not other.is_truncated:
-                return self.name == other.name and self.args == other.args
+                return (
+                    self.name == other.name
+                    and self.args == other.args
+                    and self.noncentered == other.noncentered
+                )
             return False
 
         if isinstance(other, bmb.Prior):
             if self.is_truncated:
                 return False
             if self.dist is not None:
-                return self.name == other.name and self.dist == other.dist
-            return self.name == other.name and self.args == other.args
+                return (
+                    self.name == other.name
+                    and self.dist == other.dist
+                    and self.noncentered == other.noncentered
+                )
+            return (
+                self.name == other.name
+                and self.args == other.args
+                and self.noncentered == other.noncentered
+            )
 
         return False
 

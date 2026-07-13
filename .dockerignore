@@ -1,0 +1,16 @@
+# Keep the build context small. The Dockerfile only COPYs pyproject/README/LICENSE,
+# src, and docs/tutorials; everything else is noise.
+.git
+.github
+.venv
+**/__pycache__
+*.pyc
+*.pyo
+**/.ipynb_checkpoints
+tests
+.pytest_cache
+.ruff_cache
+.mypy_cache
+# Only docs/tutorials is copied into the image; drop the rest of docs/ from context.
+docs/*
+!docs/tutorials

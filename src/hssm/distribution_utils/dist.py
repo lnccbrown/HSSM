@@ -34,7 +34,7 @@ from .onnx_utils.model import load_onnx_model
 
 _logger = logging.getLogger("hssm")
 
-LOGP_LB = pm.floatX(-66.1)
+LOGP_LB = pm.pytensorf.floatX(-66.1)
 
 
 def apply_param_bounds_to_loglik(
@@ -62,7 +62,10 @@ def apply_param_bounds_to_loglik(
     """
     dist_params_dict = dict(zip(list_params, dist_params))
 
-    bounds = {k: (pm.floatX(v[0]), pm.floatX(v[1])) for k, v in bounds.items()}
+    bounds = {
+        k: (pm.pytensorf.floatX(v[0]), pm.pytensorf.floatX(v[1]))
+        for k, v in bounds.items()
+    }
     out_of_bounds_mask = pt.zeros_like(logp, dtype=bool)
 
     for param_name, param in dist_params_dict.items():
@@ -129,7 +132,7 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
 
 class _RandomVariable(Protocol):  # for mypy
     _list_params: list[str]
-    _lapse: bmb.Prior
+    _lapse: bmb.Prior | float | None
 
 
 def _extract_size(args, kwargs):
@@ -156,7 +159,7 @@ def _extract_size(args, kwargs):
     return size, args, kwargs
 
 
-def _create_arg_arrays(cls: bmb.Prior, args: tuple) -> list[np.ndarray]:
+def _create_arg_arrays(cls: type[_RandomVariable], args: tuple) -> list[np.ndarray]:
     """
     Create argument arrays from input arguments.
 
@@ -178,7 +181,7 @@ def _create_arg_arrays(cls: bmb.Prior, args: tuple) -> list[np.ndarray]:
     return arg_arrays
 
 
-def _get_p_outlier(cls: _RandomVariable, arg_arrays):
+def _get_p_outlier(cls: type[_RandomVariable], arg_arrays):
     """Get p_outlier from arg_arrays and update arg_arrays."""
     list_params = cls._list_params
     p_outlier = None
@@ -190,7 +193,7 @@ def _get_p_outlier(cls: _RandomVariable, arg_arrays):
 def make_hssm_rv(
     simulator_fun: Callable | str,
     list_params: list[str],
-    lapse: bmb.Prior | None = None,
+    lapse: bmb.Prior | float | None = None,
     is_choice_only: bool = False,
 ) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
@@ -323,7 +326,7 @@ def _apply_lapse_model(
     sims_out: np.ndarray,
     p_outlier: np.ndarray | float | None,
     rng: np.random.Generator,
-    lapse_dist: bmb.Prior | None,
+    lapse_dist: bmb.Prior | float | None,
     choices: list,
 ) -> np.ndarray:
     """Apply lapse model to the simulation output.
@@ -355,6 +358,16 @@ def _apply_lapse_model(
             "distribution but did not specify the distribution."
         )
 
+    if not isinstance(lapse_dist, bmb.Prior):
+        # A numeric `lapse` (e.g. `1 / n_choices` for choice-only models) has no
+        # reaction-time distribution to draw lapse RTs from, so it cannot drive
+        # simulation via this RT/response path.
+        raise TypeError(
+            "Lapse simulation is not supported for choice-only models with a "
+            f"numeric lapse ({lapse_dist!r}). Provide a `bmb.Prior` lapse "
+            "distribution to simulate lapses, or disable `p_outlier`."
+        )
+
     out_shape = sims_out.shape[:-1]
 
     # Handle p_outlier shape/type to ensure consistent shape:
@@ -380,10 +393,13 @@ def _apply_lapse_model(
     replace_shape = (*out_shape[:-1], replace_n)
     replace_mask = np.stack([replace, replace], axis=-1)
     n_draws = np.prod(replace_shape)
-    lapse_rt = pm.draw(
-        get_distribution_from_prior(lapse_dist).dist(**lapse_dist.args),
-        n_draws,
-        random_seed=rng,
+    lapse_rt = cast(
+        "np.ndarray",
+        pm.draw(
+            get_distribution_from_prior(lapse_dist).dist(**lapse_dist.args),
+            n_draws,
+            random_seed=rng,
+        ),
     ).reshape(replace_shape)
 
     lapse_response = rng.choice(
@@ -474,6 +490,7 @@ def make_distribution(
             simulator_fun=cast("Callable[..., Any]", rv),
             list_params=list_params,
             lapse=lapse,
+            is_choice_only=is_choice_only,
         )
         rv_instance = random_variable()
     elif isinstance(rv, str):
@@ -481,6 +498,7 @@ def make_distribution(
             simulator_fun=rv,
             list_params=list_params,
             lapse=lapse,
+            is_choice_only=is_choice_only,
         )
         rv_instance = random_variable()
     else:
@@ -497,7 +515,9 @@ def make_distribution(
     if fixed_vector_params:
         for name, vector in fixed_vector_params.items():
             idx = list_params.index(name)
-            _fixed_vector_substitutions[idx] = pt.as_tensor_variable(pm.floatX(vector))
+            _fixed_vector_substitutions[idx] = pt.as_tensor_variable(
+                pm.pytensorf.floatX(vector)
+            )
 
     if lapse is not None:
         if list_params[-1] != "p_outlier":
@@ -531,7 +551,8 @@ def make_distribution(
         @classmethod
         def dist(cls, **kwargs):  # pylint: disable=arguments-renamed
             dist_params = [
-                pt.as_tensor_variable(pm.floatX(kwargs[param])) for param in cls._params
+                pt.as_tensor_variable(pm.pytensorf.floatX(kwargs[param]))
+                for param in cls._params
             ]
             other_kwargs = {k: v for k, v in kwargs.items() if k not in cls._params}
             return super().dist(dist_params, **other_kwargs)
@@ -682,7 +703,7 @@ def make_distribution_for_supported_model(
 def make_family(
     dist: type[pm.Distribution],
     list_params: list[str],
-    link: str | dict[str, bmb.families.Link],
+    link: str | dict[str, str | bmb.families.Link],
     parent: str = "v",
     likelihood_name: str = "SSM Likelihood",
     family_name="SSM Family",

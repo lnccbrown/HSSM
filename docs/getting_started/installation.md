@@ -1,78 +1,48 @@
 # Installation
 
-**Important Update:** From HSSM 0.2.2, `conda-forge` is the official way of installing HSSM. This will also install other libraries such as `libblas` that PyMC requires to run properly.
+**Important Update:** From HSSM 0.4.0, HSSM supports installation directly through `pip` or `uv` on all platforms. You can still install HSSM into conda environments via `pip`, but `conda install hssm` no longer installs the latest version of HSSM.
 
-## Step 1: Create a conda environment
+Please follow the instructions below to install HSSM.
 
-If you haven't already, please follow the [Anaconda official website](https://www.anaconda.com/download) to install conda. We assume that you already have one of [Anaconda](https://www.anaconda.com/download), [Miniconda](https://docs.anaconda.com/free/miniconda/index.html), [miniforge](https://github.com/conda-forge/miniforge/releases), or [mambaforge](https://github.com/conda-forge/miniforge/releases) installed on your system and have access to either `conda` or `mamba` available on your command line.
+## Option 1: Installation with uv
 
-To create a conda environment, use the following command. Substitute `mamba` for `conda` if `mamba` is available:
+We highly recommend that the installation of HSSM is done through `uv`, a package manager that simplifies the installation of Python packages and their dependencies. You can install `uv` by following the instructions on the [uv official website](https://docs.astral.sh/uv/getting-started/installation/).
 
-```bash
-conda create -n <your-env-name> python=3.11
-conda activate <your-env-name>
-```
-
-Substitute `<your-env-name>` with the name of the virtual environment that you choose. HSSM 0.2.0 and above supports Python versions 3.10 and 3.11.
-
-## Step 2: Install HSSM
-
-HSSM can be directly installed into your conda environment on Linux and MacOS. Installing HSSM on windows takes only one more simple step.
-
-### Install HSSM on Linux and MacOS (CPU only)
-
-Use the following command to install HSSM into your virtual environment:
+Once `uv` is installed, you can install uv in one of the following ways:
 
 ```bash
-conda install -c conda-forge hssm
+uv venv ## creates a new virtual environment
+uv pip install hssm
 ```
 
-### Install HSSM on Linux and MacOS (with GPU Support)
-
-If you need to sample with GPU, please install JAX with GPU support before installing HSSM:
+You can also add hssm to an existing Python project by:
 
 ```bash
-conda install jaxlib=*=*cuda* jax cuda-nvcc -c conda-forge -c nvidia
-conda install -c conda-forge hssm
+uv add hssm
 ```
 
-### Install HSSM on Windows (CPU only)
+## Option 2: Installation with pip
 
-Because `jaxlib` is not available through `conda-forge` on Windows, you need to install JAX on Windows through `pip` before getting HSSM:
-
-```bash
-pip install jax
-conda install -c conda-forge hssm
-```
-
-### Install HSSM on Windows (with GPU support)
-
-You simply need to install JAX with GPU support before getting HSSM:
-
-```bash
-pip install jax[cuda12]
-conda install -c conda-forge hssm
-```
-
-### Support for Apple Silicon, AMD, and other GPUs
-
-JAX also has support other GPUs. Please follow the [Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) to install the correct version of JAX before installing HSSM.
-
-
-## Advanced Installation
-
-### Install HSSM directly with Pip
-
-HSSM is also available through PyPI. You can directly install it with pip into any virtual environment via:
+HSSM can also be installed directly through `pip`. You can install HSSM into any virtual environment via:
 
 ```bash
 pip install hssm
 ```
 
-!!! note
+### Install HSSM (with GPU Support)
 
-    While this installation is much simpler, you might encounter this warning message `WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.` You can follow
-    [this discussion](https://github.com/pymc-devs/pytensor/issues/524) to link a BLAS library with `pytensor`.
+If you need to sample with GPU, please install JAX with GPU support before
+installing HSSM:
+
+```bash
+pip install hssm[cuda12]
+```
+
+### Support for Apple Silicon, AMD, and other GPUs
+
+JAX also has support other GPUs. Please follow the
+[Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html)
+to install the correct version of JAX before installing HSSM.
 
 ### Install the dev version of HSSM
 
@@ -84,7 +54,9 @@ pip install git+https://github.com/lnccbrown/HSSM.git
 
 ### Install HSSM on Google Colab
 
-Google Colab comes with PyMC and JAX pre-configured. That holds true even if you are using the GPU and TPU backend, so you simply need to install HSSM via pip on Colab regardless of the backend you are using:
+Google Colab comes with PyMC and JAX pre-configured. That holds true even if you
+are using the GPU and TPU backend, so you simply need to install HSSM via pip on
+Colab regardless of the backend you are using:
 
 ```bash
 !pip install hssm
@@ -97,14 +69,14 @@ packages installed for additional features such as sampling with `blackjax` or G
 for `JAX`. Please follow the instructions below if you need any of these additional
 features:
 
-### 1. Sampling with JAX through `numpyro` or `blackjax`
+### 1. Sampling with JAX through `numpyro`, `nutpie` or `blackjax`
 
-JAX-based sampling is done through `numpyro` and `blackjax`. `numpyro` is installed as
+JAX-based sampling is done through `numpyro`, `nutpie`, or `blackjax`. `numpyro` is installed as
 a dependency by default. You need to have `blackjax` installed if you want to use the
 `blackjax` sampler.
 
 ```bash
-pip install blackjax
+pip install blackjax nutpie
 ```
 
 ### 2. Visualizing the model with `graphviz`
@@ -140,11 +112,11 @@ pip install graphviz
 WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS functions.
 ```
 
-   This is because `pytensor`, the compute backend of PyMC, cannot find a BLAS library on your
-   system to optimize its computation. This can be resolved by following the recommended
-   steps to install HSSM into a conda environment. If conda cannot be used, you can follow
-   [this discussion](https://github.com/pymc-devs/pytensor/issues/524) to link a BLAS library
-   with `pytensor`.
+This is because `pytensor`, the compute backend of PyMC, cannot find a BLAS library on your
+system to optimize its computation. This can be resolved by following the recommended
+steps to install HSSM into a conda environment. If conda cannot be used, you can follow
+[this discussion](https://github.com/pymc-devs/pytensor/issues/524) to link a BLAS library
+with `pytensor`.
 
 2. `pip` installation fails with missing dependencies:
 

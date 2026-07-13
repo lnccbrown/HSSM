@@ -95,3 +95,4 @@ explorations/
 pypi-token
 pre-commit
 .github/copilot-instructions.md
+uv.lock

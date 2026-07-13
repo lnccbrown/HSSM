@@ -1,9 +1,9 @@
 """Plotting utilities for HSSM."""
 
 import logging
+import numbers
 from typing import Any, Iterable, Literal, cast
 
-import arviz as az
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -133,7 +133,7 @@ def _hdi_to_interval(hdi: str | float | tuple[float, float]) -> tuple[float, flo
 
 
 def _get_plotting_df(
-    idata: az.InferenceData | None = None,
+    dt: xr.DataTree | None = None,
     data: pd.DataFrame | None = None,
     extra_dims: list[str] | None = None,
     quantile_by_dims: list[str] | str | None = None,
@@ -147,14 +147,14 @@ def _get_plotting_df(
 
     Parameters
     ----------
-    idata : optional
-        An InferenceData object. If not provided, the function will only return the
+    dt : optional
+        A DataTree object. If not provided, the function will only return the
         processed original data.
     data: optional
         A dataframe with the original data. If not provided, the function will only
         return the posterior samples without appending the observed data.
     extra_dims, optional
-        Extra dimensions to be added to the dataframe from `idata`, by default None
+        Extra dimensions to be added to the dataframe from `dt`, by default None
     quantile_by_dims, optional
         Extra dimensions to be used for quantiles.
     n_samples, optional
@@ -184,19 +184,21 @@ def _get_plotting_df(
                     "`quantile_by_dims` and `extra_dims` must not have any overlap."
                 )
 
-    if idata is None and data is None:
-        raise ValueError("Either idata or data must be provided.")
+    if dt is None and data is None:
+        raise ValueError("Either dt or data must be provided.")
 
     extra_dims = [] if extra_dims is None else extra_dims
 
-    if idata is None:
+    if dt is None:
+        if data is None:
+            raise ValueError("`data` must be provided when `dt` is not provided.")
         data = _process_data(data, extra_dims, quantile_by_dims)
 
         data.insert(0, "observed", "observed")
         return data
 
     # get the posterior samples
-    idata_predictive = idata[predictive_group][response_str]
+    idata_predictive = cast("xr.DataArray", dt[predictive_group][response_str])
     predictive = _xarray_to_df(idata_predictive, n_samples=n_samples)
 
     if data is None:
@@ -291,12 +293,15 @@ def _subset_df(
     pd.DataFrame
         A subset dataframe.
     """
-    row_mask = np.column_stack(
-        [
-            _row_mask_with_error(df, col, col_value)
-            for col, col_value in zip(cols, col_values)
-        ]
-    ).all(axis=1)
+    row_mask = cast(
+        "np.ndarray",
+        np.column_stack(
+            [
+                _row_mask_with_error(df, col, col_value)
+                for col, col_value in zip(cols, col_values)
+            ]
+        ).all(axis=1),
+    )
 
     return df.loc[row_mask, :]
 
@@ -359,14 +364,17 @@ def _process_df_for_qp_plot(
         if any(q_elem < 0 or q_elem > 1 for q_elem in q):
             raise ValueError("All elements in `q` must be between 0 and 1.")
 
-    if isinstance(q, int):
-        if q >= 10:
+    if isinstance(q, numbers.Integral):
+        q_int = int(q)
+        if q_int >= 10:
             _logger.warning(
                 "The number of quantiles (%d) is high. Generally 4-5 quantiles are"
                 + " ideal for visualizing the data.",
-                q,
+                q_int,
             )
-        q = np.linspace(0, 1, q)[1:-1]
+        q_arr = np.linspace(0, 1, q_int)[1:-1]
+    else:
+        q_arr = np.asarray(list(cast("Iterable[float]", q)), dtype=float)
 
     if not isinstance(cond, str):
         raise ValueError("`cond` must be a string.")
@@ -396,7 +404,7 @@ def _process_df_for_qp_plot(
 
         # Compute quantiles with the extra grouping variables
         quantiles = (
-            df.groupby(base_groups + quantile_by)["rt"].quantile(q=q).reset_index()
+            df.groupby(base_groups + quantile_by)["rt"].quantile(q=q_arr).reset_index()
         )
 
         # Find and rename the level_* column
@@ -418,7 +426,7 @@ def _process_df_for_qp_plot(
         # Original behavior: compute quantiles directly
         quantiles = (
             df.groupby(["observed", "chain", "draw", cond, "is_correct"])["rt"]
-            .quantile(q=q)
+            .quantile(q=q_arr)
             .reset_index()
         )
 
@@ -485,47 +493,47 @@ def _check_groups_and_groups_order(
 def _use_traces_or_sample(
     model,
     data: pd.DataFrame | None,
-    idata: az.InferenceData | None,
+    dt: xr.DataTree | None,
     n_samples: int | float | None,
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
-) -> tuple[az.InferenceData, bool]:
-    """Check if idata is provided, otherwise use traces.
+) -> tuple[xr.DataTree, bool]:
+    """Check if dt is provided, otherwise use traces.
 
     Also, if posterior predictive samples are not contained in traces, sample from
     the model.
     """
     # First, determine whether posterior predictive samples are available
     # If not, we need to sample from the posterior
-    if idata is None:
+    if dt is None:
         if model.traces is None:
             raise ValueError(
-                "No InferenceData object provided. Please provide an InferenceData "
+                "No DataTree object provided. Please provide a DataTree "
                 + "object or sample the model first using model.sample()."
             )
-        idata = model.traces
+        dt = model.traces
 
     sampled = False
 
-    if predictive_group not in idata:
+    if predictive_group not in dt:
         _logger.info(
             "No %s samples found. Generating %s samples using the provided "
-            "InferenceData object and the original data. "
-            "This will modify the provided InferenceData object, "
+            "DataTree object and the original data. "
+            "This will modify the provided DataTree object, "
             "or if not provided, the traces object stored inside the model.",
             predictive_group,
             predictive_group,
         )
         if predictive_group == "posterior_predictive":
             model.sample_posterior_predictive(
-                idata=idata,
+                dt=dt,
                 data=data,
                 inplace=True,
                 draws=n_samples,
             )
         elif predictive_group == "prior_predictive":
-            idata = model.sample_prior_predictive(
+            dt = model.sample_prior_predictive(
                 draws=n_samples,
                 omit_offsets=False,
             )
@@ -534,7 +542,7 @@ def _use_traces_or_sample(
         # AF-TODO: 'sampled' logic needs to be re-examined
         sampled = True
 
-    return cast("az.InferenceData", idata), sampled
+    return cast("xr.DataTree", dt), sampled
 
 
 def _check_sample_size(plotting_df):
@@ -552,7 +560,7 @@ def _check_sample_size(plotting_df):
         )
 
 
-def _to_idata_group(
+def _to_dt_group(
     predictive_group: Literal["posterior_predictive", "prior_predictive"],
 ) -> Literal["posterior", "prior"]:
     return "posterior" if predictive_group == "posterior_predictive" else "prior"

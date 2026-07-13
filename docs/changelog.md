@@ -1,5 +1,27 @@
 # Changelog
 
+### 0.4.0
+
+This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
+
+#### Major new features:
+
+1. A new `RLSSM` class has been added to support reinforcement learning sequential sampling models.
+2. Per-parameter centered vs. non-centered parameterization. Pass `noncentered` to `HSSM(...)` as a `dict` keyed by parameter name (e.g. `noncentered={"v": False, "a": True}`), or set a per-prior `noncentered` field on a group term's prior (dict or `hssm.Prior`) to override the model-level choice. Requires Bambi >= 0.19. See the "Per-parameter centered vs. non-centered parameterization" tutorial.
+
+#### Breaking changes that require migration:
+
+1. Dependencies have been streamlined to support PyMC 6.0+, pytensor 3.0+, ArviZ 1.0+, and Bambi 0.19+.
+2. We added support for Python 3.14. However, `sample_posterior_predictive` sometimes fails due to a `cloudpickle` issue. Use Python 3.14 with caution if you have to perform posterior predictive sampling.
+3. Consistent with PyMC 6.0+ and ArviZ 1,0+ expectations, the `model.sample()` by default uses `numba` as the compute backend.
+4. `model.sample()` now returns an `xarray.DataTree` object instead of the `arviz.InferenceData` object. Other functions that expect `arviz.InferenceData` objects have been updated to accept `xarray.DataTree` objects.
+5. `model.summary()` and `model.plot_trace()` methods are now removed. Use `az.summary()` and `az.plot_trace_dist()` instead.
+6. HSSM can now be installed directly from PyPI via `pip` or `uv`. Conda support is no longer provided.
+
+#### Bug fixes:
+
+1. **Restore JAX-NUTS jitter control**: HSSM again disables the built-in initial-value jitter of the `numpyro`/`blackjax` samplers (PyMC 6 removed the public switch that made this possible), so sampling starts from HSSM's own controlled `initval_jitter` instead of an extra uniform jitter (#999).
+
 ### 0.3.1
 
 This version includes the following changes:

@@ -551,11 +551,13 @@ def make_rl_logp_func(
     list_params = list_params or []
     extra_fields = extra_fields or []
 
-    # Pre-compute vmapped versions of all compute functions
+    # Pre-compute vmapped versions of unique compute functions. Several computed
+    # parameters may share the same function when one RL replay produces multiple
+    # decision parameters (for example q0, q1, q2).
     vmapped_compute_funcs = (
         {
-            param_name: jax.vmap(compute_func, in_axes=0)
-            for param_name, compute_func in ssm_logp_func.computed.items()
+            compute_func: jax.vmap(compute_func, in_axes=0)
+            for compute_func in set(ssm_logp_func.computed.values())
         }
         if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed
         else {}
@@ -585,21 +587,67 @@ def make_rl_logp_func(
         subj_trials = jnp.stack(cols_data, axis=1)
         return subj_trials.reshape(n_participants, n_trials, -1)
 
-    def compute_parameter(
-        param_name: str, data: np.ndarray, args: tuple
-    ) -> jnp.ndarray:
-        """Compute a single parameter."""
-        compute_func = ssm_logp_func.computed[param_name]
-        vmapped_func = vmapped_compute_funcs[param_name]
+    def _reshape_computed_output(value: Any) -> jnp.ndarray:
+        return jnp.asarray(value).reshape((-1, 1))
+
+    def _extract_computed_outputs(
+        computed_values: Any,
+        compute_func: AnnotatedFunction,
+    ) -> dict[str, jnp.ndarray]:
+        """Normalize one compute-function result to ``output_name -> column``."""
+        outputs = list(getattr(compute_func, "outputs", []))
+        if isinstance(computed_values, dict):
+            return {
+                name: _reshape_computed_output(computed_values[name])
+                for name in outputs
+                if name in computed_values
+            }
+
+        if len(outputs) == 1:
+            return {outputs[0]: _reshape_computed_output(computed_values)}
+
+        if isinstance(computed_values, (tuple, list)) and len(computed_values) == len(
+            outputs
+        ):
+            return {
+                name: _reshape_computed_output(value)
+                for name, value in zip(outputs, computed_values)
+            }
+
+        computed_array = jnp.asarray(computed_values)
+        if computed_array.ndim >= 1 and computed_array.shape[-1] == len(outputs):
+            return {
+                name: _reshape_computed_output(computed_array[..., i])
+                for i, name in enumerate(outputs)
+            }
+
+        raise ValueError(
+            "A multi-output computed function must return a dict, a sequence "
+            "aligned with its .outputs, or an array whose last dimension matches "
+            f".outputs. Got outputs={outputs} and result shape={computed_array.shape}."
+        )
+
+    def compute_parameter_group(
+        param_names: list[str], data: np.ndarray, args: tuple
+    ) -> dict[str, jnp.ndarray]:
+        """Compute all requested outputs from one shared compute function."""
+        compute_func = ssm_logp_func.computed[param_names[0]]
+        vmapped_func = vmapped_compute_funcs[compute_func]
 
         # Prepare data for computation
         subj_trials = _prepare_subj_trials(compute_func, data, args)
 
-        # Apply pre-vmapped function to compute parameter values
+        # Apply pre-vmapped function to compute parameter values.
         computed_values = vmapped_func(subj_trials)
+        normalized_outputs = _extract_computed_outputs(computed_values, compute_func)
 
-        # Reshape back to 2D (total_trials, 1) for concatenation
-        return computed_values.reshape((-1, 1))
+        missing_outputs = set(param_names) - normalized_outputs.keys()
+        if missing_outputs:
+            raise ValueError(
+                f"Computed function with outputs {compute_func.outputs} did not "
+                f"return values for requested parameter(s): {sorted(missing_outputs)}."
+            )
+        return {name: normalized_outputs[name] for name in param_names}
 
     def logp(data, *args) -> Array:
         """Compute the log-likelihood for the RLDM model for each trial.
@@ -626,6 +674,9 @@ def make_rl_logp_func(
         np.ndarray
             The computed log-likelihoods for each trial, reshaped as a 2D array.
         """
+        if data_cols == ["response"] and data.ndim == 1:
+            data = data.reshape((-1, 1))
+
         # Validate inputs
         _validate_inputs(
             data, args, n_participants, n_trials, data_cols, list_params, extra_fields
@@ -643,14 +694,17 @@ def make_rl_logp_func(
         # Validate that all computed parameters have compute functions
         _validate_computed_parameters(ssm_logp_func, ssm_logp_func_colidxs.computed)
 
-        computed_param_values = (
-            {
-                param_name: compute_parameter(param_name, data, args)
-                for param_name in ssm_logp_func_colidxs.computed
-            }
-            if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed
-            else {}
-        )
+        computed_param_values: dict[str, jnp.ndarray] = {}
+        if hasattr(ssm_logp_func, "computed") and ssm_logp_func.computed:
+            computed_groups: dict[AnnotatedFunction, list[str]] = {}
+            for param_name in ssm_logp_func_colidxs.computed:
+                compute_func = ssm_logp_func.computed[param_name]
+                computed_groups.setdefault(compute_func, []).append(param_name)
+
+            for param_names in computed_groups.values():
+                computed_param_values.update(
+                    compute_parameter_group(param_names, data, args)
+                )
 
         # Extract non-computed parameters
         non_computed_args = _collect_cols_arrays(

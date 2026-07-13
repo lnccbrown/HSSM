@@ -22,6 +22,7 @@ SupportedModels = Literal[
     "race_no_bias_angle_4",
     "ddm_seq2_no_bias",
     "lba3",
+    "lba4",
     "lba2",
     "racing_diffusion_3",
     "poisson_race",
