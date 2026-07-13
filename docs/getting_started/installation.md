@@ -88,13 +88,15 @@ pip install blackjax nutpie
 ### 2. Visualizing the model with `graphviz`
 
 Model graphs are created with `model.graph()` through `graphviz`. You need to have
-`graphviz` installed system-wide and then install its Python binding:
+the Graphviz binaries available on your `PATH` (the `dot` command) and then install
+its Python binding:
 
-#### Install graphviz system-wide
+#### Install the Graphviz binaries
 
-Please follow the instructions on the
-[graphviz official site](https://graphviz.org/download/) to install graphviz for your
-specific platform.
+Install Graphviz through your package manager (e.g. conda or Homebrew) or by
+following the instructions on the
+[graphviz official site](https://graphviz.org/download/) for your specific platform.
+Make sure the `dot` command is on your `PATH`.
 
 #### Install graphviz python binding
 
