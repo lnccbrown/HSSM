@@ -116,15 +116,19 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, method, expected)
 
 @pytest.mark.slow
 @pytest.mark.parametrize("method", ["advi", "fullrank_advi"])
-def test_vi_jax_compile_backend(data_ddm, method):
+@pytest.mark.parametrize("backend_arg", ["jax", None])
+def test_vi_jax_compile_backend(data_ddm, method, backend_arg):
     """End-to-end regression test for #1056: VI compiled through the JAX linker.
 
     Exercises the LANLogpVJPOp jax_funcify registration plus the scoped
     PyMC compatibility shims in `hssm._vi_compat` (static parameter shapes;
-    numpy coercion before `approx.sample`).
+    numpy coercion before `approx.sample`). Runs both with an explicit
+    ``backend="jax"`` and with ``backend=None``, where the jax backend is
+    inferred from the angle model's jax model config (#1060) — the inferred
+    route must hit the same shims.
     """
     model = hssm.HSSM(data_ddm, model="angle", p_outlier=0.0)
-    model.vi(method=method, niter=100, draws=10, backend="jax", progressbar=False)
+    model.vi(method=method, niter=100, draws=10, backend=backend_arg, progressbar=False)
     assert isinstance(model.vi_idata, xr.DataTree)
     assert isinstance(model.vi_approx, pm.variational.Approximation)
 
