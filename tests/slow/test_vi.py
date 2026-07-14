@@ -112,3 +112,32 @@ def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, method, expected)
         a=param_reg_a,
     )
     run_vi(model, method, expected)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("method", ["advi", "fullrank_advi"])
+def test_vi_jax_compile_backend(data_ddm, method):
+    """End-to-end regression test for #1056: VI compiled through the JAX linker.
+
+    Exercises the LANLogpVJPOp jax_funcify registration plus the scoped
+    PyMC compatibility shims in `hssm._vi_compat` (static parameter shapes;
+    numpy coercion before `approx.sample`).
+    """
+    model = hssm.HSSM(data_ddm, model="angle", p_outlier=0.0)
+    model.vi(method=method, niter=100, draws=10, backend="jax", progressbar=False)
+    assert isinstance(model.vi_idata, xr.DataTree)
+    assert isinstance(model.vi_approx, pm.variational.Approximation)
+
+
+@pytest.mark.slow
+def test_vi_c_compile_backend(data_ddm):
+    """VI with the explicit C compile backend (the documented #1056 workaround).
+
+    The parametrized tests above exercise only pymc's default compile mode;
+    this pins the `backend="c"` path, which runs the LAN Ops' perform/VJP
+    through the C VM.
+    """
+    model = hssm.HSSM(data_ddm, model="angle", p_outlier=0.0)
+    model.vi(method="advi", niter=100, backend="c", progressbar=False)
+    assert isinstance(model.vi_idata, xr.DataTree)
+    assert isinstance(model.vi_approx, pm.variational.Approximation)

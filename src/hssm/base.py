@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
     from pytensor.tensor.variable import TensorVariable
 
+from hssm import _vi_compat
 from hssm._types import SupportedModels
 from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import (
@@ -810,6 +811,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
             # Sample from the approximate posterior
             if self._vi_approx is not None:
+                _vi_compat.coerce_approx_params_to_numpy(self._vi_approx)
                 self._inference_obj_vi = self._vi_approx.sample(draws)
 
         # Post-processing
