@@ -585,7 +585,15 @@ def test_deprecated_inference_helpers_raise_documented_error(
 def test_vi_passes_backend_to_pm_fit(
     data_ddm, monkeypatch, config_backend, backend_arg, expected_backend
 ):
-    """The resolved backend is forwarded to `pm.fit`."""
+    """The resolved backend is forwarded to `pm.fit`, with the jax shim active.
+
+    The shim assertion guards against the `_vi_compat.static_shape_vi_params`
+    gate being dropped or gated on the wrong variable (regression of the
+    #1059/#1060 merge): whenever the *resolved* backend is "jax", the
+    static-shape patch must be active at the moment `pm.fit` runs.
+    """
+    from pymc.variational import approximations
+
     model = HSSM(data=data_ddm, model="ddm")
     model.model_config.backend = config_backend
 
@@ -593,6 +601,11 @@ def test_vi_passes_backend_to_pm_fit(
 
     def fake_fit(*args, **kwargs):
         captured["backend"] = kwargs.get("backend")
+        # The shim wraps create_shared_params with functools.wraps, so the
+        # patched method carries __wrapped__ while the context is active.
+        captured["shim_active"] = hasattr(
+            approximations.MeanFieldGroup.create_shared_params, "__wrapped__"
+        )
 
     monkeypatch.setattr("hssm.base.pm.fit", fake_fit)
     # Skip post-processing since fake_fit returns no approximation object.
@@ -601,6 +614,11 @@ def test_vi_passes_backend_to_pm_fit(
     model.vi(niter=1, draws=1, backend=backend_arg)
 
     assert captured["backend"] == expected_backend
+    assert captured["shim_active"] == (expected_backend == "jax")
+    # The patch is scoped: always reverted after vi() returns.
+    assert not hasattr(
+        approximations.MeanFieldGroup.create_shared_params, "__wrapped__"
+    )
 
 
 def test_vi_idata_rejects_attached_approximation(data_ddm):

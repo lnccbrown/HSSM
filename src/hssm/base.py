@@ -805,9 +805,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # Run variational inference directly from pymc model
         # pyrefly: ignore[bad-context-manager]
         with self.pymc_model:
-            self._vi_approx = pm.fit(
-                n=niter, method=method, backend=backend, **vi_kwargs
-            )
+            if backend == "jax":
+                # Two PyMC bugs currently break backend="jax" for every
+                # model; this scoped, self-disabling shim works around the
+                # first (static parameter shapes) until the pinned PyMC
+                # includes the upstream fixes (see hssm._vi_compat, #1056).
+                # Gate on the *resolved* backend: it is a named parameter,
+                # so it never appears in vi_kwargs.
+                with _vi_compat.static_shape_vi_params():
+                    self._vi_approx = pm.fit(
+                        n=niter, method=method, backend=backend, **vi_kwargs
+                    )
+            else:
+                self._vi_approx = pm.fit(
+                    n=niter, method=method, backend=backend, **vi_kwargs
+                )
 
             # Sample from the approximate posterior
             if self._vi_approx is not None:
