@@ -1,6 +1,6 @@
 [project]
 name = "HSSM"
-version = "0.4.0"
+version = "0.4.1"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
@@ -43,7 +43,8 @@ documentation = "https://lnccbrown.github.io/HSSM/"
 repository = "https://github.com/lnccbrown/HSSM"
 
 [project.optional-dependencies]
-cuda12 = ["jax[cuda12]>=0.5.2"]
+cuda12 = ["jax[cuda12]>=0.7.0"]
+cuda13 = ["jax[cuda13]>=0.7.0"]
 
 [dependency-groups]
 dev = [

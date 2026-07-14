@@ -31,12 +31,19 @@ def test_addm_log_likelihood_enables_waic_loo():
     df = make_addm_dataframe(30, seed=1)
     model = hssm.aDDM(data=df)
 
-    # >=26 total draws so arviz 1.x PSIS-LOO has a >=5-sample Pareto tail.
+    # arviz 1.x PSIS-LOO fits a generalized Pareto to the top ~min(0.2*S, 3*sqrt(S))
+    # importance weights per observation and RAISES on a degenerate tail: it needs
+    # >=5 tail draws (count) AND spread among them (distinctness). Duplicate draws
+    # from a barely-adapted sampler (every rejected proposal repeats the previous
+    # state) make the tail values bit-identical -> "All tail values are the same".
+    # So: enough tune for the chains to actually move, and a fixed seed so CI
+    # doesn't gamble on sampler luck.
     idata = model.sample(
-        draws=30,
-        tune=15,
+        draws=50,
+        tune=100,
         chains=2,
         cores=1,
+        random_seed=20260713,
         idata_kwargs={"log_likelihood": True},
     )
 
@@ -45,7 +52,7 @@ def test_addm_log_likelihood_enables_waic_loo():
     ll = idata.log_likelihood
     var = next(iter(ll.data_vars))
     arr = np.asarray(ll[var])
-    assert arr.shape[:2] == (2, 30)  # (chain, draw, ...)
+    assert arr.shape[:2] == (2, 50)  # (chain, draw, ...)
     assert arr.shape[-1] == len(df)  # one column per observed trial
     assert np.isfinite(arr).all()
 
