@@ -58,17 +58,22 @@ uv add hssm
 
 ### CUDA
 
-For NVIDIA GPUs, install HSSM with the CUDA 12 extra:
+For NVIDIA GPUs, install HSSM with the extra matching your CUDA version:
 
 ```bash
-pip install "hssm[cuda12]"
+pip install "hssm[cuda12]"  # CUDA 12
+pip install "hssm[cuda13]"  # CUDA 13
 ```
 
 or with `uv`:
 
 ```bash
-uv add "hssm[cuda12]"
+uv add "hssm[cuda12]"  # CUDA 12
+uv add "hssm[cuda13]"  # CUDA 13
 ```
+
+> **Note:** JAX's CUDA wheels are Linux-only and require a compatible NVIDIA
+> driver (>= 525 for CUDA 12, >= 580 for CUDA 13).
 
 ### Apple Silicon, AMD, and Other Accelerators
 

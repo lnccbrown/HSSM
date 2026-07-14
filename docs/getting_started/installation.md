@@ -31,12 +31,18 @@ pip install hssm
 
 ### Install HSSM (with GPU Support)
 
-If you need to sample with GPU, please install JAX with GPU support before
-installing HSSM:
+To sample on an NVIDIA GPU, install HSSM with the CUDA extra matching your CUDA
+version. This pulls in the GPU-enabled build of JAX for you:
 
 ```bash
-pip install hssm[cuda12]
+pip install hssm[cuda12]  # CUDA 12
+pip install hssm[cuda13]  # CUDA 13
 ```
+
+!!! note
+
+    JAX's CUDA wheels are Linux-only and require a compatible NVIDIA driver
+    (>= 525 for CUDA 12, >= 580 for CUDA 13).
 
 ### Support for Apple Silicon, AMD, and other GPUs
 
@@ -64,7 +70,7 @@ Colab regardless of the backend you are using:
 
 ## Install optional dependencies
 
-Whether you have installed HSSM via `conda`, `pip`, or GitHub, you might still need additional
+Whether you have installed HSSM via `pip`, `uv`, or GitHub, you might still need additional
 packages installed for additional features such as sampling with `blackjax` or GPU support
 for `JAX`. Please follow the instructions below if you need any of these additional
 features:
@@ -81,20 +87,16 @@ pip install blackjax nutpie
 
 ### 2. Visualizing the model with `graphviz`
 
-Model graphs are created with `model.graph()` through `graphviz`. If you have installed
-hssm in a conda environment, you can simply install `graphviz` in conda:
+Model graphs are created with `model.graph()` through `graphviz`. You need to have
+the Graphviz binaries available on your `PATH` (the `dot` command) and then install
+its Python binding:
 
-```bash
-conda install -c conda-forge graphviz
-```
+#### Install the Graphviz binaries
 
-If you have installed hssm in a non-conda environment, you need to have `graphviz` installed system-wide and then install its Python binding:
-
-#### Install graphviz system-wide
-
-Please follow the instructions on the
-[graphviz official site](https://graphviz.org/download/) to install graphviz for your
-specific platform.
+Install Graphviz through your package manager (e.g. conda or Homebrew) or by
+following the instructions on the
+[graphviz official site](https://graphviz.org/download/) for your specific platform.
+Make sure the `dot` command is on your `PATH`.
 
 #### Install graphviz python binding
 
@@ -113,8 +115,7 @@ WARNING (pytensor.tensor.blas): Using NumPy C-API based implementation for BLAS 
 ```
 
 This is because `pytensor`, the compute backend of PyMC, cannot find a BLAS library on your
-system to optimize its computation. This can be resolved by following the recommended
-steps to install HSSM into a conda environment. If conda cannot be used, you can follow
+system to optimize its computation. You can follow
 [this discussion](https://github.com/pymc-devs/pytensor/issues/524) to link a BLAS library
 with `pytensor`.
 
@@ -135,10 +136,9 @@ with `pytensor`.
 
     Possible solutions to any issues with installations with hssm can be located [here](https://github.com/lnccbrown/HSSM/discussions). Also feel free to start a new
     discussion thread if you don't find answers there. We recommend installing HSSM into
-    a new conda environment with Python 3.10 or 3.11 to prevent any problems with dependencies
-    during the installation process. Please note that hssm is only tested for python 3.10,
-    3.11. As of HSSM v0.2.0, support for Python 3.9 is dropped. Use unsupported python
-    versions with caution.
+    a fresh virtual environment to prevent any problems with dependencies
+    during the installation process. Please note that HSSM is only tested for Python 3.12
+    through 3.14. Use unsupported Python versions with caution.
 
 ## Questions?
 
