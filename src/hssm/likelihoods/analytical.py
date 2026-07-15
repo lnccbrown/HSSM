@@ -16,7 +16,7 @@ from jax.scipy.stats import norm
 from numpy import inf
 from pymc.distributions.dist_math import check_parameters
 
-from ..distribution_utils.dist import make_distribution
+from ..distribution_utils.dist import make_distribution, make_likelihood_callable
 
 LOGP_LB = pm.pytensorf.floatX(-66.1)
 
@@ -622,53 +622,6 @@ def _pt_lba3_ll(t, ch, A, b, v0, v1, v2):
     return pt.log(pt.clip(like[running_idx, ch] / (1 - prob_neg), __min, __max))
 
 
-def _pt_lba4_ll(t, ch, A, b, v0, v1, v2, v3):
-    s = 0.1
-    __min = pt.exp(LOGP_LB)
-    __max = pt.exp(-LOGP_LB)
-    k = len([0, 1, 2, 3])
-    like = pt.zeros((*t.shape, k))
-    running_idx = pt.arange(t.shape[0])
-
-    like_1 = (
-        _pt_tpdf(t, A, b, v0, s)
-        * (1 - _pt_tcdf(t, A, b, v1, s))
-        * (1 - _pt_tcdf(t, A, b, v2, s))
-        * (1 - _pt_tcdf(t, A, b, v3, s))
-    )
-    like_2 = (
-        (1 - _pt_tcdf(t, A, b, v0, s))
-        * _pt_tpdf(t, A, b, v1, s)
-        * (1 - _pt_tcdf(t, A, b, v2, s))
-        * (1 - _pt_tcdf(t, A, b, v3, s))
-    )
-    like_3 = (
-        (1 - _pt_tcdf(t, A, b, v0, s))
-        * (1 - _pt_tcdf(t, A, b, v1, s))
-        * _pt_tpdf(t, A, b, v2, s)
-        * (1 - _pt_tcdf(t, A, b, v3, s))
-    )
-    like_4 = (
-        (1 - _pt_tcdf(t, A, b, v0, s))
-        * (1 - _pt_tcdf(t, A, b, v1, s))
-        * (1 - _pt_tcdf(t, A, b, v2, s))
-        * _pt_tpdf(t, A, b, v3, s)
-    )
-
-    like = pt.stack([like_1, like_2, like_3, like_4], axis=-1)
-
-    # One should RETURN this because otherwise it will be pruned from graph
-    # like_printed = pytensor.printing.Print('like')(like)
-
-    prob_neg = (
-        _pt_normcdf(-v0 / s)
-        * _pt_normcdf(-v1 / s)
-        * _pt_normcdf(-v2 / s)
-        * _pt_normcdf(-v3 / s)
-    )
-    return pt.log(pt.clip(like[running_idx, ch] / (1 - prob_neg), __min, __max))
-
-
 def _pt_lba2_ll(t, ch, A, b, v0, v1):
     s = 0.1
     __min = pt.exp(LOGP_LB)
@@ -726,6 +679,50 @@ def logp_lba3(
     return checked_logp
 
 
+def _jax_lba_tpdf(t, A, b, v, s):
+    """Return the LBA first-passage-time density for one accumulator."""
+    g = (b - A - t * v) / (t * s)
+    h = (b - t * v) / (t * s)
+    return (-v * norm.cdf(g) + s * norm.pdf(g) + v * norm.cdf(h) - s * norm.pdf(h)) / A
+
+
+def _jax_lba_tcdf(t, A, b, v, s):
+    """Return the LBA first-passage-time CDF for one accumulator."""
+    g = (b - A - t * v) / (t * s)
+    h = (b - t * v) / (t * s)
+    return (
+        1
+        + ((b - A - t * v) / A) * norm.cdf(g)
+        - ((b - t * v) / A) * norm.cdf(h)
+        + ((t * s) / A) * norm.pdf(g)
+        - ((t * s) / A) * norm.pdf(h)
+    )
+
+
+def _jax_lba4_ll(t, ch, A, b, v0, v1, v2, v3):
+    """Return the four-choice LBA log-likelihood at the JAX level."""
+    s = 0.1
+    drift_rates = jnp.stack(jnp.broadcast_arrays(v0, v1, v2, v3))
+    all_pdfs = vmap(lambda v: _jax_lba_tpdf(t, A, b, v, s))(drift_rates)
+    all_cdfs = vmap(lambda v: _jax_lba_tcdf(t, A, b, v, s))(drift_rates)
+
+    trial_idx = jnp.arange(ch.shape[0])
+    winner_pdf = all_pdfs[ch, trial_idx]
+    loser_mask = jnp.arange(drift_rates.shape[0])[:, None] != ch
+    likelihood = winner_pdf * jnp.prod(
+        jnp.where(loser_mask, 1.0 - all_cdfs, 1.0), axis=0
+    )
+
+    prob_neg = jnp.prod(norm.cdf(-drift_rates / s), axis=0)
+    return jnp.log(
+        jnp.clip(
+            likelihood / (1.0 - prob_neg),
+            jnp.exp(LOGP_LB),
+            jnp.exp(-LOGP_LB),
+        )
+    )
+
+
 def logp_lba4(
     data: np.ndarray,
     A: float,
@@ -736,14 +733,12 @@ def logp_lba4(
     v3: float,
 ) -> np.ndarray:
     """Compute the log-likelihood of the LBA model with 4 drift rates."""
-    data = pt.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
-    rt = pt.abs(data[:, 0])
-    response = data[:, 1]
-    response_int = pt.cast(response, "int32")
-    logp = _pt_lba4_ll(rt, response_int, A, b, v0, v1, v2, v3).squeeze()
-    # pyrefly: ignore[bad-argument-type]
-    checked_logp = check_parameters(logp, b > A, msg="b > A")
-    return checked_logp
+    data_reshaped = jnp.reshape(data, (-1, 2)).astype(pytensor.config.floatX)
+    rt = jnp.abs(data_reshaped[:, 0])
+    response = data_reshaped[:, 1]
+    response_int = response.astype(jnp.int32)
+    logp = _jax_lba4_ll(rt, response_int, A, b, v0, v1, v2, v3).squeeze()
+    return jax_check_parameters(logp, b > A, msg="b > A")
 
 
 lba2_params = ["A", "b", "v0", "v1"]
@@ -788,9 +783,15 @@ LBA3: type[pm.Distribution] = make_distribution(
     bounds=lba3_bounds,
 )
 
+_lba4_jax_loglik = make_likelihood_callable(
+    logp_lba4,
+    loglik_kind="analytical",
+    backend="jax",
+)
+
 LBA4: type[pm.Distribution] = make_distribution(
     rv="lba4",
-    loglik=logp_lba4,
+    loglik=_lba4_jax_loglik,
     list_params=lba4_params,
     bounds=lba4_bounds,
 )

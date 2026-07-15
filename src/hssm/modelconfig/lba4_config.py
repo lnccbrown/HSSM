@@ -25,7 +25,7 @@ def get_lba4_config() -> DefaultConfig:
         "likelihoods": {
             "analytical": {
                 "loglik": logp_lba4,
-                "backend": None,
+                "backend": "jax",
                 "default_priors": {},
                 "bounds": lba4_bounds,
                 "extra_fields": None,
