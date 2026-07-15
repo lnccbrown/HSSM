@@ -18,6 +18,13 @@
 3. **Fixed incorrect gradients for choice-only models with all-scalar parameters and outlier modeling.** For likelihoods that take parameters only (CPN/OPN networks) with no regression parameters, the gradient computation ignored any transformation applied downstream of the likelihood — for example the `p_outlier` mixture. Gradient-based fitting (VI, or NUTS on the default backend) of such models silently used incorrect gradients. The gradient is now exact, and a regression test asserts the chain rule holds on every backend.
 4. **Internal cleanup of the LAN likelihood operators.** The Op classes are now defined once at module level instead of once per model, so building many models in one long-running process (e.g. a parameter-recovery loop in a notebook) no longer grows PyTensor's dispatch registry — which previously kept every model's network weights in memory for the lifetime of the process. The gradient hook was also migrated from PyTensor's deprecated `grad` to the new `pullback` API, silencing a `FutureWarning` that appeared on every model fit.
 
+### 0.4.2
+
+This version includes the following changes:
+
+1. **LBA4 analytical likelihood now uses JAX.** The LBA4 likelihood has been ported from PyTensor to JAX, enabling JAX/NumPyro-compatible sampling and gradients for the analytical LBA4 model.
+2. **Documentation build fix for the marimo aDDM tutorial.** The docs build now includes the marimo dependency needed to parse the aDDM marimo tutorial, and skips CI execution for its button-gated sampling cells.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
