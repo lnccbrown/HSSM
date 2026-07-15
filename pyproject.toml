@@ -1,6 +1,6 @@
 [project]
 name = "HSSM"
-version = "0.4.1"
+version = "0.4.2"
 description = "Bayesian inference for hierarchical sequential sampling models."
 authors = [
     { name = "Alexander Fengler", email = "alexander_fengler@brown.edu" },
