@@ -85,6 +85,7 @@ plugins:
         - getting_started/getting_started.ipynb
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
+        - tutorials/attentional_ddm.py
         - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
         - tutorials/choice_only_rlssm.ipynb
