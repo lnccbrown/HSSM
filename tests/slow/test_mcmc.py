@@ -4,6 +4,7 @@ import arviz as az
 import matplotlib.pyplot as plt
 import hssm
 import numpy as np
+import pandas as pd
 import pymc as pm
 from copy import deepcopy
 import xarray as xr
@@ -99,11 +100,26 @@ def test_lba_sampling():
 
     lba3_model = hssm.HSSM(model="lba3", data=lba3_data_out)
 
+    lba4_data = pd.DataFrame(
+        [[rt, choice] for rt in (0.35, 0.50) for choice in range(4)],
+        columns=["rt", "response"],
+    )
+    lba4_model = hssm.HSSM(model="lba4", data=lba4_data, p_outlier=0)
+
     traces_2 = lba2_model.sample(sampler="numpyro", draws=10, tune=10, chains=1)
     traces_3 = lba3_model.sample(sampler="numpyro", draws=10, tune=10, chains=1)
+    traces_4 = lba4_model.sample(
+        sampler="numpyro",
+        draws=10,
+        tune=10,
+        chains=1,
+        cores=1,
+        progressbar=False,
+    )
 
     assert isinstance(traces_2, xr.DataTree)
     assert isinstance(traces_3, xr.DataTree)
+    assert isinstance(traces_4, xr.DataTree)
 
 
 @pytest.mark.slow

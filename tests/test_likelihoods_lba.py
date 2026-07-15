@@ -2,6 +2,7 @@
 
 from itertools import product
 
+import jax
 import numpy as np
 import pymc as pm
 import pytest
@@ -73,7 +74,6 @@ def make_lba_data(n_choices):
     [
         (logp_lba2, theta_lba2, 2),
         (logp_lba3, theta_lba3, 3),
-        (logp_lba4, theta_lba4, 4),
     ],
 )
 def test_lba_synthetic_data(logp_func, theta, n_choices):
@@ -92,6 +92,53 @@ def test_lba_synthetic_data(logp_func, theta, n_choices):
     for A, b in product([np.full(size, 0.6), 0.6], [np.full(size, 0.5), 0.5]):
         with pytest.raises(pm.logprob.utils.ParameterValueError):
             logp_func(lba_data, A=A, b=b, **filter_theta(theta, ["A", "b"])).eval()
+
+
+def test_lba4_jax_likelihood_supports_jit_vectors_and_gradients():
+    """LBA4 should be a native JAX likelihood with differentiable parameters."""
+    lba_data = make_lba_data(4)
+    expected = np.array(
+        [
+            0.65798534,
+            0.65798534,
+            0.65798534,
+            0.65798534,
+            -6.08265287,
+            -6.08265287,
+            -6.08265287,
+            -6.08265287,
+        ],
+        dtype=np.float32,
+    )
+
+    output = np.asarray(jax.jit(logp_lba4)(lba_data, **theta_lba4))
+    np.testing.assert_allclose(output, expected, rtol=1e-5, atol=1e-5)
+
+    for param in theta_lba4:
+        vectorized = np.asarray(
+            logp_lba4(lba_data, **vectorize_param(theta_lba4, param, len(lba_data)))
+        )
+        np.testing.assert_allclose(vectorized, expected, rtol=1e-5, atol=1e-5)
+
+        def summed_logp(value):
+            params = theta_lba4 | {param: value}
+            return logp_lba4(lba_data, **params).sum()
+
+        gradient = np.asarray(jax.grad(summed_logp)(theta_lba4[param]))
+        assert np.isfinite(gradient).all()
+
+    invalid = np.asarray(
+        logp_lba4(
+            lba_data,
+            A=0.6,
+            b=0.5,
+            v0=1.0,
+            v1=1.0,
+            v2=1.0,
+            v3=1.0,
+        )
+    )
+    assert np.isneginf(invalid).all()
 
 
 @pytest.mark.slow
