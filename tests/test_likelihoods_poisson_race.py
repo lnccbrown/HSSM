@@ -5,10 +5,7 @@ import pandas as pd
 import pytest
 from ssms.config import model_config
 
-import hssm
 from hssm.simulator import simulate_data
-
-hssm.set_floatX("float32")
 
 
 @pytest.mark.skipif(
