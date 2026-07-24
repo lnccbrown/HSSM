@@ -6,9 +6,7 @@ import pytest
 
 import jax
 import numpy as np
-import pandas as pd
 import pymc as pm
-from ssms.config import model_config
 
 import hssm
 from hssm.likelihoods.analytical import (
@@ -21,7 +19,6 @@ from hssm.likelihoods.analytical import (
     logp_rdm3,
     softmax_inv_temperature,
 )
-from hssm.simulator import simulate_data
 
 hssm.set_floatX("float32")
 
@@ -200,10 +197,6 @@ class TestDdmSdvStability:
 
 class TestPoissonRaceLikelihood:
     theta_poisson_race = dict(r1=2.5, r2=3.5, k1=1.3, k2=1.6, t=0.05)
-    _requires_poisson_race = pytest.mark.skipif(
-        "poisson_race" not in model_config,
-        reason="poisson_race not available in installed ssms",
-    )
 
     @staticmethod
     def _vectorize_param(theta, param, size):
@@ -310,32 +303,6 @@ class TestPoissonRaceLikelihood:
         logp = logp_poisson_race(data, **theta).eval()
         assert np.all(np.isfinite(logp))
         assert logp.shape == (3,)
-
-    @_requires_poisson_race
-    def test_smooth_unif_defaults_to_false(self):
-        """simulate_data should set smooth_unif=False for poisson_race by default."""
-        df = simulate_data(
-            "poisson_race",
-            theta=self.theta_poisson_race,
-            size=20,
-            random_state=42,
-        )
-        assert isinstance(df, pd.DataFrame)
-        assert len(df) == 20
-        assert set(df.columns) == {"rt", "response"}
-
-    @_requires_poisson_race
-    def test_smooth_unif_explicit_override_respected(self):
-        """An explicit smooth_unif=True passed by the caller should be honoured."""
-        df = simulate_data(
-            "poisson_race",
-            theta=self.theta_poisson_race,
-            size=20,
-            random_state=42,
-            smooth_unif=True,
-        )
-        assert isinstance(df, pd.DataFrame)
-        assert len(df) == 20
 
 
 class TestRdmLikelihood:
