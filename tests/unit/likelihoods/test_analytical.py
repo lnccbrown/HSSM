@@ -12,6 +12,7 @@ from hssm.likelihoods.analytical import (
     LOGP_LB,
     logp_ddm_sdv,
     logp_poisson_race,
+    logp_rdm3,
     softmax_inv_temperature,
 )
 from hssm.simulator import simulate_data
@@ -230,3 +231,22 @@ class TestPoissonRaceLikelihood:
         )
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 20
+
+
+class TestRdmLikelihood:
+    def test_negative_rt_returns_logp_lb_and_is_finite(self):
+        """Trials with rt <= t should return LOGP_LB and remain finite."""
+        data = np.array(
+            [
+                (0.02, 0.0),
+                (0.60, 1.0),
+            ],
+            dtype="float32",
+        )
+        theta = dict(v0=1.0, v1=1.2, v2=1.4, b=2.0, A=1.0, t=0.05)
+
+        logp = np.asarray(logp_rdm3(data, **theta))
+
+        assert np.isclose(logp[0], LOGP_LB)
+        assert np.all(np.isfinite(logp))
+        assert not np.any(np.isnan(logp))
