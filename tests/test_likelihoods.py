@@ -8,7 +8,6 @@ from pathlib import Path
 from itertools import product
 from hssm.utils import SuppressOutput
 
-import jax
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -24,9 +23,6 @@ import hssm
 from hssm.likelihoods.analytical import (
     logp_ddm,
     logp_ddm_sdv,
-    logp_lba2,
-    logp_lba3,
-    logp_lba4,
 )
 from hssm.likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox
 from hssm.distribution_utils import make_likelihood_callable
@@ -58,108 +54,6 @@ true_values_sdv = true_values + (0,)
 standard = (logp_ddm, logp_ddm_bbox, true_values)
 sdv = (logp_ddm_sdv, logp_ddm_sdv_bbox, true_values_sdv)
 parameters = [standard, sdv]  # type: ignore
-
-CLOSE_TOLERANCE = 1e-4
-
-
-class TestLbaLikelihood:
-    theta_lba2 = dict(A=0.2, b=0.5, v0=1.0, v1=1.0)
-    theta_lba3 = theta_lba2 | {"v2": 1.0}
-    theta_lba4 = theta_lba3 | {"v3": 1.0}
-    lba_parameters = [
-        (logp_lba2, theta_lba2, 2),
-        (logp_lba3, theta_lba3, 3),
-    ]
-
-    @staticmethod
-    def _filter_theta(theta, exclude_keys=("A", "b")):
-        return {k: v for k, v in theta.items() if k not in exclude_keys}
-
-    @staticmethod
-    def _vectorize_param(theta, param, size):
-        return {k: (np.full(size, v) if k == param else v) for k, v in theta.items()}
-
-    @staticmethod
-    def _make_lba_data(n_choices):
-        rows = [[0.35, choice] for choice in range(n_choices)] + [
-            [0.5, choice] for choice in range(n_choices)
-        ]
-        return np.array(rows, dtype=np.float32)
-
-    @pytest.mark.parametrize(
-        "logp_func, theta, n_choices",
-        lba_parameters,
-    )
-    def test_lba_synthetic_data(self, logp_func, theta, n_choices):
-        lba_data = self._make_lba_data(n_choices)
-        size = lba_data.shape[0]
-
-        out_base = logp_func(lba_data, **theta).eval()
-        assert out_base.shape == (size,)
-        assert np.isfinite(out_base).all()
-
-        for param in theta:
-            param_vec = self._vectorize_param(theta, param, size)
-            out_vec = logp_func(lba_data, **param_vec).eval()
-            assert np.allclose(out_vec, out_base, atol=CLOSE_TOLERANCE)
-
-        for A, b in product([np.full(size, 0.6), 0.6], [np.full(size, 0.5), 0.5]):
-            with pytest.raises(pm.logprob.utils.ParameterValueError):
-                logp_func(
-                    lba_data,
-                    A=A,
-                    b=b,
-                    **self._filter_theta(theta, ("A", "b")),
-                ).eval()
-
-    def test_lba4_jax_likelihood_supports_jit_vectors_and_gradients(self):
-        """LBA4 should be a native JAX likelihood with differentiable parameters."""
-        lba_data = self._make_lba_data(4)
-        expected = np.array(
-            [
-                0.65798534,
-                0.65798534,
-                0.65798534,
-                0.65798534,
-                -6.08265287,
-                -6.08265287,
-                -6.08265287,
-                -6.08265287,
-            ],
-            dtype=np.float32,
-        )
-
-        output = np.asarray(jax.jit(logp_lba4)(lba_data, **self.theta_lba4))
-        np.testing.assert_allclose(output, expected, rtol=1e-5, atol=1e-5)
-
-        for param in self.theta_lba4:
-            vectorized = np.asarray(
-                logp_lba4(
-                    lba_data,
-                    **self._vectorize_param(self.theta_lba4, param, len(lba_data)),
-                )
-            )
-            np.testing.assert_allclose(vectorized, expected, rtol=1e-5, atol=1e-5)
-
-            def summed_logp(value):
-                params = self.theta_lba4 | {param: value}
-                return logp_lba4(lba_data, **params).sum()
-
-            gradient = np.asarray(jax.grad(summed_logp)(self.theta_lba4[param]))
-            assert np.isfinite(gradient).all()
-
-        invalid = np.asarray(
-            logp_lba4(
-                lba_data,
-                A=0.6,
-                b=0.5,
-                v0=1.0,
-                v1=1.0,
-                v2=1.0,
-                v3=1.0,
-            )
-        )
-        assert np.isneginf(invalid).all()
 
 
 @pytest.mark.slow

@@ -1,7 +1,10 @@
 """Unit tests for analytical likelihood helpers and DDM-SDV stability."""
 
+from itertools import product
+
 import pytest
 
+import jax
 import numpy as np
 import pandas as pd
 import pymc as pm
@@ -11,6 +14,9 @@ import hssm
 from hssm.likelihoods.analytical import (
     LOGP_LB,
     logp_ddm_sdv,
+    logp_lba2,
+    logp_lba3,
+    logp_lba4,
     logp_poisson_race,
     logp_rdm3,
     softmax_inv_temperature,
@@ -31,6 +37,8 @@ _VECTOR_BETA = np.full(_N, 1.5, dtype=np.float32)
 
 _SCALAR_LOGIT = np.float32(0.5)
 _VECTOR_LOGIT = np.full(_N, 0.5, dtype=np.float32)
+
+CLOSE_TOLERANCE = 1e-4
 
 
 class TestSoftmaxInvTemperature:
@@ -58,6 +66,106 @@ class TestSoftmaxInvTemperature:
         result = softmax_inv_temperature(_DATA_TERNARY, beta, logit1, logit2)
         evaluated = result.eval()
         assert evaluated.shape == (_N,)
+
+
+class TestLbaLikelihood:
+    theta_lba2 = dict(A=0.2, b=0.5, v0=1.0, v1=1.0)
+    theta_lba3 = theta_lba2 | {"v2": 1.0}
+    theta_lba4 = theta_lba3 | {"v3": 1.0}
+    lba_parameters = [
+        (logp_lba2, theta_lba2, 2),
+        (logp_lba3, theta_lba3, 3),
+    ]
+
+    @staticmethod
+    def _filter_theta(theta, exclude_keys=("A", "b")):
+        return {k: v for k, v in theta.items() if k not in exclude_keys}
+
+    @staticmethod
+    def _vectorize_param(theta, param, size):
+        return {k: (np.full(size, v) if k == param else v) for k, v in theta.items()}
+
+    @staticmethod
+    def _make_lba_data(n_choices):
+        rows = [[0.35, choice] for choice in range(n_choices)] + [
+            [0.5, choice] for choice in range(n_choices)
+        ]
+        return np.array(rows, dtype=np.float32)
+
+    @pytest.mark.parametrize(
+        "logp_func, theta, n_choices",
+        lba_parameters,
+    )
+    def test_lba_synthetic_data(self, logp_func, theta, n_choices):
+        lba_data = self._make_lba_data(n_choices)
+        size = lba_data.shape[0]
+
+        out_base = logp_func(lba_data, **theta).eval()
+        assert out_base.shape == (size,)
+        assert np.isfinite(out_base).all()
+
+        for param in theta:
+            param_vec = self._vectorize_param(theta, param, size)
+            out_vec = logp_func(lba_data, **param_vec).eval()
+            assert np.allclose(out_vec, out_base, atol=CLOSE_TOLERANCE)
+
+        for A, b in product([np.full(size, 0.6), 0.6], [np.full(size, 0.5), 0.5]):
+            with pytest.raises(pm.logprob.utils.ParameterValueError):
+                logp_func(
+                    lba_data,
+                    A=A,
+                    b=b,
+                    **self._filter_theta(theta, ("A", "b")),
+                ).eval()
+
+    def test_lba4_jax_likelihood_supports_jit_vectors_and_gradients(self):
+        """LBA4 should be a native JAX likelihood with differentiable parameters."""
+        lba_data = self._make_lba_data(4)
+        expected = np.array(
+            [
+                0.65798534,
+                0.65798534,
+                0.65798534,
+                0.65798534,
+                -6.08265287,
+                -6.08265287,
+                -6.08265287,
+                -6.08265287,
+            ],
+            dtype=np.float32,
+        )
+
+        output = np.asarray(jax.jit(logp_lba4)(lba_data, **self.theta_lba4))
+        np.testing.assert_allclose(output, expected, rtol=1e-5, atol=1e-5)
+
+        for param in self.theta_lba4:
+            vectorized = np.asarray(
+                logp_lba4(
+                    lba_data,
+                    **self._vectorize_param(self.theta_lba4, param, len(lba_data)),
+                )
+            )
+            np.testing.assert_allclose(vectorized, expected, rtol=1e-5, atol=1e-5)
+
+            def summed_logp(value):
+                params = self.theta_lba4 | {param: value}
+                return logp_lba4(lba_data, **params).sum()
+
+            gradient = np.asarray(jax.grad(summed_logp)(self.theta_lba4[param]))
+            assert np.isfinite(gradient).all()
+
+        invalid = np.asarray(
+            logp_lba4(
+                lba_data,
+                A=0.6,
+                b=0.5,
+                v0=1.0,
+                v1=1.0,
+                v2=1.0,
+                v3=1.0,
+            )
+        )
+        assert np.isneginf(invalid).all()
 
 
 class TestDdmSdvStability:
@@ -91,13 +199,16 @@ class TestDdmSdvStability:
 
 
 class TestPoissonRaceLikelihood:
-    close_tolerance = 1e-4
     theta_poisson_race = dict(r1=2.5, r2=3.5, k1=1.3, k2=1.6, t=0.05)
+    _requires_poisson_race = pytest.mark.skipif(
+        "poisson_race" not in model_config,
+        reason="poisson_race not available in installed ssms",
+    )
 
     @staticmethod
     def _vectorize_param(theta, param, size):
         return {
-            k: (np.full(size, v, dtype="float32") if k == param else v)
+            k: (np.full(size, v, dtype=np.float32) if k == param else v)
             for k, v in theta.items()
         }
 
@@ -115,7 +226,7 @@ class TestPoissonRaceLikelihood:
                 (0.65, -1.0),
                 (0.75, 1.0),
             ],
-            dtype="float32",
+            dtype=np.float32,
         )
 
     def test_vectorization(self, poisson_race_data):
@@ -126,7 +237,7 @@ class TestPoissonRaceLikelihood:
         for param in self.theta_poisson_race:
             param_vec = self._vectorize_param(self.theta_poisson_race, param, size)
             out_vec = logp_poisson_race(poisson_race_data, **param_vec).eval()
-            assert np.allclose(out_vec, base, atol=self.close_tolerance)
+            assert np.allclose(out_vec, base, atol=CLOSE_TOLERANCE)
 
     def test_matches_exponential_case(self):
         """With k1 = k2 = 1, the race reduces to competing exponentials."""
@@ -137,7 +248,7 @@ class TestPoissonRaceLikelihood:
                 (0.8, -1.0),
                 (0.9, 1.0),
             ],
-            dtype="float32",
+            dtype=np.float32,
         )
         theta = dict(r1=1.5, r2=2.0, k1=1.0, k2=1.0, t=0.0)
 
@@ -177,14 +288,14 @@ class TestPoissonRaceLikelihood:
 
     def test_negative_rt_returns_logp_lb(self):
         """Trials with rt <= t should clip to LOGP_LB."""
-        data = np.array([(0.02, 1.0)], dtype="float32")
+        data = np.array([(0.02, 1.0)], dtype=np.float32)
         theta = dict(r1=2.0, r2=3.0, k1=1.2, k2=1.4, t=0.05)
         logp = logp_poisson_race(data, **theta).eval()
         assert np.allclose(logp, LOGP_LB)
 
     def test_tiny_parameters(self):
         """Tiny positive parameters should still produce finite log-likelihoods."""
-        data = np.array([(0.5, 1.0), (0.6, -1.0)], dtype="float32")
+        data = np.array([(0.5, 1.0), (0.6, -1.0)], dtype=np.float32)
         theta = dict(r1=1e-8, r2=1e-8, k1=1e-8, k2=1e-8, t=0.0)
         logp = logp_poisson_race(data, **theta).eval()
         assert np.all(np.isfinite(logp))
@@ -193,17 +304,14 @@ class TestPoissonRaceLikelihood:
         """t=0 should be valid and return finite values."""
         data = np.array(
             [(0.3, 1.0), (0.5, -1.0), (0.7, 1.0)],
-            dtype="float32",
+            dtype=np.float32,
         )
         theta = dict(r1=2.0, r2=3.0, k1=1.5, k2=1.5, t=0.0)
         logp = logp_poisson_race(data, **theta).eval()
         assert np.all(np.isfinite(logp))
         assert logp.shape == (3,)
 
-    @pytest.mark.skipif(
-        "poisson_race" not in model_config,
-        reason="poisson_race not available in installed ssms",
-    )
+    @_requires_poisson_race
     def test_smooth_unif_defaults_to_false(self):
         """simulate_data should set smooth_unif=False for poisson_race by default."""
         df = simulate_data(
@@ -216,10 +324,7 @@ class TestPoissonRaceLikelihood:
         assert len(df) == 20
         assert set(df.columns) == {"rt", "response"}
 
-    @pytest.mark.skipif(
-        "poisson_race" not in model_config,
-        reason="poisson_race not available in installed ssms",
-    )
+    @_requires_poisson_race
     def test_smooth_unif_explicit_override_respected(self):
         """An explicit smooth_unif=True passed by the caller should be honoured."""
         df = simulate_data(
@@ -241,7 +346,7 @@ class TestRdmLikelihood:
                 (0.02, 0.0),
                 (0.60, 1.0),
             ],
-            dtype="float32",
+            dtype=np.float32,
         )
         theta = dict(v0=1.0, v1=1.2, v2=1.4, b=2.0, A=1.0, t=0.05)
 
