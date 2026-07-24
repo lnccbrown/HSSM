@@ -7,6 +7,7 @@ import pytest
 import jax
 import numpy as np
 import pymc as pm
+import pytensor
 
 import hssm
 from hssm.likelihoods.analytical import (
@@ -20,7 +21,18 @@ from hssm.likelihoods.analytical import (
     softmax_inv_temperature,
 )
 
-hssm.set_floatX("float32")
+
+@pytest.fixture(scope="module", autouse=True)
+def _float32_precision_guard():
+    """Pin float32 for this module and restore prior precision settings."""
+    prev_floatx = pytensor.config.floatX
+    prev_jax_x64 = jax.config.read("jax_enable_x64")
+
+    hssm.set_floatX("float32")
+    yield
+
+    pytensor.config.floatX = prev_floatx
+    jax.config.update("jax_enable_x64", prev_jax_x64)
 
 
 _N = 10
@@ -80,7 +92,10 @@ class TestLbaLikelihood:
 
     @staticmethod
     def _vectorize_param(theta, param, size):
-        return {k: (np.full(size, v) if k == param else v) for k, v in theta.items()}
+        return {
+            k: (np.full(size, v, dtype=np.float32) if k == param else v)
+            for k, v in theta.items()
+        }
 
     @staticmethod
     def _make_lba_data(n_choices):
