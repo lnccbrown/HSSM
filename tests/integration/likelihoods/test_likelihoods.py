@@ -1,7 +1,7 @@
-"""Unit testing for WFPT likelihood function.
+"""Integration tests for DDM/WFPT likelihood paths.
 
-This code compares WFPT likelihood function with
-old implementation of WFPT from (https://github.com/hddm-devs/hddm)
+These tests validate consistency across analytical, blackbox, and
+approx_differentiable (ONNX-wrapped) likelihood flows in HSSM.
 """
 
 from pathlib import Path
