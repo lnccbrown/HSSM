@@ -23,7 +23,7 @@ class TestPlottingUtilsUnit:
 
     def test__get_title(self):
         """Check grouped title formatting."""
-        assert _get_title(("a"), ("b")) == "a = b"
+        assert _get_title(("conf",), ("LC",)) == "conf = LC"
         assert _get_title(("a", "b"), ("c", "d")) == "a = c | b = d"
 
     def test__subset_df(self, cavanagh_test):
