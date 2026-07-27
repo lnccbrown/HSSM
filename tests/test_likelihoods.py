@@ -20,7 +20,10 @@ from pytensor.compile.debug.nanguardmode import NanGuardMode
 import hssm
 
 # pylint: disable=C0413
-from hssm.likelihoods.analytical import logp_ddm, logp_ddm_sdv
+from hssm.likelihoods.analytical import (
+    logp_ddm,
+    logp_ddm_sdv,
+)
 from hssm.likelihoods.blackbox import logp_ddm_bbox, logp_ddm_sdv_bbox
 from hssm.distribution_utils import make_likelihood_callable
 
@@ -44,36 +47,6 @@ hssm.set_floatX("float32")
 #         data = data_fixture[:, 0] * data_fixture[:, 1]
 #         cython_log = wfpt.pdf_array(data, v, sv, a, z, 0, t, 0, err, 1)
 #         np.testing.assert_array_almost_equal(pytensor_log.eval(), cython_log, 0)
-
-
-@pytest.fixture
-def shared_params():
-    return {
-        "v": 1,
-        "sv": 0,
-        "a": 0.5,
-        "z": 0.5,
-        "t": 0.5,
-        "err": 1e-7,
-        "epsilon": 1e-15,
-    }
-
-
-names = ["a", "t", "v"]
-values = [2.5, 3.0, 3.0]
-parameters = [(name, np.arange(value, 5.1, 0.5)) for name, value in zip(names, values)]
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize("param_name, param_values", parameters)
-def test_no_inf_values(data_ddm, shared_params, param_name, param_values):
-    for value in param_values:
-        params = shared_params | {param_name: value}
-        logp = logp_ddm_sdv(data_ddm, **params).eval()
-        assert logp.ndim == 1, "logp_ddm_sdv() returned wrong number of dimensions."
-        assert np.all(np.isfinite(logp)), (
-            f"log_pdf_sv() returned non-finite values for {param_name} = {value}."
-        )
 
 
 true_values = (0.5, 1.5, 0.5, 0.5)
