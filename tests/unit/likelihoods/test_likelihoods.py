@@ -1,7 +1,7 @@
-"""Integration tests for DDM/WFPT likelihood paths.
+"""Unit tests for DDM/WFPT likelihood components.
 
-These tests validate consistency across analytical, blackbox, and
-approx_differentiable (ONNX-wrapped) likelihood flows in HSSM.
+These tests validate consistency of analytical, blackbox, and
+approx_differentiable (ONNX-wrapped) likelihood-related paths.
 """
 
 from pathlib import Path
