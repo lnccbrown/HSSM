@@ -40,7 +40,7 @@ model = hssm.HSSM_HMM(
     K=2,
     switching_params=["v"],
 )
-idata   = model.sample()
+idata = model.sample()
 regimes = model.infer_regimes(idata)
 ```
 
