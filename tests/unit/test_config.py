@@ -1,3 +1,5 @@
+"""Unit tests for configuration defaults and model-config assembly."""
+
 import logging
 
 import pytest
