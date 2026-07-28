@@ -60,15 +60,17 @@ What v1 implementation (Phase 2+) still has to verify: the `HSSMBase` override m
 from hssm import HSSM_HMM
 
 model = HSSM_HMM(
-    data=df,                          # long-format, balanced panel, sorted (participant, trial)
+    data=df,  # long-format, balanced panel, sorted (participant, trial)
     K=2,
     decision_process="ddm",
-    switching_params=["v"],           # parameters that vary by regime
+    switching_params=["v"],  # parameters that vary by regime
     participant_col="participant_id",
 )
-idata   = model.sample(...)                    # standard HSSM .sample()
-regimes = model.infer_regimes(idata)           # posterior over s_{n,1:T}                (§5.5)
-idata   = model.compute_log_likelihood(idata)  # per-trial logp for arviz.loo / waic     (§5.6)
+idata = model.sample(...)  # standard HSSM .sample()
+regimes = model.infer_regimes(idata)  # posterior over s_{n,1:T}                (§5.5)
+idata = model.compute_log_likelihood(
+    idata
+)  # per-trial logp for arviz.loo / waic     (§5.6)
 ```
 
 **Where to read next.**
@@ -297,8 +299,8 @@ The "no equivalent" rows are HMM-specific concerns (the forward algorithm, the d
 User-facing API:
 
 ```python
-from hssm import HSSM_HMM        # re-exported from hssm.__init__
-from hssm.hmm import HMMConfig   # advanced / custom-config path
+from hssm import HSSM_HMM  # re-exported from hssm.__init__
+from hssm.hmm import HMMConfig  # advanced / custom-config path
 ```
 
 ### 4.3 Workflow at a glance
@@ -399,7 +401,8 @@ class HMMConfig(BaseModelConfig):
     switching_params: list[str] = field(kw_only=True)
     transition_prior: TransitionPriorSpec = field(kw_only=True)
     initial_distribution: InitialDistributionSpec = field(
-        default_factory=UniformInitialDistribution, kw_only=True,
+        default_factory=UniformInitialDistribution,
+        kw_only=True,
     )
 
     # --- Emission ---
@@ -440,15 +443,17 @@ analytical and LAN emission backends (see "One pytensor path" below).
 
 ```python
 def make_hmm_logp_op(
-    emission_logp_func: Callable[..., Array],   # resolved by L2 (analytical or LAN)
+    emission_logp_func: Callable[..., Array],  # resolved by L2 (analytical or LAN)
     n_participants: int,
     n_trials: int,
     K: int,
-    list_params: list[str],          # full param order
-    switching_params: list[str],     # subset that has K values
-    data_cols: list[str],            # e.g. ["rt", "response"]
+    list_params: list[str],  # full param order
+    switching_params: list[str],  # subset that has K values
+    data_cols: list[str],  # e.g. ["rt", "response"]
     extra_fields: list[str] | None = None,
-) -> Callable[..., None]: ...   # model-builder closure: takes the regime params and adds pm.Potential to the active pm.Model
+) -> Callable[
+    ..., None
+]: ...  # model-builder closure: takes the regime params and adds pm.Potential to the active pm.Model
 ```
 
 Contract:
@@ -471,10 +476,10 @@ Layer 1 (`hmm/likelihoods/forward.py`) implements the recursion in pytensor:
 
 ```python
 def forward_log_marginal(
-    log_emission_lik,         # shape (N, T, K) — per-participant per-regime per-trial logp
-    log_P,                    # shape (K, K)
-    log_pi0,                  # shape (K,)
-):                            # returns a scalar: sum_n log p(y_{n,1..T} | theta, P, pi0)
+    log_emission_lik,  # shape (N, T, K) — per-participant per-regime per-trial logp
+    log_P,  # shape (K, K)
+    log_pi0,  # shape (K,)
+):  # returns a scalar: sum_n log p(y_{n,1..T} | theta, P, pi0)
     ...
 ```
 
@@ -497,7 +502,10 @@ Heuristic to pick the anchor parameter (in order of preference):
 
 ```python
 v = pm.Normal(
-    "v", mu=0.0, sigma=..., shape=(K,),
+    "v",
+    mu=0.0,
+    sigma=...,
+    shape=(K,),
     transform=ordered,
     initval=np.linspace(lo, hi, K),  # strictly ascending, clear of ties
 )
@@ -535,8 +543,8 @@ class HSSM_HMM(HSSMBase):
         ordering: OrderingSpec | None = None,
         # ---- inherited HSSM kwargs ----
         include: list[...] | None = None,
-        p_outlier: float | bmb.Prior | None = None,   # v1: rejected — decision 10.1.9
-        lapse: bmb.Prior | None = None,                # v1: rejected — decision 10.1.9
+        p_outlier: float | bmb.Prior | None = None,  # v1: rejected — decision 10.1.9
+        lapse: bmb.Prior | None = None,  # v1: rejected — decision 10.1.9
         link_settings: ... = None,
         prior_settings: ... = "safe",
         extra_namespace: dict | None = None,
@@ -577,8 +585,8 @@ in dependency order:
 
 ```python
 with pm.Model() as model:
-    P   = ...   # (K, K), per TransitionPriorSpec
-    pi0 = ...   # (K,), fixed by default, per InitialDistributionSpec
+    P = ...  # (K, K), per TransitionPriorSpec
+    pi0 = ...  # (K,), fixed by default, per InitialDistributionSpec
     # switching params: each a (K,) RV; the ordering anchor carries transform=ordered
     # shared params: scalar RVs
     ...
@@ -710,9 +718,9 @@ model = hssm.HSSM_HMM(
     participant_col="participant_id",
 )
 
-idata    = model.sample(draws=1000, tune=1000, chains=4)
-summary  = model.summary()
-regimes  = model.infer_regimes(idata, n_draws=200)
+idata = model.sample(draws=1000, tune=1000, chains=4)
+summary = model.summary()
+regimes = model.infer_regimes(idata, n_draws=200)
 ```
 
 ### 6.2 Custom config path (advanced)
