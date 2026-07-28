@@ -16,6 +16,7 @@ from hssm.plotting.utils import (
 )
 
 hssm.set_floatX("float32")
+TEST_RNG_SEED = 0
 
 
 class TestPlottingUtilsUnit:
@@ -165,7 +166,8 @@ class TestPlottingUtilsUnit:
         assert all(col in processed_df_single.columns for col in base_groups)
 
         df_multi = df.copy()
-        df_multi["session"] = np.random.randint(1, 3, len(df_multi))
+        rng = np.random.default_rng(TEST_RNG_SEED)
+        df_multi["session"] = rng.integers(1, 3, size=len(df_multi))
 
         processed_df_multi = _process_df_for_qp_plot(
             df_multi, 5, "conf", None, quantile_by=["participant_id", "session"]
@@ -215,8 +217,9 @@ class TestPlottingUtilsUnit:
             _process_df_for_qp_plot(df, 5, "conf", None, quantile_by=1)
 
         df_extra = df.copy()
-        df_extra["dim1"] = np.random.randint(1, 3, len(df_extra))
-        df_extra["dim2"] = np.random.randint(1, 3, len(df_extra))
+        rng = np.random.default_rng(TEST_RNG_SEED)
+        df_extra["dim1"] = rng.integers(1, 3, size=len(df_extra))
+        df_extra["dim2"] = rng.integers(1, 3, size=len(df_extra))
 
         result1 = _process_df_for_qp_plot(
             df_extra, 5, "conf", None, quantile_by="participant_id"
