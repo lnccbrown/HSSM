@@ -25,7 +25,6 @@ def has_twin(ax):
 
 
 @pytest.mark.slow
-# TODO: move this file to tests/integration/plotting/test_quantile_probability.py #1117
 class TestQuantileProbabilityPlotting:
     """Tests for functions in hssm.plotting.quantile_probability."""
 
