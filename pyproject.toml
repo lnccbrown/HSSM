@@ -101,7 +101,6 @@ exclude = [
     "__pycache__",
     "venv",
     ".venv",
-    "docs",
     "notebooks",
 ]
 
