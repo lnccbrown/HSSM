@@ -7,6 +7,7 @@ from typing import Any, Literal, cast
 import bambi as bmb
 import numpy as np
 import pandas as pd
+from bambi.utils import is_hsgp_term
 from formulae import design_matrices
 
 from ..link import Link
@@ -236,6 +237,12 @@ class RegressionParam(Param):
         if dm.common is not None:
             for name, term in dm.common.terms.items():
                 self.terms.append(name)
+                if is_hsgp_term(term):
+                    # Bambi requires an HSGP term's prior to be None or a dict of
+                    # covariance-function priors — a scalar default would be
+                    # rejected at model build. Leaving it out defers to bambi's
+                    # automatic HSGP priors.
+                    continue
                 if name not in specified_priors:
                     if term.kind == "intercept":
                         has_common_intercept = True

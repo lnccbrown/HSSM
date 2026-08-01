@@ -477,6 +477,26 @@ def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
     hssm.set_floatX("float32")
 
 
+def test_make_safe_priors_skips_hsgp_terms(cavanagh_test):
+    # Bambi rejects any HSGP-term prior that is not None or a dict of
+    # covariance-function priors, so the safe-prior machinery must not blanket
+    # hsgp() terms with its scalar defaults (gh-624).
+    hsgp_term = "hsgp(theta, m=8, c=2)"
+    param = RegressionParam(
+        name="v",
+        formula=f"v ~ 1 + {hsgp_term}",
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(data=cavanagh_test, eval_env={}, is_ddm=False)
+
+    # Linear terms still receive safe defaults; the HSGP term receives nothing.
+    assert isinstance(param.prior["Intercept"], bmb.Prior)
+    assert hsgp_term not in param.prior
+    # The term is still tracked for parameterization bookkeeping.
+    assert hsgp_term in param.terms
+
+
 def test__make_priors_recursive():
     test_dict = {
         "name": "Uniform",
