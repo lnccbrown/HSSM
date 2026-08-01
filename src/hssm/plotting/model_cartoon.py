@@ -20,6 +20,7 @@ from ssms.basic_simulators.simulator import simulator
 from ..defaults import SupportedModels, default_model_config
 from .predictive import _process_lines
 from .utils import (
+    DEFAULT_PREDICTIVE_COLORS,
     _check_groups_and_groups_order,
     _get_plotting_df,
     _get_title,
@@ -101,7 +102,7 @@ def _plot_model_cartoon_1D(
 
     if "color" in kwargs:
         del kwargs["color"]
-    colors = colors or ["#ec205b", "#338fb8"]
+    colors = colors or list(DEFAULT_PREDICTIVE_COLORS)
 
     if plot_data and isinstance(colors, str):
         raise ValueError("When `plot_data=True`, `colors` must be a list or dict.")
