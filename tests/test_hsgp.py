@@ -23,6 +23,7 @@ def hsgp_data():
     )
     data["x"] = rng.uniform(0.0, 6.0, len(data))
     data["grp"] = rng.choice(["g1", "g2"], len(data))
+    data["participant_id"] = rng.integers(0, 5, len(data))
     return data
 
 
@@ -120,3 +121,20 @@ def test_hsgp_mixed_formula_keeps_safe_defaults(hsgp_data):
     assert isinstance(v_prior["Intercept"], bmb.Prior)
     assert isinstance(v_prior["x"], bmb.Prior)
     assert isinstance(v_prior[HSGP_TERM], dict)
+
+
+def test_hsgp_dict_prior_is_inert_to_noncentering(hsgp_data, recwarn):
+    # The parameterization checks iterate prior values expecting bmb.Prior;
+    # a dict-valued HSGP prior must fall through their isinstance guards.
+    # The group term must still be non-centered (its *_offset RV exists), and
+    # no parameterization warning may fire about the HSGP entry.
+    model = make_model(
+        hsgp_data,
+        f"v ~ 1 + (1|participant_id) + {HSGP_TERM}",
+        prior={HSGP_TERM: cov_priors()},
+    )
+    offset_rvs = [
+        rv.name for rv in model.pymc_model.free_RVs if rv.name.endswith("_offset")
+    ]
+    assert any(name.startswith("v_") for name in offset_rvs)
+    assert not any("hsgp" in str(w.message).lower() for w in recwarn.list)
