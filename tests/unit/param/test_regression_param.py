@@ -549,6 +549,35 @@ def test_process_prior():
     assert v.prior["y"] is prior3
 
 
+def test_process_prior_hsgp_dict_passes_through():
+    # Priors for hsgp() terms must reach bambi as dicts of covariance-function
+    # priors, not be collapsed into a single bmb.Prior (gh-624). Inner
+    # HSSM-style dict specs still convert; a top-level "name": "HSGP" marker
+    # is dropped as convention residue.
+    hsgp_term = "hsgp(theta, m=8, c=2)"
+    v = RegressionParam(
+        name="v",
+        formula=f"v ~ 0 + {hsgp_term}",
+        prior={
+            hsgp_term: {
+                "name": "HSGP",
+                "sigma": bmb.Prior("Exponential", lam=3.0),
+                "ell": {"name": "InverseGamma", "mu": 2.0, "sigma": 0.2},
+            },
+        },
+    )
+
+    v.process_prior()
+
+    hsgp_prior = v.prior[hsgp_term]
+    assert isinstance(hsgp_prior, dict)
+    assert "name" not in hsgp_prior
+    assert isinstance(hsgp_prior["sigma"], bmb.Prior)
+    assert hsgp_prior["sigma"].name == "Exponential"
+    assert isinstance(hsgp_prior["ell"], bmb.Prior)
+    assert hsgp_prior["ell"].name == "InverseGamma"
+
+
 def test_repr():
     prior1 = {
         "name": "Normal",
