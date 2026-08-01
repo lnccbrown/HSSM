@@ -76,6 +76,14 @@ class HSSM(HSSMBase):
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
+
+        In a regression's ``"prior"`` dictionary, each key is a term of the
+        formula and each value is a number, a ``bmb.Prior``, or a dict spec
+        (with a ``"name"`` key) that is converted to one. The exception is
+        ``hsgp(...)`` terms: bambi requires their prior to be a *dictionary*
+        mapping covariance-function parameters (e.g. ``"sigma"``, ``"ell"``)
+        to priors or numbers, so such values are passed through as dicts.
+        Omitting the ``hsgp(...)`` key defers to bambi's automatic HSGP priors.
     model_config : optional
         A `hssm.config.BaseModelConfig` / `hssm.config.Config`
         instance or a ``dict`` with model configuration information. The
