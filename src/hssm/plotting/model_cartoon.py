@@ -1114,6 +1114,15 @@ def plot_func_model(
     ylim_low, ylim_high = kwargs.get("ylims", (-3, 3))
     xlim_low, xlim_high = kwargs.get("xlims", (-0.05, 5))
 
+    # One simulation horizon and one time grid for every geometry element.
+    # The geometry only needs to exist a little past the visible right edge —
+    # not out to the simulator's 20 s default, which put ~75% of every
+    # boundary polyline outside the axes. Noisy RT simulations keep the long
+    # default horizon: shortening it would censor slow RTs into -999 and
+    # silently re-normalize the defective densities.
+    max_t_geom = xlim_high + 0.5
+    t_s = np.arange(0, max_t_geom, delta_t_model)
+
     # RUN SIMULATIONS
     # -------------------------------
 
@@ -1148,6 +1157,7 @@ def plot_func_model(
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
+            max_t=max_t_geom,
             smooth_unif=False,
         )
 
@@ -1168,6 +1178,7 @@ def plot_func_model(
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
+                max_t=max_t_geom,
                 smooth_unif=False,
             )
 
@@ -1208,6 +1219,7 @@ def plot_func_model(
             n_samples=1,
             no_noise=False,
             delta_t=delta_t_model,
+            max_t=max_t_geom,
             random_state=rand_int + i,
             smooth_unif=False,
         )
@@ -1405,11 +1417,7 @@ def plot_func_model(
     z_cnt = 0  # controlling the order of elements in plot
 
     if theta_samples is not None:
-        # ADD MODEL CARTOONS:
-        t_s = np.arange(
-            0, posterior_pred_no_noise[0]["metadata"]["max_t"], delta_t_model
-        )
-
+        # ADD MODEL CARTOONS (on the shared t_s grid):
         if legacy:
             # Legacy rendering: one full five-artist cartoon per draw,
             # including the per-draw ndt axvlines.
@@ -1522,7 +1530,6 @@ def plot_func_model(
                 )
 
     if theta_mean is not None:
-        t_s = np.arange(0, sim_out_no_noise["metadata"]["max_t"], delta_t_model)
         # Model cartoon for the reference geometry. In uncertainty modes it
         # sits above every band/spaghetti layer (zorder 1030); in legacy mode
         # it keeps its historical slot just above the per-draw cartoons.
@@ -2153,7 +2160,7 @@ def _geometry_arrays(
     ndts = np.empty(n_draws)
     z_abs = np.empty(n_draws)
 
-    for i, sample in sims.items():
+    for i, sample in enumerate(sims.values()):
         meta = sample["metadata"]
         b_high = np.maximum(meta["boundary"], 0)
         b_low = np.minimum((-1) * meta["boundary"], 0)
@@ -2164,8 +2171,13 @@ def _geometry_arrays(
         b_high[:n_roll] = b_h_init
         b_low = np.roll(b_low, n_roll)
         b_low[:n_roll] = b_l_init
-        b_high_m[i] = b_high[:n_t]
-        b_low_m[i] = b_low[:n_t]
+        # The simulator's grid can be a sample shorter or longer than t_s;
+        # constant-extend the last value rather than assume len >= n_t.
+        m = min(b_high.shape[0], n_t)
+        b_high_m[i, :m] = b_high[:m]
+        b_high_m[i, m:] = b_high[m - 1]
+        b_low_m[i, :m] = b_low[:m]
+        b_low_m[i, m:] = b_low[m - 1]
 
         traj = np.asarray(meta["trajectory"]).ravel()
         maxid = int(np.minimum(np.argmax(np.where(traj > -999)), n_t))
@@ -2428,6 +2440,11 @@ def plot_func_model_n(
     ylim_low, ylim_high = kwargs.get("ylims", (0, 5))
     xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
+    # Shared horizon/grid; see plot_func_model for why noisy RT sims keep the
+    # simulator's long default horizon instead.
+    max_t_geom = xlim_high + 0.5
+    t_s = np.arange(0, max_t_geom, delta_t_model)
+
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
 
@@ -2463,6 +2480,7 @@ def plot_func_model_n(
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
+            max_t=max_t_geom,
             smooth_unif=False,
         )
 
@@ -2484,6 +2502,7 @@ def plot_func_model_n(
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
+                max_t=max_t_geom,
                 smooth_unif=False,
             )
 
@@ -2525,6 +2544,7 @@ def plot_func_model_n(
             n_samples=1,
             no_noise=False,
             delta_t=delta_t_model,
+            max_t=max_t_geom,
             random_state=rand_int + i,
             smooth_unif=False,
         )
@@ -2700,9 +2720,6 @@ def plot_func_model_n(
     tmp_label = None
     z_cnt = 0
     if theta_samples is not None:
-        t_s = np.arange(
-            0, posterior_pred_no_noise[0]["metadata"]["max_t"], delta_t_model
-        )
         if legacy or uncertainty in ("samples", "both"):
             # Per-draw cartoons. In the uncertainty modes the per-draw ndt
             # axvline (drawn via keep_starting_point in this renderer) is
@@ -2764,7 +2781,6 @@ def plot_func_model_n(
             )
 
     if theta_mean is not None:
-        t_s = np.arange(0, sim_out_no_noise["metadata"]["max_t"], delta_t_model)
         _add_model_n_cartoon_to_ax(
             sample=sim_out_no_noise,
             axis=axis,

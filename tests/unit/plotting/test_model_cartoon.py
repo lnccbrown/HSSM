@@ -191,6 +191,78 @@ class TestSharedHelpers:
         # z=0.5 on a symmetric bound: starting point at 0
         np.testing.assert_allclose(z_abs, 0.0, atol=1e-12)
 
+    def test_geometry_arrays_short_boundary_constant_extension(self):
+        t_s = np.arange(0, 2, 0.01)
+        n_t = t_s.shape[0]
+        boundary = np.linspace(1.0, 0.5, n_t - 30)
+        traj = np.concatenate([np.linspace(0, 1, 60), np.full(n_t, -999.0)])
+        sims = {
+            0: {
+                "metadata": {
+                    "boundary": boundary,
+                    "trajectory": traj,
+                    "t": np.array([0.0]),
+                    "z": np.array([0.5]),
+                }
+            }
+        }
+        b_high, b_low, *_ = _geometry_arrays(sims, t_s, 0.01)
+        assert b_high.shape == (1, n_t)
+        # beyond the simulated grid: constant extension of the last value
+        np.testing.assert_allclose(b_high[0, n_t - 30 :], b_high[0, n_t - 31])
+        np.testing.assert_allclose(b_low[0, n_t - 30 :], b_low[0, n_t - 31])
+
+    def test_geometry_arrays_ignores_dict_keys(self):
+        t_s = np.arange(0, 1, 0.01)
+        n_t = t_s.shape[0]
+        traj = np.concatenate([np.linspace(0, 1, 20), np.full(n_t, -999.0)])
+
+        def sim(level):
+            return {
+                "metadata": {
+                    "boundary": np.full(n_t, float(level)),
+                    "trajectory": traj,
+                    "t": np.array([0.0]),
+                    "z": np.array([0.5]),
+                }
+            }
+
+        # non-contiguous keys must not be used as row indices
+        sims = {3: sim(1.0), 7: sim(2.0)}
+        b_high, *_ = _geometry_arrays(sims, t_s, 0.01)
+        np.testing.assert_allclose(b_high[0], 1.0)
+        np.testing.assert_allclose(b_high[1], 2.0)
+
+
+class TestSimulationRouting:
+    def test_max_t_derived_from_xlims(self, monkeypatch):
+        import hssm.plotting.model_cartoon as mc
+
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        _render("band", n_trajectories=2, xlims=(0, 2))
+        plt.close("all")
+
+        no_noise = [c for c in calls if c.get("no_noise")]
+        noisy = [c for c in calls if not c.get("no_noise")]
+        traj = [c for c in noisy if c.get("smooth_unif") is False]
+        rt_hist = [c for c in noisy if "smooth_unif" not in c]
+        assert no_noise and traj and rt_hist
+
+        # geometry + trajectories: horizon derived from xlims
+        for c in no_noise + traj:
+            assert c["max_t"] == pytest.approx(2.5)
+        # noisy RT sims keep the simulator's long default horizon (shrinking
+        # it would censor slow RTs and re-normalize the defective densities)
+        for c in rt_hist:
+            assert "max_t" not in c
+
 
 class TestUncertainHistogramLayers:
     def _densities(self, n_draws=6, n_bins=10):
