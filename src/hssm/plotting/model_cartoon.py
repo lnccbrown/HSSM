@@ -1,6 +1,7 @@
 """Plotting functionalities for HSSM."""
 
 import logging
+import warnings
 from copy import deepcopy
 from itertools import product
 from types import MappingProxyType
@@ -18,7 +19,7 @@ from ssms.basic_simulators.simulator import simulator
 
 # Original model cartoon plot from gui
 from ..defaults import SupportedModels, default_model_config
-from .predictive import _legend_order, _process_lines
+from .predictive import _legend_order, _process_colors, _process_lines
 from .utils import (
     DEFAULT_PREDICTIVE_COLORS,
     _band_alphas,
@@ -26,6 +27,7 @@ from .utils import (
     _curve_xy,
     _get_plotting_df,
     _get_title,
+    _hdi_to_intervals,
     _subset_df,
     _to_dt_group,
     _use_traces_or_sample,
@@ -72,6 +74,46 @@ def _cartoon_model_meta(model) -> tuple[list[str], list[int]]:
     return list(mc.list_params), list(mc.choices)
 
 
+def _resolve_uncertainty_from_legacy(
+    plot_predictive_mean: bool | None,
+    plot_predictive_samples: bool | None,
+    uncertainty: Literal["band", "samples", "both"] | None,
+    alpha_mean: float,
+) -> tuple[Literal["band", "samples", "both"] | None, float]:
+    """Map the deprecated boolean pair onto the ``uncertainty=`` vocabulary.
+
+    Returns the resolved ``(uncertainty, alpha_mean)``. The booleans only take
+    effect when ``uncertainty`` was left at its default; passing both spellings
+    explicitly is an error. Mapping: ``(True, False)`` (the old default) means
+    mean-only, i.e. ``uncertainty=None``; anything with samples on maps to
+    ``"samples"``, with the mean suppressed via ``alpha_mean=0.0`` when
+    ``plot_predictive_mean=False``.
+    """
+    if plot_predictive_mean is None and plot_predictive_samples is None:
+        return uncertainty, alpha_mean
+    if uncertainty != "band":
+        raise ValueError(
+            "Pass either `uncertainty=` or the deprecated `plot_predictive_mean`/"
+            "`plot_predictive_samples` booleans, not both."
+        )
+    mean_flag = True if plot_predictive_mean is None else plot_predictive_mean
+    samples_flag = False if plot_predictive_samples is None else plot_predictive_samples
+    if not (mean_flag or samples_flag):
+        raise ValueError(
+            "At least one of plot_predictive_mean or "
+            "plot_predictive_samples must be True"
+        )
+    warnings.warn(
+        "plot_predictive_mean/plot_predictive_samples are deprecated; use "
+        "uncertainty=None (mean only), 'samples', 'band', or 'both' instead.",
+        FutureWarning,
+        stacklevel=3,
+    )
+    if samples_flag:
+        return "samples", (alpha_mean if mean_flag else 0.0)
+    return None, alpha_mean
+
+
 def _plot_model_cartoon_1D(
     data: pd.DataFrame,
     model_name: str,
@@ -81,10 +123,20 @@ def _plot_model_cartoon_1D(
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
+    bins: int | np.ndarray | str | None = None,
+    step: bool = True,
+    uncertainty: Literal["band", "samples", "both"] | None = None,
+    intervals: list[tuple[float, float]] | None = None,
+    alpha_mean: float = 1.0,
+    alpha_uncertainty: float | None = None,
+    hist_height: float | None = None,
     colors: str | list[str] | None = None,
+    linestyles: list[str] | None = None,
+    linewidths: list[float] | None = None,
     title: str | None = "Model Plots",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
+    legend: bool = True,
     list_params: list[str] | None = None,
     choices: list[int] | None = None,
     **kwargs,
@@ -107,6 +159,21 @@ def _plot_model_cartoon_1D(
 
     if plot_data and isinstance(colors, str):
         raise ValueError("When `plot_data=True`, `colors` must be a list or dict.")
+
+    # Translate the processed [predicted, observed] style pairs into the
+    # renderer's per-artist parameters. These were previously documented but
+    # silently swallowed by **kwargs.
+    linestyles = linestyles if linestyles is not None else ["-", "-"]
+    linewidths = linewidths if linewidths is not None else [1.25, 1.25]
+    style_kwargs: dict[str, Any] = dict(
+        color_predictive=colors[0],
+        color_predictive_mean=colors[0],
+        color_data=colors[1] if len(colors) > 1 else DEFAULT_PREDICTIVE_COLORS[1],
+        linestyle_histogram=linestyles[0],
+        linestyle_histogram_data=linestyles[1] if len(linestyles) > 1 else None,
+        linewidth_histogram=linewidths[0],
+        linewidth_histogram_data=linewidths[1] if len(linewidths) > 1 else None,
+    )
 
     if "ax" in kwargs:
         ax = kwargs.pop("ax")
@@ -171,6 +238,15 @@ def _plot_model_cartoon_1D(
             if not plot_data or data_observed is None
             else data_observed.reset_index()
         ),
+        bins=bins,
+        step=step,
+        uncertainty=uncertainty,
+        intervals=intervals,
+        alpha_mean=alpha_mean,
+        alpha_uncertainty=alpha_uncertainty,
+        hist_height=hist_height,
+        legend=legend,
+        **style_kwargs,
         **plot_function_kwargs,
         **kwargs,
     )
@@ -197,15 +273,20 @@ def _plot_model_cartoon_2D(
     row: str | None = None,
     col: str | None = None,
     col_wrap: int | None = None,
-    bins: int | np.ndarray | str | None = 100,
-    step: bool = False,
-    # interval: tuple[float, float] | None = None,
+    bins: int | np.ndarray | str | None = None,
+    step: bool = True,
+    uncertainty: Literal["band", "samples", "both"] | None = None,
+    intervals: list[tuple[float, float]] | None = None,
+    alpha_mean: float = 1.0,
+    alpha_uncertainty: float | None = None,
+    hist_height: float | None = None,
     colors: str | list[str] | None = None,
-    linestyles: str | list[str] = "-",
-    linewidths: float | list[float] = 1.25,
+    linestyles: list[str] | None = None,
+    linewidths: list[float] | None = None,
     title: str | None = "Model Cartoon",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
+    legend: bool = True,
     grid_kwargs: dict | None = None,
     list_params: list[str] | None = None,
     choices: list[int] | None = None,
@@ -240,29 +321,38 @@ def _plot_model_cartoon_2D(
         predictive_group=predictive_group,
         bins=bins,
         step=step,
-        # interval=interval,
+        uncertainty=uncertainty,
+        intervals=intervals,
+        alpha_mean=alpha_mean,
+        alpha_uncertainty=alpha_uncertainty,
+        hist_height=hist_height,
         colors=colors,
         linestyles=linestyles,
         linewidths=linewidths,
         title=None,
         xlabel=xlabel,
         ylabel=ylabel,
+        legend=False,
         **kwargs,
     )
 
-    if plot_data:
-        custom_lines = [
-            Line2D([0], [0], color="blue", linestyle="-", lw=1.5),
-            Line2D([0], [0], color="black", linestyle="-", lw=1.5),
-        ]
-
-        custom_labels = ["observed", "mean_predictive"]
-
-        g.add_legend(
-            dict(zip(custom_labels, custom_lines)),
-            title="",
-            label_order=["observed", "mean_predictive"],
-        )
+    # One grid-level legend harvested from the labeled artists across all
+    # figure axes (twin axes register on the figure too). Mapped facets run
+    # with legend=False, so there are no per-facet legends to collide with.
+    if legend:
+        handles_by_label: dict[str, Any] = {}
+        for ax_ in g.figure.axes:
+            h_, l_ = ax_.get_legend_handles_labels()
+            for handle, lab in zip(h_, l_):
+                handles_by_label.setdefault(lab, handle)
+        if handles_by_label:
+            labels_all = list(handles_by_label)
+            ordered = [labels_all[i] for i in _legend_order(labels_all)]
+            g.add_legend(
+                {lab: handles_by_label[lab] for lab in ordered},
+                title="",
+                label_order=ordered,
+            )
 
     if title:
         g.figure.subplots_adjust(top=0.9)
@@ -389,16 +479,22 @@ def plot_model_cartoon(
     col_wrap: int | None = None,
     groups: str | Iterable[str] | None = None,
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
-    bins: int | np.ndarray | str | None = 50,
-    step: bool = False,
-    plot_predictive_mean: bool = True,
-    plot_predictive_samples: bool = False,
-    colors: str | list[str] | None = None,
+    bins: int | np.ndarray | str | None = None,
+    step: bool = True,
+    hdi: float | str | tuple[float, float] | list | None = None,
+    uncertainty: Literal["band", "samples", "both"] | None = "band",
+    alpha_mean: float = 1.0,
+    alpha_uncertainty: float | None = None,
+    hist_height: float | None = None,
+    plot_predictive_mean: bool | None = None,
+    plot_predictive_samples: bool | None = None,
+    colors: str | list[str] | dict[str, str] | None = None,
     linestyles: str | list[str] | tuple[str] | dict[str, str] = "-",
     linewidths: float | list[float] | tuple[float] | dict[str, float] = 1.25,
     title: str | None = "Posterior Predictive Distribution",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
+    legend: bool = True,
     grid_kwargs: dict | None = None,
     **kwargs,
 ) -> Axes | FacetGrid | list[FacetGrid]:
@@ -480,13 +576,51 @@ def plot_model_cartoon(
         this can be an iterable of strings. Otherwise, this is a dictionary mapping the
         dimension name to the order of the groups in that dimension.
     bins : optional
-        Specification of hist bins, by default 100. There are three options:
+        Specification of the RT-histogram bins, by default None, which keeps the
+        legacy grid of `bin_size`-spaced edges over the x-range (`bin_size` can be
+        passed as a keyword argument, default 0.05). Otherwise one of:
         - A string describing the binning strategy (passed to `np.histogram_bin_edges`).
         - A list-like defining the bin edges.
         - An integer defining the number of bins to be used.
+        An explicit `bins` wins over `bin_size`.
     step : optional
-        Whether to plot the distributions as a step function or a smooth density plot,
-        by default False.
+        If True (default), histogram curves are drawn as edge-anchored step
+        outlines; if False, as frequency polygons through the bin centers.
+    hdi : optional
+        The interval(s) displayed by the uncertainty bands, by default None,
+        which becomes graded 50% and 94% equal-tailed intervals. Accepts a
+        float mass (0.94), a "94%" string, a legacy (lo, hi) quantile tuple,
+        or a list of any of these for multiple graded bands. Despite the
+        name, intervals are equal-tailed, not highest-density.
+    uncertainty : optional
+        How posterior predictive uncertainty is displayed (same vocabulary as
+        `plot_predictive`), by default "band":
+        - "band": graded pointwise quantile bands on the RT histograms, fan-chart
+          ribbons on the decision bounds, a dashed drift-quantile cone, graded
+          non-decision-time spans, and a starting-point whisker.
+        - "samples": per-draw translucent curves (the classic spaghetti), with a
+          rug of non-decision-time ticks instead of per-draw vertical lines.
+        - "both": samples underneath bands.
+        - None: the mean-only rendering (the previous default look).
+    alpha_mean : optional
+        Opacity of the predictive-mean / reference-geometry artists, by
+        default 1.0.
+    alpha_uncertainty : optional
+        Opacity of the uncertainty layer, by default None: bands use a 0.25
+        base with a graded ladder, and sample curves get an automatic
+        per-curve value that keeps total ink roughly constant. An explicit
+        0.0 is honored.
+    hist_height : optional
+        If given, rescale all RT-histogram curves by one common factor so the
+        tallest curve has this height in y-data units above its bound, by
+        default None (raw defective-density units, which can overrun the
+        y-limits for very peaked distributions).
+    plot_predictive_mean, plot_predictive_samples : optional
+        Deprecated boolean spellings of `uncertainty`; mapped with a
+        FutureWarning. (True, False) means `uncertainty=None`; any
+        combination with samples on maps to "samples" (mean suppressed via
+        `alpha_mean=0` when `plot_predictive_mean=False`). Passing these
+        together with an explicit `uncertainty` raises a ValueError.
     colors : optional
         Colors to use for the different levels of the hue variable. When a `str`, the
         color of posterior predictives, in which case an error will be thrown if
@@ -513,6 +647,9 @@ def plot_model_cartoon(
         The label for the x-axis, by default "Response Time".
     ylabel : optional
         The label for the y-axis, by default "Density".
+    legend : optional
+        Whether to draw a legend assembled from the labeled plot layers, by
+        default True.
     grid_kwargs : optional
         Additional keyword arguments are passed to the [`FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
@@ -526,15 +663,34 @@ def plot_model_cartoon(
     Axes | FacetGrid | list[FacetGrid]
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
-    if not (plot_predictive_mean or plot_predictive_samples):
+    if uncertainty is not None and uncertainty not in ("band", "samples", "both"):
         raise ValueError(
-            "At least one of plot_predictive_mean or "
-            "plot_predictive_samples must be True"
+            f"`uncertainty` must be one of 'band', 'samples', 'both', or None, "
+            f"but got {uncertainty!r}. Did you pass a positional argument in the "
+            "wrong slot?"
         )
 
-    # Process linestyles
+    # Deprecated boolean spellings map onto the `uncertainty` vocabulary.
+    uncertainty, alpha_mean = _resolve_uncertainty_from_legacy(
+        plot_predictive_mean, plot_predictive_samples, uncertainty, alpha_mean
+    )
+
+    # Resolve the band intervals once, widest-first (mirrors plot_predictive).
+    intervals = (
+        _hdi_to_intervals([0.5, 0.94] if hdi is None else hdi)
+        if uncertainty in ("band", "both")
+        else None
+    )
+
+    # The mean pipeline always runs: the reference geometry and the histogram
+    # baselines need it. The samples pipeline runs whenever uncertainty is
+    # displayed.
+    run_mean = True
+    run_samples = uncertainty is not None
+
+    # Process colors / linestyles / linewidths into [predicted, observed] pairs
+    colors_ = _process_colors(colors, plot_data)
     linestyles_ = _process_lines(linestyles, mode="linestyles")
-    # Process linewidths
     linewidths_ = _process_lines(linewidths, mode="linewidths")
 
     groups, groups_order = _check_groups_and_groups_order(
@@ -560,7 +716,7 @@ def plot_model_cartoon(
 
     # Mean version of plot
     plotting_df_mean = None
-    if plot_predictive_mean:
+    if run_mean:
         if predictive_group == "posterior_predictive":
             dt_mean = _make_dt_mean_posterior(
                 deepcopy(model.traces if dt is None else dt)
@@ -633,7 +789,7 @@ def plot_model_cartoon(
 
         plotting_df_mean["source"] = predictive_group + "_mean"
 
-    if plot_predictive_samples:
+    if run_samples:
         dt, sampled = _use_traces_or_sample(
             model, data, dt, n_samples=n_samples, predictive_group=predictive_group
         )
@@ -678,11 +834,8 @@ def plot_model_cartoon(
     elif plotting_df_mean is not None:
         plotting_df = plotting_df_mean
 
-    if plotting_df is None:
-        raise ValueError(
-            "At least one of `plot_predictive_samples` or `plot_predictive_mean` "
-            "must be True."
-        )
+    if plotting_df is None:  # pragma: no cover — run_mean is always True
+        raise ValueError("Could not assemble a plotting dataframe.")
 
     # return plotting_df
 
@@ -693,63 +846,53 @@ def plot_model_cartoon(
     # (aDDM/RLSSM, absent from default_model_config) render like built-ins.
     _list_params, _choices = _cartoon_model_meta(model)
 
+    shared_plot_kwargs: dict[str, Any] = dict(
+        model_name=model.model_name,
+        list_params=_list_params,
+        choices=_choices,
+        plot_data=plot_data,
+        plot_mean=run_mean,
+        plot_samples=run_samples,
+        predictive_group=predictive_group,
+        bins=bins,
+        step=step,
+        uncertainty=uncertainty,
+        intervals=intervals,
+        alpha_mean=alpha_mean,
+        alpha_uncertainty=alpha_uncertainty,
+        hist_height=hist_height,
+        colors=colors_,
+        linestyles=linestyles_,
+        linewidths=linewidths_,
+        xlabel=xlabel,
+        ylabel=ylabel,
+    )
+
     if not extra_dims:
-        ax = _plot_model_cartoon_1D(
+        # The legend is assembled inside the renderer from the labeled
+        # artists (replacing the old hard-coded two-entry proxy legend).
+        return _plot_model_cartoon_1D(
             data=plotting_df,
-            model_name=model.model_name,
-            list_params=_list_params,
-            choices=_choices,
-            plot_data=plot_data,
-            plot_mean=plot_predictive_mean,
-            plot_samples=plot_predictive_samples,
-            predictive_group=predictive_group,
-            bins=bins,
-            step=step,
-            colors=colors,
-            linestyles=linestyles_,
-            linewidths=linewidths_,
             title=title,
-            xlabel=xlabel,
-            ylabel=ylabel,
+            legend=legend,
+            **shared_plot_kwargs,
             **kwargs,
         )
-
-        custom_lines = [
-            Line2D([0], [0], color="blue", linestyle="-", lw=1.5),
-            Line2D([0], [0], color="black", linestyle="-", lw=1.5),
-        ]
-
-        custom_labels = ["observed", "mean_predictive"]
-        ax.legend(custom_lines, custom_labels, title="", loc="upper right")
-        return ax
 
     # The multiple dimensions case
     # If group is not provided, we are producing a grid of plots
     if groups is None:
-        g = _plot_model_cartoon_2D(
+        return _plot_model_cartoon_2D(
             data=plotting_df,
-            model_name=model.model_name,
-            list_params=_list_params,
-            choices=_choices,
-            plot_data=plot_data,
-            plot_mean=plot_predictive_mean,
-            plot_samples=plot_predictive_samples,
-            predictive_group=predictive_group,
             row=row,
             col=col,
             col_wrap=col_wrap,
-            bins=bins,
-            step=step,
-            colors=colors,
-            linestyles=linestyles_,
-            linewidths=linewidths_,
             title=title,
-            xlabel=xlabel,
-            ylabel=ylabel,
+            legend=legend,
             grid_kwargs=grid_kwargs,
+            **shared_plot_kwargs,
             **kwargs,
         )
-        return g
 
     # The group dimension case
     plots = []
@@ -772,25 +915,13 @@ def plot_model_cartoon(
             continue
         g = _plot_model_cartoon_2D(
             data=df,
-            model_name=model.model_name,
-            list_params=_list_params,
-            choices=_choices,
-            plot_data=plot_data,
-            plot_mean=plot_predictive_mean,
-            plot_samples=plot_predictive_samples,
-            predictive_group=predictive_group,
             row=row,
             col=col,
             col_wrap=col_wrap,
-            bins=bins,
-            step=step,
-            colors=colors,
-            linestyles=linestyles_,
-            linewidths=linewidths_,
             title=title,
-            xlabel=xlabel,
-            ylabel=ylabel,
+            legend=legend,
             grid_kwargs=grid_kwargs,
+            **shared_plot_kwargs,
             **kwargs,
         )
 
@@ -831,6 +962,7 @@ def plot_func_model(
     color_data: str = "blue",
     color_predictive_mean: str = "black",
     color_predictive: str = "black",
+    color_model: str = "black",
     alpha_mean: float = 1,
     alpha_predictive: float | None = None,
     alpha_uncertainty: float | None = None,
@@ -919,7 +1051,12 @@ def plot_func_model(
     color_predictive_mean : str, optional
         Color for posterior mean. Defaults to "black".
     color_predictive : str, optional
-        Color for posterior samples. Defaults to "black".
+        Color for the predictive RT-histogram layers. Defaults to "black".
+    color_model : str, optional
+        Color for the model geometry — boundaries, drift, non-decision time,
+        starting point, and their uncertainty layers. Kept neutral ("black")
+        by default so the figure reads as: structure = neutral, predictions =
+        predicted color, data = observed color.
     alpha_mean : float, optional
         Transparency of posterior mean. Defaults to 1.
     alpha_predictive : float, optional
@@ -1056,11 +1193,14 @@ def plot_func_model(
             smooth_unif=False,
         )
 
-    # ADD DATA HISTOGRAMS
+    # ADD DATA HISTOGRAMS. The baseline is anchored to the same no-noise
+    # simulation that draws the reference boundary, so the histograms sit
+    # exactly on the drawn bound (sim_out's metadata describes a different
+    # trial of the noisy mean simulation).
     hist_bottom_high, hist_bottom_low = calculate_histogram_bounds(
         theta_mean,
         theta_samples,
-        sim_out if (theta_mean is not None) else None,
+        sim_out_no_noise if (theta_mean is not None) else None,
         posterior_pred_no_noise if (theta_samples is not None) else None,
         **kwargs,
     )
@@ -1271,7 +1411,7 @@ def plot_func_model(
                     ylim_low=ylim_low,
                     ylim_high=ylim_high,
                     t_s=t_s,
-                    color=color_predictive,
+                    color=color_model,
                     zorder_cnt=z_cnt,
                 )
                 z_cnt += 1
@@ -1315,7 +1455,7 @@ def plot_func_model(
                         ylim_low=ylim_low,
                         ylim_high=ylim_high,
                         t_s=t_s,
-                        color=color_predictive,
+                        color=color_model,
                         zorder_cnt=0,
                     )
 
@@ -1328,7 +1468,7 @@ def plot_func_model(
                         b_low_m,
                         intervals,
                         geom_base_alpha,
-                        color_predictive,
+                        color_model,
                     )
                 if keep_slope:
                     _render_drift_band(
@@ -1338,7 +1478,7 @@ def plot_func_model(
                         ndt_ref,
                         intervals,
                         geom_base_alpha,
-                        color_predictive,
+                        color_model,
                         linewidth_model,
                     )
                 if keep_starting_point:
@@ -1351,7 +1491,7 @@ def plot_func_model(
                         geom_base_alpha,
                         markershift_starting_point,
                         linewidth_model,
-                        color_predictive,
+                        color_model,
                     )
             if keep_ndt:
                 _render_ndt_uncertainty(
@@ -1361,7 +1501,7 @@ def plot_func_model(
                     uncertainty,
                     geom_base_alpha,
                     geom_spaghetti_alpha,
-                    color_predictive,
+                    color_model,
                     ylim_low,
                     ylim_high,
                 )
@@ -1387,7 +1527,7 @@ def plot_func_model(
             ylim_low=ylim_low,
             ylim_high=ylim_high,
             t_s=t_s,
-            color=color_predictive,
+            color=color_model,
             zorder_cnt=(z_cnt + 1) if legacy else 30,
         )
 
@@ -2030,12 +2170,13 @@ def _render_drift_band(
     the axis would stack its alpha over the boundary ribbons, trajectories,
     and histograms, recreating exactly the occlusion this redesign removes.
     Quantiles are taken in decision time (each draw's path starts at its own
-    t=0) and the cone is truncated once fewer than half the draws are still
-    unabsorbed, so the tail is never computed from a vanishing subsample. The
-    cone is plotted shifted by the reference geometry's non-decision time.
+    t=0) and the cone is truncated at the first absorption across draws:
+    beyond that point the surviving subsample is selection-biased (slow-drift,
+    high-bound draws), which visibly bends the quantiles upward. The cone is
+    plotted shifted by the reference geometry's non-decision time.
     """
     alive = ~np.isnan(drifts)
-    keep = alive.mean(axis=0) >= 0.5
+    keep = alive.all(axis=0)
     if not keep.any():
         return
     last = int(keep.size if keep.all() else np.argmin(keep))
