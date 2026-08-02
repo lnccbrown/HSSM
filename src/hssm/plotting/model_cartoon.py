@@ -1833,6 +1833,50 @@ def _density_matrices(
     return np.vstack(ups), np.vstack(downs)
 
 
+def _defective_densities_n(
+    rts: np.ndarray,
+    choices_arr: np.ndarray,
+    bin_edges: np.ndarray,
+    choices: list[int],
+) -> dict[int, np.ndarray]:
+    """Per-choice defective RT densities for one set of simulated trials.
+
+    The >2-choice sibling of `_defective_densities`: each choice's density
+    integrates to P(choice | valid), so the densities jointly integrate to 1.
+    Deadline misses (``-999``) are excluded from numerator and denominator.
+    """
+    rts = np.asarray(rts).ravel()
+    choices_arr = np.asarray(choices_arr).ravel()
+    valid = rts != -999
+    n_total = int(valid.sum())
+    n_bins = len(bin_edges) - 1
+    if n_total == 0:
+        return {choice: np.zeros(n_bins) for choice in choices}
+    widths = np.diff(bin_edges)
+    return {
+        choice: (
+            np.histogram(np.abs(rts[valid & (choices_arr == choice)]), bins=bin_edges)[
+                0
+            ]
+            / (n_total * widths)
+        )
+        for choice in choices
+    }
+
+
+def _density_matrices_n(
+    sim_outs: Mapping[int, dict],
+    bin_edges: np.ndarray,
+    choices: list[int],
+) -> dict[int, np.ndarray]:
+    """Stack per-draw per-choice densities into ``{choice: (n_draws, n_bins)}``."""
+    per_draw = [
+        _defective_densities_n(s["rts"], s["choices"], bin_edges, choices)
+        for s in sim_outs.values()
+    ]
+    return {choice: np.vstack([d[choice] for d in per_draw]) for choice in choices}
+
+
 def _add_uncertain_histograms(
     ax: Axes,
     bin_edges: np.ndarray,
@@ -2288,16 +2332,25 @@ def plot_func_model_n(
     data: pd.DataFrame | None = None,
     n_trajectories: int = 10,
     bin_size: float = 0.05,
-    n_samples: int = 10,
+    bins: int | np.ndarray | str | None = None,
+    step: bool = True,
+    uncertainty: Literal["band", "samples", "both"] | None = None,
+    intervals: list[tuple[float, float]] | None = None,
+    hist_height: float | None = None,
+    n_reps: int = 10,
     linewidth_histogram: float | int = 0.5,
     linewidth_model: float | int = 0.5,
+    linestyle_histogram: str = "-.",
+    linestyle_histogram_data: str | None = "-",
+    linewidth_histogram_data: float | None = None,
     legend_fontsize: int = 7,
     legend_shadow: bool = True,
     legend_location: str = "upper right",
     delta_t_model: float = 0.01,
     add_legend: bool = True,
     alpha_mean: float = 1.0,
-    alpha_predictive: float = 0.05,
+    alpha_predictive: float | None = None,
+    alpha_uncertainty: float | None = None,
     alpha_trajectories: float = 0.5,
     keep_frame: bool = False,
     random_state: int | None = None,
@@ -2355,15 +2408,26 @@ def plot_func_model_n(
     -----
     This function visualizes model predictions by plotting simulated trajectories,
     histograms of response times, and model cartoons. It can show both the mean
-    prediction and uncertainty from posterior samples.
+    prediction and uncertainty from posterior samples. `uncertainty` follows the
+    same vocabulary as `plot_func_model`; None keeps the legacy rendering.
     """
+    if "n_samples" in kwargs:
+        _logger.warning(
+            "plot_func_model_n(n_samples=...) was renamed to n_reps= (simulation "
+            "repetitions per parameter row); the old name will stop working in "
+            "a future release."
+        )
+        n_reps = kwargs.pop("n_samples")
+    if alpha_predictive is not None and alpha_uncertainty is None:
+        alpha_uncertainty = alpha_predictive
+    legacy_alpha = alpha_predictive if alpha_predictive is not None else 0.05
+    legacy = uncertainty is None
+
     ylim_low, ylim_high = kwargs.get("ylims", (0, 5))
     xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
-    # # Extract some parameters from kwargs
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
-    bins = list(np.arange(xlim_low, xlim_high, bin_size))
 
     # ADD MODEL:
 
@@ -2379,7 +2443,7 @@ def plot_func_model_n(
         sim_out = simulator(
             model=model_name,
             theta=theta_mean.values,
-            n_samples=n_samples,
+            n_samples=n_reps,
             no_noise=False,
             delta_t=delta_t_model,
             random_state=rand_int,
@@ -2459,146 +2523,241 @@ def plot_func_model_n(
     # fall back to the registry for built-in models called directly.
     if choices is None:
         choices = default_model_config[cast("SupportedModels", model_name)]["choices"]
-    cnt_cumul = 0
 
-    # POSTERIOR MEAN BASED HISTOGRAM
+    # Shared bin edges for every histogram on this axis (see plot_func_model).
+    if bins is None:
+        bin_edges = np.arange(xlim_low, xlim_high, bin_size)
+    else:
+        if bin_size != 0.05:
+            _logger.warning("Both `bins` and `bin_size` were provided; `bins` wins.")
+        pooled: list[np.ndarray] = []
+        if theta_mean is not None:
+            rts_arr = np.asarray(sim_out["rts"]).ravel()
+            pooled.append(np.abs(rts_arr[rts_arr != -999]))
+        if theta_samples is not None:
+            for sim_out_tmp in posterior_pred_sims.values():
+                rts_arr = np.asarray(sim_out_tmp["rts"]).ravel()
+                pooled.append(np.abs(rts_arr[rts_arr != -999]))
+        if data is not None:
+            obs_rts = data["rt"].to_numpy()
+            pooled.append(np.abs(obs_rts[obs_rts != -999]))
+        bin_edges = np.histogram_bin_edges(
+            np.concatenate(pooled) if pooled else np.array([0.0, 1.0]),
+            bins=bins,
+            range=(max(xlim_low, 0.0), xlim_high),
+        )
+
+    # One shared baseline: the reference no-noise boundary at t=0 when a mean
+    # is drawn (the same anchor the reference cartoon uses), else the max over
+    # the sampled draws' boundaries, else the axis floor (data-only call).
     if theta_mean is not None:
-        b = np.maximum(sim_out["metadata"]["boundary"], 0)
-        bottom = b[0]
-
-        for i, choice in enumerate(choices):
-            tmp_label = None
-
-            if add_legend and i == 0:
-                tmp_label = "PostPred"
-
-            weights = np.tile(
-                (1 / bin_size)
-                / sim_out["rts"][sim_out["rts"] != -999].flatten().shape[0],
-                reps=sim_out["rts"][
-                    (sim_out["choices"] == choice) & (sim_out["rts"] != -999)
-                ]
-                .flatten()
-                .shape[0],
-            )
-
-            axis.hist(
-                np.abs(
-                    sim_out["rts"][
-                        (sim_out["choices"] == choice) & (sim_out["rts"] != -999)
-                    ]
-                ),
-                bins=bins,
-                bottom=bottom,
-                weights=weights,
-                histtype="step",
-                alpha=alpha_mean,
-                color=TRAJ_COLOR_DEFAULT_DICT[choice],
-                zorder=cnt_cumul,
-                label=tmp_label,
-                linewidth=linewidth_histogram,
-                linestyle="-.",
-            )
-            cnt_cumul += 1
-
-    # POSTERIOR SAMPLE BASED HISTOGRAM
-    if theta_samples is not None:
-        if theta_mean is None:
-            bottom = np.max(
+        bottom = float(np.maximum(sim_out_no_noise["metadata"]["boundary"], 0)[0])
+    elif theta_samples is not None:
+        bottom = float(
+            np.max(
                 [
                     np.maximum(
                         posterior_pred_no_noise[key_]["metadata"]["boundary"], 0
                     )[0]
-                    for key_, _ in posterior_pred_no_noise.items()
+                    for key_ in posterior_pred_no_noise
                 ]
             )
+        )
+    else:
+        bottom = 0.0
 
-        for k, sim_out_tmp in posterior_pred_sims.items():
-            for i, choice in enumerate(choices):
-                tmp_label = None
-
-                if add_legend and i == 0:
-                    tmp_label = "PostPred"
-
-                weights = np.tile(
-                    (1 / bin_size)
-                    / sim_out_tmp["rts"][sim_out_tmp["rts"] != -999].shape[0],
-                    reps=sim_out_tmp["rts"][
-                        (sim_out_tmp["choices"] == choice)
-                        & (sim_out_tmp["rts"] != -999)
-                    ].shape[0],
-                )
-
-                axis.hist(
-                    np.abs(
-                        sim_out_tmp["rts"][
-                            (sim_out_tmp["choices"] == choice)
-                            & (sim_out_tmp["rts"] != -999)
-                        ]
-                    ),
-                    bins=bins,
-                    bottom=bottom,
-                    weights=weights,
-                    histtype="step",
-                    alpha=alpha_predictive,
-                    color=TRAJ_COLOR_DEFAULT_DICT[choice],
-                    zorder=cnt_cumul,
-                    label=tmp_label,
-                    linewidth=linewidth_histogram,
-                    linestyle="-.",
-                )
-                cnt_cumul += 1
-
-    # DATA BASED HISTOGRAM
+    # Per-choice density matrices in raw defective-density units.
+    sample_densities: dict[int, np.ndarray] | None = None
+    if theta_samples is not None:
+        sample_densities = _density_matrices_n(posterior_pred_sims, bin_edges, choices)
+        n_hist_draws = next(iter(sample_densities.values())).shape[0]
+        if n_hist_draws < 10 and uncertainty in ("band", "both"):
+            _logger.warning(
+                "Quantile bands over fewer than 10 posterior draws are noisy; "
+                "consider a larger `n_samples`."
+            )
+    plugin_densities: dict[int, np.ndarray] | None = None
+    if theta_mean is not None:
+        plugin_densities = _density_matrices_n({0: sim_out}, bin_edges, choices)
+    obs_densities: dict[int, np.ndarray] | None = None
     if data is not None:
+        obs_densities = _defective_densities_n(
+            data["rt"].to_numpy(), data["response"].to_numpy(), bin_edges, choices
+        )
+
+    if hist_height is not None:
+        peak = max(
+            (
+                float(v.max())
+                for group in (sample_densities, plugin_densities, obs_densities)
+                if group is not None
+                for v in group.values()
+            ),
+            default=0.0,
+        )
+        hist_scale = hist_height / peak if peak > 0 else 1.0
+    else:
+        hist_scale = 1.0
+
+    if not legacy:
+        band_densities = (
+            sample_densities if sample_densities is not None else plugin_densities
+        )
+        if band_densities is not None:
+            for i, choice in enumerate(choices):
+                _add_uncertain_histograms(
+                    axis,
+                    bin_edges,
+                    bottom,
+                    band_densities[choice],
+                    uncertainty=uncertainty,
+                    intervals=intervals,
+                    step=step,
+                    scale=hist_scale,
+                    color=TRAJ_COLOR_DEFAULT_DICT[choice],
+                    linestyle=linestyle_histogram,
+                    linewidth=linewidth_histogram,
+                    alpha_mean=alpha_mean,
+                    alpha_uncertainty=alpha_uncertainty,
+                    add_labels=(i == 0),
+                )
+    else:
+        if plugin_densities is not None:
+            for i, choice in enumerate(choices):
+                _add_uncertain_histograms(
+                    axis,
+                    bin_edges,
+                    bottom,
+                    plugin_densities[choice],
+                    uncertainty=None,
+                    intervals=None,
+                    step=step,
+                    scale=hist_scale,
+                    color=TRAJ_COLOR_DEFAULT_DICT[choice],
+                    linestyle=linestyle_histogram,
+                    linewidth=linewidth_histogram,
+                    alpha_mean=alpha_mean,
+                    alpha_uncertainty=None,
+                    add_labels=(i == 0),
+                )
+        if sample_densities is not None:
+            for i, choice in enumerate(choices):
+                _add_uncertain_histograms(
+                    axis,
+                    bin_edges,
+                    bottom,
+                    sample_densities[choice],
+                    uncertainty="samples",
+                    intervals=None,
+                    step=step,
+                    scale=hist_scale,
+                    color=TRAJ_COLOR_DEFAULT_DICT[choice],
+                    linestyle=linestyle_histogram,
+                    linewidth=linewidth_histogram,
+                    alpha_mean=alpha_mean,
+                    alpha_uncertainty=legacy_alpha,
+                    add_labels=(i == 0),
+                    draw_mean=False,
+                )
+
+    if obs_densities is not None:
+        ls_data = (
+            linestyle_histogram_data
+            if linestyle_histogram_data is not None
+            else linestyle_histogram
+        )
+        lw_data = (
+            linewidth_histogram_data
+            if linewidth_histogram_data is not None
+            else linewidth_histogram
+        )
         for i, choice in enumerate(choices):
-            tmp_label = None
-
-            if add_legend and (i == 0):
-                tmp_label = "Data"
-
-            data_tmp = data.query(f"rt != {-999} and response == {choice}")["rt"].values
-            weights = np.tile(
-                (1 / bin_size) / data.shape[0],
-                reps=data_tmp.shape[0],
-            )
-
-            axis.hist(
-                np.abs(data_tmp),
-                bins=bins,
-                bottom=bottom,
-                weights=weights,
-                histtype="step",
-                alpha=1,
+            x_o, y_o = _curve_xy(bin_edges, obs_densities[choice], step)
+            axis.plot(
+                x_o,
+                bottom + hist_scale * y_o,
                 color=TRAJ_COLOR_DEFAULT_DICT[choice],
-                zorder=cnt_cumul,
-                label="Data",
-                linewidth=linewidth_histogram,
-                linestyle="-",
+                linestyle=ls_data,
+                linewidth=lw_data,
+                zorder=4,
+                label="observed" if i == 0 else "_nolegend_",
             )
-            cnt_cumul += 1
 
     # ADD MODEL CARTOONS:
 
     tmp_label = None
     z_cnt = 0
     if theta_samples is not None:
-        for k, sim_out_tmp in posterior_pred_no_noise.items():
-            t_s = np.arange(0, sim_out_tmp["metadata"]["max_t"], delta_t_model)
-            _add_model_n_cartoon_to_ax(
-                sample=sim_out_tmp,
-                axis=axis,
-                delta_t_graph=delta_t_model,
-                alpha=alpha_predictive,
-                lw_m=linewidth_model,
-                tmp_label=tmp_label,
-                linestyle="-",
-                ylim=ylim_high,
-                t_s=t_s,
-                color_dict=TRAJ_COLOR_DEFAULT_DICT,
-                zorder_cnt=z_cnt,
+        t_s = np.arange(
+            0, posterior_pred_no_noise[0]["metadata"]["max_t"], delta_t_model
+        )
+        if legacy or uncertainty in ("samples", "both"):
+            # Per-draw cartoons. In the uncertainty modes the per-draw ndt
+            # axvline (drawn via keep_starting_point in this renderer) is
+            # replaced by the rug/spans below.
+            spaghetti_alpha = (
+                legacy_alpha
+                if legacy
+                else (
+                    alpha_uncertainty
+                    if alpha_uncertainty is not None
+                    else float(np.clip(4.0 / len(posterior_pred_no_noise), 0.02, 0.25))
+                )
             )
-            z_cnt += 1
+            for _, sim_out_tmp in posterior_pred_no_noise.items():
+                _add_model_n_cartoon_to_ax(
+                    sample=sim_out_tmp,
+                    axis=axis,
+                    delta_t_graph=delta_t_model,
+                    alpha=spaghetti_alpha,
+                    lw_m=linewidth_model if legacy else 0.6 * linewidth_model,
+                    tmp_label=tmp_label,
+                    linestyle="-",
+                    ylim=ylim_high,
+                    t_s=t_s,
+                    color_dict=TRAJ_COLOR_DEFAULT_DICT,
+                    zorder_cnt=z_cnt if legacy else 0,
+                    keep_starting_point=legacy,
+                )
+                z_cnt += 1
+
+        if not legacy:
+            b_high_m, _, _, ndts, _ = _geometry_arrays(
+                posterior_pred_no_noise, t_s, delta_t_model
+            )
+            geom_base_alpha = (
+                alpha_uncertainty if alpha_uncertainty is not None else 0.25
+            )
+            geom_spaghetti_alpha = (
+                alpha_uncertainty
+                if alpha_uncertainty is not None
+                else float(np.clip(4.0 / b_high_m.shape[0], 0.02, 0.25))
+            )
+            if uncertainty in ("band", "both") and intervals:
+                # Single upward boundary: one graded ribbon per interval.
+                band_alphas_ = _band_alphas(geom_base_alpha, len(intervals))
+                for (lo, hi), band_alpha in zip(intervals, band_alphas_):
+                    axis.fill_between(
+                        t_s,
+                        np.quantile(b_high_m, lo, axis=0),
+                        np.quantile(b_high_m, hi, axis=0),
+                        color="black",
+                        alpha=float(band_alpha),
+                        linewidth=0,
+                        zorder=1010,
+                        label=f"boundary {hi - lo:.0%} interval",
+                    )
+            _render_ndt_uncertainty(
+                axis,
+                ndts,
+                intervals,
+                uncertainty,
+                geom_base_alpha,
+                geom_spaghetti_alpha,
+                "black",
+                ylim_low,
+                ylim_high,
+            )
 
     if theta_mean is not None:
         t_s = np.arange(0, sim_out_no_noise["metadata"]["max_t"], delta_t_model)
@@ -2613,7 +2772,7 @@ def plot_func_model_n(
             ylim=ylim_high,
             t_s=t_s,
             color_dict=TRAJ_COLOR_DEFAULT_DICT,
-            zorder_cnt=z_cnt + 1,
+            zorder_cnt=(z_cnt + 1) if legacy else 30,
         )
 
     if (n_trajectories > 0) and (
@@ -2639,6 +2798,7 @@ def plot_func_model_n(
         custom_titles = ["response: " + str(choice) for choice in choices]
 
         custom_elems.append(Line2D([0], [0], color="black", lw=1.0, linestyle="dashed"))
+        custom_titles.append("ndt")
 
         axis.legend(
             custom_elems,
