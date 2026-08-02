@@ -14,8 +14,10 @@ from scipy.stats import gaussian_kde
 
 from .utils import (
     DEFAULT_PREDICTIVE_COLORS,
+    _band_alphas,
     _check_groups_and_groups_order,
     _check_sample_size,
+    _curve_xy,
     _get_plotting_df,
     _get_title,
     _hdi_to_intervals,
@@ -80,21 +82,6 @@ def _kde_series(
         name="bin_n",
         copy=False,
     )
-
-
-def _curve_xy(
-    bin_edges: np.ndarray, values: np.ndarray | pd.Series, step: bool
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return x, y for one histogram curve.
-
-    `step=True` yields the edge-anchored histogram outline; `step=False` yields
-    a frequency polygon through the bin centers (not the left edges, which
-    would shift the curve by half a bin).
-    """
-    values = np.asarray(values)
-    if step:
-        return np.repeat(bin_edges, 2)[1:-1], np.repeat(values, 2)
-    return (bin_edges[:-1] + bin_edges[1:]) / 2, values
 
 
 def _process_colors(
@@ -239,9 +226,7 @@ def _plot_predictive_1D(
     # print on top with higher opacity.
     if uncertainty in ("band", "both") and intervals:
         base_alpha = alpha_uncertainty if alpha_uncertainty is not None else 0.25
-        # Narrowest band prints at base_alpha; wider bands fade toward 45% of
-        # it. Reversed linspace so a single band gets the full base value.
-        band_alphas = np.linspace(base_alpha, 0.45 * base_alpha, len(intervals))[::-1]
+        band_alphas = _band_alphas(base_alpha, len(intervals))
         for (lo, hi), band_alpha in zip(intervals, band_alphas):
             x_b, y_lo = to_xy(hists_groupby.quantile(lo))
             _, y_hi = to_xy(hists_groupby.quantile(hi))
