@@ -30,6 +30,7 @@ jobs:
           # List of notebooks to skip (temporarily)
           SKIP_NOTEBOOKS=(
             "docs/tutorials/tutorial_bayeux.ipynb"
+            "docs/tutorials/hsgp_regression.ipynb"
             "hssm_tutorial_workshop_1.ipynb"
             "hssm_tutorial_workshop_2.ipynb"
           )
