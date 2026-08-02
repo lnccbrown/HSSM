@@ -350,6 +350,36 @@ class TestSimulationRouting:
         # reference geometry is the across-trials mean of theta_mean
         np.testing.assert_allclose(no_noise[0]["theta"][0], theta_mean.mean().values)
 
+    def test_trajectories_realize_reference_theta(self, monkeypatch):
+        """Trajectories are noisy realizations of the SAME reduced θ that
+        draws the reference geometry — their crossing markers land on the
+        drawn boundary by construction (was: a random trial's θ each)."""
+        import hssm.plotting.model_cartoon as mc
+
+        theta_mean, _ = _theta_frames()
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        fig, ax, *_ = _render("band", n_trajectories=3)
+
+        traj = [kw for kw in calls if not kw.get("no_noise") and "smooth_unif" in kw]
+        assert len(traj) == 3
+        expected = theta_mean.mean().to_frame().T.values
+        for kw in traj:
+            np.testing.assert_allclose(kw["theta"], expected)
+
+        # crossing markers sit exactly on the (constant, a=1.2) drawn bound
+        markers = [c for c in ax.collections if c.get_zorder() >= 2000]
+        assert markers
+        for m in markers:
+            assert abs(m.get_offsets()[0][1]) == pytest.approx(1.2, rel=1e-6)
+        plt.close("all")
+
     def test_max_t_derived_from_xlims(self, monkeypatch):
         import hssm.plotting.model_cartoon as mc
 

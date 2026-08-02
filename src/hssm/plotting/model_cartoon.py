@@ -1195,6 +1195,8 @@ def plot_func_model(
     rng = np.random.default_rng(random_state)
 
     sim_out = None
+    theta_ref: pd.DataFrame | None = None
+    theta_draws: pd.DataFrame | None = None
     if theta_mean is not None:
         # RT histograms stay marginal over trials by default (they are a
         # predictive check against the pooled observed data); obs= conditions
@@ -1257,39 +1259,33 @@ def plot_func_model(
                 random_state=int(rng.integers(0, 2**31 - 1)),
             )
 
-    # Simulate trajectories
+    # Simulate trajectories: noisy realizations of the SAME reduced θ that
+    # draws the reference geometry, so trajectories illustrate diffusion
+    # noise around the bounds actually on screen and their crossing markers
+    # land on the drawn boundary by construction. (Previously each trajectory
+    # simulated a different random trial's θ against the reference geometry.
+    # Posterior uncertainty stays the bands' job.)
     sim_out_traj = {}
-    for i in range(n_trajectories):
-        if theta_mean is not None:
-            # positional pick: theta_mean is indexed by obs_n labels, which
-            # need not be contiguous under faceting
-            tmp_theta = theta_mean.iloc[
-                rng.integers(theta_mean.shape[0], size=1), :
-            ].values
-        elif theta_samples is not None:
-            # wrap in max statement here
-            # because negative value are possible,
-            # however refer to data instead of posterior samples
-            random_index = tuple(
-                [
-                    rng.choice(theta_samples.index.get_level_values(name_))
-                    for name_ in ("chain", "draw", "obs_n")
-                ]
-            )
-            tmp_theta = theta_samples.loc[random_index, :].values
+    if n_trajectories > 0:
+        if theta_ref is not None:
+            theta_traj = theta_ref
+        elif theta_draws is not None:
+            # Direct renderer calls without theta_mean: one real draw's θ —
+            # deterministic under the seed, never a composed vector.
+            theta_traj = theta_draws.iloc[[int(rng.integers(len(theta_draws)))]]
         else:  # pragma: no cover
             raise ValueError("No theta values provided but n_trajectories is > 0")
-
-        sim_out_traj[i] = simulator(
-            model=model_name,
-            theta=tmp_theta,
-            n_samples=1,
-            no_noise=False,
-            delta_t=delta_t_model,
-            max_t=max_t_geom,
-            random_state=int(rng.integers(0, 2**31 - 1)),
-            smooth_unif=False,
-        )
+        for i in range(n_trajectories):
+            sim_out_traj[i] = simulator(
+                model=model_name,
+                theta=theta_traj.values,
+                n_samples=1,
+                no_noise=False,
+                delta_t=delta_t_model,
+                max_t=max_t_geom,
+                random_state=int(rng.integers(0, 2**31 - 1)),
+                smooth_unif=False,
+            )
 
     # ADD DATA HISTOGRAMS. The baseline is anchored to the same no-noise
     # simulation that draws the reference boundary, so the histograms sit
@@ -1825,25 +1821,24 @@ def _add_trajectories(
     else:
         raise ValueError("The `colors` argument must be a string, list, or mapping.")
 
-    # Make bounds
-    (b_high, b_low) = (
-        np.maximum(sample[0]["metadata"]["boundary"], 0),
-        np.minimum((-1) * sample[0]["metadata"]["boundary"], 0),
-    )
-
-    b_h_init = b_high[0]
-    b_l_init = b_low[0]
-    # .item() extracts a Python scalar; required since NumPy >= 1.25 deprecated
-    # implicit ndim>0-to-scalar conversion inside int()/float().
-    n_roll = int((sample[0]["metadata"]["t"][0] / delta_t_graph + 1).item())
-    b_high = np.roll(b_high, n_roll)
-    b_high[:n_roll] = b_h_init
-    b_low = np.roll(b_low, n_roll)
-    b_low[:n_roll] = b_l_init
-
-    # Trajectories
+    # Trajectories. Bounds and ndt-roll derive per trajectory from its OWN
+    # simulation metadata (was: sample[0] anchored every marker) — value-
+    # identical while all trajectories share one θ, and correct if a caller
+    # ever passes per-draw trajectory sims.
     for i in range(n):
         metadata = sample[i]["metadata"]
+        b_high = np.maximum(metadata["boundary"], 0)
+        b_low = np.minimum((-1) * metadata["boundary"], 0)
+        b_h_init = b_high[0]
+        b_l_init = b_low[0]
+        # .item() extracts a Python scalar; required since NumPy >= 1.25
+        # deprecated implicit ndim>0-to-scalar conversion inside int()/float().
+        n_roll = int((metadata["t"][0] / delta_t_graph + 1).item())
+        b_high = np.roll(b_high, n_roll)
+        b_high[:n_roll] = b_h_init
+        b_low = np.roll(b_low, n_roll)
+        b_low[:n_roll] = b_l_init
+
         tmp_traj = metadata["trajectory"]
         tmp_traj_choice = float(sample[i]["choices"].flatten().item())
         maxid = np.minimum(np.argmax(np.where(tmp_traj > -999)), t_s.shape[0])
@@ -2557,6 +2552,8 @@ def plot_func_model_n(
 
     # One Generator drives every random choice; see plot_func_model.
     rng = np.random.default_rng(random_state)
+    theta_ref: pd.DataFrame | None = None
+    theta_draws: pd.DataFrame | None = None
     if theta_mean is not None:
         # See plot_func_model: histograms marginal by default, conditioned on
         # one trial when obs= is given; geometry always from the reduced θ.
@@ -2614,40 +2611,28 @@ def plot_func_model_n(
                 random_state=int(rng.integers(0, 2**31 - 1)),
             )
 
-    # Simulate trajectories
+    # Simulate trajectories at the reduced reference θ; see plot_func_model.
     sim_out_traj = {}
-    for i in range(n_trajectories):
-        if theta_mean is not None:
-            # positional pick: theta_mean is indexed by obs_n labels, which
-            # need not be contiguous under faceting
-            tmp_theta = theta_mean.iloc[
-                rng.integers(theta_mean.shape[0], size=1), :
-            ].values
-        elif theta_samples is not None:
-            # wrap in max statement here
-            # because negative value are possible,
-            # however refer to data instead of posterior samples
-            random_index = tuple(
-                [
-                    rng.choice(theta_samples.index.get_level_values(name_))
-                    for name_ in ("chain", "draw", "obs_n")
-                ]
-            )
-
-            tmp_theta = theta_samples.loc[random_index, :].values
+    if n_trajectories > 0:
+        if theta_ref is not None:
+            theta_traj = theta_ref
+        elif theta_draws is not None:
+            # Direct renderer calls without theta_mean: one real draw's θ —
+            # deterministic under the seed, never a composed vector.
+            theta_traj = theta_draws.iloc[[int(rng.integers(len(theta_draws)))]]
         else:
             raise ValueError("No theta values provided but n_trajectories is > 0")
-
-        sim_out_traj[i] = simulator(
-            model=model_name,
-            theta=tmp_theta,
-            n_samples=1,
-            no_noise=False,
-            delta_t=delta_t_model,
-            max_t=max_t_geom,
-            random_state=int(rng.integers(0, 2**31 - 1)),
-            smooth_unif=False,
-        )
+        for i in range(n_trajectories):
+            sim_out_traj[i] = simulator(
+                model=model_name,
+                theta=theta_traj.values,
+                n_samples=1,
+                no_noise=False,
+                delta_t=delta_t_model,
+                max_t=max_t_geom,
+                random_state=int(rng.integers(0, 2**31 - 1)),
+                smooth_unif=False,
+            )
 
     # ADD HISTOGRAMS
     # -------------------------------
@@ -2984,17 +2969,18 @@ def _add_trajectories_n(
     """
     colors_dict = TRAJ_COLOR_DEFAULT_DICT
 
-    # Make bounds
-    b = np.maximum(sample[0]["metadata"]["boundary"], 0)
-    b_init = b[0]
-    # .item(): NumPy >= 1.25 deprecated implicit ndim>0-to-scalar conversion.
-    n_roll = int((sample[0]["metadata"]["t"][0] / delta_t_graph + 1).item())
-    b = np.roll(b, n_roll)
-    b[:n_roll] = b_init
-
-    # Trajectories
+    # Trajectories. Bounds and ndt-roll derive per trajectory from its own
+    # metadata; see _add_trajectories.
     for i in range(n):
         metadata = sample[i]["metadata"]
+        b = np.maximum(metadata["boundary"], 0)
+        b_init = b[0]
+        # .item(): NumPy >= 1.25 deprecated implicit ndim>0-to-scalar
+        # conversion.
+        n_roll = int((metadata["t"][0] / delta_t_graph + 1).item())
+        b = np.roll(b, n_roll)
+        b[:n_roll] = b_init
+
         tmp_traj = metadata["trajectory"]
         tmp_traj_choice = float(sample[i]["choices"].flatten().item())
 
