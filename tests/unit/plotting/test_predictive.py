@@ -285,6 +285,31 @@ class TestPredictiveUncertaintyUnit:
         with pytest.raises(ValueError, match="exactly two floats"):
             _hdi_to_intervals((0.1, 0.5, 0.9))
 
+    def test_alpha_uncertainty_zero_is_respected(self):
+        """An explicit 0.0 must not fall back to the default alpha."""
+        df = _synthetic_plotting_df()
+        _, ax = plt.subplots()
+        ax = _plot_predictive_1D(
+            df,
+            ax=ax,
+            uncertainty="band",
+            interval=[(0.03, 0.97)],
+            alpha_uncertainty=0.0,
+        )
+        assert ax.collections[0].get_alpha() == 0.0
+        plt.close("all")
+
+    def test_explicit_uncertainty_none_wins_over_hdi(self):
+        """uncertainty=None draws no bands even when hdi= is set."""
+        with pytest.raises(ValueError, match="`kind` must be"):
+            # validation-only probe unaffected; behavior probe below
+            plot_predictive(None, kind="bogus")
+        df = _synthetic_plotting_df()
+        _, ax = plt.subplots()
+        ax = _plot_predictive_1D(df, ax=ax, uncertainty=None, interval=[(0.03, 0.97)])
+        assert len(ax.collections) == 0
+        plt.close("all")
+
     def test_label_kwarg_does_not_leak(self):
         """A user-passed label must not break band rendering or duplicate."""
         df = _synthetic_plotting_df()

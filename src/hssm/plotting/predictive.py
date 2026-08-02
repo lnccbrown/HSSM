@@ -215,7 +215,11 @@ def _plot_predictive_1D(
     # Layer 1 — per-draw sample curves (the model-cartoon uncertainty idiom).
     if uncertainty in ("samples", "both"):
         n_draws = hists.groupby(level=["chain", "draw"]).ngroups
-        alpha_samples = alpha_uncertainty or float(np.clip(4.0 / n_draws, 0.02, 0.25))
+        alpha_samples = (
+            alpha_uncertainty
+            if alpha_uncertainty is not None
+            else float(np.clip(4.0 / n_draws, 0.02, 0.25))
+        )
         first = True
         for _, draw_hist in hists.groupby(level=["chain", "draw"]):
             x_s, y_s = to_xy(draw_hist.sort_values("bin_n")["rt"].to_numpy())
@@ -234,7 +238,7 @@ def _plot_predictive_1D(
     # Layer 2 — graded uncertainty bands, widest first so narrower bands
     # print on top with higher opacity.
     if uncertainty in ("band", "both") and intervals:
-        base_alpha = alpha_uncertainty or 0.25
+        base_alpha = alpha_uncertainty if alpha_uncertainty is not None else 0.25
         # Narrowest band prints at base_alpha; wider bands fade toward 45% of
         # it. Reversed linspace so a single band gets the full base value.
         band_alphas = np.linspace(base_alpha, 0.45 * base_alpha, len(intervals))[::-1]
@@ -685,7 +689,9 @@ def plot_predictive(
     ylabel : optional
         The label for the y-axis, by default "Density".
     legend : optional
-        Whether to draw a legend, by default True.
+        Whether to draw a legend, by default True. No legend is drawn when the
+        plot contains only the predictive mean (`plot_data=False` with
+        `uncertainty=None`) — a single-series legend adds no information.
     grid_kwargs : optional
         Additional keyword arguments are passed to the [`sns.FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
@@ -716,11 +722,6 @@ def plot_predictive(
     intervals: list[tuple[float, float]] | None = None
     if uncertainty in ("band", "both"):
         intervals = _hdi_to_intervals([0.5, 0.94] if hdi is None else hdi)
-    elif hdi is not None and uncertainty is None:
-        # Legacy spelling: hdi= provided without touching uncertainty was the
-        # old way to request a band. Honor it.
-        uncertainty = "band"
-        intervals = _hdi_to_intervals(hdi)
 
     # Adapt default text to what is actually being plotted.
     if title == _DEFAULT_TITLE and predictive_group == "prior_predictive":
