@@ -385,7 +385,9 @@ def _print_prior(term: CommonTerm | GroupSpecificTerm) -> str:
 
 
 def _generate_random_indices(
-    n_samples: int | float | None, n_draws: int
+    n_samples: int | float | None,
+    n_draws: int,
+    rng: np.random.Generator | None = None,
 ) -> np.ndarray | None:
     """Generate random indices for sampling an InferenceData object.
 
@@ -399,6 +401,9 @@ def _generate_random_indices(
         small, at least one sample will be drawn. When None, returns None.
     n_draws
         The number of total draws in the InferenceData object.
+    rng
+        A seeded Generator to draw the indices from. When None (default), the
+        global NumPy RNG is used, preserving the legacy unseeded behavior.
 
     Returns
     -------
@@ -424,13 +429,16 @@ def _generate_random_indices(
     if n_samples < 1:
         raise ValueError("When an int, n_samples must be >= 1.")
 
-    sampling_indices = np.random.choice(n_draws, size=n_samples, replace=False)
+    choice = rng.choice if rng is not None else np.random.choice
+    sampling_indices = choice(n_draws, size=n_samples, replace=False)
 
     return sampling_indices
 
 
 def _random_sample(
-    data: xr.DataArray | xr.Dataset, n_samples: int | float | None
+    data: xr.DataArray | xr.Dataset,
+    n_samples: int | float | None,
+    rng: np.random.Generator | None = None,
 ) -> xr.DataArray | xr.Dataset:
     """Randomly sample a DataArray or Dataset.
 
@@ -444,6 +452,9 @@ def _random_sample(
         all samples are extracted. When a float between 0 and 1, the proportion of
         samples to be extracted from the draw dimension. If this proportion is very
         small, at least one sample will be drawn. When None, returns None.
+    rng
+        A seeded Generator for the draw selection; None keeps the legacy
+        global-RNG behavior.
 
     Returns
     -------
@@ -451,7 +462,7 @@ def _random_sample(
         The sampled InferenceData object.
     """
     n_draws = data.draw.size
-    sampling_indices = _generate_random_indices(n_samples, n_draws)
+    sampling_indices = _generate_random_indices(n_samples, n_draws, rng=rng)
 
     if sampling_indices is None:
         return data

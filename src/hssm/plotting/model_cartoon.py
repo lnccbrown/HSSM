@@ -508,6 +508,7 @@ def plot_model_cartoon(
     ylabel: str | None = "",
     legend: bool = True,
     obs: int | None = None,
+    random_state: int | np.random.Generator | None = None,
     grid_kwargs: dict | None = None,
     **kwargs,
 ) -> Axes | FacetGrid | list[FacetGrid]:
@@ -675,6 +676,13 @@ def plot_model_cartoon(
         every facet. Note the geometry is nonlinear in the parameters, so the
         curve drawn at the trial-mean θ is not the mean of per-trial curves
         and need not sit mid-band; the reduction is a display convention.
+    random_state : optional
+        Seed (or an existing ``np.random.Generator``) making the whole figure
+        reproducible: which posterior draws are displayed, every simulator
+        seed, and the trajectories. Stream order: the predictive draw subset
+        first, then per facet the plug-in simulation seed, one seed per
+        posterior draw, and one trial pick + seed per trajectory. By default
+        None (fresh entropy — a new figure every call).
     grid_kwargs : optional
         Additional keyword arguments are passed to the [`FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
@@ -706,6 +714,13 @@ def plot_model_cartoon(
             "trial; the observed-data histogram remains pooled over trials.",
             obs,
         )
+
+    # One seeded stream for everything random in this figure: which posterior
+    # draws are displayed, every simulator seed, and the trajectories. The
+    # Generator object itself is handed to the renderers, so each facet
+    # consumes a later segment of the same stream (distinct per facet,
+    # reproducible across calls).
+    rng = np.random.default_rng(random_state)
 
     uncertainty, alpha_mean = _resolve_uncertainty_from_legacy(
         plot_predictive_mean, plot_predictive_samples, uncertainty, alpha_mean
@@ -833,7 +848,9 @@ def plot_model_cartoon(
             model, data, dt, n_samples=n_samples, predictive_group=predictive_group
         )
 
-        # Get the plotting dataframe by chain and sample
+        # Get the plotting dataframe by chain and sample. The rng seeds the
+        # draw-subset selection, which used the unseeded global RNG before —
+        # random_state could never make the displayed draws reproducible.
         plotting_df = _get_plotting_df(
             dt,
             data,
@@ -841,6 +858,7 @@ def plot_model_cartoon(
             n_samples=None if sampled else n_samples,
             response_str=model.response_str,
             predictive_group=predictive_group,
+            rng=rng,
         )
 
         # Get plotting dataframe for posterior mean
@@ -901,6 +919,7 @@ def plot_model_cartoon(
         alpha_uncertainty=alpha_uncertainty,
         hist_height=hist_height,
         obs=obs,
+        random_state=rng,
         colors=colors_,
         linestyles=linestyles_,
         linewidths=linewidths_,
@@ -986,7 +1005,7 @@ def plot_func_model(
     hist_height: float | None = None,
     n_trajectories: int = 0,
     delta_t_model: float = 0.01,
-    random_state: int | None = None,
+    random_state: int | np.random.Generator | None = None,
     obs: int | None = None,
     keep_slope: bool = True,
     keep_boundary: bool = True,
@@ -1059,8 +1078,12 @@ def plot_func_model(
         Number of trajectories to plot. Defaults to 0.
     delta_t_model : float, optional
         Time step for model simulation. Defaults to 0.01.
-    random_state : int, optional
-        Random seed for reproducibility.
+    random_state : int | np.random.Generator, optional
+        Seed (or an existing Generator, passed through unchanged) for every
+        random choice in this renderer. Stream order: one simulator seed for
+        the plug-in RT simulation (if ``theta_mean``), then one per posterior
+        draw (if ``theta_samples``), then one trial pick + one simulator seed
+        per trajectory. Defaults to None (fresh entropy, non-reproducible).
     obs : int, optional
         The ``obs_n`` label of one trial to condition the cartoon on. By
         default (None), the geometry of each draw derives from the trial-mean
@@ -1163,11 +1186,13 @@ def plot_func_model(
     # RUN SIMULATIONS
     # -------------------------------
 
-    # Simulator Data from posterior mean
-    if random_state is not None:
-        np.random.seed(random_state)
-
-    rand_int = np.random.randint(0, 400000000)
+    # One Generator drives every random choice in this renderer; simulator
+    # seeds are drawn positionally from it, so no two consumers share a seed
+    # (the old `rand_int + i` protocol seeded trajectory i and per-draw sim i
+    # identically). An incoming Generator is passed through unchanged, so the
+    # facets of one figure consume successive segments of a single stream —
+    # distinct per facet, reproducible across calls.
+    rng = np.random.default_rng(random_state)
 
     sim_out = None
     if theta_mean is not None:
@@ -1181,7 +1206,7 @@ def plot_func_model(
             n_samples=n_reps,
             no_noise=False,
             delta_t=delta_t_model,
-            random_state=rand_int,
+            random_state=int(rng.integers(0, 2**31 - 1)),
         )
 
         # Simulate model without noise: posterior mean
@@ -1229,7 +1254,7 @@ def plot_func_model(
                 n_samples=n_reps,
                 no_noise=False,
                 delta_t=delta_t_model,
-                random_state=rand_int + i,
+                random_state=int(rng.integers(0, 2**31 - 1)),
             )
 
     # Simulate trajectories
@@ -1239,7 +1264,7 @@ def plot_func_model(
             # positional pick: theta_mean is indexed by obs_n labels, which
             # need not be contiguous under faceting
             tmp_theta = theta_mean.iloc[
-                np.random.choice(theta_mean.shape[0], 1), :
+                rng.integers(theta_mean.shape[0], size=1), :
             ].values
         elif theta_samples is not None:
             # wrap in max statement here
@@ -1247,7 +1272,7 @@ def plot_func_model(
             # however refer to data instead of posterior samples
             random_index = tuple(
                 [
-                    np.random.choice(theta_samples.index.get_level_values(name_))
+                    rng.choice(theta_samples.index.get_level_values(name_))
                     for name_ in ("chain", "draw", "obs_n")
                 ]
             )
@@ -1262,7 +1287,7 @@ def plot_func_model(
             no_noise=False,
             delta_t=delta_t_model,
             max_t=max_t_geom,
-            random_state=rand_int + i,
+            random_state=int(rng.integers(0, 2**31 - 1)),
             smooth_unif=False,
         )
 
@@ -2437,7 +2462,7 @@ def plot_func_model_n(
     alpha_uncertainty: float | None = None,
     alpha_trajectories: float = 0.5,
     keep_frame: bool = False,
-    random_state: int | None = None,
+    random_state: int | np.random.Generator | None = None,
     obs: int | None = None,
     choices: list[int] | None = None,
     **kwargs,
@@ -2484,8 +2509,10 @@ def plot_func_model_n(
         Transparency for trajectory paths.
     keep_frame : bool, default=False
         Whether to keep the frame around the plot.
-    random_state : int, optional
-        Random seed for reproducibility.
+    random_state : int | np.random.Generator, optional
+        Seed (or an existing Generator, passed through unchanged) for every
+        random choice in this renderer; stream order as in
+        ``plot_func_model``. Defaults to None (fresh entropy).
     obs : int, optional
         The ``obs_n`` label of one trial to condition the cartoon on; see
         ``plot_func_model``. Defaults to None (trial-mean geometry, marginal
@@ -2528,11 +2555,8 @@ def plot_func_model_n(
     # RUN SIMULATIONS
     # -------------------------------
 
-    # Simulator Data
-    if random_state is not None:
-        np.random.seed(random_state)
-
-    rand_int = np.random.randint(0, 400000000)
+    # One Generator drives every random choice; see plot_func_model.
+    rng = np.random.default_rng(random_state)
     if theta_mean is not None:
         # See plot_func_model: histograms marginal by default, conditioned on
         # one trial when obs= is given; geometry always from the reduced θ.
@@ -2543,7 +2567,7 @@ def plot_func_model_n(
             n_samples=n_reps,
             no_noise=False,
             delta_t=delta_t_model,
-            random_state=rand_int,
+            random_state=int(rng.integers(0, 2**31 - 1)),
         )
 
         sim_out_no_noise = simulator(
@@ -2585,7 +2609,7 @@ def plot_func_model_n(
                 n_samples=1,
                 no_noise=False,
                 delta_t=delta_t_model,
-                random_state=rand_int,
+                random_state=int(rng.integers(0, 2**31 - 1)),
             )
 
     # Simulate trajectories
@@ -2595,7 +2619,7 @@ def plot_func_model_n(
             # positional pick: theta_mean is indexed by obs_n labels, which
             # need not be contiguous under faceting
             tmp_theta = theta_mean.iloc[
-                np.random.choice(theta_mean.shape[0], 1), :
+                rng.integers(theta_mean.shape[0], size=1), :
             ].values
         elif theta_samples is not None:
             # wrap in max statement here
@@ -2603,7 +2627,7 @@ def plot_func_model_n(
             # however refer to data instead of posterior samples
             random_index = tuple(
                 [
-                    np.random.choice(theta_samples.index.get_level_values(name_))
+                    rng.choice(theta_samples.index.get_level_values(name_))
                     for name_ in ("chain", "draw", "obs_n")
                 ]
             )
@@ -2619,7 +2643,7 @@ def plot_func_model_n(
             no_noise=False,
             delta_t=delta_t_model,
             max_t=max_t_geom,
-            random_state=rand_int + i,
+            random_state=int(rng.integers(0, 2**31 - 1)),
             smooth_unif=False,
         )
 

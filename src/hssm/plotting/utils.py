@@ -17,6 +17,7 @@ def _xarray_to_df(
     posterior: xr.DataArray,
     n_samples: int | float | None,
     response_str: str = "rt,response",
+    rng: np.random.Generator | None = None,
 ) -> pd.DataFrame:
     """Extract samples from posterior and converts it to a DataFrame.
 
@@ -36,13 +37,16 @@ def _xarray_to_df(
         extracted from the draw dimension. When None, all samples are extracted.
     response_str
         The names of the response variable in the posterior.
+    rng
+        A seeded Generator for the draw selection; None keeps the legacy
+        global-RNG behavior.
 
     Returns
     -------
     pd.DataFrame
         A dataframe with the posterior samples.
     """
-    sampled_posterior = _random_sample(posterior, n_samples=n_samples)
+    sampled_posterior = _random_sample(posterior, n_samples=n_samples, rng=rng)
 
     # Convert the posterior samples to a dataframe
     stacked = (
@@ -203,6 +207,7 @@ def _get_plotting_df(
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
+    rng: np.random.Generator | None = None,
 ) -> pd.DataFrame:
     """Prepare a dataframe for plotting.
 
@@ -224,6 +229,9 @@ def _get_plotting_df(
         extracted from the draw dimension. When None, all samples are extracted.
     response_str, optional
         The names of the response variable in the posterior, by default "rt,response"
+    rng, optional
+        A seeded Generator for the draw selection; None keeps the legacy
+        global-RNG behavior.
 
     Returns
     -------
@@ -260,7 +268,7 @@ def _get_plotting_df(
 
     # get the posterior samples
     idata_predictive = cast("xr.DataArray", dt[predictive_group][response_str])
-    predictive = _xarray_to_df(idata_predictive, n_samples=n_samples)
+    predictive = _xarray_to_df(idata_predictive, n_samples=n_samples, rng=rng)
 
     if data is None:
         if extra_dims:

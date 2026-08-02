@@ -327,7 +327,7 @@ class TestSimulationRouting:
     def test_default_histograms_stay_marginal(self, monkeypatch):
         import hssm.plotting.model_cartoon as mc
 
-        theta_mean, theta_samples = _theta_frames()
+        theta_mean, _ = _theta_frames()
         calls: list[dict] = []
         real_simulator = mc.simulator
 
@@ -560,15 +560,16 @@ class TestPlotFuncModel:
         from ssms.basic_simulators.simulator import simulator
 
         theta_mean, _ = _theta_frames()
-        np.random.seed(0)
-        rand_int = np.random.randint(0, 400000000)
+        # reproduce the renderer's seeding protocol: one Generator, simulator
+        # seeds drawn positionally (the plug-in sim's seed is the first draw)
+        rng = np.random.default_rng(0)
         sim_out = simulator(
             model="ddm",
             theta=theta_mean.values,
             n_samples=2,
             no_noise=False,
             delta_t=0.01,
-            random_state=rand_int,
+            random_state=int(rng.integers(0, 2**31 - 1)),
         )
         edges = np.arange(-0.05, 5, 0.05)
         expected_up, _ = _defective_densities(sim_out["rts"], sim_out["choices"], edges)
@@ -654,14 +655,57 @@ class TestPlotFuncModel:
         plt.close("all")
 
     def test_reproducible_with_seed(self):
-        results = []
-        for _ in range(2):
+        """Same random_state => identical figure, including every random layer."""
+
+        def snapshot():
             fig, ax, up, down = _render("band", n_trajectories=2)
-            traj_lines = [ln for ln in ax.get_lines() if 2000 <= ln.get_zorder() < 3000]
-            results.append([ln.get_ydata().copy() for ln in ax.get_lines()[:2]])
+            lines = [ln.get_ydata().copy() for ln in ax.get_lines()]
+            traj = [
+                ln.get_ydata().copy()
+                for ln in ax.get_lines()
+                if 2000 <= ln.get_zorder() < 3000
+            ]
+            polys = [
+                c.get_paths()[0].vertices.copy()
+                for c in ax.collections
+                if isinstance(c, PolyCollection)
+            ]
+            spans = [p.get_extents().bounds for p in ax.patches]
+            bands = [
+                c.get_paths()[0].vertices.copy()
+                for c in up.collections
+                if isinstance(c, PolyCollection)
+            ]
             plt.close("all")
-        for a, b in zip(*results):
-            np.testing.assert_array_equal(a, b)
+            return lines, traj, polys, spans, bands
+
+        first, second = snapshot(), snapshot()
+        assert len(first[1]) == 2  # the trajectories are actually asserted
+        for a, b in zip(first, second):
+            for x, y in zip(a, b):
+                np.testing.assert_array_equal(x, y)
+
+    def test_generator_instance_accepted_and_stateful(self):
+        """A Generator renders fine; two sequential renders sharing ONE
+        Generator consume successive stream segments (the facet mechanism)."""
+
+        def traj_data(rng):
+            fig, ax, *_ = _render("band", n_trajectories=2, random_state=rng)
+            traj = [
+                ln.get_ydata().copy()
+                for ln in ax.get_lines()
+                if 2000 <= ln.get_zorder() < 3000
+            ]
+            plt.close("all")
+            return traj
+
+        shared = np.random.default_rng(5)
+        a, b = traj_data(shared), traj_data(shared)
+        assert any(x.shape != y.shape or not np.array_equal(x, y) for x, y in zip(a, b))
+        # ...while re-seeding reproduces the first segment exactly
+        c = traj_data(np.random.default_rng(5))
+        for x, y in zip(a, c):
+            np.testing.assert_array_equal(x, y)
 
 
 class TestPlotFuncModelN:
