@@ -2598,7 +2598,9 @@ def plot_func_model_n(
                 smooth_unif=False,
             )
 
-            # Simulate model: posterior samples
+            # Simulate model: posterior samples. n_reps was silently ignored
+            # here (n_samples=1), so the per-choice bands summarized
+            # single-rep, near-degenerate histograms.
             posterior_pred_sims[i] = simulator(
                 model=model_name,
                 theta=(
@@ -2606,7 +2608,7 @@ def plot_func_model_n(
                     if obs is None
                     else theta_draws.iloc[[i]].values
                 ),
-                n_samples=1,
+                n_samples=n_reps,
                 no_noise=False,
                 delta_t=delta_t_model,
                 random_state=int(rng.integers(0, 2**31 - 1)),

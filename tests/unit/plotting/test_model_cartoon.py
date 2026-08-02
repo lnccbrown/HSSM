@@ -747,6 +747,31 @@ class TestPlotFuncModelN:
         assert colors == {"black", "green", "blue"}  # per-choice mean curves
         plt.close("all")
 
+    def test_per_draw_sims_respect_n_reps_and_distinct_seeds(self, monkeypatch):
+        """The per-choice bands must summarize real, independent histograms:
+        n_reps was silently ignored (n_samples=1) and every draw shared one
+        seed, so the bands described single-rep, noise-correlated sims."""
+        import hssm.plotting.model_cartoon as mc
+
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        self._render_n("band", n_reps=3)
+        plt.close("all")
+
+        noisy = [kw for kw in calls if not kw.get("no_noise")]
+        per_draw = noisy[1:]  # the first noisy call is the plug-in sim
+        assert len(per_draw) == 6  # 2 chains x 3 draws
+        for kw in per_draw:
+            assert kw["n_samples"] == 3
+        seeds = [kw["random_state"] for kw in noisy]
+        assert len(set(seeds)) == len(seeds)
+
     def test_none_mode_data_only_no_nameerror(self):
         """Regression: bottom was unbound when only data was passed."""
         data = pd.DataFrame({"rt": [0.5, 0.7, 0.6], "response": [0, 1, 2]})
