@@ -1555,11 +1555,11 @@ def plot_func_model(
             labels.extend(l_)
         if labels:
             seen: set[str] = set()
-            ordered = [
-                i
-                for i in _legend_order(labels)
-                if not (labels[i] in seen or seen.add(labels[i]))
-            ]
+            ordered = []
+            for i in _legend_order(labels):
+                if labels[i] not in seen:
+                    seen.add(labels[i])
+                    ordered.append(i)
             axis.legend(
                 [handles[i] for i in ordered],
                 [labels[i] for i in ordered],
@@ -2248,7 +2248,7 @@ def _render_ndt_uncertainty(
     axis: Axes,
     ndts: np.ndarray,
     intervals: list[tuple[float, float]] | None,
-    mode: Literal["band", "samples", "both"],
+    mode: Literal["band", "samples", "both"] | None,
     base_alpha: float,
     spaghetti_alpha: float,
     color: str,
