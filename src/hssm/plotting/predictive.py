@@ -154,6 +154,12 @@ def _plot_predictive_1D(
     if "color" in kwargs:
         del kwargs["color"]
     kwargs.pop("label", None)  # labels are managed internally for the legend
+    # alpha/zorder are set internally per layer; a user-passed value overrides
+    # them on the mean and observed lines instead of colliding.
+    user_alpha = kwargs.pop("alpha", None)
+    user_zorder = kwargs.pop("zorder", None)
+    if user_alpha is not None:
+        alpha_mean = user_alpha
     colors = _process_colors(colors, plot_data)
     intervals = [interval] if isinstance(interval, tuple) else interval
 
@@ -229,7 +235,9 @@ def _plot_predictive_1D(
     # print on top with higher opacity.
     if uncertainty in ("band", "both") and intervals:
         base_alpha = alpha_uncertainty or 0.25
-        band_alphas = np.linspace(0.45 * base_alpha, base_alpha, len(intervals))
+        # Narrowest band prints at base_alpha; wider bands fade toward 45% of
+        # it. Reversed linspace so a single band gets the full base value.
+        band_alphas = np.linspace(base_alpha, 0.45 * base_alpha, len(intervals))[::-1]
         for (lo, hi), band_alpha in zip(intervals, band_alphas):
             x_b, y_lo = to_xy(hists_groupby.quantile(lo))
             _, y_hi = to_xy(hists_groupby.quantile(hi))
@@ -253,7 +261,7 @@ def _plot_predictive_1D(
         linestyle=styles["linestyle"],
         linewidth=styles["linewidth"],
         alpha=alpha_mean,
-        zorder=3,
+        zorder=3 if user_zorder is None else user_zorder,
         label="predicted",
         **kwargs,
     )
@@ -282,7 +290,8 @@ def _plot_predictive_1D(
             color=styles["color"],
             linestyle=styles["linestyle"],
             linewidth=styles["linewidth"],
-            zorder=4,
+            alpha=user_alpha,
+            zorder=4 if user_zorder is None else user_zorder,
             label="observed",
             **kwargs,
         )
@@ -347,6 +356,7 @@ def _plot_predictive_2D(
     title: str | None = _DEFAULT_TITLE,
     xlabel: str | None = _DEFAULT_XLABEL,
     ylabel: str | None = "Density",
+    legend: bool = True,
     grid_kwargs: dict | None = None,
     **kwargs,
 ) -> sns.FacetGrid:
@@ -391,7 +401,7 @@ def _plot_predictive_2D(
         **kwargs,
     )
 
-    if plot_data or uncertainty is not None:
+    if legend and (plot_data or uncertainty is not None):
         handles, labels = g.figure.axes[0].get_legend_handles_labels()
         if handles:
             order = _legend_order(labels)
@@ -529,6 +539,7 @@ def plot_predictive(
     title: str | None = _DEFAULT_TITLE,
     xlabel: str | None = _DEFAULT_XLABEL,
     ylabel: str | None = "Density",
+    legend: bool = True,
     grid_kwargs: dict | None = None,
     **kwargs,
 ) -> Axes | sns.FacetGrid | list[sns.FacetGrid]:
@@ -615,7 +626,7 @@ def plot_predictive(
         (`kind="kde"` only), by default None (Scott's rule).
     x_range : optional
         The lower and upper range of the bins. If not provided, the range spans the
-        0.1%-99.9% quantiles of the predictive samples, widened to include all
+        1%-99% quantiles of the predictive samples, widened to include all
         observed data (so observations are never silently clipped), by default None.
     step : optional
         Whether to plot the distributions as edge-anchored step histograms (True,
@@ -629,7 +640,7 @@ def plot_predictive(
         - A list of any of the above, one entry per graded band.
         Intervals are equal-tailed percentile intervals across posterior
         predictive draws (not highest-density intervals). There should be at
-        least 50 predictive samples per chain for the bands to be reliable; a
+        least ~50 predicted trials per draw for the bands to be reliable; a
         warning is logged when there are fewer.
     uncertainty : optional
         How to display uncertainty across posterior predictive draws, by default
@@ -668,9 +679,13 @@ def plot_predictive(
         The title of the plot, by default "Posterior Predictive Distribution". Ignored
         when `groups` is provided.
     xlabel : optional
-        The label for the x-axis, by default "Response Time".
+        The label for the x-axis, by default "Response Time" — automatically
+        annotated as "Response Time (sign = choice)" on 2-choice models, where
+        the negative half-axis carries the other choice.
     ylabel : optional
         The label for the y-axis, by default "Density".
+    legend : optional
+        Whether to draw a legend, by default True.
     grid_kwargs : optional
         Additional keyword arguments are passed to the [`sns.FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
@@ -684,6 +699,17 @@ def plot_predictive(
     Axes | sns.FacetGrid | list[sns.FacetGrid]
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
+    if kind not in ("hist", "kde"):
+        raise ValueError(
+            f"`kind` must be 'hist' or 'kde', got {kind!r}. (Did you pass a "
+            "positional argument in the wrong slot?)"
+        )
+    if uncertainty not in ("band", "samples", "both", None):
+        raise ValueError(
+            "`uncertainty` must be one of 'band', 'samples', 'both', or None, "
+            f"got {uncertainty!r}."
+        )
+
     # Process hdi into a list of quantile intervals. `hdi=None` with band-style
     # uncertainty falls back to the default graded 50% + 94% bands; passing
     # `uncertainty=None` switches uncertainty display off entirely.
@@ -786,7 +812,7 @@ def plot_predictive(
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
-            legend=True,
+            legend=legend,
             **kwargs,
         )
 
@@ -817,6 +843,7 @@ def plot_predictive(
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
+            legend=legend,
             grid_kwargs=grid_kwargs,
             **kwargs,
         )
@@ -862,6 +889,7 @@ def plot_predictive(
             title=title,
             xlabel=xlabel,
             ylabel=ylabel,
+            legend=legend,
             grid_kwargs=grid_kwargs,
             **kwargs,
         )

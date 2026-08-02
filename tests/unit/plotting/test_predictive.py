@@ -249,6 +249,42 @@ class TestPredictiveUncertaintyUnit:
         assert len(ax.get_lines()) == 2 * 4 + 2
         plt.close("all")
 
+    def test_alpha_and_zorder_kwargs_do_not_collide(self):
+        """User alpha/zorder override the internal layer values, not crash."""
+        df = _synthetic_plotting_df()
+        _, ax = plt.subplots()
+        ax = _plot_predictive_1D(df, ax=ax, uncertainty=None, alpha=0.5, zorder=7)
+        assert ax.get_lines()[0].get_alpha() == 0.5
+        assert ax.get_lines()[0].get_zorder() == 7
+        plt.close("all")
+
+    def test_single_band_gets_full_base_alpha(self):
+        df = _synthetic_plotting_df()
+        _, ax = plt.subplots()
+        ax = _plot_predictive_1D(df, ax=ax, uncertainty="band", interval=[(0.03, 0.97)])
+        assert ax.collections[0].get_alpha() == pytest.approx(0.25)
+        plt.close("all")
+
+    def test_invalid_kind_and_uncertainty_raise(self):
+        """Validation fires before the model is touched, so None suffices."""
+        with pytest.raises(ValueError, match="`kind` must be"):
+            plot_predictive(None, kind="histogram")
+        with pytest.raises(ValueError, match="`uncertainty` must be"):
+            plot_predictive(None, uncertainty="bands")
+
+    def test_legend_can_be_disabled(self):
+        df = _synthetic_plotting_df()
+        _, ax = plt.subplots()
+        ax = _plot_predictive_1D(
+            df, ax=ax, uncertainty="band", interval=[(0.03, 0.97)], legend=False
+        )
+        assert ax.get_legend() is None
+        plt.close("all")
+
+    def test_overlong_hdi_tuple_raises_clearly(self):
+        with pytest.raises(ValueError, match="exactly two floats"):
+            _hdi_to_intervals((0.1, 0.5, 0.9))
+
     def test_label_kwarg_does_not_leak(self):
         """A user-passed label must not break band rendering or duplicate."""
         df = _synthetic_plotting_df()

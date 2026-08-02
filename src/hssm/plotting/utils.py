@@ -136,6 +136,8 @@ def _hdi_to_interval(hdi: str | float | tuple[float, float]) -> tuple[float, flo
     is an equal-tailed percentile interval, not a highest-density interval.
     """
     if isinstance(hdi, tuple):
+        if len(hdi) != 2:
+            raise ValueError("The HDI must be a tuple of exactly two floats.")
         if not all(isinstance(i, float) for i in hdi):
             raise ValueError("The HDI must be a tuple of floats.")
         elif not all(0 <= i <= 1 for i in hdi):
