@@ -567,11 +567,15 @@ def _use_traces_or_sample(
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
+    rng: np.random.Generator | None = None,
 ) -> tuple[xr.DataTree, bool]:
     """Check if dt is provided, otherwise use traces.
 
     Also, if posterior predictive samples are not contained in traces, sample from
-    the model.
+    the model. When ``rng`` is given and posterior-predictive sampling is
+    triggered with an integer ``n_samples``, the draws are a seeded random
+    subset of the posterior instead of the legacy first-``n`` (which is
+    deterministic but biased toward early, warm-up-adjacent draws).
     """
     # First, determine whether posterior predictive samples are available
     # If not, we need to sample from the posterior
@@ -595,11 +599,16 @@ def _use_traces_or_sample(
             predictive_group,
         )
         if predictive_group == "posterior_predictive":
+            draws: int | float | np.ndarray | None = n_samples
+            if rng is not None and isinstance(n_samples, int):
+                n_draws = int(dt["posterior"].draw.size)
+                if n_samples <= n_draws:
+                    draws = np.sort(rng.choice(n_draws, size=n_samples, replace=False))
             model.sample_posterior_predictive(
                 dt=dt,
                 data=data,
                 inplace=True,
-                draws=n_samples,
+                draws=draws,
             )
         elif predictive_group == "prior_predictive":
             dt = model.sample_prior_predictive(

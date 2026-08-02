@@ -845,7 +845,12 @@ def plot_model_cartoon(
 
     if run_samples:
         dt, sampled = _use_traces_or_sample(
-            model, data, dt, n_samples=n_samples, predictive_group=predictive_group
+            model,
+            data,
+            dt,
+            n_samples=n_samples,
+            predictive_group=predictive_group,
+            rng=rng,
         )
 
         # Get the plotting dataframe by chain and sample. The rng seeds the
