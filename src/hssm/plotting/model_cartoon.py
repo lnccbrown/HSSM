@@ -602,7 +602,7 @@ def plot_model_cartoon(
         How posterior predictive uncertainty is displayed (same vocabulary as
         `plot_predictive`), by default "band":
         - "band": graded pointwise quantile bands on the RT histograms, fan-chart
-          ribbons on the decision bounds, a dashed drift-quantile cone, graded
+          ribbons on the decision bounds, a graded drift-quantile fan, graded
           non-decision-time spans, and a starting-point whisker.
         - "samples": per-draw translucent curves (the classic spaghetti), with a
           rug of non-decision-time ticks instead of per-draw vertical lines.
@@ -1498,7 +1498,6 @@ def plot_func_model(
                         intervals,
                         geom_base_alpha,
                         color_model,
-                        linewidth_model,
                     )
                 if keep_starting_point:
                     _render_start_uncertainty(
@@ -2226,18 +2225,19 @@ def _render_drift_band(
     intervals: list[tuple[float, float]],
     base_alpha: float,
     color: str,
-    linewidth: float,
 ) -> None:
-    """Open drift cone: dashed pointwise quantile paths of the widest interval.
+    """Drift cone: graded filled quantile bands, like every other band layer.
 
-    Two thin dashed lines instead of a filled wedge — a fill in the middle of
-    the axis would stack its alpha over the boundary ribbons, trajectories,
-    and histograms, recreating exactly the occlusion this redesign removes.
-    Quantiles are taken in decision time (each draw's path starts at its own
-    t=0) and the cone is truncated at the first absorption across draws:
-    beyond that point the surviving subsample is selection-biased (slow-drift,
-    high-bound draws), which visibly bends the quantiles upward. The cone is
-    plotted shifted by the reference geometry's non-decision time.
+    The same fan-chart treatment as the boundary ribbons and the RT-histogram
+    bands, so the figure has one visual vocabulary for uncertainty (and the
+    dashed linestyle stays reserved for the non-decision-time reference
+    line). The graded alpha ladder keeps the fills light enough not to
+    occlude the reference drift path or trajectories. Quantiles are taken in
+    decision time (each draw's path starts at its own t=0) and the cone is
+    truncated at the first absorption across draws: beyond that point the
+    surviving subsample is selection-biased (slow-drift, high-bound draws),
+    which visibly bends the quantiles upward. The cone is plotted shifted by
+    the reference geometry's non-decision time.
     """
     alive = ~np.isnan(drifts)
     keep = alive.all(axis=0)
@@ -2246,21 +2246,18 @@ def _render_drift_band(
     last = int(keep.size if keep.all() else np.argmin(keep))
     if last < 2:
         return
-    lo, hi = intervals[0]  # widest-first ordering
-    q_lo = np.nanquantile(drifts[:, :last], lo, axis=0)
-    q_hi = np.nanquantile(drifts[:, :last], hi, axis=0)
     tt = t_s[:last] + ndt_ref
-    line_alpha = min(1.0, 2.0 * base_alpha)
-    for values, label in ((q_lo, "drift interval"), (q_hi, "_nolegend_")):
-        axis.plot(
+    band_alphas = _band_alphas(base_alpha, len(intervals))
+    for (lo, hi), band_alpha in zip(intervals, band_alphas):
+        axis.fill_between(
             tt,
-            values,
+            np.nanquantile(drifts[:, :last], lo, axis=0),
+            np.nanquantile(drifts[:, :last], hi, axis=0),
             color=color,
-            linestyle="--",
-            linewidth=0.75 * linewidth,
-            alpha=line_alpha,
+            alpha=float(band_alpha),
+            linewidth=0,
             zorder=1012,
-            label=label,
+            label=f"drift {hi - lo:.0%} interval",
         )
 
 
