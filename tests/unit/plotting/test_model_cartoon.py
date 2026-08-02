@@ -313,9 +313,21 @@ class TestPlotFuncModel:
             # mean (zorder 3) + observed (zorder 4)
             zorders = sorted(ln.get_zorder() for ln in twin.get_lines())
             assert zorders == [3, 4]
-        # geometry: 4 boundary ribbons on the main axis
-        ribbons = [c for c in ax.collections if isinstance(c, PolyCollection)]
+        # geometry: 4 boundary ribbons (zorder 1010) + one drift band per
+        # interval (zorder 1012) on the main axis — all filled, none dashed
+        polys_main = [c for c in ax.collections if isinstance(c, PolyCollection)]
+        ribbons = [c for c in polys_main if c.get_zorder() == 1010]
+        drift_bands = [c for c in polys_main if c.get_zorder() == 1012]
         assert len(ribbons) == 4
+        assert len(drift_bands) == len(INTERVALS)
+        # the dashed linestyle stays reserved for the ndt reference line:
+        # no dashed non-vertical lines exist in band mode
+        dashed_nonvertical = [
+            ln
+            for ln in ax.get_lines()
+            if ln.get_linestyle() == "--" and len(set(ln.get_xdata())) > 1
+        ]
+        assert not dashed_nonvertical
         # ndt spans land in patches, one per interval
         assert len(ax.patches) == len(INTERVALS)
         # exactly ONE dashed vertical line (the reference ndt), none per draw
