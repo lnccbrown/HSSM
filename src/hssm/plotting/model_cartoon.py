@@ -509,6 +509,9 @@ def plot_model_cartoon(
     legend: bool = True,
     obs: int | None = None,
     random_state: int | np.random.Generator | None = None,
+    n_trajectories: int | None = None,
+    xlims: tuple[float, float] | None = None,
+    ylims: tuple[float, float] | None = None,
     grid_kwargs: dict | None = None,
     **kwargs,
 ) -> Axes | FacetGrid | list[FacetGrid]:
@@ -683,6 +686,19 @@ def plot_model_cartoon(
         first, then per facet the plug-in simulation seed, one seed per
         posterior draw, and one trial pick + seed per trajectory. By default
         None (fresh entropy — a new figure every call).
+    n_trajectories : optional
+        Number of example diffusion trajectories drawn at the reduced
+        reference θ. By default None, keeping each renderer's default (0 for
+        2-choice, 10 for >2-choice — a historical inconsistency preserved for
+        compatibility).
+    xlims : optional
+        The x-axis limits ``(t_low, t_high)`` in seconds. Also determines the
+        geometry simulation horizon (``max_t = xlim_high + 0.5``). By default
+        None, keeping renderer defaults ((-0.05, 5) for 2-choice, (0, 5) for
+        >2-choice).
+    ylims : optional
+        The y-axis limits. By default None, keeping renderer defaults
+        ((-3, 3) for 2-choice, (0, 5) for >2-choice).
     grid_kwargs : optional
         Additional keyword arguments are passed to the [`FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
@@ -931,6 +947,19 @@ def plot_model_cartoon(
         xlabel=xlabel,
         ylabel=ylabel,
     )
+
+    # Promoted parameters with None sentinels: only forwarded when set, so
+    # each renderer's own default is preserved. The named parameter wins over
+    # a legacy **kwargs spelling (popped to avoid duplicate-keyword errors).
+    for name_, value_ in (
+        ("n_trajectories", n_trajectories),
+        ("xlims", xlims),
+        ("ylims", ylims),
+    ):
+        legacy_value = kwargs.pop(name_, None)
+        resolved = value_ if value_ is not None else legacy_value
+        if resolved is not None:
+            shared_plot_kwargs[name_] = resolved
 
     if not extra_dims:
         # The legend is assembled inside the renderer from the labeled
