@@ -10,6 +10,7 @@ import pandas as pd
 import seaborn as sns
 import xarray as xr
 from matplotlib.axes import Axes
+from scipy.stats import gaussian_kde
 
 from .utils import (
     DEFAULT_PREDICTIVE_COLORS,
@@ -31,6 +32,51 @@ _DEFAULT_XLABEL = "Response Time"
 def _histogram(a: np.ndarray, bins: int | np.ndarray | str | None = 50) -> pd.Series:
     return pd.Series(
         np.histogram(a, bins=bins, density=True)[0],  # type: ignore
+        name="bin_n",
+        copy=False,
+    )
+
+
+def _kde_density(
+    samples: np.ndarray,
+    grid: np.ndarray,
+    split_at_zero: bool,
+    bw_method: str | float | None = None,
+) -> np.ndarray:
+    """Evaluate a kernel density estimate for RT samples on a shared grid.
+
+    On the signed-RT axis (2-choice models) there is a hard density gap around
+    zero — no response is faster than the non-decision time — and a single KDE
+    would smooth mass straight across it. When `split_at_zero` is True (the
+    grid spans zero), a separate KDE is therefore fit per choice side, each
+    weighted by its response proportion and evaluated only on its own
+    half-axis, so the two lobes jointly integrate to one and no mass bleeds
+    across zero. Sides with fewer than two distinct samples (e.g. a draw with
+    a single error trial) contribute zero density rather than failing.
+    """
+    out = np.zeros_like(grid, dtype=float)
+    n_total = samples.size
+    if n_total == 0:
+        return out
+    if split_at_zero:
+        sides = [(samples[samples < 0], grid < 0), (samples[samples >= 0], grid >= 0)]
+    else:
+        sides = [(samples, np.ones_like(grid, dtype=bool))]
+    for side_samples, mask in sides:
+        if side_samples.size >= 2 and np.ptp(side_samples) > 0:
+            kde = gaussian_kde(side_samples, bw_method=bw_method)
+            out[mask] = kde(grid[mask]) * (side_samples.size / n_total)
+    return out
+
+
+def _kde_series(
+    a: pd.Series,
+    grid: np.ndarray,
+    split_at_zero: bool,
+    bw_method: str | float | None = None,
+) -> pd.Series:
+    return pd.Series(
+        _kde_density(a.to_numpy(), grid, split_at_zero, bw_method),
         name="bin_n",
         copy=False,
     )
@@ -77,7 +123,10 @@ def _process_colors(
 def _plot_predictive_1D(
     data: pd.DataFrame,
     plot_data: bool = True,
+    kind: Literal["hist", "kde"] = "hist",
     bins: int | np.ndarray | str | None = 50,
+    grid_points: int = 256,
+    bw_method: str | float | None = None,
     x_range: tuple[float, float] | None = None,
     step: bool = True,
     interval: list[tuple[float, float]] | tuple[float, float] | None = None,
@@ -114,19 +163,46 @@ def _plot_predictive_1D(
     styles["linewidth"] = linewidths[0] if isinstance(linewidths, list) else linewidths
 
     predicted = data.loc[data["observed"] == "predicted", "rt"]
-    bin_edges = np.histogram_bin_edges(predicted, bins=bins, range=x_range)  # type: ignore
 
     if "ax" in kwargs:
         ax = kwargs.pop("ax")
     else:
         ax = plt.gca()
 
-    hists = (
-        predicted.groupby(["chain", "draw"])
-        .apply(_histogram, bins=bin_edges)
-        .reset_index(level=2, name="rt")
-        .rename(columns={"level_2": "bin_n"})
-    )
+    # Build the per-(chain, draw) curve matrix on a shared x support. Both
+    # backends produce the same long shape, so the mean / band / sample
+    # machinery below is backend-agnostic.
+    if kind == "kde":
+        x_lo, x_hi = x_range or (float(predicted.min()), float(predicted.max()))
+        grid = np.linspace(x_lo, x_hi, grid_points)
+        split_at_zero = x_lo < 0.0 < x_hi
+        hists = (
+            predicted.groupby(["chain", "draw"])
+            .apply(
+                _kde_series,
+                grid=grid,
+                split_at_zero=split_at_zero,
+                bw_method=bw_method,
+            )
+            .reset_index(level=2, name="rt")
+            .rename(columns={"level_2": "bin_n"})
+        )
+
+        def to_xy(values: np.ndarray | pd.Series) -> tuple[np.ndarray, np.ndarray]:
+            return grid, np.asarray(values)
+
+    else:
+        bin_edges = np.histogram_bin_edges(predicted, bins=bins, range=x_range)  # type: ignore
+        hists = (
+            predicted.groupby(["chain", "draw"])
+            .apply(_histogram, bins=bin_edges)
+            .reset_index(level=2, name="rt")
+            .rename(columns={"level_2": "bin_n"})
+        )
+
+        def to_xy(values: np.ndarray | pd.Series) -> tuple[np.ndarray, np.ndarray]:
+            return _curve_xy(bin_edges, values, step)
+
     hists_groupby = hists.groupby("bin_n")["rt"]
     hists_mean = hists_groupby.mean()
 
@@ -136,9 +212,7 @@ def _plot_predictive_1D(
         alpha_samples = alpha_uncertainty or float(np.clip(4.0 / n_draws, 0.02, 0.25))
         first = True
         for _, draw_hist in hists.groupby(level=["chain", "draw"]):
-            x_s, y_s = _curve_xy(
-                bin_edges, draw_hist.sort_values("bin_n")["rt"].to_numpy(), step
-            )
+            x_s, y_s = to_xy(draw_hist.sort_values("bin_n")["rt"].to_numpy())
             ax.plot(
                 x_s,
                 y_s,
@@ -157,8 +231,8 @@ def _plot_predictive_1D(
         base_alpha = alpha_uncertainty or 0.25
         band_alphas = np.linspace(0.45 * base_alpha, base_alpha, len(intervals))
         for (lo, hi), band_alpha in zip(intervals, band_alphas):
-            x_b, y_lo = _curve_xy(bin_edges, hists_groupby.quantile(lo), step)
-            _, y_hi = _curve_xy(bin_edges, hists_groupby.quantile(hi), step)
+            x_b, y_lo = to_xy(hists_groupby.quantile(lo))
+            _, y_hi = to_xy(hists_groupby.quantile(hi))
             ax.fill_between(
                 x_b,
                 y_lo,
@@ -171,7 +245,7 @@ def _plot_predictive_1D(
             )
 
     # Layer 3 — the predictive mean.
-    x_m, y_m = _curve_xy(bin_edges, hists_mean, step)
+    x_m, y_m = to_xy(hists_mean)
     ax.plot(
         x_m,
         y_m,
@@ -195,8 +269,13 @@ def _plot_predictive_1D(
         )
 
         observed = data.loc[data["observed"] == "observed", "rt"]
-        data_hist = _histogram(observed.to_numpy(), bins=bin_edges)
-        x_o, y_o = _curve_xy(bin_edges, data_hist, step)
+        if kind == "kde":
+            data_hist = _kde_density(
+                observed.to_numpy(), grid, split_at_zero, bw_method
+            )
+        else:
+            data_hist = _histogram(observed.to_numpy(), bins=bin_edges)
+        x_o, y_o = to_xy(data_hist)
         ax.plot(
             x_o,
             y_o,
@@ -252,7 +331,10 @@ def _plot_predictive_2D(
     row: str | None = None,
     col: str | None = None,
     col_wrap: int | None = None,
+    kind: Literal["hist", "kde"] = "hist",
     bins: int | np.ndarray | str | None = 50,
+    grid_points: int = 256,
+    bw_method: str | float | None = None,
     x_range: tuple[float, float] | None = None,
     step: bool = True,
     interval: list[tuple[float, float]] | tuple[float, float] | None = None,
@@ -289,7 +371,10 @@ def _plot_predictive_2D(
     g.map_dataframe(
         _plot_predictive_1D,
         plot_data=plot_data,
+        kind=kind,
         bins=bins,
+        grid_points=grid_points,
+        bw_method=bw_method,
         x_range=x_range,
         step=step,
         interval=interval,
@@ -428,7 +513,10 @@ def plot_predictive(
     col_wrap: int | None = None,
     groups: str | Iterable[str] | None = None,
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
+    kind: Literal["hist", "kde"] = "hist",
     bins: int | np.ndarray | str | None = 50,
+    grid_points: int = 256,
+    bw_method: str | float | None = None,
     x_range: tuple[float, float] | None = None,
     step: bool = True,
     hdi: float | str | tuple[float, float] | list | None = None,
@@ -506,11 +594,25 @@ def plot_predictive(
         order in which the groups appear in the data. Only when `groups` is a string,
         this can be an iterable of strings. Otherwise, this is a dictionary mapping the
         dimension name to the order of the groups in that dimension.
+    kind : optional
+        The density estimator drawn for every curve, by default "hist":
+        - `"hist"`: binned histogram densities (see `bins`, `step`).
+        - `"kde"`: Gaussian kernel density estimates evaluated on a shared
+          grid (see `grid_points`, `bw_method`). On the signed-RT axis the
+          KDE is fit separately per choice side, weighted by response
+          proportion, so no density is smoothed across the gap at zero.
     bins : optional
-        Specification of hist bins, by default 50. There are three options:
+        Specification of hist bins (`kind="hist"` only), by default 50.
+        There are three options:
         - A string describing the binning strategy (passed to `np.histogram_bin_edges`).
         - A list-like defining the bin edges.
         - An integer defining the number of bins to be used.
+    grid_points : optional
+        Number of grid points the KDE is evaluated on (`kind="kde"` only),
+        by default 256.
+    bw_method : optional
+        Bandwidth selection passed to `scipy.stats.gaussian_kde`
+        (`kind="kde"` only), by default None (Scott's rule).
     x_range : optional
         The lower and upper range of the bins. If not provided, the range spans the
         0.1%-99.9% quantiles of the predictive samples, widened to include all
@@ -668,7 +770,10 @@ def plot_predictive(
         ax = _plot_predictive_1D(
             data=plotting_df,
             plot_data=plot_data,
+            kind=kind,
             bins=bins,
+            grid_points=grid_points,
+            bw_method=bw_method,
             x_range=x_range,
             step=step,
             interval=intervals,
@@ -696,7 +801,10 @@ def plot_predictive(
             row=row,
             col=col,
             col_wrap=col_wrap,
+            kind=kind,
             bins=bins,
+            grid_points=grid_points,
+            bw_method=bw_method,
             x_range=x_range,
             step=step,
             interval=intervals,
@@ -738,7 +846,10 @@ def plot_predictive(
             row=row,
             col=col,
             col_wrap=col_wrap,
+            kind=kind,
             bins=bins,
+            grid_points=grid_points,
+            bw_method=bw_method,
             x_range=x_range,
             step=step,
             interval=intervals,

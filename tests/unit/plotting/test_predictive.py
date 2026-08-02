@@ -8,6 +8,7 @@ import pytest
 import hssm
 from hssm.plotting.predictive import (
     _curve_xy,
+    _kde_density,
     _legend_order,
     _plot_predictive_1D,
     _plot_predictive_2D,
@@ -133,6 +134,54 @@ class TestPredictivePlottingUnit:
         ]
 
 
+class TestKDEDensityUnit:
+    """Statistical guarantees of the per-side KDE used by kind='kde'."""
+
+    def test_no_mass_bleeds_across_zero(self):
+        """A draw with only positive samples puts zero density on the left."""
+        rng = np.random.default_rng(0)
+        samples = rng.lognormal(0.0, 0.3, 200)  # all positive
+        grid = np.linspace(-3, 3, 101)
+        out = _kde_density(samples, grid, split_at_zero=True)
+        assert (out[grid < 0] == 0).all()
+        assert out[grid >= 0].max() > 0
+
+    def test_sides_weighted_by_response_proportion(self):
+        """Two-sided density integrates to ~1 jointly, split by proportion."""
+        rng = np.random.default_rng(1)
+        pos = rng.lognormal(0.0, 0.25, 300)
+        neg = -rng.lognormal(0.0, 0.25, 100)  # 25% of responses
+        samples = np.concatenate([pos, neg])
+        grid = np.linspace(-8, 8, 2001)
+        out = _kde_density(samples, grid, split_at_zero=True)
+        dx = grid[1] - grid[0]
+        mass_neg = out[grid < 0].sum() * dx
+        mass_pos = out[grid >= 0].sum() * dx
+        assert mass_neg + mass_pos == pytest.approx(1.0, abs=0.02)
+        assert mass_neg == pytest.approx(0.25, abs=0.03)
+
+    def test_sparse_side_contributes_zero_instead_of_failing(self):
+        """A single sample on one side must not crash gaussian_kde."""
+        samples = np.array([-0.8, 1.0, 1.2, 1.4, 0.9, 1.1])
+        grid = np.linspace(-3, 3, 51)
+        out = _kde_density(samples, grid, split_at_zero=True)
+        assert (out[grid < 0] == 0).all()
+        assert np.isfinite(out).all()
+
+    def test_single_sided_mode_uses_one_kde(self):
+        rng = np.random.default_rng(2)
+        samples = rng.lognormal(0.0, 0.3, 200)
+        grid = np.linspace(0.01, 6, 501)
+        out = _kde_density(samples, grid, split_at_zero=False)
+        dx = grid[1] - grid[0]
+        assert out.sum() * dx == pytest.approx(1.0, abs=0.05)
+
+    def test_empty_input_returns_zeros(self):
+        grid = np.linspace(-1, 1, 11)
+        out = _kde_density(np.array([]), grid, split_at_zero=True)
+        assert (out == 0).all()
+
+
 class TestPredictiveUncertaintyUnit:
     """Fast rendering tests for the uncertainty display paths."""
 
@@ -176,6 +225,28 @@ class TestPredictiveUncertaintyUnit:
         assert legend is not None
         labels = [t.get_text() for t in legend.get_texts()]
         assert labels == ["observed", "predicted", "94% interval"]
+        plt.close("all")
+
+    def test_kde_kind_draws_bands_and_no_extra_lines(self):
+        """`kind="kde"` produces the same artist structure as the hist path."""
+        df = _synthetic_plotting_df()
+        _, ax = plt.subplots()
+        ax = _plot_predictive_1D(
+            df,
+            ax=ax,
+            kind="kde",
+            uncertainty="band",
+            interval=[(0.25, 0.75), (0.03, 0.97)],
+        )
+        assert len(ax.get_lines()) == 2
+        assert len(ax.collections) == 2
+        plt.close("all")
+
+    def test_kde_samples_mode_line_count(self):
+        df = _synthetic_plotting_df(n_chains=2, n_draws=4)
+        _, ax = plt.subplots()
+        ax = _plot_predictive_1D(df, ax=ax, kind="kde", uncertainty="samples")
+        assert len(ax.get_lines()) == 2 * 4 + 2
         plt.close("all")
 
     def test_label_kwarg_does_not_leak(self):

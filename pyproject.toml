@@ -33,6 +33,9 @@ dependencies = [
     "jaxonnxruntime>=0.3.0",
     "numpyro>=0.19",
     "onnx>=1.16.0",
+    # Imported directly by hssm.plotting (gaussian_kde, chi2); previously only
+    # a transitive dependency via pymc.
+    "scipy>=1.10",
     # 0.13.1 ships the aDDM engine + fixation_continuation (used by aDDM PPC).
     "ssm-simulators>=0.13.1",
 ]
