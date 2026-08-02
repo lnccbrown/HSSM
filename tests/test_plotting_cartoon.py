@@ -56,6 +56,7 @@ def test_plot_model_cartoon_2_choice(
         predictive_group=predictive_group,
         uncertainty=uncertainty,
         n_trajectories=n_trajectories,
+        random_state=42,
     )
 
     if groups is None:
@@ -117,6 +118,56 @@ def test_plot_model_cartoon_intercept_only(intercept_only_ddm_cartoon):
 
 
 @pytest.mark.slow
+def test_plot_model_cartoon_random_state_end_to_end(cav_model_cartoon):
+    """Same random_state => identical figure through the full public path
+    (draw selection, simulations, trajectories)."""
+    import matplotlib.pyplot as plt
+
+    # Warm-up materializes the posterior-predictive group once, so both
+    # seeded renders below take the identical code path.
+    hssm.plotting.plot_model_cartoon(cav_model_cartoon, n_samples=10)
+    plt.close("all")
+
+    def snapshot():
+        ax = hssm.plotting.plot_model_cartoon(
+            cav_model_cartoon,
+            n_samples=10,
+            uncertainty="band",
+            n_trajectories=2,
+            random_state=7,
+        )
+        fig = ax.get_figure()
+        data = [
+            line.get_ydata().copy() for axes in fig.axes for line in axes.get_lines()
+        ]
+        plt.close("all")
+        return data
+
+    first, second = snapshot(), snapshot()
+    assert first and len(first) == len(second)
+    for a, b in zip(first, second):
+        np.testing.assert_array_equal(a, b)
+
+
+@pytest.mark.slow
+def test_plot_model_cartoon_obs_conditioning(cav_model_cartoon):
+    """obs= conditions the cartoon on one trial of the regression model."""
+    ax = hssm.plotting.plot_model_cartoon(
+        cav_model_cartoon,
+        n_samples=10,
+        uncertainty="band",
+        obs=0,
+        random_state=3,
+    )
+    assert ax is not None
+
+    with pytest.raises(ValueError, match="obs="):
+        hssm.plotting.plot_model_cartoon(
+            cav_model_cartoon, n_samples=10, obs=10_000_000
+        )
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize(
     [
         "n_trajectories",
@@ -161,6 +212,7 @@ def test_plot_model_cartoon_3_choice(
         uncertainty=uncertainty,
         predictive_group=predictive_group,
         n_trajectories=n_trajectories,
+        random_state=42,
     )
 
     if groups is None:
