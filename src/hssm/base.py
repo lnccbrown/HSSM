@@ -1183,6 +1183,22 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         """
         return plotting.plot_quantile_probability(self, **kwargs)
 
+    def plot_model_cartoon(
+        self, **kwargs
+    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
+        """Produce a model cartoon plot.
+
+        Equivalent to calling `hssm.plotting.plot_model_cartoon()` with the
+        model. Please see that function for
+        [full documentation][hssm.plotting.plot_model_cartoon].
+
+        Returns
+        -------
+        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
+            The matplotlib axis or seaborn FacetGrid object containing the plot.
+        """
+        return plotting.plot_model_cartoon(self, **kwargs)
+
     def predict(self, **kwargs) -> DataTree:
         """Generate samples from the predictive distribution."""
         return self.model.predict(**kwargs)

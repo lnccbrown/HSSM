@@ -21,5 +21,6 @@ Use `hssm.HSSM` class to construct an HSSM model.
             - graph
             - plot_predictive
             - plot_quantile_probability
+            - plot_model_cartoon
             - restore_traces
             - initial_point
