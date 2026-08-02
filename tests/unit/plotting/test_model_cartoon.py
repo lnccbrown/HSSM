@@ -63,7 +63,7 @@ def _render(uncertainty, **overrides):
         n_reps=2,
         random_state=0,
         uncertainty=uncertainty,
-        intervals=INTERVALS if uncertainty in ("band", "both") else None,
+        intervals=INTERVALS if uncertainty is not None else None,
     )
     kwargs.update(overrides)
     plot_func_model(**kwargs)
@@ -334,13 +334,13 @@ class TestPlotFuncModel:
         assert len(up.get_lines()) == n_draws + 2
         expected_alpha = float(np.clip(4.0 / n_draws, 0.02, 0.25))
         assert up.get_lines()[0].get_alpha() == pytest.approx(expected_alpha)
-        # no bands anywhere
+        # no histogram or boundary bands anywhere ...
         assert not [c for c in up.collections if isinstance(c, PolyCollection)]
         assert not [c for c in ax.collections if isinstance(c, PolyCollection)]
-        # the ndt rug is one Line2D with n_draws points and no linestyle
-        rugs = [ln for ln in ax.get_lines() if ln.get_label() == "ndt draws"]
-        assert len(rugs) == 1
-        assert len(rugs[0].get_xdata()) == n_draws
+        # ... but the ndt envelope (graded axvspans) is drawn in every mode
+        assert len(ax.patches) == len(INTERVALS)
+        # and no per-draw rug/axvline artifacts survive
+        assert not [ln for ln in ax.get_lines() if ln.get_label() == "ndt draws"]
         plt.close("all")
 
     def test_uncertainty_none_reproduces_legacy_census(self):

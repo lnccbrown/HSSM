@@ -404,6 +404,12 @@ def attach_trialwise_params_to_df(
     necessary_params, _ = _cartoon_model_meta(model)
     df[necessary_params] = 0.0
 
+    # Sort the (chain, draw, obs_n) MultiIndex once so the per-draw .loc
+    # assignments below use a lexsorted index — otherwise pandas emits one
+    # PerformanceWarning per assignment (over a thousand per plot at the
+    # default draw counts).
+    df = df.sort_index()
+
     group_ds = dt[dt_group].to_dataset()
     for chain_tmp, draw_tmp in {(x[0], x[1]) for x in list(df.index) if x[0] != -1}:
         n_rows = len(df.loc[(chain_tmp, draw_tmp, slice(None))])
@@ -676,9 +682,12 @@ def plot_model_cartoon(
     )
 
     # Resolve the band intervals once, widest-first (mirrors plot_predictive).
+    # Resolved for every uncertainty mode: samples mode has no histogram or
+    # boundary bands, but the non-decision-time envelope uses the intervals in
+    # all modes.
     intervals = (
         _hdi_to_intervals([0.5, 0.94] if hdi is None else hdi)
-        if uncertainty in ("band", "both")
+        if uncertainty is not None
         else None
     )
 
@@ -1127,9 +1136,15 @@ def plot_func_model(
 
         # Simulate model without noise: posterior mean
         # (this allows to extract the time-dynamics of the drift e.g.)
+        # Trial-0 row, deterministically: the no-noise geometry must come from
+        # ONE trial so boundary/trajectory/ndt/z all describe the same trial
+        # (ssm-simulators returns trial 0's trajectory but the LAST trial's
+        # boundary for multi-row theta), and so repeated calls draw the same
+        # reference. lnccbrown/HSSM#1125 upgrades the convention to a
+        # configurable reduction.
         sim_out_no_noise = simulator(
             model=model_name,
-            theta=theta_mean.loc[np.random.choice(theta_mean.shape[0], 1), :].values,
+            theta=theta_mean.iloc[[0]].values,
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
@@ -1143,9 +1158,13 @@ def plot_func_model(
         for i, (chain, draw) in enumerate(
             list(theta_samples.index.droplevel("obs_n").unique())
         ):
+            # Trial-0 row for the same reason as the reference geometry above:
+            # one trial per draw keeps every metadata element consistent, and
+            # puts the per-draw boundary curves on the same trial as the
+            # reference boundary (previously: last trial vs random trial).
             posterior_pred_no_noise[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].values,
+                theta=theta_samples.loc[(chain, draw), :].iloc[[0]].values,
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
@@ -1500,10 +1519,7 @@ def plot_func_model(
                     intervals,
                     uncertainty,
                     geom_base_alpha,
-                    geom_spaghetti_alpha,
                     color_model,
-                    ylim_low,
-                    ylim_high,
                 )
 
     if theta_mean is not None:
@@ -1560,10 +1576,14 @@ def plot_func_model(
                 if labels[i] not in seen:
                     seen.add(labels[i])
                     ordered.append(i)
+            # Outside the axes: the combined histogram + geometry legend is
+            # too tall to float inside the plot without covering data.
             axis.legend(
                 [handles[i] for i in ordered],
                 [labels[i] for i in ordered],
                 frameon=False,
+                loc="center left",
+                bbox_to_anchor=(1.02, 0.5),
             )
     return axis
 
@@ -2250,20 +2270,18 @@ def _render_ndt_uncertainty(
     intervals: list[tuple[float, float]] | None,
     mode: Literal["band", "samples", "both"] | None,
     base_alpha: float,
-    spaghetti_alpha: float,
     color: str,
-    ylim_low: float,
-    ylim_high: float,
 ) -> None:
-    """Non-decision-time uncertainty: graded axvspans and/or a rug of ticks.
+    """Non-decision-time uncertainty: a graded axvspan envelope.
 
     Replaces the per-draw ``axvline`` smear (N near-identical dashed verticals
-    was the single worst clutter contributor). In band mode the spans collapse
-    onto the reference line when ndt uncertainty is tiny — a slight visual
-    thickening, which is the honest rendering of "almost no uncertainty". The
-    rug is a single ``Line2D`` of tick markers near the bottom axis edge.
+    was the single worst clutter contributor). Drawn in every uncertainty mode
+    — a vertical envelope hugging the dashed reference line is the natural
+    reading of "where can the non-decision time be", and when the posterior
+    spread is tiny the spans read as a slight thickening of the line, which is
+    the honest rendering of "almost no uncertainty".
     """
-    if mode in ("band", "both") and intervals:
+    if mode is not None and intervals:
         band_alphas = _band_alphas(base_alpha, len(intervals))
         for (lo, hi), band_alpha in zip(intervals, band_alphas):
             axis.axvspan(
@@ -2275,19 +2293,6 @@ def _render_ndt_uncertainty(
                 zorder=1002,
                 label="_nolegend_",
             )
-    if mode in ("samples", "both"):
-        rug_y = ylim_low + 0.03 * (ylim_high - ylim_low)
-        axis.plot(
-            ndts,
-            np.full_like(ndts, rug_y),
-            linestyle="none",
-            marker="|",
-            markersize=8,
-            color=color,
-            alpha=max(spaghetti_alpha, 0.25),
-            zorder=1000,
-            label="ndt draws",
-        )
 
 
 def _render_start_uncertainty(
@@ -2449,9 +2454,15 @@ def plot_func_model_n(
             random_state=rand_int,
         )
 
+        # Trial-0 row, deterministically: the no-noise geometry must come from
+        # ONE trial so boundary/trajectory/ndt/z all describe the same trial
+        # (ssm-simulators returns trial 0's trajectory but the LAST trial's
+        # boundary for multi-row theta), and so repeated calls draw the same
+        # reference. lnccbrown/HSSM#1125 upgrades the convention to a
+        # configurable reduction.
         sim_out_no_noise = simulator(
             model=model_name,
-            theta=theta_mean.loc[np.random.choice(theta_mean.shape[0], 1), :].values,
+            theta=theta_mean.iloc[[0]].values,
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
@@ -2466,9 +2477,13 @@ def plot_func_model_n(
             list(theta_samples.index.droplevel("obs_n").unique())
         ):
             # Simulate model: no noise
+            # Trial-0 row for the same reason as the reference geometry above:
+            # one trial per draw keeps every metadata element consistent, and
+            # puts the per-draw boundary curves on the same trial as the
+            # reference boundary (previously: last trial vs random trial).
             posterior_pred_no_noise[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].values,
+                theta=theta_samples.loc[(chain, draw), :].iloc[[0]].values,
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
@@ -2728,11 +2743,6 @@ def plot_func_model_n(
             geom_base_alpha = (
                 alpha_uncertainty if alpha_uncertainty is not None else 0.25
             )
-            geom_spaghetti_alpha = (
-                alpha_uncertainty
-                if alpha_uncertainty is not None
-                else float(np.clip(4.0 / b_high_m.shape[0], 0.02, 0.25))
-            )
             if uncertainty in ("band", "both") and intervals:
                 # Single upward boundary: one graded ribbon per interval.
                 band_alphas_ = _band_alphas(geom_base_alpha, len(intervals))
@@ -2753,10 +2763,7 @@ def plot_func_model_n(
                 intervals,
                 uncertainty,
                 geom_base_alpha,
-                geom_spaghetti_alpha,
                 "black",
-                ylim_low,
-                ylim_high,
             )
 
     if theta_mean is not None:
