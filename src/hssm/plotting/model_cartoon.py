@@ -229,8 +229,14 @@ def _plot_model_cartoon_1D(
     ax = plot_function(
         model_name=model_name,
         axis=ax,
+        # Keep the obs_n labels on the mean pseudo-draw frame: the θ-reduction
+        # selects trials by label, and facet subsets carry non-contiguous
+        # labels. (The mean DataTree has a single (chain, draw), so dropping
+        # those levels is lossless.)
         theta_mean=(
-            data_predictive_mean.reset_index()[model_params] if plot_mean else None
+            data_predictive_mean[model_params].droplevel(["chain", "draw"])
+            if plot_mean
+            else None
         ),
         theta_samples=(data_predictive[model_params] if plot_samples else None),
         data=(
@@ -501,6 +507,7 @@ def plot_model_cartoon(
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
     legend: bool = True,
+    obs: int | None = None,
     grid_kwargs: dict | None = None,
     **kwargs,
 ) -> Axes | FacetGrid | list[FacetGrid]:
@@ -656,6 +663,18 @@ def plot_model_cartoon(
     legend : optional
         Whether to draw a legend assembled from the labeled plot layers, by
         default True.
+    obs : optional
+        The ``obs_n`` label of one trial to condition the cartoon on. By
+        default (None), the drawn geometry of each posterior draw derives from
+        that draw's **trial-mean** parameter vector, while the RT histograms
+        stay marginal over all trials (they are a predictive check against the
+        pooled observed data). With ``obs`` set, every simulated layer —
+        geometry, predicted histograms, and trajectories — conditions on that
+        trial's parameters; the observed-data histogram remains pooled (a
+        warning notes this). Under faceting, the label must be present in
+        every facet. Note the geometry is nonlinear in the parameters, so the
+        curve drawn at the trial-mean θ is not the mean of per-trial curves
+        and need not sit mid-band; the reduction is a display convention.
     grid_kwargs : optional
         Additional keyword arguments are passed to the [`FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
@@ -677,6 +696,17 @@ def plot_model_cartoon(
         )
 
     # Deprecated boolean spellings map onto the `uncertainty` vocabulary.
+    if obs is not None and (
+        isinstance(obs, bool) or not isinstance(obs, (int, np.integer)) or obs < 0
+    ):
+        raise ValueError(f"`obs` must be a non-negative integer or None, got {obs!r}")
+    if obs is not None and plot_data:
+        _logger.warning(
+            "obs=%s conditions the predicted histograms and geometry on one "
+            "trial; the observed-data histogram remains pooled over trials.",
+            obs,
+        )
+
     uncertainty, alpha_mean = _resolve_uncertainty_from_legacy(
         plot_predictive_mean, plot_predictive_samples, uncertainty, alpha_mean
     )
@@ -870,6 +900,7 @@ def plot_model_cartoon(
         alpha_mean=alpha_mean,
         alpha_uncertainty=alpha_uncertainty,
         hist_height=hist_height,
+        obs=obs,
         colors=colors_,
         linestyles=linestyles_,
         linewidths=linewidths_,
@@ -956,6 +987,7 @@ def plot_func_model(
     n_trajectories: int = 0,
     delta_t_model: float = 0.01,
     random_state: int | None = None,
+    obs: int | None = None,
     keep_slope: bool = True,
     keep_boundary: bool = True,
     keep_ndt: bool = True,
@@ -1029,6 +1061,11 @@ def plot_func_model(
         Time step for model simulation. Defaults to 0.01.
     random_state : int, optional
         Random seed for reproducibility.
+    obs : int, optional
+        The ``obs_n`` label of one trial to condition the cartoon on. By
+        default (None), the geometry of each draw derives from the trial-mean
+        θ while the RT histograms stay marginal over trials; with ``obs`` set,
+        every simulated layer conditions on that trial's θ.
     keep_slope : bool, optional
         Whether to plot drift slopes. Defaults to True.
     keep_boundary : bool, optional
@@ -1134,9 +1171,13 @@ def plot_func_model(
 
     sim_out = None
     if theta_mean is not None:
+        # RT histograms stay marginal over trials by default (they are a
+        # predictive check against the pooled observed data); obs= conditions
+        # them on that one trial along with the geometry.
+        theta_ref = _reduce_theta(theta_mean, obs)
         sim_out = simulator(
             model=model_name,
-            theta=theta_mean.values,
+            theta=theta_mean.values if obs is None else theta_ref.values,
             n_samples=n_reps,
             no_noise=False,
             delta_t=delta_t_model,
@@ -1145,15 +1186,12 @@ def plot_func_model(
 
         # Simulate model without noise: posterior mean
         # (this allows to extract the time-dynamics of the drift e.g.)
-        # Trial-0 row, deterministically: the no-noise geometry must come from
-        # ONE trial so boundary/trajectory/ndt/z all describe the same trial
-        # (ssm-simulators returns trial 0's trajectory but the LAST trial's
-        # boundary for multi-row theta), and so repeated calls draw the same
-        # reference. lnccbrown/HSSM#1125 upgrades the convention to a
-        # configurable reduction.
+        # Reduced θ: the reference geometry describes one coherent parameter
+        # vector (the trial mean by default, trial `obs` when given), so
+        # boundary, drift, ndt, and starting point agree by construction.
         sim_out_no_noise = simulator(
             model=model_name,
-            theta=theta_mean.iloc[[0]].values,
+            theta=theta_ref.values,
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
@@ -1163,18 +1201,16 @@ def plot_func_model(
 
     # Simulate model without noise: posterior samples
     if theta_samples is not None:
+        theta_draws = _reduce_theta(theta_samples, obs)
         posterior_pred_no_noise = {}
         posterior_pred_sims = {}
-        for i, (chain, draw) in enumerate(
-            list(theta_samples.index.droplevel("obs_n").unique())
-        ):
-            # Trial-0 row for the same reason as the reference geometry above:
-            # one trial per draw keeps every metadata element consistent, and
-            # puts the per-draw boundary curves on the same trial as the
-            # reference boundary (previously: last trial vs random trial).
+        for i, (chain, draw) in enumerate(theta_draws.index):
+            # Same reduction per draw: one θ per (chain, draw) keeps every
+            # geometry element of a draw consistent and comparable with the
+            # reference geometry.
             posterior_pred_no_noise[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].iloc[[0]].values,
+                theta=theta_draws.iloc[[i]].values,
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
@@ -1185,7 +1221,11 @@ def plot_func_model(
             # Simulate model: posterior samples
             posterior_pred_sims[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].values,
+                theta=(
+                    theta_samples.loc[(chain, draw), :].values
+                    if obs is None
+                    else theta_draws.iloc[[i]].values
+                ),
                 n_samples=n_reps,
                 no_noise=False,
                 delta_t=delta_t_model,
@@ -1196,8 +1236,10 @@ def plot_func_model(
     sim_out_traj = {}
     for i in range(n_trajectories):
         if theta_mean is not None:
-            tmp_theta = theta_mean.loc[
-                (np.random.choice(theta_mean.shape[0], 1)), :
+            # positional pick: theta_mean is indexed by obs_n labels, which
+            # need not be contiguous under faceting
+            tmp_theta = theta_mean.iloc[
+                np.random.choice(theta_mean.shape[0], 1), :
             ].values
         elif theta_samples is not None:
             # wrap in max statement here
@@ -2138,6 +2180,34 @@ def _add_model_cartoon_to_ax(
         )
 
 
+def _reduce_theta(theta: pd.DataFrame, obs: int | None = None) -> pd.DataFrame:
+    """Reduce a θ frame to one row per posterior draw.
+
+    The geometry of a cartoon must describe one coherent parameter vector —
+    this is that reduction. Frames carrying a ``(chain, draw, obs_n)``
+    MultiIndex reduce within each ``(chain, draw)`` group: the across-trials
+    mean by default, or the row whose ``obs_n`` label equals ``obs``. Frames
+    indexed by ``obs_n`` alone (the posterior-mean pseudo-draw) reduce to a
+    single row. Raises ``ValueError`` when ``obs`` is not among the frame's
+    ``obs_n`` labels (under faceting, labels are facet-local).
+    """
+    is_multi = isinstance(theta.index, pd.MultiIndex)
+    if obs is not None:
+        obs_labels = theta.index.get_level_values("obs_n") if is_multi else theta.index
+        if obs not in obs_labels:
+            raise ValueError(
+                f"obs={obs} is not an observation of this facet; available "
+                f"obs_n labels range from {obs_labels.min()} to {obs_labels.max()}."
+            )
+    if is_multi:
+        if obs is None:
+            return theta.groupby(level=["chain", "draw"], sort=True).mean()
+        return cast("pd.DataFrame", theta.xs(obs, level="obs_n"))
+    if obs is None:
+        return theta.mean().to_frame().T
+    return theta.loc[[obs]]
+
+
 def _geometry_arrays(
     sims: Mapping[int, dict],
     t_s: np.ndarray,
@@ -2368,6 +2438,7 @@ def plot_func_model_n(
     alpha_trajectories: float = 0.5,
     keep_frame: bool = False,
     random_state: int | None = None,
+    obs: int | None = None,
     choices: list[int] | None = None,
     **kwargs,
 ) -> Axes:
@@ -2415,6 +2486,10 @@ def plot_func_model_n(
         Whether to keep the frame around the plot.
     random_state : int, optional
         Random seed for reproducibility.
+    obs : int, optional
+        The ``obs_n`` label of one trial to condition the cartoon on; see
+        ``plot_func_model``. Defaults to None (trial-mean geometry, marginal
+        histograms).
     **kwargs
         Additional keyword arguments passed to plotting functions.
 
@@ -2459,24 +2534,21 @@ def plot_func_model_n(
 
     rand_int = np.random.randint(0, 400000000)
     if theta_mean is not None:
+        # See plot_func_model: histograms marginal by default, conditioned on
+        # one trial when obs= is given; geometry always from the reduced θ.
+        theta_ref = _reduce_theta(theta_mean, obs)
         sim_out = simulator(
             model=model_name,
-            theta=theta_mean.values,
+            theta=theta_mean.values if obs is None else theta_ref.values,
             n_samples=n_reps,
             no_noise=False,
             delta_t=delta_t_model,
             random_state=rand_int,
         )
 
-        # Trial-0 row, deterministically: the no-noise geometry must come from
-        # ONE trial so boundary/trajectory/ndt/z all describe the same trial
-        # (ssm-simulators returns trial 0's trajectory but the LAST trial's
-        # boundary for multi-row theta), and so repeated calls draw the same
-        # reference. lnccbrown/HSSM#1125 upgrades the convention to a
-        # configurable reduction.
         sim_out_no_noise = simulator(
             model=model_name,
-            theta=theta_mean.iloc[[0]].values,
+            theta=theta_ref.values,
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
@@ -2486,19 +2558,15 @@ def plot_func_model_n(
 
     # Simulate model without noise: posterior samples
     if theta_samples is not None:
+        theta_draws = _reduce_theta(theta_samples, obs)
         posterior_pred_no_noise = {}
         posterior_pred_sims = {}
-        for i, (chain, draw) in enumerate(
-            list(theta_samples.index.droplevel("obs_n").unique())
-        ):
+        for i, (chain, draw) in enumerate(theta_draws.index):
             # Simulate model: no noise
-            # Trial-0 row for the same reason as the reference geometry above:
-            # one trial per draw keeps every metadata element consistent, and
-            # puts the per-draw boundary curves on the same trial as the
-            # reference boundary (previously: last trial vs random trial).
+            # One reduced θ per (chain, draw); see plot_func_model.
             posterior_pred_no_noise[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].iloc[[0]].values,
+                theta=theta_draws.iloc[[i]].values,
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
@@ -2509,7 +2577,11 @@ def plot_func_model_n(
             # Simulate model: posterior samples
             posterior_pred_sims[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].values,
+                theta=(
+                    theta_samples.loc[(chain, draw), :].values
+                    if obs is None
+                    else theta_draws.iloc[[i]].values
+                ),
                 n_samples=1,
                 no_noise=False,
                 delta_t=delta_t_model,
@@ -2520,8 +2592,10 @@ def plot_func_model_n(
     sim_out_traj = {}
     for i in range(n_trajectories):
         if theta_mean is not None:
-            tmp_theta = theta_mean.loc[
-                (np.random.choice(theta_mean.shape[0], 1)), :
+            # positional pick: theta_mean is indexed by obs_n labels, which
+            # need not be contiguous under faceting
+            tmp_theta = theta_mean.iloc[
+                np.random.choice(theta_mean.shape[0], 1), :
             ].values
         elif theta_samples is not None:
             # wrap in max statement here

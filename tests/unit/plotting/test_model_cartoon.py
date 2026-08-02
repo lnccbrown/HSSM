@@ -22,6 +22,7 @@ from hssm.plotting.model_cartoon import (
     _defective_densities_n,
     _density_matrices,
     _geometry_arrays,
+    _reduce_theta,
     _resolve_uncertainty_from_legacy,
     plot_func_model,
     plot_func_model_n,
@@ -234,7 +235,121 @@ class TestSharedHelpers:
         np.testing.assert_allclose(b_high[1], 2.0)
 
 
+class TestThetaReduction:
+    def test_trial_mean_and_obs_selection(self):
+        theta_mean, theta_samples = _theta_frames()
+        reduced = _reduce_theta(theta_samples)
+        manual = theta_samples.groupby(level=["chain", "draw"]).mean()
+        pd.testing.assert_frame_equal(reduced, manual)
+
+        picked = _reduce_theta(theta_samples, obs=3)
+        pd.testing.assert_frame_equal(picked, theta_samples.xs(3, level="obs_n"))
+
+        flat = _reduce_theta(theta_mean)
+        assert flat.shape == (1, theta_mean.shape[1])
+        np.testing.assert_allclose(flat.values[0], theta_mean.mean().values)
+        np.testing.assert_allclose(
+            _reduce_theta(theta_mean, obs=1).values, theta_mean.loc[[1]].values
+        )
+
+    def test_missing_obs_label_raises(self):
+        _, theta_samples = _theta_frames()
+        with pytest.raises(ValueError, match="obs=99"):
+            _reduce_theta(theta_samples, obs=99)
+
+    def test_reference_geometry_is_trial_mean(self):
+        # Trial 0 carries an outlier ndt; the drawn reference ndt must be the
+        # trial mean, not trial 0's value (the pre-#1125 convention).
+        theta_mean, _ = _theta_frames()
+        theta_mean["t"] = [1.5] + [0.3] * (len(theta_mean) - 1)
+        fig, ax = plt.subplots()
+        plot_func_model(
+            model_name="ddm",
+            axis=ax,
+            theta_mean=theta_mean,
+            theta_samples=None,
+            data=_observed(),
+            n_reps=2,
+            random_state=0,
+            uncertainty=None,
+            intervals=None,
+        )
+        vlines = [
+            ln
+            for ln in ax.get_lines()
+            if ln.get_linestyle() == "--" and len(set(ln.get_xdata())) == 1
+        ]
+        assert len(vlines) == 1
+        assert float(vlines[0].get_xdata()[0]) == pytest.approx(
+            theta_mean["t"].mean(), abs=0.02
+        )
+        plt.close("all")
+
+
 class TestSimulationRouting:
+    def test_obs_conditions_every_simulated_layer(self, monkeypatch):
+        import hssm.plotting.model_cartoon as mc
+
+        theta_mean, theta_samples = _theta_frames()
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        fig, ax = plt.subplots()
+        plot_func_model(
+            model_name="ddm",
+            axis=ax,
+            theta_mean=theta_mean,
+            theta_samples=theta_samples,
+            data=_observed(),
+            n_reps=2,
+            random_state=0,
+            uncertainty="band",
+            intervals=INTERVALS,
+            obs=2,
+        )
+        plt.close("all")
+
+        # every simulated layer conditions on exactly one trial's θ
+        for kw in calls:
+            assert np.asarray(kw["theta"]).shape[0] == 1
+        no_noise = [kw for kw in calls if kw.get("no_noise")]
+        np.testing.assert_allclose(no_noise[0]["theta"], theta_mean.loc[[2]].values)
+        expected_draws = theta_samples.xs(2, level="obs_n")
+        np.testing.assert_allclose(
+            no_noise[1]["theta"], expected_draws.iloc[[0]].values
+        )
+
+    def test_default_histograms_stay_marginal(self, monkeypatch):
+        import hssm.plotting.model_cartoon as mc
+
+        theta_mean, theta_samples = _theta_frames()
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        _render("band")
+        plt.close("all")
+
+        n_obs = theta_mean.shape[0]
+        no_noise = [kw for kw in calls if kw.get("no_noise")]
+        noisy = [kw for kw in calls if not kw.get("no_noise")]
+        # geometry: one reduced θ per call; histograms: all trial rows
+        for kw in no_noise:
+            assert np.asarray(kw["theta"]).shape[0] == 1
+        for kw in noisy:
+            assert np.asarray(kw["theta"]).shape[0] == n_obs
+        # reference geometry is the across-trials mean of theta_mean
+        np.testing.assert_allclose(no_noise[0]["theta"][0], theta_mean.mean().values)
+
     def test_max_t_derived_from_xlims(self, monkeypatch):
         import hssm.plotting.model_cartoon as mc
 
