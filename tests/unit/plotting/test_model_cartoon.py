@@ -706,6 +706,44 @@ class TestPlotFuncModel:
             _render("band", hist_height="bogus")
         plt.close("all")
 
+    def test_ylims_auto_grows_frame(self):
+        """'auto' ylims keep raw densities and grow the frame around them —
+        symmetric, never below the defaults, everything contained."""
+        theta_mean, theta_samples = _theta_frames()
+        for frame in (theta_mean, theta_samples):
+            frame["v"] = 2.5  # peaked RTs: raw densities overrun ylim_high=3
+            frame["a"] = 1.0
+        fig, ax, up, down = _render(
+            "band",
+            theta_mean=theta_mean,
+            theta_samples=theta_samples,
+            ylims="auto",
+            n_reps=10,
+        )
+        ylo, yhi = ax.get_ylim()
+        assert yhi > 3.0  # grew past the default
+        assert ylo == pytest.approx(-yhi)  # stayed symmetric
+        assert up.get_ylim() == ax.get_ylim()  # twins follow
+        for twin in (up, down):
+            for ln in twin.get_lines():
+                assert np.max(ln.get_ydata()) <= yhi + 1e-9
+        plt.close("all")
+
+    def test_ylims_auto_keeps_defaults_when_content_fits(self):
+        fig, ax, up, down = _render("band", hist_height=0.5, ylims="auto")
+        assert ax.get_ylim() == (-3.0, 3.0)
+        plt.close("all")
+
+    def test_ylims_auto_conflicts_with_hist_height_auto(self):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            _render("band", hist_height="auto", ylims="auto")
+        plt.close("all")
+
+    def test_ylims_invalid_string_raises(self):
+        with pytest.raises(ValueError, match="ylims"):
+            _render("band", ylims="bogus")
+        plt.close("all")
+
     def test_hist_height_auto_degenerate_ylims_warns(self, caplog):
         """No positive headroom => warn and fall back to raw densities."""
         import logging

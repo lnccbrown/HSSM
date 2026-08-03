@@ -515,7 +515,7 @@ def plot_model_cartoon(
     random_state: int | np.random.Generator | None = None,
     n_trajectories: int | None = None,
     xlims: tuple[float, float] | None = None,
-    ylims: tuple[float, float] | None = None,
+    ylims: tuple[float, float] | Literal["auto"] | None = None,
     grid_kwargs: dict | None = None,
     **kwargs,
 ) -> Axes | FacetGrid | list[FacetGrid]:
@@ -705,8 +705,14 @@ def plot_model_cartoon(
         None, keeping renderer defaults ((-0.05, 5) for 2-choice, (0, 5) for
         >2-choice).
     ylims : optional
-        The y-axis limits. By default None, keeping renderer defaults
-        ((-3, 3) for 2-choice, (0, 5) for >2-choice).
+        The y-axis limits. If ``"auto"``, keep the histograms at raw density
+        scale and grow the frame instead so nothing is clipped (the tallest
+        drawn side plus the visible boundary-ribbon top get 90% of the
+        frame; limits never shrink below the defaults, and the 2-choice
+        frame stays symmetric). Mutually exclusive with
+        ``hist_height="auto"`` — one fits the content into the frame, the
+        other fits the frame around the content. By default None, keeping
+        renderer defaults ((-3, 3) for 2-choice, (0, 5) for >2-choice).
     grid_kwargs : optional
         Additional keyword arguments are passed to the [`FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
@@ -745,6 +751,13 @@ def plot_model_cartoon(
     # consumes a later segment of the same stream (distinct per facet,
     # reproducible across calls).
     rng = np.random.default_rng(random_state)
+
+    if ylims == "auto" and hist_height == "auto":
+        raise ValueError(
+            "`hist_height='auto'` and `ylims='auto'` are mutually exclusive: "
+            "one fits the histograms into the frame, the other fits the "
+            "frame around the histograms."
+        )
 
     uncertainty, alpha_mean = _resolve_uncertainty_from_legacy(
         plot_predictive_mean, plot_predictive_samples, uncertainty, alpha_mean
@@ -1215,7 +1228,20 @@ def plot_func_model(
     legacy_alpha = alpha_predictive if alpha_predictive is not None else 0.05
     legacy = uncertainty is None
 
-    ylim_low, ylim_high = kwargs.get("ylims", (-3, 3))
+    ylims_setting = kwargs.get("ylims", (-3, 3))
+    ylims_auto = isinstance(ylims_setting, str) and ylims_setting == "auto"
+    if isinstance(ylims_setting, str) and not ylims_auto:
+        raise ValueError(
+            f"`ylims` must be a (low, high) tuple, 'auto', or None; "
+            f"got {ylims_setting!r}"
+        )
+    if ylims_auto and hist_height == "auto":
+        raise ValueError(
+            "`hist_height='auto'` and `ylims='auto'` are mutually exclusive: "
+            "one fits the histograms into the frame, the other fits the "
+            "frame around the histograms."
+        )
+    ylim_low, ylim_high = (-3, 3) if ylims_auto else ylims_setting
     xlim_low, xlim_high = kwargs.get("xlims", (-0.05, 5))
 
     # One simulation horizon and one time grid for every geometry element.
@@ -1408,15 +1434,12 @@ def plot_func_model(
             data["rt"].to_numpy(), data["response"].to_numpy(), bin_edges
         )
 
-    hist_height_: float | None
-    if hist_height == "auto":
-        # Fit the tallest curve into the vertical headroom. The baseline must
-        # clear the highest point any boundary ribbon reaches inside the
-        # visible x-range (expanding bounds rise above the t=0 anchor), on
-        # the tighter of the two mirrored sides.
+    def _visible_ribbon_max() -> float:
+        # Highest point any (no-noise) boundary reaches inside the visible
+        # x-range — expanding bounds rise above their t=0 anchor.
         n_vis = int(xlim_high / delta_t_model) + 1
         if theta_samples is not None:
-            ribbon_max = max(
+            return max(
                 float(
                     np.max(
                         np.maximum(
@@ -1427,13 +1450,19 @@ def plot_func_model(
                 )
                 for k in posterior_pred_no_noise
             )
-        elif theta_mean is not None:
-            ribbon_max = float(
+        if theta_mean is not None:
+            return float(
                 np.max(np.maximum(sim_out_no_noise["metadata"]["boundary"][:n_vis], 0))
             )
-        else:
-            ribbon_max = 0.0
-        effective_bottom = max(hist_bottom_high, hist_bottom_low, ribbon_max)
+        return 0.0
+
+    hist_height_: float | None
+    if hist_height == "auto":
+        # Fit the tallest curve into the vertical headroom. The baseline must
+        # clear the highest point any boundary ribbon reaches inside the
+        # visible x-range (expanding bounds rise above the t=0 anchor), on
+        # the tighter of the two mirrored sides.
+        effective_bottom = max(hist_bottom_high, hist_bottom_low, _visible_ribbon_max())
         headroom = ylim_high - effective_bottom
         if headroom > 0:
             hist_height_ = HIST_HEIGHT_MARGIN * headroom
@@ -1464,6 +1493,31 @@ def plot_func_model(
         hist_scale = hist_height_ / peak if peak > 0 else 1.0
     else:
         hist_scale = 1.0
+
+    if ylims_auto:
+        # The mirror image of hist_height="auto": keep the raw density scale
+        # and grow the frame so the tallest drawn side (and the visible
+        # ribbon top) occupies HIST_HEIGHT_MARGIN of it. Never shrinks below
+        # the default limits, and stays symmetric like them.
+        peak_up = max(
+            (m.max() for m in (densities_up, plugin_up, obs_up) if m is not None),
+            default=0.0,
+        )
+        peak_down = max(
+            (m.max() for m in (densities_down, plugin_down, obs_down) if m is not None),
+            default=0.0,
+        )
+        content_top = max(
+            hist_bottom_high + hist_scale * peak_up,
+            hist_bottom_low + hist_scale * peak_down,
+            _visible_ribbon_max(),
+        )
+        ylim_high = max(ylim_high, float(content_top) / HIST_HEIGHT_MARGIN)
+        ylim_low = -ylim_high
+        axis.set_ylim(ylim_low, ylim_high)
+        axis_twin_up.set_ylim(ylim_low, ylim_high)
+        axis_twin_down.set_ylim(ylim_high, ylim_low)
+
     axis_twin_up.set_zorder(0)
     axis_twin_down.set_zorder(0)
 
@@ -2620,7 +2674,20 @@ def plot_func_model_n(
     legacy_alpha = alpha_predictive if alpha_predictive is not None else 0.05
     legacy = uncertainty is None
 
-    ylim_low, ylim_high = kwargs.get("ylims", (0, 5))
+    ylims_setting = kwargs.get("ylims", (0, 5))
+    ylims_auto = isinstance(ylims_setting, str) and ylims_setting == "auto"
+    if isinstance(ylims_setting, str) and not ylims_auto:
+        raise ValueError(
+            f"`ylims` must be a (low, high) tuple, 'auto', or None; "
+            f"got {ylims_setting!r}"
+        )
+    if ylims_auto and hist_height == "auto":
+        raise ValueError(
+            "`hist_height='auto'` and `ylims='auto'` are mutually exclusive: "
+            "one fits the histograms into the frame, the other fits the "
+            "frame around the histograms."
+        )
+    ylim_low, ylim_high = (0, 5) if ylims_auto else ylims_setting
     xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
     # Shared horizon/grid; see plot_func_model for why noisy RT sims keep the
@@ -2788,13 +2855,12 @@ def plot_func_model_n(
             data["rt"].to_numpy(), data["response"].to_numpy(), bin_edges, choices
         )
 
-    hist_height_: float | None
-    if hist_height == "auto":
-        # Single, non-mirrored axis: one shared baseline; the ribbon exists
-        # only on the single upward bound. See plot_func_model.
+    def _visible_ribbon_max() -> float:
+        # Highest point any (no-noise) boundary reaches inside the visible
+        # x-range — expanding bounds rise above their t=0 anchor.
         n_vis = int(xlim_high / delta_t_model) + 1
         if theta_samples is not None:
-            ribbon_max = max(
+            return max(
                 float(
                     np.max(
                         np.maximum(
@@ -2805,13 +2871,17 @@ def plot_func_model_n(
                 )
                 for k in posterior_pred_no_noise
             )
-        elif theta_mean is not None:
-            ribbon_max = float(
+        if theta_mean is not None:
+            return float(
                 np.max(np.maximum(sim_out_no_noise["metadata"]["boundary"][:n_vis], 0))
             )
-        else:
-            ribbon_max = 0.0
-        effective_bottom = max(bottom, ribbon_max)
+        return 0.0
+
+    hist_height_: float | None
+    if hist_height == "auto":
+        # Single, non-mirrored axis: one shared baseline; the ribbon exists
+        # only on the single upward bound. See plot_func_model.
+        effective_bottom = max(bottom, _visible_ribbon_max())
         headroom = ylim_high - effective_bottom
         if headroom > 0:
             hist_height_ = HIST_HEIGHT_MARGIN * headroom
@@ -2841,6 +2911,21 @@ def plot_func_model_n(
         hist_scale = hist_height_ / peak if peak > 0 else 1.0
     else:
         hist_scale = 1.0
+
+    if ylims_auto:
+        # See plot_func_model: raw density scale kept, frame grown instead.
+        peak_all = max(
+            (
+                float(v.max())
+                for group in (sample_densities, plugin_densities, obs_densities)
+                if group is not None
+                for v in group.values()
+            ),
+            default=0.0,
+        )
+        content_top = max(bottom + hist_scale * peak_all, _visible_ribbon_max())
+        ylim_high = max(ylim_high, content_top / HIST_HEIGHT_MARGIN)
+        axis.set_ylim(ylim_low, ylim_high)
 
     if not legacy:
         band_densities = (
