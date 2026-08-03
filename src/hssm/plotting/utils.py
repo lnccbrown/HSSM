@@ -104,9 +104,40 @@ def _process_data(
     return data
 
 
+# The HSSM house palette for predictive plots, in [predicted, observed] order.
+# Validated for CVD safety (deutan dE 16.1, tritan 36.0, normal 31.9 on a white
+# surface). Shared with model_cartoon.py — change it here, nowhere else.
+DEFAULT_PREDICTIVE_COLORS: list[str] = ["#ec205b", "#338fb8"]
+
+
+def _hdi_to_intervals(
+    hdi: str | float | tuple[float, float] | list,
+) -> list[tuple[float, float]]:
+    """Normalize one or many interval specs into quantile pairs.
+
+    A single spec — a float mass (0.94), a "94%" string, or a legacy
+    (lo, hi) *tuple* of quantiles — yields one interval. A *list* holds one
+    spec per band (each entry itself a mass, string, or quantile tuple).
+    Tuples always keep their legacy quantile-pair meaning; only lists fan
+    out into multiple bands. Returns intervals sorted widest-first so graded
+    bands can be drawn back-to-front.
+    """
+    specs = list(hdi) if isinstance(hdi, list) else [hdi]
+    if not specs:
+        raise ValueError("The `hdi` list must not be empty.")
+    intervals = [_hdi_to_interval(spec) for spec in specs]
+    return sorted(intervals, key=lambda iv: iv[1] - iv[0], reverse=True)
+
+
 def _hdi_to_interval(hdi: str | float | tuple[float, float]) -> tuple[float, float]:
-    """Convert HDI to range."""
+    """Convert an interval spec to a (lower, upper) quantile pair.
+
+    Note: despite the parameter name (kept for API compatibility), the result
+    is an equal-tailed percentile interval, not a highest-density interval.
+    """
     if isinstance(hdi, tuple):
+        if len(hdi) != 2:
+            raise ValueError("The HDI must be a tuple of exactly two floats.")
         if not all(isinstance(i, float) for i in hdi):
             raise ValueError("The HDI must be a tuple of floats.")
         elif not all(0 <= i <= 1 for i in hdi):
