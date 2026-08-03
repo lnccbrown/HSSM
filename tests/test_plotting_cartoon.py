@@ -215,11 +215,10 @@ def test_plot_model_cartoon_3_choice(
         random_state=42,
     )
 
-    if groups is None:
-        if row is not None:
-            assert np.all(ax.row_names == race_model_cartoon.data[row].unique())
-        if col is not None:
-            assert np.all(ax.col_names == race_model_cartoon.data[col].unique())
-    else:
-        assert isinstance(ax, list)
-        assert len(ax) == len(race_model_cartoon.data[groups].unique())
+    # groups is None in every parametrization row: the race fixture has no
+    # grouping column, and the grouped path is renderer-agnostic — it is
+    # exercised by the 2-choice matrix's ["dbs"] rows.
+    if row is not None:
+        assert np.all(ax.row_names == race_model_cartoon.data[row].unique())
+    if col is not None:
+        assert np.all(ax.col_names == race_model_cartoon.data[col].unique())

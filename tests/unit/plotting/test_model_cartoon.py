@@ -606,7 +606,6 @@ class TestPlotFuncModel:
         fig, ax, up, down = _render(None, data=None)
         x, y = _curve_xy(edges, expected_up, True)
         mean_line = up.get_lines()[0]
-        bottom = mean_line.get_ydata().min() if expected_up.min() == 0 else None
         np.testing.assert_allclose(
             mean_line.get_ydata() - (mean_line.get_ydata() - y).min(), y, atol=1e-8
         )
