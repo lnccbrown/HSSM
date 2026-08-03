@@ -35,6 +35,10 @@ from .utils import (
 
 _logger = logging.getLogger("hssm")
 
+# Fraction of the vertical headroom that hist_height="auto" hands to the
+# tallest histogram curve (the rest stays as breathing room below ylim_high).
+HIST_HEIGHT_MARGIN = 0.9
+
 TRAJ_COLOR_DEFAULT_DICT: Mapping[Any, str] = MappingProxyType(
     {
         -1: "black",
@@ -129,7 +133,7 @@ def _plot_model_cartoon_1D(
     intervals: list[tuple[float, float]] | None = None,
     alpha_mean: float = 1.0,
     alpha_uncertainty: float | None = None,
-    hist_height: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     colors: str | list[str] | None = None,
     linestyles: list[str] | None = None,
     linewidths: list[float] | None = None,
@@ -285,7 +289,7 @@ def _plot_model_cartoon_2D(
     intervals: list[tuple[float, float]] | None = None,
     alpha_mean: float = 1.0,
     alpha_uncertainty: float | None = None,
-    hist_height: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     colors: str | list[str] | None = None,
     linestyles: list[str] | None = None,
     linewidths: list[float] | None = None,
@@ -497,7 +501,7 @@ def plot_model_cartoon(
     uncertainty: Literal["band", "samples", "both"] | None = "band",
     alpha_mean: float = 1.0,
     alpha_uncertainty: float | None = None,
-    hist_height: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     plot_predictive_mean: bool | None = None,
     plot_predictive_samples: bool | None = None,
     colors: str | list[str] | dict[str, str] | None = None,
@@ -628,10 +632,14 @@ def plot_model_cartoon(
         per-curve value that keeps total ink roughly constant. An explicit
         0.0 is honored.
     hist_height : optional
-        If given, rescale all RT-histogram curves by one common factor so the
-        tallest curve has this height in y-data units above its bound, by
-        default None (raw defective-density units, which can overrun the
-        y-limits for very peaked distributions).
+        If a float, rescale all RT-histogram curves by one common factor so
+        the tallest curve has this height in y-data units above its bound.
+        If ``"auto"``, fit the tallest curve to 90% of the vertical headroom
+        between the histogram baseline (or the highest visible boundary-
+        ribbon point, whichever is higher) and the upper y-limit, so
+        histograms can never overrun the axes; under faceting the fit is
+        per facet. By default None (raw defective-density units, which can
+        overrun the y-limits for very peaked distributions).
     plot_predictive_mean, plot_predictive_samples : optional
         Deprecated boolean spellings of `uncertainty`; mapped with a
         FutureWarning. (True, False) means `uncertainty=None`; any
@@ -1036,7 +1044,7 @@ def plot_func_model(
     step: bool = True,
     uncertainty: Literal["band", "samples", "both"] | None = None,
     intervals: list[tuple[float, float]] | None = None,
-    hist_height: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     n_trajectories: int = 0,
     delta_t_model: float = 0.01,
     random_state: int | np.random.Generator | None = None,
@@ -1104,10 +1112,12 @@ def plot_func_model(
         Pre-resolved quantile pairs for the bands, sorted widest-first (the
         output of ``_hdi_to_intervals``). Required when `uncertainty` is
         "band" or "both".
-    hist_height : float, optional
-        If given, rescale all histogram curves by one common factor so the
+    hist_height : float or "auto", optional
+        If a float, rescale all histogram curves by one common factor so the
         tallest drawn curve has this height (in y-data units above its
-        bound). Defaults to None (raw defective-density units).
+        bound). ``"auto"`` fits the tallest curve to 90% of the headroom
+        between the (ribbon-aware) baseline and ylim_high. Defaults to None
+        (raw defective-density units).
     n_trajectories : int, optional
         Number of trajectories to plot. Defaults to 0.
     delta_t_model : float, optional
@@ -1398,7 +1408,49 @@ def plot_func_model(
             data["rt"].to_numpy(), data["response"].to_numpy(), bin_edges
         )
 
-    if hist_height is not None:
+    hist_height_: float | None
+    if hist_height == "auto":
+        # Fit the tallest curve into the vertical headroom. The baseline must
+        # clear the highest point any boundary ribbon reaches inside the
+        # visible x-range (expanding bounds rise above the t=0 anchor), on
+        # the tighter of the two mirrored sides.
+        n_vis = int(xlim_high / delta_t_model) + 1
+        if theta_samples is not None:
+            ribbon_max = max(
+                float(
+                    np.max(
+                        np.maximum(
+                            posterior_pred_no_noise[k]["metadata"]["boundary"][:n_vis],
+                            0,
+                        )
+                    )
+                )
+                for k in posterior_pred_no_noise
+            )
+        elif theta_mean is not None:
+            ribbon_max = float(
+                np.max(np.maximum(sim_out_no_noise["metadata"]["boundary"][:n_vis], 0))
+            )
+        else:
+            ribbon_max = 0.0
+        effective_bottom = max(hist_bottom_high, hist_bottom_low, ribbon_max)
+        headroom = ylim_high - effective_bottom
+        if headroom > 0:
+            hist_height_ = HIST_HEIGHT_MARGIN * headroom
+        else:
+            hist_height_ = None
+            _logger.warning(
+                "hist_height='auto': no positive headroom above the histogram "
+                "baseline within ylims; using raw densities."
+            )
+    elif isinstance(hist_height, str):
+        raise ValueError(
+            f"`hist_height` must be a float, 'auto', or None; got {hist_height!r}"
+        )
+    else:
+        hist_height_ = hist_height
+
+    if hist_height_ is not None:
         peak = max(
             (
                 m.max()
@@ -1409,7 +1461,7 @@ def plot_func_model(
         )
         if obs_up is not None and obs_down is not None:
             peak = max(peak, obs_up.max(), obs_down.max())
-        hist_scale = hist_height / peak if peak > 0 else 1.0
+        hist_scale = hist_height_ / peak if peak > 0 else 1.0
     else:
         hist_scale = 1.0
     axis_twin_up.set_zorder(0)
@@ -2474,7 +2526,7 @@ def plot_func_model_n(
     step: bool = True,
     uncertainty: Literal["band", "samples", "both"] | None = None,
     intervals: list[tuple[float, float]] | None = None,
-    hist_height: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     n_reps: int = 10,
     linewidth_histogram: float | int = 0.5,
     linewidth_model: float | int = 0.5,
@@ -2736,7 +2788,47 @@ def plot_func_model_n(
             data["rt"].to_numpy(), data["response"].to_numpy(), bin_edges, choices
         )
 
-    if hist_height is not None:
+    hist_height_: float | None
+    if hist_height == "auto":
+        # Single, non-mirrored axis: one shared baseline; the ribbon exists
+        # only on the single upward bound. See plot_func_model.
+        n_vis = int(xlim_high / delta_t_model) + 1
+        if theta_samples is not None:
+            ribbon_max = max(
+                float(
+                    np.max(
+                        np.maximum(
+                            posterior_pred_no_noise[k]["metadata"]["boundary"][:n_vis],
+                            0,
+                        )
+                    )
+                )
+                for k in posterior_pred_no_noise
+            )
+        elif theta_mean is not None:
+            ribbon_max = float(
+                np.max(np.maximum(sim_out_no_noise["metadata"]["boundary"][:n_vis], 0))
+            )
+        else:
+            ribbon_max = 0.0
+        effective_bottom = max(bottom, ribbon_max)
+        headroom = ylim_high - effective_bottom
+        if headroom > 0:
+            hist_height_ = HIST_HEIGHT_MARGIN * headroom
+        else:
+            hist_height_ = None
+            _logger.warning(
+                "hist_height='auto': no positive headroom above the histogram "
+                "baseline within ylims; using raw densities."
+            )
+    elif isinstance(hist_height, str):
+        raise ValueError(
+            f"`hist_height` must be a float, 'auto', or None; got {hist_height!r}"
+        )
+    else:
+        hist_height_ = hist_height
+
+    if hist_height_ is not None:
         peak = max(
             (
                 float(v.max())
@@ -2746,7 +2838,7 @@ def plot_func_model_n(
             ),
             default=0.0,
         )
-        hist_scale = hist_height / peak if peak > 0 else 1.0
+        hist_scale = hist_height_ / peak if peak > 0 else 1.0
     else:
         hist_scale = 1.0
 
