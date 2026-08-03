@@ -56,7 +56,9 @@ def _xarray_to_df(
     # Rename the columns
     stacked.columns = response_str.split(",")
 
-    return stacked.loc[:, ["rt", "response"]]
+    # `.to_pandas()` above is typed DataFrame | Series; with a list selector
+    # `.loc` always yields a DataFrame here.
+    return cast("pd.DataFrame", stacked.loc[:, ["rt", "response"]])
 
 
 def _process_data(
