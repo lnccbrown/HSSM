@@ -17,6 +17,7 @@ def _xarray_to_df(
     posterior: xr.DataArray,
     n_samples: int | float | None,
     response_str: str = "rt,response",
+    rng: np.random.Generator | None = None,
 ) -> pd.DataFrame:
     """Extract samples from posterior and converts it to a DataFrame.
 
@@ -36,13 +37,16 @@ def _xarray_to_df(
         extracted from the draw dimension. When None, all samples are extracted.
     response_str
         The names of the response variable in the posterior.
+    rng
+        A seeded Generator for the draw selection; None keeps the legacy
+        global-RNG behavior.
 
     Returns
     -------
     pd.DataFrame
         A dataframe with the posterior samples.
     """
-    sampled_posterior = _random_sample(posterior, n_samples=n_samples)
+    sampled_posterior = _random_sample(posterior, n_samples=n_samples, rng=rng)
 
     # Convert the posterior samples to a dataframe
     stacked = (
@@ -203,6 +207,7 @@ def _get_plotting_df(
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
+    rng: np.random.Generator | None = None,
 ) -> pd.DataFrame:
     """Prepare a dataframe for plotting.
 
@@ -224,6 +229,9 @@ def _get_plotting_df(
         extracted from the draw dimension. When None, all samples are extracted.
     response_str, optional
         The names of the response variable in the posterior, by default "rt,response"
+    rng, optional
+        A seeded Generator for the draw selection; None keeps the legacy
+        global-RNG behavior.
 
     Returns
     -------
@@ -260,7 +268,7 @@ def _get_plotting_df(
 
     # get the posterior samples
     idata_predictive = cast("xr.DataArray", dt[predictive_group][response_str])
-    predictive = _xarray_to_df(idata_predictive, n_samples=n_samples)
+    predictive = _xarray_to_df(idata_predictive, n_samples=n_samples, rng=rng)
 
     if data is None:
         if extra_dims:
@@ -559,11 +567,15 @@ def _use_traces_or_sample(
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
+    rng: np.random.Generator | None = None,
 ) -> tuple[xr.DataTree, bool]:
     """Check if dt is provided, otherwise use traces.
 
     Also, if posterior predictive samples are not contained in traces, sample from
-    the model.
+    the model. When ``rng`` is given and posterior-predictive sampling is
+    triggered with an integer ``n_samples``, the draws are a seeded random
+    subset of the posterior instead of the legacy first-``n`` (which is
+    deterministic but biased toward early, warm-up-adjacent draws).
     """
     # First, determine whether posterior predictive samples are available
     # If not, we need to sample from the posterior
@@ -587,11 +599,16 @@ def _use_traces_or_sample(
             predictive_group,
         )
         if predictive_group == "posterior_predictive":
+            draws: int | float | np.ndarray | None = n_samples
+            if rng is not None and isinstance(n_samples, int):
+                n_draws = int(dt["posterior"].draw.size)
+                if n_samples <= n_draws:
+                    draws = np.sort(rng.choice(n_draws, size=n_samples, replace=False))
             model.sample_posterior_predictive(
                 dt=dt,
                 data=data,
                 inplace=True,
-                draws=n_samples,
+                draws=draws,
             )
         elif predictive_group == "prior_predictive":
             dt = model.sample_prior_predictive(

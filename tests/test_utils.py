@@ -240,6 +240,16 @@ def test__generate_random_indice(caplog, n_samples, n_draws, expected):
                 assert "n_samples > n_draws" in caplog.text
 
 
+def test__generate_random_indices_rng():
+    """A seeded rng makes the selection reproducible; None stays legacy."""
+    a = _generate_random_indices(10, 100, rng=np.random.default_rng(42))
+    b = _generate_random_indices(10, 100, rng=np.random.default_rng(42))
+    np.testing.assert_array_equal(a, b)
+    # the legacy global-RNG path still works and honors the same contract
+    c = _generate_random_indices(10, 100)
+    assert len(c) == 10 and np.all(c < 100)
+
+
 def assertions(caplog, obj, n_samples, expected):
     """Assert random-sampling behavior for one xarray object."""
     if expected == "error":

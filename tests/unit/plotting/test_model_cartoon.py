@@ -22,6 +22,7 @@ from hssm.plotting.model_cartoon import (
     _defective_densities_n,
     _density_matrices,
     _geometry_arrays,
+    _reduce_theta,
     _resolve_uncertainty_from_legacy,
     plot_func_model,
     plot_func_model_n,
@@ -190,6 +191,222 @@ class TestSharedHelpers:
         np.testing.assert_allclose(ndts, 0.3)
         # z=0.5 on a symmetric bound: starting point at 0
         np.testing.assert_allclose(z_abs, 0.0, atol=1e-12)
+
+    def test_geometry_arrays_short_boundary_constant_extension(self):
+        t_s = np.arange(0, 2, 0.01)
+        n_t = t_s.shape[0]
+        boundary = np.linspace(1.0, 0.5, n_t - 30)
+        traj = np.concatenate([np.linspace(0, 1, 60), np.full(n_t, -999.0)])
+        sims = {
+            0: {
+                "metadata": {
+                    "boundary": boundary,
+                    "trajectory": traj,
+                    "t": np.array([0.0]),
+                    "z": np.array([0.5]),
+                }
+            }
+        }
+        b_high, b_low, *_ = _geometry_arrays(sims, t_s, 0.01)
+        assert b_high.shape == (1, n_t)
+        # beyond the simulated grid: constant extension of the last value
+        np.testing.assert_allclose(b_high[0, n_t - 30 :], b_high[0, n_t - 31])
+        np.testing.assert_allclose(b_low[0, n_t - 30 :], b_low[0, n_t - 31])
+
+    def test_geometry_arrays_ignores_dict_keys(self):
+        t_s = np.arange(0, 1, 0.01)
+        n_t = t_s.shape[0]
+        traj = np.concatenate([np.linspace(0, 1, 20), np.full(n_t, -999.0)])
+
+        def sim(level):
+            return {
+                "metadata": {
+                    "boundary": np.full(n_t, float(level)),
+                    "trajectory": traj,
+                    "t": np.array([0.0]),
+                    "z": np.array([0.5]),
+                }
+            }
+
+        # non-contiguous keys must not be used as row indices
+        sims = {3: sim(1.0), 7: sim(2.0)}
+        b_high, *_ = _geometry_arrays(sims, t_s, 0.01)
+        np.testing.assert_allclose(b_high[0], 1.0)
+        np.testing.assert_allclose(b_high[1], 2.0)
+
+
+class TestThetaReduction:
+    def test_trial_mean_and_obs_selection(self):
+        theta_mean, theta_samples = _theta_frames()
+        reduced = _reduce_theta(theta_samples)
+        manual = theta_samples.groupby(level=["chain", "draw"]).mean()
+        pd.testing.assert_frame_equal(reduced, manual)
+
+        picked = _reduce_theta(theta_samples, obs=3)
+        pd.testing.assert_frame_equal(picked, theta_samples.xs(3, level="obs_n"))
+
+        flat = _reduce_theta(theta_mean)
+        assert flat.shape == (1, theta_mean.shape[1])
+        np.testing.assert_allclose(flat.values[0], theta_mean.mean().values)
+        np.testing.assert_allclose(
+            _reduce_theta(theta_mean, obs=1).values, theta_mean.loc[[1]].values
+        )
+
+    def test_missing_obs_label_raises(self):
+        _, theta_samples = _theta_frames()
+        with pytest.raises(ValueError, match="obs=99"):
+            _reduce_theta(theta_samples, obs=99)
+
+    def test_reference_geometry_is_trial_mean(self):
+        # Trial 0 carries an outlier ndt; the drawn reference ndt must be the
+        # trial mean, not trial 0's value (the pre-#1125 convention).
+        theta_mean, _ = _theta_frames()
+        theta_mean["t"] = [1.5] + [0.3] * (len(theta_mean) - 1)
+        fig, ax = plt.subplots()
+        plot_func_model(
+            model_name="ddm",
+            axis=ax,
+            theta_mean=theta_mean,
+            theta_samples=None,
+            data=_observed(),
+            n_reps=2,
+            random_state=0,
+            uncertainty=None,
+            intervals=None,
+        )
+        vlines = [
+            ln
+            for ln in ax.get_lines()
+            if ln.get_linestyle() == "--" and len(set(ln.get_xdata())) == 1
+        ]
+        assert len(vlines) == 1
+        assert float(vlines[0].get_xdata()[0]) == pytest.approx(
+            theta_mean["t"].mean(), abs=0.02
+        )
+        plt.close("all")
+
+
+class TestSimulationRouting:
+    def test_obs_conditions_every_simulated_layer(self, monkeypatch):
+        import hssm.plotting.model_cartoon as mc
+
+        theta_mean, theta_samples = _theta_frames()
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        fig, ax = plt.subplots()
+        plot_func_model(
+            model_name="ddm",
+            axis=ax,
+            theta_mean=theta_mean,
+            theta_samples=theta_samples,
+            data=_observed(),
+            n_reps=2,
+            random_state=0,
+            uncertainty="band",
+            intervals=INTERVALS,
+            obs=2,
+        )
+        plt.close("all")
+
+        # every simulated layer conditions on exactly one trial's θ
+        for kw in calls:
+            assert np.asarray(kw["theta"]).shape[0] == 1
+        no_noise = [kw for kw in calls if kw.get("no_noise")]
+        np.testing.assert_allclose(no_noise[0]["theta"], theta_mean.loc[[2]].values)
+        expected_draws = theta_samples.xs(2, level="obs_n")
+        np.testing.assert_allclose(
+            no_noise[1]["theta"], expected_draws.iloc[[0]].values
+        )
+
+    def test_default_histograms_stay_marginal(self, monkeypatch):
+        import hssm.plotting.model_cartoon as mc
+
+        theta_mean, _ = _theta_frames()
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        _render("band")
+        plt.close("all")
+
+        n_obs = theta_mean.shape[0]
+        no_noise = [kw for kw in calls if kw.get("no_noise")]
+        noisy = [kw for kw in calls if not kw.get("no_noise")]
+        # geometry: one reduced θ per call; histograms: all trial rows
+        for kw in no_noise:
+            assert np.asarray(kw["theta"]).shape[0] == 1
+        for kw in noisy:
+            assert np.asarray(kw["theta"]).shape[0] == n_obs
+        # reference geometry is the across-trials mean of theta_mean
+        np.testing.assert_allclose(no_noise[0]["theta"][0], theta_mean.mean().values)
+
+    def test_trajectories_realize_reference_theta(self, monkeypatch):
+        """Trajectories are noisy realizations of the SAME reduced θ that
+        draws the reference geometry — their crossing markers land on the
+        drawn boundary by construction (was: a random trial's θ each)."""
+        import hssm.plotting.model_cartoon as mc
+
+        theta_mean, _ = _theta_frames()
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        fig, ax, *_ = _render("band", n_trajectories=3)
+
+        traj = [kw for kw in calls if not kw.get("no_noise") and "smooth_unif" in kw]
+        assert len(traj) == 3
+        expected = theta_mean.mean().to_frame().T.values
+        for kw in traj:
+            np.testing.assert_allclose(kw["theta"], expected)
+
+        # crossing markers sit exactly on the (constant, a=1.2) drawn bound
+        markers = [c for c in ax.collections if c.get_zorder() >= 2000]
+        assert markers
+        for m in markers:
+            assert abs(m.get_offsets()[0][1]) == pytest.approx(1.2, rel=1e-6)
+        plt.close("all")
+
+    def test_max_t_derived_from_xlims(self, monkeypatch):
+        import hssm.plotting.model_cartoon as mc
+
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        _render("band", n_trajectories=2, xlims=(0, 2))
+        plt.close("all")
+
+        no_noise = [c for c in calls if c.get("no_noise")]
+        noisy = [c for c in calls if not c.get("no_noise")]
+        traj = [c for c in noisy if c.get("smooth_unif") is False]
+        rt_hist = [c for c in noisy if "smooth_unif" not in c]
+        assert no_noise and traj and rt_hist
+
+        # geometry + trajectories: horizon derived from xlims
+        for c in no_noise + traj:
+            assert c["max_t"] == pytest.approx(2.5)
+        # noisy RT sims keep the simulator's long default horizon (shrinking
+        # it would censor slow RTs and re-normalize the defective densities)
+        for c in rt_hist:
+            assert "max_t" not in c
 
 
 class TestUncertainHistogramLayers:
@@ -373,22 +590,22 @@ class TestPlotFuncModel:
         from ssms.basic_simulators.simulator import simulator
 
         theta_mean, _ = _theta_frames()
-        np.random.seed(0)
-        rand_int = np.random.randint(0, 400000000)
+        # reproduce the renderer's seeding protocol: one Generator, simulator
+        # seeds drawn positionally (the plug-in sim's seed is the first draw)
+        rng = np.random.default_rng(0)
         sim_out = simulator(
             model="ddm",
             theta=theta_mean.values,
             n_samples=2,
             no_noise=False,
             delta_t=0.01,
-            random_state=rand_int,
+            random_state=int(rng.integers(0, 2**31 - 1)),
         )
         edges = np.arange(-0.05, 5, 0.05)
         expected_up, _ = _defective_densities(sim_out["rts"], sim_out["choices"], edges)
         fig, ax, up, down = _render(None, data=None)
         x, y = _curve_xy(edges, expected_up, True)
         mean_line = up.get_lines()[0]
-        bottom = mean_line.get_ydata().min() if expected_up.min() == 0 else None
         np.testing.assert_allclose(
             mean_line.get_ydata() - (mean_line.get_ydata() - y).min(), y, atol=1e-8
         )
@@ -467,14 +684,57 @@ class TestPlotFuncModel:
         plt.close("all")
 
     def test_reproducible_with_seed(self):
-        results = []
-        for _ in range(2):
+        """Same random_state => identical figure, including every random layer."""
+
+        def snapshot():
             fig, ax, up, down = _render("band", n_trajectories=2)
-            traj_lines = [ln for ln in ax.get_lines() if 2000 <= ln.get_zorder() < 3000]
-            results.append([ln.get_ydata().copy() for ln in ax.get_lines()[:2]])
+            lines = [ln.get_ydata().copy() for ln in ax.get_lines()]
+            traj = [
+                ln.get_ydata().copy()
+                for ln in ax.get_lines()
+                if 2000 <= ln.get_zorder() < 3000
+            ]
+            polys = [
+                c.get_paths()[0].vertices.copy()
+                for c in ax.collections
+                if isinstance(c, PolyCollection)
+            ]
+            spans = [p.get_extents().bounds for p in ax.patches]
+            bands = [
+                c.get_paths()[0].vertices.copy()
+                for c in up.collections
+                if isinstance(c, PolyCollection)
+            ]
             plt.close("all")
-        for a, b in zip(*results):
-            np.testing.assert_array_equal(a, b)
+            return lines, traj, polys, spans, bands
+
+        first, second = snapshot(), snapshot()
+        assert len(first[1]) == 2  # the trajectories are actually asserted
+        for a, b in zip(first, second):
+            for x, y in zip(a, b):
+                np.testing.assert_array_equal(x, y)
+
+    def test_generator_instance_accepted_and_stateful(self):
+        """A Generator renders fine; two sequential renders sharing ONE
+        Generator consume successive stream segments (the facet mechanism)."""
+
+        def traj_data(rng):
+            fig, ax, *_ = _render("band", n_trajectories=2, random_state=rng)
+            traj = [
+                ln.get_ydata().copy()
+                for ln in ax.get_lines()
+                if 2000 <= ln.get_zorder() < 3000
+            ]
+            plt.close("all")
+            return traj
+
+        shared = np.random.default_rng(5)
+        a, b = traj_data(shared), traj_data(shared)
+        assert any(x.shape != y.shape or not np.array_equal(x, y) for x, y in zip(a, b))
+        # ...while re-seeding reproduces the first segment exactly
+        c = traj_data(np.random.default_rng(5))
+        for x, y in zip(a, c):
+            np.testing.assert_array_equal(x, y)
 
 
 class TestPlotFuncModelN:
@@ -515,6 +775,31 @@ class TestPlotFuncModelN:
         colors = {ln.get_color() for ln in ax.get_lines() if ln.get_zorder() == 3}
         assert colors == {"black", "green", "blue"}  # per-choice mean curves
         plt.close("all")
+
+    def test_per_draw_sims_respect_n_reps_and_distinct_seeds(self, monkeypatch):
+        """The per-choice bands must summarize real, independent histograms:
+        n_reps was silently ignored (n_samples=1) and every draw shared one
+        seed, so the bands described single-rep, noise-correlated sims."""
+        import hssm.plotting.model_cartoon as mc
+
+        calls: list[dict] = []
+        real_simulator = mc.simulator
+
+        def recording(*args, **kw):
+            calls.append(kw)
+            return real_simulator(*args, **kw)
+
+        monkeypatch.setattr(mc, "simulator", recording)
+        self._render_n("band", n_reps=3)
+        plt.close("all")
+
+        noisy = [kw for kw in calls if not kw.get("no_noise")]
+        per_draw = noisy[1:]  # the first noisy call is the plug-in sim
+        assert len(per_draw) == 6  # 2 chains x 3 draws
+        for kw in per_draw:
+            assert kw["n_samples"] == 3
+        seeds = [kw["random_state"] for kw in noisy]
+        assert len(set(seeds)) == len(seeds)
 
     def test_none_mode_data_only_no_nameerror(self):
         """Regression: bottom was unbound when only data was passed."""
