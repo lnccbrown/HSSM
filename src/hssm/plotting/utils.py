@@ -110,6 +110,34 @@ def _process_data(
 DEFAULT_PREDICTIVE_COLORS: list[str] = ["#ec205b", "#338fb8"]
 
 
+def _curve_xy(
+    bin_edges: np.ndarray, values: np.ndarray | pd.Series, step: bool
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return x, y for one histogram curve.
+
+    `step=True` yields the edge-anchored histogram outline; `step=False` yields
+    a frequency polygon through the bin centers (not the left edges, which
+    would shift the curve by half a bin). Both return plain arrays, so the same
+    x works for `plot` and `fill_between` — which is what makes step outlines
+    bandable. Shared between the predictive and model-cartoon plot families.
+    """
+    values = np.asarray(values)
+    if step:
+        return np.repeat(bin_edges, 2)[1:-1], np.repeat(values, 2)
+    return (bin_edges[:-1] + bin_edges[1:]) / 2, values
+
+
+def _band_alphas(base_alpha: float, n_bands: int) -> np.ndarray:
+    """Opacity ladder for graded uncertainty bands, widest-band-first.
+
+    The narrowest band prints at `base_alpha`; wider bands fade toward 45% of
+    it. The reversed linspace makes a single band get the full base value.
+    Callers zip this against intervals sorted widest-first (the order
+    `_hdi_to_intervals` returns) and draw back-to-front.
+    """
+    return np.linspace(base_alpha, 0.45 * base_alpha, n_bands)[::-1]
+
+
 def _hdi_to_intervals(
     hdi: str | float | tuple[float, float] | list,
 ) -> list[tuple[float, float]]:

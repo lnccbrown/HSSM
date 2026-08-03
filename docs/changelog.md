@@ -1,5 +1,9 @@
 # Changelog
 
+### Unreleased
+
+1. **`plot_model_cartoon` displays posterior uncertainty as graded bands by default** (#1124), adopting the same `uncertainty="band" | "samples" | "both" | None` vocabulary as `plot_predictive` (#1122): pointwise quantile bands on the RT histograms, fan-chart ribbons on the decision bounds, a graded drift-quantile fan, graded non-decision-time spans (replacing the per-draw vertical-line smear), and a starting-point whisker. `uncertainty=None` reproduces the previous mean-only look; the default call now runs per-draw simulations (seconds). New parameters: `hdi`, `alpha_mean`, `alpha_uncertainty`, `hist_height`, `legend`; `plot_predictive_mean`/`plot_predictive_samples` are deprecated with a `FutureWarning`. The previously documented-but-ignored `bins`, `step`, `colors`, `linestyles`, and `linewidths` parameters now work. With uncertainty display on, the drawn mean is the pointwise predictive mean across draws (it cannot exit its own bands) rather than the plug-in simulation at the posterior-mean parameters. The figure uses a three-way color encoding — model geometry stays neutral black (`color_model`), predictions and data use the predictive palette. Note for regression/hierarchical models: all geometry (reference and per-draw) derives from the first trial's parameter row — a fixed, deterministic convention; a follow-up (#1125) makes the reduction configurable (per-draw trial mean, `obs=`). See the new "Model cartoon plot gallery" tutorial.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
