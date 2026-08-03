@@ -669,6 +669,52 @@ class TestPlotFuncModel:
         assert max(tops((up, down))) == pytest.approx(0.8, rel=1e-6)
         plt.close("all")
 
+    @staticmethod
+    def _tops(twins):
+        out = []
+        for twin in twins:
+            for ln in twin.get_lines():
+                y = ln.get_ydata()
+                out.append(np.max(np.abs(y - y.min())))
+            for coll in twin.collections:
+                for path in coll.get_paths():
+                    y = path.vertices[:, 1]
+                    out.append(np.max(np.abs(y - y.min())))
+        return out
+
+    def test_hist_height_auto_fits_headroom(self):
+        """'auto' scales the tallest curve to 90% of the headroom between the
+        ribbon-aware baseline and ylim_high — nothing can overrun the axes."""
+        theta_mean, theta_samples = _theta_frames()
+        # effective bottom: the highest per-draw (trial-mean) boundary — the
+        # ddm bound is constant in time, so the ribbon max equals it
+        expected_bottom = (
+            theta_samples["a"].groupby(level=["chain", "draw"]).mean().max()
+        )
+        expected_h = 0.9 * (3.0 - expected_bottom)  # default ylims (-3, 3)
+
+        fig, ax, up, down = _render("samples", hist_height="auto")
+        assert max(self._tops((up, down))) == pytest.approx(expected_h, rel=1e-6)
+        plt.close("all")
+
+        fig, ax, up, down = _render("band", hist_height="auto")
+        assert max(self._tops((up, down))) <= expected_h + 1e-9
+        plt.close("all")
+
+    def test_hist_height_invalid_string_raises(self):
+        with pytest.raises(ValueError, match="hist_height"):
+            _render("band", hist_height="bogus")
+        plt.close("all")
+
+    def test_hist_height_auto_degenerate_ylims_warns(self, caplog):
+        """No positive headroom => warn and fall back to raw densities."""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="hssm"):
+            _render("band", hist_height="auto", ylims=(-0.5, 0.5))
+        assert "no positive headroom" in caplog.text
+        plt.close("all")
+
     def test_styles_are_live(self):
         fig, ax, up, down = _render(
             "band",
@@ -800,6 +846,17 @@ class TestPlotFuncModelN:
             assert kw["n_samples"] == 3
         seeds = [kw["random_state"] for kw in noisy]
         assert len(set(seeds)) == len(seeds)
+
+    def test_hist_height_auto_single_axis(self):
+        """The >2-choice renderer fits under its (0, 5) ylims: every histogram
+        artist stays below ylim_high with room to spare."""
+        fig, ax = self._render_n("band", hist_height="auto")
+        for coll in ax.collections:
+            for path in coll.get_paths():
+                assert path.vertices[:, 1].max() <= 5.0 + 1e-9
+        for ln in ax.get_lines():
+            assert np.max(ln.get_ydata()) <= 5.0 + 1e-9
+        plt.close("all")
 
     def test_none_mode_data_only_no_nameerror(self):
         """Regression: bottom was unbound when only data was passed."""
