@@ -1229,19 +1229,23 @@ def plot_func_model(
     legacy = uncertainty is None
 
     ylims_setting = kwargs.get("ylims", (-3, 3))
-    ylims_auto = isinstance(ylims_setting, str) and ylims_setting == "auto"
-    if isinstance(ylims_setting, str) and not ylims_auto:
-        raise ValueError(
-            f"`ylims` must be a (low, high) tuple, 'auto', or None; "
-            f"got {ylims_setting!r}"
-        )
-    if ylims_auto and hist_height == "auto":
-        raise ValueError(
-            "`hist_height='auto'` and `ylims='auto'` are mutually exclusive: "
-            "one fits the histograms into the frame, the other fits the "
-            "frame around the histograms."
-        )
-    ylim_low, ylim_high = (-3, 3) if ylims_auto else ylims_setting
+    ylims_auto = False
+    if isinstance(ylims_setting, str):
+        if ylims_setting != "auto":
+            raise ValueError(
+                f"`ylims` must be a (low, high) tuple, 'auto', or None; "
+                f"got {ylims_setting!r}"
+            )
+        if hist_height == "auto":
+            raise ValueError(
+                "`hist_height='auto'` and `ylims='auto'` are mutually "
+                "exclusive: one fits the histograms into the frame, the "
+                "other fits the frame around the histograms."
+            )
+        ylims_auto = True
+        ylim_low, ylim_high = -3.0, 3.0
+    else:
+        ylim_low, ylim_high = ylims_setting
     xlim_low, xlim_high = kwargs.get("xlims", (-0.05, 5))
 
     # One simulation horizon and one time grid for every geometry element.
@@ -2675,19 +2679,23 @@ def plot_func_model_n(
     legacy = uncertainty is None
 
     ylims_setting = kwargs.get("ylims", (0, 5))
-    ylims_auto = isinstance(ylims_setting, str) and ylims_setting == "auto"
-    if isinstance(ylims_setting, str) and not ylims_auto:
-        raise ValueError(
-            f"`ylims` must be a (low, high) tuple, 'auto', or None; "
-            f"got {ylims_setting!r}"
-        )
-    if ylims_auto and hist_height == "auto":
-        raise ValueError(
-            "`hist_height='auto'` and `ylims='auto'` are mutually exclusive: "
-            "one fits the histograms into the frame, the other fits the "
-            "frame around the histograms."
-        )
-    ylim_low, ylim_high = (0, 5) if ylims_auto else ylims_setting
+    ylims_auto = False
+    if isinstance(ylims_setting, str):
+        if ylims_setting != "auto":
+            raise ValueError(
+                f"`ylims` must be a (low, high) tuple, 'auto', or None; "
+                f"got {ylims_setting!r}"
+            )
+        if hist_height == "auto":
+            raise ValueError(
+                "`hist_height='auto'` and `ylims='auto'` are mutually "
+                "exclusive: one fits the histograms into the frame, the "
+                "other fits the frame around the histograms."
+            )
+        ylims_auto = True
+        ylim_low, ylim_high = 0.0, 5.0
+    else:
+        ylim_low, ylim_high = ylims_setting
     xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
     # Shared horizon/grid; see plot_func_model for why noisy RT sims keep the
