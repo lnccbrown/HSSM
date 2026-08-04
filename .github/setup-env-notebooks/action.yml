@@ -15,6 +15,7 @@ runs:
       uses: astral-sh/setup-uv@v9.0.0
       with:
         version: "latest"
+        python-version: ${{ inputs.python-version }}
         enable-cache: true
 
     - name: Install hssm
