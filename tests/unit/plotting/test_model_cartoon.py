@@ -830,6 +830,10 @@ class TestPlotFuncModelN:
         cols = {"v0": 1.0, "v1": 1.2, "v2": 0.8, "a": 2.0, "z": 0.4, "t": 0.2}
         theta_samples = pd.DataFrame(cols, index=idx)
         theta_samples["a"] += rng.normal(0, 0.08, len(theta_samples))
+        # drift rates vary across draws so the per-choice drift bands are
+        # non-degenerate (identical slopes => zero-width quantile bands)
+        for v_col in ("v0", "v1", "v2"):
+            theta_samples[v_col] += rng.normal(0, 0.1, len(theta_samples))
         theta_mean = pd.DataFrame({k: [v] * 4 for k, v in cols.items()})
         data = pd.DataFrame({"rt": [0.5, 0.7, 0.6, 0.9], "response": [0, 1, 2, 1]})
         fig, ax = plt.subplots()
@@ -853,12 +857,35 @@ class TestPlotFuncModelN:
     def test_band_mode_per_choice_collections(self):
         fig, ax = self._render_n("band")
         polys = [c for c in ax.collections if isinstance(c, PolyCollection)]
-        # 3 choices x 2 intervals (histograms) + 2 boundary ribbons
-        assert len(polys) == 3 * len(INTERVALS) + len(INTERVALS)
+        ribbons = [c for c in polys if c.get_zorder() == 1010]
+        drift_bands = [c for c in polys if c.get_zorder() == 1012]
+        hist_bands = [c for c in polys if c.get_zorder() < 1000]
+        assert len(hist_bands) == 3 * len(INTERVALS)  # per-choice histograms
+        assert len(ribbons) == len(INTERVALS)  # single upward bound
+        assert len(drift_bands) == 3 * len(INTERVALS)  # per-choice drift cones
         assert len(ax.patches) == len(INTERVALS)  # ndt spans
         colors = {ln.get_color() for ln in ax.get_lines() if ln.get_zorder() == 3}
         assert colors == {"black", "green", "blue"}  # per-choice mean curves
+        # drift cones carry real width (drift rates vary across draws)
+        assert any(np.ptp(c.get_paths()[0].vertices[:, 1]) > 1e-6 for c in drift_bands)
         plt.close("all")
+
+    def test_drift_matrices_n_columns(self):
+        from hssm.plotting.model_cartoon import _drift_matrices_n
+
+        t_s = np.arange(0, 1, 0.01)
+        n_t = t_s.shape[0]
+        traj = np.full((n_t, 3), -999.0)
+        traj[:40, 0] = np.linspace(0, 1.0, 40)
+        traj[:60, 1] = np.linspace(0, 1.5, 60)
+        traj[:20, 2] = np.linspace(0, 0.4, 20)
+        sims = {i: {"metadata": {"trajectory": traj}} for i in range(2)}
+        drifts = _drift_matrices_n(sims, t_s, 3)
+        assert set(drifts) == {0, 1, 2}
+        for j, alive in ((0, 39), (1, 59), (2, 19)):
+            assert drifts[j].shape == (2, n_t)
+            assert not np.isnan(drifts[j][:, :alive]).any()
+            assert np.isnan(drifts[j][:, alive + 1 :]).all()
 
     def test_per_draw_sims_respect_n_reps_and_distinct_seeds(self, monkeypatch):
         """The per-choice bands must summarize real, independent histograms:

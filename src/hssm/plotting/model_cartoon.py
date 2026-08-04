@@ -2424,6 +2424,30 @@ def _geometry_arrays(
     return b_high_m, b_low_m, drifts, ndts, z_abs
 
 
+def _drift_matrices_n(
+    sims: Mapping[int, dict],
+    t_s: np.ndarray,
+    n_choices: int,
+) -> dict[int, np.ndarray]:
+    """Stack per-draw, per-accumulator drift paths onto the shared time grid.
+
+    The n-choice simulator records one trajectory column per accumulator;
+    each column is NaN-masked beyond its recorded extent so pointwise
+    quantiles across draws see only live paths (mirrors `_geometry_arrays`,
+    whose flattened trajectory handling is 2-choice-only).
+    """
+    n_t = t_s.shape[0]
+    n_draws = len(sims)
+    drifts = {j: np.full((n_draws, n_t), np.nan) for j in range(n_choices)}
+    for i, sample in enumerate(sims.values()):
+        traj = np.atleast_2d(np.asarray(sample["metadata"]["trajectory"]))
+        for j in range(min(n_choices, traj.shape[1])):
+            col = traj[:, j]
+            maxid = int(np.minimum(np.argmax(np.where(col > -999)), n_t))
+            drifts[j][i, :maxid] = col[:maxid]
+    return drifts
+
+
 def _render_boundary_bands(
     axis: Axes,
     t_s: np.ndarray,
@@ -3074,6 +3098,26 @@ def plot_func_model_n(
                         linewidth=0,
                         zorder=1010,
                         label=f"boundary {hi - lo:.0%} interval",
+                    )
+                # Per-choice drift cones, one graded band per interval in
+                # that accumulator's color. The graded-alpha ladder keeps
+                # the overlap readable (the reason cones were previously
+                # left to the samples display).
+                drifts_n = _drift_matrices_n(posterior_pred_no_noise, t_s, len(choices))
+                ndt_ref_n = (
+                    float(np.asarray(sim_out_no_noise["metadata"]["t"]).ravel()[0])
+                    if theta_mean is not None
+                    else float(np.mean(ndts))
+                )
+                for j, choice in enumerate(choices):
+                    _render_drift_band(
+                        axis,
+                        t_s,
+                        drifts_n[j],
+                        ndt_ref_n,
+                        intervals,
+                        geom_base_alpha,
+                        TRAJ_COLOR_DEFAULT_DICT[choice],
                     )
             _render_ndt_uncertainty(
                 axis,
