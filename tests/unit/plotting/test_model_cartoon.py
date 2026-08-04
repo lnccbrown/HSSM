@@ -669,6 +669,90 @@ class TestPlotFuncModel:
         assert max(tops((up, down))) == pytest.approx(0.8, rel=1e-6)
         plt.close("all")
 
+    @staticmethod
+    def _tops(twins):
+        out = []
+        for twin in twins:
+            for ln in twin.get_lines():
+                y = ln.get_ydata()
+                out.append(np.max(np.abs(y - y.min())))
+            for coll in twin.collections:
+                for path in coll.get_paths():
+                    y = path.vertices[:, 1]
+                    out.append(np.max(np.abs(y - y.min())))
+        return out
+
+    def test_hist_height_auto_fits_headroom(self):
+        """'auto' scales the tallest curve to 90% of the headroom between the
+        ribbon-aware baseline and ylim_high — nothing can overrun the axes."""
+        theta_mean, theta_samples = _theta_frames()
+        # effective bottom: the highest per-draw (trial-mean) boundary — the
+        # ddm bound is constant in time, so the ribbon max equals it
+        expected_bottom = (
+            theta_samples["a"].groupby(level=["chain", "draw"]).mean().max()
+        )
+        expected_h = 0.9 * (3.0 - expected_bottom)  # default ylims (-3, 3)
+
+        fig, ax, up, down = _render("samples", hist_height="auto")
+        assert max(self._tops((up, down))) == pytest.approx(expected_h, rel=1e-6)
+        plt.close("all")
+
+        fig, ax, up, down = _render("band", hist_height="auto")
+        assert max(self._tops((up, down))) <= expected_h + 1e-9
+        plt.close("all")
+
+    def test_hist_height_invalid_string_raises(self):
+        with pytest.raises(ValueError, match="hist_height"):
+            _render("band", hist_height="bogus")
+        plt.close("all")
+
+    def test_ylims_auto_grows_frame(self):
+        """'auto' ylims keep raw densities and grow the frame around them —
+        symmetric, never below the defaults, everything contained."""
+        theta_mean, theta_samples = _theta_frames()
+        for frame in (theta_mean, theta_samples):
+            frame["v"] = 2.5  # peaked RTs: raw densities overrun ylim_high=3
+            frame["a"] = 1.0
+        fig, ax, up, down = _render(
+            "band",
+            theta_mean=theta_mean,
+            theta_samples=theta_samples,
+            ylims="auto",
+            n_reps=10,
+        )
+        ylo, yhi = ax.get_ylim()
+        assert yhi > 3.0  # grew past the default
+        assert ylo == pytest.approx(-yhi)  # stayed symmetric
+        assert up.get_ylim() == ax.get_ylim()  # twins follow
+        for twin in (up, down):
+            for ln in twin.get_lines():
+                assert np.max(ln.get_ydata()) <= yhi + 1e-9
+        plt.close("all")
+
+    def test_ylims_auto_keeps_defaults_when_content_fits(self):
+        fig, ax, up, down = _render("band", hist_height=0.5, ylims="auto")
+        assert ax.get_ylim() == (-3.0, 3.0)
+        plt.close("all")
+
+    def test_ylims_auto_conflicts_with_hist_height_auto(self):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            _render("band", hist_height="auto", ylims="auto")
+        plt.close("all")
+
+    def test_ylims_invalid_string_raises(self):
+        with pytest.raises(ValueError, match="ylims"):
+            _render("band", ylims="bogus")
+        plt.close("all")
+
+    def test_hist_height_auto_degenerate_ylims_warns(self, caplog):
+        """No positive headroom => warn and fall back to raw densities."""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="hssm"):
+            _render("band", hist_height="auto", ylims=(-0.5, 0.5))
+        assert "no positive headroom" in caplog.text
+        plt.close("all")
+
     def test_styles_are_live(self):
         fig, ax, up, down = _render(
             "band",
@@ -746,6 +830,10 @@ class TestPlotFuncModelN:
         cols = {"v0": 1.0, "v1": 1.2, "v2": 0.8, "a": 2.0, "z": 0.4, "t": 0.2}
         theta_samples = pd.DataFrame(cols, index=idx)
         theta_samples["a"] += rng.normal(0, 0.08, len(theta_samples))
+        # drift rates vary across draws so the per-choice drift bands are
+        # non-degenerate (identical slopes => zero-width quantile bands)
+        for v_col in ("v0", "v1", "v2"):
+            theta_samples[v_col] += rng.normal(0, 0.1, len(theta_samples))
         theta_mean = pd.DataFrame({k: [v] * 4 for k, v in cols.items()})
         data = pd.DataFrame({"rt": [0.5, 0.7, 0.6, 0.9], "response": [0, 1, 2, 1]})
         fig, ax = plt.subplots()
@@ -769,12 +857,35 @@ class TestPlotFuncModelN:
     def test_band_mode_per_choice_collections(self):
         fig, ax = self._render_n("band")
         polys = [c for c in ax.collections if isinstance(c, PolyCollection)]
-        # 3 choices x 2 intervals (histograms) + 2 boundary ribbons
-        assert len(polys) == 3 * len(INTERVALS) + len(INTERVALS)
+        ribbons = [c for c in polys if c.get_zorder() == 1010]
+        drift_bands = [c for c in polys if c.get_zorder() == 1012]
+        hist_bands = [c for c in polys if c.get_zorder() < 1000]
+        assert len(hist_bands) == 3 * len(INTERVALS)  # per-choice histograms
+        assert len(ribbons) == len(INTERVALS)  # single upward bound
+        assert len(drift_bands) == 3 * len(INTERVALS)  # per-choice drift cones
         assert len(ax.patches) == len(INTERVALS)  # ndt spans
         colors = {ln.get_color() for ln in ax.get_lines() if ln.get_zorder() == 3}
         assert colors == {"black", "green", "blue"}  # per-choice mean curves
+        # drift cones carry real width (drift rates vary across draws)
+        assert any(np.ptp(c.get_paths()[0].vertices[:, 1]) > 1e-6 for c in drift_bands)
         plt.close("all")
+
+    def test_drift_matrices_n_columns(self):
+        from hssm.plotting.model_cartoon import _drift_matrices_n
+
+        t_s = np.arange(0, 1, 0.01)
+        n_t = t_s.shape[0]
+        traj = np.full((n_t, 3), -999.0)
+        traj[:40, 0] = np.linspace(0, 1.0, 40)
+        traj[:60, 1] = np.linspace(0, 1.5, 60)
+        traj[:20, 2] = np.linspace(0, 0.4, 20)
+        sims = {i: {"metadata": {"trajectory": traj}} for i in range(2)}
+        drifts = _drift_matrices_n(sims, t_s, 3)
+        assert set(drifts) == {0, 1, 2}
+        for j, alive in ((0, 39), (1, 59), (2, 19)):
+            assert drifts[j].shape == (2, n_t)
+            assert not np.isnan(drifts[j][:, :alive]).any()
+            assert np.isnan(drifts[j][:, alive + 1 :]).all()
 
     def test_per_draw_sims_respect_n_reps_and_distinct_seeds(self, monkeypatch):
         """The per-choice bands must summarize real, independent histograms:
@@ -800,6 +911,17 @@ class TestPlotFuncModelN:
             assert kw["n_samples"] == 3
         seeds = [kw["random_state"] for kw in noisy]
         assert len(set(seeds)) == len(seeds)
+
+    def test_hist_height_auto_single_axis(self):
+        """The >2-choice renderer fits under its (0, 5) ylims: every histogram
+        artist stays below ylim_high with room to spare."""
+        fig, ax = self._render_n("band", hist_height="auto")
+        for coll in ax.collections:
+            for path in coll.get_paths():
+                assert path.vertices[:, 1].max() <= 5.0 + 1e-9
+        for ln in ax.get_lines():
+            assert np.max(ln.get_ydata()) <= 5.0 + 1e-9
+        plt.close("all")
 
     def test_none_mode_data_only_no_nameerror(self):
         """Regression: bottom was unbound when only data was passed."""

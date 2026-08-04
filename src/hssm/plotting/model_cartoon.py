@@ -35,6 +35,10 @@ from .utils import (
 
 _logger = logging.getLogger("hssm")
 
+# Fraction of the vertical headroom that hist_height="auto" hands to the
+# tallest histogram curve (the rest stays as breathing room below ylim_high).
+HIST_HEIGHT_MARGIN = 0.9
+
 TRAJ_COLOR_DEFAULT_DICT: Mapping[Any, str] = MappingProxyType(
     {
         -1: "black",
@@ -129,7 +133,7 @@ def _plot_model_cartoon_1D(
     intervals: list[tuple[float, float]] | None = None,
     alpha_mean: float = 1.0,
     alpha_uncertainty: float | None = None,
-    hist_height: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     colors: str | list[str] | None = None,
     linestyles: list[str] | None = None,
     linewidths: list[float] | None = None,
@@ -285,7 +289,7 @@ def _plot_model_cartoon_2D(
     intervals: list[tuple[float, float]] | None = None,
     alpha_mean: float = 1.0,
     alpha_uncertainty: float | None = None,
-    hist_height: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     colors: str | list[str] | None = None,
     linestyles: list[str] | None = None,
     linewidths: list[float] | None = None,
@@ -497,7 +501,7 @@ def plot_model_cartoon(
     uncertainty: Literal["band", "samples", "both"] | None = "band",
     alpha_mean: float = 1.0,
     alpha_uncertainty: float | None = None,
-    hist_height: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     plot_predictive_mean: bool | None = None,
     plot_predictive_samples: bool | None = None,
     colors: str | list[str] | dict[str, str] | None = None,
@@ -511,7 +515,7 @@ def plot_model_cartoon(
     random_state: int | np.random.Generator | None = None,
     n_trajectories: int | None = None,
     xlims: tuple[float, float] | None = None,
-    ylims: tuple[float, float] | None = None,
+    ylims: tuple[float, float] | Literal["auto"] | None = None,
     grid_kwargs: dict | None = None,
     **kwargs,
 ) -> Axes | FacetGrid | list[FacetGrid]:
@@ -628,10 +632,14 @@ def plot_model_cartoon(
         per-curve value that keeps total ink roughly constant. An explicit
         0.0 is honored.
     hist_height : optional
-        If given, rescale all RT-histogram curves by one common factor so the
-        tallest curve has this height in y-data units above its bound, by
-        default None (raw defective-density units, which can overrun the
-        y-limits for very peaked distributions).
+        If a float, rescale all RT-histogram curves by one common factor so
+        the tallest curve has this height in y-data units above its bound.
+        If ``"auto"``, fit the tallest curve to 90% of the vertical headroom
+        between the histogram baseline (or the highest visible boundary-
+        ribbon point, whichever is higher) and the upper y-limit, so
+        histograms can never overrun the axes; under faceting the fit is
+        per facet. By default None (raw defective-density units, which can
+        overrun the y-limits for very peaked distributions).
     plot_predictive_mean, plot_predictive_samples : optional
         Deprecated boolean spellings of `uncertainty`; mapped with a
         FutureWarning. (True, False) means `uncertainty=None`; any
@@ -697,8 +705,14 @@ def plot_model_cartoon(
         None, keeping renderer defaults ((-0.05, 5) for 2-choice, (0, 5) for
         >2-choice).
     ylims : optional
-        The y-axis limits. By default None, keeping renderer defaults
-        ((-3, 3) for 2-choice, (0, 5) for >2-choice).
+        The y-axis limits. If ``"auto"``, keep the histograms at raw density
+        scale and grow the frame instead so nothing is clipped (the tallest
+        drawn side plus the visible boundary-ribbon top get 90% of the
+        frame; limits never shrink below the defaults, and the 2-choice
+        frame stays symmetric). Mutually exclusive with
+        ``hist_height="auto"`` — one fits the content into the frame, the
+        other fits the frame around the content. By default None, keeping
+        renderer defaults ((-3, 3) for 2-choice, (0, 5) for >2-choice).
     grid_kwargs : optional
         Additional keyword arguments are passed to the [`FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
@@ -737,6 +751,13 @@ def plot_model_cartoon(
     # consumes a later segment of the same stream (distinct per facet,
     # reproducible across calls).
     rng = np.random.default_rng(random_state)
+
+    if ylims == "auto" and hist_height == "auto":
+        raise ValueError(
+            "`hist_height='auto'` and `ylims='auto'` are mutually exclusive: "
+            "one fits the histograms into the frame, the other fits the "
+            "frame around the histograms."
+        )
 
     uncertainty, alpha_mean = _resolve_uncertainty_from_legacy(
         plot_predictive_mean, plot_predictive_samples, uncertainty, alpha_mean
@@ -1036,7 +1057,7 @@ def plot_func_model(
     step: bool = True,
     uncertainty: Literal["band", "samples", "both"] | None = None,
     intervals: list[tuple[float, float]] | None = None,
-    hist_height: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     n_trajectories: int = 0,
     delta_t_model: float = 0.01,
     random_state: int | np.random.Generator | None = None,
@@ -1104,10 +1125,12 @@ def plot_func_model(
         Pre-resolved quantile pairs for the bands, sorted widest-first (the
         output of ``_hdi_to_intervals``). Required when `uncertainty` is
         "band" or "both".
-    hist_height : float, optional
-        If given, rescale all histogram curves by one common factor so the
+    hist_height : float or "auto", optional
+        If a float, rescale all histogram curves by one common factor so the
         tallest drawn curve has this height (in y-data units above its
-        bound). Defaults to None (raw defective-density units).
+        bound). ``"auto"`` fits the tallest curve to 90% of the headroom
+        between the (ribbon-aware) baseline and ylim_high. Defaults to None
+        (raw defective-density units).
     n_trajectories : int, optional
         Number of trajectories to plot. Defaults to 0.
     delta_t_model : float, optional
@@ -1205,7 +1228,24 @@ def plot_func_model(
     legacy_alpha = alpha_predictive if alpha_predictive is not None else 0.05
     legacy = uncertainty is None
 
-    ylim_low, ylim_high = kwargs.get("ylims", (-3, 3))
+    ylims_setting = kwargs.get("ylims", (-3, 3))
+    ylims_auto = False
+    if isinstance(ylims_setting, str):
+        if ylims_setting != "auto":
+            raise ValueError(
+                f"`ylims` must be a (low, high) tuple, 'auto', or None; "
+                f"got {ylims_setting!r}"
+            )
+        if hist_height == "auto":
+            raise ValueError(
+                "`hist_height='auto'` and `ylims='auto'` are mutually "
+                "exclusive: one fits the histograms into the frame, the "
+                "other fits the frame around the histograms."
+            )
+        ylims_auto = True
+        ylim_low, ylim_high = -3.0, 3.0
+    else:
+        ylim_low, ylim_high = ylims_setting
     xlim_low, xlim_high = kwargs.get("xlims", (-0.05, 5))
 
     # One simulation horizon and one time grid for every geometry element.
@@ -1398,7 +1438,52 @@ def plot_func_model(
             data["rt"].to_numpy(), data["response"].to_numpy(), bin_edges
         )
 
-    if hist_height is not None:
+    def _visible_ribbon_max() -> float:
+        # Highest point any (no-noise) boundary reaches inside the visible
+        # x-range — expanding bounds rise above their t=0 anchor.
+        n_vis = int(xlim_high / delta_t_model) + 1
+        if theta_samples is not None:
+            return max(
+                float(
+                    np.max(
+                        np.maximum(
+                            posterior_pred_no_noise[k]["metadata"]["boundary"][:n_vis],
+                            0,
+                        )
+                    )
+                )
+                for k in posterior_pred_no_noise
+            )
+        if theta_mean is not None:
+            return float(
+                np.max(np.maximum(sim_out_no_noise["metadata"]["boundary"][:n_vis], 0))
+            )
+        return 0.0
+
+    hist_height_: float | None
+    if hist_height == "auto":
+        # Fit the tallest curve into the vertical headroom. The baseline must
+        # clear the highest point any boundary ribbon reaches inside the
+        # visible x-range (expanding bounds rise above the t=0 anchor), on
+        # the tighter of the two mirrored sides.
+        effective_bottom = max(hist_bottom_high, hist_bottom_low, _visible_ribbon_max())
+        headroom = ylim_high - effective_bottom
+        if headroom > 0:
+            hist_height_ = HIST_HEIGHT_MARGIN * headroom
+        else:
+            hist_height_ = None
+            _logger.warning(
+                "hist_height='auto': no positive headroom above the histogram "
+                "baseline within ylims; using raw densities."
+            )
+    elif isinstance(hist_height, str):
+        raise ValueError(
+            f"`hist_height` must be a float, 'auto', or None; got {hist_height!r}"
+        )
+    else:
+        hist_height_ = hist_height
+
+    if hist_height_ is not None:
         peak = max(
             (
                 m.max()
@@ -1409,9 +1494,34 @@ def plot_func_model(
         )
         if obs_up is not None and obs_down is not None:
             peak = max(peak, obs_up.max(), obs_down.max())
-        hist_scale = hist_height / peak if peak > 0 else 1.0
+        hist_scale = hist_height_ / peak if peak > 0 else 1.0
     else:
         hist_scale = 1.0
+
+    if ylims_auto:
+        # The mirror image of hist_height="auto": keep the raw density scale
+        # and grow the frame so the tallest drawn side (and the visible
+        # ribbon top) occupies HIST_HEIGHT_MARGIN of it. Never shrinks below
+        # the default limits, and stays symmetric like them.
+        peak_up = max(
+            (m.max() for m in (densities_up, plugin_up, obs_up) if m is not None),
+            default=0.0,
+        )
+        peak_down = max(
+            (m.max() for m in (densities_down, plugin_down, obs_down) if m is not None),
+            default=0.0,
+        )
+        content_top = max(
+            hist_bottom_high + hist_scale * peak_up,
+            hist_bottom_low + hist_scale * peak_down,
+            _visible_ribbon_max(),
+        )
+        ylim_high = max(ylim_high, float(content_top) / HIST_HEIGHT_MARGIN)
+        ylim_low = -ylim_high
+        axis.set_ylim(ylim_low, ylim_high)
+        axis_twin_up.set_ylim(ylim_low, ylim_high)
+        axis_twin_down.set_ylim(ylim_high, ylim_low)
+
     axis_twin_up.set_zorder(0)
     axis_twin_down.set_zorder(0)
 
@@ -2314,6 +2424,30 @@ def _geometry_arrays(
     return b_high_m, b_low_m, drifts, ndts, z_abs
 
 
+def _drift_matrices_n(
+    sims: Mapping[int, dict],
+    t_s: np.ndarray,
+    n_choices: int,
+) -> dict[int, np.ndarray]:
+    """Stack per-draw, per-accumulator drift paths onto the shared time grid.
+
+    The n-choice simulator records one trajectory column per accumulator;
+    each column is NaN-masked beyond its recorded extent so pointwise
+    quantiles across draws see only live paths (mirrors `_geometry_arrays`,
+    whose flattened trajectory handling is 2-choice-only).
+    """
+    n_t = t_s.shape[0]
+    n_draws = len(sims)
+    drifts = {j: np.full((n_draws, n_t), np.nan) for j in range(n_choices)}
+    for i, sample in enumerate(sims.values()):
+        traj = np.atleast_2d(np.asarray(sample["metadata"]["trajectory"]))
+        for j in range(min(n_choices, traj.shape[1])):
+            col = traj[:, j]
+            maxid = int(np.minimum(np.argmax(np.where(col > -999)), n_t))
+            drifts[j][i, :maxid] = col[:maxid]
+    return drifts
+
+
 def _render_boundary_bands(
     axis: Axes,
     t_s: np.ndarray,
@@ -2474,7 +2608,7 @@ def plot_func_model_n(
     step: bool = True,
     uncertainty: Literal["band", "samples", "both"] | None = None,
     intervals: list[tuple[float, float]] | None = None,
-    hist_height: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     n_reps: int = 10,
     linewidth_histogram: float | int = 0.5,
     linewidth_model: float | int = 0.5,
@@ -2568,7 +2702,24 @@ def plot_func_model_n(
     legacy_alpha = alpha_predictive if alpha_predictive is not None else 0.05
     legacy = uncertainty is None
 
-    ylim_low, ylim_high = kwargs.get("ylims", (0, 5))
+    ylims_setting = kwargs.get("ylims", (0, 5))
+    ylims_auto = False
+    if isinstance(ylims_setting, str):
+        if ylims_setting != "auto":
+            raise ValueError(
+                f"`ylims` must be a (low, high) tuple, 'auto', or None; "
+                f"got {ylims_setting!r}"
+            )
+        if hist_height == "auto":
+            raise ValueError(
+                "`hist_height='auto'` and `ylims='auto'` are mutually "
+                "exclusive: one fits the histograms into the frame, the "
+                "other fits the frame around the histograms."
+            )
+        ylims_auto = True
+        ylim_low, ylim_high = 0.0, 5.0
+    else:
+        ylim_low, ylim_high = ylims_setting
     xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
     # Shared horizon/grid; see plot_func_model for why noisy RT sims keep the
@@ -2736,7 +2887,50 @@ def plot_func_model_n(
             data["rt"].to_numpy(), data["response"].to_numpy(), bin_edges, choices
         )
 
-    if hist_height is not None:
+    def _visible_ribbon_max() -> float:
+        # Highest point any (no-noise) boundary reaches inside the visible
+        # x-range — expanding bounds rise above their t=0 anchor.
+        n_vis = int(xlim_high / delta_t_model) + 1
+        if theta_samples is not None:
+            return max(
+                float(
+                    np.max(
+                        np.maximum(
+                            posterior_pred_no_noise[k]["metadata"]["boundary"][:n_vis],
+                            0,
+                        )
+                    )
+                )
+                for k in posterior_pred_no_noise
+            )
+        if theta_mean is not None:
+            return float(
+                np.max(np.maximum(sim_out_no_noise["metadata"]["boundary"][:n_vis], 0))
+            )
+        return 0.0
+
+    hist_height_: float | None
+    if hist_height == "auto":
+        # Single, non-mirrored axis: one shared baseline; the ribbon exists
+        # only on the single upward bound. See plot_func_model.
+        effective_bottom = max(bottom, _visible_ribbon_max())
+        headroom = ylim_high - effective_bottom
+        if headroom > 0:
+            hist_height_ = HIST_HEIGHT_MARGIN * headroom
+        else:
+            hist_height_ = None
+            _logger.warning(
+                "hist_height='auto': no positive headroom above the histogram "
+                "baseline within ylims; using raw densities."
+            )
+    elif isinstance(hist_height, str):
+        raise ValueError(
+            f"`hist_height` must be a float, 'auto', or None; got {hist_height!r}"
+        )
+    else:
+        hist_height_ = hist_height
+
+    if hist_height_ is not None:
         peak = max(
             (
                 float(v.max())
@@ -2746,9 +2940,24 @@ def plot_func_model_n(
             ),
             default=0.0,
         )
-        hist_scale = hist_height / peak if peak > 0 else 1.0
+        hist_scale = hist_height_ / peak if peak > 0 else 1.0
     else:
         hist_scale = 1.0
+
+    if ylims_auto:
+        # See plot_func_model: raw density scale kept, frame grown instead.
+        peak_all = max(
+            (
+                float(v.max())
+                for group in (sample_densities, plugin_densities, obs_densities)
+                if group is not None
+                for v in group.values()
+            ),
+            default=0.0,
+        )
+        content_top = max(bottom + hist_scale * peak_all, _visible_ribbon_max())
+        ylim_high = max(ylim_high, content_top / HIST_HEIGHT_MARGIN)
+        axis.set_ylim(ylim_low, ylim_high)
 
     if not legacy:
         band_densities = (
@@ -2889,6 +3098,26 @@ def plot_func_model_n(
                         linewidth=0,
                         zorder=1010,
                         label=f"boundary {hi - lo:.0%} interval",
+                    )
+                # Per-choice drift cones, one graded band per interval in
+                # that accumulator's color. The graded-alpha ladder keeps
+                # the overlap readable (the reason cones were previously
+                # left to the samples display).
+                drifts_n = _drift_matrices_n(posterior_pred_no_noise, t_s, len(choices))
+                ndt_ref_n = (
+                    float(np.asarray(sim_out_no_noise["metadata"]["t"]).ravel()[0])
+                    if theta_mean is not None
+                    else float(np.mean(ndts))
+                )
+                for j, choice in enumerate(choices):
+                    _render_drift_band(
+                        axis,
+                        t_s,
+                        drifts_n[j],
+                        ndt_ref_n,
+                        intervals,
+                        geom_base_alpha,
+                        TRAJ_COLOR_DEFAULT_DICT[choice],
                     )
             _render_ndt_uncertainty(
                 axis,
