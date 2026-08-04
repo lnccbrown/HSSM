@@ -14,8 +14,6 @@ on:
 jobs:
   coverage:
     runs-on: ubuntu-latest
-    env:
-      PYTENSOR_FLAGS: "blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
 
     strategy:
       fail-fast: true
