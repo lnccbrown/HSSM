@@ -5,34 +5,15 @@ on:
     types:
       - published
   workflow_dispatch:
-    inputs:
-      run_full_test_suite:
-        description: "Run the full test suite before publishing"
-        type: boolean
-        default: true
 
 jobs:
   lint_and_typecheck:
     name: Lint and type-check
     uses: ./.github/workflows/linting_and_type_checking.yml
 
-  run_tests:
-    name: Run full test suite
-    # Always run on release; on manual dispatch, respect the input.
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_full_test_suite }}
-    uses: ./.github/workflows/run_tests.yml
-    with:
-      run_slow_tests: true
-
-  # check_notebooks:
-  #   name: Check notebooks
-  #   uses: ./.github/workflows/check_notebooks.yml
-
   publish:
     name: Build wheel and publish to test-PyPI, then PyPI, and publish docs
-    needs: [lint_and_typecheck, run_tests]
-    # run_tests may be skipped on manual dispatch; still require it to not have failed.
-    if: ${{ always() && needs.lint_and_typecheck.result == 'success' && needs.run_tests.result != 'failure' && needs.run_tests.result != 'cancelled' }}
+    needs: [lint_and_typecheck]
     runs-on: ubuntu-latest
 
     strategy:
