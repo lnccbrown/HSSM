@@ -2,15 +2,6 @@ name: Run slow tests
 
 on:
   workflow_dispatch:  # Manual trigger
-  push:
-    branches:
-      - main
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "pyproject.toml"
-      - ".github/workflows/run_slow_tests.yml"
-      - ".github/workflows/run_tests.yml"
 
 jobs:
   run_slow_tests:
