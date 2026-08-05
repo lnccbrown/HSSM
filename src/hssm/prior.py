@@ -9,9 +9,10 @@ bmb.Prior but adds the following:
 3. The ability to shorten the output of bmb.Prior.
 """
 
+from collections.abc import Callable
 from copy import deepcopy
 from statistics import mean
-from typing import Any, Callable
+from typing import Any
 
 import bambi as bmb
 import numpy as np
@@ -47,6 +48,12 @@ class Prior(bmb.Prior):  # noqa: PLW1641
         ``noncentered`` setting; ``True``/``False`` overrides it for this term.
     """
 
+    is_truncated: bool
+    bounds: tuple[float, float] | None
+    args: dict[str, Any]
+    _args: dict[str, Any]
+    dist: Callable
+
     def __init__(
         self,
         name: str,
@@ -65,10 +72,11 @@ class Prior(bmb.Prior):  # noqa: PLW1641
         self.bounds = bounds
 
         if self.bounds is not None:
-            assert self.dist is None, (
-                "We cannot bound a prior defined with the `dist` argument. The "
-                + "`dist` and `bounds` arguments cannot both be supplied."
-            )
+            if dist is not None:
+                raise ValueError(
+                    "We cannot bound a prior defined with the `dist` argument. The "
+                    "`dist` and `bounds` arguments cannot both be supplied."
+                )
             lower, upper = self.bounds
             if np.isinf(lower) and np.isinf(upper):
                 return
@@ -76,7 +84,7 @@ class Prior(bmb.Prior):  # noqa: PLW1641
             self.is_truncated = True
             self.dist = _make_truncated_dist(self.name, lower, upper, **self.args)
             self._args = self.args.copy()
-            self.args: dict = {}
+            self.args: dict[str, Any] = {}
 
     def __str__(self) -> str:
         """Create the printout of the object."""
