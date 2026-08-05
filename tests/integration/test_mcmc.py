@@ -1,46 +1,76 @@
-import pytest
+"""Integration tests for `HSSM.sample()` across likelihood/backend/sampler combos.
+
+The sampling matrix used to be a full 3-way cross of (loglik_kind, backend) x
+(sampler, step) x model shape, run as three near-identical 20-row grids. Every
+failure mode these tests actually catch is pairwise -- a backend either supports
+a sampler or it does not, a model shape either builds or it does not -- so the
+cross is replaced by a pairwise covering array (`COVERING_ARRAY` below), and the
+checks that never depended on the sampler at all were lifted out into their own
+tests.
+"""
+
+from copy import deepcopy
 
 import arviz as az
 import matplotlib.pyplot as plt
-import hssm
 import numpy as np
 import pandas as pd
 import pymc as pm
-from copy import deepcopy
+import pytest
 import xarray as xr
 
+import hssm
 
 hssm.set_floatX("float32", update_jax=True)
 
 # AF-TODO: Include more tests that use different link functions!
 
 
-PARAMETER_NAMES = "loglik_kind,backend,sampler,step,expected"
-PARAMETER_GRID = [
-    ("analytical", None, None, None, True),  # Defaults should work
-    ("analytical", None, "pymc", None, True),
-    ("analytical", None, "pymc", "slice", True),
-    ("analytical", None, "numpyro", None, True),
-    ("analytical", None, "numpyro", "slice", ValueError),
-    ("approx_differentiable", "pytensor", None, None, True),  # Defaults should work
-    ("approx_differentiable", "pytensor", "pymc", None, True),
-    ("approx_differentiable", "pytensor", "pymc", "slice", True),
-    ("approx_differentiable", "pytensor", "numpyro", None, True),
-    ("approx_differentiable", "pytensor", "numpyro", "slice", ValueError),
-    ("approx_differentiable", "jax", None, None, True),  # Defaults should work
-    ("approx_differentiable", "jax", "pymc", None, True),
-    ("approx_differentiable", "jax", "pymc", "slice", True),
-    ("approx_differentiable", "jax", "numpyro", None, True),
-    ("approx_differentiable", "jax", "numpyro", "slice", ValueError),
-    ("blackbox", None, None, None, True),  # Defaults should work
-    ("blackbox", None, "pymc", None, True),
-    ("blackbox", None, "pymc", "slice", True),
-    ("blackbox", None, "numpyro", None, ValueError),
-    ("blackbox", None, "numpyro", "slice", ValueError),
-]
+V_REG = dict(
+    formula="v ~ 1 + x + y",
+    prior={
+        "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
+        "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+        "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
+    },
+)
+
+A_REG = dict(
+    formula="a ~ 1 + m + n",
+    prior={
+        "Intercept": {
+            "name": "Normal",
+            "mu": 1.0,
+            "sigma": 0.5,
+        },
+        "m": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
+        "n": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
+    },
+    link="identity",
+)
+
+# Model shape -> (data fixture name, extra HSSM kwargs).
+MODEL_SHAPES = {
+    "simple": ("data_ddm", {}),
+    "reg_v": ("data_ddm_reg", {"v": V_REG}),
+    "reg_va": ("data_ddm_reg_va", {"v": V_REG, "a": A_REG}),
+}
+
+
+def build_model(request, shape, loglik_kind, backend):
+    """Build an HSSM model of the given shape, pulling its data fixture lazily."""
+    data_fixture, params = MODEL_SHAPES[shape]
+    return hssm.HSSM(
+        request.getfixturevalue(data_fixture),
+        loglik_kind=loglik_kind,
+        model_config={"backend": backend},
+        # HSSM mutates the param dicts it is handed, so hand it a fresh copy.
+        **deepcopy(params),
+    )
 
 
 def sample(model, sampler, step):
+    """Sample the model briefly, optionally with a Slice step sampler."""
     if step == "slice":
         model.sample(
             sampler=sampler,
@@ -62,26 +92,215 @@ def sample(model, sampler, step):
         )
 
 
-def run_sample(model, sampler, step, expected):
-    """Run the sample function and check if the expected error is raised."""
-    if expected is True:
+def sample_and_verify(model, sampler, step):
+    """Sample, then check that recomputing the log-likelihood reproduces it."""
+    sample(model, sampler, step)
+    assert isinstance(model.traces, xr.DataTree)
+
+    # make sure log_likelihood computations check out
+    traces_copy = deepcopy(model.traces)
+    del traces_copy["log_likelihood"]
+
+    # recomputing log-likelihood yields same results?
+    model.log_likelihood(traces_copy, inplace=True)
+    assert isinstance(traces_copy, xr.DataTree)
+    assert "log_likelihood" in traces_copy
+    for group_ in traces_copy:
+        xr.testing.assert_equal(traces_copy[group_], model.traces[group_])
+
+
+# Pairwise covering array over three factors:
+#   B = (loglik_kind, backend): analytical / approx+pytensor / approx+jax / blackbox
+#   S = (sampler, step):        pymc / pymc+slice / numpyro
+#   M = model shape:            simple / reg_v / reg_va
+#
+# 12 rows cover every valid (B, S) pair, every (B, M) pair and every (S, M) pair
+# -- rows 1-9 are an exact Latin square, and blackbox (which has no valid numpyro
+# cell) repeats `pymc` to reach all three shapes. Because the 12 rows hit each
+# (backend, shape) cell exactly once, the log_likelihood recompute check in
+# `sample_and_verify` still gets full coverage while running 12 times instead of 45.
+#
+# approx/jax + pymc+slice is deliberately paired with `simple`: PyMC's
+# Python-level Slice sampler calls the JAX logp once per variable per draw, which
+# costs ~2.6s on `simple` but ~198s on `reg_va` (75x, from 4 extra scalar RVs).
+MATRIX_NAMES = "loglik_kind,backend,sampler,step,shape"
+COVERING_ARRAY = [
+    ("analytical", None, "pymc", None, "simple"),
+    ("analytical", None, "pymc", "slice", "reg_v"),
+    ("analytical", None, "numpyro", None, "reg_va"),
+    ("approx_differentiable", "pytensor", "pymc", None, "reg_v"),
+    ("approx_differentiable", "pytensor", "pymc", "slice", "reg_va"),
+    ("approx_differentiable", "pytensor", "numpyro", None, "simple"),
+    ("approx_differentiable", "jax", "pymc", None, "reg_va"),
+    ("approx_differentiable", "jax", "pymc", "slice", "simple"),
+    ("approx_differentiable", "jax", "numpyro", None, "reg_v"),
+    ("blackbox", None, "pymc", None, "simple"),
+    ("blackbox", None, "pymc", "slice", "reg_v"),
+    ("blackbox", None, "pymc", None, "reg_va"),
+]
+
+# Rejected combinations, all of which raise ValueError. These raise in `sample()`
+# before any sampling happens and do not depend on the model shape, so one cheap
+# model shape covers them and they are not marked slow.
+ERROR_NAMES = "loglik_kind,backend,sampler,step"
+ERROR_GRID = [
+    ("analytical", None, "numpyro", "slice"),
+    ("approx_differentiable", "pytensor", "numpyro", "slice"),
+    ("approx_differentiable", "jax", "numpyro", "slice"),
+    ("blackbox", None, "numpyro", "slice"),
+    ("blackbox", None, "numpyro", None),
+]
+
+# `sampler=None` resolves to an explicit sampler in `HSSMBase.sample`; these are
+# the expected resolutions, asserted without sampling.
+DEFAULT_SAMPLER_NAMES = "loglik_kind,backend,expected_sampler"
+DEFAULT_SAMPLER_GRID = [
+    ("analytical", None, "pymc"),
+    ("approx_differentiable", "pytensor", "pymc"),
+    ("approx_differentiable", "jax", "numpyro"),
+    ("blackbox", None, "pymc"),
+]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(MATRIX_NAMES, COVERING_ARRAY)
+def test_mcmc_matrix(request, loglik_kind, backend, sampler, step, shape):
+    """Sample each covered (likelihood/backend, sampler/step, model shape) cell."""
+    model = build_model(request, shape, loglik_kind, backend)
+    assert np.all(
+        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
+    )
+    sample_and_verify(model, sampler, step)
+
+
+@pytest.mark.parametrize(ERROR_NAMES, ERROR_GRID)
+def test_rejected_sampler_combinations(data_ddm, loglik_kind, backend, sampler, step):
+    """Unsupported sampler/step combinations are rejected before sampling."""
+    model = hssm.HSSM(
+        data_ddm, loglik_kind=loglik_kind, model_config={"backend": backend}
+    )
+    with pytest.raises(ValueError):
         sample(model, sampler, step)
-        assert isinstance(model.traces, xr.DataTree)
 
-        # make sure log_likelihood computations check out
-        traces_copy = deepcopy(model.traces)
-        del traces_copy["log_likelihood"]
 
-        # recomputing log-likelihood yields same results?
-        model.log_likelihood(traces_copy, inplace=True)
-        assert isinstance(traces_copy, xr.DataTree)
-        assert "log_likelihood" in traces_copy
-        for group_ in traces_copy:
-            xr.testing.assert_equal(traces_copy[group_], model.traces[group_])
+class _FitCalled(Exception):
+    """Sentinel raised in place of an actual `bambi.Model.fit` call."""
 
-    else:
-        with pytest.raises(expected):
-            sample(model, sampler, step)
+
+@pytest.mark.parametrize(DEFAULT_SAMPLER_NAMES, DEFAULT_SAMPLER_GRID)
+def test_default_sampler_resolution(
+    data_ddm, monkeypatch, loglik_kind, backend, expected_sampler
+):
+    """`sampler=None` resolves to the right sampler for each likelihood/backend."""
+    model = hssm.HSSM(
+        data_ddm, loglik_kind=loglik_kind, model_config={"backend": backend}
+    )
+
+    captured = {}
+
+    def fake_fit(**kwargs):
+        captured["inference_method"] = kwargs["inference_method"]
+        raise _FitCalled
+
+    monkeypatch.setattr(model.model, "fit", fake_fit)
+
+    with pytest.raises(_FitCalled):
+        sample(model, None, None)
+
+    assert captured["inference_method"] == expected_sampler
+
+
+@pytest.mark.slow
+def test_default_sampler_end_to_end(data_ddm):
+    """The default sampling path works end to end, not just in resolution."""
+    model = hssm.HSSM(data_ddm, loglik_kind="analytical")
+    sample_and_verify(model, None, None)
+
+
+@pytest.fixture(scope="module")
+def fitted_analytical(request):
+    """Return an analytical model of the requested shape, sampled with defaults.
+
+    Module-scoped and shape-parametrized so the post-processing tests below share
+    one fit per shape instead of re-sampling for every assertion.
+    """
+    model = build_model(request, request.param, "analytical", None)
+    sample(model, None, None)
+    return model
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("fitted_analytical", ["simple"], indirect=True)
+def test_post_processing_simple(fitted_analytical):
+    """Traces of a non-regression model omit the trial-wise parent parameter."""
+    model = fitted_analytical
+
+    # Traces should be post-processed to NOT include
+    # the trial wise parameters if they are not
+    # associated with an actual regression
+    deterministics = model._get_deterministic_var_names(model.traces)
+    assert f"~{model._parent}_mean" not in deterministics
+    # test summary:
+    summary = az.summary(model.traces)
+    assert summary.shape[0] == 4
+
+    az.plot_trace_dist(model.traces)
+    fig = plt.gcf()
+    assert len(fig.axes) // 2 == 4
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("fitted_analytical", ["reg_v"], indirect=True)
+def test_post_processing_reg(fitted_analytical):
+    """Traces of a v-regression model keep `v` as a deterministic."""
+    model = fitted_analytical
+
+    assert model._get_deterministic_var_names(model.traces) == ["~v"]
+    # test summary:
+    summary = az.summary(model.traces)
+    assert summary.shape[0] == 6
+
+    az.plot_trace_dist(model.traces)
+    fig = plt.gcf()
+    assert len(fig.axes) // 2 == 6
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("fitted_analytical", ["reg_va"], indirect=True)
+def test_post_processing_reg_v_a(fitted_analytical):
+    """`var_names` filtering behaves as expected with two regressions."""
+    model = fitted_analytical
+
+    assert len(model._get_deterministic_var_names(model.traces)) == len(["~a", "~v"])
+    assert set(model._get_deterministic_var_names(model.traces)) == set(["~a", "~v"])
+    # test summary:
+    summary = az.summary(model.traces)
+    assert summary.shape[0] == 8
+
+    summary = az.summary(model.traces, var_names=["~a"])
+    assert summary.shape[0] == 8
+
+    summary = az.summary(model.traces, var_names=["~t"])
+    assert summary.shape[0] == 7
+
+    summary = az.summary(model.traces, var_names=["~a", "~t"])
+    assert summary.shape[0] == 7
+
+    az.plot_trace_dist(model.traces)
+    fig = plt.gcf()
+    assert len(fig.axes) // 2 == 8
+
+    az.plot_trace_dist(model.traces, var_names=["~a"])
+    fig = plt.gcf()
+    assert len(fig.axes) // 2 == 8
+
+    az.plot_trace_dist(model.traces, var_names=["~t"])
+    fig = plt.gcf()
+    assert len(fig.axes) // 2 == 7
+
+    az.plot_trace_dist(model.traces, var_names=["~a", "~t"])
+    fig = plt.gcf()
+    assert len(fig.axes) // 2 == 7
 
 
 # Basic tests for LBA likelihood
@@ -120,161 +339,3 @@ def test_lba_sampling():
     assert isinstance(traces_2, xr.DataTree)
     assert isinstance(traces_3, xr.DataTree)
     assert isinstance(traces_4, xr.DataTree)
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-def test_simple_models(data_ddm, loglik_kind, backend, sampler, step, expected):
-    """Test simple models."""
-    print("PYMC VERSION: ")
-    print(pm.__version__)
-    print("TEST INPUTS WERE: ")
-    print("REPORTING FROM SIMPLE MODELS TEST")
-    print(loglik_kind, backend, sampler, step, expected)
-
-    model = hssm.HSSM(
-        data_ddm, loglik_kind=loglik_kind, model_config={"backend": backend}
-    )
-    assert np.all(
-        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
-    )
-    run_sample(model, sampler, step, expected)
-
-    # Only runs once
-    if loglik_kind == "analytical" and sampler is None:
-        # Traces should be post-processed to NOT include
-        # the trial wise parameters if they are not
-        # associated with an actual regression
-        assert not (
-            f"~{model._parent}_mean" in model._get_deterministic_var_names(model.traces)
-        )
-        # test summary:
-        summary = az.summary(model.traces)
-        assert summary.shape[0] == 4
-
-        az.plot_trace_dist(model.traces)
-        fig = plt.gcf()
-        assert len(fig.axes) // 2 == 4
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-def test_reg_models(data_ddm_reg, loglik_kind, backend, sampler, step, expected):
-    """Test regression models."""
-    print("PYMC VERSION: ")
-    print(pm.__version__)
-    print("TEST INPUTS WERE: ")
-    print("REPORTING FROM REG MODELS TEST")
-    print(loglik_kind, backend, sampler, step, expected)
-
-    param_reg = dict(
-        formula="v ~ 1 + x + y",
-        prior={
-            "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-        },
-    )
-    model = hssm.HSSM(
-        data_ddm_reg,
-        loglik_kind=loglik_kind,
-        model_config={"backend": backend},
-        v=param_reg,
-    )
-    assert np.all(
-        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
-    )
-    run_sample(model, sampler, step, expected)
-
-    # Only runs once
-    if loglik_kind == "analytical" and sampler is None:
-        assert model._get_deterministic_var_names(model.traces) == ["~v"]
-        # test summary:
-        summary = az.summary(model.traces)
-        assert summary.shape[0] == 6
-
-        az.plot_trace_dist(model.traces)
-        fig = plt.gcf()
-        assert len(fig.axes) // 2 == 6
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-def test_reg_models_v_a(data_ddm_reg_va, loglik_kind, backend, sampler, step, expected):
-    """Test regression models with multiple parameters (v, a)."""
-    print("PYMC VERSION: ")
-    print(pm.__version__)
-    print("TEST INPUTS WERE: ")
-    print("REPORTING FROM REG MODELS V_A TEST")
-    print(loglik_kind, backend, sampler, step, expected)
-    param_reg_v = dict(
-        formula="v ~ 1 + x + y",
-        prior={
-            "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-            "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-            "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-        },
-    )
-    param_reg_a = dict(
-        formula="a ~ 1 + m + n",
-        prior={
-            "Intercept": {
-                "name": "Normal",
-                "mu": 1.0,
-                "sigma": 0.5,
-            },
-            "m": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
-            "n": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
-        },
-        link="identity",
-    )
-
-    model = hssm.HSSM(
-        data_ddm_reg_va,
-        loglik_kind=loglik_kind,
-        model_config={"backend": backend},
-        v=param_reg_v,
-        a=param_reg_a,
-    )
-    assert np.all(
-        [val_ is None for key_, val_ in model.pymc_model.rvs_to_initial_values.items()]
-    )
-    print(model.params["a"])
-    run_sample(model, sampler, step, expected)
-
-    # Only runs once
-    if loglik_kind == "analytical" and sampler is None:
-        assert len(model._get_deterministic_var_names(model.traces)) == len(
-            ["~a", "~v"]
-        )
-        assert set(model._get_deterministic_var_names(model.traces)) == set(
-            ["~a", "~v"]
-        )
-        # test summary:
-        summary = az.summary(model.traces)
-        assert summary.shape[0] == 8
-
-        summary = az.summary(model.traces, var_names=["~a"])
-        assert summary.shape[0] == 8
-
-        summary = az.summary(model.traces, var_names=["~t"])
-        assert summary.shape[0] == 7
-
-        summary = az.summary(model.traces, var_names=["~a", "~t"])
-        assert summary.shape[0] == 7
-
-        az.plot_trace_dist(model.traces)
-        fig = plt.gcf()
-        assert len(fig.axes) // 2 == 8
-
-        az.plot_trace_dist(model.traces, var_names=["~a"])
-        fig = plt.gcf()
-        assert len(fig.axes) // 2 == 8
-
-        az.plot_trace_dist(model.traces, var_names=["~t"])
-        fig = plt.gcf()
-        assert len(fig.axes) // 2 == 7
-
-        az.plot_trace_dist(model.traces, var_names=["~a", "~t"])
-        fig = plt.gcf()
-        assert len(fig.axes) // 2 == 7
