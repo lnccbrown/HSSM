@@ -72,7 +72,7 @@ class TestPriorUnit:
         assert not prior2.is_truncated
         assert prior2.dist is None
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             Prior("Uniform", lower=0.0, upper=1.0, bounds=(0.2, 0.8), dist=lambda x: x)
 
     def test_str(self):
