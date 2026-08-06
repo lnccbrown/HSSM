@@ -58,10 +58,10 @@ dev = [
     "types-PyYAML",
     "psutil>=7.2.2",
     "prek>=0.4.8",
-    "pyrefly>=1.1.1",
     "onnxruntime>=1.27.0",
     "ruff>=0.16.1",
     "pytest>=9.1.1",
+    "pyrefly>=1.2.0",
 ]
 
 notebook = [

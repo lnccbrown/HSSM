@@ -2,30 +2,16 @@ name: Run slow tests
 
 on:
   workflow_dispatch:  # Manual trigger
-  push:
-    branches:
-      - main
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "pyproject.toml"
-      - ".github/workflows/run_slow_tests.yml"
-      - ".github/workflows/run_tests.yml"
+  push:  # Or push a commit whose message contains "[run slow]"
 
 jobs:
   run_slow_tests:
-    name: Run Slow Tests (${{ matrix.batch }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - batch: "Missing Data"
-            test_args: "tests/slow/test_missing_data_mcmc.py tests/slow/test_missing_data_and_deadline_mcmc.py"
-          - batch: "Core MCMC"
-            test_args: "tests/slow/test_mcmc.py tests/slow/test_choice_only.py"
-          - batch: "Remaining Slow"
-            test_args: "-m slow --ignore=tests/slow/test_missing_data_mcmc.py --ignore=tests/slow/test_missing_data_and_deadline_mcmc.py --ignore=tests/slow/test_mcmc.py --ignore=tests/slow/test_choice_only.py"
+    name: Run slow tests only
+    # Always run on manual dispatch; on push, only when opted in via the
+    # commit message.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[run slow]')
     uses: ./.github/workflows/run_tests.yml
     with:
       run_slow_tests: true
-      test_args: "${{ matrix.test_args }}"
