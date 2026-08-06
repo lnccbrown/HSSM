@@ -48,7 +48,9 @@ def load_data(dataset: str) -> pd.DataFrame:
     Raises
     ------
     ValueError
-        If the provided dataset name does not match any of the available datasets.
+        If the provided dataset name does not match any of the available
+        datasets, or if the dataset is known but its file is missing from the
+        installation.
 
     Returns
     -------
