@@ -5,7 +5,7 @@ on:
   workflow_call:
     inputs:
       run_slow_tests:
-        description: "Whether to run slow tests"
+        description: "Whether to run only the slow tests instead of the fast suite"
         required: false
         default: false
         type: boolean
@@ -32,9 +32,9 @@ jobs:
         if: ${{ !inputs.run_slow_tests }}
         run: uv run pytest -m "not slow"
 
-      - name: Run all tests
+      - name: Run slow tests
         if: ${{ inputs.run_slow_tests }}
-        run: uv run pytest
+        run: uv run pytest -m slow
         env:
           # Log per-test RSS to diagnose slow-test memory leaks. This step only
           # runs on the slow-test path (run_slow_tests.yml), so it stays scoped.

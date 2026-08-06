@@ -2,10 +2,16 @@ name: Run slow tests
 
 on:
   workflow_dispatch:  # Manual trigger
+  push:  # Or push a commit whose message contains "[run slow]"
 
 jobs:
   run_slow_tests:
-    name: Run full test suite including slow tests
+    name: Run slow tests only
+    # Always run on manual dispatch; on push, only when opted in via the
+    # commit message.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[run slow]')
     uses: ./.github/workflows/run_tests.yml
     with:
       run_slow_tests: true
