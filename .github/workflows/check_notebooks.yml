@@ -2,16 +2,22 @@ name: Check notebooks
 
 on:
   workflow_dispatch:
+  workflow_call:  # Called by drift.yml (monthly notebook drift run)
 
 jobs:
   check_notebooks:
     runs-on: ubuntu-latest
     if: ${{ ! contains(github.event.head_commit.message, '[skip fast tests]') }}
 
+    name: Check notebooks (shard ${{ matrix.shard }})
     strategy:
-      fail-fast: true
+      # Shards partition the ~37 executed notebooks so no single job can hit
+      # the 6-hour limit; fail-fast off so a drift run reports the full blast
+      # radius, not just the first broken shard.
+      fail-fast: false
       matrix:
         python-version: ["3.13"]
+        shard: [0, 1, 2, 3]
 
     steps:
       - name: Checkout repository
@@ -25,15 +31,24 @@ jobs:
       - name: Run notebooks
         run: |
           echo "Running notebooks with Python ${{ matrix.python-version }}"
-          # List of notebooks to skip (temporarily)
+          # List of notebooks to skip (temporarily). Entries must be the
+          # full find-produced path — bare filenames never match the loop
+          # comparison (the two workshop notebooks executed for months while
+          # "skipped").
           SKIP_NOTEBOOKS=(
             "docs/tutorials/tutorial_bayeux.ipynb"
-            "hssm_tutorial_workshop_1.ipynb"
-            "hssm_tutorial_workshop_2.ipynb"
+            "docs/tutorials/hssm_tutorial_workshop_1.ipynb"
+            "docs/tutorials/hssm_tutorial_workshop_2.ipynb"
           )
 
           EXIT_CODE=0
-          for notebook in $(find docs -name "*.ipynb"); do
+          INDEX=0
+          for notebook in $(find docs -name "*.ipynb" | sort); do
+            THIS_INDEX=$INDEX
+            INDEX=$((INDEX + 1))
+            if [ $((THIS_INDEX % 4)) -ne ${{ matrix.shard }} ]; then
+              continue
+            fi
             # Check if notebook is in skip list
             SKIP=false
             for skip_nb in "${SKIP_NOTEBOOKS[@]}"; do
