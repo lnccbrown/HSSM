@@ -52,7 +52,7 @@ class Prior(bmb.Prior):  # noqa: PLW1641
     bounds: tuple[float, float] | None
     args: dict[str, Any]
     _args: dict[str, Any]
-    dist: Callable
+    dist: Callable | None
 
     def __init__(
         self,
