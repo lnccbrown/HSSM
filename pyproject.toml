@@ -25,19 +25,32 @@ classifiers = [
 
 dependencies = [
     "absl-py>=2.3.1",
+    # arviz, jax, numpy, pandas, pymc, pytensor, and xarray are imported
+    # directly throughout src/hssm but were previously only transitive
+    # dependencies (via bambi/numpyro), so upstream releases reached us
+    # unbounded — see https://github.com/lnccbrown/HSSM/issues/1144.
+    "arviz>=1.0",
     "bambi>=0.19.0",
     "h5netcdf>=1.8.1",
     "h5py>=3.16.0",
     "hddm-wfpt>=0.1.6",
     "huggingface-hub>=1.17.0",
+    "jax>=0.7.0",
     "jaxonnxruntime>=0.3.0",
+    # numpy 2.5 removed np.row_stack, which the resolved pytensor stack still
+    # calls; lift the cap when upstream compatibility is restored (#1144).
+    "numpy>=2.0,<2.5",
     "numpyro>=0.19",
     "onnx>=1.16.0",
+    "pandas>=2.0",
+    "pymc>=6.0",
+    "pytensor>=3.0",
     # Imported directly by hssm.plotting (gaussian_kde, chi2); previously only
     # a transitive dependency via pymc.
     "scipy>=1.10",
     # 0.13.1 ships the aDDM engine + fixation_continuation (used by aDDM PPC).
     "ssm-simulators>=0.13.1",
+    "xarray>=2024.10",
 ]
 
 [project.urls]
