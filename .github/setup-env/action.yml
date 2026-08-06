@@ -26,7 +26,8 @@ runs:
         version: "latest"
         enable-cache: true
 
+    # (a stale `if: steps.cache.outputs.cache-hit` guard used to sit here —
+    # no step with id `cache` exists, so it always evaluated true)
     - name: Install hssm
-      if: steps.cache.outputs.cache-hit != 'true'
       run: uv sync
       shell: bash
