@@ -25,6 +25,7 @@ repos:
       - id: pyrefly-check
         name: Pyrefly (type checking)
         pass_filenames: false
+        language: system
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.1.0
