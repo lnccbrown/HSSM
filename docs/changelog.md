@@ -8,6 +8,8 @@
 
 3. **`plot_model_cartoon` accepts `hist_height="auto"`** (#1127): fits the tallest RT-histogram curve to 90% of the vertical headroom between the histogram baseline (ribbon-aware — expanding bounds are cleared too) and the upper y-limit, so histograms can never overrun the axes; resolves per facet. Its mirror image, `ylims="auto"`, keeps the raw density scale and grows the frame around the content instead (never below the default limits; the two spellings are mutually exclusive). The defaults remain unchanged. The >2-choice renderer now also draws per-choice drift-uncertainty cones in band mode (graded fills in each accumulator's color; previously slope uncertainty appeared only as per-draw spaghetti in the samples display).
 
+4. **`hssm.load_data` now returns a `pd.DataFrame` unconditionally** (#1146). Its `dataset` argument is required, and the return type is no longer `pd.DataFrame | str`, which forced type-checkers (and users) to narrow away a `str` branch that existed only to print the dataset listing. Use the new **`hssm.list_data()`** to get the names of the built-in datasets as a `tuple[str, ...]` (mirroring `hssm.list_models()`). Breaking: `hssm.load_data()` with no argument now raises `TypeError` instead of returning a listing string.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
