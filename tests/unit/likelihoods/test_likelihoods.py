@@ -138,7 +138,7 @@ def test_lapse_distribution_cav(p_outlier, loglik_kind):
         p_outlier=p_outlier,
         loglik_kind=loglik_kind,
         loglik=(
-            Path(__file__).parent / "fixtures" / "ddm.onnx"
+            Path(__file__).parents[2] / "fixtures" / "ddm.onnx"
             if loglik_kind == "approx_differentiable"
             else None
         ),
@@ -180,7 +180,7 @@ def test_lapse_distribution_cav(p_outlier, loglik_kind):
         logp_func = logp_ddm
     elif loglik_kind == "approx_differentiable":
         logp_func = make_likelihood_callable(
-            loglik=Path(__file__).parent / "fixtures" / "ddm.onnx",
+            loglik=Path(__file__).parents[2] / "fixtures" / "ddm.onnx",
             loglik_kind="approx_differentiable",
             backend="pytensor",
             params_is_reg=[False] * 4,
