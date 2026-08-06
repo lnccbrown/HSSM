@@ -36,6 +36,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Cache Hugging Face hub
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/hub
+          key: ${{ runner.os }}-huggingface-hub-v1
+          restore-keys: |
+            ${{ runner.os }}-huggingface-hub-
+
       - name: Run fast tests
         if: ${{ !inputs.run_slow_tests }}
         run: uv run pytest -m "not slow" $HSSM_TEST_ARGS
