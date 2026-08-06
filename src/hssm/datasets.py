@@ -59,7 +59,7 @@ def load_data(dataset: str) -> pd.DataFrame:
     """
     if dataset not in DATASETS:
         raise ValueError(
-            f"Dataset {dataset} not found! The following are available:\n"
+            f"Dataset {dataset!r} not found! The following are available:\n"
             f"{_list_datasets()}"
         )
 
