@@ -2,96 +2,101 @@
 
 import numpy as np
 import pytest
+from matplotlib.collections import PolyCollection
 
 import hssm
 
 hssm.set_floatX("float32")
 
 
-# I want to parameter
 @pytest.mark.slow
 @pytest.mark.parametrize(
     [
         "n_trajectories",
         "groups",
-        "plot_predictive_mean",
-        "plot_predictive_samples",
+        "uncertainty",
         "predictive_group",
         "row",
         "col",
     ],
     [
-        (2, None, False, False, "posterior_predictive", "participant_id", "stim"),
-        (2, None, False, False, "prior_predictive", "participant_id", "stim"),
-        (2, None, True, True, "posterior_predictive", "participant_id", "stim"),
-        (2, None, True, True, "prior_predictive", "participant_id", "stim"),
-        (2, None, False, True, "posterior_predictive", "participant_id", "stim"),
-        (2, None, False, True, "prior_predictive", "participant_id", "stim"),
-        (0, None, False, True, "posterior_predictive", "participant_id", "stim"),
-        (0, None, False, True, "prior_predictive", "participant_id", "stim"),
-        (0, None, True, False, "posterior_predictive", "participant_id", "stim"),
-        (0, None, True, False, "prior_predictive", "participant_id", "stim"),
-        (2, ["dbs"], True, True, "posterior_predictive", "participant_id", "stim"),
-        (2, ["dbs"], True, True, "prior_predictive", "participant_id", "stim"),
-        (2, None, True, False, "posterior_predictive", "participant_id", None),
-        (2, None, True, False, "prior_predictive", "participant_id", None),
-        (2, None, True, False, "posterior_predictive", "participant_id", "stim"),
-        (2, None, True, False, "prior_predictive", "participant_id", "stim"),
-        (2, None, True, False, "posterior_predictive", None, None),
-        (2, None, True, False, "prior_predictive", None, None),
+        (2, None, "both", "posterior_predictive", "participant_id", "stim"),
+        (2, None, "both", "prior_predictive", "participant_id", "stim"),
+        (2, None, "samples", "posterior_predictive", "participant_id", "stim"),
+        (2, None, "samples", "prior_predictive", "participant_id", "stim"),
+        (0, None, "band", "posterior_predictive", "participant_id", "stim"),
+        (0, None, "band", "prior_predictive", "participant_id", "stim"),
+        (0, None, None, "posterior_predictive", "participant_id", "stim"),
+        (0, None, None, "prior_predictive", "participant_id", "stim"),
+        (2, ["dbs"], "band", "posterior_predictive", "participant_id", "stim"),
+        (2, ["dbs"], "band", "prior_predictive", "participant_id", "stim"),
+        (2, None, None, "posterior_predictive", "participant_id", None),
+        (2, None, None, "prior_predictive", "participant_id", None),
+        (2, None, "band", "posterior_predictive", None, None),
+        (2, None, "band", "prior_predictive", None, None),
     ],
 )
 def test_plot_model_cartoon_2_choice(
     cav_model_cartoon,
     n_trajectories,
     groups,
-    plot_predictive_mean,
-    plot_predictive_samples,
+    uncertainty,
     predictive_group,
     row,
     col,
 ):
     """Test plot_model_cartoon for 2-choice data."""
-    if (not plot_predictive_mean) and (not plot_predictive_samples):
-        with pytest.raises(ValueError):
-            ax = hssm.plotting.plot_model_cartoon(
-                cav_model_cartoon,
-                n_samples=10,
-                n_samples_prior=10,  # AF-TODO: Low number of samples fails
-                bins=30,
-                col=col,
-                row=row,
-                groups=groups,
-                predictive_group=predictive_group,
-                plot_predictive_mean=plot_predictive_mean,
-                plot_predictive_samples=plot_predictive_samples,
-                alpha_mean=0.025,
-                n_trajectories=n_trajectories,
+    ax = hssm.plotting.plot_model_cartoon(
+        cav_model_cartoon,
+        n_samples=10,
+        n_samples_prior=100,  # AF-TODO: Low number of samples fails
+        col=col,
+        row=row,
+        groups=groups,
+        predictive_group=predictive_group,
+        uncertainty=uncertainty,
+        n_trajectories=n_trajectories,
+        random_state=42,
+    )
+
+    if groups is None:
+        if row is not None:
+            assert np.all(ax.row_names == cav_model_cartoon.data[row].unique())
+        if col is not None:
+            assert np.all(ax.col_names == cav_model_cartoon.data[col].unique())
+        if row is not None and uncertainty in ("band", "both"):
+            # Band mode must place quantile-band PolyCollections in each
+            # facet's twin axes (twins register on the figure).
+            fig = ax.figure
+            assert any(
+                isinstance(coll, PolyCollection)
+                for axes in fig.axes
+                for coll in axes.collections
             )
-    else:
+    elif groups == ["dbs"]:
+        assert isinstance(ax, list)
+        assert len(ax) == len(cav_model_cartoon.data[groups[0]].unique())
+
+
+@pytest.mark.slow
+def test_plot_model_cartoon_legacy_booleans(cav_model_cartoon):
+    """The deprecated boolean spellings still work, with a FutureWarning."""
+    with pytest.warns(FutureWarning):
         ax = hssm.plotting.plot_model_cartoon(
             cav_model_cartoon,
             n_samples=10,
-            n_samples_prior=100,  # AF-TODO: Low number of samples fails
-            bins=30,
-            col=col,
-            row=row,
-            groups=groups,
-            predictive_group=predictive_group,
-            plot_predictive_mean=plot_predictive_mean,
-            plot_predictive_samples=plot_predictive_samples,
-            alpha_mean=0.025,
-            n_trajectories=n_trajectories,
+            plot_predictive_mean=True,
+            plot_predictive_samples=True,
         )
+    assert ax is not None
 
-        if groups is None:
-            if row is not None:
-                assert np.all(ax.row_names == cav_model_cartoon.data[row].unique())
-            if col is not None:
-                assert np.all(ax.col_names == cav_model_cartoon.data[col].unique())
-        elif groups == ["dbs"]:
-            assert isinstance(ax, list)
-            assert len(ax) == len(cav_model_cartoon.data[groups[0]].unique())
+    with pytest.raises(ValueError):
+        hssm.plotting.plot_model_cartoon(
+            cav_model_cartoon,
+            n_samples=10,
+            plot_predictive_mean=False,
+            plot_predictive_samples=False,
+        )
 
 
 @pytest.mark.slow
@@ -105,9 +110,7 @@ def test_plot_model_cartoon_intercept_only(intercept_only_ddm_cartoon):
     ax = hssm.plotting.plot_model_cartoon(
         intercept_only_ddm_cartoon,
         n_samples_prior=100,
-        bins=20,
-        plot_predictive_mean=True,
-        plot_predictive_samples=False,
+        uncertainty=None,
         predictive_group="prior_predictive",
         n_trajectories=2,
     )
@@ -115,83 +118,107 @@ def test_plot_model_cartoon_intercept_only(intercept_only_ddm_cartoon):
 
 
 @pytest.mark.slow
+def test_plot_model_cartoon_random_state_end_to_end(cav_model_cartoon):
+    """Same random_state => identical figure through the full public path
+    (draw selection, simulations, trajectories)."""
+    import matplotlib.pyplot as plt
+
+    # Warm-up materializes the posterior-predictive group once, so both
+    # seeded renders below take the identical code path.
+    hssm.plotting.plot_model_cartoon(cav_model_cartoon, n_samples=10)
+    plt.close("all")
+
+    def snapshot():
+        ax = hssm.plotting.plot_model_cartoon(
+            cav_model_cartoon,
+            n_samples=10,
+            uncertainty="band",
+            n_trajectories=2,
+            random_state=7,
+        )
+        fig = ax.get_figure()
+        data = [
+            line.get_ydata().copy() for axes in fig.axes for line in axes.get_lines()
+        ]
+        plt.close("all")
+        return data
+
+    first, second = snapshot(), snapshot()
+    assert first and len(first) == len(second)
+    for a, b in zip(first, second):
+        np.testing.assert_array_equal(a, b)
+
+
+@pytest.mark.slow
+def test_plot_model_cartoon_obs_conditioning(cav_model_cartoon):
+    """obs= conditions the cartoon on one trial of the regression model."""
+    ax = hssm.plotting.plot_model_cartoon(
+        cav_model_cartoon,
+        n_samples=10,
+        uncertainty="band",
+        obs=0,
+        random_state=3,
+    )
+    assert ax is not None
+
+    with pytest.raises(ValueError, match="obs="):
+        hssm.plotting.plot_model_cartoon(
+            cav_model_cartoon, n_samples=10, obs=10_000_000
+        )
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize(
     [
         "n_trajectories",
         "groups",
-        "plot_predictive_mean",
-        "plot_predictive_samples",
+        "uncertainty",
         "predictive_group",
         "row",
         "col",
     ],
     [
-        (2, None, False, False, "posterior_predictive", "participant_id", "stim"),
-        (2, None, False, False, "prior_predictive", "participant_id", "stim"),
-        (2, None, True, True, "posterior_predictive", "participant_id", "stim"),
-        (2, None, True, True, "prior_predictive", "participant_id", "stim"),
-        (2, None, False, True, "posterior_predictive", "participant_id", "stim"),
-        (2, None, False, True, "prior_predictive", "participant_id", "stim"),
-        (0, None, False, True, "posterior_predictive", "participant_id", "stim"),
-        (0, None, False, True, "prior_predictive", "participant_id", "stim"),
-        (0, None, True, False, "posterior_predictive", "participant_id", "stim"),
-        (0, None, True, False, "prior_predictive", "participant_id", "stim"),
-        (2, None, True, False, "posterior_predictive", "participant_id", None),
-        (2, None, True, False, "prior_predictive", "participant_id", None),
-        (2, None, True, False, "posterior_predictive", "participant_id", "stim"),
-        (2, None, True, False, "prior_predictive", "participant_id", "stim"),
-        (2, None, True, False, "posterior_predictive", None, None),
-        (2, None, True, False, "prior_predictive", None, None),
+        (2, None, "both", "posterior_predictive", "participant_id", "stim"),
+        (2, None, "both", "prior_predictive", "participant_id", "stim"),
+        (2, None, "samples", "posterior_predictive", "participant_id", "stim"),
+        (2, None, "samples", "prior_predictive", "participant_id", "stim"),
+        (0, None, "band", "posterior_predictive", "participant_id", "stim"),
+        (0, None, "band", "prior_predictive", "participant_id", "stim"),
+        (0, None, None, "posterior_predictive", "participant_id", "stim"),
+        (0, None, None, "prior_predictive", "participant_id", "stim"),
+        (2, None, None, "posterior_predictive", "participant_id", None),
+        (2, None, None, "prior_predictive", "participant_id", None),
+        (2, None, "band", "posterior_predictive", None, None),
+        (2, None, "band", "prior_predictive", None, None),
     ],
 )
 def test_plot_model_cartoon_3_choice(
     race_model_cartoon,
     n_trajectories,
     groups,
-    plot_predictive_mean,
-    plot_predictive_samples,
+    uncertainty,
     predictive_group,
     row,
     col,
 ):
     """Test plot_model_cartoon for 3-choice data."""
-    if (not plot_predictive_mean) and (not plot_predictive_samples):
-        with pytest.raises(ValueError):
-            ax = hssm.plotting.plot_model_cartoon(
-                race_model_cartoon,
-                n_samples=10,
-                n_samples_prior=10,
-                bins=30,
-                col=col,
-                row=row,
-                groups=groups,
-                plot_predictive_mean=plot_predictive_mean,
-                plot_predictive_samples=plot_predictive_samples,
-                predictive_group=predictive_group,
-                alpha_mean=0.025,
-                n_trajectories=n_trajectories,
-            )
-    else:
-        ax = hssm.plotting.plot_model_cartoon(
-            race_model_cartoon,
-            n_samples=10,
-            n_samples_prior=10,
-            bins=30,
-            col=col,
-            row=row,
-            groups=groups,
-            plot_predictive_mean=plot_predictive_mean,
-            plot_predictive_samples=plot_predictive_samples,
-            predictive_group=predictive_group,
-            alpha_mean=0.025,
-            n_trajectories=n_trajectories,
-        )
+    ax = hssm.plotting.plot_model_cartoon(
+        race_model_cartoon,
+        n_samples=10,
+        n_samples_prior=10,
+        col=col,
+        row=row,
+        groups=groups,
+        uncertainty=uncertainty,
+        predictive_group=predictive_group,
+        n_trajectories=n_trajectories,
+        random_state=42,
+    )
 
-        if groups is None:
-            if row is not None:
-                assert np.all(ax.row_names == race_model_cartoon.data[row].unique())
-            if col is not None:
-                assert np.all(ax.col_names == race_model_cartoon.data[col].unique())
-        else:
-            assert isinstance(ax, list)
-            assert len(ax) == len(race_model_cartoon.data[groups].unique())
+    # groups is None in every parametrization row: the race fixture has no
+    # grouping column, and the grouped path is renderer-agnostic — it is
+    # exercised by the 2-choice matrix's ["dbs"] rows.
+    if row is not None:
+        assert np.all(ax.row_names == race_model_cartoon.data[row].unique())
+    if col is not None:
+        assert np.all(ax.col_names == race_model_cartoon.data[col].unique())

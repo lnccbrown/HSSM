@@ -42,6 +42,8 @@ nav:
       - Choice-only RLSSM: tutorials/choice_only_rlssm.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
       - Plotting: tutorials/plotting.ipynb
+      - Posterior predictive plot gallery: tutorials/ppc_gallery.ipynb
+      - Model cartoon plot gallery: tutorials/cartoon_gallery.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
       - Variational Inference: tutorials/variational_inference.ipynb
       - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
@@ -116,6 +118,8 @@ plugins:
         - tutorials/rlssm_hssm_custom_models.ipynb
         - tutorials/lapse_prob_and_dist.ipynb
         - tutorials/plotting.ipynb
+        - tutorials/ppc_gallery.ipynb
+        - tutorials/cartoon_gallery.ipynb
         - tutorials/scientific_workflow_hssm.ipynb
         - tutorials/pymc_to_hssm.ipynb
         - tutorials/tutorial_bayeux.ipynb

@@ -1,6 +1,7 @@
 """Plotting functionalities for HSSM."""
 
 import logging
+import warnings
 from copy import deepcopy
 from itertools import product
 from types import MappingProxyType
@@ -18,18 +19,25 @@ from ssms.basic_simulators.simulator import simulator
 
 # Original model cartoon plot from gui
 from ..defaults import SupportedModels, default_model_config
-from .predictive import _process_lines
+from .predictive import _legend_order, _process_colors, _process_lines
 from .utils import (
+    DEFAULT_PREDICTIVE_COLORS,
+    _band_alphas,
     _check_groups_and_groups_order,
+    _curve_xy,
     _get_plotting_df,
     _get_title,
-    # _hdi_to_interval, # TODO: We eventually want to add HDI plotting back in here
+    _hdi_to_intervals,
     _subset_df,
     _to_dt_group,
     _use_traces_or_sample,
 )
 
 _logger = logging.getLogger("hssm")
+
+# Fraction of the vertical headroom that hist_height="auto" hands to the
+# tallest histogram curve (the rest stays as breathing room below ylim_high).
+HIST_HEIGHT_MARGIN = 0.9
 
 TRAJ_COLOR_DEFAULT_DICT: Mapping[Any, str] = MappingProxyType(
     {
@@ -70,6 +78,46 @@ def _cartoon_model_meta(model) -> tuple[list[str], list[int]]:
     return list(mc.list_params), list(mc.choices)
 
 
+def _resolve_uncertainty_from_legacy(
+    plot_predictive_mean: bool | None,
+    plot_predictive_samples: bool | None,
+    uncertainty: Literal["band", "samples", "both"] | None,
+    alpha_mean: float,
+) -> tuple[Literal["band", "samples", "both"] | None, float]:
+    """Map the deprecated boolean pair onto the ``uncertainty=`` vocabulary.
+
+    Returns the resolved ``(uncertainty, alpha_mean)``. The booleans only take
+    effect when ``uncertainty`` was left at its default; passing both spellings
+    explicitly is an error. Mapping: ``(True, False)`` (the old default) means
+    mean-only, i.e. ``uncertainty=None``; anything with samples on maps to
+    ``"samples"``, with the mean suppressed via ``alpha_mean=0.0`` when
+    ``plot_predictive_mean=False``.
+    """
+    if plot_predictive_mean is None and plot_predictive_samples is None:
+        return uncertainty, alpha_mean
+    if uncertainty != "band":
+        raise ValueError(
+            "Pass either `uncertainty=` or the deprecated `plot_predictive_mean`/"
+            "`plot_predictive_samples` booleans, not both."
+        )
+    mean_flag = True if plot_predictive_mean is None else plot_predictive_mean
+    samples_flag = False if plot_predictive_samples is None else plot_predictive_samples
+    if not (mean_flag or samples_flag):
+        raise ValueError(
+            "At least one of plot_predictive_mean or "
+            "plot_predictive_samples must be True"
+        )
+    warnings.warn(
+        "plot_predictive_mean/plot_predictive_samples are deprecated; use "
+        "uncertainty=None (mean only), 'samples', 'band', or 'both' instead.",
+        FutureWarning,
+        stacklevel=3,
+    )
+    if samples_flag:
+        return "samples", (alpha_mean if mean_flag else 0.0)
+    return None, alpha_mean
+
+
 def _plot_model_cartoon_1D(
     data: pd.DataFrame,
     model_name: str,
@@ -79,10 +127,20 @@ def _plot_model_cartoon_1D(
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
+    bins: int | np.ndarray | str | None = None,
+    step: bool = True,
+    uncertainty: Literal["band", "samples", "both"] | None = None,
+    intervals: list[tuple[float, float]] | None = None,
+    alpha_mean: float = 1.0,
+    alpha_uncertainty: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     colors: str | list[str] | None = None,
+    linestyles: list[str] | None = None,
+    linewidths: list[float] | None = None,
     title: str | None = "Model Plots",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
+    legend: bool = True,
     list_params: list[str] | None = None,
     choices: list[int] | None = None,
     **kwargs,
@@ -101,10 +159,25 @@ def _plot_model_cartoon_1D(
 
     if "color" in kwargs:
         del kwargs["color"]
-    colors = colors or ["#ec205b", "#338fb8"]
+    colors = colors or list(DEFAULT_PREDICTIVE_COLORS)
 
     if plot_data and isinstance(colors, str):
         raise ValueError("When `plot_data=True`, `colors` must be a list or dict.")
+
+    # Translate the processed [predicted, observed] style pairs into the
+    # renderer's per-artist parameters. These were previously documented but
+    # silently swallowed by **kwargs.
+    linestyles = linestyles if linestyles is not None else ["-", "-"]
+    linewidths = linewidths if linewidths is not None else [1.25, 1.25]
+    style_kwargs: dict[str, Any] = dict(
+        color_predictive=colors[0],
+        color_predictive_mean=colors[0],
+        color_data=colors[1] if len(colors) > 1 else DEFAULT_PREDICTIVE_COLORS[1],
+        linestyle_histogram=linestyles[0],
+        linestyle_histogram_data=linestyles[1] if len(linestyles) > 1 else None,
+        linewidth_histogram=linewidths[0],
+        linewidth_histogram_data=linewidths[1] if len(linewidths) > 1 else None,
+    )
 
     if "ax" in kwargs:
         ax = kwargs.pop("ax")
@@ -160,8 +233,14 @@ def _plot_model_cartoon_1D(
     ax = plot_function(
         model_name=model_name,
         axis=ax,
+        # Keep the obs_n labels on the mean pseudo-draw frame: the θ-reduction
+        # selects trials by label, and facet subsets carry non-contiguous
+        # labels. (The mean DataTree has a single (chain, draw), so dropping
+        # those levels is lossless.)
         theta_mean=(
-            data_predictive_mean.reset_index()[model_params] if plot_mean else None
+            data_predictive_mean[model_params].droplevel(["chain", "draw"])
+            if plot_mean
+            else None
         ),
         theta_samples=(data_predictive[model_params] if plot_samples else None),
         data=(
@@ -169,6 +248,15 @@ def _plot_model_cartoon_1D(
             if not plot_data or data_observed is None
             else data_observed.reset_index()
         ),
+        bins=bins,
+        step=step,
+        uncertainty=uncertainty,
+        intervals=intervals,
+        alpha_mean=alpha_mean,
+        alpha_uncertainty=alpha_uncertainty,
+        hist_height=hist_height,
+        legend=legend,
+        **style_kwargs,
         **plot_function_kwargs,
         **kwargs,
     )
@@ -195,15 +283,20 @@ def _plot_model_cartoon_2D(
     row: str | None = None,
     col: str | None = None,
     col_wrap: int | None = None,
-    bins: int | np.ndarray | str | None = 100,
-    step: bool = False,
-    # interval: tuple[float, float] | None = None,
+    bins: int | np.ndarray | str | None = None,
+    step: bool = True,
+    uncertainty: Literal["band", "samples", "both"] | None = None,
+    intervals: list[tuple[float, float]] | None = None,
+    alpha_mean: float = 1.0,
+    alpha_uncertainty: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     colors: str | list[str] | None = None,
-    linestyles: str | list[str] = "-",
-    linewidths: float | list[float] = 1.25,
+    linestyles: list[str] | None = None,
+    linewidths: list[float] | None = None,
     title: str | None = "Model Cartoon",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
+    legend: bool = True,
     grid_kwargs: dict | None = None,
     list_params: list[str] | None = None,
     choices: list[int] | None = None,
@@ -238,29 +331,38 @@ def _plot_model_cartoon_2D(
         predictive_group=predictive_group,
         bins=bins,
         step=step,
-        # interval=interval,
+        uncertainty=uncertainty,
+        intervals=intervals,
+        alpha_mean=alpha_mean,
+        alpha_uncertainty=alpha_uncertainty,
+        hist_height=hist_height,
         colors=colors,
         linestyles=linestyles,
         linewidths=linewidths,
         title=None,
         xlabel=xlabel,
         ylabel=ylabel,
+        legend=False,
         **kwargs,
     )
 
-    if plot_data:
-        custom_lines = [
-            Line2D([0], [0], color="blue", linestyle="-", lw=1.5),
-            Line2D([0], [0], color="black", linestyle="-", lw=1.5),
-        ]
-
-        custom_labels = ["observed", "mean_predictive"]
-
-        g.add_legend(
-            dict(zip(custom_labels, custom_lines)),
-            title="",
-            label_order=["observed", "mean_predictive"],
-        )
+    # One grid-level legend harvested from the labeled artists across all
+    # figure axes (twin axes register on the figure too). Mapped facets run
+    # with legend=False, so there are no per-facet legends to collide with.
+    if legend:
+        handles_by_label: dict[str, Any] = {}
+        for ax_ in g.figure.axes:
+            h_, l_ = ax_.get_legend_handles_labels()
+            for handle, lab in zip(h_, l_):
+                handles_by_label.setdefault(lab, handle)
+        if handles_by_label:
+            labels_all = list(handles_by_label)
+            ordered = [labels_all[i] for i in _legend_order(labels_all)]
+            g.add_legend(
+                {lab: handles_by_label[lab] for lab in ordered},
+                title="",
+                label_order=ordered,
+            )
 
     if title:
         g.figure.subplots_adjust(top=0.9)
@@ -311,6 +413,12 @@ def attach_trialwise_params_to_df(
     """
     necessary_params, _ = _cartoon_model_meta(model)
     df[necessary_params] = 0.0
+
+    # Sort the (chain, draw, obs_n) MultiIndex once so the per-draw .loc
+    # assignments below use a lexsorted index — otherwise pandas emits one
+    # PerformanceWarning per assignment (over a thousand per plot at the
+    # default draw counts).
+    df = df.sort_index()
 
     group_ds = dt[dt_group].to_dataset()
     for chain_tmp, draw_tmp in {(x[0], x[1]) for x in list(df.index) if x[0] != -1}:
@@ -387,16 +495,27 @@ def plot_model_cartoon(
     col_wrap: int | None = None,
     groups: str | Iterable[str] | None = None,
     groups_order: Iterable[str] | dict[str, Iterable[str]] | None = None,
-    bins: int | np.ndarray | str | None = 50,
-    step: bool = False,
-    plot_predictive_mean: bool = True,
-    plot_predictive_samples: bool = False,
-    colors: str | list[str] | None = None,
+    bins: int | np.ndarray | str | None = None,
+    step: bool = True,
+    hdi: float | str | tuple[float, float] | list | None = None,
+    uncertainty: Literal["band", "samples", "both"] | None = "band",
+    alpha_mean: float = 1.0,
+    alpha_uncertainty: float | None = None,
+    hist_height: float | Literal["auto"] | None = None,
+    plot_predictive_mean: bool | None = None,
+    plot_predictive_samples: bool | None = None,
+    colors: str | list[str] | dict[str, str] | None = None,
     linestyles: str | list[str] | tuple[str] | dict[str, str] = "-",
     linewidths: float | list[float] | tuple[float] | dict[str, float] = 1.25,
     title: str | None = "Posterior Predictive Distribution",
     xlabel: str | None = "Response Time",
     ylabel: str | None = "",
+    legend: bool = True,
+    obs: int | None = None,
+    random_state: int | np.random.Generator | None = None,
+    n_trajectories: int | None = None,
+    xlims: tuple[float, float] | None = None,
+    ylims: tuple[float, float] | Literal["auto"] | None = None,
     grid_kwargs: dict | None = None,
     **kwargs,
 ) -> Axes | FacetGrid | list[FacetGrid]:
@@ -478,13 +597,55 @@ def plot_model_cartoon(
         this can be an iterable of strings. Otherwise, this is a dictionary mapping the
         dimension name to the order of the groups in that dimension.
     bins : optional
-        Specification of hist bins, by default 100. There are three options:
+        Specification of the RT-histogram bins, by default None, which keeps the
+        legacy grid of `bin_size`-spaced edges over the x-range (`bin_size` can be
+        passed as a keyword argument, default 0.05). Otherwise one of:
         - A string describing the binning strategy (passed to `np.histogram_bin_edges`).
         - A list-like defining the bin edges.
         - An integer defining the number of bins to be used.
+        An explicit `bins` wins over `bin_size`.
     step : optional
-        Whether to plot the distributions as a step function or a smooth density plot,
-        by default False.
+        If True (default), histogram curves are drawn as edge-anchored step
+        outlines; if False, as frequency polygons through the bin centers.
+    hdi : optional
+        The interval(s) displayed by the uncertainty bands, by default None,
+        which becomes graded 50% and 94% equal-tailed intervals. Accepts a
+        float mass (0.94), a "94%" string, a legacy (lo, hi) quantile tuple,
+        or a list of any of these for multiple graded bands. Despite the
+        name, intervals are equal-tailed, not highest-density.
+    uncertainty : optional
+        How posterior predictive uncertainty is displayed (same vocabulary as
+        `plot_predictive`), by default "band":
+        - "band": graded pointwise quantile bands on the RT histograms, fan-chart
+          ribbons on the decision bounds, a graded drift-quantile fan, graded
+          non-decision-time spans, and a starting-point whisker.
+        - "samples": per-draw translucent curves (the classic spaghetti), with a
+          rug of non-decision-time ticks instead of per-draw vertical lines.
+        - "both": samples underneath bands.
+        - None: the mean-only rendering (the previous default look).
+    alpha_mean : optional
+        Opacity of the predictive-mean / reference-geometry artists, by
+        default 1.0.
+    alpha_uncertainty : optional
+        Opacity of the uncertainty layer, by default None: bands use a 0.25
+        base with a graded ladder, and sample curves get an automatic
+        per-curve value that keeps total ink roughly constant. An explicit
+        0.0 is honored.
+    hist_height : optional
+        If a float, rescale all RT-histogram curves by one common factor so
+        the tallest curve has this height in y-data units above its bound.
+        If ``"auto"``, fit the tallest curve to 90% of the vertical headroom
+        between the histogram baseline (or the highest visible boundary-
+        ribbon point, whichever is higher) and the upper y-limit, so
+        histograms can never overrun the axes; under faceting the fit is
+        per facet. By default None (raw defective-density units, which can
+        overrun the y-limits for very peaked distributions).
+    plot_predictive_mean, plot_predictive_samples : optional
+        Deprecated boolean spellings of `uncertainty`; mapped with a
+        FutureWarning. (True, False) means `uncertainty=None`; any
+        combination with samples on maps to "samples" (mean suppressed via
+        `alpha_mean=0` when `plot_predictive_mean=False`). Passing these
+        together with an explicit `uncertainty` raises a ValueError.
     colors : optional
         Colors to use for the different levels of the hue variable. When a `str`, the
         color of posterior predictives, in which case an error will be thrown if
@@ -511,6 +672,47 @@ def plot_model_cartoon(
         The label for the x-axis, by default "Response Time".
     ylabel : optional
         The label for the y-axis, by default "Density".
+    legend : optional
+        Whether to draw a legend assembled from the labeled plot layers, by
+        default True.
+    obs : optional
+        The ``obs_n`` label of one trial to condition the cartoon on. By
+        default (None), the drawn geometry of each posterior draw derives from
+        that draw's **trial-mean** parameter vector, while the RT histograms
+        stay marginal over all trials (they are a predictive check against the
+        pooled observed data). With ``obs`` set, every simulated layer —
+        geometry, predicted histograms, and trajectories — conditions on that
+        trial's parameters; the observed-data histogram remains pooled (a
+        warning notes this). Under faceting, the label must be present in
+        every facet. Note the geometry is nonlinear in the parameters, so the
+        curve drawn at the trial-mean θ is not the mean of per-trial curves
+        and need not sit mid-band; the reduction is a display convention.
+    random_state : optional
+        Seed (or an existing ``np.random.Generator``) making the whole figure
+        reproducible: which posterior draws are displayed, every simulator
+        seed, and the trajectories. Stream order: the predictive draw subset
+        first, then per facet the plug-in simulation seed, one seed per
+        posterior draw, and one trial pick + seed per trajectory. By default
+        None (fresh entropy — a new figure every call).
+    n_trajectories : optional
+        Number of example diffusion trajectories drawn at the reduced
+        reference θ. By default None, keeping each renderer's default (0 for
+        2-choice, 10 for >2-choice — a historical inconsistency preserved for
+        compatibility).
+    xlims : optional
+        The x-axis limits ``(t_low, t_high)`` in seconds. Also determines the
+        geometry simulation horizon (``max_t = xlim_high + 0.5``). By default
+        None, keeping renderer defaults ((-0.05, 5) for 2-choice, (0, 5) for
+        >2-choice).
+    ylims : optional
+        The y-axis limits. If ``"auto"``, keep the histograms at raw density
+        scale and grow the frame instead so nothing is clipped (the tallest
+        drawn side plus the visible boundary-ribbon top get 90% of the
+        frame; limits never shrink below the defaults, and the 2-choice
+        frame stays symmetric). Mutually exclusive with
+        ``hist_height="auto"`` — one fits the content into the frame, the
+        other fits the frame around the content. By default None, keeping
+        renderer defaults ((-3, 3) for 2-choice, (0, 5) for >2-choice).
     grid_kwargs : optional
         Additional keyword arguments are passed to the [`FacetGrid` constructor]
         (https://seaborn.pydata.org/generated/seaborn.FacetGrid.html#seaborn.FacetGrid.__init__)
@@ -524,15 +726,62 @@ def plot_model_cartoon(
     Axes | FacetGrid | list[FacetGrid]
         The matplotlib `axis` or seaborn `FacetGrid` object containing the plot.
     """
-    if not (plot_predictive_mean or plot_predictive_samples):
+    if uncertainty is not None and uncertainty not in ("band", "samples", "both"):
         raise ValueError(
-            "At least one of plot_predictive_mean or "
-            "plot_predictive_samples must be True"
+            f"`uncertainty` must be one of 'band', 'samples', 'both', or None, "
+            f"but got {uncertainty!r}. Did you pass a positional argument in the "
+            "wrong slot?"
         )
 
-    # Process linestyles
+    # Deprecated boolean spellings map onto the `uncertainty` vocabulary.
+    if obs is not None and (
+        isinstance(obs, bool) or not isinstance(obs, (int, np.integer)) or obs < 0
+    ):
+        raise ValueError(f"`obs` must be a non-negative integer or None, got {obs!r}")
+    if obs is not None and plot_data:
+        _logger.warning(
+            "obs=%s conditions the predicted histograms and geometry on one "
+            "trial; the observed-data histogram remains pooled over trials.",
+            obs,
+        )
+
+    # One seeded stream for everything random in this figure: which posterior
+    # draws are displayed, every simulator seed, and the trajectories. The
+    # Generator object itself is handed to the renderers, so each facet
+    # consumes a later segment of the same stream (distinct per facet,
+    # reproducible across calls).
+    rng = np.random.default_rng(random_state)
+
+    if ylims == "auto" and hist_height == "auto":
+        raise ValueError(
+            "`hist_height='auto'` and `ylims='auto'` are mutually exclusive: "
+            "one fits the histograms into the frame, the other fits the "
+            "frame around the histograms."
+        )
+
+    uncertainty, alpha_mean = _resolve_uncertainty_from_legacy(
+        plot_predictive_mean, plot_predictive_samples, uncertainty, alpha_mean
+    )
+
+    # Resolve the band intervals once, widest-first (mirrors plot_predictive).
+    # Resolved for every uncertainty mode: samples mode has no histogram or
+    # boundary bands, but the non-decision-time envelope uses the intervals in
+    # all modes.
+    intervals = (
+        _hdi_to_intervals([0.5, 0.94] if hdi is None else hdi)
+        if uncertainty is not None
+        else None
+    )
+
+    # The mean pipeline always runs: the reference geometry and the histogram
+    # baselines need it. The samples pipeline runs whenever uncertainty is
+    # displayed.
+    run_mean = True
+    run_samples = uncertainty is not None
+
+    # Process colors / linestyles / linewidths into [predicted, observed] pairs
+    colors_ = _process_colors(colors, plot_data)
     linestyles_ = _process_lines(linestyles, mode="linestyles")
-    # Process linewidths
     linewidths_ = _process_lines(linewidths, mode="linewidths")
 
     groups, groups_order = _check_groups_and_groups_order(
@@ -558,7 +807,7 @@ def plot_model_cartoon(
 
     # Mean version of plot
     plotting_df_mean = None
-    if plot_predictive_mean:
+    if run_mean:
         if predictive_group == "posterior_predictive":
             dt_mean = _make_dt_mean_posterior(
                 deepcopy(model.traces if dt is None else dt)
@@ -631,12 +880,19 @@ def plot_model_cartoon(
 
         plotting_df_mean["source"] = predictive_group + "_mean"
 
-    if plot_predictive_samples:
+    if run_samples:
         dt, sampled = _use_traces_or_sample(
-            model, data, dt, n_samples=n_samples, predictive_group=predictive_group
+            model,
+            data,
+            dt,
+            n_samples=n_samples,
+            predictive_group=predictive_group,
+            rng=rng,
         )
 
-        # Get the plotting dataframe by chain and sample
+        # Get the plotting dataframe by chain and sample. The rng seeds the
+        # draw-subset selection, which used the unseeded global RNG before —
+        # random_state could never make the displayed draws reproducible.
         plotting_df = _get_plotting_df(
             dt,
             data,
@@ -644,6 +900,7 @@ def plot_model_cartoon(
             n_samples=None if sampled else n_samples,
             response_str=model.response_str,
             predictive_group=predictive_group,
+            rng=rng,
         )
 
         # Get plotting dataframe for posterior mean
@@ -676,11 +933,8 @@ def plot_model_cartoon(
     elif plotting_df_mean is not None:
         plotting_df = plotting_df_mean
 
-    if plotting_df is None:
-        raise ValueError(
-            "At least one of `plot_predictive_samples` or `plot_predictive_mean` "
-            "must be True."
-        )
+    if plotting_df is None:  # pragma: no cover — run_mean is always True
+        raise ValueError("Could not assemble a plotting dataframe.")
 
     # return plotting_df
 
@@ -691,63 +945,68 @@ def plot_model_cartoon(
     # (aDDM/RLSSM, absent from default_model_config) render like built-ins.
     _list_params, _choices = _cartoon_model_meta(model)
 
+    shared_plot_kwargs: dict[str, Any] = dict(
+        model_name=model.model_name,
+        list_params=_list_params,
+        choices=_choices,
+        plot_data=plot_data,
+        plot_mean=run_mean,
+        plot_samples=run_samples,
+        predictive_group=predictive_group,
+        bins=bins,
+        step=step,
+        uncertainty=uncertainty,
+        intervals=intervals,
+        alpha_mean=alpha_mean,
+        alpha_uncertainty=alpha_uncertainty,
+        hist_height=hist_height,
+        obs=obs,
+        random_state=rng,
+        colors=colors_,
+        linestyles=linestyles_,
+        linewidths=linewidths_,
+        xlabel=xlabel,
+        ylabel=ylabel,
+    )
+
+    # Promoted parameters with None sentinels: only forwarded when set, so
+    # each renderer's own default is preserved. The named parameter wins over
+    # a legacy **kwargs spelling (popped to avoid duplicate-keyword errors).
+    for name_, value_ in (
+        ("n_trajectories", n_trajectories),
+        ("xlims", xlims),
+        ("ylims", ylims),
+    ):
+        legacy_value = kwargs.pop(name_, None)
+        resolved = value_ if value_ is not None else legacy_value
+        if resolved is not None:
+            shared_plot_kwargs[name_] = resolved
+
     if not extra_dims:
-        ax = _plot_model_cartoon_1D(
+        # The legend is assembled inside the renderer from the labeled
+        # artists (replacing the old hard-coded two-entry proxy legend).
+        return _plot_model_cartoon_1D(
             data=plotting_df,
-            model_name=model.model_name,
-            list_params=_list_params,
-            choices=_choices,
-            plot_data=plot_data,
-            plot_mean=plot_predictive_mean,
-            plot_samples=plot_predictive_samples,
-            predictive_group=predictive_group,
-            bins=bins,
-            step=step,
-            colors=colors,
-            linestyles=linestyles_,
-            linewidths=linewidths_,
             title=title,
-            xlabel=xlabel,
-            ylabel=ylabel,
+            legend=legend,
+            **shared_plot_kwargs,
             **kwargs,
         )
-
-        custom_lines = [
-            Line2D([0], [0], color="blue", linestyle="-", lw=1.5),
-            Line2D([0], [0], color="black", linestyle="-", lw=1.5),
-        ]
-
-        custom_labels = ["observed", "mean_predictive"]
-        ax.legend(custom_lines, custom_labels, title="", loc="upper right")
-        return ax
 
     # The multiple dimensions case
     # If group is not provided, we are producing a grid of plots
     if groups is None:
-        g = _plot_model_cartoon_2D(
+        return _plot_model_cartoon_2D(
             data=plotting_df,
-            model_name=model.model_name,
-            list_params=_list_params,
-            choices=_choices,
-            plot_data=plot_data,
-            plot_mean=plot_predictive_mean,
-            plot_samples=plot_predictive_samples,
-            predictive_group=predictive_group,
             row=row,
             col=col,
             col_wrap=col_wrap,
-            bins=bins,
-            step=step,
-            colors=colors,
-            linestyles=linestyles_,
-            linewidths=linewidths_,
             title=title,
-            xlabel=xlabel,
-            ylabel=ylabel,
+            legend=legend,
             grid_kwargs=grid_kwargs,
+            **shared_plot_kwargs,
             **kwargs,
         )
-        return g
 
     # The group dimension case
     plots = []
@@ -770,25 +1029,13 @@ def plot_model_cartoon(
             continue
         g = _plot_model_cartoon_2D(
             data=df,
-            model_name=model.model_name,
-            list_params=_list_params,
-            choices=_choices,
-            plot_data=plot_data,
-            plot_mean=plot_predictive_mean,
-            plot_samples=plot_predictive_samples,
-            predictive_group=predictive_group,
             row=row,
             col=col,
             col_wrap=col_wrap,
-            bins=bins,
-            step=step,
-            colors=colors,
-            linestyles=linestyles_,
-            linewidths=linewidths_,
             title=title,
-            xlabel=xlabel,
-            ylabel=ylabel,
+            legend=legend,
             grid_kwargs=grid_kwargs,
+            **shared_plot_kwargs,
             **kwargs,
         )
 
@@ -804,11 +1051,17 @@ def plot_func_model(
     theta_mean: pd.DataFrame | None = None,
     theta_samples: pd.DataFrame | None = None,
     data: pd.DataFrame | None = None,
-    n_samples=10,
+    n_reps: int = 10,
     bin_size: float = 0.05,
+    bins: int | np.ndarray | str | None = None,
+    step: bool = True,
+    uncertainty: Literal["band", "samples", "both"] | None = None,
+    intervals: list[tuple[float, float]] | None = None,
+    hist_height: float | Literal["auto"] | None = None,
     n_trajectories: int = 0,
     delta_t_model: float = 0.01,
-    random_state: int | None = None,
+    random_state: int | np.random.Generator | None = None,
+    obs: int | None = None,
     keep_slope: bool = True,
     keep_boundary: bool = True,
     keep_ndt: bool = True,
@@ -818,12 +1071,18 @@ def plot_func_model(
     markershift_starting_point: float | int = 0,
     linewidth_histogram: float | int = 1.5,
     linewidth_model: float | int = 1.5,
+    linestyle_histogram: str = "-",
+    linestyle_histogram_data: str | None = None,
+    linewidth_histogram_data: float | None = None,
     color_data: str = "blue",
     color_predictive_mean: str = "black",
     color_predictive: str = "black",
+    color_model: str = "black",
     alpha_mean: float = 1,
-    alpha_predictive: float = 0.05,
+    alpha_predictive: float | None = None,
+    alpha_uncertainty: float | None = None,
     alpha_trajectories: float = 0.5,
+    legend: bool = True,
     **kwargs,
 ) -> Axes:
     """Plot model cartoon with posterior predictive samples.
@@ -840,16 +1099,53 @@ def plot_func_model(
         DataFrame containing posterior samples of parameters.
     data : pd.DataFrame, optional
         DataFrame containing observed data to overlay.
-    n_samples : int, optional
-        Number of posterior samples to use. Defaults to 10.
+    n_reps : int, optional
+        Number of simulation repetitions per parameter row (previously named
+        ``n_samples``, which shadowed the public draw-count parameter of
+        ``plot_model_cartoon``). Defaults to 10.
     bin_size : float, optional
-        Size of bins used for histograms. Defaults to 0.05.
+        Spacing in seconds of the legacy histogram grid, used when `bins` is
+        None. Defaults to 0.05.
+    bins : int, array-like, or str, optional
+        Histogram bins for the RT histograms, as accepted by
+        ``np.histogram_bin_edges``. When provided, wins over `bin_size` and is
+        resolved on the pooled simulated + observed RTs. Defaults to None
+        (legacy `bin_size` grid).
+    step : bool, optional
+        If True (default), draw histogram curves as edge-anchored step
+        outlines; if False, as frequency polygons through the bin centers.
+    uncertainty : {"band", "samples", "both"} or None, optional
+        How posterior predictive uncertainty is displayed (same vocabulary as
+        ``plot_predictive``). ``"band"`` draws graded pointwise quantile
+        bands, ``"samples"`` per-draw curves, ``"both"`` combines them. None
+        (default here) keeps the legacy rendering: a plug-in mean when
+        `theta_mean` is given and per-draw overlays at `alpha_predictive`
+        when `theta_samples` is given.
+    intervals : list of (float, float), optional
+        Pre-resolved quantile pairs for the bands, sorted widest-first (the
+        output of ``_hdi_to_intervals``). Required when `uncertainty` is
+        "band" or "both".
+    hist_height : float or "auto", optional
+        If a float, rescale all histogram curves by one common factor so the
+        tallest drawn curve has this height (in y-data units above its
+        bound). ``"auto"`` fits the tallest curve to 90% of the headroom
+        between the (ribbon-aware) baseline and ylim_high. Defaults to None
+        (raw defective-density units).
     n_trajectories : int, optional
         Number of trajectories to plot. Defaults to 0.
     delta_t_model : float, optional
         Time step for model simulation. Defaults to 0.01.
-    random_state : int, optional
-        Random seed for reproducibility.
+    random_state : int | np.random.Generator, optional
+        Seed (or an existing Generator, passed through unchanged) for every
+        random choice in this renderer. Stream order: one simulator seed for
+        the plug-in RT simulation (if ``theta_mean``), then one per posterior
+        draw (if ``theta_samples``), then one trial pick + one simulator seed
+        per trajectory. Defaults to None (fresh entropy, non-reproducible).
+    obs : int, optional
+        The ``obs_n`` label of one trial to condition the cartoon on. By
+        default (None), the geometry of each draw derives from the trial-mean
+        θ while the RT histograms stay marginal over trials; with ``obs`` set,
+        every simulated layer conditions on that trial's θ.
     keep_slope : bool, optional
         Whether to plot drift slopes. Defaults to True.
     keep_boundary : bool, optional
@@ -865,21 +1161,43 @@ def plot_func_model(
     markershift_starting_point : float or int, optional
         Shift of starting point marker. Defaults to 0.
     linewidth_histogram : float or int, optional
-        Width of histogram lines. Defaults to 0.5.
+        Width of predictive histogram lines. Defaults to 1.5.
     linewidth_model : float or int, optional
-        Width of model lines. Defaults to 0.5.
+        Width of model lines. Defaults to 1.5.
+    linestyle_histogram : str, optional
+        Line style of predictive histogram curves. Defaults to "-".
+    linestyle_histogram_data : str, optional
+        Line style of the observed-data histogram. Defaults to None (same as
+        `linestyle_histogram`).
+    linewidth_histogram_data : float, optional
+        Width of the observed-data histogram lines. Defaults to None (same as
+        `linewidth_histogram`).
     color_data : str, optional
         Color for data histogram. Defaults to "blue".
     color_predictive_mean : str, optional
         Color for posterior mean. Defaults to "black".
     color_predictive : str, optional
-        Color for posterior samples. Defaults to "black".
+        Color for the predictive RT-histogram layers. Defaults to "black".
+    color_model : str, optional
+        Color for the model geometry — boundaries, drift, non-decision time,
+        starting point, and their uncertainty layers. Kept neutral ("black")
+        by default so the figure reads as: structure = neutral, predictions =
+        predicted color, data = observed color.
     alpha_mean : float, optional
         Transparency of posterior mean. Defaults to 1.
     alpha_predictive : float, optional
-        Transparency of posterior samples. Defaults to 0.05.
+        Deprecated alias for `alpha_uncertainty`, kept for GUI-heritage
+        callers. In the legacy rendering (``uncertainty=None``) it sets the
+        per-draw overlay opacity (default 0.05).
+    alpha_uncertainty : float, optional
+        Opacity of the uncertainty layer. None (default) resolves to 0.25 for
+        bands and an automatic per-curve value for sample curves; an explicit
+        0.0 is honored.
     alpha_trajectories : float, optional
         Transparency of trajectories. Defaults to 0.5.
+    legend : bool, optional
+        Whether to assemble a legend from the labeled artists on the main
+        axis and the upper twin axis. Defaults to True.
     **kwargs
         Additional arguments passed to plotting functions.
 
@@ -888,110 +1206,173 @@ def plot_func_model(
     matplotlib.axes.Axes
         The axis with the model cartoon plot.
     """
-    ylim_low, ylim_high = kwargs.get("ylims", (-3, 3))
+    if "n_samples" in kwargs:
+        _logger.warning(
+            "plot_func_model(n_samples=...) was renamed to n_reps= (simulation "
+            "repetitions per parameter row); the old name will stop working in "
+            "a future release."
+        )
+        n_reps = kwargs.pop("n_samples")
+    if "hist_histtype" in kwargs:
+        _logger.warning(
+            "hist_histtype is no longer used: histogram curves are drawn from "
+            "precomputed densities (see the `step` parameter) and the argument "
+            "is ignored."
+        )
+        kwargs.pop("hist_histtype")
+
+    # `alpha_predictive` is the deprecated spelling; map it onto the new knob
+    # when the caller has not set `alpha_uncertainty` directly.
+    if alpha_predictive is not None and alpha_uncertainty is None:
+        alpha_uncertainty = alpha_predictive
+    legacy_alpha = alpha_predictive if alpha_predictive is not None else 0.05
+    legacy = uncertainty is None
+
+    ylims_setting = kwargs.get("ylims", (-3, 3))
+    ylims_auto = False
+    if isinstance(ylims_setting, str):
+        if ylims_setting != "auto":
+            raise ValueError(
+                f"`ylims` must be a (low, high) tuple, 'auto', or None; "
+                f"got {ylims_setting!r}"
+            )
+        if hist_height == "auto":
+            raise ValueError(
+                "`hist_height='auto'` and `ylims='auto'` are mutually "
+                "exclusive: one fits the histograms into the frame, the "
+                "other fits the frame around the histograms."
+            )
+        ylims_auto = True
+        ylim_low, ylim_high = -3.0, 3.0
+    else:
+        ylim_low, ylim_high = ylims_setting
     xlim_low, xlim_high = kwargs.get("xlims", (-0.05, 5))
 
-    # Extract some parameters from kwargs
-    bins = list(np.arange(xlim_low, xlim_high, bin_size))
+    # One simulation horizon and one time grid for every geometry element.
+    # The geometry only needs to exist a little past the visible right edge —
+    # not out to the simulator's 20 s default, which put ~75% of every
+    # boundary polyline outside the axes. Noisy RT simulations keep the long
+    # default horizon: shortening it would censor slow RTs into -999 and
+    # silently re-normalize the defective densities.
+    max_t_geom = xlim_high + 0.5
+    t_s = np.arange(0, max_t_geom, delta_t_model)
 
     # RUN SIMULATIONS
     # -------------------------------
 
-    # Simulator Data from posterior mean
-    if random_state is not None:
-        np.random.seed(random_state)
-
-    rand_int = np.random.randint(0, 400000000)
+    # One Generator drives every random choice in this renderer; simulator
+    # seeds are drawn positionally from it, so no two consumers share a seed
+    # (the old `rand_int + i` protocol seeded trajectory i and per-draw sim i
+    # identically). An incoming Generator is passed through unchanged, so the
+    # facets of one figure consume successive segments of a single stream —
+    # distinct per facet, reproducible across calls.
+    rng = np.random.default_rng(random_state)
 
     sim_out = None
+    theta_ref: pd.DataFrame | None = None
+    theta_draws: pd.DataFrame | None = None
     if theta_mean is not None:
+        # RT histograms stay marginal over trials by default (they are a
+        # predictive check against the pooled observed data); obs= conditions
+        # them on that one trial along with the geometry.
+        theta_ref = _reduce_theta(theta_mean, obs)
         sim_out = simulator(
             model=model_name,
-            theta=theta_mean.values,
-            n_samples=n_samples,
+            theta=theta_mean.values if obs is None else theta_ref.values,
+            n_samples=n_reps,
             no_noise=False,
             delta_t=delta_t_model,
-            random_state=rand_int,
+            random_state=int(rng.integers(0, 2**31 - 1)),
         )
 
         # Simulate model without noise: posterior mean
         # (this allows to extract the time-dynamics of the drift e.g.)
+        # Reduced θ: the reference geometry describes one coherent parameter
+        # vector (the trial mean by default, trial `obs` when given), so
+        # boundary, drift, ndt, and starting point agree by construction.
         sim_out_no_noise = simulator(
             model=model_name,
-            theta=theta_mean.loc[np.random.choice(theta_mean.shape[0], 1), :].values,
+            theta=theta_ref.values,
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
+            max_t=max_t_geom,
             smooth_unif=False,
         )
 
     # Simulate model without noise: posterior samples
     if theta_samples is not None:
+        theta_draws = _reduce_theta(theta_samples, obs)
         posterior_pred_no_noise = {}
         posterior_pred_sims = {}
-        for i, (chain, draw) in enumerate(
-            list(theta_samples.index.droplevel("obs_n").unique())
-        ):
+        for i, (chain, draw) in enumerate(theta_draws.index):
+            # Same reduction per draw: one θ per (chain, draw) keeps every
+            # geometry element of a draw consistent and comparable with the
+            # reference geometry.
             posterior_pred_no_noise[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].values,
+                theta=theta_draws.iloc[[i]].values,
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
+                max_t=max_t_geom,
                 smooth_unif=False,
             )
 
             # Simulate model: posterior samples
             posterior_pred_sims[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].values,
-                n_samples=n_samples,
+                theta=(
+                    theta_samples.loc[(chain, draw), :].values
+                    if obs is None
+                    else theta_draws.iloc[[i]].values
+                ),
+                n_samples=n_reps,
                 no_noise=False,
                 delta_t=delta_t_model,
-                random_state=rand_int + i,
+                random_state=int(rng.integers(0, 2**31 - 1)),
             )
 
-    # Simulate trajectories
+    # Simulate trajectories: noisy realizations of the SAME reduced θ that
+    # draws the reference geometry, so trajectories illustrate diffusion
+    # noise around the bounds actually on screen and their crossing markers
+    # land on the drawn boundary by construction. (Previously each trajectory
+    # simulated a different random trial's θ against the reference geometry.
+    # Posterior uncertainty stays the bands' job.)
     sim_out_traj = {}
-    for i in range(n_trajectories):
-        if theta_mean is not None:
-            tmp_theta = theta_mean.loc[
-                (np.random.choice(theta_mean.shape[0], 1)), :
-            ].values
-        elif theta_samples is not None:
-            # wrap in max statement here
-            # because negative value are possible,
-            # however refer to data instead of posterior samples
-            random_index = tuple(
-                [
-                    np.random.choice(theta_samples.index.get_level_values(name_))
-                    for name_ in ("chain", "draw", "obs_n")
-                ]
-            )
-            tmp_theta = theta_samples.loc[random_index, :].values
+    if n_trajectories > 0:
+        if theta_ref is not None:
+            theta_traj = theta_ref
+        elif theta_draws is not None:
+            # Direct renderer calls without theta_mean: one real draw's θ —
+            # deterministic under the seed, never a composed vector.
+            theta_traj = theta_draws.iloc[[int(rng.integers(len(theta_draws)))]]
         else:  # pragma: no cover
             raise ValueError("No theta values provided but n_trajectories is > 0")
+        for i in range(n_trajectories):
+            sim_out_traj[i] = simulator(
+                model=model_name,
+                theta=theta_traj.values,
+                n_samples=1,
+                no_noise=False,
+                delta_t=delta_t_model,
+                max_t=max_t_geom,
+                random_state=int(rng.integers(0, 2**31 - 1)),
+                smooth_unif=False,
+            )
 
-        sim_out_traj[i] = simulator(
-            model=model_name,
-            theta=tmp_theta,
-            n_samples=1,
-            no_noise=False,
-            delta_t=delta_t_model,
-            random_state=rand_int + i,
-            smooth_unif=False,
-        )
-
-    # ADD DATA HISTOGRAMS
+    # ADD DATA HISTOGRAMS. The baseline is anchored to the same no-noise
+    # simulation that draws the reference boundary, so the histograms sit
+    # exactly on the drawn bound (sim_out's metadata describes a different
+    # trial of the noisy mean simulation).
     hist_bottom_high, hist_bottom_low = calculate_histogram_bounds(
         theta_mean,
         theta_samples,
-        sim_out if (theta_mean is not None) else None,
+        sim_out_no_noise if (theta_mean is not None) else None,
         posterior_pred_no_noise if (theta_samples is not None) else None,
         **kwargs,
     )
 
-    hist_histtype = kwargs.get("hist_histtype", "step")
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
     axis_twin_up: Axes = axis.twinx()
@@ -1007,119 +1388,358 @@ def plot_func_model(
     # for the sequence in which they are invoked.
     axis.set_zorder(1)
     axis.set_facecolor("none")
+
+    # Shared bin edges for every histogram in this facet. `bins=None` keeps
+    # the legacy bin_size grid bit-for-bit; an explicit `bins` wins and is
+    # resolved on the pooled RTs that will actually be drawn.
+    if bins is None:
+        bin_edges = np.arange(xlim_low, xlim_high, bin_size)
+    else:
+        if bin_size != 0.05:
+            _logger.warning("Both `bins` and `bin_size` were provided; `bins` wins.")
+        pooled: list[np.ndarray] = []
+        if theta_mean is not None and sim_out is not None:
+            rts = np.asarray(sim_out["rts"]).ravel()
+            pooled.append(np.abs(rts[rts != -999]))
+        if theta_samples is not None:
+            for sim_out_tmp in posterior_pred_sims.values():
+                rts = np.asarray(sim_out_tmp["rts"]).ravel()
+                pooled.append(np.abs(rts[rts != -999]))
+        if data is not None:
+            obs_rts = data["rt"].to_numpy()
+            pooled.append(np.abs(obs_rts[obs_rts != -999]))
+        bin_edges = np.histogram_bin_edges(
+            np.concatenate(pooled) if pooled else np.array([0.0, 1.0]),
+            bins=bins,
+            range=(max(xlim_low, 0.0), xlim_high),
+        )
+
+    # Per-draw density matrices (and the observed densities) in raw defective-
+    # density units. `scale` maps them all with one common factor so up/down
+    # and predicted/observed stay comparable.
+    densities_up: np.ndarray | None = None
+    densities_down: np.ndarray | None = None
+    if not legacy and theta_samples is not None:
+        densities_up, densities_down = _density_matrices(posterior_pred_sims, bin_edges)
+        if densities_up.shape[0] < 10 and uncertainty in ("band", "both"):
+            _logger.warning(
+                "Quantile bands over fewer than 10 posterior draws are noisy; "
+                "consider a larger `n_samples`."
+            )
+    plugin_up: np.ndarray | None = None
+    plugin_down: np.ndarray | None = None
+    if theta_mean is not None and sim_out is not None:
+        plugin_up, plugin_down = _density_matrices({0: sim_out}, bin_edges)
+
+    obs_up: np.ndarray | None = None
+    obs_down: np.ndarray | None = None
+    if data is not None:
+        obs_up, obs_down = _defective_densities(
+            data["rt"].to_numpy(), data["response"].to_numpy(), bin_edges
+        )
+
+    def _visible_ribbon_max() -> float:
+        # Highest point any (no-noise) boundary reaches inside the visible
+        # x-range — expanding bounds rise above their t=0 anchor.
+        n_vis = int(xlim_high / delta_t_model) + 1
+        if theta_samples is not None:
+            return max(
+                float(
+                    np.max(
+                        np.maximum(
+                            posterior_pred_no_noise[k]["metadata"]["boundary"][:n_vis],
+                            0,
+                        )
+                    )
+                )
+                for k in posterior_pred_no_noise
+            )
+        if theta_mean is not None:
+            return float(
+                np.max(np.maximum(sim_out_no_noise["metadata"]["boundary"][:n_vis], 0))
+            )
+        return 0.0
+
+    hist_height_: float | None
+    if hist_height == "auto":
+        # Fit the tallest curve into the vertical headroom. The baseline must
+        # clear the highest point any boundary ribbon reaches inside the
+        # visible x-range (expanding bounds rise above the t=0 anchor), on
+        # the tighter of the two mirrored sides.
+        effective_bottom = max(hist_bottom_high, hist_bottom_low, _visible_ribbon_max())
+        headroom = ylim_high - effective_bottom
+        if headroom > 0:
+            hist_height_ = HIST_HEIGHT_MARGIN * headroom
+        else:
+            hist_height_ = None
+            _logger.warning(
+                "hist_height='auto': no positive headroom above the histogram "
+                "baseline within ylims; using raw densities."
+            )
+    elif isinstance(hist_height, str):
+        raise ValueError(
+            f"`hist_height` must be a float, 'auto', or None; got {hist_height!r}"
+        )
+    else:
+        hist_height_ = hist_height
+
+    if hist_height_ is not None:
+        peak = max(
+            (
+                m.max()
+                for m in (densities_up, densities_down, plugin_up, plugin_down)
+                if m is not None
+            ),
+            default=0.0,
+        )
+        if obs_up is not None and obs_down is not None:
+            peak = max(peak, obs_up.max(), obs_down.max())
+        hist_scale = hist_height_ / peak if peak > 0 else 1.0
+    else:
+        hist_scale = 1.0
+
+    if ylims_auto:
+        # The mirror image of hist_height="auto": keep the raw density scale
+        # and grow the frame so the tallest drawn side (and the visible
+        # ribbon top) occupies HIST_HEIGHT_MARGIN of it. Never shrinks below
+        # the default limits, and stays symmetric like them.
+        peak_up = max(
+            (m.max() for m in (densities_up, plugin_up, obs_up) if m is not None),
+            default=0.0,
+        )
+        peak_down = max(
+            (m.max() for m in (densities_down, plugin_down, obs_down) if m is not None),
+            default=0.0,
+        )
+        content_top = max(
+            hist_bottom_high + hist_scale * peak_up,
+            hist_bottom_low + hist_scale * peak_down,
+            _visible_ribbon_max(),
+        )
+        ylim_high = max(ylim_high, float(content_top) / HIST_HEIGHT_MARGIN)
+        ylim_low = -ylim_high
+        axis.set_ylim(ylim_low, ylim_high)
+        axis_twin_up.set_ylim(ylim_low, ylim_high)
+        axis_twin_down.set_ylim(ylim_high, ylim_low)
+
     axis_twin_up.set_zorder(0)
     axis_twin_down.set_zorder(0)
 
-    if theta_mean is not None:
-        if sim_out is None:  # pragma: no cover
-            raise ValueError("No sim_out provided but theta_mean is not None")
-        data_up = np.abs(
-            sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] == 1)]
+    # Predictive histogram layers. The two twins get identical calls — the
+    # lower twin's inverted ylim renders its curves downward from the bound.
+    twin_sides = (
+        (axis_twin_up, hist_bottom_high, True),
+        (axis_twin_down, hist_bottom_low, False),
+    )
+    if not legacy:
+        band_matrices = (
+            (densities_up, densities_down)
+            if densities_up is not None and densities_down is not None
+            else (plugin_up, plugin_down)
         )
-        data_down = np.abs(
-            sim_out["rts"][(sim_out["rts"] != -999) & (sim_out["choices"] != 1)]
-        )
+        if band_matrices[0] is not None and band_matrices[1] is not None:
+            for ax_twin, bottom, is_up in twin_sides:
+                _add_uncertain_histograms(
+                    ax_twin,
+                    bin_edges,
+                    bottom,
+                    band_matrices[0] if is_up else band_matrices[1],
+                    uncertainty=uncertainty,
+                    intervals=intervals,
+                    step=step,
+                    scale=hist_scale,
+                    color=color_predictive,
+                    linestyle=linestyle_histogram,
+                    linewidth=linewidth_histogram,
+                    alpha_mean=alpha_mean,
+                    alpha_uncertainty=alpha_uncertainty,
+                    add_labels=is_up,
+                )
+    else:
+        # Legacy rendering: plug-in mean curve, plus per-draw overlays at the
+        # old fixed alpha when samples are given.
+        if plugin_up is not None and plugin_down is not None:
+            for ax_twin, bottom, is_up in twin_sides:
+                _add_uncertain_histograms(
+                    ax_twin,
+                    bin_edges,
+                    bottom,
+                    plugin_up if is_up else plugin_down,
+                    uncertainty=None,
+                    intervals=None,
+                    step=step,
+                    scale=hist_scale,
+                    color=color_predictive_mean,
+                    linestyle=linestyle_histogram,
+                    linewidth=linewidth_histogram,
+                    alpha_mean=alpha_mean,
+                    alpha_uncertainty=None,
+                    add_labels=is_up,
+                )
+        if theta_samples is not None:
+            legacy_up, legacy_down = _density_matrices(posterior_pred_sims, bin_edges)
+            for ax_twin, bottom, is_up in twin_sides:
+                _add_uncertain_histograms(
+                    ax_twin,
+                    bin_edges,
+                    bottom,
+                    legacy_up if is_up else legacy_down,
+                    uncertainty="samples",
+                    intervals=None,
+                    step=step,
+                    scale=hist_scale,
+                    color=color_predictive,
+                    linestyle=linestyle_histogram,
+                    linewidth=linewidth_histogram,
+                    alpha_mean=alpha_mean,
+                    alpha_uncertainty=legacy_alpha,
+                    add_labels=is_up,
+                    draw_mean=False,
+                )
 
-        add_histograms_to_twin_axes(
-            data_up=data_up,
-            data_down=data_down,
-            hist_bottom_high=hist_bottom_high,
-            hist_bottom_low=hist_bottom_low,
-            color_data=color_predictive_mean,
-            linewidth_histogram=linewidth_histogram,
-            bins=bins,
-            alpha=alpha_mean,
-            axis_twin_up=axis_twin_up,
-            axis_twin_down=axis_twin_down,
-            hist_histtype=hist_histtype,
-            bin_size=bin_size,
-            zorder=-1,
+    # Observed data — always a plain line on top of the stack, never banded.
+    if obs_up is not None and obs_down is not None:
+        ls_data = (
+            linestyle_histogram_data
+            if linestyle_histogram_data is not None
+            else linestyle_histogram
         )
-
-    if theta_samples is not None:
-        # Add histograms for posterior samples:
-        for k, sim_out_tmp in posterior_pred_sims.items():
-            data_up = np.abs(
-                sim_out_tmp["rts"][
-                    (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] == 1)
-                ]
+        lw_data = (
+            linewidth_histogram_data
+            if linewidth_histogram_data is not None
+            else linewidth_histogram
+        )
+        for ax_twin, bottom, is_up in twin_sides:
+            x_o, y_o = _curve_xy(bin_edges, obs_up if is_up else obs_down, step)
+            ax_twin.plot(
+                x_o,
+                bottom + hist_scale * y_o,
+                color=color_data,
+                linestyle=ls_data,
+                linewidth=lw_data,
+                zorder=4,
+                label="observed" if is_up else "_nolegend_",
             )
-            data_down = np.abs(
-                sim_out_tmp["rts"][
-                    (sim_out_tmp["rts"] != -999) & (sim_out_tmp["choices"] != 1)
-                ]
-            )
-
-            add_histograms_to_twin_axes(
-                data_up=data_up,
-                data_down=data_down,
-                hist_bottom_high=hist_bottom_high,
-                hist_bottom_low=hist_bottom_low,
-                color_data=color_predictive,
-                linewidth_histogram=linewidth_histogram,
-                bins=bins,
-                alpha=alpha_predictive,
-                axis_twin_up=axis_twin_up,
-                axis_twin_down=axis_twin_down,
-                hist_histtype=hist_histtype,
-                bin_size=bin_size,
-                zorder=-k - 1,
-            )
-
-    # Add histograms for real data
-    if data is not None:
-        data_up = data.query(f"rt != {-999} and response == {1}")["rt"].to_numpy()
-        data_down = data.query(f"rt != {-999} and response != {1}")["rt"].to_numpy()
-        add_histograms_to_twin_axes(
-            data_up=data_up,
-            data_down=data_down,
-            hist_bottom_high=hist_bottom_high,
-            hist_bottom_low=hist_bottom_low,
-            color_data=color_data,
-            linewidth_histogram=linewidth_histogram,
-            bins=bins,
-            alpha=1,
-            axis_twin_up=axis_twin_up,
-            axis_twin_down=axis_twin_down,
-            hist_histtype=hist_histtype,
-            bin_size=bin_size,
-        )
 
     z_cnt = 0  # controlling the order of elements in plot
 
     if theta_samples is not None:
-        # ADD MODEL CARTOONS:
-        t_s = np.arange(
-            0, posterior_pred_no_noise[0]["metadata"]["max_t"], delta_t_model
-        )
-
-        # Model cartoon for posterior samples
-        for j, sim_out_tmp in posterior_pred_no_noise.items():
-            _add_model_cartoon_to_ax(
-                sample=sim_out_tmp,
-                axis=axis,
-                keep_slope=keep_slope,
-                keep_boundary=keep_boundary,
-                keep_ndt=keep_ndt,
-                keep_starting_point=keep_starting_point,
-                markersize_starting_point=markersize_starting_point,
-                markertype_starting_point=markertype_starting_point,
-                markershift_starting_point=markershift_starting_point,
-                delta_t_graph=delta_t_model,
-                alpha=alpha_predictive,
-                lw_m=linewidth_model,
-                ylim_low=ylim_low,
-                ylim_high=ylim_high,
-                t_s=t_s,
-                color=color_predictive,
-                zorder_cnt=z_cnt,
+        # ADD MODEL CARTOONS (on the shared t_s grid):
+        if legacy:
+            # Legacy rendering: one full five-artist cartoon per draw,
+            # including the per-draw ndt axvlines.
+            for _, sim_out_tmp in posterior_pred_no_noise.items():
+                _add_model_cartoon_to_ax(
+                    sample=sim_out_tmp,
+                    axis=axis,
+                    keep_slope=keep_slope,
+                    keep_boundary=keep_boundary,
+                    keep_ndt=keep_ndt,
+                    keep_starting_point=keep_starting_point,
+                    markersize_starting_point=markersize_starting_point,
+                    markertype_starting_point=markertype_starting_point,
+                    markershift_starting_point=markershift_starting_point,
+                    delta_t_graph=delta_t_model,
+                    alpha=legacy_alpha,
+                    lw_m=linewidth_model,
+                    ylim_low=ylim_low,
+                    ylim_high=ylim_high,
+                    t_s=t_s,
+                    color=color_model,
+                    zorder_cnt=z_cnt,
+                )
+                z_cnt += 1
+        else:
+            b_high_m, b_low_m, drifts_m, ndts, z_abs = _geometry_arrays(
+                posterior_pred_no_noise, t_s, delta_t_model
+            )
+            n_geom_draws = b_high_m.shape[0]
+            geom_spaghetti_alpha = (
+                alpha_uncertainty
+                if alpha_uncertainty is not None
+                else float(np.clip(4.0 / n_geom_draws, 0.02, 0.25))
+            )
+            geom_base_alpha = (
+                alpha_uncertainty if alpha_uncertainty is not None else 0.25
+            )
+            ndt_ref = (
+                float(np.asarray(sim_out_no_noise["metadata"]["t"]).ravel()[0])
+                if theta_mean is not None
+                else float(np.mean(ndts))
             )
 
-            z_cnt += 1
+            if uncertainty in ("samples", "both"):
+                # Per-draw geometry spaghetti. The ndt axvlines are replaced
+                # by the rug below — N near-vertical dashed lines were the
+                # single worst clutter contributor of the old rendering.
+                for _, sim_out_tmp in posterior_pred_no_noise.items():
+                    _add_model_cartoon_to_ax(
+                        sample=sim_out_tmp,
+                        axis=axis,
+                        keep_slope=keep_slope,
+                        keep_boundary=keep_boundary,
+                        keep_ndt=False,
+                        keep_starting_point=keep_starting_point,
+                        markersize_starting_point=markersize_starting_point,
+                        markertype_starting_point=markertype_starting_point,
+                        markershift_starting_point=markershift_starting_point,
+                        delta_t_graph=delta_t_model,
+                        alpha=geom_spaghetti_alpha,
+                        lw_m=0.6 * linewidth_model,
+                        ylim_low=ylim_low,
+                        ylim_high=ylim_high,
+                        t_s=t_s,
+                        color=color_model,
+                        zorder_cnt=0,
+                    )
+
+            if uncertainty in ("band", "both") and intervals:
+                if keep_boundary:
+                    _render_boundary_bands(
+                        axis,
+                        t_s,
+                        b_high_m,
+                        b_low_m,
+                        intervals,
+                        geom_base_alpha,
+                        color_model,
+                    )
+                if keep_slope:
+                    _render_drift_band(
+                        axis,
+                        t_s,
+                        drifts_m,
+                        ndt_ref,
+                        intervals,
+                        geom_base_alpha,
+                        color_model,
+                    )
+                if keep_starting_point:
+                    _render_start_uncertainty(
+                        axis,
+                        ndt_ref,
+                        z_abs,
+                        intervals,
+                        uncertainty,
+                        geom_base_alpha,
+                        markershift_starting_point,
+                        linewidth_model,
+                        color_model,
+                    )
+            if keep_ndt:
+                _render_ndt_uncertainty(
+                    axis,
+                    ndts,
+                    intervals,
+                    uncertainty,
+                    geom_base_alpha,
+                    color_model,
+                )
 
     if theta_mean is not None:
-        t_s = np.arange(0, sim_out_no_noise["metadata"]["max_t"], delta_t_model)
-        # Model cartoon for posterior mean
+        # Model cartoon for the reference geometry. In uncertainty modes it
+        # sits above every band/spaghetti layer (zorder 1030); in legacy mode
+        # it keeps its historical slot just above the per-draw cartoons.
         _add_model_cartoon_to_ax(
             sample=sim_out_no_noise,
             axis=axis,
@@ -1136,8 +1756,8 @@ def plot_func_model(
             ylim_low=ylim_low,
             ylim_high=ylim_high,
             t_s=t_s,
-            color=color_predictive,
-            zorder_cnt=z_cnt + 1,
+            color=color_model,
+            zorder_cnt=(z_cnt + 1) if legacy else 30,
         )
 
     # Add in trajectories
@@ -1151,6 +1771,33 @@ def plot_func_model(
             alpha=alpha_trajectories,
             **kwargs,
         )
+
+    # Legend: harvest labeled artists from the main axis and the upper twin
+    # (the lower twin labels everything "_nolegend_"), order them with the
+    # shared predictive-family ranking, and dedupe by label keeping the first.
+    if legend:
+        handles: list = []
+        labels: list[str] = []
+        for ax_ in (axis, axis_twin_up):
+            h_, l_ = ax_.get_legend_handles_labels()
+            handles.extend(h_)
+            labels.extend(l_)
+        if labels:
+            seen: set[str] = set()
+            ordered = []
+            for i in _legend_order(labels):
+                if labels[i] not in seen:
+                    seen.add(labels[i])
+                    ordered.append(i)
+            # Outside the axes: the combined histogram + geometry legend is
+            # too tall to float inside the plot without covering data.
+            axis.legend(
+                [handles[i] for i in ordered],
+                [labels[i] for i in ordered],
+                frameon=False,
+                loc="center left",
+                bbox_to_anchor=(1.02, 0.5),
+            )
     return axis
 
 
@@ -1318,25 +1965,24 @@ def _add_trajectories(
     else:
         raise ValueError("The `colors` argument must be a string, list, or mapping.")
 
-    # Make bounds
-    (b_high, b_low) = (
-        np.maximum(sample[0]["metadata"]["boundary"], 0),
-        np.minimum((-1) * sample[0]["metadata"]["boundary"], 0),
-    )
-
-    b_h_init = b_high[0]
-    b_l_init = b_low[0]
-    # .item() extracts a Python scalar; required since NumPy >= 1.25 deprecated
-    # implicit ndim>0-to-scalar conversion inside int()/float().
-    n_roll = int((sample[0]["metadata"]["t"][0] / delta_t_graph + 1).item())
-    b_high = np.roll(b_high, n_roll)
-    b_high[:n_roll] = b_h_init
-    b_low = np.roll(b_low, n_roll)
-    b_low[:n_roll] = b_l_init
-
-    # Trajectories
+    # Trajectories. Bounds and ndt-roll derive per trajectory from its OWN
+    # simulation metadata (was: sample[0] anchored every marker) — value-
+    # identical while all trajectories share one θ, and correct if a caller
+    # ever passes per-draw trajectory sims.
     for i in range(n):
         metadata = sample[i]["metadata"]
+        b_high = np.maximum(metadata["boundary"], 0)
+        b_low = np.minimum((-1) * metadata["boundary"], 0)
+        b_h_init = b_high[0]
+        b_l_init = b_low[0]
+        # .item() extracts a Python scalar; required since NumPy >= 1.25
+        # deprecated implicit ndim>0-to-scalar conversion inside int()/float().
+        n_roll = int((metadata["t"][0] / delta_t_graph + 1).item())
+        b_high = np.roll(b_high, n_roll)
+        b_high[:n_roll] = b_h_init
+        b_low = np.roll(b_low, n_roll)
+        b_low[:n_roll] = b_l_init
+
         tmp_traj = metadata["trajectory"]
         tmp_traj_choice = float(sample[i]["choices"].flatten().item())
         maxid = np.minimum(np.argmax(np.where(tmp_traj > -999)), t_s.shape[0])
@@ -1372,74 +2018,188 @@ def _add_trajectories(
             )
 
 
-def add_histograms_to_twin_axes(
-    data_up: np.ndarray,
-    data_down: np.ndarray,
-    hist_bottom_high: float,
-    hist_bottom_low: float,
-    color_data: str,
-    linewidth_histogram: float,
-    bins: list[float],
-    alpha: float,
-    axis_twin_up: Axes,
-    axis_twin_down: Axes,
-    hist_histtype: Literal["bar", "barstacked", "step", "stepfilled"],
-    bin_size: float,
-    zorder: int = -1,
-):
-    """Add histograms to upper and lower twin axes.
+def _defective_densities(
+    rts: np.ndarray,
+    choices: np.ndarray,
+    bin_edges: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-side defective RT densities for one set of simulated trials.
 
-    Args:
-        data_up: Array of data points for upper histogram.
-        data_down: Array of data points for lower histogram.
-        hist_bottom_high: Bottom position for upper histogram.
-        hist_bottom_low: Bottom position for lower histogram.
-        color_data: Color to use for histogram bars/lines.
-        linewidth_histogram: Width of histogram lines.
-        bins: List of bin edges for histograms.
-        alpha: Transparency value for histograms.
-        axis_twin_up: Upper twin axis to plot on.
-        axis_twin_down: Lower twin axis to plot on.
-        hist_histtype: Type of histogram ('bar', 'barstacked', 'step', or 'stepfilled').
-        bin_size: Size of histogram bins.
-        zorder: Z-order for plot elements. Defaults to -1.
+    The upper density integrates to P(choice == 1 | valid) and the lower to
+    the complement, so the two sides jointly integrate to 1 — the invariant
+    the old per-point ``ax.hist`` weights encoded. Deadline misses (``-999``)
+    are excluded from both the numerator and the denominator, matching the
+    previous behavior. ``np.diff(bin_edges)`` generalizes the uniform
+    ``bin_size`` assumption so user-supplied edge arrays work.
     """
-    # Compute weights
-    weights_up_data = np.tile(
-        (1 / bin_size) / (data_up.shape[0] + data_down.shape[0]),
-        reps=data_up.shape[0],
-    )
-    weights_down_data = np.tile(
-        (1 / bin_size) / (data_up.shape[0] + data_down.shape[0]),
-        reps=data_down.shape[0],
-    )
+    rts = np.asarray(rts).ravel()
+    choices = np.asarray(choices).ravel()
+    valid = rts != -999
+    up = np.abs(rts[valid & (choices == 1)])
+    down = np.abs(rts[valid & (choices != 1)])
+    n_total = up.size + down.size
+    n_bins = len(bin_edges) - 1
+    if n_total == 0:
+        return np.zeros(n_bins), np.zeros(n_bins)
+    widths = np.diff(bin_edges)
+    dens_up = np.histogram(up, bins=bin_edges)[0] / (n_total * widths)
+    dens_down = np.histogram(down, bins=bin_edges)[0] / (n_total * widths)
+    return dens_up, dens_down
 
-    # Add histograms for simulated data
-    axis_twin_up.hist(
-        np.abs(data_up),
-        bins=bins,
-        weights=weights_up_data,
-        histtype=hist_histtype,
-        bottom=hist_bottom_high,
-        alpha=alpha,
-        color=color_data,
-        edgecolor=color_data,
-        linewidth=linewidth_histogram,
-        zorder=zorder,
-    )
 
-    axis_twin_down.hist(
-        np.abs(data_down),
-        bins=bins,
-        weights=weights_down_data,
-        histtype=hist_histtype,
-        bottom=hist_bottom_low,
-        alpha=alpha,
-        color=color_data,
-        edgecolor=color_data,
-        linewidth=linewidth_histogram,
-        zorder=zorder,
+def _density_matrices(
+    sim_outs: Mapping[int, dict],
+    bin_edges: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Stack per-draw defective densities into ``(n_draws, n_bins)`` matrices.
+
+    One row per posterior draw's simulation output, on the shared bin edges —
+    the substrate for pointwise mean and quantile-band computation.
+    """
+    ups, downs = zip(
+        *(
+            _defective_densities(s["rts"], s["choices"], bin_edges)
+            for s in sim_outs.values()
+        )
     )
+    return np.vstack(ups), np.vstack(downs)
+
+
+def _defective_densities_n(
+    rts: np.ndarray,
+    choices_arr: np.ndarray,
+    bin_edges: np.ndarray,
+    choices: list[int],
+) -> dict[int, np.ndarray]:
+    """Per-choice defective RT densities for one set of simulated trials.
+
+    The >2-choice sibling of `_defective_densities`: each choice's density
+    integrates to P(choice | valid), so the densities jointly integrate to 1.
+    Deadline misses (``-999``) are excluded from numerator and denominator.
+    """
+    rts = np.asarray(rts).ravel()
+    choices_arr = np.asarray(choices_arr).ravel()
+    valid = rts != -999
+    n_total = int(valid.sum())
+    n_bins = len(bin_edges) - 1
+    if n_total == 0:
+        return {choice: np.zeros(n_bins) for choice in choices}
+    widths = np.diff(bin_edges)
+    return {
+        choice: (
+            np.histogram(np.abs(rts[valid & (choices_arr == choice)]), bins=bin_edges)[
+                0
+            ]
+            / (n_total * widths)
+        )
+        for choice in choices
+    }
+
+
+def _density_matrices_n(
+    sim_outs: Mapping[int, dict],
+    bin_edges: np.ndarray,
+    choices: list[int],
+) -> dict[int, np.ndarray]:
+    """Stack per-draw per-choice densities into ``{choice: (n_draws, n_bins)}``."""
+    per_draw = [
+        _defective_densities_n(s["rts"], s["choices"], bin_edges, choices)
+        for s in sim_outs.values()
+    ]
+    return {choice: np.vstack([d[choice] for d in per_draw]) for choice in choices}
+
+
+def _add_uncertain_histograms(
+    ax: Axes,
+    bin_edges: np.ndarray,
+    bottom: float,
+    densities: np.ndarray,
+    *,
+    uncertainty: Literal["band", "samples", "both"] | None,
+    intervals: list[tuple[float, float]] | None,
+    step: bool,
+    scale: float,
+    color: str,
+    linestyle: str,
+    linewidth: float,
+    alpha_mean: float,
+    alpha_uncertainty: float | None,
+    add_labels: bool,
+    draw_mean: bool = True,
+) -> None:
+    """Draw one side's RT histogram layers onto a twin axis.
+
+    Renders the #1123 layer stack — per-draw sample curves (zorder 1), graded
+    quantile bands (2), and the mean curve (3) — from a precomputed
+    ``(n_draws, n_bins)`` density matrix. All y values are ``bottom +
+    scale * density``; the inverted ylim on the lower twin handles mirroring,
+    so this function is identical for both sides. Called exactly twice per
+    facet; ``add_labels`` is True only for the upper twin so each layer gets
+    one legend entry.
+    """
+    n_draws = densities.shape[0]
+
+    def label(text: str) -> str:
+        return text if add_labels else "_nolegend_"
+
+    # Layer 1 — per-draw sample curves ("spaghetti").
+    if uncertainty in ("samples", "both"):
+        alpha_samples = (
+            alpha_uncertainty
+            if alpha_uncertainty is not None
+            else float(np.clip(4.0 / n_draws, 0.02, 0.25))
+        )
+        first = True
+        for row in densities:
+            x, y = _curve_xy(bin_edges, row, step)
+            ax.plot(
+                x,
+                bottom + scale * y,
+                color=color,
+                linestyle=linestyle,
+                linewidth=0.6 * linewidth,
+                alpha=alpha_samples,
+                zorder=1,
+                label=label("predictive draws") if first else "_nolegend_",
+            )
+            first = False
+
+    # Layer 2 — graded uncertainty bands, widest first so narrower bands
+    # print on top with higher opacity.
+    if uncertainty in ("band", "both") and intervals:
+        base_alpha = alpha_uncertainty if alpha_uncertainty is not None else 0.25
+        band_alphas = _band_alphas(base_alpha, len(intervals))
+        for (lo, hi), band_alpha in zip(intervals, band_alphas):
+            x_b, y_lo = _curve_xy(bin_edges, np.quantile(densities, lo, axis=0), step)
+            _, y_hi = _curve_xy(bin_edges, np.quantile(densities, hi, axis=0), step)
+            ax.fill_between(
+                x_b,
+                bottom + scale * y_lo,
+                bottom + scale * y_hi,
+                color=color,
+                alpha=float(band_alpha),
+                linewidth=0,
+                zorder=2,
+                label=label(f"{hi - lo:.0%} interval"),
+            )
+
+    # Layer 3 — the predictive mean. With uncertainty on this is the pointwise
+    # mean across draws (it cannot exit its own bands); with uncertainty off
+    # the caller passes the single plug-in density as the only row. The legacy
+    # per-draw overlay path sets `draw_mean=False` because its mean curve, if
+    # any, comes from a separate plug-in call.
+    if draw_mean:
+        x_m, y_m = _curve_xy(bin_edges, densities.mean(axis=0), step)
+        ax.plot(
+            x_m,
+            bottom + scale * y_m,
+            color=color,
+            linestyle=linestyle,
+            linewidth=linewidth,
+            alpha=alpha_mean,
+            zorder=3,
+            label=label("predicted"),
+        )
 
 
 def _add_model_cartoon_to_ax(
@@ -1584,6 +2344,258 @@ def _add_model_cartoon_to_ax(
         )
 
 
+def _reduce_theta(theta: pd.DataFrame, obs: int | None = None) -> pd.DataFrame:
+    """Reduce a θ frame to one row per posterior draw.
+
+    The geometry of a cartoon must describe one coherent parameter vector —
+    this is that reduction. Frames carrying a ``(chain, draw, obs_n)``
+    MultiIndex reduce within each ``(chain, draw)`` group: the across-trials
+    mean by default, or the row whose ``obs_n`` label equals ``obs``. Frames
+    indexed by ``obs_n`` alone (the posterior-mean pseudo-draw) reduce to a
+    single row. Raises ``ValueError`` when ``obs`` is not among the frame's
+    ``obs_n`` labels (under faceting, labels are facet-local).
+    """
+    is_multi = isinstance(theta.index, pd.MultiIndex)
+    if obs is not None:
+        obs_labels = theta.index.get_level_values("obs_n") if is_multi else theta.index
+        if obs not in obs_labels:
+            raise ValueError(
+                f"obs={obs} is not an observation of this facet; available "
+                f"obs_n labels range from {obs_labels.min()} to {obs_labels.max()}."
+            )
+    if is_multi:
+        if obs is None:
+            return theta.groupby(level=["chain", "draw"], sort=True).mean()
+        return cast("pd.DataFrame", theta.xs(obs, level="obs_n"))
+    if obs is None:
+        return theta.mean().to_frame().T
+    return theta.loc[[obs]]
+
+
+def _geometry_arrays(
+    sims: Mapping[int, dict],
+    t_s: np.ndarray,
+    delta_t: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Stack per-draw geometry into matrices on the shared time grid.
+
+    Returns ``(b_high, b_low, drifts, ndts, z_abs)``. Boundaries are rolled by
+    each draw's own non-decision time (the same roll `_add_model_cartoon_to_ax`
+    applies), so pointwise quantiles across rows describe "where the bound can
+    be at absolute time t". Drift paths stay in decision time (their natural
+    frame) and are NaN beyond each draw's absorption point so
+    ``np.nanquantile`` sees only live draws.
+    """
+    n_t = t_s.shape[0]
+    n_draws = len(sims)
+    b_high_m = np.empty((n_draws, n_t))
+    b_low_m = np.empty((n_draws, n_t))
+    drifts = np.full((n_draws, n_t), np.nan)
+    ndts = np.empty(n_draws)
+    z_abs = np.empty(n_draws)
+
+    for i, sample in enumerate(sims.values()):
+        meta = sample["metadata"]
+        b_high = np.maximum(meta["boundary"], 0)
+        b_low = np.minimum((-1) * meta["boundary"], 0)
+        b_h_init = b_high[0]
+        b_l_init = b_low[0]
+        n_roll = int((meta["t"][0] / delta_t + 1).item())
+        b_high = np.roll(b_high, n_roll)
+        b_high[:n_roll] = b_h_init
+        b_low = np.roll(b_low, n_roll)
+        b_low[:n_roll] = b_l_init
+        # The simulator's grid can be a sample shorter or longer than t_s;
+        # constant-extend the last value rather than assume len >= n_t.
+        m = min(b_high.shape[0], n_t)
+        b_high_m[i, :m] = b_high[:m]
+        b_high_m[i, m:] = b_high[m - 1]
+        b_low_m[i, :m] = b_low[:m]
+        b_low_m[i, m:] = b_low[m - 1]
+
+        traj = np.asarray(meta["trajectory"]).ravel()
+        maxid = int(np.minimum(np.argmax(np.where(traj > -999)), n_t))
+        drifts[i, :maxid] = traj[:maxid]
+
+        ndts[i] = float(np.asarray(meta["t"]).ravel()[0])
+        z_val = float(np.asarray(meta["z"]).ravel()[0])
+        z_abs[i] = b_l_init + z_val * (b_h_init - b_l_init)
+
+    return b_high_m, b_low_m, drifts, ndts, z_abs
+
+
+def _drift_matrices_n(
+    sims: Mapping[int, dict],
+    t_s: np.ndarray,
+    n_choices: int,
+) -> dict[int, np.ndarray]:
+    """Stack per-draw, per-accumulator drift paths onto the shared time grid.
+
+    The n-choice simulator records one trajectory column per accumulator;
+    each column is NaN-masked beyond its recorded extent so pointwise
+    quantiles across draws see only live paths (mirrors `_geometry_arrays`,
+    whose flattened trajectory handling is 2-choice-only).
+    """
+    n_t = t_s.shape[0]
+    n_draws = len(sims)
+    drifts = {j: np.full((n_draws, n_t), np.nan) for j in range(n_choices)}
+    for i, sample in enumerate(sims.values()):
+        traj = np.atleast_2d(np.asarray(sample["metadata"]["trajectory"]))
+        for j in range(min(n_choices, traj.shape[1])):
+            col = traj[:, j]
+            maxid = int(np.minimum(np.argmax(np.where(col > -999)), n_t))
+            drifts[j][i, :maxid] = col[:maxid]
+    return drifts
+
+
+def _render_boundary_bands(
+    axis: Axes,
+    t_s: np.ndarray,
+    b_high: np.ndarray,
+    b_low: np.ndarray,
+    intervals: list[tuple[float, float]],
+    base_alpha: float,
+    color: str,
+) -> None:
+    """Graded fan-chart ribbons around the upper and lower decision bounds.
+
+    One ``fill_between`` ribbon per interval per bound — a band *around* the
+    boundary curve, not a fill to zero — drawn widest-first so narrower bands
+    print on top with higher opacity.
+    """
+    band_alphas = _band_alphas(base_alpha, len(intervals))
+    for (lo, hi), band_alpha in zip(intervals, band_alphas):
+        axis.fill_between(
+            t_s,
+            np.quantile(b_high, lo, axis=0),
+            np.quantile(b_high, hi, axis=0),
+            color=color,
+            alpha=float(band_alpha),
+            linewidth=0,
+            zorder=1010,
+            label=f"boundary {hi - lo:.0%} interval",
+        )
+        axis.fill_between(
+            t_s,
+            np.quantile(b_low, lo, axis=0),
+            np.quantile(b_low, hi, axis=0),
+            color=color,
+            alpha=float(band_alpha),
+            linewidth=0,
+            zorder=1010,
+            label="_nolegend_",
+        )
+
+
+def _render_drift_band(
+    axis: Axes,
+    t_s: np.ndarray,
+    drifts: np.ndarray,
+    ndt_ref: float,
+    intervals: list[tuple[float, float]],
+    base_alpha: float,
+    color: str,
+) -> None:
+    """Drift cone: graded filled quantile bands, like every other band layer.
+
+    The same fan-chart treatment as the boundary ribbons and the RT-histogram
+    bands, so the figure has one visual vocabulary for uncertainty (and the
+    dashed linestyle stays reserved for the non-decision-time reference
+    line). The graded alpha ladder keeps the fills light enough not to
+    occlude the reference drift path or trajectories. Quantiles are taken in
+    decision time (each draw's path starts at its own t=0) and the cone is
+    truncated at the first absorption across draws: beyond that point the
+    surviving subsample is selection-biased (slow-drift, high-bound draws),
+    which visibly bends the quantiles upward. The cone is plotted shifted by
+    the reference geometry's non-decision time.
+    """
+    alive = ~np.isnan(drifts)
+    keep = alive.all(axis=0)
+    if not keep.any():
+        return
+    last = int(keep.size if keep.all() else np.argmin(keep))
+    if last < 2:
+        return
+    tt = t_s[:last] + ndt_ref
+    band_alphas = _band_alphas(base_alpha, len(intervals))
+    for (lo, hi), band_alpha in zip(intervals, band_alphas):
+        axis.fill_between(
+            tt,
+            np.nanquantile(drifts[:, :last], lo, axis=0),
+            np.nanquantile(drifts[:, :last], hi, axis=0),
+            color=color,
+            alpha=float(band_alpha),
+            linewidth=0,
+            zorder=1012,
+            label=f"drift {hi - lo:.0%} interval",
+        )
+
+
+def _render_ndt_uncertainty(
+    axis: Axes,
+    ndts: np.ndarray,
+    intervals: list[tuple[float, float]] | None,
+    mode: Literal["band", "samples", "both"] | None,
+    base_alpha: float,
+    color: str,
+) -> None:
+    """Non-decision-time uncertainty: a graded axvspan envelope.
+
+    Replaces the per-draw ``axvline`` smear (N near-identical dashed verticals
+    was the single worst clutter contributor). Drawn in every uncertainty mode
+    — a vertical envelope hugging the dashed reference line is the natural
+    reading of "where can the non-decision time be", and when the posterior
+    spread is tiny the spans read as a slight thickening of the line, which is
+    the honest rendering of "almost no uncertainty".
+    """
+    if mode is not None and intervals:
+        band_alphas = _band_alphas(base_alpha, len(intervals))
+        for (lo, hi), band_alpha in zip(intervals, band_alphas):
+            axis.axvspan(
+                float(np.quantile(ndts, lo)),
+                float(np.quantile(ndts, hi)),
+                color=color,
+                alpha=float(band_alpha),
+                linewidth=0,
+                zorder=1002,
+                label="_nolegend_",
+            )
+
+
+def _render_start_uncertainty(
+    axis: Axes,
+    ndt_ref: float,
+    z_abs: np.ndarray,
+    intervals: list[tuple[float, float]] | None,
+    mode: Literal["band", "samples", "both"],
+    base_alpha: float,
+    markershift: float,
+    linewidth: float,
+    color: str,
+) -> None:
+    """Starting-point uncertainty: a vertical interval whisker.
+
+    The starting point is a scalar per draw, so the minimal honest device is
+    a capped whisker spanning the widest interval's quantiles at the reference
+    non-decision time. The per-draw scatter cloud in samples mode is emitted
+    by the per-draw cartoon calls themselves.
+    """
+    if mode in ("band", "both") and intervals:
+        lo, hi = intervals[0]
+        x = ndt_ref + markershift
+        axis.plot(
+            [x, x],
+            [float(np.quantile(z_abs, lo)), float(np.quantile(z_abs, hi))],
+            color=color,
+            linewidth=linewidth,
+            alpha=min(1.0, 2.0 * base_alpha),
+            marker="_",
+            markersize=8,
+            zorder=1031,
+            label="_nolegend_",
+        )
+
+
 def plot_func_model_n(
     model_name: str,
     axis: Axes,
@@ -1592,19 +2604,29 @@ def plot_func_model_n(
     data: pd.DataFrame | None = None,
     n_trajectories: int = 10,
     bin_size: float = 0.05,
-    n_samples: int = 10,
+    bins: int | np.ndarray | str | None = None,
+    step: bool = True,
+    uncertainty: Literal["band", "samples", "both"] | None = None,
+    intervals: list[tuple[float, float]] | None = None,
+    hist_height: float | Literal["auto"] | None = None,
+    n_reps: int = 10,
     linewidth_histogram: float | int = 0.5,
     linewidth_model: float | int = 0.5,
+    linestyle_histogram: str = "-.",
+    linestyle_histogram_data: str | None = "-",
+    linewidth_histogram_data: float | None = None,
     legend_fontsize: int = 7,
     legend_shadow: bool = True,
     legend_location: str = "upper right",
     delta_t_model: float = 0.01,
     add_legend: bool = True,
     alpha_mean: float = 1.0,
-    alpha_predictive: float = 0.05,
+    alpha_predictive: float | None = None,
+    alpha_uncertainty: float | None = None,
     alpha_trajectories: float = 0.5,
     keep_frame: bool = False,
-    random_state: int | None = None,
+    random_state: int | np.random.Generator | None = None,
+    obs: int | None = None,
     choices: list[int] | None = None,
     **kwargs,
 ) -> Axes:
@@ -1650,8 +2672,14 @@ def plot_func_model_n(
         Transparency for trajectory paths.
     keep_frame : bool, default=False
         Whether to keep the frame around the plot.
-    random_state : int, optional
-        Random seed for reproducibility.
+    random_state : int | np.random.Generator, optional
+        Seed (or an existing Generator, passed through unchanged) for every
+        random choice in this renderer; stream order as in
+        ``plot_func_model``. Defaults to None (fresh entropy).
+    obs : int, optional
+        The ``obs_n`` label of one trial to condition the cartoon on; see
+        ``plot_func_model``. Defaults to None (trial-mean geometry, marginal
+        histograms).
     **kwargs
         Additional keyword arguments passed to plotting functions.
 
@@ -1659,103 +2687,137 @@ def plot_func_model_n(
     -----
     This function visualizes model predictions by plotting simulated trajectories,
     histograms of response times, and model cartoons. It can show both the mean
-    prediction and uncertainty from posterior samples.
+    prediction and uncertainty from posterior samples. `uncertainty` follows the
+    same vocabulary as `plot_func_model`; None keeps the legacy rendering.
     """
-    ylim_low, ylim_high = kwargs.get("ylims", (0, 5))
+    if "n_samples" in kwargs:
+        _logger.warning(
+            "plot_func_model_n(n_samples=...) was renamed to n_reps= (simulation "
+            "repetitions per parameter row); the old name will stop working in "
+            "a future release."
+        )
+        n_reps = kwargs.pop("n_samples")
+    if alpha_predictive is not None and alpha_uncertainty is None:
+        alpha_uncertainty = alpha_predictive
+    legacy_alpha = alpha_predictive if alpha_predictive is not None else 0.05
+    legacy = uncertainty is None
+
+    ylims_setting = kwargs.get("ylims", (0, 5))
+    ylims_auto = False
+    if isinstance(ylims_setting, str):
+        if ylims_setting != "auto":
+            raise ValueError(
+                f"`ylims` must be a (low, high) tuple, 'auto', or None; "
+                f"got {ylims_setting!r}"
+            )
+        if hist_height == "auto":
+            raise ValueError(
+                "`hist_height='auto'` and `ylims='auto'` are mutually "
+                "exclusive: one fits the histograms into the frame, the "
+                "other fits the frame around the histograms."
+            )
+        ylims_auto = True
+        ylim_low, ylim_high = 0.0, 5.0
+    else:
+        ylim_low, ylim_high = ylims_setting
     xlim_low, xlim_high = kwargs.get("xlims", (0, 5))
 
-    # # Extract some parameters from kwargs
+    # Shared horizon/grid; see plot_func_model for why noisy RT sims keep the
+    # simulator's long default horizon instead.
+    max_t_geom = xlim_high + 0.5
+    t_s = np.arange(0, max_t_geom, delta_t_model)
+
     axis.set_xlim(xlim_low, xlim_high)
     axis.set_ylim(ylim_low, ylim_high)
-    bins = list(np.arange(xlim_low, xlim_high, bin_size))
 
     # ADD MODEL:
 
     # RUN SIMULATIONS
     # -------------------------------
 
-    # Simulator Data
-    if random_state is not None:
-        np.random.seed(random_state)
-
-    rand_int = np.random.randint(0, 400000000)
+    # One Generator drives every random choice; see plot_func_model.
+    rng = np.random.default_rng(random_state)
+    theta_ref: pd.DataFrame | None = None
+    theta_draws: pd.DataFrame | None = None
     if theta_mean is not None:
+        # See plot_func_model: histograms marginal by default, conditioned on
+        # one trial when obs= is given; geometry always from the reduced θ.
+        theta_ref = _reduce_theta(theta_mean, obs)
         sim_out = simulator(
             model=model_name,
-            theta=theta_mean.values,
-            n_samples=n_samples,
+            theta=theta_mean.values if obs is None else theta_ref.values,
+            n_samples=n_reps,
             no_noise=False,
             delta_t=delta_t_model,
-            random_state=rand_int,
+            random_state=int(rng.integers(0, 2**31 - 1)),
         )
 
         sim_out_no_noise = simulator(
             model=model_name,
-            theta=theta_mean.loc[np.random.choice(theta_mean.shape[0], 1), :].values,
+            theta=theta_ref.values,
             n_samples=1,
             no_noise=True,
             delta_t=delta_t_model,
+            max_t=max_t_geom,
             smooth_unif=False,
         )
 
     # Simulate model without noise: posterior samples
     if theta_samples is not None:
+        theta_draws = _reduce_theta(theta_samples, obs)
         posterior_pred_no_noise = {}
         posterior_pred_sims = {}
-        for i, (chain, draw) in enumerate(
-            list(theta_samples.index.droplevel("obs_n").unique())
-        ):
+        for i, (chain, draw) in enumerate(theta_draws.index):
             # Simulate model: no noise
+            # One reduced θ per (chain, draw); see plot_func_model.
             posterior_pred_no_noise[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].values,
+                theta=theta_draws.iloc[[i]].values,
                 n_samples=1,
                 no_noise=True,
                 delta_t=delta_t_model,
+                max_t=max_t_geom,
                 smooth_unif=False,
             )
 
-            # Simulate model: posterior samples
+            # Simulate model: posterior samples. n_reps was silently ignored
+            # here (n_samples=1), so the per-choice bands summarized
+            # single-rep, near-degenerate histograms.
             posterior_pred_sims[i] = simulator(
                 model=model_name,
-                theta=theta_samples.loc[(chain, draw), :].values,
+                theta=(
+                    theta_samples.loc[(chain, draw), :].values
+                    if obs is None
+                    else theta_draws.iloc[[i]].values
+                ),
+                n_samples=n_reps,
+                no_noise=False,
+                delta_t=delta_t_model,
+                random_state=int(rng.integers(0, 2**31 - 1)),
+            )
+
+    # Simulate trajectories at the reduced reference θ; see plot_func_model.
+    sim_out_traj = {}
+    if n_trajectories > 0:
+        if theta_ref is not None:
+            theta_traj = theta_ref
+        elif theta_draws is not None:
+            # Direct renderer calls without theta_mean: one real draw's θ —
+            # deterministic under the seed, never a composed vector.
+            theta_traj = theta_draws.iloc[[int(rng.integers(len(theta_draws)))]]
+        else:
+            raise ValueError("No theta values provided but n_trajectories is > 0")
+        for i in range(n_trajectories):
+            sim_out_traj[i] = simulator(
+                model=model_name,
+                theta=theta_traj.values,
                 n_samples=1,
                 no_noise=False,
                 delta_t=delta_t_model,
-                random_state=rand_int,
+                max_t=max_t_geom,
+                random_state=int(rng.integers(0, 2**31 - 1)),
+                smooth_unif=False,
             )
-
-    # Simulate trajectories
-    sim_out_traj = {}
-    for i in range(n_trajectories):
-        if theta_mean is not None:
-            tmp_theta = theta_mean.loc[
-                (np.random.choice(theta_mean.shape[0], 1)), :
-            ].values
-        elif theta_samples is not None:
-            # wrap in max statement here
-            # because negative value are possible,
-            # however refer to data instead of posterior samples
-            random_index = tuple(
-                [
-                    np.random.choice(theta_samples.index.get_level_values(name_))
-                    for name_ in ("chain", "draw", "obs_n")
-                ]
-            )
-
-            tmp_theta = theta_samples.loc[random_index, :].values
-        else:
-            raise ValueError("No theta values provided but n_trajectories is > 0")
-
-        sim_out_traj[i] = simulator(
-            model=model_name,
-            theta=tmp_theta,
-            n_samples=1,
-            no_noise=False,
-            delta_t=delta_t_model,
-            random_state=rand_int + i,
-            smooth_unif=False,
-        )
 
     # ADD HISTOGRAMS
     # -------------------------------
@@ -1763,149 +2825,310 @@ def plot_func_model_n(
     # fall back to the registry for built-in models called directly.
     if choices is None:
         choices = default_model_config[cast("SupportedModels", model_name)]["choices"]
-    cnt_cumul = 0
 
-    # POSTERIOR MEAN BASED HISTOGRAM
+    # Shared bin edges for every histogram on this axis (see plot_func_model).
+    if bins is None:
+        bin_edges = np.arange(xlim_low, xlim_high, bin_size)
+    else:
+        if bin_size != 0.05:
+            _logger.warning("Both `bins` and `bin_size` were provided; `bins` wins.")
+        pooled: list[np.ndarray] = []
+        if theta_mean is not None:
+            rts_arr = np.asarray(sim_out["rts"]).ravel()
+            pooled.append(np.abs(rts_arr[rts_arr != -999]))
+        if theta_samples is not None:
+            for sim_out_tmp in posterior_pred_sims.values():
+                rts_arr = np.asarray(sim_out_tmp["rts"]).ravel()
+                pooled.append(np.abs(rts_arr[rts_arr != -999]))
+        if data is not None:
+            obs_rts = data["rt"].to_numpy()
+            pooled.append(np.abs(obs_rts[obs_rts != -999]))
+        bin_edges = np.histogram_bin_edges(
+            np.concatenate(pooled) if pooled else np.array([0.0, 1.0]),
+            bins=bins,
+            range=(max(xlim_low, 0.0), xlim_high),
+        )
+
+    # One shared baseline: the reference no-noise boundary at t=0 when a mean
+    # is drawn (the same anchor the reference cartoon uses), else the max over
+    # the sampled draws' boundaries, else the axis floor (data-only call).
     if theta_mean is not None:
-        b = np.maximum(sim_out["metadata"]["boundary"], 0)
-        bottom = b[0]
-
-        for i, choice in enumerate(choices):
-            tmp_label = None
-
-            if add_legend and i == 0:
-                tmp_label = "PostPred"
-
-            weights = np.tile(
-                (1 / bin_size)
-                / sim_out["rts"][sim_out["rts"] != -999].flatten().shape[0],
-                reps=sim_out["rts"][
-                    (sim_out["choices"] == choice) & (sim_out["rts"] != -999)
-                ]
-                .flatten()
-                .shape[0],
-            )
-
-            axis.hist(
-                np.abs(
-                    sim_out["rts"][
-                        (sim_out["choices"] == choice) & (sim_out["rts"] != -999)
-                    ]
-                ),
-                bins=bins,
-                bottom=bottom,
-                weights=weights,
-                histtype="step",
-                alpha=alpha_mean,
-                color=TRAJ_COLOR_DEFAULT_DICT[choice],
-                zorder=cnt_cumul,
-                label=tmp_label,
-                linewidth=linewidth_histogram,
-                linestyle="-.",
-            )
-            cnt_cumul += 1
-
-    # POSTERIOR SAMPLE BASED HISTOGRAM
-    if theta_samples is not None:
-        if theta_mean is None:
-            bottom = np.max(
+        bottom = float(np.maximum(sim_out_no_noise["metadata"]["boundary"], 0)[0])
+    elif theta_samples is not None:
+        bottom = float(
+            np.max(
                 [
                     np.maximum(
                         posterior_pred_no_noise[key_]["metadata"]["boundary"], 0
                     )[0]
-                    for key_, _ in posterior_pred_no_noise.items()
+                    for key_ in posterior_pred_no_noise
                 ]
             )
+        )
+    else:
+        bottom = 0.0
 
-        for k, sim_out_tmp in posterior_pred_sims.items():
-            for i, choice in enumerate(choices):
-                tmp_label = None
-
-                if add_legend and i == 0:
-                    tmp_label = "PostPred"
-
-                weights = np.tile(
-                    (1 / bin_size)
-                    / sim_out_tmp["rts"][sim_out_tmp["rts"] != -999].shape[0],
-                    reps=sim_out_tmp["rts"][
-                        (sim_out_tmp["choices"] == choice)
-                        & (sim_out_tmp["rts"] != -999)
-                    ].shape[0],
-                )
-
-                axis.hist(
-                    np.abs(
-                        sim_out_tmp["rts"][
-                            (sim_out_tmp["choices"] == choice)
-                            & (sim_out_tmp["rts"] != -999)
-                        ]
-                    ),
-                    bins=bins,
-                    bottom=bottom,
-                    weights=weights,
-                    histtype="step",
-                    alpha=alpha_predictive,
-                    color=TRAJ_COLOR_DEFAULT_DICT[choice],
-                    zorder=cnt_cumul,
-                    label=tmp_label,
-                    linewidth=linewidth_histogram,
-                    linestyle="-.",
-                )
-                cnt_cumul += 1
-
-    # DATA BASED HISTOGRAM
+    # Per-choice density matrices in raw defective-density units.
+    sample_densities: dict[int, np.ndarray] | None = None
+    if theta_samples is not None:
+        sample_densities = _density_matrices_n(posterior_pred_sims, bin_edges, choices)
+        n_hist_draws = next(iter(sample_densities.values())).shape[0]
+        if n_hist_draws < 10 and uncertainty in ("band", "both"):
+            _logger.warning(
+                "Quantile bands over fewer than 10 posterior draws are noisy; "
+                "consider a larger `n_samples`."
+            )
+    plugin_densities: dict[int, np.ndarray] | None = None
+    if theta_mean is not None:
+        plugin_densities = _density_matrices_n({0: sim_out}, bin_edges, choices)
+    obs_densities: dict[int, np.ndarray] | None = None
     if data is not None:
+        obs_densities = _defective_densities_n(
+            data["rt"].to_numpy(), data["response"].to_numpy(), bin_edges, choices
+        )
+
+    def _visible_ribbon_max() -> float:
+        # Highest point any (no-noise) boundary reaches inside the visible
+        # x-range — expanding bounds rise above their t=0 anchor.
+        n_vis = int(xlim_high / delta_t_model) + 1
+        if theta_samples is not None:
+            return max(
+                float(
+                    np.max(
+                        np.maximum(
+                            posterior_pred_no_noise[k]["metadata"]["boundary"][:n_vis],
+                            0,
+                        )
+                    )
+                )
+                for k in posterior_pred_no_noise
+            )
+        if theta_mean is not None:
+            return float(
+                np.max(np.maximum(sim_out_no_noise["metadata"]["boundary"][:n_vis], 0))
+            )
+        return 0.0
+
+    hist_height_: float | None
+    if hist_height == "auto":
+        # Single, non-mirrored axis: one shared baseline; the ribbon exists
+        # only on the single upward bound. See plot_func_model.
+        effective_bottom = max(bottom, _visible_ribbon_max())
+        headroom = ylim_high - effective_bottom
+        if headroom > 0:
+            hist_height_ = HIST_HEIGHT_MARGIN * headroom
+        else:
+            hist_height_ = None
+            _logger.warning(
+                "hist_height='auto': no positive headroom above the histogram "
+                "baseline within ylims; using raw densities."
+            )
+    elif isinstance(hist_height, str):
+        raise ValueError(
+            f"`hist_height` must be a float, 'auto', or None; got {hist_height!r}"
+        )
+    else:
+        hist_height_ = hist_height
+
+    if hist_height_ is not None:
+        peak = max(
+            (
+                float(v.max())
+                for group in (sample_densities, plugin_densities, obs_densities)
+                if group is not None
+                for v in group.values()
+            ),
+            default=0.0,
+        )
+        hist_scale = hist_height_ / peak if peak > 0 else 1.0
+    else:
+        hist_scale = 1.0
+
+    if ylims_auto:
+        # See plot_func_model: raw density scale kept, frame grown instead.
+        peak_all = max(
+            (
+                float(v.max())
+                for group in (sample_densities, plugin_densities, obs_densities)
+                if group is not None
+                for v in group.values()
+            ),
+            default=0.0,
+        )
+        content_top = max(bottom + hist_scale * peak_all, _visible_ribbon_max())
+        ylim_high = max(ylim_high, content_top / HIST_HEIGHT_MARGIN)
+        axis.set_ylim(ylim_low, ylim_high)
+
+    if not legacy:
+        band_densities = (
+            sample_densities if sample_densities is not None else plugin_densities
+        )
+        if band_densities is not None:
+            for i, choice in enumerate(choices):
+                _add_uncertain_histograms(
+                    axis,
+                    bin_edges,
+                    bottom,
+                    band_densities[choice],
+                    uncertainty=uncertainty,
+                    intervals=intervals,
+                    step=step,
+                    scale=hist_scale,
+                    color=TRAJ_COLOR_DEFAULT_DICT[choice],
+                    linestyle=linestyle_histogram,
+                    linewidth=linewidth_histogram,
+                    alpha_mean=alpha_mean,
+                    alpha_uncertainty=alpha_uncertainty,
+                    add_labels=(i == 0),
+                )
+    else:
+        if plugin_densities is not None:
+            for i, choice in enumerate(choices):
+                _add_uncertain_histograms(
+                    axis,
+                    bin_edges,
+                    bottom,
+                    plugin_densities[choice],
+                    uncertainty=None,
+                    intervals=None,
+                    step=step,
+                    scale=hist_scale,
+                    color=TRAJ_COLOR_DEFAULT_DICT[choice],
+                    linestyle=linestyle_histogram,
+                    linewidth=linewidth_histogram,
+                    alpha_mean=alpha_mean,
+                    alpha_uncertainty=None,
+                    add_labels=(i == 0),
+                )
+        if sample_densities is not None:
+            for i, choice in enumerate(choices):
+                _add_uncertain_histograms(
+                    axis,
+                    bin_edges,
+                    bottom,
+                    sample_densities[choice],
+                    uncertainty="samples",
+                    intervals=None,
+                    step=step,
+                    scale=hist_scale,
+                    color=TRAJ_COLOR_DEFAULT_DICT[choice],
+                    linestyle=linestyle_histogram,
+                    linewidth=linewidth_histogram,
+                    alpha_mean=alpha_mean,
+                    alpha_uncertainty=legacy_alpha,
+                    add_labels=(i == 0),
+                    draw_mean=False,
+                )
+
+    if obs_densities is not None:
+        ls_data = (
+            linestyle_histogram_data
+            if linestyle_histogram_data is not None
+            else linestyle_histogram
+        )
+        lw_data = (
+            linewidth_histogram_data
+            if linewidth_histogram_data is not None
+            else linewidth_histogram
+        )
         for i, choice in enumerate(choices):
-            tmp_label = None
-
-            if add_legend and (i == 0):
-                tmp_label = "Data"
-
-            data_tmp = data.query(f"rt != {-999} and response == {choice}")["rt"].values
-            weights = np.tile(
-                (1 / bin_size) / data.shape[0],
-                reps=data_tmp.shape[0],
-            )
-
-            axis.hist(
-                np.abs(data_tmp),
-                bins=bins,
-                bottom=bottom,
-                weights=weights,
-                histtype="step",
-                alpha=1,
+            x_o, y_o = _curve_xy(bin_edges, obs_densities[choice], step)
+            axis.plot(
+                x_o,
+                bottom + hist_scale * y_o,
                 color=TRAJ_COLOR_DEFAULT_DICT[choice],
-                zorder=cnt_cumul,
-                label="Data",
-                linewidth=linewidth_histogram,
-                linestyle="-",
+                linestyle=ls_data,
+                linewidth=lw_data,
+                zorder=4,
+                label="observed" if i == 0 else "_nolegend_",
             )
-            cnt_cumul += 1
 
     # ADD MODEL CARTOONS:
 
     tmp_label = None
     z_cnt = 0
     if theta_samples is not None:
-        for k, sim_out_tmp in posterior_pred_no_noise.items():
-            t_s = np.arange(0, sim_out_tmp["metadata"]["max_t"], delta_t_model)
-            _add_model_n_cartoon_to_ax(
-                sample=sim_out_tmp,
-                axis=axis,
-                delta_t_graph=delta_t_model,
-                alpha=alpha_predictive,
-                lw_m=linewidth_model,
-                tmp_label=tmp_label,
-                linestyle="-",
-                ylim=ylim_high,
-                t_s=t_s,
-                color_dict=TRAJ_COLOR_DEFAULT_DICT,
-                zorder_cnt=z_cnt,
+        if legacy or uncertainty in ("samples", "both"):
+            # Per-draw cartoons. In the uncertainty modes the per-draw ndt
+            # axvline (drawn via keep_starting_point in this renderer) is
+            # replaced by the rug/spans below.
+            spaghetti_alpha = (
+                legacy_alpha
+                if legacy
+                else (
+                    alpha_uncertainty
+                    if alpha_uncertainty is not None
+                    else float(np.clip(4.0 / len(posterior_pred_no_noise), 0.02, 0.25))
+                )
             )
-            z_cnt += 1
+            for _, sim_out_tmp in posterior_pred_no_noise.items():
+                _add_model_n_cartoon_to_ax(
+                    sample=sim_out_tmp,
+                    axis=axis,
+                    delta_t_graph=delta_t_model,
+                    alpha=spaghetti_alpha,
+                    lw_m=linewidth_model if legacy else 0.6 * linewidth_model,
+                    tmp_label=tmp_label,
+                    linestyle="-",
+                    ylim=ylim_high,
+                    t_s=t_s,
+                    color_dict=TRAJ_COLOR_DEFAULT_DICT,
+                    zorder_cnt=z_cnt if legacy else 0,
+                    keep_starting_point=legacy,
+                )
+                z_cnt += 1
+
+        if not legacy:
+            b_high_m, _, _, ndts, _ = _geometry_arrays(
+                posterior_pred_no_noise, t_s, delta_t_model
+            )
+            geom_base_alpha = (
+                alpha_uncertainty if alpha_uncertainty is not None else 0.25
+            )
+            if uncertainty in ("band", "both") and intervals:
+                # Single upward boundary: one graded ribbon per interval.
+                band_alphas_ = _band_alphas(geom_base_alpha, len(intervals))
+                for (lo, hi), band_alpha in zip(intervals, band_alphas_):
+                    axis.fill_between(
+                        t_s,
+                        np.quantile(b_high_m, lo, axis=0),
+                        np.quantile(b_high_m, hi, axis=0),
+                        color="black",
+                        alpha=float(band_alpha),
+                        linewidth=0,
+                        zorder=1010,
+                        label=f"boundary {hi - lo:.0%} interval",
+                    )
+                # Per-choice drift cones, one graded band per interval in
+                # that accumulator's color. The graded-alpha ladder keeps
+                # the overlap readable (the reason cones were previously
+                # left to the samples display).
+                drifts_n = _drift_matrices_n(posterior_pred_no_noise, t_s, len(choices))
+                ndt_ref_n = (
+                    float(np.asarray(sim_out_no_noise["metadata"]["t"]).ravel()[0])
+                    if theta_mean is not None
+                    else float(np.mean(ndts))
+                )
+                for j, choice in enumerate(choices):
+                    _render_drift_band(
+                        axis,
+                        t_s,
+                        drifts_n[j],
+                        ndt_ref_n,
+                        intervals,
+                        geom_base_alpha,
+                        TRAJ_COLOR_DEFAULT_DICT[choice],
+                    )
+            _render_ndt_uncertainty(
+                axis,
+                ndts,
+                intervals,
+                uncertainty,
+                geom_base_alpha,
+                "black",
+            )
 
     if theta_mean is not None:
-        t_s = np.arange(0, sim_out_no_noise["metadata"]["max_t"], delta_t_model)
         _add_model_n_cartoon_to_ax(
             sample=sim_out_no_noise,
             axis=axis,
@@ -1917,7 +3140,7 @@ def plot_func_model_n(
             ylim=ylim_high,
             t_s=t_s,
             color_dict=TRAJ_COLOR_DEFAULT_DICT,
-            zorder_cnt=z_cnt + 1,
+            zorder_cnt=(z_cnt + 1) if legacy else 30,
         )
 
     if (n_trajectories > 0) and (
@@ -1943,6 +3166,7 @@ def plot_func_model_n(
         custom_titles = ["response: " + str(choice) for choice in choices]
 
         custom_elems.append(Line2D([0], [0], color="black", lw=1.0, linestyle="dashed"))
+        custom_titles.append("ndt")
 
         axis.legend(
             custom_elems,
@@ -2008,17 +3232,18 @@ def _add_trajectories_n(
     """
     colors_dict = TRAJ_COLOR_DEFAULT_DICT
 
-    # Make bounds
-    b = np.maximum(sample[0]["metadata"]["boundary"], 0)
-    b_init = b[0]
-    # .item(): NumPy >= 1.25 deprecated implicit ndim>0-to-scalar conversion.
-    n_roll = int((sample[0]["metadata"]["t"][0] / delta_t_graph + 1).item())
-    b = np.roll(b, n_roll)
-    b[:n_roll] = b_init
-
-    # Trajectories
+    # Trajectories. Bounds and ndt-roll derive per trajectory from its own
+    # metadata; see _add_trajectories.
     for i in range(n):
         metadata = sample[i]["metadata"]
+        b = np.maximum(metadata["boundary"], 0)
+        b_init = b[0]
+        # .item(): NumPy >= 1.25 deprecated implicit ndim>0-to-scalar
+        # conversion.
+        n_roll = int((metadata["t"][0] / delta_t_graph + 1).item())
+        b = np.roll(b, n_roll)
+        b[:n_roll] = b_init
+
         tmp_traj = metadata["trajectory"]
         tmp_traj_choice = float(sample[i]["choices"].flatten().item())
 

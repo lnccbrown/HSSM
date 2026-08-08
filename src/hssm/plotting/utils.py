@@ -17,6 +17,7 @@ def _xarray_to_df(
     posterior: xr.DataArray,
     n_samples: int | float | None,
     response_str: str = "rt,response",
+    rng: np.random.Generator | None = None,
 ) -> pd.DataFrame:
     """Extract samples from posterior and converts it to a DataFrame.
 
@@ -36,13 +37,16 @@ def _xarray_to_df(
         extracted from the draw dimension. When None, all samples are extracted.
     response_str
         The names of the response variable in the posterior.
+    rng
+        A seeded Generator for the draw selection; None keeps the legacy
+        global-RNG behavior.
 
     Returns
     -------
     pd.DataFrame
         A dataframe with the posterior samples.
     """
-    sampled_posterior = _random_sample(posterior, n_samples=n_samples)
+    sampled_posterior = _random_sample(posterior, n_samples=n_samples, rng=rng)
 
     # Convert the posterior samples to a dataframe
     stacked = (
@@ -56,8 +60,8 @@ def _xarray_to_df(
     # Rename the columns
     stacked.columns = response_str.split(",")
 
-    # cast: .loc with a column list is typed DataFrame | Series under recent
-    # pandas stubs; a two-column selection is always a DataFrame at runtime.
+    # `.to_pandas()` above is typed DataFrame | Series; with a list selector
+    # `.loc` always yields a DataFrame here.
     return cast("pd.DataFrame", stacked.loc[:, ["rt", "response"]])
 
 
@@ -104,9 +108,68 @@ def _process_data(
     return data
 
 
+# The HSSM house palette for predictive plots, in [predicted, observed] order.
+# Validated for CVD safety (deutan dE 16.1, tritan 36.0, normal 31.9 on a white
+# surface). Shared with model_cartoon.py — change it here, nowhere else.
+DEFAULT_PREDICTIVE_COLORS: list[str] = ["#ec205b", "#338fb8"]
+
+
+def _curve_xy(
+    bin_edges: np.ndarray, values: np.ndarray | pd.Series, step: bool
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return x, y for one histogram curve.
+
+    `step=True` yields the edge-anchored histogram outline; `step=False` yields
+    a frequency polygon through the bin centers (not the left edges, which
+    would shift the curve by half a bin). Both return plain arrays, so the same
+    x works for `plot` and `fill_between` — which is what makes step outlines
+    bandable. Shared between the predictive and model-cartoon plot families.
+    """
+    values = np.asarray(values)
+    if step:
+        return np.repeat(bin_edges, 2)[1:-1], np.repeat(values, 2)
+    return (bin_edges[:-1] + bin_edges[1:]) / 2, values
+
+
+def _band_alphas(base_alpha: float, n_bands: int) -> np.ndarray:
+    """Opacity ladder for graded uncertainty bands, widest-band-first.
+
+    The narrowest band prints at `base_alpha`; wider bands fade toward 45% of
+    it. The reversed linspace makes a single band get the full base value.
+    Callers zip this against intervals sorted widest-first (the order
+    `_hdi_to_intervals` returns) and draw back-to-front.
+    """
+    return np.linspace(base_alpha, 0.45 * base_alpha, n_bands)[::-1]
+
+
+def _hdi_to_intervals(
+    hdi: str | float | tuple[float, float] | list,
+) -> list[tuple[float, float]]:
+    """Normalize one or many interval specs into quantile pairs.
+
+    A single spec — a float mass (0.94), a "94%" string, or a legacy
+    (lo, hi) *tuple* of quantiles — yields one interval. A *list* holds one
+    spec per band (each entry itself a mass, string, or quantile tuple).
+    Tuples always keep their legacy quantile-pair meaning; only lists fan
+    out into multiple bands. Returns intervals sorted widest-first so graded
+    bands can be drawn back-to-front.
+    """
+    specs = list(hdi) if isinstance(hdi, list) else [hdi]
+    if not specs:
+        raise ValueError("The `hdi` list must not be empty.")
+    intervals = [_hdi_to_interval(spec) for spec in specs]
+    return sorted(intervals, key=lambda iv: iv[1] - iv[0], reverse=True)
+
+
 def _hdi_to_interval(hdi: str | float | tuple[float, float]) -> tuple[float, float]:
-    """Convert HDI to range."""
+    """Convert an interval spec to a (lower, upper) quantile pair.
+
+    Note: despite the parameter name (kept for API compatibility), the result
+    is an equal-tailed percentile interval, not a highest-density interval.
+    """
     if isinstance(hdi, tuple):
+        if len(hdi) != 2:
+            raise ValueError("The HDI must be a tuple of exactly two floats.")
         if not all(isinstance(i, float) for i in hdi):
             raise ValueError("The HDI must be a tuple of floats.")
         elif not all(0 <= i <= 1 for i in hdi):
@@ -144,6 +207,7 @@ def _get_plotting_df(
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
+    rng: np.random.Generator | None = None,
 ) -> pd.DataFrame:
     """Prepare a dataframe for plotting.
 
@@ -165,6 +229,9 @@ def _get_plotting_df(
         extracted from the draw dimension. When None, all samples are extracted.
     response_str, optional
         The names of the response variable in the posterior, by default "rt,response"
+    rng, optional
+        A seeded Generator for the draw selection; None keeps the legacy
+        global-RNG behavior.
 
     Returns
     -------
@@ -201,7 +268,7 @@ def _get_plotting_df(
 
     # get the posterior samples
     idata_predictive = cast("xr.DataArray", dt[predictive_group][response_str])
-    predictive = _xarray_to_df(idata_predictive, n_samples=n_samples)
+    predictive = _xarray_to_df(idata_predictive, n_samples=n_samples, rng=rng)
 
     if data is None:
         if extra_dims:
@@ -500,11 +567,15 @@ def _use_traces_or_sample(
     predictive_group: Literal[
         "posterior_predictive", "prior_predictive"
     ] = "posterior_predictive",
+    rng: np.random.Generator | None = None,
 ) -> tuple[xr.DataTree, bool]:
     """Check if dt is provided, otherwise use traces.
 
     Also, if posterior predictive samples are not contained in traces, sample from
-    the model.
+    the model. When ``rng`` is given and posterior-predictive sampling is
+    triggered with an integer ``n_samples``, the draws are a seeded random
+    subset of the posterior instead of the legacy first-``n`` (which is
+    deterministic but biased toward early, warm-up-adjacent draws).
     """
     # First, determine whether posterior predictive samples are available
     # If not, we need to sample from the posterior
@@ -528,11 +599,16 @@ def _use_traces_or_sample(
             predictive_group,
         )
         if predictive_group == "posterior_predictive":
+            draws: int | float | np.ndarray | None = n_samples
+            if rng is not None and isinstance(n_samples, int):
+                n_draws = int(dt["posterior"].draw.size)
+                if n_samples <= n_draws:
+                    draws = np.sort(rng.choice(n_draws, size=n_samples, replace=False))
             model.sample_posterior_predictive(
                 dt=dt,
                 data=data,
                 inplace=True,
-                draws=n_samples,
+                draws=draws,
             )
         elif predictive_group == "prior_predictive":
             dt = model.sample_prior_predictive(
