@@ -25,7 +25,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   lint:
@@ -54,6 +53,16 @@ jobs:
     needs: [lint, fast, slow, notebooks]
     if: always()
     runs-on: ubuntu-latest
+    # Only this job needs issue-write; the tokens above run freshly-resolved
+    # third-party test code and stay read-only (inherited from the workflow).
+    permissions:
+      contents: read
+      issues: write
+    # One issue reconciler at a time: the read at `gh issue list` and the write
+    # below are not atomic, so an overlapping dispatch could file a duplicate.
+    concurrency:
+      group: drift-issue-${{ github.repository }}
+      cancel-in-progress: false
     steps:
       - name: Create, update, or close the deduped drift issue
         env:
@@ -69,13 +78,23 @@ jobs:
           TITLE="drift: HSSM scheduled checks failing"
           RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
+          # Three outcomes matter separately. `skipped` is neutral by design —
+          # the monthly notebooks job is skipped in every weekly run. But
+          # `cancelled` is not evidence of health, and `report` runs under
+          # `if: always()`, which includes cancellation: without this
+          # distinction a cancelled run would silently close a real drift
+          # issue. Closing therefore requires at least one genuine success and
+          # nothing cancelled.
           FAILED_JOBS=""
+          CANCELLED_JOBS=""
+          SUCCEEDED=""
           for job in lint fast slow notebooks; do
             var="RESULT_$(echo "$job" | tr '[:lower:]' '[:upper:]')"
-            # skipped is neutral: monthly-gated jobs are skipped in weekly runs
-            if [ "${!var}" = "failure" ]; then
-              FAILED_JOBS="$FAILED_JOBS $job"
-            fi
+            case "${!var}" in
+              failure) FAILED_JOBS="$FAILED_JOBS $job" ;;
+              cancelled) CANCELLED_JOBS="$CANCELLED_JOBS $job" ;;
+              success) SUCCEEDED="yes" ;;
+            esac
           done
           if [ "$FORCE_FAIL" = "true" ]; then
             FAILED_JOBS="$FAILED_JOBS (force_fail rehearsal)"
@@ -86,9 +105,14 @@ jobs:
             --json number --jq '.[0].number // empty')
 
           if [ -z "$FAILED_JOBS" ]; then
-            if [ -n "$EXISTING" ]; then
-              gh issue close "$EXISTING" --repo "$GITHUB_REPOSITORY" \
-                --comment "Scheduled drift checks green again: $RUN_URL"
+            if [ -n "$SUCCEEDED" ] && [ -z "$CANCELLED_JOBS" ]; then
+              if [ -n "$EXISTING" ]; then
+                gh issue close "$EXISTING" --repo "$GITHUB_REPOSITORY" \
+                  --comment "Scheduled drift checks green again: $RUN_URL"
+              fi
+            else
+              echo "::notice::Inconclusive run (cancelled:${CANCELLED_JOBS:- none};" \
+                "no job succeeded) — drift issue state left unchanged."
             fi
             exit 0
           fi
