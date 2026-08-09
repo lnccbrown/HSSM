@@ -53,11 +53,11 @@ HSSM uses PEP 735 dependency groups alongside traditional optional-dependencies:
 # Install all dev dependencies
 uv sync --group dev --group notebook --group docs
 
-# Run tests
+# Run tests (slow tests included — there is no --runslow flag)
 uv run pytest tests/
 
-# Run slow tests (marked with @pytest.mark.slow)
-uv run pytest tests/ --runslow
+# Skip slow tests (what CI's fast job runs)
+uv run pytest tests/ -m "not slow"
 
 # Build docs
 uv run --group notebook --group docs mkdocs build

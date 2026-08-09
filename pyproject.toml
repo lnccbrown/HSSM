@@ -237,7 +237,7 @@ addopts = [
     "--reruns-delay=5",
 ]
 markers = [
-    "slow: marks tests as slow (add --runslow option to run these tests)",
+    "slow: marks tests as slow (deselect with -m 'not slow')",
 ]
 
 [build-system]
