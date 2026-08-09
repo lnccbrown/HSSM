@@ -49,6 +49,7 @@ nav:
       - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
       - Per-parameter centered vs. non-centered parameterization: tutorials/parameterization_per_parameter.ipynb
+      - Smooth effects with HSGP regressions: tutorials/hsgp_regression.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
       - RLSSM — Basic tutorial: tutorials/rlssm_basic.ipynb
       - RLSSM — Custom models with ssms.rl: tutorials/rlssm_advanced.ipynb
@@ -88,6 +89,7 @@ plugins:
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
         - tutorials/attentional_ddm.py
+        - tutorials/hsgp_regression.ipynb
         - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
         - tutorials/choice_only_rlssm.ipynb

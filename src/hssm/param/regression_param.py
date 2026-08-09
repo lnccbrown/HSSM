@@ -7,6 +7,7 @@ from typing import Any, Literal, cast
 import bambi as bmb
 import numpy as np
 import pandas as pd
+from bambi.utils import is_hsgp_term
 from formulae import design_matrices
 
 from ..link import Link
@@ -236,6 +237,12 @@ class RegressionParam(Param):
         if dm.common is not None:
             for name, term in dm.common.terms.items():
                 self.terms.append(name)
+                if is_hsgp_term(term):
+                    # Bambi requires an HSGP term's prior to be None or a dict of
+                    # covariance-function priors — a scalar default would be
+                    # rejected at model build. Leaving it out defers to bambi's
+                    # automatic HSGP priors.
+                    continue
                 if name not in specified_priors:
                     if term.kind == "intercept":
                         has_common_intercept = True
@@ -372,9 +379,40 @@ class RegressionParam(Param):
         )
 
 
+def _is_hsgp_key(key: str) -> bool:
+    """Whether a regression prior key addresses an hsgp() formula term.
+
+    String-based because this runs before design matrices exist; ``hsgp`` is
+    the reserved stateful-transform name in bambi's formula namespace, so a
+    term key beginning with ``hsgp(`` is an HSGP call.
+    """
+    return key.lstrip().startswith("hsgp(")
+
+
+def _convert_hsgp_prior_dict(spec: dict[str, Any]) -> dict[str, Any]:
+    """Prepare an HSGP term's prior dict for bambi.
+
+    Bambi requires the prior of an HSGP term to stay a dictionary mapping
+    covariance-function parameters (e.g. ``sigma``, ``ell``) to priors or
+    numeric constants — never a single ``bmb.Prior``. Values given as
+    HSSM-style dicts (with a ``"name"`` key) are converted to ``bmb.Prior``;
+    everything else passes through. A top-level ``"name": "HSGP"`` entry is
+    HSSM-convention residue, not a covariance parameter, and is dropped.
+    """
+    return {
+        key: (
+            _make_priors_recursive(value)
+            if isinstance(value, dict) and "name" in value
+            else value
+        )
+        for key, value in spec.items()
+        if not (key == "name" and value == "HSGP")
+    }
+
+
 def _make_prior_dict(
     prior: dict[str, float | dict[dict, Any] | bmb.Prior],
-) -> dict[str, float | bmb.Prior]:
+) -> dict[str, float | bmb.Prior | dict[str, Any]]:
     """Make bambi priors from a ``dict`` of priors for the regression case.
 
     Parameters
@@ -385,14 +423,18 @@ def _make_prior_dict(
 
     Returns
     -------
-    dict[str, float | bmb.Prior]
-        A dictionary where each key is the name of a parameter in a regression and each
-        value is either a float or a bmb.Prior object.
+    dict[str, float | bmb.Prior | dict[str, Any]]
+        A dictionary where each key is the name of a parameter in a regression and
+        each value is a float, a bmb.Prior, or — for hsgp() terms only — a
+        dictionary of covariance-function priors, which bambi consumes as-is.
     """
     priors = {
-        # Convert dict to bmb.Prior if a dict is passed
         param: (
-            _make_priors_recursive(cast("dict[str, Any]", prior))
+            # HSGP priors must remain dicts of covariance-function priors.
+            _convert_hsgp_prior_dict(cast("dict[str, Any]", prior))
+            if _is_hsgp_key(param) and isinstance(prior, dict)
+            # Convert dict to bmb.Prior if a dict is passed
+            else _make_priors_recursive(cast("dict[str, Any]", prior))
             if isinstance(prior, dict)
             else prior
         )
