@@ -11,6 +11,14 @@ runs:
     - name: Checkout repository
       uses: actions/checkout@v7
 
+    # run_tests.yml sets PYTENSOR_FLAGS=blas__ldflags=... -lblas -llapack; the
+    # runner image ships only the runtime .so.3 objects, so without the -dev
+    # packages the linker cannot resolve those flags and PyTensor's C backend
+    # fails to compile any BLAS-using op.
+    - name: Install BLAS and LAPACK
+      run: sudo apt-get update && sudo apt-get install -y libblas-dev liblapack-dev
+      shell: bash
+
     - name: Install uv
       uses: astral-sh/setup-uv@v9.0.0
       with:
