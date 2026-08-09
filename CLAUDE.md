@@ -107,7 +107,7 @@ Two separate skip mechanisms for notebooks:
 |----------|---------|
 | `run_tests.yml` | Fast test suite |
 | `run_slow_tests.yml` | Slow tests (`@pytest.mark.slow`) |
-| `linting_and_type_checking.yml` | ruff + mypy |
+| `linting_and_type_checking.yml` | ruff + pyrefly + mypy |
 | `check_notebooks.yml` | Execute all non-skipped notebooks |
 | `coverage.yml` | Code coverage |
 | `build_docs.yml` | Build documentation |
