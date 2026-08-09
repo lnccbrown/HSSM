@@ -4,7 +4,6 @@ These tests validate consistency of analytical, blackbox, and
 approx_differentiable (ONNX-wrapped) likelihood-related paths.
 """
 
-from pathlib import Path
 from itertools import product
 from hssm.utils import SuppressOutput
 
@@ -123,7 +122,7 @@ def test_analytical_gradient():
 
 @pytest.mark.slow
 @pytest.mark.parametrize("p_outlier, loglik_kind", param_matrix)
-def test_lapse_distribution_cav(p_outlier, loglik_kind):
+def test_lapse_distribution_cav(p_outlier, loglik_kind, fixture_path):
     true_values = (1.5, 0.5, 0.5)
     a, z, t = true_values
     # v is set to vector, because
@@ -138,7 +137,7 @@ def test_lapse_distribution_cav(p_outlier, loglik_kind):
         p_outlier=p_outlier,
         loglik_kind=loglik_kind,
         loglik=(
-            Path(__file__).parent / "fixtures" / "ddm.onnx"
+            fixture_path / "ddm.onnx"
             if loglik_kind == "approx_differentiable"
             else None
         ),
@@ -180,7 +179,7 @@ def test_lapse_distribution_cav(p_outlier, loglik_kind):
         logp_func = logp_ddm
     elif loglik_kind == "approx_differentiable":
         logp_func = make_likelihood_callable(
-            loglik=Path(__file__).parent / "fixtures" / "ddm.onnx",
+            loglik=fixture_path / "ddm.onnx",
             loglik_kind="approx_differentiable",
             backend="pytensor",
             params_is_reg=[False] * 4,
