@@ -34,6 +34,8 @@ dependencies = [
     "numpy>=2.4.0,<2.5.0",
     "numpyro>=0.20",
     "onnx>=1.16.0",
+    # Direct import in hssm.plotting (gaussian_kde, chi2), not merely transitive via pymc.
+    "scipy>=1.10",
     "ssm-simulators>=0.13.1",
 ]
 
