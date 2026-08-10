@@ -159,7 +159,7 @@ Colab regardless of the backend you are using:
 ## License
 
 HSSM is licensed under
-[Copyright 2023, Brown University, Providence, RI](LICENSE)
+[Copyright 2023, Brown University, Providence, RI](license.md)
 
 ## Support
 

@@ -1,0 +1,4 @@
+# Flaky or auth-gated domains excluded from the scheduled link check
+https://doi.org/.*
+https://twitter.com/.*
+https://x.com/.*
