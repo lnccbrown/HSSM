@@ -894,12 +894,16 @@ class TestPlotFuncModelN:
         assert len(ax.patches) == len(INTERVALS)  # ndt spans
         colors = {ln.get_color() for ln in ax.get_lines() if ln.get_zorder() == 3}
         assert colors == {"black", "green", "blue"}  # per-choice mean curves
-        # Drift cones carry real width. Measure enclosed area, not the y-span
-        # of the vertices: a cone rises, so `ptp` is ~1.0 even when every draw
-        # shares one drift rate and the band is a zero-width line traced out
-        # and back. Area is 0 in exactly that degenerate case, which is what
+        # Every drift cone carries real width. Measure enclosed area, not the
+        # y-span of the vertices: a cone rises, so `ptp` is ~1.0 even when every
+        # draw shares one drift rate and the band is a zero-width line traced
+        # out and back. Area is 0 in exactly that degenerate case, which is what
         # the noise injected into v0/v1/v2 above exists to avoid.
-        assert any(_polygon_area(c.get_paths()[0].vertices) > 1e-6 for c in drift_bands)
+        # `all`, not `any`: measured areas span 2.3e-2 .. 1.1e-1, so the
+        # narrowest band clears this threshold by ~4 orders of magnitude and
+        # one degenerate choice cannot hide behind five healthy ones.
+        areas = [_polygon_area(c.get_paths()[0].vertices) for c in drift_bands]
+        assert all(area > 1e-6 for area in areas), areas
         plt.close("all")
 
     def test_drift_matrices_n_columns(self):
