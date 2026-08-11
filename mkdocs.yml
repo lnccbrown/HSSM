@@ -8,9 +8,6 @@ validation:
   omitted_files: warn
   # phase-2 consolidation targets, deliberately unlisted until then
 not_in_nav: |
-  api/defaults.md
-  tutorials/initial_values.ipynb
-  tutorials/poisson_race.ipynb
   tutorials/attentional_ddm.py
   absolute_links: warn
   unrecognized_links: warn
@@ -82,6 +79,8 @@ nav:
       - P-outlier Regression: tutorials/tutorial_p_outlier_regression.ipynb
       - Sampling with Bayeux: tutorials/tutorial_bayeux.ipynb
       - Hidden Markov Models with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
+      - Setting initial values: tutorials/initial_values.ipynb
+      - Poisson race models: tutorials/poisson_race.ipynb
   - Contributed Tutorials:
       - Winterbrain 2025 Workshop Talk 1: tutorials/hssm_tutorial_workshop_1.ipynb
       - Winterbrain 2025 Workshop Talk 2: tutorials/hssm_tutorial_workshop_2.ipynb
@@ -96,7 +95,8 @@ plugins:
   - search
   - autorefs
   - redirects:
-      redirect_maps: {}
+      redirect_maps:
+        api/defaults.md: api/show_defaults.md
   - mkdocs-jupyter:
       execute: true
       execute_ignore:
