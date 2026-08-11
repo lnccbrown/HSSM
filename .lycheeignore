@@ -1,4 +1,2 @@
-# Flaky or auth-gated domains excluded from the scheduled link check
+# doi.org resolvers habitually 403 automated checkers; real DOI targets are stable
 https://doi.org/.*
-https://twitter.com/.*
-https://x.com/.*

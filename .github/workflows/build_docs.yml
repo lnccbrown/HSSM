@@ -2,15 +2,18 @@ name: Docs
 
 on:
   pull_request:
-    paths: ["docs/**", "mkdocs.yml", "src/hssm/**"]
+    paths: ["docs/**", "mkdocs.yml", "pyproject.toml", "src/hssm/**"]
   push:
     branches: [main]
-    paths: ["docs/**", "mkdocs.yml"]
+    paths: ["docs/**", "mkdocs.yml", "pyproject.toml", "src/hssm/**"]
   release:
     types: [published]
   schedule:
     - cron: "50 5 * * 1" # weekly link check (Monday, off-peak UTC)
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
