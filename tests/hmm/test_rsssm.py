@@ -35,6 +35,7 @@ from hssm.hmm.specs import (
     resolve_transition_prior,
 )
 from hssm.hmm.utils import pad_and_align_to_T_max
+from hssm.modelconfig import get_default_model_config
 
 from .conftest import (
     TUTORIAL_P,
@@ -392,6 +393,150 @@ def test_config_and_granular_args_conflict(small_single_participant):
         RSSSM(data=small_single_participant, model="ddm", K=2, model_config=cfg)
 
 
+def _logp_at(model, point):
+    """Total logp of `model` at an explicit transformed point."""
+    return float(model.pymc_model.compile_logp()(point))
+
+
+def _assert_same_model(granular, config):
+    """The two construction paths must yield the *same* model, not just a model.
+
+    Compared away from the shared initial point, so agreement cannot come from
+    both merely starting in the same place.
+    """
+    ip = granular.pymc_model.initial_point()
+    assert set(ip) == set(config.pymc_model.initial_point())
+    point = {k: np.asarray(v) + 0.05 for k, v in ip.items()}
+    lp = _logp_at(granular, point)
+    assert np.isfinite(lp)
+    assert abs(lp - _logp_at(config, point)) < 1e-9
+
+
+def test_config_path_supports_inferred_per_regime_p_outlier(small_single_participant):
+    """`p_outlier` is an RSSSM addition, so the config path must append it too.
+
+    No registered SSM carries `p_outlier` in `list_params`, so deriving them
+    from the registry alone left `switching_params=["p_outlier"]` failing
+    validation with "not parameters of model 'ddm'" — while the granular path
+    appends it in `_build_config`.
+    """
+    cfg = RSSSMConfig(
+        model_name="rsssm_ddm",
+        model="ddm",
+        K=2,
+        switching_params=["v", "p_outlier"],
+        loglik_kind="analytical",
+    )
+    m = RSSSM(data=small_single_participant, model_config=cfg)
+    assert m.list_params == ["v", "a", "z", "t", "p_outlier"]
+    assert m._has_p_outlier
+    _assert_same_model(
+        RSSSM(
+            data=small_single_participant,
+            model="ddm",
+            K=2,
+            switching_params=["v", "p_outlier"],
+        ),
+        m,
+    )
+
+
+def test_config_path_supports_fixed_per_regime_p_outlier(small_single_participant):
+    """The same for a length-K fixed lapse supplied through `param_specs`."""
+    cfg = RSSSMConfig(
+        model_name="rsssm_ddm",
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        loglik_kind="analytical",
+        param_specs={"p_outlier": [0.02, 0.10]},
+    )
+    m = RSSSM(data=small_single_participant, model_config=cfg)
+    assert m.list_params == ["v", "a", "z", "t", "p_outlier"]
+    assert m._has_p_outlier
+    _assert_same_model(
+        RSSSM(
+            data=small_single_participant,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            p_outlier=[0.02, 0.10],
+        ),
+        m,
+    )
+
+
+def test_config_path_rejects_global_iid_p_outlier(small_single_participant):
+    """The decision-10.1.9 rejection must not be bypassable via `model_config=`.
+
+    The granular path enforces it in `_resolve_p_outlier_spec`; a hand-built
+    config went straight to `param_specs`, so a scalar `p_outlier` produced the
+    shared-across-regimes lapse the design explicitly rules out.
+    """
+    cfg = RSSSMConfig(
+        model_name="rsssm_ddm",
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        loglik_kind="analytical",
+        param_specs={"p_outlier": 0.05},
+    )
+    with pytest.raises(NotImplementedError, match="global iid"):
+        RSSSM(data=small_single_participant, model_config=cfg)
+
+
+def test_config_path_defaults_lan_backend_with_explicit_list_params(
+    small_single_participant,
+):
+    """A config that sets `list_params` by hand still gets the LAN jax default.
+
+    The metadata-derivation early-return skipped the backend default too, so
+    `loglik_kind="approx_differentiable"` silently resolved to the (much slower)
+    pytensor backend while the granular path picked jax.
+    """
+    lan = get_default_model_config("ddm")["likelihoods"]["approx_differentiable"]
+    cfg = RSSSMConfig(
+        model_name="rsssm_ddm",
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        loglik_kind="approx_differentiable",
+        list_params=["v", "a", "z", "t"],
+        bounds=dict(lan["bounds"]),
+    )
+    m = RSSSM(data=small_single_participant, model_config=cfg)
+    assert m.model_config.backend == "jax"
+    assert m._broadcast_params
+    _assert_same_model(
+        RSSSM(
+            data=small_single_participant,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            loglik_kind="approx_differentiable",
+        ),
+        m,
+    )
+
+
+def test_extra_fields_rejected(small_single_participant):
+    """`extra_fields` would be validated and then ignored, so it is rejected.
+
+    They feed bambi's trial-wise regression machinery, which the direct-build
+    path does not have — the emission is fed `(rt, response)` only.
+    """
+    cfg = RSSSMConfig(
+        model_name="rsssm_ddm",
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        loglik_kind="analytical",
+        extra_fields=["cue"],
+    )
+    with pytest.raises(NotImplementedError, match="extra_fields"):
+        RSSSM(data=small_single_participant.assign(cue=1.0), model_config=cfg)
+
+
 # ---------------------------------------------------------------------------
 # Validation & v1 rejections
 # ---------------------------------------------------------------------------
@@ -472,6 +617,100 @@ def test_fixed_value_on_bound_is_accepted(tiny_df):
     """The bounds check is inclusive: a value exactly on the bound is valid."""
     m = RSSSM(data=tiny_df, model="ddm", K=2, switching_params=["v"], z=[0.0, 1.0])
     assert "z" not in {rv.name for rv in m.pymc_model.free_RVs}
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        {"a": [1.0, float("nan")]},  # per-regime: the silent case
+        {"z": float("nan")},
+        {"v": float("inf")},  # bounds are (-inf, inf): no bound to fail
+    ],
+)
+def test_non_finite_fixed_value_rejected(tiny_df, spec):
+    """NaN / inf compare False against both bounds, so they slipped the check.
+
+    The per-regime NaN is the worst of them: it clamps that regime's emission at
+    every trial, so the `logsumexp` over regimes silently degenerates to a K=1
+    model with a perfectly plausible finite logp (`a=[1.0, nan]` scored -292).
+    """
+    switching = ["a"] if "v" in spec else ["v"]
+    with pytest.raises(ValueError, match="must be finite"):
+        RSSSM(data=tiny_df, model="ddm", K=2, switching_params=switching, **spec)
+
+
+@pytest.mark.parametrize("model_name", ["angle", "levy", "ornstein", "weibull"])
+def test_explicit_loglik_kind_is_never_substituted(tiny_df, model_name):
+    """Asking for a likelihood the model lacks must raise, not swap in another.
+
+    The kind resolved here fixes the bounds, the default priors *and* the
+    emission, so falling back is right when the user said nothing (`angle` has
+    no analytical likelihood, so plain `RSSSM(model="angle")` must still work)
+    but wrong for an explicit request: it silently returns the neural
+    approximation where `hssm.HSSM` raises. 7 of the 16 registered models have
+    no analytical likelihood.
+    """
+    with pytest.raises(ValueError, match="has no 'analytical' likelihood"):
+        RSSSM(
+            data=tiny_df,
+            model=model_name,
+            K=2,
+            switching_params=["v"],
+            loglik_kind="analytical",
+        )
+
+
+def test_omitted_loglik_kind_still_falls_back(tiny_df):
+    """The fallback itself is intact: only the *explicit* request is protected."""
+    m = RSSSM(data=tiny_df, model="angle", K=2, switching_params=["v"])
+    assert m.loglik_kind == "approx_differentiable"
+    assert RSSSM(
+        data=tiny_df, model="ddm", K=2, switching_params=["v"]
+    ).loglik_kind == ("analytical")
+
+
+def test_unknown_loglik_kind_rejected(tiny_df):
+    """An unrecognised kind names the available ones rather than falling back."""
+    with pytest.raises(ValueError, match="has no 'nope' likelihood"):
+        RSSSM(
+            data=tiny_df, model="ddm", K=2, switching_params=["v"], loglik_kind="nope"
+        )
+
+
+def test_blackbox_loglik_kind_rejected(tiny_df):
+    """`blackbox` builds and then dies at gradient time, so reject it eagerly."""
+    with pytest.raises(NotImplementedError, match="no gradient"):
+        RSSSM(
+            data=tiny_df,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            loglik_kind="blackbox",
+        )
+
+
+def test_blackbox_only_model_rejected(tiny_df):
+    """`full_ddm` has only a blackbox likelihood, so it cannot be an emission.
+
+    It used to build fine and produce a finite logp; the failure surfaced only
+    at `sample()` as `NotImplementedError: pullback not implemented for
+    BlackBoxOp`.
+    """
+    with pytest.raises(NotImplementedError, match="no differentiable likelihood"):
+        RSSSM(data=tiny_df, model="full_ddm", K=2, switching_params=["v"])
+
+
+def test_model_as_config_loglik_kind_validated_against_registry(tiny_df):
+    """The emission is rebuilt from the registry, so the kind is checked there."""
+    from hssm.config import Config
+
+    cfg = Config(
+        model_name="angle",
+        loglik_kind="analytical",
+        list_params=["v", "a", "z", "t", "theta"],
+    )
+    with pytest.raises(ValueError, match="has no 'analytical' likelihood"):
+        RSSSM(data=tiny_df, model=cfg, K=2, switching_params=["v"])
 
 
 @pytest.mark.parametrize(

@@ -121,6 +121,25 @@ class RSSSMConfig(BaseModelConfig):
                 f"switching_params {unknown} are not parameters of model "
                 f"{self.model!r} (list_params={self.list_params})."
             )
+        # Per-regime `p_outlier` only (decision 10.1.9): a single lapse
+        # probability shared across regimes double-models the lapse regime.  The
+        # granular path enforces this in `RSSSM._resolve_p_outlier_spec`, which a
+        # hand-built config bypasses — so it is re-checked here, where both
+        # construction paths meet.  (No registered SSM carries `p_outlier` in its
+        # own `list_params`, so its presence always means the RSSSM lapse.)
+        if "p_outlier" in self.list_params:
+            spec = self.param_specs.get("p_outlier")
+            per_regime = "p_outlier" in self.switching_params or isinstance(
+                spec, (list, tuple, np.ndarray)
+            )
+            if not per_regime:
+                raise NotImplementedError(
+                    "RSSSM rejects a global iid `p_outlier`: a single lapse "
+                    "probability shared across regimes double-models the lapse "
+                    "regime (decision 10.1.9). Pass `p_outlier` per regime — list "
+                    "it in `switching_params` (inferred) or give a length-K "
+                    "`param_specs` entry (fixed per regime)."
+                )
         # The transition prior must be shape-consistent with K (eagerly, so a
         # mismatched concentration matrix is caught here, not at build time).
         if self.transition_prior is not None:

@@ -58,6 +58,12 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger("hssm")
 
+# The emission sits inside the forward `scan` that NUTS differentiates, so only
+# the differentiable likelihood kinds are usable.  A `blackbox` logp evaluates
+# fine and then dies at gradient time with "pullback not implemented for
+# BlackBoxOp", i.e. only once the user calls `sample()`.
+_DIFFERENTIABLE_KINDS: tuple[str, ...] = ("analytical", "approx_differentiable")
+
 
 def _bounds_based_prior(bounds: tuple[float, float] | None) -> dict[str, Any]:
     """Return a sensible default prior dict given parameter bounds."""
@@ -283,6 +289,16 @@ class RSSSM(HSSMBase):
         # error `HSSM` raises on the same data.
         self.choices = self._resolve_choices(cfg)  # type: ignore[assignment]
         self.n_choices = len(self.choices)
+        # `extra_fields` feeds bambi's trial-wise regression machinery, which the
+        # direct-build path does not have: the emission is fed `(rt, response)`
+        # only.  Accepting them would validate the columns and then ignore them.
+        if cfg.extra_fields:
+            raise NotImplementedError(
+                "RSSSM does not support `extra_fields`: they feed the trial-wise "
+                "regression machinery of the bambi model, which the directly-built "
+                f"RSSSM graph does not have, so {list(cfg.extra_fields)} would be "
+                "validated and then ignored."
+            )
         self.extra_fields = cfg.extra_fields
         # Choice-only emissions, `missing_data` and `deadline` are all rejected
         # in v1, so the corresponding branches of the mixin are inactive.
@@ -380,20 +396,35 @@ class RSSSM(HSSMBase):
         validation with "list_params must be populated ...".  Anything the user
         did set is left untouched — only the gaps are filled.
 
+        ``p_outlier`` is an RSSSM addition rather than an SSM parameter (no
+        registered model carries it in ``list_params``), so it is appended here
+        exactly as :meth:`_build_config` does for the granular path — otherwise
+        a config that lists it in ``switching_params`` fails validation with
+        "switching_params ['p_outlier'] are not parameters of model 'ddm'".
+
         Parameters
         ----------
         cfg
             The user-supplied config, mutated in place.
         """
-        if cfg.list_params is not None or cfg.model is None:
+        if cfg.model is None:
             return
-        list_params, bounds, kind = cls._resolve_ssm_param_meta(
-            cfg.model, cfg.loglik_kind
-        )
-        cfg.list_params = list_params
-        cfg.bounds = {**bounds, **dict(cfg.bounds)}
-        cfg.loglik_kind = kind
-        if kind == "approx_differentiable" and cfg.backend is None:
+        if cfg.list_params is None:
+            list_params, bounds, kind = cls._resolve_ssm_param_meta(
+                cfg.model, cfg.loglik_kind
+            )
+            if "p_outlier" in cfg.switching_params or "p_outlier" in cfg.param_specs:
+                if "p_outlier" not in list_params:
+                    list_params = list(list_params) + ["p_outlier"]
+                bounds.setdefault("p_outlier", (0.0, 1.0))
+            cfg.list_params = list_params
+            cfg.bounds = {**bounds, **dict(cfg.bounds)}
+            cfg.loglik_kind = kind
+        # Outside the `list_params is None` branch: a config that sets
+        # `list_params` by hand still needs the LAN backend default, otherwise it
+        # silently resolves to the (much slower) pytensor backend while the
+        # granular path picks jax for the same `loglik_kind`.
+        if cfg.loglik_kind == "approx_differentiable" and cfg.backend is None:
             cfg.backend = "jax"
 
     @staticmethod
@@ -580,16 +611,65 @@ class RSSSM(HSSMBase):
         )
 
     @staticmethod
+    def _resolve_loglik_kind(model, loglik_kind, likelihoods) -> "LoglikKind":
+        """Pick the likelihood kind the bounds *and* the emission are built from.
+
+        The two must agree: the returned kind fixes the bounds, the default
+        priors and the anchor grid *and* is what ``resolve_emission_dist`` builds
+        the emission with, so silently returning a different one would score the
+        data with one likelihood while constraining it with another's support.
+
+        An **explicit** ``loglik_kind`` is never substituted.  Falling back to
+        the model's first available kind is right when the user said nothing
+        (``angle`` has no analytical likelihood, so ``RSSSM(model="angle")``
+        should just work), but doing it for an explicit request means asking for
+        the exact likelihood and silently getting the neural approximation —
+        where ``hssm.HSSM`` raises.  7 of the 16 registered models have no
+        analytical likelihood, so this is not a corner case.
+
+        Only differentiable kinds are usable at all (see
+        ``_DIFFERENTIABLE_KINDS``); ``blackbox`` is rejected here rather than
+        building a model that dies at gradient time.
+        """
+        if loglik_kind is not None:
+            if loglik_kind not in likelihoods:
+                raise ValueError(
+                    f"Model {model!r} has no {loglik_kind!r} likelihood (available: "
+                    f"{list(likelihoods)}). Pass one of those, or omit "
+                    "`loglik_kind` to use the model's default."
+                )
+            if loglik_kind not in _DIFFERENTIABLE_KINDS:
+                raise NotImplementedError(
+                    f"RSSSM cannot use the {loglik_kind!r} likelihood of "
+                    f"{model!r}: the emission sits inside the forward `scan` that "
+                    "NUTS differentiates, and a non-differentiable likelihood has "
+                    f"no gradient. Use one of {list(_DIFFERENTIABLE_KINDS)}."
+                )
+            return cast("LoglikKind", loglik_kind)
+
+        available = [k for k in likelihoods if k in _DIFFERENTIABLE_KINDS]
+        if not available:
+            raise NotImplementedError(
+                f"RSSSM does not support the model {model!r}: it has no "
+                f"differentiable likelihood (available: {list(likelihoods)}), and "
+                "the emission must be differentiable to sit inside the forward "
+                "`scan` that NUTS differentiates."
+            )
+        # Prefer the exact likelihood; otherwise the first differentiable kind.
+        return cast(
+            "LoglikKind", "analytical" if "analytical" in available else available[0]
+        )
+
+    @staticmethod
     def _resolve_ssm_param_meta(
         model, loglik_kind
     ) -> tuple[list[str], dict[str, tuple[float, float]], "LoglikKind"]:
         """Return (list_params, bounds, loglik_kind) for the SSM emission model.
 
-        The returned kind is the one the bounds were actually read from: a model
-        with no analytical likelihood (e.g. ``angle``) falls back to its first
-        available kind, and the caller must build the emission with that same
-        kind — otherwise the bounds / default priors / anchor grid and the
-        emission itself come from different likelihoods.
+        The returned kind is the one the bounds were actually read from, and the
+        caller must build the emission with that same kind — otherwise the
+        bounds / default priors / anchor grid and the emission itself come from
+        different likelihoods.  See :meth:`_resolve_loglik_kind`.
         """
         if isinstance(model, BaseModelConfig):
             if model.list_params is None:
@@ -600,7 +680,21 @@ class RSSSM(HSSMBase):
                     "emission is fed `(rt, response)` and the panel is keyed on the "
                     "`rt` column."
                 )
-            kind = cast("LoglikKind", loglik_kind or model.loglik_kind or "analytical")
+            # The emission is always rebuilt from the registry entry the config
+            # names (see `_emission_model_name`), so the kind is validated
+            # against that entry too when the name is registered.  An
+            # unregistered name is rejected later, by `_emission_model_name`.
+            requested = loglik_kind or model.loglik_kind
+            try:
+                registered = get_default_model_config(
+                    cast("SupportedModels", model.model_name)
+                )
+            except Exception:
+                kind = cast("LoglikKind", requested or "analytical")
+            else:
+                kind = RSSSM._resolve_loglik_kind(
+                    model.model_name, requested, registered["likelihoods"]
+                )
             return list(model.list_params), dict(model.bounds), kind
 
         try:
@@ -617,12 +711,8 @@ class RSSSM(HSSMBase):
                 "`rt` column."
             )
         list_params = list(cfg["list_params"])
-        # Pull bounds from the requested likelihood kind when available, else the
-        # first available kind (e.g. LAN-only models such as `angle`).
-        kind = cast("LoglikKind", loglik_kind or "analytical")
         likelihoods = cfg["likelihoods"]
-        if kind not in likelihoods:
-            kind = next(iter(likelihoods))
+        kind = RSSSM._resolve_loglik_kind(model, loglik_kind, likelihoods)
         bounds = dict(likelihoods[kind].get("bounds", {}))
         return list_params, bounds, kind
 
@@ -786,13 +876,20 @@ class RSSSM(HSSMBase):
     def _check_fixed_in_bounds(
         name: str, value: float | np.ndarray, bounds: tuple[float, float] | None
     ) -> None:
-        """Raise when a user-supplied *fixed* value falls outside the SSM bounds.
+        """Raise when a user-supplied *fixed* value is unusable.
 
         The direct-build path never goes through ``Param.validate``, so without
         this an out-of-support value (``a=-1.0``, ``z=2.0``) silently produces a
         *finite but wrong* likelihood instead of the error ``hssm.HSSM`` raises
         on the same input.  Applies to both the shared scalar and the length-K
         fixed-per-regime vector.
+
+        The finiteness check comes **first**, and applies even when the SSM
+        declares no bounds: ``NaN`` compares False against both bounds, so it
+        would otherwise slip through the very check this method exists for.  It
+        is also the worst case — ``a=[1.0, nan]`` clamps regime 1's emission at
+        every trial, so the ``logsumexp`` over regimes silently degenerates to a
+        ``K = 1`` model with a perfectly plausible finite logp.
 
         Parameters
         ----------
@@ -804,10 +901,15 @@ class RSSSM(HSSMBase):
             ``(lower, upper)`` support of the parameter, or ``None`` when the
             SSM declares no bounds for it.
         """
+        arr = np.asarray(value, dtype=float)
+        if not np.all(np.isfinite(arr)):
+            raise ValueError(
+                f"Fixed Value {value} for parameter {name} must be finite."
+            )
         if bounds is None:
             return
         lower, upper = bounds
-        if np.any(np.asarray(value) < lower) or np.any(np.asarray(value) > upper):
+        if np.any(arr < lower) or np.any(arr > upper):
             raise ValueError(
                 f"Fixed Value {value} not in bounds {bounds} for parameter {name}"
             )
