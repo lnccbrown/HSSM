@@ -32,6 +32,17 @@ from hssm.plotting.utils import _band_alphas, _curve_xy, _hdi_to_intervals
 INTERVALS = _hdi_to_intervals([0.5, 0.94])
 
 
+def _polygon_area(vertices: np.ndarray) -> float:
+    """Shoelace area of a closed polygon — 0 for a zero-width band.
+
+    `fill_between` traces the upper curve then returns along the lower one, so
+    when the two coincide the polygon has zero area no matter how far it
+    travels in y. That makes area the honest test of "this band has width".
+    """
+    x, y = vertices[:, 0], vertices[:, 1]
+    return 0.5 * abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
+
+
 def _theta_frames(n_chains=2, n_draws=3, n_obs=6, jitter=0.05):
     """Hand-built θ frames matching the shapes plot_func_model receives."""
     idx = pd.MultiIndex.from_product(
@@ -701,6 +712,23 @@ class TestPlotFuncModel:
         assert max(self._tops((up, down))) <= expected_h + 1e-9
         plt.close("all")
 
+    def test_hist_height_auto_ignores_ribbon_when_not_drawn(self):
+        """keep_boundary=False draws no ribbon, so none of the headroom is its.
+
+        The auto height clears the tallest boundary ribbon inside the visible
+        range. With keep_boundary=False there is no ribbon on screen, and
+        reserving space for it silently shrinks the histograms.
+        """
+        with_ribbon = _render("samples", hist_height="auto", keep_boundary=True)
+        tall_with = max(self._tops(with_ribbon[2:]))
+        plt.close("all")
+
+        without = _render("samples", hist_height="auto", keep_boundary=False)
+        tall_without = max(self._tops(without[2:]))
+        plt.close("all")
+
+        assert tall_without > tall_with
+
     def test_hist_height_invalid_string_raises(self):
         with pytest.raises(ValueError, match="hist_height"):
             _render("band", hist_height="bogus")
@@ -866,8 +894,16 @@ class TestPlotFuncModelN:
         assert len(ax.patches) == len(INTERVALS)  # ndt spans
         colors = {ln.get_color() for ln in ax.get_lines() if ln.get_zorder() == 3}
         assert colors == {"black", "green", "blue"}  # per-choice mean curves
-        # drift cones carry real width (drift rates vary across draws)
-        assert any(np.ptp(c.get_paths()[0].vertices[:, 1]) > 1e-6 for c in drift_bands)
+        # Every drift cone carries real width. Measure enclosed area, not the
+        # y-span of the vertices: a cone rises, so `ptp` is ~1.0 even when every
+        # draw shares one drift rate and the band is a zero-width line traced
+        # out and back. Area is 0 in exactly that degenerate case, which is what
+        # the noise injected into v0/v1/v2 above exists to avoid.
+        # `all`, not `any`: measured areas span 2.3e-2 .. 1.1e-1, so the
+        # narrowest band clears this threshold by ~4 orders of magnitude and
+        # one degenerate choice cannot hide behind five healthy ones.
+        areas = [_polygon_area(c.get_paths()[0].vertices) for c in drift_bands]
+        assert all(area > 1e-6 for area in areas), areas
         plt.close("all")
 
     def test_drift_matrices_n_columns(self):
@@ -912,16 +948,37 @@ class TestPlotFuncModelN:
         seeds = [kw["random_state"] for kw in noisy]
         assert len(set(seeds)) == len(seeds)
 
-    def test_hist_height_auto_single_axis(self):
-        """The >2-choice renderer fits under its (0, 5) ylims: every histogram
-        artist stays below ylim_high with room to spare."""
-        fig, ax = self._render_n("band", hist_height="auto")
-        for coll in ax.collections:
-            for path in coll.get_paths():
-                assert path.vertices[:, 1].max() <= 5.0 + 1e-9
-        for ln in ax.get_lines():
-            assert np.max(ln.get_ydata()) <= 5.0 + 1e-9
-        plt.close("all")
+    def test_hist_height_auto_single_axis(self, monkeypatch):
+        """'auto' scales the histograms to HIST_HEIGHT_MARGIN of the headroom.
+
+        Asserting only "everything sits below ylim_high" is near-vacuous on the
+        auto path: the drawn top is `bottom + margin * headroom`, so it is
+        under the limit by construction. Dropping the margin to 0.0001 —
+        histograms flat and invisible — passes that check. So measure the
+        height that was actually used, and pin it to the margin.
+        """
+        import hssm.plotting.model_cartoon as mc
+
+        def tallest(margin: float) -> float:
+            monkeypatch.setattr(mc, "HIST_HEIGHT_MARGIN", margin)
+            fig, ax = self._render_n("band", hist_height="auto")
+            # zorder 4 are the per-choice mean histogram curves
+            tops = [
+                float(np.max(ln.get_ydata()) - np.min(ln.get_ydata()))
+                for ln in ax.get_lines()
+                if ln.get_zorder() == 4
+            ]
+            plt.close("all")
+            assert tops, "no histogram curves found"
+            return max(tops)
+
+        full = tallest(0.9)
+        half = tallest(0.45)
+        # Height is proportional to the margin, so a broken 'auto' that ignores
+        # the headroom (or collapses to ~0) cannot pass.
+        assert half == pytest.approx(full / 2, rel=1e-6)
+        assert full > 0.5, "auto height collapsed"
+        assert full <= 5.0 + 1e-9  # still inside the (0, 5) ylims
 
     def test_none_mode_data_only_no_nameerror(self):
         """Regression: bottom was unbound when only data was passed."""

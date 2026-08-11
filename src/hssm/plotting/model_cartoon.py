@@ -1441,6 +1441,10 @@ def plot_func_model(
     def _visible_ribbon_max() -> float:
         # Highest point any (no-noise) boundary reaches inside the visible
         # x-range — expanding bounds rise above their t=0 anchor.
+        if not keep_boundary:
+            # No ribbon is drawn, so reserving headroom for one just shrinks
+            # the histogram for nothing.
+            return 0.0
         n_vis = int(xlim_high / delta_t_model) + 1
         if theta_samples is not None:
             return max(
