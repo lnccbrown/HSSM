@@ -67,22 +67,18 @@ jobs:
             Synthesize commits into user-facing descriptions. Focus on features, bug fixes,
             and breaking changes. Skip CI-only changes.
 
-            ## Task 2: Update the announcement banner
-
-            Edit `docs/overrides/main.html`. Find the line with the version announcement
-            (pattern: `vX.Y.Z is released!`) and replace the version with v${{ inputs.version }}.
-
             ## Important
             - Changelog headings use NO "v" prefix (e.g., ### 0.3.0)
             - Git tags use "v" prefix (e.g., v0.3.0)
-            - Only modify docs/changelog.md and docs/overrides/main.html
+            - Only modify docs/changelog.md (the announcement banner is a
+              vendored version-free template and needs no release edits)
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/changelog.md docs/overrides/main.html
+          git add docs/changelog.md
           git commit -m "docs: update changelog and banner for v${{ inputs.version }}"
           git push origin "${{ steps.branch.outputs.name }}"
 
@@ -93,7 +89,6 @@ jobs:
             --title "docs: prepare release v${{ inputs.version }}" \
             --body "## Summary
           - Updated \`docs/changelog.md\` with v${{ inputs.version }} entries (AI-generated from git log)
-          - Updated announcement banner in \`docs/overrides/main.html\`
 
           ## Review checklist
           - [ ] Changelog entries are accurate and well-written

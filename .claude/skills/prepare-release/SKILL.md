@@ -14,7 +14,6 @@ This skill automates the pre-release checklist for the HSSM package. It assumes 
 in `pyproject.toml` has already been bumped. The skill walks through four steps:
 
 1. Update the changelog (`docs/changelog.md`)
-2. Update the announcement banner (`docs/overrides/main.html`)
 3. Build docs locally to verify they compile
 4. Run the notebook check workflow in CI
 5. Create a draft GitHub release
@@ -82,7 +81,7 @@ After user approval, insert the new version section into `docs/changelog.md` imm
 
 ## Step 5: Update the announcement banner
 
-Edit `docs/overrides/main.html`. Find the line containing the version announcement (pattern: `v{OLD_VERSION} is released!`) and replace it with:
+The announcement banner (`docs/overrides/main.html`) is a vendored version-free template — no release edit needed.
 
 ```html
 <span class="right-margin"> v{VERSION} is released! </span>

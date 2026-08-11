@@ -1,6 +1,7 @@
 /* HSSM ecosystem brand tokens + shared helpers.
-   SOURCE OF TRUTH: HSSMSpine/docs-brand/extra.css — synced into each repo by
-   scripts/sync_docs_brand.py; do not edit the vendored copies. */
+   VENDORED COPY — source of truth: https://github.com/lnccbrown/HSSMSpine
+   (docs-brand/extra.css). Edit there and re-sync; local edits will be
+   flagged as drift. */
 
 /* -- palette (ocean = light/auto, slate = dark) -- */
 [data-md-color-scheme="ocean"] {
@@ -57,10 +58,6 @@ div .jp-RenderedText {
   width: 200px;
 }
 
-.md-header-__title {
-  font-size: 1rem;
-}
-
 div .md-sidebar__inner {
   margin-left: 0.2rem;
 }
@@ -97,10 +94,10 @@ div .md-sidebar__inner nav .md-nav__list {
 
 .move-down {
   transform: translate(0px, -5px);
-  animation: down_movement 1000ms infinite ease-out;
+  animation: down-movement 1000ms infinite ease-out;
 }
 
-@keyframes down_movement {
+@keyframes down-movement {
   to {
     transform: translate(0px, 5px);
   }
