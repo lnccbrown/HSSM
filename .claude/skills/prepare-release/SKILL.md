@@ -1,7 +1,7 @@
 ---
 name: prepare-release
 description: >
-  Automate the HSSM pre-release workflow: update changelog, update docs announcement banner,
+  Automate the HSSM pre-release workflow: update changelog,
   build docs locally, and create a draft GitHub release. Use this skill whenever the user mentions
   "prepare release", "release prep", "pre-release checklist", "update changelog for release",
   or any variation of getting ready to publish a new version of HSSM. Also trigger when the user
@@ -79,17 +79,7 @@ Guidelines for writing the changelog:
 
 After user approval, insert the new version section into `docs/changelog.md` immediately after the `# Changelog` heading on line 1. Add a blank line before and after the new section.
 
-## Step 5: Update the announcement banner
-
-The announcement banner (`docs/overrides/main.html`) is a vendored version-free template — no release edit needed.
-
-```html
-<span class="right-margin"> v{VERSION} is released! </span>
-```
-
-Only change the version number — leave the surrounding HTML and Jinja2 template structure untouched.
-
-## Step 6: Build docs locally
+## Step 5: Build docs locally
 
 Run:
 
@@ -104,7 +94,7 @@ Check that the command exits with code 0. If it fails:
 
 If it succeeds, confirm to the user and move on.
 
-## Step 7: Run the notebook check workflow
+## Step 6: Run the notebook check workflow
 
 Trigger the `check_notebooks.yml` workflow on the current branch to verify all notebooks execute successfully:
 
@@ -124,7 +114,7 @@ Use `gh run watch <RUN_ID>` to stream the status, or poll with `gh run view <RUN
 - If the workflow **succeeds**, confirm to the user and proceed to the draft release.
 - If the workflow **fails**, show the user the failure details using `gh run view <RUN_ID> --log-failed` and help debug. Do NOT proceed to creating the release until notebooks pass.
 
-## Step 8: Create a draft GitHub release
+## Step 7: Create a draft GitHub release
 
 Run:
 
@@ -135,9 +125,9 @@ gh release create v{VERSION} --draft --title "v{VERSION}" --generate-notes --tar
 The `--draft` flag ensures nothing is published (and therefore no CI release pipeline is triggered).
 The `--generate-notes` flag uses GitHub's auto-generated release notes from merged PRs.
 
-## Step 9: Report
+## Step 8: Report
 
 Tell the user:
 - The draft release URL (from the `gh release create` output)
-- A summary of what was done: changelog updated, banner updated, docs build verified, draft release created
+- A summary of what was done: changelog updated, docs build verified, draft release created
 - Remind them that publishing the release will trigger the full CI pipeline (tests, PyPI publish, docs deploy)
