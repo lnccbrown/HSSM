@@ -1,25 +1,52 @@
-name: Build docs
+name: Docs
 
 on:
+  pull_request:
+    paths: ["docs/**", "mkdocs.yml", "pyproject.toml", "src/hssm/**"]
+  push:
+    branches: [main]
+    paths: ["docs/**", "mkdocs.yml", "pyproject.toml", "src/hssm/**"]
+  release:
+    types: [published]
+  schedule:
+    - cron: "50 5 * * 1" # weekly link check (Monday, off-peak UTC)
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build_docs:
+  build:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: true
-      matrix:
-        python-version: ["3.13"]
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Setup environment
-        uses: ./.github/setup-env
+      - uses: actions/checkout@v7
+      - uses: ./.github/setup-env
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.13"
+      - name: Build docs (strict)
+        run: uv run --group notebook --group docs mkdocs build --strict
 
-      - name: Run mkdocs
+  deploy:
+    if: github.event_name == 'release' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/setup-env
+        with:
+          python-version: "3.13"
+      - name: Deploy docs
         run: uv run --group notebook --group docs mkdocs gh-deploy --force
+
+  linkcheck:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: --cache --max-cache-age 1d --no-progress './docs/**/*.md' 'README.md'
+          fail: true

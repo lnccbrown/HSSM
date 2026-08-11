@@ -1,7 +1,20 @@
 site_name: HSSM
+site_url: https://lnccbrown.github.io/HSSM/
 repo_name: lnccbrown/HSSM
 repo_url: https://github.com/lnccbrown/HSSM/
 edit_uri: edit/main/docs
+
+validation:
+  omitted_files: warn
+  # phase-2 consolidation targets, deliberately unlisted until then
+not_in_nav: |
+  api/defaults.md
+  tutorials/initial_values.ipynb
+  tutorials/poisson_race.ipynb
+  tutorials/attentional_ddm.py
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
 
 nav:
   - Home:
@@ -82,6 +95,8 @@ nav:
 plugins:
   - search
   - autorefs
+  - redirects:
+      redirect_maps: {}
   - mkdocs-jupyter:
       execute: true
       execute_ignore:
