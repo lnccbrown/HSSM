@@ -176,6 +176,7 @@ plugins:
               - "!^_"
 theme:
   logo: images/navlogo.png
+  favicon: images/navlogo.png
   name: material
   custom_dir: docs/overrides
   features:
@@ -184,6 +185,8 @@ theme:
     - navigation.tabs.sticky
     - navigation.sections
     - navigation.path
+    - navigation.footer
+    - navigation.indexes
     - navigation.top
     - content.code.copy
     - content.action.view
@@ -216,6 +219,11 @@ theme:
         name: Switch to system preference
 
 extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/lnccbrown/HSSM
+    - icon: material/forum
+      link: https://github.com/lnccbrown/HSSM/discussions
   homepage: "https://lnccbrown.github.io/HSSM/"
 
 extra_css:
@@ -237,3 +245,9 @@ markdown_extensions:
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+copyright: >-
+  Copyright &copy; Brown University —
+  <a href="https://lnccbrown.github.io/HSSM/">HSSM</a> ·
+  <a href="https://lnccbrown.github.io/ssm-simulators/">ssm-simulators</a> ·
+  <a href="https://lnccbrown.github.io/LANfactory/">LANfactory</a>

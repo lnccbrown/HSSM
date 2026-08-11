@@ -1,4 +1,9 @@
-{% extends "base.html" %} {% block announce %}
+{#- HSSM ecosystem shared announcement banner.
+    SOURCE OF TRUTH: HSSMSpine/docs-brand/main.html — synced by
+    scripts/sync_docs_brand.py; do not edit the vendored copies.
+    Repo-agnostic: all links derive from config.repo_url. -#}
+{% extends "base.html" %}
+{% block announce %}
 <span class="show-on-small right-margin">
     <span class="twemoji right-margin show-on-small move-down">
         {% include ".icons/fontawesome/solid/angles-down.svg" %}
@@ -6,8 +11,8 @@
     Navigate the site here!
 </span>
 <span class="right-margin">
-    <a href="/HSSM/changelog/#040">
-        Read the v0.4.0 release notes for major new capabilities and migration guidance
+    <a href="{{ config.repo_url | trim('/') }}/releases/latest">
+        A new release is out — read the release notes
     </a>
 </span>
 <span>
@@ -16,34 +21,7 @@
     </span>
     Questions?
     <a href="https://github.com/lnccbrown/HSSM/discussions">
-        Open a discussion here!
+        Open a discussion!
     </a>
 </span>
-{% endblock %} {% block content %} {{ super() }}
-
-<style>
-    pre {
-        font-size: 0.7rem;
-    }
-
-    .jp-OutputArea-executeResult pre {
-        font-size: 0.7rem;
-    }
-
-    .jp-xr-text-repr-fallback pre {
-        font-size: 0.7rem;
-    }
-
-    .xr-sections {
-        font-size: 0.7rem;
-    }
-
-    div .jp-RenderedText {
-        font-size: 0.7rem !important;
-    }
-
-    .jupyter-wrapper .jp-RenderedText pre {
-        font-size: 0.7rem !important;
-    }
-</style>
-{% endblock content %}
+{% endblock %}

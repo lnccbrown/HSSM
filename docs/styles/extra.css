@@ -1,3 +1,8 @@
+/* HSSM ecosystem brand tokens + shared helpers.
+   SOURCE OF TRUTH: HSSMSpine/docs-brand/extra.css — synced into each repo by
+   scripts/sync_docs_brand.py; do not edit the vendored copies. */
+
+/* -- palette (ocean = light/auto, slate = dark) -- */
 [data-md-color-scheme="ocean"] {
   --md-primary-fg-color: #245c81;
   --md-accent-fg-color: #ec205b;
@@ -10,17 +15,46 @@
   --md-typeset-a-color: #00b4b5;
 }
 
-.md-header-nav__title img {
-  height: 200px; /* adjust size as needed */
-  width: 200px; /* adjust size as needed */
-}
-
+/* -- shared typography -- */
 .md-typeset h1 {
   font-weight: 300;
 }
 
 h2 {
   font-weight: 700;
+}
+
+.md-typeset code {
+  font-size: 0.7rem;
+}
+
+.md-typeset table:not([class]) {
+  font-size: 0.7rem;
+}
+
+/* -- notebook output sizing (was inline in HSSM's main.html) -- */
+pre {
+  font-size: 0.7rem;
+}
+
+.jp-OutputArea-executeResult pre,
+.jp-xr-text-repr-fallback pre,
+.jupyter-wrapper .jp-RenderedText pre {
+  font-size: 0.7rem !important;
+}
+
+.xr-sections {
+  font-size: 0.7rem;
+}
+
+div .jp-RenderedText {
+  font-size: 0.7rem !important;
+}
+
+/* -- header/sidebar tweaks -- */
+.md-header-nav__title img {
+  height: 200px;
+  width: 200px;
 }
 
 .md-header-__title {
@@ -35,10 +69,7 @@ div .md-sidebar__inner nav .md-nav__list {
   margin-left: 0.2rem;
 }
 
-div .md-sidebar__inner {
-  margin-left: 0.2rem;
-}
-
+/* -- landing-page grid -- */
 #wrapper {
   display: grid;
   grid-template-columns: 33.334% 66.667%;
@@ -53,6 +84,7 @@ div .md-sidebar__inner {
   padding-left: 1em;
 }
 
+/* -- announcement-banner helpers (used by the shared main.html) -- */
 .right-margin {
   margin-right: 10px;
 }
@@ -78,12 +110,4 @@ div .md-sidebar__inner {
   color: pink;
   width: 35px;
   height: 35px;
-}
-
-.md-typeset code {
-  font-size: 0.7rem;
-}
-
-.md-typeset table:not([class]) {
-  font-size: 0.7rem;
 }
