@@ -1,7 +1,7 @@
 """Slow sampling tests for RSSSM (parameter recovery).
 
 These actually run NUTS via numpyro and are marked ``slow`` (run with
-``pytest --runslow``).  They exercise the overridden ``sample()`` / ``summary()``
+``pytest --runslow``).  They exercise the overridden ``sample()``
 surface and confirm parameter recovery on synthetic regime-switching data.
 
 Note on the tutorial regression: the *structural* bit-for-bit equivalence of
@@ -42,7 +42,7 @@ def test_sample_recovers_single_participant_k2(tutorial_data):
         draws=500, tune=500, chains=2, target_accept=0.9, random_seed=42
     )
 
-    summary = model.summary()
+    summary = az.summary(model.traces, round_to=None)
     assert summary["r_hat"].max() < 1.05
 
     post = idata.posterior
@@ -92,7 +92,7 @@ def test_sample_multi_participant_k3():
         draws=500, tune=500, chains=2, target_accept=0.9, random_seed=42
     )
 
-    summary = model.summary()
+    summary = az.summary(model.traces, round_to=None)
     assert summary["r_hat"].max() < 1.1
 
     v_mean = idata.posterior["v"].mean(("chain", "draw")).values
@@ -182,11 +182,11 @@ def test_infer_regimes_and_loo_end_to_end():
     assert (map_regime == regimes).mean() > 0.8
 
     # --- compute_log_likelihood (wired via sample): arviz.loo runs ---
-    assert "log_likelihood" in idata.groups()
+    assert "log_likelihood" in idata
     ll = idata.log_likelihood["obs"].values
     assert np.isfinite(ll).all()
     loo = az.loo(idata)
-    assert np.isfinite(loo.elpd_loo)
+    assert np.isfinite(loo.elpd)
 
 
 def test_per_regime_p_outlier_recovery():
@@ -224,7 +224,7 @@ def test_per_regime_p_outlier_recovery():
         draws=600, tune=600, chains=2, target_accept=0.9, random_seed=1
     )
 
-    assert model.summary()["r_hat"].max() < 1.1
+    assert az.summary(model.traces, round_to=None)["r_hat"].max() < 1.1
     post = idata.posterior
     v_mean = post["v"].mean(("chain", "draw")).values
     p_mean = post["p_outlier"].mean(("chain", "draw")).values

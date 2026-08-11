@@ -72,11 +72,12 @@ def build_tutorial_forward_marginal(data, v, a, z, t, P, K):
     def step(ll, ap, lp):
         return pt.logsumexp(ap[:, None] + lp, axis=0) + ll
 
-    log_alphas, _ = pytensor.scan(
+    log_alphas = pytensor.scan(
         fn=step,
         sequences=[log_lik[1:]],
         outputs_info=[log_alpha_init],
         non_sequences=[log_P],
+        return_updates=False,
     )
     return float(pt.logsumexp(log_alphas[-1]).eval())
 

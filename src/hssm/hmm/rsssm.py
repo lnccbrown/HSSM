@@ -49,8 +49,8 @@ from .specs import (
 from .utils import pad_and_align_to_T_max
 
 if TYPE_CHECKING:
-    import arviz as az
     import pandas as pd
+    from xarray import DataTree
 
     from .._types import LoglikKind, SupportedModels
 
@@ -173,7 +173,7 @@ class RSSSM(HSSMBase):
 
         # ===== minimal HSSMBase state (we bypass HSSMBase.__init__) =====
         self.data = data.copy()
-        self._inference_obj: az.InferenceData | None = None
+        self._inference_obj: DataTree | None = None
         self._inference_obj_vi: pm.Approximation | None = None
         self._vi_approx = None
         self._map_dict = None
@@ -690,7 +690,7 @@ class RSSSM(HSSMBase):
         nuts_sampler: str = "numpyro",
         include_log_likelihood: bool = False,
         **kwargs: Any,
-    ) -> az.InferenceData:
+    ) -> DataTree:
         """Sample the model via ``pm.sample`` on the directly-built graph.
 
         Defaults to ``nuts_sampler="numpyro"`` (decision 10.1.10): the forward
@@ -710,7 +710,7 @@ class RSSSM(HSSMBase):
         ----------
         include_log_likelihood
             When ``True``, attach the per-trial ``log_likelihood`` group via
-            :meth:`compute_log_likelihood` (needed for ``arviz.loo`` / ``waic``).
+            :meth:`compute_log_likelihood` (needed for ``arviz.loo``).
             Defaults to ``False``: unlike a standard HSSM model whose per-trial
             logp is vectorised, RSSSM reconstructs it post-hoc with a pure-NumPy
             forward filter over every draw (``O(chains·draws·N·T)``), which is
@@ -764,7 +764,7 @@ class RSSSM(HSSMBase):
             "RSSSM contributes the likelihood as a scalar marginal, so the "
             "per-trial `log_likelihood` group is not produced at sampling time. "
             "Use `compute_log_likelihood(idata)` (Phase 4) to reconstruct it "
-            "post-hoc for arviz.loo / waic."
+            "post-hoc for arviz.loo."
         )
 
     def vi(self, *args: Any, **kwargs: Any):
@@ -822,10 +822,10 @@ class RSSSM(HSSMBase):
 
     def infer_regimes(
         self,
-        idata: az.InferenceData | None = None,
+        idata: DataTree | None = None,
         n_draws: int = 200,
         seed: int | None = None,
-    ) -> az.InferenceData:
+    ) -> DataTree:
         """Recover the latent regime sequences from the posterior via FFBS.
 
         NUTS marginalises the discrete regimes out at sampling time, so the
@@ -844,7 +844,7 @@ class RSSSM(HSSMBase):
 
         Returns
         -------
-        az.InferenceData
+        DataTree
             A ``posterior_regimes`` group with ``regimes``
             ``(draw, participant, trial)`` and ``regime_sample_frequency``
             ``(participant, trial, regime)``.
@@ -854,19 +854,17 @@ class RSSSM(HSSMBase):
         idata = idata if idata is not None else self.traces
         return _infer_regimes(self, idata, n_draws=n_draws, seed=seed)
 
-    def compute_log_likelihood(
-        self, idata: az.InferenceData | None = None
-    ) -> az.InferenceData:
+    def compute_log_likelihood(self, idata: DataTree | None = None) -> DataTree:
         """Attach the post-hoc per-trial log-likelihood group (§5.6).
 
         The sampler graph contributes only the scalar marginal (§3.4), so the
-        ``log_likelihood`` group needed by ``arviz.loo`` / ``arviz.waic`` is
+        ``log_likelihood`` group needed by ``arviz.loo`` is
         reconstructed here from the saved posterior: per draw, the forward
         filter's running log-evidence yields ``delta_t = logZ_t - logZ_{t-1}``,
         whose per-participant sum equals the marginal the sampler used.
 
         The per-trial terms are one-step-ahead predictives and are serially
-        dependent within a participant, so the ``arviz.loo`` / ``waic`` estimate
+        dependent within a participant, so the ``arviz.loo`` estimate
         is an *approximate* leave-one-out (use it as a relative comparison score,
         not an exact LOO).  This recomputes the forward filter for every
         posterior draw, so it can be slow on large posteriors.
@@ -884,7 +882,7 @@ class RSSSM(HSSMBase):
 
     def plot_regime_recovery(
         self,
-        regimes_idata: az.InferenceData | None = None,
+        regimes_idata: DataTree | None = None,
         participant: int = 0,
         true_regimes: Any = None,
         ax: Any = None,

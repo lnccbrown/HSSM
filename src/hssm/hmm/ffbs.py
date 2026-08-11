@@ -8,8 +8,8 @@ reconstructs them *after* sampling, in pure NumPy:
   posterior draws, drawing one plausible regime sequence per participant per
   draw — a posterior over regime trajectories.
 - ``compute_log_likelihood`` reconstructs the per-trial one-step-ahead
-  contributions ``delta_t = logZ_t - logZ_{t-1}`` so ``arviz.loo`` / ``waic``
-  work despite the sampler graph contributing only the scalar marginal (§3.4).
+  contributions ``delta_t = logZ_t - logZ_{t-1}`` so ``arviz.loo`` works despite
+  the sampler graph contributing only the scalar marginal (§3.4).
 
 Both consume the *same* emission as sampling time: ``build_log_emission`` is
 recompiled to a NumPy callable via ``pytensor.function``, which works uniformly
@@ -31,7 +31,7 @@ from .likelihoods.builder import build_log_emission
 from .specs import DirichletInitialDistribution, NoPooling
 
 if TYPE_CHECKING:
-    import arviz as az
+    from xarray import DataTree
 
     from .rsssm import RSSSM
 
@@ -184,13 +184,14 @@ def _select_draws(
 
 
 def infer_regimes(
-    model: RSSSM, idata: az.InferenceData, n_draws: int, seed: int | None
-) -> az.InferenceData:
+    model: RSSSM, idata: DataTree, n_draws: int, seed: int | None
+) -> DataTree:
     """FFBS posterior over regime sequences (design §5.5)."""
-    import arviz as az
     import xarray as xr
 
-    posterior = idata.posterior  # type: ignore[attr-defined]
+    # `.dataset` unwraps the DataTree node to a plain Dataset view, so variable
+    # lookups return DataArrays (a DataTree's `.values` is the mapping method).
+    posterior = idata["posterior"].dataset
     K, N, T = model.K, model.n_participants, model.n_trials
     lengths = _participant_lengths(model)
     rng = np.random.default_rng(seed)
@@ -230,10 +231,10 @@ def infer_regimes(
             "regime": np.arange(K),
         },
     )
-    return az.InferenceData(posterior_regimes=ds)
+    return xr.DataTree.from_dict({"posterior_regimes": ds})
 
 
-def compute_log_likelihood(model: RSSSM, idata: az.InferenceData) -> az.InferenceData:
+def compute_log_likelihood(model: RSSSM, idata: DataTree) -> DataTree:
     """Attach the post-hoc per-trial log-likelihood group (design §5.6).
 
     For every posterior draw, the forward filter's running log-evidence
@@ -241,7 +242,7 @@ def compute_log_likelihood(model: RSSSM, idata: az.InferenceData) -> az.Inferenc
     contribution ``delta_t = logZ_t - logZ_{t-1}`` (with ``delta_0 = logZ_0``).
     By construction the per-participant sum equals that participant's marginal,
     and the grand total equals the scalar marginal the sampler used, so
-    ``arviz.loo`` / ``waic`` can consume the result.
+    ``arviz.loo`` can consume the result.
 
     The ``log_likelihood`` group is laid out over the **real** trials only as a
     single ``__obs__`` axis (participant-major, matching the input row order),
@@ -253,8 +254,8 @@ def compute_log_likelihood(model: RSSSM, idata: az.InferenceData) -> az.Inferenc
     Caveat (interpretation).  The per-trial contributions are *one-step-ahead*
     predictive terms ``p(y_t | y_{1:t-1}, theta)``, so within a participant they
     are serially dependent through the latent regime chain (the trials are not
-    exchangeable).  ``arviz.loo`` / ``waic`` treat each ``__obs__`` as an
-    independent observation, so the resulting estimate is an *approximate*
+    exchangeable).  ``arviz.loo`` treats each ``__obs__`` as an independent
+    observation, so the resulting estimate is an *approximate*
     leave-one-out (closer in spirit to leave-future-out); treat it as a relative
     model-comparison score rather than an exact LOO.  The factorisation itself is
     exact: the per-participant sum of contributions equals that participant's
@@ -265,7 +266,9 @@ def compute_log_likelihood(model: RSSSM, idata: az.InferenceData) -> az.Inferenc
     """
     import xarray as xr
 
-    posterior = idata.posterior  # type: ignore[attr-defined]
+    # `.dataset` unwraps the DataTree node to a plain Dataset view, so variable
+    # lookups return DataArrays (a DataTree's `.values` is the mapping method).
+    posterior = idata["posterior"].dataset
     N = model.n_participants
     n_chains, n_post = posterior.sizes["chain"], posterior.sizes["draw"]
     lengths = _participant_lengths(model)
@@ -317,7 +320,7 @@ def compute_log_likelihood(model: RSSSM, idata: az.InferenceData) -> az.Inferenc
             "trial": ("__obs__", obs_trial),
         },
     )
-    if "log_likelihood" in idata.groups():
-        del idata.log_likelihood  # type: ignore[attr-defined]
-    idata.add_groups({"log_likelihood": ds})
+    if "log_likelihood" in idata:
+        del idata["log_likelihood"]
+    idata["log_likelihood"] = ds
     return idata

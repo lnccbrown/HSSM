@@ -156,13 +156,22 @@ def test_per_trial_delta_sums_to_marginal():
 # ---------------------------------------------------------------------------
 
 
-def _fake_posterior(v, a, z, t, P, n_draws=3):
-    """A 1-chain InferenceData posterior for a K=2, switching=['v'] DDM."""
+def _fake_posterior(v, a, z, t, P, n_draws=3, jitter=0.0):
+    """A 1-chain ``DataTree`` posterior for a K=2, switching=['v'] DDM.
+
+    ``jitter`` spreads ``v`` deterministically across draws.  Draws are
+    otherwise identical, which makes the per-draw log-likelihood constant —
+    arviz's PSIS tail estimator rejects that ("All tail values are the same"),
+    so the ``arviz.loo`` tests need a non-degenerate spread.
+    """
     v, P = np.asarray(v, float), np.asarray(P, float)
     K = v.shape[0]
+    v_draws = np.tile(v, (1, n_draws, 1))
+    if jitter:
+        v_draws = v_draws + np.linspace(-jitter, jitter, n_draws)[None, :, None]
     ds = xr.Dataset(
         {
-            "v": (("chain", "draw", "v_dim"), np.tile(v, (1, n_draws, 1))),
+            "v": (("chain", "draw", "v_dim"), v_draws),
             "a": (("chain", "draw"), np.full((1, n_draws), a)),
             "z": (("chain", "draw"), np.full((1, n_draws), z)),
             "t": (("chain", "draw"), np.full((1, n_draws), t)),
@@ -174,7 +183,7 @@ def _fake_posterior(v, a, z, t, P, n_draws=3):
             "v_dim": np.arange(K),
         },
     )
-    return az.InferenceData(posterior=ds)
+    return xr.DataTree.from_dict({"posterior": ds})
 
 
 def _fitted_model():
@@ -221,13 +230,15 @@ def test_compute_log_likelihood_sums_to_model_marginal():
 def test_compute_log_likelihood_enables_loo():
     """The attached log_likelihood group is consumable by arviz.loo."""
     model, _ = _fitted_model()
+    # >= 25 draws (arviz's PSIS tail needs >= 5 tail draws) and a non-degenerate
+    # spread across them.
     idata = _fake_posterior(
-        [0.2, 1.5], 0.8, 0.5, 0.3, [[0.9, 0.1], [0.1, 0.9]], n_draws=8
+        [0.2, 1.5], 0.8, 0.5, 0.3, [[0.9, 0.1], [0.1, 0.9]], n_draws=40, jitter=0.05
     )
     model.compute_log_likelihood(idata)
-    assert "log_likelihood" in idata.groups()
+    assert "log_likelihood" in idata
     loo = az.loo(idata)
-    assert np.isfinite(loo.elpd_loo)
+    assert np.isfinite(loo.elpd)
 
 
 def test_infer_regimes_shapes_and_frequencies():
@@ -277,9 +288,11 @@ def test_infer_regimes_uses_estimable_pi0(monkeypatch):
     idata = _fake_posterior(
         [0.2, 1.5], 0.8, 0.5, 0.3, [[0.9, 0.1], [0.1, 0.9]], n_draws=2
     )
-    idata.posterior["pi0"] = (
-        ("chain", "draw", "pi0_dim"),
+    # Assign an explicit DataArray: a `(dims, data)` tuple is silently stored as
+    # a 0-d object on a DataTree node (unlike on a plain Dataset).
+    idata.posterior["pi0"] = xr.DataArray(
         np.tile([0.7, 0.3], (1, 2, 1)),
+        dims=("chain", "draw", "pi0_dim"),
     )
 
     captured = {}
@@ -325,8 +338,10 @@ def test_log_likelihood_unbalanced_excludes_padding():
     observations and inflate ``n_data_points`` / bias elpd.
     """
     model = _unbalanced_model()
+    # >= 25 draws (arviz's PSIS tail needs >= 5 tail draws) and a non-degenerate
+    # spread across them.
     idata = _fake_posterior(
-        [0.2, 1.5], 0.8, 0.5, 0.3, [[0.9, 0.1], [0.1, 0.9]], n_draws=8
+        [0.2, 1.5], 0.8, 0.5, 0.3, [[0.9, 0.1], [0.1, 0.9]], n_draws=40, jitter=0.05
     )
     model.compute_log_likelihood(idata)
     ll = idata.log_likelihood["obs"]
@@ -334,7 +349,7 @@ def test_log_likelihood_unbalanced_excludes_padding():
     assert ll.sizes["__obs__"] == 80
     loo = az.loo(idata)
     assert int(loo.n_data_points) == 80
-    assert np.isfinite(loo.elpd_loo)
+    assert np.isfinite(loo.elpd)
 
 
 def test_compute_log_likelihood_is_idempotent():
@@ -377,7 +392,7 @@ def test_ffbs_and_log_likelihood_under_no_pooling():
         },
         coords={"chain": [0], "draw": np.arange(4)},
     )
-    idata = az.InferenceData(posterior=ds)
+    idata = xr.DataTree.from_dict({"posterior": ds})
     reg = model.infer_regimes(idata, n_draws=4, seed=0)
     assert reg.posterior_regimes["regimes"].sizes["participant"] == n
     model.compute_log_likelihood(idata)
@@ -425,18 +440,20 @@ def test_lan_backend_ffbs_and_log_likelihood():
         loglik_kind="approx_differentiable",
         backend="jax",
     )
-    idata = az.InferenceData(
-        posterior=xr.Dataset(
-            {
-                "v": (("chain", "draw", "k"), [[[-1.0, 1.0]]]),
-                "a": (("chain", "draw"), [[1.2]]),
-                "z": (("chain", "draw"), [[0.5]]),
-                "t": (("chain", "draw"), [[0.3]]),
-                "theta": (("chain", "draw"), [[0.2]]),
-                "P": (("chain", "draw", "i", "j"), [[[[0.9, 0.1], [0.1, 0.9]]]]),
-            },
-            coords={"chain": [0], "draw": [0]},
-        )
+    idata = xr.DataTree.from_dict(
+        {
+            "posterior": xr.Dataset(
+                {
+                    "v": (("chain", "draw", "k"), [[[-1.0, 1.0]]]),
+                    "a": (("chain", "draw"), [[1.2]]),
+                    "z": (("chain", "draw"), [[0.5]]),
+                    "t": (("chain", "draw"), [[0.3]]),
+                    "theta": (("chain", "draw"), [[0.2]]),
+                    "P": (("chain", "draw", "i", "j"), [[[[0.9, 0.1], [0.1, 0.9]]]]),
+                },
+                coords={"chain": [0], "draw": [0]},
+            )
+        }
     )
     reg = model.infer_regimes(idata, n_draws=1, seed=0)
     freq = reg.posterior_regimes["regime_sample_frequency"].values[0]

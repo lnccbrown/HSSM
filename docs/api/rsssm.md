@@ -5,7 +5,7 @@ DDM) with regime-specific *switching* parameters. The discrete regimes are
 marginalised out by the forward algorithm, so only continuous parameters remain
 for NUTS. After sampling, `infer_regimes` reconstructs the latent regime
 trajectories (Forward-Filter Backward-Sample) and `compute_log_likelihood`
-produces the per-trial log-likelihood needed for `arviz.loo` / `arviz.waic`.
+produces the per-trial log-likelihood needed for `arviz.loo`.
 
 ::: hssm.RSSSM
     handler: python
@@ -17,13 +17,11 @@ produces the per-trial log-likelihood needed for `arviz.loo` / `arviz.waic`.
         docstring_options:
             ignore_init_summary: false
         members:
+            - traces
+            - pymc_model
             - sample
             - infer_regimes
             - compute_log_likelihood
             - plot_regime_recovery
-            - summary
             - find_MAP
-            - plot_trace
             - graph
-            - pymc_model
-            - traces
