@@ -39,6 +39,7 @@ from hssm.hmm.utils import pad_and_align_to_T_max
 from .conftest import (
     TUTORIAL_P,
     build_tutorial_forward_marginal,
+    eval_at_point,
     make_panel,
     simulate_hmm_data,
     simulate_hmm_ddm_data,
@@ -113,6 +114,48 @@ def test_build_no_pooling():
     assert _logp_finite(m)
 
 
+def test_no_pooling_emission_aligns_participants_to_rows():
+    """Each participant's parameters must land on that participant's own rows.
+
+    The panel is flattened participant-major (row = p * T + t), so each
+    participant's value is expanded with `repeat` (not `tile`).  Feeding
+    *distinct* per-participant values is what discriminates the two: with
+    identical values across participants (or with only shape/finiteness
+    assertions) the wrong expansion is invisible.
+    """
+    from hssm.hmm import ffbs
+
+    n, t_each = 3, 30
+    panel = make_panel(n, t_each)
+    m = RSSSM(
+        data=panel,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        pooling="none",
+        participant_col="participant_id",
+    )
+    values = {
+        "v": np.array([[-1.5, 0.5], [0.2, 1.2], [-0.4, 2.0]]),  # (N, K)
+        "a": np.array([0.8, 1.2, 1.5]),
+        "z": np.array([0.4, 0.5, 0.6]),
+        "t": np.array([0.05, 0.10, 0.15]),
+    }
+    fn, order = ffbs._compile_emission_fn(m)
+    emission = np.asarray(fn(*[values[name] for name in order]))  # (N, T, K)
+
+    # Reference: the same participant fitted on its own, fully pooled.
+    for p in range(n):
+        sub = panel.loc[panel["participant_id"] == p, ["rt", "response"]]
+        m_p = RSSSM(
+            data=sub.reset_index(drop=True), model="ddm", K=2, switching_params=["v"]
+        )
+        fn_p, order_p = ffbs._compile_emission_fn(m_p)
+        vals_p = {name: values[name][p] for name in order_p}
+        expected = np.asarray(fn_p(*[vals_p[name] for name in order_p]))  # (1, T, K)
+        np.testing.assert_allclose(emission[p], expected[0], rtol=1e-4, atol=1e-4)
+
+
 def test_estimable_pi0():
     df = make_panel(2, 60)
     m = RSSSM(
@@ -139,8 +182,9 @@ def test_fixed_per_regime_param_has_no_rv(small_single_participant):
     assert _logp_finite(m)
 
 
-def test_advanced_config_path(small_single_participant):
-    cfg = RSSSMConfig(
+def _advanced_config() -> RSSSMConfig:
+    """A complete, hand-built config for the advanced `model_config=` path."""
+    return RSSSMConfig(
         model_name="rsssm_ddm",
         model="ddm",
         K=2,
@@ -156,8 +200,182 @@ def test_advanced_config_path(small_single_participant):
         transition_prior=DirichletConcentration(alpha=np.array([[20, 2], [2, 20]])),
         initial_distribution=FixedInitialDistribution(pi0=[0.6, 0.4]),
     )
-    m = RSSSM(data=small_single_participant, model_config=cfg)
+
+
+def test_advanced_config_path(small_single_participant):
+    m = RSSSM(data=small_single_participant, model_config=_advanced_config())
     assert _logp_finite(m)
+
+
+def test_model_as_config_object_builds(small_single_participant):
+    """`model=<BaseModelConfig>` resolves the emission from the wrapped SSM.
+
+    The RSSSM config's own `model_name` is the prefixed `"rsssm_ddm"`, which is
+    not a supported SSM, so the emission has to be resolved from the underlying
+    model identifier.
+    """
+    from hssm.config import Config
+
+    m = RSSSM(
+        data=small_single_participant,
+        model=Config.from_defaults("ddm", "analytical"),
+        K=2,
+        switching_params=["v"],
+    )
+    assert {rv.name for rv in m.pymc_model.free_RVs} == {"P", "v", "a", "z", "t"}
+    assert _logp_finite(m)
+
+
+def test_model_as_config_object_uses_registry_choices(small_single_participant):
+    """A wrapped config that never set `choices` still accepts `{-1, 1}` data.
+
+    `BaseModelConfig.choices` defaults to the generic `(0, 1)`, so trusting the
+    config's own field rejected standard DDM responses. The coding must come
+    from the registry entry the emission is rebuilt from — which is also what
+    `hssm.HSSM` does for a registered model string.
+    """
+    from hssm.config import Config
+
+    cfg = Config(
+        model_name="ddm",
+        loglik_kind="analytical",
+        list_params=["v", "a", "z", "t"],
+        bounds={"v": (-np.inf, np.inf), "a": (0.0, np.inf), "z": (0.0, 1.0)},
+    )
+    assert cfg.choices == (0, 1)  # the class default the bug trusted
+
+    m = RSSSM(
+        data=small_single_participant,
+        model=cfg,
+        K=2,
+        switching_params=["v"],
+    )
+    assert m.choices == [-1, 1]
+    assert _logp_finite(m)
+
+
+def test_model_as_config_rejects_custom_loglik(small_single_participant):
+    """A custom `loglik` on a `model=` config is rejected, not silently dropped.
+
+    `resolve_emission_dist` re-enters the registry, so the custom likelihood was
+    discarded and the model computed the stock one — bit-identical logp to plain
+    `model="ddm"`, i.e. silently wrong science.
+    """
+    from hssm.config import Config
+
+    def my_loglik(data, *args):  # pragma: no cover - never called
+        raise AssertionError("must not be reached")
+
+    cfg = Config(
+        model_name="ddm",
+        loglik_kind="analytical",
+        loglik=my_loglik,
+        list_params=["v", "a", "z", "t"],
+    )
+    with pytest.raises(NotImplementedError, match="custom `loglik`"):
+        RSSSM(
+            data=small_single_participant,
+            model=cfg,
+            K=2,
+            switching_params=["v"],
+        )
+
+
+@pytest.mark.parametrize("model_name", ["ddm", "angle"])
+def test_model_as_config_accepts_stock_lan_loglik(small_single_participant, model_name):
+    """A stock LAN config is not mistaken for a custom `loglik`.
+
+    The registered LAN `loglik` is an `.onnx` *path string*, and
+    `get_default_model_config` re-imports the config module on every call, so an
+    identity check rejected every unmodified `Config.from_defaults(...,
+    "approx_differentiable")` — 8 of the 20 registered (model, kind) entries.
+    """
+    from hssm.config import Config
+
+    cfg = Config.from_defaults(model_name, "approx_differentiable")
+    assert isinstance(cfg.loglik, str)  # the case identity comparison missed
+    assert RSSSM._is_registry_loglik(cfg, "approx_differentiable")
+
+
+def test_model_as_config_rejects_loglik_from_another_kind(small_single_participant):
+    """Borrowing another kind's loglik is a custom loglik for the resolved kind.
+
+    `loglik=logp_ddm` under `loglik_kind="approx_differentiable"` would be
+    silently rebuilt as the stock LAN emission, so it must be rejected.
+    """
+    from hssm.config import Config
+
+    analytical = Config.from_defaults("ddm", "analytical").loglik
+    cfg = Config(
+        model_name="ddm",
+        loglik_kind="approx_differentiable",
+        loglik=analytical,
+        list_params=["v", "a", "z", "t"],
+    )
+    assert not RSSSM._is_registry_loglik(cfg, "approx_differentiable")
+
+
+def test_config_path_fills_list_params_and_bounds(small_single_participant):
+    """The `model_config=` path derives `list_params`/`bounds` from the SSM.
+
+    Design §6.2's own example leaves both unset; without the derivation it died
+    with "list_params must be populated from the SSM model before validation".
+    """
+    cfg = RSSSMConfig(
+        model_name="rsssm_ddm",
+        model="ddm",
+        K=3,
+        switching_params=["v", "a"],
+        loglik_kind="analytical",
+        transition_prior=DirichletConcentration(
+            alpha=np.array([[30, 2, 2], [2, 30, 2], [2, 2, 30]])
+        ),
+        initial_distribution=FixedInitialDistribution(pi0=[0.5, 0.3, 0.2]),
+        ordering=OrderByParam(name="v", direction="desc"),
+    )
+    assert cfg.list_params is None
+
+    m = RSSSM(data=small_single_participant, model_config=cfg)
+    assert m.list_params == ["v", "a", "z", "t"]
+    assert m.bounds["z"] == (0.0, 1.0)
+    assert _logp_finite(m)
+
+
+def test_config_path_keeps_user_bounds(small_single_participant):
+    """Deriving the SSM metadata must not clobber bounds the user did set."""
+    cfg = RSSSMConfig(
+        model_name="rsssm_ddm",
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        loglik_kind="analytical",
+        bounds={"z": (0.4, 0.6)},
+    )
+    m = RSSSM(data=small_single_participant, model_config=cfg)
+    assert m.bounds["z"] == (0.4, 0.6)
+    assert m.bounds["a"] == (0.0, np.inf)  # still filled from the registry
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"pooling": "none"},
+        {"ordering": "none"},
+        {"p_outlier": 0.5},
+        {"transition_prior": {"sticky_diag": 5.0}},
+        {"initial_distribution": [0.9, 0.1]},
+        {"loglik_kind": "approx_differentiable"},
+        {"a": [0.1, 5.0]},
+    ],
+)
+def test_config_path_rejects_all_granular_kwargs(small_single_participant, extra):
+    """Every granular arg is carried by the config, so passing one is an error.
+
+    Silently dropping it (the previous behaviour) built a model that disagreed
+    with the call — e.g. `pooling="none"` still fully pooled.
+    """
+    with pytest.raises(ValueError, match="not both"):
+        RSSSM(data=small_single_participant, model_config=_advanced_config(), **extra)
 
 
 def test_config_and_granular_args_conflict(small_single_participant):
@@ -202,6 +420,61 @@ def test_validation_unknown_switching_param(tiny_df):
 
 
 @pytest.mark.parametrize(
+    ("param", "value"),
+    [
+        ("a", -1.0),  # a > 0
+        ("z", 2.0),  # z in [0, 1]
+        ("t", -0.5),  # t > 0
+    ],
+)
+def test_fixed_scalar_out_of_bounds_rejected(tiny_df, param, value):
+    """An out-of-support *fixed* scalar must raise, as it does in `hssm.HSSM`.
+
+    The direct-build path never goes through `Param.validate`, so these built a
+    model with a *finite but wrong* logp instead of erroring.
+    """
+    with pytest.raises(ValueError, match="not in bounds"):
+        RSSSM(
+            data=tiny_df,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            **{param: value},
+        )
+
+
+def test_fixed_vector_out_of_bounds_rejected(tiny_df):
+    """One out-of-support entry in a length-K fixed vector is enough to raise."""
+    with pytest.raises(ValueError, match="not in bounds"):
+        RSSSM(
+            data=tiny_df,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            a=[0.8, -1.2],
+        )
+
+
+@pytest.mark.parametrize("p_outlier", [[0.3, 1.5], [-0.1, 0.2]])
+def test_fixed_per_regime_p_outlier_out_of_bounds_rejected(tiny_df, p_outlier):
+    """Per-regime `p_outlier` outside [0, 1] raises instead of yielding NaN logp."""
+    with pytest.raises(ValueError, match="not in bounds"):
+        RSSSM(
+            data=tiny_df,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            p_outlier=p_outlier,
+        )
+
+
+def test_fixed_value_on_bound_is_accepted(tiny_df):
+    """The bounds check is inclusive: a value exactly on the bound is valid."""
+    m = RSSSM(data=tiny_df, model="ddm", K=2, switching_params=["v"], z=[0.0, 1.0])
+    assert "z" not in {rv.name for rv in m.pymc_model.free_RVs}
+
+
+@pytest.mark.parametrize(
     "kwargs",
     [
         {"p_outlier": 0.05},
@@ -223,6 +496,68 @@ def test_choice_only_model_rejected(tiny_df):
             model="softmax_inv_temperature_2",  # a supported choice-only SSM
             K=2,
             switching_params=["v"],
+        )
+
+
+def test_invalid_response_coding_rejected(tiny_df):
+    """A response coding the SSM does not use must raise, not silently rescore.
+
+    The DDM's choices are `{-1, 1}`; `{1, 2}` used to be accepted and every
+    trial scored as an upper-boundary response — a wrong likelihood with no
+    warning, where `hssm.HSSM` raises on the same frame.
+    """
+    df = tiny_df.copy()
+    df["response"] = df["response"].replace({-1.0: 2.0})
+    with pytest.raises(ValueError, match="Invalid responses"):
+        RSSSM(data=df, model="ddm", K=2, switching_params=["v"])
+
+
+def test_negative_rt_rejected(tiny_df):
+    """Negative RTs used to yield a finite, wrong logp."""
+    df = tiny_df.copy()
+    df.loc[3, "rt"] = -0.5
+    with pytest.raises(ValueError, match="negative response times"):
+        RSSSM(data=df, model="ddm", K=2, switching_params=["v"])
+
+
+def test_nan_rt_rejected(tiny_df):
+    """NaN RTs used to yield a NaN logp instead of an error."""
+    df = tiny_df.copy()
+    df.loc[3, "rt"] = np.nan
+    with pytest.raises(ValueError, match="NaN response times"):
+        RSSSM(data=df, model="ddm", K=2, switching_params=["v"])
+
+
+def test_numpy_scalar_spec_fixes_the_parameter(small_single_participant):
+    """Numpy scalars fix a parameter rather than silently becoming an RV.
+
+    `np.float64` subclasses `float` and was already handled; `np.float32` /
+    `np.int64` are not `float`/`int` subclasses and used to fall through to the
+    inferred branch.
+    """
+    m = RSSSM(
+        data=small_single_participant,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        z=np.float32(0.5),
+        a=np.int64(1),
+    )
+    rv_names = {rv.name for rv in m.pymc_model.free_RVs}
+    assert "z" not in rv_names and "a" not in rv_names
+    assert _logp_finite(m)
+
+
+@pytest.mark.parametrize("spec", ["0.8", {"0.8"}])
+def test_uninterpretable_param_spec_rejected(small_single_participant, spec):
+    """A spec that is neither numeric, array-like, nor a prior raises."""
+    with pytest.raises(TypeError, match="Unsupported input for 'z'"):
+        RSSSM(
+            data=small_single_participant,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            z=spec,
         )
 
 
@@ -288,6 +623,55 @@ def test_anchor_none_for_no_ordering():
 
 def test_anchor_none_when_no_switching():
     assert resolve_anchor(AutoOrdering(), []) is None
+
+
+def test_explicit_anchor_validated_even_without_switching_params():
+    """`ordering="v"` must not be silently ignored when nothing switches.
+
+    The early return for an empty `switching_params` used to fire *before* the
+    `OrderByParam` checks, so an explicit (and unsatisfiable) anchor built a
+    model with no ordering at all and no error — while the same typo with one
+    switching parameter raised.
+    """
+    with pytest.raises(ValueError, match="is not in switching_params"):
+        resolve_anchor(OrderByParam(name="v"), [])
+
+
+def test_explicit_anchor_rejected_at_construction(tiny_df):
+    """The same, through the constructor."""
+    with pytest.raises(ValueError, match="is not in switching_params"):
+        RSSSM(
+            data=tiny_df,
+            model="ddm",
+            K=2,
+            switching_params=[],
+            ordering="v",
+            a=[0.8, 1.2],
+        )
+
+
+def test_auto_and_no_ordering_stay_silent_without_switching_params():
+    """Only an *explicit* anchor raises; the implicit specs still return None."""
+    assert resolve_anchor(AutoOrdering(), []) is None
+    assert resolve_anchor(NoOrdering(), []) is None
+
+
+def test_fixed_initial_distribution_rejects_negative_entries():
+    """`pi0 = [1.5, -0.5]` sums to 1 but makes `log(pi0)` — and the logp — NaN."""
+    with pytest.raises(ValueError, match="non-negative"):
+        FixedInitialDistribution(pi0=[1.5, -0.5]).pi0_value(2)
+
+
+def test_fixed_initial_distribution_rejected_at_construction(tiny_df):
+    """The same, through the constructor."""
+    with pytest.raises(ValueError, match="non-negative"):
+        RSSSM(
+            data=tiny_df,
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            initial_distribution=[1.5, -0.5],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +797,77 @@ def test_v_anchor_initval_unchanged(small_single_participant):
 
     asc = _ascending_initval(2, bounds=None, center=0.0)
     np.testing.assert_allclose(asc, np.array([-2.0, 2.0]))
+
+
+def test_build_under_float32(small_single_participant):
+    """Initial values must respect `floatX`.
+
+    `hssm.set_floatX("float32")` makes every RV float32, and PyMC refuses to
+    store a float64 start in one ("cannot store a value of dtype float64").
+    Both seeded-vector paths are exercised: the anchor grid (`v`), the
+    per-parameter safe seed (`t`), and the no-pooling `(N, K)` broadcast.
+    """
+    import pytensor
+
+    prev_floatx = pytensor.config.floatX
+    hssm.set_floatX("float32", update_jax=True)
+    try:
+        m = RSSSM(
+            data=small_single_participant,
+            model="ddm",
+            K=2,
+            switching_params=["v", "t"],
+        )
+        assert _logp_finite(m)
+        m_np = RSSSM(
+            data=make_panel(2, 30),
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+            pooling="none",
+            participant_col="participant_id",
+        )
+        assert _logp_finite(m_np)
+    finally:
+        hssm.set_floatX(prev_floatx, update_jax=True)
+
+
+def _hmm_data_dtype(model) -> str:
+    """Return the dtype of the emission's `hmm_data` constant in the model graph."""
+    from pytensor.graph.traversal import ancestors
+
+    (potential,) = model.pymc_model.potentials
+    constants = [
+        node
+        for node in ancestors([potential])
+        if getattr(node, "name", None) == "hmm_data"
+    ]
+    assert constants, "the emission's `hmm_data` constant is not in the graph"
+    return constants[0].dtype
+
+
+@pytest.mark.parametrize("float_x", ["float32", "float64"])
+def test_panel_data_is_cast_to_floatx(small_single_participant, float_x):
+    """The panel enters the emission in `floatX`, not a hard-coded float32.
+
+    `small_single_participant` is a float32 frame, so a hard `.astype("float32")`
+    also passes under `float32` — the property only bites under the float64
+    default, where the old cast truncated genuine float64 RTs.
+    """
+    import pytensor
+
+    prev_floatx = pytensor.config.floatX
+    hssm.set_floatX(float_x, update_jax=True)
+    try:
+        m = RSSSM(
+            data=small_single_participant.astype("float64"),
+            model="ddm",
+            K=2,
+            switching_params=["v"],
+        )
+        assert _hmm_data_dtype(m) == float_x
+    finally:
+        hssm.set_floatX(prev_floatx, update_jax=True)
 
 
 # ---------------------------------------------------------------------------
@@ -701,8 +1156,8 @@ def test_validate_rejects_mismatched_transition_prior(tiny_df):
         )
 
 
-def test_validate_requires_model_or_emission():
-    """A config with neither `model` nor `emission_logp_func` fails validation."""
+def test_validate_requires_model():
+    """A config with no `model` fails validation: the emission is unresolvable."""
     cfg = RSSSMConfig(
         model_name="x",
         model=None,
@@ -712,8 +1167,16 @@ def test_validate_requires_model_or_emission():
         bounds={"v": (-np.inf, np.inf)},
         loglik_kind="analytical",
     )
-    with pytest.raises(ValueError, match="model.*or.*emission_logp_func"):
+    with pytest.raises(ValueError, match="`model` must be provided"):
         cfg.validate()
+
+
+def test_config_has_no_emission_logp_func():
+    """`emission_logp_func` is gone: it was never read anywhere in `src/`."""
+    assert not hasattr(
+        RSSSMConfig(model_name="x", model="ddm", loglik_kind="analytical"),
+        "emission_logp_func",
+    )
 
 
 def test_validate_warns_on_degenerate_no_switching(tiny_df, caplog):
@@ -864,6 +1327,34 @@ def test_descending_anchor_builds_with_finite_gradient(small_single_participant)
     assert np.all(np.isfinite(m.pymc_model.compile_dlogp()(ip)))
 
 
+def test_descending_anchor_starts_in_support(small_single_participant):
+    """The descending anchor must start on the *reversed* grid, not the negated one.
+
+    The ordered RV is `u = -anchor`, so its start has to be `-asc[::-1]`; plain
+    `-asc` starts a one-sided anchor (here `a > 0`) outside its support, where
+    every trial's emission is clamped to `LOGP_LB` and the likelihood
+    contributes exactly zero gradient — a silent flat plateau for NUTS.
+    """
+    from hssm.distribution_utils.dist import LOGP_LB
+
+    m = RSSSM(
+        data=small_single_participant,
+        model="ddm",
+        K=2,
+        switching_params=["a"],
+        ordering={"name": "a", "direction": "desc"},
+        a={"name": "Normal", "mu": 1.5, "sigma": 1.0},
+    )
+    ip = m.pymc_model.initial_point()
+    a_init = eval_at_point(m, m.pymc_model["a"], ip)
+    assert np.all(a_init > 0.0)  # in support
+    assert a_init[0] > a_init[1]  # descending
+
+    # The likelihood is not sitting on the clamped floor (T * LOGP_LB).
+    potential = float(eval_at_point(m, m.pymc_model.potentials[0], ip))
+    assert potential > m.n_trials * float(LOGP_LB)
+
+
 def test_vi_and_log_likelihood_raise(small_single_participant):
     """`vi` and `log_likelihood` are unavailable on the scalar-marginal graph."""
     m = RSSSM(data=small_single_participant, model="ddm", K=2, switching_params=["v"])
@@ -889,8 +1380,70 @@ def test_predictive_family_raises_cleanly(small_single_participant):
         m.sample_prior_predictive()
     with pytest.raises(NotImplementedError, match="§6.3"):
         m.plot_predictive()
+    with pytest.raises(NotImplementedError, match="§6.3"):
+        m.sample_do({"v": [0.5, 1.5]})
     with pytest.raises(NotImplementedError, match="bambi"):
         m.set_alias({"v": "drift"})
+    with pytest.raises(NotImplementedError, match="infer_regimes"):
+        m.add_likelihood_parameters_to_datatree()
+
+
+def test_sample_rejects_bambi_sampler_kwarg(small_single_participant):
+    """`sample(sampler=...)` raises a pointed TypeError, not a PyMC internal one.
+
+    `HSSM.sample` selects the backend with `sampler=`; RSSSM calls `pm.sample`
+    directly, where the same name collided with `_sample_external_nuts`'s own
+    `sampler` argument ("got multiple values for keyword argument 'sampler'").
+    """
+    m = RSSSM(data=small_single_participant, model="ddm", K=2, switching_params=["v"])
+    with pytest.raises(TypeError, match="nuts_sampler"):
+        m.sample(sampler="numpyro")
+
+
+def test_compile_logp_works_on_rsssm(small_single_participant):
+    """`compile_logp()` (untransformed) must work despite RSSSM's explicit initvals.
+
+    `remove_value_transforms` goes through `fgraph_from_model`, which refuses
+    models with non-default initial values; RSSSM sets several. The initvals are
+    cleared for the conversion and must be restored afterwards.
+    """
+    m = RSSSM(data=small_single_participant, model="ddm", K=2, switching_params=["v"])
+    before = dict(m.pymc_model.rvs_to_initial_values)
+    assert any(value is not None for value in before.values())
+
+    logp_fn = m.compile_logp()
+    # The value variables are untransformed here, so the point is the natural
+    # parameterisation (a simplex `P`, an ascending `v`, `a > 0`, `z` in [0, 1]).
+    untransformed_point = {
+        "P": np.array([[0.9, 0.1], [0.1, 0.9]]),
+        "v": np.array([-1.0, 1.0]),
+        "a": np.array(1.0),
+        "z": np.array(0.5),
+        "t": np.array(0.1),
+    }
+    assert np.isfinite(logp_fn(untransformed_point))
+    assert m.pymc_model.rvs_to_initial_values == before
+
+
+def test_repr_summarises_the_model(small_single_participant):
+    """`repr(model)` must summarise the model, not raise.
+
+    `HSSMBase.__repr__` walks `self.params`, which the direct-build path never
+    creates — a bare `model` cell in a notebook used to be a traceback.
+    """
+    m = RSSSM(
+        data=small_single_participant,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        pooling="none",
+    )
+    text = repr(m)
+    assert "Regime-Switching Sequential Sampling Model" in text
+    assert "Regimes (K): 2" in text
+    assert "Switching parameters: v" in text
+    assert "Pooling: none" in text
+    assert str(m) == text
 
 
 def test_graph_returns_graphviz(small_single_participant):

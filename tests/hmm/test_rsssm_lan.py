@@ -12,16 +12,23 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pymc as pm
+import pytensor
 import pytensor.tensor as pt
 import pytest
 
 import hssm
 from hssm import RSSSM
-from hssm.hmm import DirichletConcentration, FixedInitialDistribution
+from hssm.hmm import (
+    DirichletConcentration,
+    FixedInitialDistribution,
+    StickyDirichlet,
+)
 from hssm.hmm.likelihoods.emissions import (
     per_regime_emission_logp,
     resolve_emission_dist,
 )
+
+from .conftest import eval_at_point
 
 
 def _sim(model, theta, n=80, seed=0):
@@ -97,6 +104,20 @@ def test_lan_finite_gradient_at_init(ddm_df, backend):
     assert np.all(np.isfinite(grad))
 
 
+def test_lan_only_model_without_loglik_kind(angle_df):
+    """`angle` has no analytical likelihood; omitting `loglik_kind` must still work.
+
+    The bounds / default priors are already looked up from the model's first
+    available kind, so the emission has to be built with that same kind —
+    otherwise the constructor raises (`loglik must be a Callable, str, or
+    PathLike`) where `hssm.HSSM(model="angle")` builds fine.
+    """
+    m = RSSSM(data=angle_df, model="angle", K=2, switching_params=["v"])
+    assert m.model_config.loglik_kind == "approx_differentiable"
+    assert m.model_config.backend == "jax"
+    assert _logp_finite(m)
+
+
 def test_lan_jax_default_backend(ddm_df):
     """approx_differentiable defaults to backend='jax' (HSSM default)."""
     m = RSSSM(
@@ -129,7 +150,10 @@ def test_lan_backends_agree_at_fixed_point(ddm_df):
                 dist, pt.as_tensor_variable(data), [params]
             ).eval()[:, 0]
 
-    assert np.max(np.abs(emit("jax") - emit("pytensor"))) < 1e-10
+    # Exact agreement only holds at float64; under `hssm.set_floatX("float32")`
+    # the two evaluations of the same net differ by float32 round-off (~1e-7).
+    tol = 1e-10 if pytensor.config.floatX == "float64" else 1e-5
+    assert np.max(np.abs(emit("jax") - emit("pytensor"))) < tol
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +185,102 @@ def test_fixed_initial_distribution_variant(ddm_df):
     # Fixed pi0 -> not an estimable RV.
     assert "pi0" not in {rv.name for rv in m.pymc_model.free_RVs}
     assert _logp_finite(m)
+
+
+def test_transition_prior_alpha_reaches_the_graph(ddm_df):
+    """The user's concentration is what P's prior is actually built with.
+
+    Asserting only that `P` is a free RV (or that the logp is finite) does not
+    discriminate: substituting the default sticky concentration leaves both
+    true.
+    """
+    alpha = np.array([[7.0, 3.0], [2.0, 11.0]])
+    m = RSSSM(
+        data=ddm_df,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        transition_prior={"name": "Dirichlet", "alpha": alpha},
+    )
+    ip = m.pymc_model.initial_point()
+    p_value = eval_at_point(m, m.pymc_model["P"], ip)
+    got = float(
+        eval_at_point(
+            m, m.pymc_model.logp(vars=[m.pymc_model["P"]], jacobian=False), ip
+        )
+    )
+    expected = float(
+        pm.logp(pm.Dirichlet.dist(a=alpha, shape=(2, 2)), p_value).sum().eval()
+    )
+    assert abs(got - expected) < 1e-5
+    # The check discriminates: the default sticky prior scores P differently.
+    sticky = float(
+        pm.logp(
+            pm.Dirichlet.dist(a=StickyDirichlet().concentration(2), shape=(2, 2)),
+            p_value,
+        )
+        .sum()
+        .eval()
+    )
+    assert abs(expected - sticky) > 1.0
+
+
+def test_estimable_pi0_alpha_reaches_the_graph(ddm_df):
+    """The user's Dirichlet alpha for `pi0` reaches the graph, not a flat one."""
+    alpha = np.array([9.0, 1.0])
+    m = RSSSM(
+        data=ddm_df,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        initial_distribution={"name": "Dirichlet", "alpha": alpha},
+    )
+    ip = m.pymc_model.initial_point()
+    pi0_value = eval_at_point(m, m.pymc_model["pi0"], ip)
+    got = float(
+        eval_at_point(
+            m, m.pymc_model.logp(vars=[m.pymc_model["pi0"]], jacobian=False), ip
+        )
+    )
+    expected = float(pm.logp(pm.Dirichlet.dist(a=alpha), pi0_value).eval())
+    assert abs(got - expected) < 1e-5
+    flat = float(pm.logp(pm.Dirichlet.dist(a=np.ones(2)), pi0_value).eval())
+    assert abs(expected - flat) > 1.0
+
+
+def test_fixed_pi0_reaches_the_forward_recursion(ddm_df):
+    """A fixed non-uniform `pi0` is the vector the forward recursion starts from.
+
+    Checked against an independent NumPy forward filter fed the *same* emission
+    and parameter values; a uniform substitution (the previous tests' blind
+    spot) gives a measurably different marginal.
+    """
+    from scipy.special import logsumexp
+
+    from hssm.hmm import ffbs
+
+    pi0 = np.array([0.85, 0.15])
+    m = RSSSM(
+        data=ddm_df,
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        initial_distribution=pi0,
+    )
+    ip = m.pymc_model.initial_point()
+    potential = float(eval_at_point(m, m.pymc_model.potentials[0], ip))
+
+    emission_fn, order = ffbs._compile_emission_fn(m)
+    params = [eval_at_point(m, m.pymc_model[name], ip).astype(float) for name in order]
+    log_em = np.asarray(emission_fn(*params), dtype=float)[0]  # (T, K)
+    log_P = np.log(eval_at_point(m, m.pymc_model["P"], ip).astype(float))
+    ref = float(logsumexp(ffbs._forward_filter(log_em, log_P, np.log(pi0))[-1]))
+    assert abs(potential - ref) < 1e-2
+
+    uniform = float(
+        logsumexp(ffbs._forward_filter(log_em, log_P, np.log(np.full(2, 0.5)))[-1])
+    )
+    assert abs(ref - uniform) > 0.05  # the check discriminates
 
 
 # ---------------------------------------------------------------------------

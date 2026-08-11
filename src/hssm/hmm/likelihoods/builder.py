@@ -65,8 +65,8 @@ def make_hmm_logp_op(
     N, T = n_participants, n_trials
     n_cols = data_padded.shape[-1]
     n_rows = N * T
-    data_flat_np = data_padded.reshape(n_rows, n_cols).astype("float32")
-    mask_np = mask.astype("float32")
+    data_flat_np = pm.pytensorf.floatX(data_padded.reshape(n_rows, n_cols))
+    mask_np = pm.pytensorf.floatX(mask)
 
     def builder(
         param_values: dict[str, pt.TensorVariable],
@@ -116,7 +116,16 @@ def build_log_emission(
     """
     N, T = n_participants, n_trials
     n_rows = N * T
-    data_flat = pt.as_tensor_variable(data_flat_np.astype("float32"), name="hmm_data")
+    # `floatX` (not a hard float32 cast): the hard cast truncated genuine
+    # float64 RTs under the float64 default.  (The emission graph itself comes
+    # out float64 either way — the analytical logp upcasts — so this is about
+    # the data, not the emission dtype.)  The call is *not* redundant with the
+    # one in `make_hmm_logp_op`: the post-hoc FFBS path (`ffbs.py`) calls this
+    # function with a raw `model._data_padded.reshape(...)` that never passed
+    # through `floatX`.
+    data_flat = pt.as_tensor_variable(
+        pm.pytensorf.floatX(data_flat_np), name="hmm_data"
+    )
 
     regime_param_dicts: list[dict[str, pt.TensorVariable]] = []
     for k in range(K):

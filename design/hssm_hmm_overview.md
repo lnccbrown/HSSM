@@ -40,14 +40,14 @@ model = hssm.RSSSM(
     K=2,
     switching_params=["v"],
 )
-idata   = model.sample()
+idata = model.sample()
 regimes = model.infer_regimes()
 ```
 
 What you get back:
 - Posterior distributions over the SSM parameters (per-regime for switching ones, shared otherwise) and the transition matrix.
 - Per-trial posterior probabilities of each regime, recovered post-hoc.
-- Standard post-fit tools — `summary`, trace plots, `find_MAP` — work as inherited. A few methods are HMM-specific (`infer_regimes`, per-trial log-likelihood) or out of v1 scope (posterior-predictive simulation, which a regime-switching model needs a bespoke routine for); see Section 6.3 of the rigorous doc.
+- Standard post-fit tools — `az.summary(idata)`, trace plots, `find_MAP` — work as usual (`model.summary()` / `model.plot_trace()` were removed package-wide in HSSM 0.4.0). A few methods are HMM-specific (`infer_regimes`, per-trial log-likelihood) or out of v1 scope (posterior-predictive simulation, which a regime-switching model needs a bespoke routine for); see Section 6.3 of the rigorous doc.
 
 ---
 
@@ -82,7 +82,7 @@ The full design document explains how each deferred feature plugs in — they're
 
 ## How it fits in the package
 
-`RSSSM` joins the family alongside `HSSM` (per-trial emission-only models) and `RLSSM` (deterministic across-trial dynamics via reinforcement learning). It subclasses `HSSMBase`, keeps the familiar `.sample()` / `.summary()` API and the same priors and data conventions, and follows `RLSSM`'s structural pattern — across-trial coupling through a custom differentiable likelihood. One deliberate difference: the HMM's regime structure (a transition matrix, regime-indexed parameter vectors) cannot be expressed through bambi's regression formulas, so the model is built directly in PyMC rather than via bambi. The rigorous doc (decision 8) explains why, and how bambi re-enters cleanly if per-regime regressions are added later.
+`RSSSM` joins the family alongside `HSSM` (per-trial emission-only models) and `RLSSM` (deterministic across-trial dynamics via reinforcement learning). It subclasses `HSSMBase`, keeps the familiar `.sample()` / `az.summary(idata)` workflow and the same priors and data conventions, and follows `RLSSM`'s structural pattern — across-trial coupling through a custom differentiable likelihood. One deliberate difference: the HMM's regime structure (a transition matrix, regime-indexed parameter vectors) cannot be expressed through bambi's regression formulas, so the model is built directly in PyMC rather than via bambi. The rigorous doc (decision 8) explains why, and how bambi re-enters cleanly if per-regime regressions are added later.
 
 ---
 

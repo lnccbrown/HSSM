@@ -28,6 +28,7 @@ import pytensor.tensor as pt
 from scipy.special import logsumexp, softmax
 
 from .likelihoods.builder import build_log_emission
+from .rsssm import _is_fixed_scalar
 from .specs import DirichletInitialDistribution, NoPooling
 
 if TYPE_CHECKING:
@@ -77,7 +78,16 @@ def _compile_emission_fn(model: RSSSM):
         pooling=pooling_mode,
         broadcast_params=model._broadcast_params,
     )
-    fn = pytensor.function(inputs, log_emission, on_unused_input="ignore")
+    # `allow_input_downcast` (PyMC's own convention for compiled model
+    # functions): the posterior values fed in are float64, while the graph is
+    # built in `floatX` — under `hssm.set_floatX("float32")` a strict function
+    # would refuse them outright.
+    fn = pytensor.function(
+        inputs,
+        log_emission,
+        on_unused_input="ignore",
+        allow_input_downcast=True,
+    )
     return fn, list(model.list_params or [])
 
 
@@ -95,7 +105,7 @@ def _draw_param_value(model: RSSSM, name: str, posterior, chain: int, draw: int)
     K, N = model.K, model.n_participants
 
     # Fixed value supplied directly (scalar or length-K list).
-    is_fixed_scalar = isinstance(spec, (int, float)) and not isinstance(spec, bool)
+    is_fixed_scalar = _is_fixed_scalar(spec)
     is_fixed_vector = isinstance(spec, (list, tuple, np.ndarray))
     if is_fixed_scalar or is_fixed_vector:
         val = np.asarray(spec, dtype=float)

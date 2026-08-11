@@ -82,6 +82,24 @@ def build_tutorial_forward_marginal(data, v, a, z, t, P, K):
     return float(pt.logsumexp(log_alphas[-1]).eval())
 
 
+def eval_at_point(model, expr, point):
+    """Evaluate a graph expression of an RSSSM's PyMC model at a point.
+
+    Random variables are replaced by their value variables first (otherwise the
+    expression would *sample* rather than read the point), and the function is
+    compiled against every value variable so a full ``initial_point()`` can be
+    passed straight in.
+    """
+    pymc_model = model.pymc_model
+    (graph,) = pymc_model.replace_rvs_by_values([expr])
+    fn = pymc_model.compile_fn(
+        graph,
+        inputs=pymc_model.value_vars,
+        on_unused_input="ignore",
+    )
+    return np.asarray(fn(point))
+
+
 @pytest.fixture(scope="module")
 def tutorial_data():
     """Single-participant K=2 dataset matching the tutorial (500 trials)."""

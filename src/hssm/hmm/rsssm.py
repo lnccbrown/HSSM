@@ -49,6 +49,8 @@ from .specs import (
 from .utils import pad_and_align_to_T_max
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import pandas as pd
     from xarray import DataTree
 
@@ -72,6 +74,19 @@ def _bounds_based_prior(bounds: tuple[float, float] | None) -> dict[str, Any]:
     return {"name": "Uniform", "lower": float(lo), "upper": float(hi)}
 
 
+def _is_fixed_scalar(spec: Any) -> bool:
+    """Return whether ``spec`` is a scalar *fixed* value for a parameter.
+
+    ``np.number`` is included so numpy scalars (e.g. ``np.float32(0.8)``, which
+    unlike ``np.float64`` is not a ``float`` subclass) fix the parameter rather
+    than silently falling through to an inferred RV.  Booleans are excluded even
+    though ``bool`` subclasses ``int``.
+    """
+    return isinstance(spec, (int, float, np.number)) and not isinstance(
+        spec, (bool, np.bool_)
+    )
+
+
 def _ascending_initval(
     K: int, bounds: tuple[float, float] | None, center: float | None = None
 ) -> np.ndarray:
@@ -86,7 +101,12 @@ def _ascending_initval(
     an unbounded anchor such as ``v`` (center 0) this reproduces the previous
     ``linspace(-2, 2, K)`` exactly.  Without a safe seed the grid spans the
     parameter's bounds as before.
+
+    The grid is returned in ``pytensor.config.floatX`` (a float64 grid cannot be
+    stored in a float32 random variable, which is what ``hssm.set_floatX
+    ("float32")`` makes every RV).
     """
+    grid: np.ndarray
     if center is not None:
         half_width = 2.0  # default for sides open to infinity (e.g. v)
         if bounds is not None:
@@ -98,19 +118,21 @@ def _ascending_initval(
         # Floor guards the degenerate seed-on-boundary case; with the real
         # seeds (t=0.025, a=1.5, v=0) the boundary-derived width dominates.
         half_width = max(half_width, 1e-3)
-        return center + np.linspace(-half_width, half_width, K)
-
-    if bounds is None:
-        return np.linspace(-2.0, 2.0, K)
-    lo, hi = bounds
-    lo_inf, hi_inf = np.isinf(lo), np.isinf(hi)
-    if lo_inf and hi_inf:
-        return np.linspace(-2.0, 2.0, K)
-    if not lo_inf and hi_inf:
-        return lo + 0.5 + np.arange(K) * 0.5
-    if lo_inf and not hi_inf:
-        return hi - 0.5 - np.arange(K)[::-1] * 0.5
-    return np.linspace(lo, hi, K + 2)[1:-1]
+        grid = center + np.linspace(-half_width, half_width, K)
+    elif bounds is None:
+        grid = np.linspace(-2.0, 2.0, K)
+    else:
+        lo, hi = bounds
+        lo_inf, hi_inf = np.isinf(lo), np.isinf(hi)
+        if lo_inf and hi_inf:
+            grid = np.linspace(-2.0, 2.0, K)
+        elif not lo_inf and hi_inf:
+            grid = lo + 0.5 + np.arange(K) * 0.5
+        elif lo_inf and not hi_inf:
+            grid = hi - 0.5 - np.arange(K)[::-1] * 0.5
+        else:
+            grid = np.linspace(lo, hi, K + 2)[1:-1]
+    return pm.pytensorf.floatX(grid)
 
 
 class RSSSM(HSSMBase):
@@ -124,6 +146,11 @@ class RSSSM(HSSMBase):
         and, for multi-participant data, ``participant_col``.
     model
         SSM identifier (e.g. ``"ddm"``) or a pre-built ``BaseModelConfig``.
+        Required.  The emission is **always** resolved from the registry entry
+        named by the identifier (``model.model_name`` for a config), so a config
+        must name a *registered* SSM; it may override ``list_params`` /
+        ``bounds`` / ``loglik_kind``, but a custom ``loglik`` is rejected rather
+        than silently discarded.
     K
         Number of hidden regimes (``>= 2``).
     switching_params
@@ -187,12 +214,30 @@ class RSSSM(HSSMBase):
 
         # ===== resolve the RSSSMConfig =====
         if model_config is not None:
-            if any(x is not None for x in (model, K, switching_params)):
+            # Every granular arg is already carried by the config, so silently
+            # ignoring one would build a model that disagrees with the call.
+            granular = {
+                "model": model,
+                "K": K,
+                "switching_params": switching_params,
+                "transition_prior": transition_prior,
+                "initial_distribution": initial_distribution,
+                "loglik_kind": loglik_kind,
+                "backend": backend,
+                "ordering": ordering,
+                "pooling": pooling,
+                "p_outlier": p_outlier,
+            }
+            supplied = [n for n, v in granular.items() if v is not None]
+            supplied += sorted(kwargs)
+            if supplied:
                 raise ValueError(
                     "Pass either `model_config` or the granular args "
-                    "(`model`, `K`, `switching_params`, ...), not both."
+                    "(`model`, `K`, `switching_params`, ...), not both. Got "
+                    f"`model_config` together with: {', '.join(supplied)}."
                 )
             self.model_config = model_config
+            self._fill_config_ssm_param_meta(model_config)
         else:
             self.model_config = self._build_config(
                 model=model,
@@ -230,6 +275,24 @@ class RSSSM(HSSMBase):
             )
         self.participant_col = participant_col
 
+        # ===== data sanity checks =====
+        # RSSSM bypasses `HSSMBase.__init__`, so `DataValidatorMixin`'s checks
+        # have to be wired up explicitly here.  Without them an invalid response
+        # coding (e.g. `{1, 2}` for a model whose choices are `{-1, 1}`) or a
+        # negative / NaN RT silently yields a *wrong* likelihood instead of the
+        # error `HSSM` raises on the same data.
+        self.choices = self._resolve_choices(cfg)  # type: ignore[assignment]
+        self.n_choices = len(self.choices)
+        self.extra_fields = cfg.extra_fields
+        # Choice-only emissions, `missing_data` and `deadline` are all rejected
+        # in v1, so the corresponding branches of the mixin are inactive.
+        self.is_choice_only = False
+        self.missing_data = False
+        self.deadline = False
+        self.missing_data_value = -999.0
+        self._pre_check_data_sanity()
+        self._post_check_data_sanity()
+
         # ===== pad / align the panel =====
         (
             self._data_padded,
@@ -252,7 +315,7 @@ class RSSSM(HSSMBase):
             bmb.Prior("Uniform", lower=0.0, upper=20.0) if self._has_p_outlier else None
         )
         self._emission_dist = resolve_emission_dist(
-            model=cfg.model if isinstance(cfg.model, str) else cfg.model_name,
+            model=self._emission_model_name(cfg),
             loglik_kind=cfg.loglik_kind,  # type: ignore[arg-type]
             backend=cfg.backend,
             list_params=self.list_params,
@@ -266,6 +329,137 @@ class RSSSM(HSSMBase):
     # ------------------------------------------------------------------
     # Construction helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _emission_model_name(cfg: RSSSMConfig) -> str:
+        """Return the SSM identifier the emission distribution is built from.
+
+        ``cfg.model_name`` is the *prefixed* RSSSM name (``"rsssm_ddm"``), which
+        is not a supported SSM, so the emission must be resolved from
+        ``cfg.model``: the identifier itself on the string path, or the wrapped
+        config's own ``model_name`` when a pre-built ``BaseModelConfig`` is
+        passed as ``model``.
+
+        The emission is **always** rebuilt from the registry entry for that
+        identifier, so a wrapped ``BaseModelConfig`` must name a *registered*
+        SSM.  Its ``list_params`` / ``bounds`` / ``loglik_kind`` are honoured
+        (that is what the path is for), but a *custom* ``loglik`` would be
+        silently discarded, so it is rejected here rather than producing a model
+        that looks custom and computes the stock likelihood.
+        """
+        model = cfg.model
+        if isinstance(model, str):
+            return model
+        if isinstance(model, BaseModelConfig):
+            if model.loglik is not None and not RSSSM._is_registry_loglik(
+                model, cfg.loglik_kind
+            ):
+                raise NotImplementedError(
+                    "RSSSM cannot use a custom `loglik` on a `model=<config>`: the "
+                    "emission is always rebuilt from the registry entry for "
+                    f"{model.model_name!r}, so the custom likelihood would be "
+                    "silently discarded (the model would compute the stock "
+                    f"{model.model_name!r} likelihood). Register the custom model "
+                    "first, then pass its name; `list_params` / `bounds` / "
+                    "`loglik_kind` overrides are supported."
+                )
+            return model.model_name
+        raise ValueError(
+            "Cannot resolve the emission distribution: `model_config.model` must "
+            "be the SSM identifier (a string such as 'ddm', or a "
+            f"`BaseModelConfig`), got {model!r}."
+        )
+
+    @classmethod
+    def _fill_config_ssm_param_meta(cls, cfg: RSSSMConfig) -> None:
+        """Derive missing SSM parameter metadata on the ``model_config=`` path.
+
+        The granular path fills ``list_params`` / ``bounds`` / ``loglik_kind``
+        from the SSM registry in :meth:`_build_config`; a hand-built
+        ``RSSSMConfig`` used to have to repeat all of it by hand or fail
+        validation with "list_params must be populated ...".  Anything the user
+        did set is left untouched — only the gaps are filled.
+
+        Parameters
+        ----------
+        cfg
+            The user-supplied config, mutated in place.
+        """
+        if cfg.list_params is not None or cfg.model is None:
+            return
+        list_params, bounds, kind = cls._resolve_ssm_param_meta(
+            cfg.model, cfg.loglik_kind
+        )
+        cfg.list_params = list_params
+        cfg.bounds = {**bounds, **dict(cfg.bounds)}
+        cfg.loglik_kind = kind
+        if kind == "approx_differentiable" and cfg.backend is None:
+            cfg.backend = "jax"
+
+    @staticmethod
+    def _is_registry_loglik(model: BaseModelConfig, loglik_kind: str | None) -> bool:
+        """Return whether ``model.loglik`` is the registry's own log-likelihood.
+
+        ``Config.from_defaults("ddm", ...)`` copies the registered log-likelihood
+        onto the config, which is harmless (the emission rebuilds the very same
+        thing).  Only a *different* one signals a custom likelihood the RSSSM
+        emission would discard.
+
+        Compared with ``==``, not ``is``:
+        :func:`~hssm.modelconfig.get_default_model_config` re-imports the config
+        module on every call, so the LAN entries — whose ``loglik`` is an
+        ``.onnx`` *path string* — are a fresh object each time and would never be
+        identical.  Callables and classes still compare by identity under ``==``,
+        so a genuinely custom likelihood is still rejected.
+
+        The comparison is scoped to ``loglik_kind`` so that borrowing another
+        kind's log-likelihood (the analytical one under
+        ``loglik_kind="approx_differentiable"``, say) is *not* mistaken for the
+        registry's own — that too would be silently rebuilt as the stock LAN
+        emission.
+        """
+        try:
+            registered = get_default_model_config(
+                cast("SupportedModels", model.model_name)
+            )
+        except Exception:  # unregistered model name; rejected downstream
+            return False
+        likelihoods = registered["likelihoods"]
+        kinds = (
+            [likelihoods[loglik_kind]]
+            if loglik_kind in likelihoods
+            else list(likelihoods.values())
+        )
+        return any(model.loglik == kind_cfg.get("loglik") for kind_cfg in kinds)
+
+    @staticmethod
+    def _resolve_choices(cfg: RSSSMConfig) -> list[int]:
+        """Return the valid response codings of the emission model.
+
+        Taken from the *registry entry* of the SSM the emission is built from,
+        which is where the emission itself comes from (see
+        :meth:`_emission_model_name`).  This matters on both advanced paths,
+        whose ``choices`` field defaults to the generic ``(0, 1)``: a wrapped
+        ``BaseModelConfig`` that never touched ``choices`` would otherwise
+        reject standard ``{-1, 1}`` DDM data.  It also mirrors ``hssm.HSSM``,
+        which deliberately ignores a user-supplied ``choices`` for a registered
+        model string.  Falls back to the config's own ``choices``.
+        """
+        model = cfg.model
+        model_name = model.model_name if isinstance(model, BaseModelConfig) else model
+        choices: Sequence[int] | None = None
+        if isinstance(model_name, str):
+            try:
+                choices = get_default_model_config(cast("SupportedModels", model_name))[
+                    "choices"
+                ]
+            except Exception:  # custom / unregistered model name
+                choices = None
+        if choices is None:
+            choices = (
+                model.choices if isinstance(model, BaseModelConfig) else cfg.choices
+            )
+        return list(choices) if choices is not None else []
 
     @staticmethod
     def _reject_unsupported_kwargs(missing_data, deadline, lapse) -> None:
@@ -347,7 +541,11 @@ class RSSSM(HSSMBase):
         )
 
         # Resolve SSM parameter metadata (list_params, bounds) from defaults.
-        list_params, bounds = self._resolve_ssm_param_meta(model, loglik_kind)
+        # `resolved_loglik_kind` is the kind the bounds were actually read from,
+        # which is what the emission must be built with as well.
+        list_params, bounds, resolved_loglik_kind = self._resolve_ssm_param_meta(
+            model, loglik_kind
+        )
 
         # Per-regime p_outlier: add a trailing `p_outlier` SSM parameter (the
         # emission gains the lapse mixture) plumbed through the three-mode rule.
@@ -361,7 +559,6 @@ class RSSSM(HSSMBase):
             if spec is not None:
                 param_specs["p_outlier"] = spec
 
-        resolved_loglik_kind = cast("LoglikKind", loglik_kind or "analytical")
         resolved_backend = backend
         if resolved_loglik_kind == "approx_differentiable" and resolved_backend is None:
             resolved_backend = "jax"
@@ -385,8 +582,15 @@ class RSSSM(HSSMBase):
     @staticmethod
     def _resolve_ssm_param_meta(
         model, loglik_kind
-    ) -> tuple[list[str], dict[str, tuple[float, float]]]:
-        """Return (list_params, bounds) for the SSM emission model."""
+    ) -> tuple[list[str], dict[str, tuple[float, float]], "LoglikKind"]:
+        """Return (list_params, bounds, loglik_kind) for the SSM emission model.
+
+        The returned kind is the one the bounds were actually read from: a model
+        with no analytical likelihood (e.g. ``angle``) falls back to its first
+        available kind, and the caller must build the emission with that same
+        kind — otherwise the bounds / default priors / anchor grid and the
+        emission itself come from different likelihoods.
+        """
         if isinstance(model, BaseModelConfig):
             if model.list_params is None:
                 raise ValueError("Provided model config has no `list_params`.")
@@ -396,7 +600,8 @@ class RSSSM(HSSMBase):
                     "emission is fed `(rt, response)` and the panel is keyed on the "
                     "`rt` column."
                 )
-            return list(model.list_params), dict(model.bounds)
+            kind = cast("LoglikKind", loglik_kind or model.loglik_kind or "analytical")
+            return list(model.list_params), dict(model.bounds), kind
 
         try:
             cfg = get_default_model_config(cast("SupportedModels", model))
@@ -419,7 +624,7 @@ class RSSSM(HSSMBase):
         if kind not in likelihoods:
             kind = next(iter(likelihoods))
         bounds = dict(likelihoods[kind].get("bounds", {}))
-        return list_params, bounds
+        return list_params, bounds, kind
 
     # ------------------------------------------------------------------
     # Model graph
@@ -434,6 +639,7 @@ class RSSSM(HSSMBase):
 
         anchor = resolve_anchor(cfg.ordering, self.switching_params)
 
+        # pyrefly: ignore[bad-context-manager]
         with pm.Model() as model:
             # --- transition matrix P (K, K) ---
             tprior = cfg.transition_prior or StickyDirichlet()
@@ -504,8 +710,21 @@ class RSSSM(HSSMBase):
         in_switching = name in self.switching_params
         is_anchor = anchor is not None and anchor.name == name
 
-        is_fixed_scalar = isinstance(spec, (int, float)) and not isinstance(spec, bool)
+        is_fixed_scalar = _is_fixed_scalar(spec)
         is_fixed_vector = isinstance(spec, (list, tuple, np.ndarray))
+
+        # Anything that is not a fixed value or a prior would silently fall
+        # through to "inferred with the default prior" — a numpy scalar meant to
+        # fix the parameter, or a string, would quietly become an RV.
+        if spec is not None and not (
+            is_fixed_scalar or is_fixed_vector or isinstance(spec, (dict, bmb.Prior))
+        ):
+            raise TypeError(
+                f"Unsupported input for {name!r} of type {type(spec).__name__}: "
+                f"{spec!r}. Pass a number (shared value), a length-K list, tuple "
+                "or ndarray (fixed per regime), or a prior dict / `bmb.Prior` "
+                "(inferred)."
+            )
 
         # The three modes are mutually exclusive: a parameter listed in
         # switching_params (inferred per regime) must not also be handed a fixed
@@ -523,6 +742,7 @@ class RSSSM(HSSMBase):
         # (N, K)), so broadcast the global fixed value across participants.
         if is_fixed_scalar:
             val = float(spec)  # type: ignore[arg-type]
+            self._check_fixed_in_bounds(name, val, bounds)
             if is_no_pooling:
                 return pt.as_tensor_variable(np.full(N, val)), False
             return pt.as_tensor_variable(val), False
@@ -533,6 +753,7 @@ class RSSSM(HSSMBase):
                     f"Fixed-per-regime value for {name!r} must have shape ({K},), "
                     f"got {arr.shape}."
                 )
+            self._check_fixed_in_bounds(name, arr, bounds)
             if is_no_pooling:
                 return pt.as_tensor_variable(np.broadcast_to(arr, (N, K)).copy()), True
             return pt.as_tensor_variable(arr), True
@@ -561,6 +782,36 @@ class RSSSM(HSSMBase):
             False,
         )
 
+    @staticmethod
+    def _check_fixed_in_bounds(
+        name: str, value: float | np.ndarray, bounds: tuple[float, float] | None
+    ) -> None:
+        """Raise when a user-supplied *fixed* value falls outside the SSM bounds.
+
+        The direct-build path never goes through ``Param.validate``, so without
+        this an out-of-support value (``a=-1.0``, ``z=2.0``) silently produces a
+        *finite but wrong* likelihood instead of the error ``hssm.HSSM`` raises
+        on the same input.  Applies to both the shared scalar and the length-K
+        fixed-per-regime vector.
+
+        Parameters
+        ----------
+        name
+            SSM parameter name (used in the error message).
+        value
+            The fixed scalar or the length-K fixed-per-regime array.
+        bounds
+            ``(lower, upper)`` support of the parameter, or ``None`` when the
+            SSM declares no bounds for it.
+        """
+        if bounds is None:
+            return
+        lower, upper = bounds
+        if np.any(np.asarray(value) < lower) or np.any(np.asarray(value) > upper):
+            raise ValueError(
+                f"Fixed Value {value} not in bounds {bounds} for parameter {name}"
+            )
+
     def _param_initval(self, name: str, shape: tuple[int, ...] | None):
         """Return a safe starting value for ``name`` from HSSM's INITVAL_SETTINGS.
 
@@ -569,11 +820,17 @@ class RSSSM(HSSMBase):
         mode sits above typical RTs, so the default start lands in the SSM's
         invalid region (``rt < t``) where the gradient is NaN — harmless under
         numpyro's re-init but fatal for the PyMC NUTS sampler.
+
+        Vector starts are cast to ``pytensor.config.floatX``: a float64 array
+        cannot be stored in the float32 random variables that
+        ``hssm.set_floatX("float32")`` creates.
         """
         val = INITVAL_SETTINGS.get(None, {}).get(name)
         if val is None:
             return None
-        return float(val) if shape is None else np.full(shape, float(val))
+        if shape is None:
+            return float(val)
+        return pm.pytensorf.floatX(np.full(shape, float(val)))
 
     def _make_switching_rv(
         self, name, prior, is_anchor, anchor, is_no_pooling, N, K
@@ -608,6 +865,15 @@ class RSSSM(HSSMBase):
         Only supported for real-line symmetric priors (e.g. ``Normal``); the
         underlying ordered RV is on ``-anchor`` and the anchor is exposed as a
         deterministic negation.
+
+        The ordered RV is ``u = -anchor``, so its start must be the *reversed*
+        negation ``-asc[::-1]`` — which puts the anchor itself at ``asc[::-1]``,
+        i.e. inside the same in-support grid the ascending path uses.  Passing
+        the ascending grid ``asc`` straight through (what this method used to
+        do) started ``u`` there and hence the anchor at ``-asc``, outside the
+        support of any one-sided parameter (e.g. ``a > 0``): with
+        ``asc = [0.75, 2.25]`` the anchor started at ``[-0.75, -2.25]``, which
+        is both out of support and descending-ordered the wrong way round.
         """
         dist_name = prior["name"] if isinstance(prior, dict) else prior.name
         if dist_name != "Normal":
@@ -626,7 +892,7 @@ class RSSSM(HSSMBase):
             **neg_args,
             shape=shape,
             transform=ordered_transform,
-            initval=asc_initval,
+            initval=-np.asarray(asc_initval)[..., ::-1].copy(),
         )
         return pm.Deterministic(name, -u)
 
@@ -682,13 +948,58 @@ class RSSSM(HSSMBase):
         """The directly-built PyMC model (no bambi)."""
         return self._pymc_model_obj
 
+    def __repr__(self) -> str:
+        """Create a representation of the model.
+
+        ``HSSMBase.__repr__`` walks ``self.params`` (the bambi parameter
+        objects), which the direct-build path never creates, so it is replaced
+        here by a summary of the regime-switching structure.
+        """
+        anchor = getattr(self, "_anchor", None)
+        shared = [p for p in self.list_params or [] if p not in self.switching_params]
+        pooling = "none" if isinstance(self.model_config.pooling, NoPooling) else "full"
+        output = [
+            "Regime-Switching Sequential Sampling Model",
+            f"Model: {self.model_name}\n",
+            f"Response variable: {', '.join(self.response)}",
+            f"Likelihood: {self.loglik_kind}",
+            f"Observations: {len(self.data)}",
+            f"Participants: {self.n_participants} (T_max: {self.n_trials})\n",
+            f"Regimes (K): {self.K}",
+            f"Switching parameters: {', '.join(self.switching_params) or 'none'}",
+            f"Shared parameters: {', '.join(shared) or 'none'}",
+            f"Pooling: {pooling}",
+            (
+                f"Ordering anchor: {anchor.name} ({anchor.direction})"
+                if anchor is not None
+                else "Ordering anchor: none"
+            ),
+        ]
+        return "\n".join(output)
+
+    def __str__(self) -> str:
+        """Create a string representation of the model."""
+        return self.__repr__()
+
+    def add_likelihood_parameters_to_datatree(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+        """Unavailable: the trial-wise likelihood parameters come from bambi."""
+        raise NotImplementedError(
+            "RSSSM does not support `add_likelihood_parameters_to_datatree`: the "
+            "trial-wise likelihood parameters are computed by the bambi model, "
+            "which the directly-built RSSSM graph does not have. The regime "
+            "parameters are already in the posterior; use `infer_regimes` for "
+            "the per-trial regime probabilities."
+        )
+
     def sample(  # type: ignore[override]
         self,
         draws: int = 1000,
         tune: int = 1000,
         chains: int = 4,
-        nuts_sampler: str = "numpyro",
+        nuts_sampler: Literal["blackjax", "numpyro", "nutpie", "pymc"] = "numpyro",
         include_log_likelihood: bool = False,
+        *,
+        sampler: Any = None,
         **kwargs: Any,
     ) -> DataTree:
         """Sample the model via ``pm.sample`` on the directly-built graph.
@@ -704,10 +1015,17 @@ class RSSSM(HSSMBase):
         builds the PyMC model directly and calls ``pm.sample`` rather than
         ``bambi.Model.fit``, so the sampler is selected with ``nuts_sampler=``
         (not ``sampler=``) and the bambi-specific ``init`` / ``initvals`` /
-        ``include_response_params`` arguments are not accepted.
+        ``include_response_params`` arguments are not accepted.  ``sampler=``
+        is accepted only to raise a clear error.  The *positional* order also
+        differs — :meth:`HSSM.sample` takes ``sampler`` first while this method
+        takes ``draws`` first — so always pass these arguments by keyword.
 
         Parameters
         ----------
+        sampler
+            Not supported; present only so that ``sampler="numpyro"`` raises a
+            clear ``TypeError`` pointing at ``nuts_sampler=`` instead of
+            leaking an internal PyMC error.
         include_log_likelihood
             When ``True``, attach the per-trial ``log_likelihood`` group via
             :meth:`compute_log_likelihood` (needed for ``arviz.loo``).
@@ -724,11 +1042,18 @@ class RSSSM(HSSMBase):
         graph has none, and it would risk dropping the descending-anchor
         ``Deterministic`` (``OrderByParam(direction="desc")``).
         """
+        if sampler is not None:
+            raise TypeError(
+                "RSSSM.sample() does not accept `sampler=`; it calls `pm.sample` "
+                "directly rather than `bambi.Model.fit`. Select the NUTS backend "
+                f"with `nuts_sampler={sampler!r}` instead."
+            )
         if self._inference_obj is not None:
             _logger.warning(
                 "The model has already been sampled. Overwriting the previous "
                 "inference object."
             )
+        # pyrefly: ignore[bad-context-manager]
         with self._pymc_model_obj:
             self._inference_obj = pm.sample(
                 draws=draws,
@@ -741,20 +1066,44 @@ class RSSSM(HSSMBase):
             self.compute_log_likelihood(self._inference_obj)
         return self._inference_obj
 
-    def graph(self, formatting="plain", **kwargs):
+    def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
         """Render the PyMC model graph via graphviz.
 
-        Only ``formatting`` is honoured.  Unlike :meth:`HSSM.graph`, the
-        direct-build path does not support the figure-saving arguments
-        (``name`` / ``figsize`` / ``dpi`` / ``fmt``); pass them and they are
-        ignored with a warning.  Save the returned graphviz object yourself if
-        you need a file.
+        The signature matches :meth:`HSSM.graph`, but only ``formatting`` is
+        honoured: the direct-build path renders the PyMC model itself rather
+        than a bambi model, so the figure-saving arguments (``name`` /
+        ``figsize`` / ``dpi`` / ``fmt``) are ignored with a warning.  Save the
+        returned graphviz object yourself if you need a file.
+
+        Parameters
+        ----------
+        formatting
+            One of ``"plain"`` or ``"plain_with_params"``. Defaults to
+            ``"plain"``.
+        name, figsize, dpi, fmt
+            Accepted for signature compatibility with :meth:`HSSM.graph` and
+            ignored with a warning when set to anything other than the default.
+
+        Returns
+        -------
+        graphviz.Graph
+            The graph.
         """
-        if kwargs:
+        ignored = [
+            arg_name
+            for arg_name, value, default in (
+                ("name", name, None),
+                ("figsize", figsize, None),
+                ("dpi", dpi, 300),
+                ("fmt", fmt, "png"),
+            )
+            if value != default
+        ]
+        if ignored:
             _logger.warning(
                 "RSSSM.graph() ignores %s; only `formatting` is supported. Render "
                 "and save the returned graphviz object directly if needed.",
-                ", ".join(sorted(kwargs)),
+                ", ".join(ignored),
             )
         return pm.model_to_graphviz(self._pymc_model_obj, formatting=formatting)
 
@@ -808,6 +1157,16 @@ class RSSSM(HSSMBase):
         """Unavailable in v1: depends on the predictive samplers (design §6.3)."""
         raise NotImplementedError(self._PREDICTIVE_MSG.format(name="`plot_predictive`"))
 
+    def sample_do(self, *args: Any, **kwargs: Any):  # type: ignore[override]
+        """Unavailable in v1: no observed response RV (design §6.3).
+
+        The inherited implementation calls ``pm.sample_prior_predictive`` on the
+        do-model.  RSSSM's entire likelihood is a ``pm.Potential``, which prior
+        predictive sampling ignores, so it would return draws that do not depend
+        on the data at all — a silently wrong result rather than a loud failure.
+        """
+        raise NotImplementedError(self._PREDICTIVE_MSG.format(name="`sample_do`"))
+
     def set_alias(self, *args: Any, **kwargs: Any):  # type: ignore[override]
         """Unavailable: RSSSM builds the PyMC model directly (no bambi aliases)."""
         raise NotImplementedError(
@@ -851,7 +1210,7 @@ class RSSSM(HSSMBase):
         """
         from .ffbs import infer_regimes as _infer_regimes
 
-        idata = idata if idata is not None else self.traces
+        idata = cast("DataTree", idata if idata is not None else self.traces)
         return _infer_regimes(self, idata, n_draws=n_draws, seed=seed)
 
     def compute_log_likelihood(self, idata: DataTree | None = None) -> DataTree:
@@ -877,7 +1236,7 @@ class RSSSM(HSSMBase):
         """
         from .ffbs import compute_log_likelihood as _compute_ll
 
-        idata = idata if idata is not None else self.traces
+        idata = cast("DataTree", idata if idata is not None else self.traces)
         return _compute_ll(self, idata)
 
     def plot_regime_recovery(

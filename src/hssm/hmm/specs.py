@@ -110,6 +110,12 @@ class FixedInitialDistribution:
             raise ValueError(
                 f"initial_distribution pi0 has shape {pi0.shape}, expected ({K},)."
             )
+        # Summing to 1 is not enough: `[1.5, -0.5]` does, and a negative entry
+        # makes `log(pi0)` (and hence the whole marginal) NaN at build time.
+        if np.any(pi0 < 0):
+            raise ValueError(
+                f"initial_distribution pi0 must be non-negative, got {pi0.tolist()}."
+            )
         if not np.isclose(pi0.sum(), 1.0):
             raise ValueError(
                 f"initial_distribution pi0 must sum to 1, got {pi0.sum()}."

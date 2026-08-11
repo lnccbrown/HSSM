@@ -31,8 +31,10 @@ def resolve_anchor(
 ) -> AnchorInfo | None:
     """Resolve the ordering anchor from the ordering spec.
 
-    Returns ``None`` when no ordering should be applied (``NoOrdering`` or no
-    switching parameters to anchor on).
+    Returns ``None`` when no ordering should be applied (``NoOrdering``, or
+    ``AutoOrdering`` with no switching parameters to anchor on).  An explicit
+    ``OrderByParam`` is always validated, even when ``switching_params`` is
+    empty — there is nothing to order, so the request cannot be honoured.
 
     The ``AutoOrdering`` heuristic (in order of preference):
 
@@ -53,10 +55,10 @@ def resolve_anchor(
         )
         return None
 
-    if not switching_params:
-        # Nothing inferred per regime -> no label-switching to break.
-        return None
-
+    # An *explicit* anchor is validated before the empty-`switching_params`
+    # early return below: silently ignoring `ordering="v"` when nothing is
+    # inferred per regime hides a user error (the same anchor with a typo does
+    # raise as soon as there is one switching parameter).
     if isinstance(ordering, OrderByParam):
         if ordering.name not in switching_params:
             raise ValueError(
@@ -77,30 +79,34 @@ def resolve_anchor(
             )
         return AnchorInfo(name=ordering.name, direction=ordering.direction)
 
-    if isinstance(ordering, AutoOrdering):
-        # p_outlier is never an auto-anchor (unstable ordered-Beta; see above).
-        candidates = [p for p in switching_params if p != "p_outlier"]
-        if not candidates:
-            _logger.warning(
-                "AutoOrdering: the only switching parameter is `p_outlier`, "
-                "which cannot anchor label-switching ordering; proceeding "
-                "without an ordering constraint (the regime posterior may be "
-                "multi-modal). Add a drift/threshold switching parameter or use "
-                "OrderByParam."
-            )
-            return None
-        if "v" in candidates:
-            name = "v"
-        elif len(candidates) == 1:
-            name = candidates[0]
-        else:
-            name = candidates[0]
-            _logger.warning(
-                "AutoOrdering: multiple switching parameters and no 'v'; "
-                "anchoring on %r. Use OrderByParam to choose another anchor or "
-                "NoOrdering to disable.",
-                name,
-            )
-        return AnchorInfo(name=name, direction="asc")
+    if not isinstance(ordering, AutoOrdering):
+        raise TypeError(f"Unsupported ordering spec of type {type(ordering)!r}.")
 
-    raise TypeError(f"Unsupported ordering spec of type {type(ordering)!r}.")
+    if not switching_params:
+        # Nothing inferred per regime -> no label-switching to break.
+        return None
+
+    # p_outlier is never an auto-anchor (unstable ordered-Beta; see above).
+    candidates = [p for p in switching_params if p != "p_outlier"]
+    if not candidates:
+        _logger.warning(
+            "AutoOrdering: the only switching parameter is `p_outlier`, "
+            "which cannot anchor label-switching ordering; proceeding "
+            "without an ordering constraint (the regime posterior may be "
+            "multi-modal). Add a drift/threshold switching parameter or use "
+            "OrderByParam."
+        )
+        return None
+    if "v" in candidates:
+        name = "v"
+    elif len(candidates) == 1:
+        name = candidates[0]
+    else:
+        name = candidates[0]
+        _logger.warning(
+            "AutoOrdering: multiple switching parameters and no 'v'; "
+            "anchoring on %r. Use OrderByParam to choose another anchor or "
+            "NoOrdering to disable.",
+            name,
+        )
+    return AnchorInfo(name=name, direction="asc")

@@ -3,8 +3,8 @@
 ``RSSSMConfig`` extends :class:`~hssm.config.BaseModelConfig` with the fields
 that define the Markov-chain structure (``K``, ``switching_params``, the
 transition prior, the initial distribution), the emission (``model`` /
-``loglik_kind`` / ``emission_logp_func``), the label-switching ``ordering``,
-and the cross-participant ``pooling``.  See the design doc §5.1.
+``loglik_kind``), the label-switching ``ordering``, and the cross-participant
+``pooling``.  See the design doc §5.1.
 """
 
 from __future__ import annotations
@@ -46,6 +46,8 @@ class RSSSMConfig(BaseModelConfig):
         per-regime fixed value is supplied via ``param_specs``.
     model
         The SSM identifier (e.g. ``"ddm"``) or a pre-built ``BaseModelConfig``.
+        Required: the emission is always resolved from the registry entry named
+        by this identifier.
     transition_prior
         The (resolved) transition-matrix prior spec.
     initial_distribution
@@ -55,9 +57,6 @@ class RSSSMConfig(BaseModelConfig):
     pooling
         The (resolved) cross-participant pooling spec.  Defaults to
         ``FullPooling``.
-    emission_logp_func
-        The resolved per-regime emission log-density callable.  When ``None``
-        it is resolved from ``model`` + ``loglik_kind`` at build time.
     param_specs
         Per-parameter user inputs implementing the three-mode rule: a scalar
         means *shared*, a length-K list means *fixed per regime*, a prior dict
@@ -75,7 +74,6 @@ class RSSSMConfig(BaseModelConfig):
 
     # --- Emission ---
     model: str | BaseModelConfig | None = field(default=None, kw_only=True)
-    emission_logp_func: Any = field(default=None, kw_only=True)
     # loglik_kind / backend are inherited from BaseModelConfig.
 
     # --- Label-switching ---
@@ -105,6 +103,14 @@ class RSSSMConfig(BaseModelConfig):
         """Validate the regime-switching configuration."""
         if self.K < 2:
             raise ValueError(f"K must be >= 2, got K={self.K}.")
+        # The emission is always resolved from the SSM model, so it is required —
+        # and it is checked first because `list_params` is derived from it.
+        if self.model is None:
+            raise ValueError(
+                "`model` must be provided: the emission is resolved from the SSM "
+                "identifier (a string such as 'ddm', or a `BaseModelConfig` "
+                "naming a registered SSM)."
+            )
         if self.list_params is None:
             raise ValueError(
                 "list_params must be populated from the SSM model before validation."
@@ -114,12 +120,6 @@ class RSSSMConfig(BaseModelConfig):
             raise ValueError(
                 f"switching_params {unknown} are not parameters of model "
                 f"{self.model!r} (list_params={self.list_params})."
-            )
-        # The emission must be set or resolvable from the SSM model.
-        if self.emission_logp_func is None and self.model is None:
-            raise ValueError(
-                "Either `model` (to resolve the emission) or a pre-built "
-                "`emission_logp_func` must be provided."
             )
         # The transition prior must be shape-consistent with K (eagerly, so a
         # mismatched concentration matrix is caught here, not at build time).

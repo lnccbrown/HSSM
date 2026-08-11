@@ -33,7 +33,7 @@ Sample-time is one JIT-compile unit, roughly constant in `N`. Post-hoc is decoup
 
 **Load-bearing decisions** (full justification and prototype evidence in §10.1):
 
-- **Scalar marginal via `pm.Potential`**, not per-trial-deltas-as-loglik. The deltas form destabilises NUTS (R-hat ≈ 1.83); the scalar marginal converges to the tutorial bit-for-bit (R-hat ≈ 1.0). Per-trial logp is recovered post-hoc for `arviz.loo` / `arviz.waic`.
+- **Scalar marginal via `pm.Potential`**, not per-trial-deltas-as-loglik. The deltas form destabilises NUTS (R-hat ≈ 1.83); the scalar marginal converges to the tutorial bit-for-bit (R-hat ≈ 1.0). Per-trial logp is recovered post-hoc for `arviz.loo`.
 - **One batched `scan`, not a Python loop over participants.** The loop pattern didn't finish a 400-draw run at `N=20` in 40+ min — each per-subject scan becomes its own JIT-compile unit.
 - **`ordered` transform on one anchor switching parameter** for label-switching. A soft `pm.Potential` barrier works at `K=2` but breaks at higher `K` (NUTS jumps across it in a single step).
 - **Build the PyMC model directly, no bambi delegation.** The HMM's defining latents (transition matrix, regime sequence) are not row-indexed quantities bambi's formula system can declare.
@@ -60,15 +60,17 @@ What v1 implementation (Phase 2+) still has to verify: the `HSSMBase` override m
 from hssm import RSSSM
 
 model = RSSSM(
-    data=df,                          # long-format panel, sorted (participant, trial)
+    data=df,  # long-format panel, sorted (participant, trial)
     K=2,
     model="ddm",
-    switching_params=["v"],           # parameters that vary by regime
+    switching_params=["v"],  # parameters that vary by regime
     participant_col="participant_id",
 )
-idata   = model.sample(...)                    # standard HSSM .sample()
-regimes = model.infer_regimes()                # posterior over s_{n,1:T}                (§5.5)
-idata   = model.compute_log_likelihood(idata)  # per-trial logp for arviz.loo / waic     (§5.6)
+idata = model.sample(...)  # standard HSSM .sample()
+regimes = model.infer_regimes()  # posterior over s_{n,1:T}                (§5.5)
+idata = model.compute_log_likelihood(
+    idata
+)  # per-trial logp for arviz.loo            (§5.6)
 ```
 
 **Where to read next.**
@@ -298,8 +300,8 @@ The "no equivalent" rows are HMM-specific concerns (the forward algorithm, the d
 User-facing API:
 
 ```python
-from hssm import RSSSM        # re-exported from hssm.__init__
-from hssm.hmm import RSSSMConfig   # advanced / custom-config path
+from hssm import RSSSM  # re-exported from hssm.__init__
+from hssm.hmm import RSSSMConfig  # advanced / custom-config path
 ```
 
 ### 4.3 Workflow at a glance
@@ -407,7 +409,6 @@ class RSSSMConfig(BaseModelConfig):
     # --- Emission ---
     model: str | BaseModelConfig = field(kw_only=True)
     loglik_kind: LoglikKind = field(kw_only=True)
-    emission_logp_func: Any = field(default=None, kw_only=True)
     # backend: Literal["jax", "pytensor"] is inherited from BaseModelConfig
     # (default "jax" for approx_differentiable; analytical likelihoods are pytensor).
 
@@ -430,7 +431,7 @@ This pattern means the constructor signature **never changes** when a new varian
 `RSSSMConfig.validate()` enforces:
 - `K >= 2`.
 - Every element of `switching_params` appears in the decision-process's `list_params`.
-- `emission_logp_func` is set (or resolvable from `model` + `loglik_kind`).
+- `model` is set: the emission is *always* resolved from the SSM registry entry it names (a plain identifier such as `"ddm"`, or the `model_name` of a wrapped `BaseModelConfig`). A wrapped config may override `list_params` / `bounds` / `loglik_kind`; a custom `loglik` is rejected rather than silently discarded.
 - `transition_prior` is consistent with `K` (e.g. concentration matrix has shape `(K, K)`).
 
 ### 5.2 The forward-algorithm builder (`make_hmm_logp_op`)
@@ -540,19 +541,24 @@ class RSSSM(HSSMBase):
         loglik_kind: LoglikKind | None = None,
         participant_col: str = "participant_id",
         ordering: OrderingSpec | None = None,
-        pooling: PoolingSpec | str | None = None,      # "full" (default) | "none"
+        pooling: PoolingSpec | str | None = None,  # "full" (default) | "none"
         # ---- inherited HSSM kwargs ----
-        include: list[...] | None = None,
-        p_outlier: float | list | bmb.Prior | None = None,  # per-regime only (decision 10.1.9)
-        lapse: bmb.Prior | None = None,                # top-level rejected — decision 10.1.9
-        link_settings: ... = None,
-        prior_settings: ... = "safe",
-        extra_namespace: dict | None = None,
-        process_initvals: bool = True,
-        initval_jitter: float = ...,
-        **kwargs,
+        p_outlier: float
+        | list
+        | bmb.Prior
+        | None = None,  # per-regime only (decision 10.1.9)
+        lapse: bmb.Prior | None = None,  # top-level rejected — decision 10.1.9
+        missing_data: bool | float = False,  # rejected — decision 10.1.9
+        deadline: bool | str = False,  # rejected — decision 10.1.9
+        **kwargs,  # per-parameter specs only
     ) -> None: ...
 ```
+
+The remaining `HSSM` constructor kwargs (`include`, `link_settings`,
+`prior_settings`, `extra_namespace`, `process_initvals`, `initval_jitter`) are
+bambi-formula machinery and are **not** accepted: `RSSSM` builds the PyMC model
+directly, and `**kwargs` carries per-parameter specs only, so passing one of
+them raises `ValueError: param_specs key '<kw>' is not a parameter of the SSM`.
 
 **Two construction paths.** The constructor supports both the minimal path
 (Section 6.1 — pass `model`, `K`, `switching_params` and the
@@ -576,7 +582,7 @@ Order of operations in `__init__`:
    - If `participant_col` is in `data.columns`, use it as-is.
    - Otherwise synthesize a column of constant `0` and emit `_logger.info("No participant column found; treating all rows as a single participant.")`. This handles the common single-participant case without requiring the user to add a dummy column.
 6. `pad_and_align_to_T_max(data, participant_col, response)` → returns `(data_padded, mask, n_participants, n_trials)`, stashed on `self`. This HMM-local preprocessor (`hssm/hmm/utils.py`) end-pads each participant to `T_max` (duplicating the last in-support trial) and builds the emission mask; it validates per-participant row contiguity and requires `T_max >= 2`. It is *not* the RLSSM balance validator (RLSSM requires balanced panels; RSSSM does not), so nothing is reused from `hssm.rl.utils`.
-7. Resolve `emission_logp_func` from `model` + `loglik_kind` + the emission `backend` (default `"jax"` for `approx_differentiable`; analytical likelihoods are pytensor) if not user-supplied. `RSSSMConfig` inherits the `backend` field from `BaseModelConfig`.
+7. Resolve the per-regime emission distribution from `model` + `loglik_kind` + the emission `backend` (default `"jax"` for `approx_differentiable`; analytical likelihoods are pytensor). The emission is *always* rebuilt from the SSM registry entry, so `model` must name a registered SSM; a wrapped `BaseModelConfig` may override `list_params` / `bounds` / `loglik_kind`, but a custom `loglik` is rejected rather than silently discarded. `RSSSMConfig` inherits the `backend` field from `BaseModelConfig`.
 8. `self._pymc_model = self._build_pymc_model()` — construct the PyMC model
    directly (next paragraph). No bambi, no `super().__init__()` bambi build.
 
@@ -691,7 +697,7 @@ def compute_log_likelihood(
 Behavior:
 - Uses `self.traces` if `idata is None`.
 - For each posterior draw, evaluates the forward algorithm in pure NumPy (using the same compiled emission callable as `infer_regimes`) and computes the per-trial one-step-ahead contributions `delta_t = log_Z_t - log_Z_{t-1}`, where `log_Z_t = logsumexp_k log_alpha_t(k)` is the running log-evidence. By construction `sum_t delta_t` equals the scalar marginal `L` the sampler used.
-- Attaches the result to `idata.log_likelihood` with shape `(chain, draw, n_participants, n_trials)`, ready for `arviz.loo` / `arviz.waic`.
+- Attaches the result to `idata.log_likelihood` as a flat `(chain, draw, __obs__)` array — one entry per *real* (non-padded) trial, in participant-major order — ready for `arviz.loo`.
 
 This keeps the sampler graph simple (one scalar `pm.Potential`, Section 3.4) while still producing the per-trial array `arviz` expects — computed once, after sampling, from the saved posterior.
 
@@ -704,6 +710,7 @@ Implementation lives alongside FFBS in `hssm/hmm/ffbs.py` (or a sibling module) 
 ### 6.1 Minimal example (v1)
 
 ```python
+import arviz as az
 import hssm
 import pandas as pd
 
@@ -719,7 +726,7 @@ model = hssm.RSSSM(
 )
 
 idata = model.sample(draws=1000, tune=1000, chains=4)
-summary = model.summary()
+summary = az.summary(idata)  # `model.summary()` was removed in HSSM 0.4.0
 regimes = model.infer_regimes(idata, n_draws=200)
 ```
 
@@ -755,6 +762,17 @@ model = hssm.RSSSM(data=df, model_config=cfg)
 This is the construction path that consumes a pre-built `model_config`
 (see Section 5.4, "Two construction paths").
 
+Two things the example relies on:
+
+- `list_params` and `bounds` are left unset; because `model="ddm"` is given they
+  are filled in from the SSM registry exactly as the minimal path does. Set them
+  explicitly only to *override* the registry.
+- `direction="desc"` is realised as the negation of an ordered `Normal`, so it
+  requires the anchor's prior to be `Normal`. That holds here because `v` is
+  unbounded in the registry and therefore gets a `Normal` default; an anchor
+  whose bounds are finite defaults to `Uniform` and needs an explicit
+  `param_specs={"<anchor>": {"name": "Normal", ...}}` (or `direction="asc"`).
+
 ### 6.3 Inherited behavior
 
 v1 builds the PyMC model directly rather than through bambi (decision 10.1.8),
@@ -771,12 +789,13 @@ Per-method audit against `src/hssm/base.py`:
 | Method | `HSSMBase` dependency | v1 status |
 |---|---|---|
 | `find_MAP` | `pm.find_MAP(model=self.pymc_model)` | **inherited** — works as-is |
-| `summary` | `self.traces`, `self.pymc_model.free_RVs` | **inherited** — works as-is |
-| `plot_trace` | `self.traces`, `self.pymc_model.free_RVs` | **inherited** — works as-is |
+| `summary` | — | **removed in HSSM 0.4.0** — raises `NotImplementedError`; use `az.summary(idata)` |
+| `plot_trace` | — | **removed in HSSM 0.4.0** — raises `NotImplementedError`; use `az.plot_trace_dist(idata)` |
 | `pymc_model` (property) | `self.model.backend.model` | **overridden** — returns the directly-built model |
 | `sample` | `self.model.fit()` | **overridden** — direct `pm.sample(model=self.pymc_model)`; stores `self._inference_obj`. Inherited sub-behaviours the override must reproduce: `find_MAP`-based init (if requested), `log_likelihood` post-hoc wiring (via `compute_log_likelihood`, §5.6), and `_clean_posterior_group`. Inherited sub-behaviours that can be safely skipped: bambi's `Slice` sampler for discrete RVs (HMM has none — they were marginalised out, §3.3). |
-| `graph` | `self.model.graph(...)` | **overridden** — trivial: `pm.model_to_graphviz(self.pymc_model)` |
-| `vi` | `self.pymc_model` + `self.model.distributional_components` | **overridden** — same pattern as `sample` |
+| `graph` | `self.model.graph(...)` | **overridden** — `pm.model_to_graphviz(self.pymc_model)`; keeps the parent signature but honours only `formatting` (the figure-saving args are ignored with a warning) |
+| `vi` | `self.pymc_model` + `self.model.distributional_components` | **overridden to raise `NotImplementedError`** — variational inference is out of v1 scope |
+| `sample_do` | `pm.sample_prior_predictive` on the do-model | **overridden to raise `NotImplementedError`** — the likelihood is a `pm.Potential`, which prior predictive sampling ignores, so the draws would be data-independent |
 | `log_likelihood` | `self.model._compute_likelihood_params` | **overridden to raise `NotImplementedError`** pointing the user to `compute_log_likelihood` (§5.6); the HMM's per-trial logp is bespoke. |
 | `sample_posterior_predictive` | `self.model.predict(...)` | **not in v1** — see below |
 | `predict` | `self.model.predict(...)` | **not in v1** — see below |
@@ -796,7 +815,7 @@ inherited method.
 ### 6.4 New methods on `RSSSM` only
 
 - `infer_regimes(idata=None, n_draws=200, seed=None)` — FFBS-based regime recovery.
-- `compute_log_likelihood(idata=None)` — post-hoc per-trial logp (Section 5.6), required for `arviz.loo` / `arviz.waic` because the sampler graph contributes only the scalar marginal.
+- `compute_log_likelihood(idata=None)` — post-hoc per-trial logp (Section 5.6), required for `arviz.loo` because the sampler graph contributes only the scalar marginal.
 - `plot_regime_recovery(regimes_idata, ax=None, ...)` — wraps the tutorial's stacked-area plot.
 
 ---
