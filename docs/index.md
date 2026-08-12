@@ -84,8 +84,8 @@ model.sample()
 ```
 
 To quickly get started with HSSM, please follow
-[this tutorial](getting_started/getting_started.ipynb). For a deeper dive into
-HSSM, please follow [our main tutorial](tutorials/main_tutorial.ipynb).
+[the quickstart](getting_started/getting_started.ipynb). For the full guided
+introduction, please follow [the HSSM tutorial](tutorials/main_tutorial.ipynb).
 
 ## Installation
 
