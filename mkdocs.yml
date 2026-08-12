@@ -22,9 +22,14 @@ nav:
   - Getting Started:
       - Getting HSSM:
           - Installation: getting_started/installation.md
-      - Using HSSM:
-          - Quickstart Guide: getting_started/getting_started.ipynb
+      - Learn HSSM:
+          - Quickstart: getting_started/getting_started.ipynb
+          - The HSSM tutorial: tutorials/main_tutorial.ipynb
           - Hierarchical modeling: getting_started/hierarchical_modeling.ipynb
+          - A complete scientific workflow: tutorials/scientific_workflow_hssm.ipynb
+  - How-to guides:
+      - Specify priors and fix parameters: how_to/specify_priors.ipynb
+      - Compare and interpret models: how_to/compare_models.ipynb
   - API References:
       - HSSM core classes:
           - hssm.HSSM: api/hssm.md
@@ -46,7 +51,6 @@ nav:
       - Plotting:
           - hssm.plotting: api/plotting.md
   - Tutorials:
-      - Main tutorial: tutorials/main_tutorial.ipynb
       - Hierarchical DDM: tutorials/ddm_hierarchical_tutorial.ipynb
       - Choice-only models: tutorials/choice_only_models.ipynb
       - Choice-only RLSSM: tutorials/choice_only_rlssm.ipynb
@@ -81,11 +85,10 @@ nav:
       - Hidden Markov Models with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
       - Setting initial values: tutorials/initial_values.ipynb
       - Poisson race models: tutorials/poisson_race.ipynb
-  - Contributed Tutorials:
-      - Winterbrain 2025 Workshop Talk 1: tutorials/hssm_tutorial_workshop_1.ipynb
-      - Winterbrain 2025 Workshop Talk 2: tutorials/hssm_tutorial_workshop_2.ipynb
-      - Scientific Workflow: tutorials/scientific_workflow_hssm.ipynb
-      - MathPsych Workshop 2025: tutorials/pymc_to_hssm.ipynb
+  - Archive:
+      - Winterbrain 2025 — Talk 1 (snapshot): archive/hssm_tutorial_workshop_1.ipynb
+      - Winterbrain 2025 — Talk 2 (snapshot): archive/hssm_tutorial_workshop_2.ipynb
+      - PyMC to HSSM — MathPsych 2025 (snapshot): archive/pymc_to_hssm.ipynb
 
   - Contributing:
       - Developing locally: local_development.md
@@ -97,10 +100,15 @@ plugins:
   - redirects:
       redirect_maps:
         api/defaults.md: api/show_defaults.md
+        tutorials/hssm_tutorial_workshop_1.md: https://lnccbrown.github.io/HSSM/archive/hssm_tutorial_workshop_1/
+        tutorials/hssm_tutorial_workshop_2.md: https://lnccbrown.github.io/HSSM/archive/hssm_tutorial_workshop_2/
+        tutorials/pymc_to_hssm.md: https://lnccbrown.github.io/HSSM/archive/pymc_to_hssm/
   - mkdocs-jupyter:
       execute: true
       execute_ignore:
         - getting_started/getting_started.ipynb
+        - how_to/specify_priors.ipynb
+        - how_to/compare_models.ipynb
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
         - tutorials/attentional_ddm.py
@@ -125,8 +133,8 @@ plugins:
         - tutorials/tutorial_stim_coding.ipynb
         - tutorials/tutorial_p_outlier_regression.ipynb
         - tutorials/hmm_ddm_regime_switching.ipynb
-        - tutorials/hssm_tutorial_workshop_1.ipynb
-        - tutorials/hssm_tutorial_workshop_2.ipynb
+        - archive/hssm_tutorial_workshop_1.ipynb
+        - archive/hssm_tutorial_workshop_2.ipynb
         - tutorials/rlssm_basic.ipynb
         - tutorials/rlssm_advanced.ipynb
         - tutorials/rlssm_restless_learner.ipynb
@@ -136,7 +144,7 @@ plugins:
         - tutorials/ppc_gallery.ipynb
         - tutorials/cartoon_gallery.ipynb
         - tutorials/scientific_workflow_hssm.ipynb
-        - tutorials/pymc_to_hssm.ipynb
+        - archive/pymc_to_hssm.ipynb
         - tutorials/tutorial_bayeux.ipynb
         - tutorials/bayesflow_lre_integration.ipynb
         - tutorials/bayesflow_nle_onnx_integration.ipynb

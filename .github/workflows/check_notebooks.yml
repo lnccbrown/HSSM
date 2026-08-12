@@ -38,13 +38,15 @@ jobs:
           SKIP_NOTEBOOKS=(
             "docs/tutorials/tutorial_bayeux.ipynb"
             "docs/tutorials/hsgp_regression.ipynb"
-            "docs/tutorials/hssm_tutorial_workshop_1.ipynb"
-            "docs/tutorials/hssm_tutorial_workshop_2.ipynb"
+            # two hierarchical fits, too heavy for the PR check; outputs
+            # inherited from the archived Winterbrain 2025 workshop run
+            "docs/how_to/compare_models.ipynb"
           )
 
           EXIT_CODE=0
           INDEX=0
-          for notebook in $(find docs -name "*.ipynb" | sort); do
+          # docs/archive/ holds frozen event snapshots — never execute them
+          for notebook in $(find docs -name "*.ipynb" -not -path "docs/archive/*" | sort); do
             THIS_INDEX=$INDEX
             INDEX=$((INDEX + 1))
             if [ $((THIS_INDEX % 4)) -ne ${{ matrix.shard }} ]; then
