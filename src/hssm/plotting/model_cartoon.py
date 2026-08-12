@@ -380,7 +380,7 @@ def compute_merge_necessary_deterministics(
     """Compute the necessary deterministic variables for the model."""
     # Get the list of deterministic variables
     necessary_params, _ = _cartoon_model_meta(model)
-    deterministics_list = []
+    deterministics_list: list[xr.Dataset] = []
     group_ds = dt[dt_group].to_dataset()
     dt_group_keys = list(group_ds.data_vars)
     # Compute the deterministic variables
@@ -390,8 +390,13 @@ def compute_merge_necessary_deterministics(
                 deterministic.name for deterministic in model.pymc_model.deterministics
             ]:
                 deterministics_list.append(
-                    pm.compute_deterministics(
-                        group_ds, model=model.pymc_model, var_names=[param]
+                    # compute_deterministics is annotated Dataset | DataTree;
+                    # it returns a Dataset when given one (group_ds)
+                    cast(
+                        "xr.Dataset",
+                        pm.compute_deterministics(
+                            group_ds, model=model.pymc_model, var_names=[param]
+                        ),
                     )
                 )
 
