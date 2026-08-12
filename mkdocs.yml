@@ -64,8 +64,7 @@ nav:
       - Posterior predictive plot gallery: tutorials/ppc_gallery.ipynb
       - Model cartoon plot gallery: tutorials/cartoon_gallery.ipynb
       - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
-      - Variational Inference: tutorials/variational_inference.ipynb
-      - Hierarchical Variational Inference: tutorials/variational_inference_hierarchical.ipynb
+      - Variational inference: tutorials/variational_inference.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
       - Per-parameter centered vs. non-centered parameterization: tutorials/parameterization_per_parameter.ipynb
       - Smooth effects with HSGP regressions: tutorials/hsgp_regression.ipynb
@@ -104,6 +103,7 @@ plugins:
         tutorials/hssm_tutorial_workshop_1.md: https://lnccbrown.github.io/HSSM/archive/hssm_tutorial_workshop_1/
         tutorials/hssm_tutorial_workshop_2.md: https://lnccbrown.github.io/HSSM/archive/hssm_tutorial_workshop_2/
         tutorials/pymc_to_hssm.md: https://lnccbrown.github.io/HSSM/archive/pymc_to_hssm/
+        tutorials/variational_inference_hierarchical.md: https://lnccbrown.github.io/HSSM/tutorials/variational_inference/
   - mkdocs-jupyter:
       execute: true
       execute_ignore:
@@ -120,7 +120,6 @@ plugins:
         - tutorials/choice_only_rlssm.ipynb
         - tutorials/likelihoods.ipynb
         - tutorials/variational_inference.ipynb
-        - tutorials/variational_inference_hierarchical.ipynb
         - tutorials/centered_vs_noncentered_basic_logic.ipynb
         - tutorials/parameterization_per_parameter.ipynb
         - tutorials/initial_values.ipynb
