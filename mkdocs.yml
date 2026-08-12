@@ -58,7 +58,6 @@ nav:
   - Tutorials:
       - Hierarchical DDM: tutorials/ddm_hierarchical_tutorial.ipynb
       - Choice-only models: tutorials/choice_only_models.ipynb
-      - Choice-only RLSSM: tutorials/choice_only_rlssm.ipynb
       - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
       - Plotting: tutorials/plotting.ipynb
       - Posterior predictive plot gallery: tutorials/ppc_gallery.ipynb
@@ -69,6 +68,7 @@ nav:
       - Per-parameter centered vs. non-centered parameterization: tutorials/parameterization_per_parameter.ipynb
       - Smooth effects with HSGP regressions: tutorials/hsgp_regression.ipynb
       - RLSSM — Basic tutorial: tutorials/rlssm_basic.ipynb
+      - RLSSM — Choice-only: tutorials/choice_only_rlssm.ipynb
       - RLSSM — Custom models with ssms.rl: tutorials/rlssm_advanced.ipynb
       - RLSSM — Restless learner: tutorials/rlssm_restless_learner.ipynb
       - RLSSM — Registering custom models in HSSM: tutorials/rlssm_hssm_custom_models.ipynb
