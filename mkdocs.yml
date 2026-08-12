@@ -30,6 +30,11 @@ nav:
   - How-to guides:
       - Specify priors and fix parameters: how_to/specify_priors.ipynb
       - Compare and interpret models: how_to/compare_models.ipynb
+      - The ONNX likelihood contract: how_to/custom_onnx_likelihoods.md
+      - Custom models from JAX callables: tutorials/jax_callable_contribution_onnx_example.ipynb
+      - Custom models from ONNX files (blackbox): tutorials/blackbox_contribution_onnx_example.ipynb
+      - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
+      - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
   - API References:
       - HSSM core classes:
           - hssm.HSSM: api/hssm.md
@@ -64,17 +69,13 @@ nav:
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
       - Per-parameter centered vs. non-centered parameterization: tutorials/parameterization_per_parameter.ipynb
       - Smooth effects with HSGP regressions: tutorials/hsgp_regression.ipynb
-      - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
       - RLSSM — Basic tutorial: tutorials/rlssm_basic.ipynb
       - RLSSM — Custom models with ssms.rl: tutorials/rlssm_advanced.ipynb
       - RLSSM — Restless learner: tutorials/rlssm_restless_learner.ipynb
       - RLSSM — Registering custom models in HSSM: tutorials/rlssm_hssm_custom_models.ipynb
-      - Custom models: tutorials/jax_callable_contribution_onnx_example.ipynb
       - BayesFlow LRE Integration: tutorials/bayesflow_lre_integration.ipynb
       - BayesFlow NLE Integration (ONNX): tutorials/bayesflow_nle_onnx_integration.ipynb
       - sbi NRE Integration (ONNX): tutorials/sbi_nre_integration.ipynb
-      - Custom models from onnx files: tutorials/blackbox_contribution_onnx_example.ipynb
-      - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
       - Saving and loading models: tutorials/save_load_tutorial.ipynb
       - Bayesian t-test: tutorials/tutorial_bayesian_t_test.ipynb
       - Using the do-operator: tutorials/do_operator.ipynb
