@@ -32,6 +32,7 @@ from hssm.hmm.specs import (
     FixedInitialDistribution,
     UniformInitialDistribution,
     resolve_initial_distribution,
+    resolve_ordering,
     resolve_transition_prior,
 )
 from hssm.hmm.utils import pad_and_align_to_T_max
@@ -485,6 +486,21 @@ def test_config_path_rejects_global_iid_p_outlier(small_single_participant):
         RSSSM(data=small_single_participant, model_config=cfg)
 
 
+def test_config_path_rejects_0d_array_p_outlier(small_single_participant):
+    """A 0-D ndarray is a scalar in disguise: it must hit the decision-10.1.9
+    rejection, not slip past as a per-regime vector."""
+    cfg = RSSSMConfig(
+        model_name="rsssm_ddm",
+        model="ddm",
+        K=2,
+        switching_params=["v"],
+        loglik_kind="analytical",
+        param_specs={"p_outlier": np.array(0.05)},
+    )
+    with pytest.raises(NotImplementedError, match="global iid"):
+        RSSSM(data=small_single_participant, model_config=cfg)
+
+
 def test_config_path_defaults_lan_backend_with_explicit_list_params(
     small_single_participant,
 ):
@@ -839,6 +855,29 @@ def test_resolve_initial_distribution_variants():
     assert isinstance(fixed, FixedInitialDistribution)
     est = resolve_initial_distribution({"name": "Dirichlet", "alpha": [1, 1]})
     assert isinstance(est, DirichletInitialDistribution)
+
+
+def test_resolve_ordering_rejects_unknown_dict_key():
+    """A typo'd ordering key raises a config error, not a raw TypeError."""
+    with pytest.raises(ValueError, match="Unknown ordering key"):
+        resolve_ordering({"name": "v", "unexpected": True})
+    with pytest.raises(ValueError, match="must include the 'name' key"):
+        resolve_ordering({"direction": "desc"})
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        StickyDirichlet(diag=0.0),
+        StickyDirichlet(offdiag=-1.0),
+        DirichletConcentration(alpha=[5.0, 0.0]),
+        DirichletInitialDistribution(alpha=[1.0, -1.0]),
+    ],
+)
+def test_non_positive_dirichlet_concentration_rejected(spec):
+    """A Dirichlet requires strictly positive concentrations, caught eagerly."""
+    with pytest.raises(ValueError, match="must be > 0"):
+        spec.concentration(2)
 
 
 def test_anchor_prefers_v():

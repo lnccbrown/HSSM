@@ -16,7 +16,7 @@ the main constructor; :func:`resolve_transition_prior` and
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any, Literal, Union
 
 import bambi as bmb
@@ -43,6 +43,13 @@ class StickyDirichlet:
 
     def concentration(self, K: int) -> np.ndarray:
         """Return the ``(K, K)`` Dirichlet concentration matrix."""
+        # A Dirichlet requires strictly positive concentrations; caught here
+        # because `RSSSMConfig.validate` calls this eagerly.
+        if self.diag <= 0 or self.offdiag <= 0:
+            raise ValueError(
+                f"transition_prior concentrations must be > 0, got "
+                f"diag={self.diag}, offdiag={self.offdiag}."
+            )
         alpha = np.full((K, K), float(self.offdiag))
         np.fill_diagonal(alpha, float(self.diag))
         return alpha
@@ -62,6 +69,10 @@ class DirichletConcentration:
     def concentration(self, K: int) -> np.ndarray:
         """Return the ``(K, K)`` Dirichlet concentration matrix."""
         alpha = np.asarray(self.alpha, dtype=float)
+        if np.any(alpha <= 0):
+            raise ValueError(
+                f"transition_prior alpha must be > 0 everywhere, got {alpha.tolist()}."
+            )
         if alpha.ndim == 0:
             return np.full((K, K), float(alpha))
         if alpha.ndim == 1:
@@ -139,6 +150,11 @@ class DirichletInitialDistribution:
         if self.alpha is None:
             return np.ones(K)
         alpha = np.asarray(self.alpha, dtype=float)
+        if np.any(alpha <= 0):
+            raise ValueError(
+                f"initial_distribution alpha must be > 0 everywhere, "
+                f"got {alpha.tolist()}."
+            )
         if alpha.ndim == 0:
             return np.full(K, float(alpha))
         if alpha.shape != (K,):
@@ -307,6 +323,16 @@ def resolve_ordering(
             return NoOrdering()
         return OrderByParam(name=spec)
     if isinstance(spec, dict):
+        # Validate the keys up front: `OrderByParam(**spec)` would surface an
+        # unexpected key as a raw TypeError from the constructor.
+        allowed = {f.name for f in fields(OrderByParam)}
+        unknown = sorted(set(spec) - allowed)
+        if unknown:
+            raise ValueError(
+                f"Unknown ordering key(s) {unknown}; valid keys are {sorted(allowed)}."
+            )
+        if "name" not in spec:
+            raise ValueError("An ordering dict must include the 'name' key.")
         return OrderByParam(**spec)
     raise TypeError(f"Unsupported ordering input of type {type(spec)!r}.")
 

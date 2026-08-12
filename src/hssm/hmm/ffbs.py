@@ -20,7 +20,7 @@ pytensor graph node).
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pytensor
@@ -54,7 +54,7 @@ def _compile_emission_fn(model: RSSSM):
     cfg = model.model_config
     K, N, T = model.K, model.n_participants, model.n_trials
     is_no_pooling = isinstance(cfg.pooling, NoPooling)
-    pooling_mode = "none" if is_no_pooling else "full"
+    pooling_mode: Literal["full", "none"] = "none" if is_no_pooling else "full"
 
     inputs: list[pt.TensorVariable] = []
     param_values: dict[str, pt.TensorVariable] = {}
@@ -157,6 +157,22 @@ def _forward_filter(
         # logsumexp_j (log_alpha[t-1, j] + log_P[j, k]) + log_lik[t, k]
         log_alpha[t] = logsumexp(log_alpha[t - 1][:, None] + log_P, axis=0) + log_lik[t]
     return log_alpha
+
+
+def _per_trial_delta(log_alpha: np.ndarray) -> np.ndarray:
+    """One-step-ahead per-trial contributions from the filtered ``log_alpha``.
+
+    ``logZ_t = logsumexp_k log_alpha[t, k]`` is the running log-evidence;
+    ``delta_t = logZ_t - logZ_{t-1}`` (with ``delta_0 = logZ_0``) is
+    ``log p(y_t | y_{1:t-1}, theta)``, so the deltas telescope to the
+    participant's marginal.  This is the per-trial split `compute_log_likelihood`
+    attaches for ``arviz.loo``.
+    """
+    logZ = logsumexp(log_alpha, axis=1)  # (T,)
+    delta = np.empty_like(logZ)
+    delta[0] = logZ[0]
+    delta[1:] = logZ[1:] - logZ[:-1]
+    return delta
 
 
 def _backward_sample(
@@ -307,11 +323,7 @@ def compute_log_likelihood(model: RSSSM, idata: DataTree) -> DataTree:
             for n in range(N):
                 Tn = int(lengths[n])
                 log_alpha = _forward_filter(log_em[n, :Tn], log_P, log_pi0)
-                logZ = logsumexp(log_alpha, axis=1)  # (Tn,)
-                delta = np.empty(Tn)
-                delta[0] = logZ[0]
-                delta[1:] = logZ[1:] - logZ[:-1]
-                ll[c, d, offset : offset + Tn] = delta
+                ll[c, d, offset : offset + Tn] = _per_trial_delta(log_alpha)
                 offset += Tn
 
     # Provenance: map each obs back to its (participant, trial) for traceability.

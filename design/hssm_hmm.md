@@ -52,7 +52,7 @@ Sample-time is one JIT-compile unit, roughly constant in `N`. Post-hoc is decoup
 | Numerical stability | 98/2 imbalanced *and* empty (regime 1 never visited) | no NaN/Inf; unoccupied regime falls back to a prior-driven value bounded by the `ordered` constraint |
 | Post-hoc FFBS | analytical DDM and LAN-only `angle` | both work via `pytensor.function`-compiled emission; 86% per-trial accuracy at K=2 |
 
-What v1 implementation (Phase 2+) still has to verify: the `HSSMBase` override mechanics (§6.3), `compute_log_likelihood` / `infer_regimes` InferenceData wiring (§5.5, §5.6), non-default config variants, and the `missing_data`/`deadline`/`p_outlier`/`lapse` rejection plumbing. None of these would change the design if they failed.
+What v1 implementation (Phase 2+) still has to verify: the `HSSMBase` override mechanics (§6.3), `compute_log_likelihood` / `infer_regimes` DataTree wiring (§5.5, §5.6), non-default config variants, and the `missing_data`/`deadline`/`p_outlier`/`lapse` rejection plumbing. None of these would change the design if they failed.
 
 **User-facing API.**
 
@@ -223,7 +223,7 @@ The forward algorithm above produces a *scalar* marginal log-likelihood `L_n = l
 
 This is exactly what the tutorial does, and the feasibility prototype confirmed it: under the scalar-marginal contribution, chains converge to the same mode and posteriors match the tutorial bit-for-bit (R-hat ≈ 1.0).
 
-**Implication for the `make_distribution` per-trial contract.** Because v1 contributes a single scalar via `pm.Potential`, it bypasses `make_distribution`'s per-trial assumption (Section 2.2) rather than satisfying it. Downstream tooling that wants per-trial log-likelihood (`log_likelihood` group, `arviz.loo`) gets it *post-hoc*: the same compiled forward function used by FFBS (Section 5.5) computes per-trial one-step-ahead contributions from any saved posterior draw in pure NumPy, and the result is attached to the returned `InferenceData` if requested. See Section 5.6.
+**Implication for the `make_distribution` per-trial contract.** Because v1 contributes a single scalar via `pm.Potential`, it bypasses `make_distribution`'s per-trial assumption (Section 2.2) rather than satisfying it. Downstream tooling that wants per-trial log-likelihood (`log_likelihood` group, `arviz.loo`) gets it *post-hoc*: the same compiled forward function used by FFBS (Section 5.5) computes per-trial one-step-ahead contributions from any saved posterior draw in pure NumPy, and the result is attached to the returned `DataTree` if requested. See Section 5.6.
 
 ### 3.5 Per-participant batching — one scan, not N
 
@@ -267,7 +267,7 @@ L3 is the builder invoked inside `_build_pymc_model` (Section 5.4). The class it
 
 A new subpackage `src/hssm/hmm/`, structured to mirror the existing `src/hssm/rl/` subpackage (which houses `RLSSM`). Folders are named after the *domain* (`rl/`, `hmm/`), classes after themselves — both classes are re-exported from `hssm/__init__.py`, so users write `from hssm import RSSSM` and never reference the folder.
 
-```
+```text
 src/hssm/hmm/
   __init__.py
   rsssm.py            # RSSSM(HSSMBase)
@@ -314,7 +314,7 @@ are the map, not the territory.
 
 **Diagram 1 — Lifecycle.** Six stages from user code to recovered regimes.
 Stages 1–3 happen in `__init__` (Section 5.4); stage 4 is `sample()` (Section
-6.3); stages 5–6 are post-fit consumers of the returned `InferenceData`
+6.3); stages 5–6 are post-fit consumers of the returned `DataTree`
 (Sections 5.5 and 5.6).
 
 ```mermaid
@@ -335,7 +335,7 @@ flowchart TD
 | 2 | `RSSSMConfig.validate`, `pad_and_align_to_T_max`; rejects `missing_data` / `deadline` / top-level `lapse` / global iid `p_outlier` | §5.4, decision 10.1.9 |
 | 3 | `_build_pymc_model` — opens one `pm.Model()`, declares all RVs, adds the forward `pm.Potential` (no bambi) | §5.4, decision 10.1.8 |
 | 4 | `self.sample(...)` overridden — calls `pm.sample(model=self.pymc_model, ...)` | §6.3 |
-| 5 | Returned `arviz.InferenceData` holds `P`, `pi0`, switching and shared params. The hidden regimes `s_t` are **never sampled** — the forward algorithm sums them out inside the likelihood in stage 3, so NUTS sees a purely continuous parameter space. | §3.3, §3.4 |
+| 5 | Returned `xarray.DataTree` holds `P`, `pi0`, switching and shared params. The hidden regimes `s_t` are **never sampled** — the forward algorithm sums them out inside the likelihood in stage 3, so NUTS sees a purely continuous parameter space. | §3.3, §3.4 |
 | 6 | `infer_regimes(idata)` reconstructs the regime trajectories from the posterior using FFBS — separately, post-hoc, in NumPy. `compute_log_likelihood(idata)` likewise reconstructs per-trial logp for `arviz.loo`. | §5.5, §5.6 |
 
 **Diagram 2 — Inside the PyMC model.** What `_build_pymc_model` (Section 5.4)
@@ -615,7 +615,7 @@ transform on the anchor parameter, declared when that parameter is created
 **Relationship to `HSSMBase`.** `RSSSM` still subclasses `HSSMBase`, but it
 does not use the bambi-backed construction path. It inherits the non-bambi
 surface — `_store_init_args` (save/load), the panel-validation helpers, and the
-post-fit methods that operate on the PyMC model and the `InferenceData`
+post-fit methods that operate on the PyMC model and the `DataTree`
 (`summary`, `find_MAP`, `plot_trace`). It overrides `__init__` so construction
 never reaches `HSSMBase.__init__`'s `bmb.Model(...)` build, and it overrides
 `sample()` to call `pm.sample` on the directly-built model (inherited
@@ -667,10 +667,10 @@ Footprint: one file (`hssm/hmm/ffbs.py`), no differentiable Op (pure NumPy), reu
 ```python
 def infer_regimes(
     self,
-    idata: az.InferenceData | None = None,
+    idata: DataTree | None = None,
     n_draws: int = 200,
     seed: int | None = None,
-) -> az.InferenceData: ...
+) -> DataTree: ...
 ```
 
 Behavior:
@@ -680,7 +680,7 @@ Behavior:
   1. Compute the per-regime emission logp matrix `(T, K)` for each participant (via the same emission callable used at sampling time).
   2. Forward pass to get `log_alpha_t(k)`.
   3. Backward sample (always in log-space, normalised via `softmax` before drawing): `s_T ~ Categorical(softmax_k(log_alpha_T(k)))`; for `t = T-1, ..., 1`, `s_t ~ Categorical(softmax_k(log_alpha_t(k) + log P[k, s_{t+1}]))`.
-- Returns an `arviz.InferenceData` with:
+- Returns an `xarray.DataTree` with:
   - Group `posterior_regimes` containing the sampled state sequences, shape `(n_draws, n_participants, n_trials)` with dim names `("draw", "participant", "trial")`.
   - Optionally a derived `regime_sample_frequency` variable of shape `(n_participants, n_trials, K)` — the Monte Carlo estimate of the marginal posterior `p(s_{n,t}=k | y, theta)` averaged over the `n_draws` FFBS samples (converges to the true marginal as `n_draws -> infinity`).
 
@@ -688,13 +688,13 @@ Implementation lives in `hssm/hmm/ffbs.py`. It does not require a differentiable
 
 ### 5.6 Post-hoc per-trial log-likelihood
 
-Because v1 contributes the joint marginal as a scalar (Section 3.4), the `log_likelihood` group of the returned `InferenceData` is empty by default and tools like `arviz.loo` will not work out of the box.
+Because v1 contributes the joint marginal as a scalar (Section 3.4), the `log_likelihood` group of the returned `DataTree` is empty by default and tools like `arviz.loo` will not work out of the box.
 
 ```python
 def compute_log_likelihood(
     self,
-    idata: az.InferenceData | None = None,
-) -> az.InferenceData: ...
+    idata: DataTree | None = None,
+) -> DataTree: ...
 ```
 
 Behavior:
@@ -882,7 +882,7 @@ findings report.
 **Not yet exercised — Phase 2+ must still validate:**
 - the `RSSSM` subclass overrides against the real `HSSMBase` (the
   `pymc_model` property and `sample` — Section 6.3);
-- `compute_log_likelihood` (Section 5.6) and the `infer_regimes` InferenceData
+- `compute_log_likelihood` (Section 5.6) and the `infer_regimes` DataTree
   return shape (Section 5.5);
 - `TransitionPriorSpec=DirichletConcentration`, `InitialDistributionSpec=FixedInitialDistribution`, `OrderingSpec=OrderByParam`/`NoOrdering` — the non-default config variants;
 - `missing_data` / `deadline` / `p_outlier` / `lapse` rejection.
@@ -897,10 +897,10 @@ This section is load-bearing for the v2/v3 roadmap. Every deferred feature liste
 |---|---|---|
 | Hierarchical (partial) pooling | `PoolingSpec` union on `RSSSMConfig.pooling` (v1 ships `FullPooling` / `NoPooling`) | New variant `PartialPooling(...)`; constructor signature unchanged. |
 | Covariate-driven `P` | `TransitionPriorSpec` union on `RSSSMConfig.transition_prior` | New variant `CovariateDrivenTransition(formula=..., link=...)`; Op factory branches on variant type. |
-| Per-regime priors / regressions for switching params | `switching_params` is `list[str]` in v1; v2 widens to `list[str] | dict[str, RegimePriorSpec]` | Backwards-compatible: a list is treated as a dict with default specs. |
+| Per-regime priors / regressions for switching params | `switching_params` is `list[str]` in v1; v2 widens to `list[str] \| dict[str, RegimePriorSpec]` | Backwards-compatible: a list is treated as a dict with default specs. |
 | Per-participant (non-global) `pi0` | `InitialDistributionSpec` union (v1 ships uniform / fixed-vector / global Dirichlet) | New variant or a per-participant Dirichlet; `_build_pymc_model` declares a per-participant `pi0`. |
 | Semi-Markov durations | Layer 1 (`forward.py`) gains a new recursion implementation; `TransitionPriorSpec` union grows | The L1 contract (in → scalar log-marginal) is unchanged. |
-| Cross-emission models | Layer 2 (`emissions.py`) gains a path for "one emission spec per regime" | `model` becomes `str | list[str]` (uniform vs per-regime); validated by `RSSSMConfig.validate`. |
+| Cross-emission models | Layer 2 (`emissions.py`) gains a path for "one emission spec per regime" | `model` becomes `str \| list[str]` (uniform vs per-regime); validated by `RSSSMConfig.validate`. |
 | New SSMs | None — L2 already resolves via `make_distribution_for_supported_model` | Free. |
 
 Design principles enforced by this table:

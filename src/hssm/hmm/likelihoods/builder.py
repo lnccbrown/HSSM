@@ -9,7 +9,7 @@ for the analytical and (Phase 3) LAN emission backends.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Literal
 
 import pymc as pm
 import pytensor.tensor as pt
@@ -29,7 +29,7 @@ def make_hmm_logp_op(
     n_participants: int,
     n_trials: int,
     regime_params: set[str],
-    pooling: str = "full",
+    pooling: Literal["full", "none"] = "full",
     broadcast_params: bool = False,
     potential_name: str = "hmm_loglik",
 ) -> Callable[..., pt.TensorVariable]:
@@ -99,7 +99,7 @@ def build_log_emission(
     n_participants: int,
     n_trials: int,
     regime_params: set[str],
-    pooling: str = "full",
+    pooling: Literal["full", "none"] = "full",
     broadcast_params: bool = False,
 ) -> pt.TensorVariable:
     """Compose the ``(N, T, K)`` per-trial, per-regime emission log-density.
@@ -114,6 +114,10 @@ def build_log_emission(
     parameter name to its tensor (the model RV at sampling time, or a symbolic
     input when compiling the FFBS callable).
     """
+    # Guard the Literal at runtime: the branching below treats anything that is
+    # not "full" as "none", so a typo would silently build the wrong expansion.
+    if pooling not in ("full", "none"):
+        raise ValueError(f"`pooling` must be 'full' or 'none', got {pooling!r}.")
     N, T = n_participants, n_trials
     n_rows = N * T
     # `floatX` (not a hard float32 cast): the hard cast truncated genuine

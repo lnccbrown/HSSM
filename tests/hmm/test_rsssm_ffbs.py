@@ -137,18 +137,42 @@ def test_numpy_forward_filter_matches_pytensor_marginal():
     assert abs(numpy_marginal - pt_marginal) < 1e-6
 
 
-def test_per_trial_delta_sums_to_marginal():
-    """sum_t delta_t equals the running log-evidence logZ_T (per-trial logp split)."""
+def _brute_force_log_marginal(log_lik, log_P, log_pi0):
+    """Exact ``log p(y_{1:T})`` by enumerating all ``K**T`` regime paths.
+
+    Shares no code with the filter or the per-trial split under test.
+    """
+    from itertools import product
+
+    T, K = log_lik.shape
+    joint = []
+    for s in product(range(K), repeat=T):
+        lp = log_pi0[s[0]] + log_lik[0, s[0]]
+        for t in range(1, T):
+            lp += log_P[s[t - 1], s[t]] + log_lik[t, s[t]]
+        joint.append(lp)
+    return logsumexp(np.asarray(joint))
+
+
+def test_per_trial_delta_matches_brute_force_and_sums_to_marginal():
+    """The production per-trial split (``ffbs._per_trial_delta``) is exact.
+
+    Each ``delta_t`` must equal the one-step-ahead contribution
+    ``log p(y_{1:t}) - log p(y_{1:t-1})`` with the prefix marginals enumerated
+    brute-force, and the deltas must telescope to the full marginal.
+    """
     rng = np.random.default_rng(2)
-    K, T = 2, 40
+    K, T = 2, 7
     log_lik, log_P, log_pi0 = _random_hmm(rng, K, T)
 
     log_alpha = ffbs._forward_filter(log_lik, log_P, log_pi0)
-    logZ = logsumexp(log_alpha, axis=1)
-    delta = np.empty(T)
-    delta[0] = logZ[0]
-    delta[1:] = logZ[1:] - logZ[:-1]
-    assert abs(delta.sum() - logZ[-1]) < 1e-10
+    delta = ffbs._per_trial_delta(log_alpha)
+
+    logZ_ref = np.array(
+        [_brute_force_log_marginal(log_lik[: t + 1], log_P, log_pi0) for t in range(T)]
+    )
+    np.testing.assert_allclose(delta, np.diff(logZ_ref, prepend=0.0), atol=1e-10)
+    assert abs(delta.sum() - logZ_ref[-1]) < 1e-10
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +232,7 @@ def test_compute_log_likelihood_sums_to_model_marginal():
     idata = _fake_posterior([0.2, 1.5], 0.8, 0.5, 0.3, [[0.9, 0.1], [0.1, 0.9]])
 
     model.compute_log_likelihood(idata)
-    ll = idata.log_likelihood["obs"].values  # (chain, draw, participant, trial)
+    ll = idata.log_likelihood["obs"].values  # (chain, draw, __obs__)
 
     # Independent reference: the model's own forward marginal at the same params.
     emission_fn, order = ffbs._compile_emission_fn(model)
@@ -380,7 +404,7 @@ def test_ffbs_and_log_likelihood_under_no_pooling():
         {
             "v": (
                 ("chain", "draw", "p", "k"),
-                np.tile([[-1.0, 1.0], [-1.0, 1.0]], (1, 4, 1, 1)),
+                np.tile([-1.0, 1.0], (1, 4, n, 1)),
             ),
             "a": (("chain", "draw", "p"), np.full((1, 4, n), 0.8)),
             "z": (("chain", "draw", "p"), np.full((1, 4, n), 0.5)),

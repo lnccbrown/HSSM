@@ -760,7 +760,7 @@ class RSSSM(HSSMBase):
             self._anchor = anchor
 
             # --- L3 builder: emission + forward + Potential ---
-            pooling_mode = "none" if is_no_pooling else "full"
+            pooling_mode: Literal["full", "none"] = "none" if is_no_pooling else "full"
             builder = make_hmm_logp_op(
                 dist_class=self._emission_dist,
                 data_padded=self._data_padded,

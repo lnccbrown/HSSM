@@ -32,6 +32,18 @@ if TYPE_CHECKING:
 _logger = logging.getLogger("hssm")
 
 
+def _is_fixed_vector(spec: Any) -> bool:
+    """Whether `spec` is a fixed per-regime vector (list/tuple or 1-D ndarray).
+
+    A scalar (shared) and a 0-D ndarray are *not* per-regime — the single
+    predicate keeps the `p_outlier` check, the length-K check, and the
+    degeneracy check agreeing on what counts as per-regime.
+    """
+    return isinstance(spec, (list, tuple)) or (
+        isinstance(spec, np.ndarray) and spec.ndim == 1
+    )
+
+
 @dataclass
 class RSSSMConfig(BaseModelConfig):
     """Config for regime-switching sequential sampling models.
@@ -129,9 +141,7 @@ class RSSSMConfig(BaseModelConfig):
         # own `list_params`, so its presence always means the RSSSM lapse.)
         if "p_outlier" in self.list_params:
             spec = self.param_specs.get("p_outlier")
-            per_regime = "p_outlier" in self.switching_params or isinstance(
-                spec, (list, tuple, np.ndarray)
-            )
+            per_regime = "p_outlier" in self.switching_params or _is_fixed_vector(spec)
             if not per_regime:
                 raise NotImplementedError(
                     "RSSSM rejects a global iid `p_outlier`: a single lapse "
@@ -151,12 +161,7 @@ class RSSSMConfig(BaseModelConfig):
                     f"param_specs key {name!r} is not a parameter of the SSM "
                     f"(list_params={self.list_params})."
                 )
-            # Fixed-per-regime values arrive as a list/tuple or a 1-D ndarray; a
-            # scalar (shared) and a 0-D ndarray are handled elsewhere.
-            is_fixed_vector = isinstance(spec, (list, tuple)) or (
-                isinstance(spec, np.ndarray) and spec.ndim == 1
-            )
-            if is_fixed_vector and len(spec) != self.K:
+            if _is_fixed_vector(spec) and len(spec) != self.K:
                 raise ValueError(
                     f"Fixed-per-regime value for {name!r} has length {len(spec)}, "
                     f"expected K={self.K}."
@@ -167,9 +172,7 @@ class RSSSMConfig(BaseModelConfig):
         # are no switching_params and no fixed-per-regime vectors.  It is a valid
         # graph (and occasionally useful as a null model), so warn rather than raise.
         has_per_regime = bool(self.switching_params) or any(
-            isinstance(spec, (list, tuple))
-            or (isinstance(spec, np.ndarray) and spec.ndim == 1)
-            for spec in self.param_specs.values()
+            _is_fixed_vector(spec) for spec in self.param_specs.values()
         )
         if not has_per_regime:
             _logger.warning(
