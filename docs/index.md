@@ -89,72 +89,13 @@ HSSM, please follow [our main tutorial](tutorials/main_tutorial.ipynb).
 
 ## Installation
 
-(💥 New in HSSM 0.4.0) HSSM supports installation directly through `pip` or `uv` on
-all platforms.
-
-### Install HSSM (CPU only)
-
-Use the following command to install HSSM into your virtual environment:
-
 ```bash
-pip install hssm
+pip install hssm        # or: uv add hssm
 ```
 
-You can also install HSSM with `uv`:
-
-```bash
-uv add hssm
-```
-
-### Install HSSM (with GPU Support)
-
-To sample on an NVIDIA GPU, install HSSM with the CUDA extra matching your CUDA
-version. This pulls in the GPU-enabled build of JAX for you:
-
-```bash
-pip install hssm[cuda12]  # CUDA 12
-pip install hssm[cuda13]  # CUDA 13
-```
-
-!!! note
-
-    JAX's CUDA wheels are Linux-only and require a compatible NVIDIA driver
-    (>= 525 for CUDA 12, >= 580 for CUDA 13).
-
-### Support for Apple Silicon, AMD, and other GPUs
-
-JAX also has support other GPUs. Please follow the
-[Official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html)
-to install the correct version of JAX before installing HSSM.
-
-### Install the dev version of HSSM
-
-You can install the dev version of `hssm` directly from this repo:
-
-```bash
-pip install git+https://github.com/lnccbrown/HSSM.git
-```
-
-### Install HSSM on Google Colab
-
-Google Colab comes with PyMC and JAX pre-configured. That holds true even if you
-are using the GPU and TPU backend, so you simply need to install HSSM via pip on
-Colab regardless of the backend you are using:
-
-```bash
-!pip install hssm
-```
-
-## Troubleshooting
-
-!!! note
-
-    Possible solutions to any issues with installations with hssm can be found
-    [in GitHub Discussions](https://github.com/lnccbrown/HSSM/discussions). Also feel free
-    to start a newdiscussion thread if you don't find answers there. We recommend installing
-    HSSM into a new virtual environment with Python 3.12 through 3.14 to prevent any problems with
-    dependencies during the installation process. Please note that hssm is only tested for
-    python 3.12 through 3.14. Use unsupported python versions with caution.
+HSSM installs on all platforms with Python 3.12–3.14. For GPU sampling (CUDA
+extras), Colab, the dev version, optional dependencies, and troubleshooting,
+see the [Installation guide](getting_started/installation.md).
 
 ## License
 
