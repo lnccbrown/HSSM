@@ -11,6 +11,7 @@ from pymc.variational import Approximation
 
 import hssm
 from hssm import HSSM
+from hssm.base import HSSMBase
 from hssm.likelihoods import DDM, logp_ddm
 
 hssm.set_floatX("float32", update_jax=True)
@@ -134,6 +135,35 @@ def test_custom_model(data_ddm):
     assert model.model_config.model_name == "custom"
     assert model.model_config.loglik_kind == "analytical"
     assert model.model_config.list_params == ["v", "a", "z", "t", "p_outlier"]
+
+
+def test_check_lapse_p_outlier_append_is_idempotent():
+    """`_check_lapse` must not duplicate a `p_outlier` already last in list_params.
+
+    The normal flow never feeds it a `p_outlier`-terminated `list_params` (named
+    models reset it from the SSM default, and no shipped config ships
+    `p_outlier`), but the append must still be idempotent so a custom config that
+    already ends in `p_outlier` is not given a second one.
+    """
+
+    class _Fake:
+        is_choice_only = False
+        n_choices = 2
+        has_lapse = True
+        _check_lapse = HSSMBase._check_lapse
+
+    fake = _Fake()
+    fake.list_params = ["v", "a", "z", "t", "p_outlier"]
+    fake._check_lapse(None)
+    assert fake.list_params == ["v", "a", "z", "t", "p_outlier"]
+    assert fake.list_params.count("p_outlier") == 1
+
+    # No-lapse path leaves list_params untouched.
+    fake2 = _Fake()
+    fake2.has_lapse = False
+    fake2.list_params = ["v", "a", "z", "t"]
+    fake2._check_lapse(None)
+    assert fake2.list_params == ["v", "a", "z", "t"]
 
 
 @pytest.mark.slow

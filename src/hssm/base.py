@@ -1418,9 +1418,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 sum=kwargs.get("sum", True),
             )
         else:
-            new_model = pm.model.transform.conditioning.remove_value_transforms(
-                self.pymc_model
-            )
+            # `remove_value_transforms` goes through `fgraph_from_model`, which
+            # raises `NotImplementedError: Cannot convert models with non-default
+            # initial_values`. Explicit `initval=`s are irrelevant to the logp
+            # (RSSSM sets several), so clear them for the conversion and put them
+            # back afterwards.
+            initial_values = dict(self.pymc_model.rvs_to_initial_values)
+            try:
+                self.pymc_model.rvs_to_initial_values.update(
+                    dict.fromkeys(initial_values, None)
+                )
+                new_model = pm.model.transform.conditioning.remove_value_transforms(
+                    self.pymc_model
+                )
+            finally:
+                self.pymc_model.rvs_to_initial_values.update(initial_values)
             return new_model.compile_logp(
                 vars=kwargs.get("vars", None),
                 jacobian=kwargs.get("jacobian", True),
@@ -1912,7 +1924,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
             else:
                 self.lapse = lapse
-            self.list_params.append("p_outlier")
+            # Append idempotently: a config whose `list_params` already ends in
+            # `p_outlier` must not get a duplicate (the append is otherwise
+            # non-idempotent).
+            if self.list_params[-1] != "p_outlier":
+                self.list_params.append("p_outlier")
             return
 
         if lapse is not None:
