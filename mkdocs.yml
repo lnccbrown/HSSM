@@ -30,7 +30,7 @@ nav:
   - How-to guides:
       - Specify priors and fix parameters: how_to/specify_priors.ipynb
       - Compare and interpret models: how_to/compare_models.ipynb
-      - The ONNX likelihood contract: how_to/custom_onnx_likelihoods.md
+      - The ONNX likelihood contract: how_to/custom_onnx_likelihoods.ipynb
       - Custom models from JAX callables: tutorials/jax_callable_contribution_onnx_example.ipynb
       - Custom models from ONNX files (blackbox): tutorials/blackbox_contribution_onnx_example.ipynb
       - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
@@ -109,6 +109,7 @@ plugins:
       execute_ignore:
         - getting_started/getting_started.ipynb
         - how_to/specify_priors.ipynb
+        - how_to/custom_onnx_likelihoods.ipynb
         - how_to/compare_models.ipynb
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
