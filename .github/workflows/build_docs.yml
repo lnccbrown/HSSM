@@ -24,6 +24,10 @@ jobs:
       - uses: ./.github/setup-env
         with:
           python-version: "3.13"
+      # Committed notebook outputs are ~55% of this repo's pack; every
+      # re-execution adds a permanent blob. Catch growth at review time.
+      - name: Check docs weight
+        run: python scripts/check_docs_weight.py
       - name: Build docs (strict)
         run: uv run --group notebook --group docs mkdocs build --strict
 
