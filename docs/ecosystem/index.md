@@ -47,10 +47,12 @@ must expose one per-trial forward pass with every input dimension concrete;
 HSSM batches across trials itself. That rule is stated once, with runnable
 checks, in [The ONNX likelihood
 contract](https://lnccbrown.github.io/HSSM/how_to/custom_onnx_likelihoods/).
-It is what lets networks trained in
+It is also what makes the ecosystem open at the edges: a network trained in
 [sbi](https://github.com/sbi-dev/sbi) or
-[BayesFlow](https://github.com/bayesflow-org/bayesflow) drop into HSSM
-unchanged.
+[BayesFlow](https://github.com/bayesflow-org/bayesflow) becomes usable in HSSM
+by exporting it to ONNX with LANfactory's exporters, after which HSSM loads it
+with the same `loglik="model.onnx"` gesture it uses for its own networks — no
+library-specific glue on the HSSM side.
 
 ## Which package answers your question
 
@@ -72,21 +74,26 @@ on all three.
 ## Tracking runs with MLflow
 
 Data generation (`ssms`) and network training (LANfactory) both log to
-[MLflow](https://mlflow.org/), and they log to the *same* tracking store when
-you point them at one. That is what makes a trained network traceable back to
-the data that produced it.
+[MLflow](https://mlflow.org/). Point them at the same tracking store and the
+two halves of a network's history end up in one place.
 
-The environment variable is the whole interface:
+Two environment variables are the interface:
 
 ```bash
-export MLFLOW_TRACKING_URI="file:///absolute/path/to/mlruns"   # or an http:// server
+export MLFLOW_TRACKING_URI="sqlite:////absolute/path/to/tracking.db"
+export MLFLOW_ARTIFACT_LOCATION="/absolute/path/to/artifacts"
 ```
 
-With that set, `ssms` records each generation run (model, output folder, file
-count, config hash) and LANfactory records each training run (model, network
-type, backend, training-data folder, the run UUID that appears in the
-artifact filenames). Joining the two is what lets you answer "which data
-trained this network" months later.
+`ssms` records each generation run — the generator and model configuration,
+the `data_output_folder`, the number of files produced and their total size,
+and tags for the run phase and any SLURM job it ran under. LANfactory records
+each training run's configuration and metrics.
+
+The two are linked explicitly rather than by convention: pass the data
+generation run's experiment id to the trainer with
+`--data-generation-experiment-id`, and LANfactory records the lineage — it can
+also discover the training-data folder from MLflow instead of being told where
+it is.
 
 Per-package details — CLI flags, what exactly is logged, how to query it —
 live with the packages:
