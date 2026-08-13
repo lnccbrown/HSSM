@@ -17,8 +17,14 @@ your numbers if you miss it.
 
 This is not a cosmetic difference. If you carry HDDM parameter values across —
 as priors, as simulation ground truth, or when comparing published estimates —
-divide them by two. HSSM's default bounds for `a` are `(0.3, 2.5)`, which is
-the range you should expect posteriors to live in.
+divide them by two.
+
+Halving also matters for a second reason: HSSM's bounds on `a` depend on which
+likelihood you use. The analytical DDM leaves `a` on `(0, inf)`, but the
+neural approximation is only valid over the range it was trained on, which for
+`ddm` is `(0.3, 2.5)`. An HDDM `a` of `2.0` becomes a comfortable `1.0`; an
+HDDM `a` of `6.0` becomes `3.0`, which is outside the trained range and calls
+for the analytical likelihood instead.
 
 You can see the conversion in HSSM's own source: the black-box likelihoods
 wrap HDDM's Cython WFPT implementation and pass `a * 2` when they call it. The
@@ -68,8 +74,8 @@ one per parameter, which covers the same ground and more:
 |---|---|---|
 | Drift varies by condition | `depends_on={'v': 'stim'}` | `include=[{"name": "v", "formula": "v ~ 0 + C(stim)"}]` |
 | Drift varies by a continuous covariate | `HDDMRegressor` with a patsy formula | `"formula": "v ~ 1 + x"` |
-| Per-participant drift | hierarchical by default | `"formula": "v ~ 1 + (1|participant_id)"` |
-| Several parameters, same structure | one specification per parameter | `global_formula="y ~ 1 + (1|participant_id)"` |
+| Per-participant drift | hierarchical by default | `"formula": "v ~ 1 + (1\|participant_id)"` |
+| Several parameters, same structure | one specification per parameter | `global_formula="y ~ 1 + (1\|participant_id)"` |
 
 The [hierarchical modeling tutorial](../getting_started/hierarchical_modeling.ipynb)
 covers the formula syntax; [hierarchical DDM
@@ -94,10 +100,14 @@ explains the tradeoff and when each is the better choice.
 
 ## Concepts with no direct translation
 
-- **Priors.** HSSM applies HDDM-derived default priors for `ddm`, `ddm_sdv`,
-  and `full_ddm` when the likelihood is analytical, so a default model starts
-  from familiar ground. Specifying your own is a different interface — see
-  [Specify priors and fix parameters](../how_to/specify_priors.ipynb).
+- **Priors.** For `ddm`, `ddm_sdv`, and `full_ddm`, HSSM's default priors on
+  regression terms are derived from HDDM's — the settings are carried in
+  `hssm.prior` under names like `HDDM_MU` and `HDDM_SIGMA` — so a regression
+  model on these families starts from familiar ground. The rule is the
+  likelihood: those defaults apply unless you are using the neural
+  (`approx_differentiable`) likelihood, which has its own priors derived from
+  the network's training bounds. Specifying your own is a different interface
+  — see [Specify priors and fix parameters](../how_to/specify_priors.ipynb).
 - **Outliers.** HDDM's `p_outlier` exists in HSSM under the same name, and the
   lapse distribution is configurable rather than fixed. See [Model outliers
   with lapse probabilities](../tutorials/lapse_prob_and_dist.ipynb).
