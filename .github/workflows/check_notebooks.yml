@@ -35,12 +35,13 @@ jobs:
           # full find-produced path — bare filenames never match the loop
           # comparison (the two workshop notebooks executed for months while
           # "skipped").
+          # Only one page is genuinely un-runnable here: bayeux needs
+          # jax[cuda12]==0.4.38, which conflicts with the JAX HSSM is tested
+          # against. The page says so in its own text. Everything else runs —
+          # this workflow is dispatch/drift-only, so "too heavy for the PR
+          # check" no longer applies: there is no PR check.
           SKIP_NOTEBOOKS=(
             "docs/tutorials/tutorial_bayeux.ipynb"
-            "docs/tutorials/hsgp_regression.ipynb"
-            # two hierarchical fits, too heavy for the PR check; outputs
-            # inherited from the archived Winterbrain 2025 workshop run
-            "docs/how_to/compare_models.ipynb"
           )
 
           EXIT_CODE=0
