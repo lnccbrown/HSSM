@@ -19,6 +19,7 @@ nav:
       - Credits: credits.md
       - License: license.md
       - Changelog: changelog.md
+      - The HSSM ecosystem: ecosystem/index.md
       - Archive:
           - Winterbrain 2025 — Talk 1 (snapshot): archive/hssm_tutorial_workshop_1.ipynb
           - Winterbrain 2025 — Talk 2 (snapshot): archive/hssm_tutorial_workshop_2.ipynb
@@ -72,6 +73,7 @@ nav:
           - Use the low-level API with PyMC: tutorials/pymc.ipynb
           - Compile a log-likelihood function: tutorials/compile_logp.ipynb
   - Explanations:
+      - Coming from HDDM: explanations/coming_from_hddm.md
       - Understanding likelihoods in HSSM: tutorials/likelihoods.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
       - Choosing a parameterization per parameter: tutorials/parameterization_per_parameter.ipynb
@@ -256,6 +258,7 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.superfences
   - attr_list
+  - md_in_html
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
