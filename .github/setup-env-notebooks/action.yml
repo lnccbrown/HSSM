@@ -11,6 +11,14 @@ runs:
     - name: Checkout repository
       uses: actions/checkout@v7
 
+    # The `graphviz` Python package is a binding, not a bundle: it shells out
+    # to the `dot` binary, which ubuntu-latest does not ship. Without this,
+    # every notebook that renders a model graph dies on
+    # `ExecutableNotFound: PosixPath('dot')`.
+    - name: Install graphviz
+      run: sudo apt-get update && sudo apt-get install -y graphviz
+      shell: bash
+
     - name: Install uv
       uses: astral-sh/setup-uv@v9.0.0
       with:
