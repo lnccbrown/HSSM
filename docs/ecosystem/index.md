@@ -10,7 +10,7 @@ This page is the map. It is maintained in
 coordination repository, and published here so there is one description of the
 whole rather than three partial ones.
 
-## The packages
+## The packages you install
 
 | Package | Owns | Start here if you want to... |
 |---|---|---|
@@ -66,10 +66,44 @@ library-specific glue on the HSSM side.
 | I trained a network in sbi or BayesFlow — now what? | [HSSM — Bring your own likelihood](https://lnccbrown.github.io/HSSM/how_to/external_trainers/) |
 | How do I track training and data-generation runs? | [Tracking runs with MLflow](#tracking-runs-with-mlflow), below |
 | Which versions work together? | [Version compatibility](#version-compatibility), below |
+| What is this package in my traceback or lockfile? | [Supporting components](#supporting-components), below |
+| How do I contribute across several packages? | [Development and coordination](#development-and-coordination), below |
 
 Each site is organised the same way — **Learn**, **How-to guides**,
 **Explanations**, **Reference** — so the tab you want sits in the same place
 on all three.
+
+## Supporting components
+
+These are not packages you choose — they arrive with HSSM, or hold artifacts
+it fetches. They are listed here because their names show up in tracebacks,
+lockfiles, and download logs.
+
+| Component | What it is |
+|---|---|
+| [`hddm-wfpt`](https://github.com/lnccbrown/hddm-wfpt) | The Cython implementation of the Wiener first-passage-time likelihood, inherited from HDDM. Installed with HSSM, and used for the analytical DDM likelihoods. |
+| [`franklab/HSSM`](https://huggingface.co/franklab/HSSM) | The HuggingFace repository holding trained likelihood networks. HSSM downloads from it on first use of a model without an analytical likelihood. |
+| [`franklab/ssms_gui`](https://huggingface.co/spaces/franklab/ssms_gui) | A HuggingFace Space for exploring SSM behaviour interactively, built on `ssm-simulators`. Useful for building intuition about what a parameter does. |
+| conda-forge feedstocks | `hssm` and `ssm-simulators` are also published on conda-forge; the feedstock repositories carry the recipes. |
+
+Third-party libraries that do real work under the hood — PyMC, Bambi, ArviZ,
+JAX, PyTensor, ONNX Runtime — are dependencies rather than ecosystem
+components, and their own documentation is the right reference for them.
+
+## Development and coordination
+
+Two repositories exist for people working *on* the ecosystem rather than with
+it. You never need them to fit models, and neither is a Python package you
+install alongside HSSM.
+
+| Repository | Role |
+|---|---|
+| [HSSMSpine](https://github.com/lnccbrown/HSSMSpine) | The coordination repository. It holds no library code — it carries cross-repo context, shared development workflows, the release playbook, the shared documentation brand, and this page. Contributors working across two or more packages start here. |
+| [HSSMCortex](https://github.com/lnccbrown/HSSMCortex) | The capability layer: a knowledge base of papers, modeling taxonomies, and curated guides, plus tooling that makes that knowledge queryable during development. |
+
+If you are contributing to a single package, its own contributing guide is the
+place to start; the spine matters when a change spans packages, such as adding
+a model that needs a simulator, a trained network, and an HSSM configuration.
 
 ## Tracking runs with MLflow
 
