@@ -33,15 +33,23 @@ ALLOWLIST = {
     "archive/hssm_tutorial_workshop_1.ipynb",
     "archive/hssm_tutorial_workshop_2.ipynb",
 }
-# Sampler-output caches the scientific-workflow notebook restores instead of
-# re-sampling; tracked deliberately, excluded from the asset rule.
-ALLOWLIST_PREFIXES = (
-    "tutorials/scientific_workflow_hssm/idata/",
-    "tutorials/idata/",
+# Sampler-output caches the notebooks restore instead of re-sampling, and the
+# model directory save_load_tutorial writes. Tracked deliberately, but listed
+# file by file: a prefix rule would silently admit the next 200 MB artifact
+# dropped into the same directory.
+ALLOWLIST_ASSETS = {
+    "tutorials/idata/basic_ddm/traces.nc",
+    "tutorials/scientific_workflow_hssm/idata/angle_hier/traces.nc",
+    "tutorials/scientific_workflow_hssm/idata/angle_hier_v2/traces.nc",
+    "tutorials/scientific_workflow_hssm/idata/angle_hier_v3/traces.nc",
+    "tutorials/scientific_workflow_hssm/idata/angle_hier_v4/traces.nc",
+    "tutorials/scientific_workflow_hssm/idata/angle_v5/traces.nc",
+    "tutorials/scientific_workflow_hssm/idata/basic_ddm/traces.nc",
+    "tutorials/scientific_workflow_hssm/idata/ddm_hier/traces.nc",
     # written by save_load_tutorial when it runs; committed so the rendered
     # page shows a populated model directory (see #1186 for retiring these)
-    "tutorials/hssm_models/",
-)
+    "tutorials/hssm_models/test_model/traces.nc",
+}
 
 
 def _mb(p: pathlib.Path) -> float:
@@ -61,7 +69,7 @@ def main() -> int:
         if not p.is_file() or ".ipynb_checkpoints" in str(p):
             continue
         rel = str(p.relative_to(DOCS))
-        if rel in ALLOWLIST or rel.startswith(ALLOWLIST_PREFIXES):
+        if rel in ALLOWLIST or rel in ALLOWLIST_ASSETS:
             continue
         size = _mb(p)
         limit = args.max_notebook_mb if p.suffix == ".ipynb" else args.max_asset_mb
