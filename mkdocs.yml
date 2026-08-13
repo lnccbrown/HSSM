@@ -19,24 +19,63 @@ nav:
       - Credits: credits.md
       - License: license.md
       - Changelog: changelog.md
-  - Getting Started:
-      - Getting HSSM:
+      - Archive:
+          - Winterbrain 2025 — Talk 1 (snapshot): archive/hssm_tutorial_workshop_1.ipynb
+          - Winterbrain 2025 — Talk 2 (snapshot): archive/hssm_tutorial_workshop_2.ipynb
+          - PyMC to HSSM — MathPsych 2025 (snapshot): archive/pymc_to_hssm.ipynb
+  - Learn:
+      - Get started:
           - Installation: getting_started/installation.md
-      - Learn HSSM:
           - Quickstart: getting_started/getting_started.ipynb
           - The HSSM tutorial: tutorials/main_tutorial.ipynb
           - Hierarchical modeling: getting_started/hierarchical_modeling.ipynb
           - A complete scientific workflow: tutorials/scientific_workflow_hssm.ipynb
+      - Model walkthroughs:
+          - Hierarchical DDM regressions: tutorials/ddm_hierarchical_tutorial.ipynb
+          - Choice-only models: tutorials/choice_only_models.ipynb
+          - Poisson race models: tutorials/poisson_race.ipynb
+          - HMM with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
+      - Reinforcement learning models:
+          - RLSSM basics: tutorials/rlssm_basic.ipynb
+          - Choice-only RLSSM: tutorials/choice_only_rlssm.ipynb
+          - Custom RLSSMs with ssms.rl: tutorials/rlssm_advanced.ipynb
+          - A restless learner: tutorials/rlssm_restless_learner.ipynb
+          - Registering custom RLSSMs in HSSM: tutorials/rlssm_hssm_custom_models.ipynb
   - How-to guides:
-      - Specify priors and fix parameters: how_to/specify_priors.ipynb
-      - Compare and interpret models: how_to/compare_models.ipynb
-      - The ONNX likelihood contract: how_to/custom_onnx_likelihoods.ipynb
-      - Bring your own likelihood (external trainers): how_to/external_trainers.md
-      - Custom models from JAX callables: tutorials/jax_callable_contribution_onnx_example.ipynb
-      - Custom models from ONNX files (blackbox): tutorials/blackbox_contribution_onnx_example.ipynb
-      - Using HSSM low-level API directly with PyMC: tutorials/pymc.ipynb
-      - Using compiled log-likelihood functions: tutorials/compile_logp.ipynb
-  - API References:
+      - Building models:
+          - Specify priors and fix parameters: how_to/specify_priors.ipynb
+          - Model outliers with lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
+          - Regress on p_outlier: tutorials/tutorial_p_outlier_regression.ipynb
+          - Use stimulus coding: tutorials/tutorial_stim_coding.ipynb
+          - Add smooth effects with hsgp(): tutorials/hsgp_regression.ipynb
+      - Sampling and diagnostics:
+          - Set initial values: tutorials/initial_values.ipynb
+          - Use alternative samplers (Bayeux): tutorials/tutorial_bayeux.ipynb
+          - Run variational inference: tutorials/variational_inference.ipynb
+      - Working with results:
+          - Plot posteriors and predictions: tutorials/plotting.ipynb
+          - Posterior predictive plot gallery: tutorials/ppc_gallery.ipynb
+          - Model cartoon plot gallery: tutorials/cartoon_gallery.ipynb
+          - Compare and interpret models: how_to/compare_models.ipynb
+          - Get trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
+          - Run Bayesian t-tests on the posterior: tutorials/tutorial_bayesian_t_test.ipynb
+          - Simulate data with the do-operator: tutorials/do_operator.ipynb
+          - Save and load models: tutorials/save_load_tutorial.ipynb
+      - Custom likelihoods and models:
+          - The ONNX likelihood contract: how_to/custom_onnx_likelihoods.ipynb
+          - Bring your own likelihood (external trainers): how_to/external_trainers.md
+          - Custom models from JAX callables: tutorials/jax_callable_contribution_onnx_example.ipynb
+          - Custom models from ONNX files (blackbox): tutorials/blackbox_contribution_onnx_example.ipynb
+          - Integrate an sbi NRE (ONNX): tutorials/sbi_nre_integration.ipynb
+          - Integrate a BayesFlow NLE (ONNX): tutorials/bayesflow_nle_onnx_integration.ipynb
+          - Integrate a BayesFlow LRE (JAX callable): tutorials/bayesflow_lre_integration.ipynb
+          - Use the low-level API with PyMC: tutorials/pymc.ipynb
+          - Compile a log-likelihood function: tutorials/compile_logp.ipynb
+  - Explanations:
+      - Understanding likelihoods in HSSM: tutorials/likelihoods.ipynb
+      - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
+      - Choosing a parameterization per parameter: tutorials/parameterization_per_parameter.ipynb
+  - Reference:
       - HSSM core classes:
           - hssm.HSSM: api/hssm.md
           - hssm.Param: api/param.md
@@ -56,41 +95,6 @@ nav:
           - hssm.distribution_utils: api/distribution_utils.md
       - Plotting:
           - hssm.plotting: api/plotting.md
-  - Tutorials:
-      - Hierarchical DDM: tutorials/ddm_hierarchical_tutorial.ipynb
-      - Choice-only models: tutorials/choice_only_models.ipynb
-      - Understanding likelihood functions in HSSM: tutorials/likelihoods.ipynb
-      - Plotting: tutorials/plotting.ipynb
-      - Posterior predictive plot gallery: tutorials/ppc_gallery.ipynb
-      - Model cartoon plot gallery: tutorials/cartoon_gallery.ipynb
-      - Using lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
-      - Variational inference: tutorials/variational_inference.ipynb
-      - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
-      - Per-parameter centered vs. non-centered parameterization: tutorials/parameterization_per_parameter.ipynb
-      - Smooth effects with HSGP regressions: tutorials/hsgp_regression.ipynb
-      - RLSSM — Basic tutorial: tutorials/rlssm_basic.ipynb
-      - RLSSM — Choice-only: tutorials/choice_only_rlssm.ipynb
-      - RLSSM — Custom models with ssms.rl: tutorials/rlssm_advanced.ipynb
-      - RLSSM — Restless learner: tutorials/rlssm_restless_learner.ipynb
-      - RLSSM — Registering custom models in HSSM: tutorials/rlssm_hssm_custom_models.ipynb
-      - BayesFlow LRE Integration: tutorials/bayesflow_lre_integration.ipynb
-      - BayesFlow NLE Integration (ONNX): tutorials/bayesflow_nle_onnx_integration.ipynb
-      - sbi NRE Integration (ONNX): tutorials/sbi_nre_integration.ipynb
-      - Saving and loading models: tutorials/save_load_tutorial.ipynb
-      - Bayesian t-test: tutorials/tutorial_bayesian_t_test.ipynb
-      - Using the do-operator: tutorials/do_operator.ipynb
-      - Getting trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
-      - Stim Coding: tutorials/tutorial_stim_coding.ipynb
-      - P-outlier Regression: tutorials/tutorial_p_outlier_regression.ipynb
-      - Sampling with Bayeux: tutorials/tutorial_bayeux.ipynb
-      - Hidden Markov Models with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
-      - Setting initial values: tutorials/initial_values.ipynb
-      - Poisson race models: tutorials/poisson_race.ipynb
-  - Archive:
-      - Winterbrain 2025 — Talk 1 (snapshot): archive/hssm_tutorial_workshop_1.ipynb
-      - Winterbrain 2025 — Talk 2 (snapshot): archive/hssm_tutorial_workshop_2.ipynb
-      - PyMC to HSSM — MathPsych 2025 (snapshot): archive/pymc_to_hssm.ipynb
-
   - Contributing:
       - Developing locally: local_development.md
       - Contributing: CONTRIBUTING.md
