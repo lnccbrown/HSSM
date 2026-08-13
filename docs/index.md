@@ -29,28 +29,15 @@ collaboration with the
 [Center for Computational Brain Science](https://ccbs.carney.brown.edu/) within
 the [Carney Institute at Brown University](https://www.brown.edu/carney/).
 
-## Citation
+## Installation
 
-Fengler, A., Xu, Y., Bera, K., Omar, A., Frank, M.J. (in preparation). HSSM: A
-generalized toolbox for hierarchical bayesian estimation of computational
-models in cognitive neuroscience.
+```bash
+pip install hssm        # or: uv add hssm
+```
 
-## Features
-
-- Allows approximate hierarchical Bayesian inference via various likelihood
-  approximators.
-- Estimate impact of neural and other trial-by-trial covariates via native
-  hierarchical mixed-regression support.
-- Extensible for users to add novel models with corresponding likelihoods.
-- Built on PyMC with support from the Python Bayesian ecosystem at large.
-- Incorporates Bambi's intuitive `lmer`-like regression parameter specification
-  for within- and between-subject effects.
-- (💥 New in HSSM 0.4.0) Support for reinforcement learning sequential sampling models.
-- Native ArviZ support for plotting and other convenience functions to aid the
-  Bayesian workflow.
-- Utilizes the ONNX format for translation of differentiable likelihood
-  approximators across backends.
-- Broad ecosystem support for differentiable likelihoods sourced from the sbi and BayesFlow libraries.
+HSSM installs on all platforms with Python 3.12–3.14. For GPU sampling (CUDA
+extras), Colab, the dev version, optional dependencies, and troubleshooting,
+see the [Installation guide](getting_started/installation.md).
 
 ## Example
 
@@ -83,35 +70,83 @@ model = hssm.HSSM(
 model.sample()
 ```
 
-To quickly get started with HSSM, please follow
-[the quickstart](getting_started/getting_started.ipynb). For the full guided
-introduction, please follow [the HSSM tutorial](tutorials/main_tutorial.ipynb).
+## Start here
 
-## Installation
+<div class="grid cards" markdown>
 
-```bash
-pip install hssm        # or: uv add hssm
-```
+-   __Fit your first model__
 
-HSSM installs on all platforms with Python 3.12–3.14. For GPU sampling (CUDA
-extras), Colab, the dev version, optional dependencies, and troubleshooting,
-see the [Installation guide](getting_started/installation.md).
+    ---
+
+    From `pip install` to a result you can defend. Six steps, each building on
+    the last:
+
+    1. [Installation](getting_started/installation.md) — a working environment, GPU extras included.
+    2. [Quickstart](getting_started/getting_started.ipynb) — simulate, fit, and check a DDM in about 15 minutes.
+    3. [The HSSM tutorial](tutorials/main_tutorial.ipynb) — the guided introduction: model choice, priors, diagnostics, predictive checks, comparison.
+    4. [Hierarchical modeling](getting_started/hierarchical_modeling.ipynb) — `lmer`-style formulas on any model parameter.
+    5. [Hierarchical DDM regressions](tutorials/ddm_hierarchical_tutorial.ipynb) — map your actual design onto a formula, and recover it.
+    6. [Compare and interpret models](how_to/compare_models.ipynb) — rank candidates, and recognise when the data cannot separate them.
+
+    **Capstone:** [A complete scientific workflow](tutorials/scientific_workflow_hssm.ipynb) — one dataset, start to finish.
+
+-   __Bring your own likelihood or model__
+
+    ---
+
+    For models HSSM does not ship, or likelihoods you trained yourself:
+
+    1. [Understanding likelihoods in HSSM](tutorials/likelihoods.ipynb) — analytical, `approx_differentiable`, and blackbox, and when each applies.
+    2. [The ONNX likelihood contract](how_to/custom_onnx_likelihoods.ipynb) — the rules an ONNX file must satisfy, demonstrated live.
+    3. [Bring your own likelihood](how_to/external_trainers.md) — the route table for networks trained in sbi or BayesFlow.
+    4. Then the walkthrough for your route — [sbi NRE](tutorials/sbi_nre_integration.ipynb), [BayesFlow NLE](tutorials/bayesflow_nle_onnx_integration.ipynb), [BayesFlow LRE](tutorials/bayesflow_lre_integration.ipynb), or [JAX callables](tutorials/jax_callable_contribution_onnx_example.ipynb).
+    5. [Use the low-level API with PyMC](tutorials/pymc.ipynb) — when the formula interface is the constraint.
+
+</div>
+
+Beyond the paths, the docs are organised by what you are doing: **Learn** for
+guided material, **How-to guides** for a specific task, **Explanations** for
+the reasoning behind a choice, and **Reference** for the API.
+
+## Part of a larger toolchain
+
+HSSM is the inference layer of a four-package ecosystem: `ssm-simulators`
+supplies the models and simulated data, LANfactory trains the likelihood
+networks that make otherwise-intractable models estimable, and HSSM consumes
+them. Most users never need the other three. See
+[The HSSM ecosystem](ecosystem/index.md) for the map, including which package
+answers which question and how versions fit together.
+
+## What HSSM gives you
+
+- Hierarchical Bayesian inference for a broad family of sequential sampling
+  models, including those with no analytical likelihood.
+- Parameter-wise mixed-effects regressions in `lmer`-like syntax, so neural and
+  trial-by-trial covariates can enter any model parameter.
+- Reinforcement learning sequential sampling models (RLSSMs), where the
+  decision parameters are driven by a learning process.
+- Custom models and likelihoods: bring an ONNX network, a JAX callable, or a
+  black-box Python function.
+- Built on PyMC, Bambi, and ArviZ, so the wider Python Bayesian ecosystem
+  applies directly.
+
+## Citation
+
+Fengler, A., Xu, Y., Bera, K., Omar, A., Frank, M.J. (in preparation). HSSM: A
+generalized toolbox for hierarchical bayesian estimation of computational
+models in cognitive neuroscience.
+
+## Community
+
+- **Questions and modeling advice** —
+  [open a discussion](https://github.com/lnccbrown/HSSM/discussions).
+- **Bugs and feature requests** —
+  [open an issue](https://github.com/lnccbrown/HSSM/issues) using the
+  corresponding template.
+- **Contributing** — see the
+  [contribution guidelines](CONTRIBUTING.md).
 
 ## License
 
 HSSM is licensed under
 [Copyright 2023, Brown University, Providence, RI](license.md)
-
-## Support
-
-For questions, please feel free to
-[open a discussion](https://github.com/lnccbrown/HSSM/discussions).
-
-For bug reports and feature requests, please feel free to
-[open an issue](https://github.com/lnccbrown/HSSM/issues) using the
-corresponding template.
-
-## Contributing
-
-If you want to contribute to this project, please follow our
-[contribution guidelines](CONTRIBUTING.md).
