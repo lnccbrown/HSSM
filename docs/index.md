@@ -90,6 +90,8 @@ model.sample()
 
     **Capstone:** [A complete scientific workflow](tutorials/scientific_workflow_hssm.ipynb) — one dataset, start to finish.
 
+    *Used HDDM before?* [Coming from HDDM](explanations/coming_from_hddm.md) maps what you know onto HSSM.
+
 -   __Bring your own likelihood or model__
 
     ---

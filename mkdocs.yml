@@ -73,6 +73,7 @@ nav:
           - Use the low-level API with PyMC: tutorials/pymc.ipynb
           - Compile a log-likelihood function: tutorials/compile_logp.ipynb
   - Explanations:
+      - Coming from HDDM: explanations/coming_from_hddm.md
       - Understanding likelihoods in HSSM: tutorials/likelihoods.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
       - Choosing a parameterization per parameter: tutorials/parameterization_per_parameter.ipynb
