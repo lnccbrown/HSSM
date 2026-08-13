@@ -28,6 +28,14 @@ runs:
 
     # (a stale `if: steps.cache.outputs.cache-hit` guard used to sit here —
     # no step with id `cache` exists, so it always evaluated true)
+    # Several tutorials call `model.graph()`, which shells out to Graphviz's
+    # `dot`. The Python wrapper comes from the notebook group; the binary does
+    # not, and without it those notebooks fail with
+    # `FileNotFoundError: PosixPath('dot')`.
+    - name: Install Graphviz
+      run: sudo apt-get update && sudo apt-get install -y graphviz
+      shell: bash
+
     - name: Install hssm
       run: uv sync --group notebook
       shell: bash

@@ -11,7 +11,7 @@ name: Drift
 on:
   schedule:
     - cron: "0 5 * * 1" # weekly: lint + fast + slow
-    - cron: "0 3 1 * *" # monthly: notebooks
+    - cron: "0 3 * * 2" # weekly: notebooks (Tuesday, off-peak)
   workflow_dispatch:
     inputs:
       force_fail:
@@ -46,7 +46,7 @@ jobs:
     uses: ./.github/workflows/run_slow_tests.yml
 
   notebooks:
-    if: (github.event_name == 'workflow_dispatch' && inputs.run_notebooks) || github.event.schedule == '0 3 1 * *'
+    if: (github.event_name == 'workflow_dispatch' && inputs.run_notebooks) || github.event.schedule == '0 3 * * 2'
     uses: ./.github/workflows/check_notebooks.yml
 
   report:
@@ -79,7 +79,8 @@ jobs:
           RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
           # Three outcomes matter separately. `skipped` is neutral by design —
-          # the monthly notebooks job is skipped in every weekly run. But
+          # the two weekly slots run different jobs, so each run skips the
+          # jobs belonging to the other one. But
           # `cancelled` is not evidence of health, and `report` runs under
           # `if: always()`, which includes cancellation: without this
           # distinction a cancelled run would silently close a real drift
