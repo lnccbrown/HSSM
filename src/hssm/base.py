@@ -55,7 +55,7 @@ from hssm.utils import (
     _split_array,
 )
 
-from . import plotting
+from . import optimize, plotting
 from .config import BaseModelConfig
 from .modelconfig import list_models
 from .param import Params
@@ -284,7 +284,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self._inference_obj: DataTree | None = None
         self._inference_obj_vi: DataTree | Approximation | None = None
         self._vi_approx = None
-        self._map_dict = None
+        self._map_dict: optimize.PointEstimate | dict | None = None
         # endregion
 
         # ===== Initial Values Configuration =====
@@ -548,16 +548,286 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         result.update(extra_kwargs)
         return result
 
-    def find_MAP(self, **kwargs):
+    def _point_estimate_setup(
+        self,
+        start: dict | None,
+        method: str | None,
+        kind: str,
+        objective_factory: Callable[[], Any] | None = None,
+        probe_gradient: bool = True,
+    ) -> tuple[dict, str, Any]:
+        """Prepare the shared preconditions of ``find_MAP`` and ``find_MLE``.
+
+        Runs the RL/aDDM extra-field refresh, resolves the start point, applies
+        the ``float32`` safety net and settles which optimizer will really run:
+        both `pymc.find_MAP` and `optimize_objective` swap in the gradient-free
+        method behind the caller's back when the likelihood has no gradient, so
+        the swap has to be resolved here or the estimate would record a method
+        that never ran.
+
+        The objective is built by ``objective_factory`` rather than passed in,
+        so that it is constructed *after* the extra-field refresh. Callers that
+        do not need one (``find_MAP`` differentiates the joint log-density,
+        which `resolve_gradient_method` builds itself) pass ``None``.
+
+        ``probe_gradient=False`` returns the method with only the ``float32``
+        rule applied, leaving the gradient question to the caller. `find_MLE`
+        uses it: probing here would build the gradient graph that
+        `optimize.compile_objective` is about to build anyway, and that graph is
+        the expensive part of both calls.
+
+        Notes
+        -----
+        The extra-field refresh mirrors what ``sample()`` does at the top of a
+        run, and is kept for parity with it, but note that it currently has no
+        effect on the likelihood: ``_update_extra_fields`` rebinds an
+        ``extra_fields`` attribute on the distribution *class*, while the logp
+        graph reads the ``extra_fields`` list closed over in
+        ``make_distribution``. The ordering above is therefore a precaution
+        against that plumbing being repaired, not a live dependency.
+        """
+        if self._check_extra_fields():
+            self._update_extra_fields()
+
+        objective = None if objective_factory is None else objective_factory()
+        resolved_start = self.initvals if start is None else start
+        resolved_method = optimize.resolve_method(method, kind)
+        if probe_gradient:
+            resolved_method = optimize.resolve_gradient_method(
+                self.pymc_model, resolved_method, objective
+            )
+        return resolved_start, resolved_method, objective
+
+    def find_MAP(
+        self,
+        start: dict | None = None,
+        method: str | None = None,
+        n_starts: int = 1,
+        strict: bool = False,
+        se: bool = False,
+        seed: int | None = None,
+        return_raw: bool = False,
+        **kwargs,
+    ) -> "optimize.PointEstimate | tuple | None":
         """Perform Maximum A Posteriori estimation.
+
+        Maximizes the joint log-density of the model (likelihood + priors) with
+        respect to all continuous parameters, delegating the optimization itself
+        to `pymc.find_MAP`.
+
+        Parameters
+        ----------
+        start : optional
+            The starting point, as a dictionary of constrained parameter values.
+            Defaults to `model.initvals` --- HSSM's own processed initial values.
+            This matters: PyMC's default start (`t=2.0`, `a=2.0`) puts many
+            models where the gradient of the log-density is non-finite, from
+            which the optimizer cannot move.
+        method : optional
+            Any `scipy.optimize.minimize` method. Defaults to `"L-BFGS-B"`, or
+            to the gradient-free `"Powell"` when the model runs at `float32`
+            precision. `"Powell"` is also substituted, whatever was asked for,
+            when the likelihood exposes no gradient (`blackbox`); the method
+            that actually ran is recorded on the returned estimate.
+        n_starts : optional
+            Number of starting points to try. Values above 1 add jittered copies
+            of `start` and keep whichever run reaches the highest log-density.
+            Must be at least 1. Defaults to 1.
+        strict : optional
+            If True, raise a `RuntimeError` instead of warning when the
+            optimizer fails to converge. Defaults to False.
+        se : optional
+            If True, also compute the inverse Hessian at the estimate. For a MAP
+            these are posterior standard deviations under a Laplace (normal)
+            approximation around the mode, not standard errors in the sampling
+            sense --- see `find_MLE` for those. Not available for `blackbox`
+            likelihoods. Costs `2 * n_parameters` gradient evaluations plus an
+            `n x n` inverse, which is noticeable on large hierarchies. Defaults
+            to False.
+        seed : optional
+            Seed for the jitter applied when `n_starts > 1`, making multi-start
+            runs reproducible.
+        return_raw : optional
+            If True, return a `(point, OptimizeResult)` tuple as
+            `pymc.find_MAP` does. The raw result is always available as
+            `model.map.opt_result`.
+        kwargs
+            Other arguments passed to `pymc.find_MAP` (`vars`, `maxeval`,
+            `progressbar`, `include_transformed`, ...).
 
         Returns
         -------
-        dict
-            A dictionary containing the MAP estimates of the model parameters.
+        PointEstimate | None
+            A `dict` subclass holding the MAP estimate along with the optimizer
+            metadata, or `None` if the optimization failed and `strict` is
+            False. A failed estimate is never cached on the model.
+
+        Raises
+        ------
+        ValueError
+            If `n_starts` is less than 1.
+
+        Notes
+        -----
+        On a hierarchical model this is the mode of the *joint* posterior over
+        parameters and group-level offsets, not of the marginal posterior of the
+        population-level parameters.
+
+        Build-time jitter (`initval_jitter`) draws from the unseeded global
+        `numpy` random state, so for models with vector-valued (hierarchical)
+        parameters the default start --- and hence the MAP --- varies slightly
+        between model instances. Pass an explicit `start=` for full
+        reproducibility.
         """
-        self._map_dict = pm.find_MAP(model=self.pymc_model, **kwargs)
-        return self._map_dict
+        optimize.validate_n_starts(n_starts)
+        resolved_start, resolved_method, _ = self._point_estimate_setup(
+            start, method, "MAP"
+        )
+        rng = np.random.default_rng(seed)
+        # A concrete seed even when the caller passed none: the expansion below
+        # and PyMC's own would otherwise each draw fresh entropy, and on a model
+        # with a stochastic initval strategy the audit would end up comparing
+        # against a start the optimizer never saw.
+        run_seed = seed if seed is not None else int(rng.integers(2**32))
+        # Scoring and the failure audit both need the transformed value-variable
+        # names, so always ask PyMC for them and drop them afterwards if the
+        # caller asked for a constrained-only point.
+        include_transformed = kwargs.pop("include_transformed", True)
+        # Compiled once rather than per candidate: multi-start runs would
+        # otherwise pay the compile cost on every start.
+        score_candidate = optimize.make_scorer(self.pymc_model)
+        # The (possibly partial) start is expanded once, here, rather than once
+        # per candidate inside the loop. That gives the audit the *complete*
+        # start it needs to tell "the optimizer never moved" from "one parameter
+        # happened not to move", and it is also the point the jitter is applied
+        # to: transformed space, where no jittered candidate can leave the
+        # model's support.
+        base_start = optimize.make_start_point(
+            self.pymc_model, resolved_start, seed=run_seed, validate=False
+        )
+        # Only a *jittered* candidate has to be mapped back to the constrained
+        # overrides `pm.find_MAP` takes, so the expander --- which costs a
+        # compile --- is built only when there will be one. The default
+        # `n_starts=1` keeps paying nothing for the multi-start machinery.
+        expander = (
+            optimize.make_point_expander(self.pymc_model) if n_starts > 1 else None
+        )
+
+        def constrained_overrides(index: int, candidate: dict) -> dict:
+            """Return the constrained ``start=`` for this candidate."""
+            if expander is None or index == 0:
+                # The first candidate is the unjittered start, which PyMC
+                # expands itself from `resolved_start` under the same seed ---
+                # the very point `base_start` already holds.
+                return resolved_start
+            return optimize.constrained_params(self.pymc_model, expander(candidate))
+
+        best_point: dict | None = None
+        best_result: Any = None
+        best_score = -np.inf
+        n_converged = 0
+        failures: list[list[str]] = []
+
+        for index, candidate_start in enumerate(
+            optimize.jittered_starts(base_start, n_starts, rng)
+        ):
+            try:
+                point, opt_result = pm.find_MAP(
+                    start=constrained_overrides(index, candidate_start),
+                    method=resolved_method,
+                    model=self.pymc_model,
+                    return_raw=True,
+                    seed=run_seed,
+                    **kwargs,
+                )
+            # Only `SamplingError` means "PyMC rejected this start". Catching
+            # `ValueError` here too would relabel an unknown `method=` or a bad
+            # `options=` -- which SciPy raises from inside this call -- as a bad
+            # starting point, and turn a usage error into a convergence warning.
+            except pm.exceptions.SamplingError as error:
+                failures.append([f"the starting point was rejected by PyMC ({error})"])
+                continue
+
+            candidate_reasons = optimize.audit_result(
+                opt_result, point, candidate_start
+            )
+            if candidate_reasons:
+                failures.append(candidate_reasons)
+                continue
+
+            n_converged += 1
+            score = score_candidate(point)
+            if score > best_score:
+                best_point, best_result, best_score = point, opt_result, score
+
+        if best_point is None:
+            optimize.report_failure("MAP", failures, strict)
+            return None
+
+        if n_starts > 1:
+            _logger.info("find_MAP: %d of %d starts converged.", n_converged, n_starts)
+
+        estimate = self._make_point_estimate(
+            best_point,
+            best_result,
+            kind="MAP",
+            method=resolved_method,
+            logp=best_score,
+            n_starts=n_starts,
+            n_converged=n_converged,
+            se=se,
+            include_transformed=include_transformed,
+        )
+        self._map_dict = estimate
+
+        if return_raw:
+            return estimate, best_result
+        return estimate
+
+    def _make_point_estimate(
+        self,
+        point: dict,
+        opt_result: Any,
+        *,
+        kind: Literal["MAP", "MLE"],
+        method: str,
+        logp: float,
+        n_starts: int,
+        n_converged: int,
+        se: bool,
+        observed_only: bool = False,
+        include_transformed: bool = True,
+    ) -> "optimize.PointEstimate":
+        """Wrap a converged optimizer point in a `PointEstimate`."""
+        params = optimize.constrained_params(self.pymc_model, point)
+        dims, coords = optimize.dims_and_coords(self.pymc_model, list(params))
+        errors = (
+            optimize.standard_errors(
+                self.pymc_model, point, observed_only=observed_only
+            )
+            if se
+            else None
+        )
+        mapping = (
+            point
+            if include_transformed
+            else optimize.drop_transformed(self.pymc_model, point)
+        )
+        return optimize.PointEstimate(
+            mapping,
+            kind=kind,
+            params=params,
+            success=True,
+            message=str(getattr(opt_result, "message", "")),
+            logp=logp,
+            method=method,
+            n_starts=n_starts,
+            n_converged=n_converged,
+            se=errors,
+            opt_result=opt_result,
+            dims=dims,
+            coords=coords,
+        )
 
     def sample(
         self,
@@ -640,9 +910,27 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                                 "Running map estimation first..."
                             )
                             self.find_MAP()
-                            kwargs["initvals"] = self._map_dict
-                        else:
-                            kwargs["initvals"] = self._map_dict
+                        # A failed `find_MAP` caches nothing, so `_map_dict` is
+                        # still None here. Falling through would hand
+                        # `initvals=None` to bambi and start NUTS from PyMC's
+                        # default point -- silently sampling from somewhere the
+                        # user never asked for. Fail loudly instead.
+                        if self._map_dict is None:
+                            raise RuntimeError(
+                                "initvals='map' was requested but MAP "
+                                "estimation did not converge, so there is no "
+                                "MAP estimate to initialize from. Investigate "
+                                "with `model.find_MAP(strict=True)`, or pass "
+                                "`initvals=None` to use the default initial "
+                                "values."
+                            )
+                        # Hand over only the constrained free parameters. The
+                        # raw optimizer point also carries transformed names and
+                        # trial-wise deterministics; PyMC tolerates both, but
+                        # there is no reason to push them through.
+                        kwargs["initvals"] = dict(
+                            getattr(self._map_dict, "params", self._map_dict)
+                        )
                 else:
                     raise ValueError(
                         "initvals argument must be a dictionary or 'map'"
@@ -660,6 +948,24 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 sampler = "numpyro"
             else:
                 sampler = "pymc"
+
+        if sampler == "laplace":
+            # bambi's `_run_laplace` calls a bare `pm.find_MAP()` and takes the
+            # Hessian at whatever it returns. It offers no way to pass initial
+            # values, and HSSM resets `rvs_to_initial_values` to None, so the
+            # optimization always starts from PyMC's default point -- the same
+            # start that leaves the gradient non-finite for many HSSM models.
+            # When that happens the "approximation" is a Gaussian centred on the
+            # start point, reported without complaint.
+            _logger.warning(
+                "The 'laplace' sampler is provided by bambi, which gives HSSM "
+                "no way to supply initial values, so its internal MAP step "
+                "starts from PyMC's default point. If the gradient is "
+                "non-finite there, the result is a Gaussian around that start "
+                "point rather than around the posterior mode -- with no error "
+                "raised. Prefer `model.find_MAP()` (which uses HSSM's own "
+                "initial values) followed by `model.sample()`."
+            )
 
         if self.loglik_kind == "blackbox":
             if sampler in ["blackjax", "numpyro", "nutpie"]:
@@ -1861,21 +2167,25 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         return self._vi_approx
 
     @property
-    def map(self) -> dict:
-        """Return the MAP estimates of the model parameters.
+    def map(self) -> "optimize.PointEstimate | dict":
+        """Return the MAP estimate of the model parameters.
 
         Raises
         ------
         ValueError
-            If the model has not been sampled yet.
+            If `find_MAP` has not been run, or if it ran but did not converge
+            (a failed estimate is never cached).
 
         Returns
         -------
-        dict
-            A dictionary containing the MAP estimates of the model parameters.
+        PointEstimate
+            A `dict` subclass containing the MAP estimate of the model
+            parameters, along with the optimizer metadata.
         """
-        if not self._map_dict:
-            raise ValueError("Please compute map first.")
+        # `is None` rather than a falsy check: None is the only "not computed"
+        # sentinel, and a computed-but-empty estimate must not read as missing.
+        if self._map_dict is None:
+            raise ValueError("Please compute map first, by running `find_MAP()`.")
 
         return self._map_dict
 
