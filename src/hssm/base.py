@@ -754,7 +754,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         Parameters
         ----------
         niter : int
-            The number of iterations to run the VI algorithm. Defaults to 3000.
+            The number of iterations to run the VI algorithm. Defaults to 10000.
         method : str
             The method to use for VI. Can be one of "advi" or "fullrank_advi", "svgd",
             "asvgd".Defaults to "advi".
