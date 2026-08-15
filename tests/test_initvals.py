@@ -47,11 +47,19 @@ def test_sample_map(caplog, loglik_kind, model, sampler, initvals):
     )
     cav_data = hssm.load_data("cavanagh_theta")
     caplog.set_level(logging.INFO)
+    # `_jitter_initvals` perturbs every initial value through the *unseeded*
+    # global numpy RNG, so `model.initvals` -- and therefore the MAP started
+    # from it -- would differ on every run, leaving the assertions below to be
+    # evaluated at a random point each time (which is how this test
+    # intermittently failed at float32). Turning the jitter off removes the
+    # dependence on global RNG state entirely; seeding it would only pin the
+    # draw, and nothing here is about jitter.
     model_on = hssm.HSSM(
         data=cav_data,
         model=model,
         loglik_kind=loglik_kind,
         process_initvals=True,
+        initval_jitter=0.0,
     )
 
     initial_point = model_on.initial_point(transformed=True)
@@ -76,6 +84,20 @@ def test_sample_map(caplog, loglik_kind, model, sampler, initvals):
             tune=10,
             progressbar=False,
         )
+
+        # This test used to be pure smoke, so it could not tell a real MAP from
+        # the bug it was meant to guard against: an optimizer that never left
+        # its starting point and had that start stored as the estimate. Note the
+        # module runs at float32, where `find_MAP` takes the gradient-free path,
+        # so the tolerance below is deliberately loose -- the claim is that the
+        # point moved, not where it landed.
+        estimate = model_on.map
+        assert estimate.success, "MAP estimation reported failure"
+        assert any(
+            not np.allclose(estimate.params[name], model_on.initvals[name], atol=1e-4)
+            for name in estimate.params
+            if name in model_on.initvals
+        ), "MAP estimate never moved off the initial point"
 
 
 def _check_initval_defaults_correctness(model) -> None:
