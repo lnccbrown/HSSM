@@ -7,8 +7,10 @@ on:
       - ".github/workflows/jeam_prototype.yml"
       - "src/hssm/integrations/jeam.py"
       - "src/hssm/modelconfig/circular_diffusion_config.py"
+      - "scripts/benchmark_jeam_objective_parity.py"
       - "tests/integration/test_jeam.py"
       - "tests/integration/test_jeam_model.py"
+      - "tests/integration/test_jeam_objective_parity.py"
       - "tests/integration/test_jeam_predictive.py"
       - "tests/integration/test_jeam_simulator.py"
   workflow_dispatch:
@@ -37,5 +39,6 @@ jobs:
           uv run --group jeam-prototype pytest
           tests/integration/test_jeam.py
           tests/integration/test_jeam_model.py
+          tests/integration/test_jeam_objective_parity.py
           tests/integration/test_jeam_predictive.py
           tests/integration/test_jeam_simulator.py
