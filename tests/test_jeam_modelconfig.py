@@ -1,6 +1,8 @@
 """Tests for the experimental built-in JEAM model configuration."""
 
 import numpy as np
+import pandas as pd
+import pytest
 
 import hssm
 from hssm.config import Config
@@ -54,3 +56,19 @@ def test_circular_diffusion_from_defaults_preserves_domain_and_rv():
     assert config.loglik is logp_circular_diffusion
     assert config.rv is simulate_circular_diffusion
     config.validate()
+
+
+@pytest.mark.parametrize("p_outlier", [0.0, 0.05])
+def test_non_categorical_model_requires_explicitly_disabled_lapse(p_outlier):
+    """Continuous-response density measures cannot use HSSM's categorical lapse."""
+    data = pd.DataFrame({"rt": [0.4, 0.8], "response": [-0.2, 0.3]})
+
+    with pytest.raises(
+        ValueError,
+        match=r"`p_outlier` is not supported.*Set `p_outlier=None`",
+    ):
+        hssm.HSSM(
+            data=data,
+            model="circular_diffusion",
+            p_outlier=p_outlier,
+        )
