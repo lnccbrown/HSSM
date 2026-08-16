@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 import numpy as np
+import pandas as pd
 
 import hssm
 
@@ -59,6 +60,95 @@ def test_invalid_responses(data_ddm):
         data_ddm_miscoded["response"] = np.random.choice([0, 1, 2], data_ddm.shape[0])
 
         hssm.HSSM(data=data_ddm_miscoded, model="ddm", choices=[1, 2, 3])
+
+
+def test_circular_response_validation_reaches_distribution_construction(monkeypatch):
+    data = np.array([[0.4, -2.75], [0.8, -0.125], [1.2, 1.875]], dtype=np.float64)
+    data = pd.DataFrame(data, columns=["rt", "response"])
+    observed = {}
+
+    def stop_after_validation(model):
+        observed["response"] = model.data["response"].to_numpy(copy=True)
+        observed["choices"] = model.choices
+        observed["n_choices"] = model.n_choices
+        raise RuntimeError("distribution construction reached")
+
+    monkeypatch.setattr(hssm.HSSM, "_make_model_distribution", stop_after_validation)
+
+    def circular_logp(data, v):
+        return np.zeros(len(data), dtype=np.float64)
+
+    model_config = {
+        "response_kind": "circular",
+        "response_bounds": {"response": (-np.pi, np.pi)},
+        "list_params": ["v"],
+        "bounds": {"v": (-np.inf, np.inf)},
+    }
+    with pytest.raises(RuntimeError, match="distribution construction reached"):
+        hssm.HSSM(
+            data=data,
+            model="custom",
+            model_config=model_config,
+            loglik=circular_logp,
+            loglik_kind="blackbox",
+            p_outlier=None,
+            v={"prior": {"name": "Normal", "mu": 0.0, "sigma": 1.0}},
+        )
+
+    np.testing.assert_array_equal(observed["response"], data["response"].to_numpy())
+    assert observed["choices"] is None
+    assert observed["n_choices"] is None
+
+
+def test_circular_response_validation_precedes_distribution_construction(monkeypatch):
+    data = pd.DataFrame({"rt": [0.4, 0.8], "response": [0.0, np.pi]})
+    distribution_was_built = False
+
+    def record_distribution_construction(model):
+        nonlocal distribution_was_built
+        distribution_was_built = True
+
+    monkeypatch.setattr(
+        hssm.HSSM, "_make_model_distribution", record_distribution_construction
+    )
+
+    with pytest.raises(ValueError, match=r"Circular responses.*must lie in .*\)"):
+        hssm.HSSM(
+            data=data,
+            model="custom",
+            model_config={
+                "response_kind": "circular",
+                "response_bounds": {"response": (-np.pi, np.pi)},
+                "list_params": ["v"],
+                "bounds": {"v": (-np.inf, np.inf)},
+            },
+            loglik=lambda data, v: np.zeros(len(data)),
+            loglik_kind="blackbox",
+            p_outlier=None,
+            v={"prior": {"name": "Normal", "mu": 0.0, "sigma": 1.0}},
+        )
+
+    assert not distribution_was_built
+
+
+def test_continuous_choice_only_lapse_requires_categorical_choices():
+    data = pd.DataFrame({"response": [-0.5, 0.25]})
+
+    with pytest.raises(ValueError, match="choice-only lapse requires categorical"):
+        hssm.HSSM(
+            data=data,
+            model="custom",
+            model_config={
+                "response": ("response",),
+                "response_kind": "continuous",
+                "response_bounds": {"response": (-1.0, 1.0)},
+                "list_params": ["v"],
+                "bounds": {"v": (-np.inf, np.inf)},
+            },
+            loglik=lambda data, v: np.zeros(len(data)),
+            loglik_kind="blackbox",
+            v={"prior": {"name": "Normal", "mu": 0.0, "sigma": 1.0}},
+        )
 
 
 @pytest.mark.slow  # as model needs to be built

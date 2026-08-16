@@ -18,11 +18,21 @@ class DataValidatorTester(DataValidatorMixin):
         missing_data: bool = False,
         choices: list[int] | None = None,
         n_choices: int | None = None,
+        response_kind: str = "categorical",
+        response_bounds: dict[str, tuple[float, float]] | None = None,
     ):
         self.data = data
         self.response = ["rt", "response"]
-        self.choices = choices if choices is not None else [0, 1]
-        self.n_choices = n_choices if n_choices is not None else len(self.choices)
+        self.response_kind = response_kind
+        self.response_bounds = response_bounds or {}
+        self.choices = (
+            [0, 1] if choices is None and response_kind == "categorical" else choices
+        )
+        self.n_choices = (
+            n_choices
+            if n_choices is not None
+            else (len(self.choices) if self.choices is not None else None)
+        )
         self.extra_fields = extra_fields
         self.deadline = deadline
         self.deadline_name = "deadline"
@@ -197,3 +207,93 @@ def test_validate_choices():
     dv.choices = None  # type: ignore[assignment]
     with pytest.raises(ValueError, match="`choices` must be provided*."):
         dv._validate_choices()
+
+    circular_dv = DataValidatorTester(
+        data=_base_data(),
+        response_kind="circular",
+        response_bounds={"response": (-np.pi, np.pi)},
+    )
+    circular_dv._validate_choices()
+    assert circular_dv.choices is None
+    assert circular_dv.n_choices is None
+
+
+def test_circular_responses_remain_fractional():
+    responses = np.array([-np.pi, -1.25, 0.125, np.nextafter(np.pi, -np.inf)])
+    data = _base_data()
+    data["response"] = responses
+    original = data["response"].to_numpy(copy=True)
+    dv = DataValidatorTester(
+        data=data,
+        deadline=False,
+        response_kind="circular",
+        response_bounds={"response": (-np.pi, np.pi)},
+    )
+
+    dv._post_check_data_sanity()
+
+    np.testing.assert_array_equal(dv.data["response"].to_numpy(), original)
+
+
+@pytest.mark.parametrize("invalid_response", [np.pi, np.nextafter(-np.pi, -np.inf)])
+def test_circular_responses_enforce_half_open_bounds(invalid_response):
+    data = _base_data()
+    data["response"] = data["response"].astype(float)
+    data.loc[0, "response"] = invalid_response
+    dv = DataValidatorTester(
+        data=data,
+        deadline=False,
+        response_kind="circular",
+        response_bounds={"response": (-np.pi, np.pi)},
+    )
+
+    with pytest.raises(ValueError, match=r"must lie in \[-3.*3.*\)"):
+        dv._post_check_data_sanity()
+
+
+@pytest.mark.parametrize("invalid_response", [np.nan, np.inf, "not-a-number"])
+def test_non_categorical_responses_must_be_numeric_and_finite(invalid_response):
+    data = _base_data()
+    data["response"] = data["response"].astype(object)
+    data.loc[0, "response"] = invalid_response
+    if invalid_response != "not-a-number":
+        data["response"] = pd.to_numeric(data["response"])
+    dv = DataValidatorTester(
+        data=data,
+        deadline=False,
+        response_kind="continuous",
+    )
+
+    with pytest.raises(ValueError, match="must contain numeric, finite values"):
+        dv._post_check_data_sanity()
+
+
+def test_continuous_response_bounds_are_closed():
+    data = _base_data()
+    data["response"] = [-1.0, -0.25, 0.25, 1.0]
+    dv = DataValidatorTester(
+        data=data,
+        deadline=False,
+        response_kind="continuous",
+        response_bounds={"response": (-1.0, 1.0)},
+    )
+    dv._post_check_data_sanity()
+
+    dv.data.loc[0, "response"] = np.nextafter(-1.0, -np.inf)
+    with pytest.raises(ValueError, match=r"must lie in \[-1.0, 1.0\]"):
+        dv._post_check_data_sanity()
+
+
+def test_circular_responses_preserve_deadline_and_missing_row_handling():
+    data = base_data_with_missing()
+    data["response"] = [-2.5, 0.125, -999.0, 2.25]
+    dv = DataValidatorTester(
+        data=data,
+        deadline=True,
+        missing_data=True,
+        response_kind="circular",
+        response_bounds={"response": (-np.pi, np.pi)},
+    )
+    dv.response.append("deadline")
+
+    dv._post_check_data_sanity()

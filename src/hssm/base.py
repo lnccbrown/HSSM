@@ -307,6 +307,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else None
         )
         self.choices = self.model_config.choices  # type: ignore[assignment]
+        self.response_kind = self.model_config.response_kind
+        self.response_bounds = self.model_config.response_bounds
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
@@ -315,11 +317,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # TODO: add to HSSMBase
         self.is_choice_only: bool = self.model_config.is_choice_only
-
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )
 
         self._validate_choices()
 
@@ -330,7 +327,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             )
         # endregion
 
-        self.n_choices = len(self.choices)  # type: ignore[arg-type]
+        self.n_choices = len(self.choices) if self.choices is not None else None
 
         self._pre_check_data_sanity()
 
@@ -1907,6 +1904,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         if self.has_lapse:
             if lapse is None:
                 if self.is_choice_only:
+                    if self.n_choices is None:
+                        raise ValueError(
+                            "The default choice-only lapse requires categorical "
+                            "responses with `choices`."
+                        )
                     self.lapse = 1 / self.n_choices
                 else:
                     self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
