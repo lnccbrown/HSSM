@@ -124,4 +124,102 @@ def logp_circular_diffusion(
     return logp
 
 
-__all__ = ["logp_circular_diffusion"]
+def _normalize_simulator_theta(theta: np.ndarray) -> np.ndarray:
+    """Normalize HSSM simulator parameters to one ``[v_x, v_y, a, t]`` row."""
+    try:
+        parameters = np.asarray(theta, dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "JEAM simulator parameters must be a numeric array with columns "
+            "[v_x, v_y, a, t]."
+        ) from exc
+
+    if parameters.ndim == 1:
+        if parameters.shape != (4,):
+            raise ValueError(
+                "JEAM simulator parameters must have shape (4,) or "
+                "(n_trials, 4) with columns [v_x, v_y, a, t]."
+            )
+        parameters = parameters[np.newaxis, :]
+    elif parameters.ndim != 2 or parameters.shape[1] != 4 or parameters.shape[0] == 0:
+        raise ValueError(
+            "JEAM simulator parameters must have shape (4,) or (n_trials, 4) "
+            "with columns [v_x, v_y, a, t]."
+        )
+
+    if not np.all(np.isfinite(parameters)):
+        raise ValueError("JEAM simulator parameters must contain only finite values.")
+
+    return parameters
+
+
+def simulate_circular_diffusion(
+    theta: np.ndarray,
+    random_state: int | np.random.Generator | None,
+    n_replicas: int,
+) -> np.ndarray:
+    """Simulate fixed-boundary JEAM circular diffusion observations for HSSM.
+
+    ``theta`` follows HSSM's ``[v_x, v_y, a, t]`` parameter order. Replicas are
+    contiguous within each trial so ``ssms.hssm_support.rng_fn`` can reshape the
+    returned rows to ``(..., n_trials, n_replicas, 2)`` without changing their
+    association. The final two columns are always ``[rt, response]``.
+    """
+    parameters = _normalize_simulator_theta(theta)
+    if (
+        isinstance(n_replicas, (bool, np.bool_))
+        or not isinstance(n_replicas, (int, np.integer))
+        or n_replicas < 1
+    ):
+        raise ValueError("n_replicas must be a positive integer.")
+
+    replicated = np.repeat(parameters, int(n_replicas), axis=0)
+    model_type = _load_circular_diffusion_model()
+    model = model_type(threshold_dynamic="fixed")
+    simulated = model.simulate(
+        drift_vec=replicated[:, :2],
+        ndt=replicated[:, 3],
+        threshold=replicated[:, 2],
+        decay=0.0,
+        threshold_function=None,
+        s_v=0.0,
+        s_t=0.0,
+        sigma=1.0,
+        n_sample=replicated.shape[0],
+        random_state=random_state,
+    )
+
+    try:
+        observations = np.asarray(
+            simulated.loc[:, ["rt", "response"]], dtype=np.float64
+        )
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "JEAM simulator output must expose numeric columns [rt, response]."
+        ) from exc
+
+    expected_shape = (replicated.shape[0], 2)
+    if observations.shape != expected_shape:
+        raise RuntimeError(
+            "JEAM returned an unexpected simulator output shape: "
+            f"expected {expected_shape}, got {observations.shape}."
+        )
+    if not np.all(np.isfinite(observations)):
+        raise RuntimeError("JEAM simulator output must contain only finite values.")
+    if np.any(observations[:, 0] <= 0.0):
+        raise RuntimeError("JEAM simulator response times must be positive.")
+    angles = observations[:, 1]
+    if np.any((angles < -np.pi) | (angles >= np.pi)):
+        raise RuntimeError("JEAM simulator responses must lie in [-pi, pi).")
+
+    return observations
+
+
+setattr(simulate_circular_diffusion, "model_name", "circular_diffusion")
+# Required by ssms.hssm_support for compatibility. Circular responses are continuous,
+# so there are deliberately no categorical choices to enumerate.
+setattr(simulate_circular_diffusion, "choices", [])
+setattr(simulate_circular_diffusion, "obs_dim", 2)
+
+
+__all__ = ["logp_circular_diffusion", "simulate_circular_diffusion"]
