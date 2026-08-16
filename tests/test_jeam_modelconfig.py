@@ -11,6 +11,7 @@ from hssm.integrations.jeam import (
     simulate_circular_diffusion,
 )
 from hssm.modelconfig import get_default_model_config
+from hssm.plotting.model_cartoon import _require_categorical_choices
 
 
 def test_circular_diffusion_is_a_supported_model():
@@ -72,3 +73,9 @@ def test_non_categorical_model_requires_explicitly_disabled_lapse(p_outlier):
             model="circular_diffusion",
             p_outlier=p_outlier,
         )
+
+
+def test_model_cartoon_rejects_non_categorical_choices_directly():
+    """Categorical-only plotting should fail before trying to enumerate angles."""
+    with pytest.raises(ValueError, match="Model cartoons.*non-categorical responses"):
+        _require_categorical_choices(None, "circular_diffusion")
