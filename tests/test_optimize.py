@@ -199,6 +199,25 @@ def test_find_map_strict_raises(hierarchical_model):
         )
 
 
+def test_find_map_failure_clears_an_earlier_estimate(ddm_model):
+    """A failed run must not leave the *previous* run's estimate reachable.
+
+    The "a failed estimate is never cached" contract is what `model.map` and
+    `sample(initvals="map")`'s `_map_dict is None` guard both rest on, so it
+    has to hold on the second call as much as the first.
+    """
+    ddm_model.find_MAP(progressbar=False)
+    assert ddm_model.map is not None
+
+    with pytest.warns(UserWarning, match="find_MAP failed to converge"):
+        assert ddm_model.find_MAP(maxeval=3, progressbar=False) is None
+
+    # The attribute, not just the property: it is what `sample` branches on.
+    assert ddm_model._map_dict is None
+    with pytest.raises(ValueError, match="Please compute map first"):
+        _ = ddm_model.map
+
+
 def test_find_map_unprocessed_initvals_still_guarded(hierarchical_data):
     """With `process_initvals=False` the fix no-ops, so the guard must catch it.
 
@@ -659,6 +678,19 @@ def test_find_mle_strict_raises(ddm_model):
         ddm_model.find_MLE(maxeval=3, progressbar=False, strict=True)
 
 
+def test_find_mle_failure_clears_an_earlier_estimate(ddm_model):
+    """`find_MLE` owes `model.mle` the same contract `find_MAP` owes `model.map`."""
+    ddm_model.find_MLE(progressbar=False)
+    assert ddm_model.mle is not None
+
+    with pytest.warns(UserWarning, match="find_MLE failed to converge"):
+        assert ddm_model.find_MLE(maxeval=3, progressbar=False) is None
+
+    assert ddm_model._mle_dict is None
+    with pytest.raises(ValueError, match="Please compute mle first"):
+        _ = ddm_model.mle
+
+
 def test_find_mle_to_datatree_round_trips(ddm_model):
     """An MLE feeds the ArviZ toolchain exactly as a MAP does."""
     posterior = ddm_model.find_MLE(progressbar=False).to_datatree().posterior
@@ -1015,6 +1047,19 @@ def test_points_equal_sees_an_untouched_zero_as_unmoved():
     """
     assert points_equal({"offset": np.array(1e-17)}, {"offset": np.array(0.0)})
     assert not points_equal({"offset": np.array(0.5)}, {"offset": np.array(0.0)})
+
+
+def test_scoring_a_constrained_only_estimate_says_what_is_wrong(ddm_model):
+    """A point missing its transformed entries is unscoreable, not zero-density.
+
+    `include_transformed=False` drops exactly the `*_log__`/`*_interval__`
+    entries the scorer indexes, so the failure has to name that cause. Silently
+    returning `-inf` would report the estimate as infinitely improbable.
+    """
+    estimate = ddm_model.find_MAP(include_transformed=False, progressbar=False)
+
+    with pytest.raises(KeyError, match="include_transformed=False"):
+        score_point(ddm_model.pymc_model, estimate)
 
 
 def test_failure_message_does_not_advertise_return_raw():

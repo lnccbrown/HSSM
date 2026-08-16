@@ -762,6 +762,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 best_point, best_result, best_score = point, opt_result, score
 
         if best_point is None:
+            # Drop any estimate an *earlier* successful call cached. Without
+            # this the "a failed estimate is never cached" contract holds only
+            # on a first run: `model.map` would keep returning the stale point
+            # instead of raising, and `sample(initvals="map")` would slip past
+            # its `_map_dict is None` guard and initialize from it.
+            self._map_dict = None
             optimize.report_failure("MAP", failures, strict)
             return None
 
@@ -975,6 +981,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 best_method = used_method
 
         if best_point is None:
+            # See the matching comment in `find_MAP`: a failed run must not
+            # leave a previous run's estimate reachable through `model.mle`.
+            self._mle_dict = None
             optimize.report_failure("MLE", failures, strict)
             return None
 

@@ -1039,7 +1039,8 @@ def make_scorer(
     Callable
         A function taking a point (every value variable, transformed names
         included) and returning its log-density, or ``-inf`` if it could not be
-        evaluated.
+        evaluated. It raises ``KeyError`` if the point is missing any value
+        variable --- unscoreable input, rather than a point of zero density.
     """
     if function is None:
         objective = (
@@ -1052,6 +1053,21 @@ def make_scorer(
     names = value_var_names(pymc_model)
 
     def score(point: dict[str, Any]) -> float:
+        missing = [name for name in names if name not in point]
+        if missing:
+            # Not a `-inf`: that is the answer for a point of zero density, and
+            # reusing it for a malformed point would report "infinitely bad"
+            # where the truth is "unscoreable". The likeliest way to get here
+            # is scoring a `find_MAP(include_transformed=False)` estimate,
+            # which drops exactly the transformed entries needed below, so the
+            # message names that case rather than only the missing keys.
+            raise KeyError(
+                f"Cannot score this point: {', '.join(missing)} missing from "
+                "it. Scoring requires every value variable, transformed names "
+                "included; an estimate produced with "
+                "`include_transformed=False` does not carry them. Re-run "
+                "without that flag, or score the raw optimizer point."
+            )
         try:
             return float(scoring_fn({name: point[name] for name in names}))
         except (ValueError, FloatingPointError):  # pragma: no cover - defensive
@@ -1085,6 +1101,12 @@ def score_point(
     -------
     float
         The log-density, or ``-inf`` if it could not be evaluated.
+
+    Raises
+    ------
+    KeyError
+        If ``point`` is missing any of the model's value variables, as an
+        estimate produced with ``include_transformed=False`` is.
     """
     return make_scorer(pymc_model, observed_only=observed_only)(point)
 
