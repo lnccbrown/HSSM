@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytensor
 import pytest
 import xarray as xr
 
@@ -38,7 +39,7 @@ def circular_model():
 def _assert_predictive_contract(values: np.ndarray) -> None:
     """Check the common final-axis, support, and numeric predictive contract."""
     assert values.shape[-1] == 2
-    assert values.dtype == np.float64
+    assert values.dtype == np.dtype(pytensor.config.floatX)
     assert np.all(np.isfinite(values))
     assert np.all(values[..., 0] > 0.0)
     assert np.all(values[..., 1] >= -np.pi)
