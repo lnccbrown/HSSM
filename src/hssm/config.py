@@ -3,27 +3,22 @@
 # This is necessary to enable forward looking
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
 from math import isfinite
-from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
+from typing import Any, Literal, Union, cast, get_args
 
 from bambi import Prior
+from ssms.config import model_config as ssms_model_config
 
-from ._types import LogLik, LoglikKind, SupportedModels
+from ._types import DefaultConfig, LogLik, LoglikKind, ResponseKind, SupportedModels
 from .defaults import (
     default_model_config,
 )
 from .modelconfig import get_default_model_config
 from .register import register_model
-
-if TYPE_CHECKING:
-    from pytensor.tensor.random.op import RandomVariable
-
-import logging
-
-from ssms.config import model_config as ssms_model_config
 
 _logger = logging.getLogger("hssm")
 
@@ -33,7 +28,6 @@ DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
 DEFAULT_SSM_CHOICES = (0, 1)
 
 ParamSpec = Union[float, dict[str, Any], Prior, None]
-ResponseKind = Literal["categorical", "continuous", "circular"]
 
 
 @dataclass
@@ -149,7 +143,7 @@ class BaseModelConfig(ABC):
 class Config(BaseModelConfig):
     """Config class that stores the configurations for models."""
 
-    rv: RandomVariable | None = None
+    rv: Any | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
 
@@ -194,16 +188,8 @@ class Config(BaseModelConfig):
                 default_config = deepcopy(default_model_config[model_name])
                 if kind in default_config["likelihoods"]:
                     kind = cast("LoglikKind", kind)
-                    loglik_config = default_config["likelihoods"][kind]
-
-                    return Config(
-                        model_name=model_name,
-                        loglik_kind=kind,
-                        response=list(default_config["response"]),
-                        choices=tuple(default_config["choices"]),
-                        list_params=default_config["list_params"],
-                        description=default_config["description"],
-                        **loglik_config,
+                    return cls._from_registered_default(
+                        model_name, kind, default_config
                     )
 
             raise ValueError(
@@ -223,23 +209,11 @@ class Config(BaseModelConfig):
                 model_name = cast("SupportedModels", model_name)
                 default_config = deepcopy(default_model_config[model_name])
                 if loglik_kind in default_config["likelihoods"]:
-                    loglik_config = default_config["likelihoods"][loglik_kind]
-                    return Config(
-                        model_name=model_name,
-                        loglik_kind=loglik_kind,
-                        response=list(default_config["response"]),
-                        choices=tuple(default_config["choices"]),
-                        list_params=default_config["list_params"],
-                        description=default_config["description"],
-                        **loglik_config,
+                    return cls._from_registered_default(
+                        model_name, loglik_kind, default_config
                     )
-                return Config(
-                    model_name=model_name,
-                    loglik_kind=loglik_kind,
-                    response=list(default_config["response"]),
-                    choices=tuple(default_config["choices"]),
-                    list_params=default_config["list_params"],
-                    description=default_config["description"],
+                return cls._from_registered_default(
+                    model_name, loglik_kind, default_config
                 )
 
             return Config(
@@ -247,6 +221,31 @@ class Config(BaseModelConfig):
                 loglik_kind=loglik_kind,
                 response=DEFAULT_SSM_OBSERVED_DATA,
             )
+
+    @classmethod
+    def _from_registered_default(
+        cls,
+        model_name: SupportedModels,
+        loglik_kind: LoglikKind,
+        default_config: DefaultConfig,
+    ) -> Config:
+        """Build a Config while preserving optional response and simulator metadata."""
+        choices = default_config["choices"]
+        likelihood = cast(
+            "dict[str, Any]", default_config["likelihoods"].get(loglik_kind, {})
+        )
+        return cls(
+            model_name=model_name,
+            loglik_kind=loglik_kind,
+            response=list(default_config["response"]),
+            choices=None if choices is None else tuple(choices),
+            response_kind=default_config.get("response_kind", "categorical"),
+            response_bounds=deepcopy(default_config.get("response_bounds", {})),
+            list_params=default_config["list_params"],
+            description=default_config["description"],
+            rv=default_config.get("rv"),
+            **likelihood,
+        )
 
     def update_loglik(self, loglik: Any | None) -> None:
         """Update the log-likelihood function from user input.
@@ -392,7 +391,7 @@ class ModelConfig:
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     backend: Literal["jax", "pytensor"] | None = None
-    rv: RandomVariable | None = None
+    rv: Any | None = None
     extra_fields: list[str] | None = None
 
 
