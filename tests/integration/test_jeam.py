@@ -7,7 +7,36 @@ pytest.importorskip("jeam")
 
 from jeam.Models.Circular import CircularDiffusionModel
 
+from hssm.distribution_utils.dist import (
+    LOGP_LB,
+    make_distribution,
+    make_likelihood_callable,
+)
 from hssm.integrations.jeam import logp_circular_diffusion
+
+PARAMETERS = ["v_x", "v_y", "a", "t"]
+BOUNDS = {
+    "v_x": (-3.0, 3.0),
+    "v_y": (-3.0, 3.0),
+    "a": (0.1, 3.0),
+    "t": (0.0, 2.0),
+}
+
+
+@pytest.fixture(scope="module")
+def circular_distribution():
+    """Build the real HSSM blackbox distribution around the JEAM adapter."""
+    likelihood = make_likelihood_callable(
+        loglik=logp_circular_diffusion,
+        loglik_kind="blackbox",
+        backend="pytensor",
+    )
+    return make_distribution(
+        rv="circular_diffusion",
+        loglik=likelihood,
+        list_params=PARAMETERS.copy(),
+        bounds=BOUNDS,
+    )
 
 
 def _direct_trialwise_jeam(
@@ -98,3 +127,76 @@ def test_adapter_preserves_jeam_impossible_rt_support_value():
 
     np.testing.assert_allclose(observed, expected, rtol=0.0, atol=0.0)
     np.testing.assert_allclose(observed, np.log(1e-14), rtol=0.0, atol=1e-12)
+
+
+def test_compiled_hssm_distribution_matches_adapter_and_direct_jeam(
+    circular_distribution,
+):
+    """The compiled HSSM blackbox path should preserve pointwise JEAM values."""
+    data = np.array([[0.18, -2.1], [0.37, 0.35], [0.82, 2.4]])
+    v_x = np.full(3, 0.45)
+    v_y = np.full(3, -0.30)
+    threshold = np.full(3, 1.20)
+    ndt = np.full(3, 0.08)
+
+    direct = _direct_trialwise_jeam(data, v_x=v_x, v_y=v_y, a=threshold, t=ndt)
+    adapted = logp_circular_diffusion(data, 0.45, -0.30, 1.20, 0.08)
+    compiled = np.asarray(
+        circular_distribution.logp(data, 0.45, -0.30, 1.20, 0.08).eval()
+    )
+
+    np.testing.assert_allclose(adapted, direct, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(compiled, direct, rtol=1e-7, atol=1e-7)
+
+
+def test_compiled_hssm_distribution_accepts_a_trialwise_drift(
+    circular_distribution,
+):
+    """A regression-shaped drift should remain pointwise through compilation."""
+    data = np.array([[0.21, -1.7], [0.46, 0.2], [0.91, 2.2]])
+    v_x = np.array([0.55, -0.20, 0.35])
+    v_y = np.full(3, -0.25)
+    threshold = np.full(3, 1.15)
+    ndt = np.full(3, 0.07)
+
+    direct = _direct_trialwise_jeam(data, v_x=v_x, v_y=v_y, a=threshold, t=ndt)
+    adapted = logp_circular_diffusion(data, v_x, -0.25, 1.15, 0.07)
+    compiled = np.asarray(
+        circular_distribution.logp(data, v_x, -0.25, 1.15, 0.07).eval()
+    )
+
+    np.testing.assert_allclose(adapted, direct, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(compiled, direct, rtol=1e-7, atol=1e-7)
+
+
+def test_hssm_distribution_applies_standard_ndt_support_mask(circular_distribution):
+    """HSSM should replace JEAM's finite floor when nondecision time reaches RT."""
+    data = np.array([[0.18, -0.4], [0.37, 0.6], [0.82, 1.2]])
+    ndt = np.array([0.08, 0.37, 0.90])
+
+    adapted = logp_circular_diffusion(data, 0.45, -0.30, 1.20, ndt)
+    compiled = np.asarray(
+        circular_distribution.logp(data, 0.45, -0.30, 1.20, ndt).eval()
+    )
+    lower_bound = float(np.asarray(LOGP_LB))
+
+    assert compiled[0] == pytest.approx(adapted[0], rel=1e-7)
+    np.testing.assert_array_equal(compiled[1:], lower_bound)
+    np.testing.assert_allclose(adapted[1:], np.log(1e-14), atol=1e-12)
+
+
+def test_hssm_distribution_applies_parameter_bounds_pointwise(
+    circular_distribution,
+):
+    """Only trials whose parameter values violate HSSM bounds should be masked."""
+    data = np.array([[0.18, -0.4], [0.37, 0.6], [0.82, 1.2]])
+    v_x = np.array([0.45, 3.01, -0.25])
+
+    adapted = logp_circular_diffusion(data, v_x, -0.30, 1.20, 0.08)
+    compiled = np.asarray(
+        circular_distribution.logp(data, v_x, -0.30, 1.20, 0.08).eval()
+    )
+    lower_bound = float(np.asarray(LOGP_LB))
+
+    np.testing.assert_allclose(compiled[[0, 2]], adapted[[0, 2]], rtol=1e-7)
+    assert compiled[1] == lower_bound
