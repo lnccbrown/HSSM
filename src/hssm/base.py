@@ -654,7 +654,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             `model.map.opt_result`.
         kwargs
             Other arguments passed to `pymc.find_MAP` (`vars`, `maxeval`,
-            `progressbar`, `include_transformed`, ...).
+            `progressbar`, ...). `include_transformed` is the exception:
+            HSSM consumes it rather than forwarding it, because scoring and the
+            convergence audit both need the transformed names. PyMC is always
+            asked for them and they are dropped afterwards, so the result is
+            the same as PyMC's.
 
         Returns
         -------
@@ -694,9 +698,26 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # names, so always ask PyMC for them and drop them afterwards if the
         # caller asked for a constrained-only point.
         include_transformed = kwargs.pop("include_transformed", True)
-        # Compiled once rather than per candidate: multi-start runs would
-        # otherwise pay the compile cost on every start.
-        score_candidate = optimize.make_scorer(self.pymc_model)
+        # No scorer is compiled up front. `pm.find_MAP` already reports the
+        # joint log-density at the point it found, as `opt_result.fun` negated,
+        # and that agrees with a freshly compiled scorer bit-for-bit under
+        # L-BFGS-B, Powell, Nelder-Mead and BFGS. Compiling a second evaluator
+        # for a number PyMC hands back costs a full logp compile --- about a
+        # tenth of a `find_MAP` on an analytical DDM, and considerably more on
+        # an ONNX/JAX likelihood. `scorer` below is the fallback for a SciPy
+        # method that leaves `fun` unset, built at most once and usually never.
+        scorer: Callable[[dict], float] | None = None
+
+        def candidate_score(point: dict, opt_result: Any) -> float:
+            """Return the joint log-density at a converged candidate."""
+            nonlocal scorer
+            reported = optimize.objective_value(opt_result)
+            if reported is not None:
+                return -reported
+            if scorer is None:
+                scorer = optimize.make_scorer(self.pymc_model)
+            return scorer(point)
+
         # The (possibly partial) start is expanded once, here, rather than once
         # per candidate inside the loop. That gives the audit the *complete*
         # start it needs to tell "the optimizer never moved" from "one parameter
@@ -706,22 +727,24 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         base_start = optimize.make_start_point(
             self.pymc_model, resolved_start, seed=run_seed, validate=False
         )
-        # Only a *jittered* candidate has to be mapped back to the constrained
-        # overrides `pm.find_MAP` takes, so the expander --- which costs a
-        # compile --- is built only when there will be one. The default
-        # `n_starts=1` keeps paying nothing for the multi-start machinery.
-        expander = (
-            optimize.make_point_expander(self.pymc_model) if n_starts > 1 else None
-        )
 
-        def constrained_overrides(index: int, candidate: dict) -> dict:
-            """Return the constrained ``start=`` for this candidate."""
-            if expander is None or index == 0:
+        def candidate_overrides(index: int, candidate: dict) -> dict:
+            """Return the ``start=`` override for this candidate.
+
+            A jittered candidate is handed over in transformed space as it
+            stands: `pm.find_MAP` routes `start=` through
+            `convert_str_to_rv_dict`, which recognizes transformed names and
+            back-transforms them itself. Expanding to constrained space here
+            instead would buy a compiled pytensor function and, on a regression
+            model, an evaluation of every trial-wise deterministic per
+            candidate --- all of it discarded by the same call.
+            """
+            if index == 0:
                 # The first candidate is the unjittered start, which PyMC
                 # expands itself from `resolved_start` under the same seed ---
                 # the very point `base_start` already holds.
                 return resolved_start
-            return optimize.constrained_params(self.pymc_model, expander(candidate))
+            return candidate
 
         best_point: dict | None = None
         best_result: Any = None
@@ -734,7 +757,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         ):
             try:
                 point, opt_result = pm.find_MAP(
-                    start=constrained_overrides(index, candidate_start),
+                    start=candidate_overrides(index, candidate_start),
                     method=resolved_method,
                     model=self.pymc_model,
                     return_raw=True,
@@ -757,7 +780,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 continue
 
             n_converged += 1
-            score = score_candidate(point)
+            score = candidate_score(point, opt_result)
             if score > best_score:
                 best_point, best_result, best_score = point, opt_result, score
 

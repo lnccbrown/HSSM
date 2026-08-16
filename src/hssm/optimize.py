@@ -113,7 +113,8 @@ class PointEstimate(dict):
     mapping itself is what the optimizer returned --- constrained values,
     transformed value-variable names (``t_log__``, ``z_interval__``) and
     deterministics --- while ``params`` holds only the constrained free
-    parameters.
+    parameters. The transformed entries are absent when the estimate was
+    produced with ``include_transformed=False``; ``params`` is unaffected.
 
     Attributes
     ----------
@@ -123,7 +124,10 @@ class PointEstimate(dict):
         The constrained free parameters only, with transformed duplicates and
         deterministics dropped.
     success
-        Whether the optimizer converged.
+        Always ``True``. A run that did not converge never becomes a
+        ``PointEstimate`` --- ``find_MAP``/``find_MLE`` warn and return ``None``
+        instead --- so this exists for the shape of the record, not as a check
+        worth branching on.
     message
         The optimizer's termination message.
     logp
@@ -147,8 +151,11 @@ class PointEstimate(dict):
         deviations under a Laplace (normal) approximation around the mode, which
         is a different object that happens to be computed the same way.
     opt_result
-        The raw ``scipy.optimize.OptimizeResult``, or ``None`` when the
-        optimizer was interrupted or exhausted ``maxeval``.
+        The raw ``scipy.optimize.OptimizeResult``. Never ``None`` on an
+        estimate that was returned: a missing result is one of the conditions
+        ``audit_result`` fails a start on, so a run that exhausted ``maxeval``
+        or was interrupted yields ``None`` from ``find_MAP``/``find_MLE``
+        rather than an estimate carrying no result.
 
     Notes
     -----
@@ -608,16 +615,23 @@ def report_failure(kind: str, failures: list[list[str]], strict: bool) -> None:
     """
     # Deliberately does not point at `return_raw=True`: a failed run returns
     # `None` before that branch is reached, so it is not an inspection channel.
-    message = (
+    # The two branches differ in what actually happened, so they cannot share a
+    # closing sentence: under `strict` nothing is returned (this raises) and
+    # recommending `strict=True` would be advising the mode already in force.
+    common = (
         f"find_{kind} failed to converge: "
         + describe_failures(failures)
-        + f". No estimate was stored, and `find_{kind}` returned None. "
-        "Try `n_starts>1`, a different `method=`, or a different `start=`; "
-        "`strict=True` raises instead of warning."
+        + ". No estimate was stored. "
+        "Try `n_starts>1`, a different `method=`, or a different `start=`"
     )
     if strict:
-        raise RuntimeError(message)
-    warnings.warn(message, UserWarning, stacklevel=3)
+        raise RuntimeError(f"{common}.")
+    warnings.warn(
+        f"{common}; `strict=True` raises instead of warning. "
+        f"`find_{kind}` returned None.",
+        UserWarning,
+        stacklevel=3,
+    )
 
 
 def validate_n_starts(n_starts: int) -> None:
@@ -712,17 +726,24 @@ def drop_transformed(pymc_model: "PyMCModel", point: dict[str, Any]) -> dict[str
 def dims_and_coords(
     pymc_model: "PyMCModel", names: list[str]
 ) -> tuple[dict[str, list[str]], dict[str, list[Any]]]:
-    """Collect the ArviZ ``dims``/``coords`` metadata for ``names``."""
+    """Collect the ArviZ ``dims``/``coords`` metadata for ``names``.
+
+    Only the coords the collected ``dims`` actually reference are kept. Copying
+    ``pymc_model.coords`` wholesale would hang the model's observation index off
+    every estimate --- an entry per trial, so hundreds or thousands of strings
+    that nothing ever reads, carried through every ``pickle`` of the result.
+    """
     dims = {
         name: list(pymc_model.named_vars_to_dims[name])
         for name in names
         if name in pymc_model.named_vars_to_dims
         and pymc_model.named_vars_to_dims[name] is not None
     }
+    used = {dim for entry in dims.values() for dim in entry}
     coords = {
         key: list(value)
         for key, value in pymc_model.coords.items()
-        if value is not None
+        if value is not None and key in used
     }
     return dims, coords
 
@@ -1111,6 +1132,38 @@ def score_point(
     return make_scorer(pymc_model, observed_only=observed_only)(point)
 
 
+def objective_value(opt_result: Any) -> float | None:
+    """Return the objective SciPy reports at its solution, or ``None``.
+
+    ``pm.find_MAP`` minimizes the *negative* log-density, so ``opt_result.fun``
+    is that density negated at the returned point --- the same number a freshly
+    compiled scorer produces, bit-for-bit, under L-BFGS-B, Powell, Nelder-Mead
+    and BFGS. Reading it costs nothing, where compiling a scorer costs a full
+    logp graph.
+
+    ``None`` when the value is unusable: a SciPy method that leaves ``fun``
+    unset, a vector-valued residual rather than a scalar, or a non-finite
+    entry. Callers fall back to scoring the point directly.
+
+    Parameters
+    ----------
+    opt_result
+        The ``OptimizeResult`` returned alongside the point.
+
+    Returns
+    -------
+    float | None
+        The reported objective, or ``None`` if it cannot be trusted.
+    """
+    value = getattr(opt_result, "fun", None)
+    if value is None:
+        return None
+    array = np.asarray(value, dtype=float).ravel()
+    if array.size != 1 or not np.isfinite(array[0]):
+        return None
+    return float(array[0])
+
+
 def standard_errors(
     pymc_model: "PyMCModel",
     point: dict[str, Any],
@@ -1143,9 +1196,11 @@ def standard_errors(
     -------
     dict | None
         Errors keyed by constrained parameter name, or ``None`` if no gradient
-        is available (blackbox likelihoods). Individual entries are ``NaN`` when
-        the Hessian is singular or not negative definite --- which is expected
-        at an optimum sitting on a bound.
+        is available (blackbox likelihoods). All entries are ``NaN`` when the
+        Hessian is unusable --- singular, not negative definite, or built from a
+        stencil that leaves the model's support, as happens at an optimum
+        sitting on a bound. It is all of them rather than the offending one
+        because the errors come from inverting the joint Hessian.
 
         For ``observed_only=True`` these are standard errors in the usual sense.
         For the joint log-density they are posterior standard deviations under a
@@ -1155,7 +1210,8 @@ def standard_errors(
     Warnings
     --------
     The cost grows with the number of scalar parameters ``n``: the central
-    differences need ``2 * n`` full-data gradient evaluations, followed by an
+    differences need ``2 * n`` full-data gradient evaluations plus ``2 * n``
+    cheaper log-density evaluations for the support check, followed by an
     ``n x n`` inverse. On a hierarchical model with hundreds of group-level
     offsets, ``se=True`` can take considerably longer than the optimization it
     follows. A line is logged at ``INFO`` before starting when ``n`` is large.
@@ -1203,6 +1259,17 @@ def standard_errors(
     def gradient_at(x: np.ndarray) -> np.ndarray:
         return np.asarray(gradient_fn(RaveledVars(x, x0.point_map_info)), dtype=float)
 
+    # The gradient alone cannot tell us whether a stencil point is inside the
+    # model's support: a bound enters the graph through `pt.switch`, so outside
+    # it the log-density is `-inf` while its gradient stays perfectly finite.
+    # Only the density itself reveals the boundary, hence this second function.
+    logp_fn = DictToArrayBijection.mapf(
+        compile_point_fn(untransformed, objective, untransformed.value_vars), base
+    )
+
+    def in_support(x: np.ndarray) -> bool:
+        return bool(np.isfinite(logp_fn(RaveledVars(x, x0.point_map_info))))
+
     size = x0.data.size
     if size > _SE_SIZE_HINT:
         _logger.info(
@@ -1226,18 +1293,30 @@ def standard_errors(
         1.0, np.abs(x0.data)
     )
     hessian = np.empty((size, size))
+    # An estimate pinned to a bound puts one of its two stencil points outside
+    # the support. The gradient there is finite, so the resulting Hessian is
+    # well conditioned and every guard below would pass --- reporting the
+    # curvature of the *smooth continuation* of a density that is `-inf` on one
+    # side as if it were a standard error. That is exactly the case the
+    # docstring promises `NaN` for, so the stencil has to be checked directly.
+    stencil_in_support = True
     for index in range(size):
         forward = x0.data.astype(float).copy()
         backward = x0.data.astype(float).copy()
         forward[index] += step[index]
         backward[index] -= step[index]
+        if not (in_support(forward) and in_support(backward)):
+            stencil_in_support = False
+            break
         hessian[:, index] = (gradient_at(forward) - gradient_at(backward)) / (
             2 * step[index]
         )
     hessian = 0.5 * (hessian + hessian.T)
 
     errors = np.full(size, np.nan)
-    if np.all(np.isfinite(hessian)):
+    # Every entry, not just the offending one: the errors come from inverting
+    # the *joint* Hessian, so one unusable column corrupts the whole inverse.
+    if stencil_in_support and np.all(np.isfinite(hessian)):
         try:
             # `inv` alone is not a test of the documented precondition: it raises
             # only on *exact* singularity, so a merely ill-conditioned Hessian
