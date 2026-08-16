@@ -80,6 +80,8 @@ nav:
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
       - Choosing a parameterization per parameter: tutorials/parameterization_per_parameter.ipynb
   - Reference:
+      - Experimental integrations:
+          - JEAM circular diffusion: reference/jeam_circular_diffusion.md
       - HSSM core classes:
           - hssm.HSSM: api/hssm.md
           - hssm.Param: api/param.md
