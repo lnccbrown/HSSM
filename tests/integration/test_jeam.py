@@ -5,14 +5,20 @@ import pytest
 
 pytest.importorskip("jeam")
 
+import jax
+import jax.numpy as jnp
 from jeam.Models.Circular import CircularDiffusionModel
+from jeam.likelihoods import fixed_cdm_logpdf, fixed_cdm_logpdf_single
 
 from hssm.distribution_utils.dist import (
     LOGP_LB,
     make_distribution,
     make_likelihood_callable,
 )
-from hssm.integrations.jeam import logp_circular_diffusion
+from hssm.integrations.jeam import (
+    logp_circular_diffusion,
+    logp_circular_diffusion_jax,
+)
 
 PARAMETERS = ["v_x", "v_y", "a", "t"]
 BOUNDS = {
@@ -25,6 +31,60 @@ BOUNDS = {
 # float32 ULPs while keeping the direct adapter comparisons at float64 precision.
 COMPILED_RTOL = 5e-7
 COMPILED_ATOL = 5e-7
+
+
+def test_jax_adapter_preserves_the_single_trial_data_contract():
+    """The JAX bridge should map ``[rt, response]`` onto JEAM without reordering."""
+    data = jnp.asarray([0.37, -0.65])
+    parameters = (0.45, -0.30, 1.20, 0.08)
+
+    observed = logp_circular_diffusion_jax(data, *parameters)
+    expected = fixed_cdm_logpdf_single(data[0], data[1], *parameters)
+
+    np.testing.assert_allclose(observed, expected, rtol=0.0, atol=0.0)
+    assert observed.shape == ()
+
+
+def test_jax_adapter_vmaps_scalar_and_trialwise_parameters_in_row_order():
+    """HSSM's vmap patterns should retain scalar sharing and trial association."""
+    data = jnp.asarray([[0.21, -1.7], [0.46, 0.2], [0.91, 2.2]])
+    v_x = jnp.asarray([0.55, -0.20, 0.35])
+    v_y = -0.25
+    threshold = jnp.asarray([1.00, 1.25, 1.10])
+    ndt = jnp.asarray([0.04, 0.11, 0.17])
+
+    observed = jax.vmap(
+        logp_circular_diffusion_jax,
+        in_axes=(0, 0, None, 0, 0),
+    )(data, v_x, v_y, threshold, ndt)
+    expected = fixed_cdm_logpdf(
+        data[:, 0],
+        data[:, 1],
+        v_x,
+        v_y,
+        threshold,
+        ndt,
+    )
+
+    np.testing.assert_allclose(observed, expected, rtol=5e-7, atol=5e-7)
+
+
+def test_jax_adapter_parameter_gradient_matches_the_direct_jeam_kernel():
+    """The HSSM argument bridge must leave JEAM's four-parameter gradient intact."""
+    data = jnp.asarray([0.53, 0.7])
+    parameters = jnp.asarray([0.45, -0.30, 1.20, 0.08])
+
+    observed = jax.grad(
+        lambda values: logp_circular_diffusion_jax(data, *values)
+    )(parameters)
+    expected = jax.grad(
+        lambda values: fixed_cdm_logpdf_single(
+            data[0], data[1], *values
+        )
+    )(parameters)
+
+    np.testing.assert_allclose(observed, expected, rtol=5e-7, atol=5e-7)
+    assert np.all(np.isfinite(observed))
 
 
 @pytest.fixture(scope="module")
