@@ -15,9 +15,8 @@ OBSERVATION_DIM = "__obs__"
 RESPONSE_DIM = "rt,response_dim"
 
 
-@pytest.fixture(scope="module")
-def circular_model():
-    """Build one ordinary HSSM model from deterministic JEAM observations."""
+def _build_circular_model():
+    """Build an ordinary HSSM model from deterministic JEAM observations."""
     observations = simulate_circular_diffusion(
         theta=np.array([0.70, -0.35, 0.40, 0.08]),
         random_state=1947,
@@ -28,6 +27,12 @@ def circular_model():
         model="circular_diffusion",
         p_outlier=None,
     )
+
+
+@pytest.fixture(scope="module")
+def circular_model():
+    """Share one circular model across the predictive-path tests."""
+    return _build_circular_model()
 
 
 def _assert_predictive_contract(values: np.ndarray) -> None:
@@ -127,3 +132,34 @@ def test_posterior_predictive_advances_one_seeded_safe_mode_stream(circular_mode
         np.arange(12),
     )
     _assert_predictive_contract(first_values)
+
+
+def test_circular_model_round_trip_reconstructs_predictive_state(tmp_path):
+    """Existing HSSM persistence should reconstruct the config and custom RV."""
+    model = _build_circular_model()
+    model.save_model(
+        model_name="circular_round_trip",
+        base_path=tmp_path,
+        allow_absolute_base_path=True,
+    )
+
+    model_path = tmp_path / "circular_round_trip"
+    restored = hssm.HSSM.load_model(model_path)
+
+    assert isinstance(restored, hssm.HSSM)
+    assert restored.model_name == "circular_diffusion"
+    assert restored._init_args["model"] == "circular_diffusion"
+    assert restored._init_args["p_outlier"] is None
+    assert restored.model_config.rv is simulate_circular_diffusion
+    assert restored.data.equals(model.data)
+    assert (model_path / "model.pkl").is_file()
+    assert not (model_path / "traces.nc").exists()
+
+    original_draws = model.sample_prior_predictive(draws=2, random_seed=1623)[
+        "prior_predictive"
+    ][OBSERVED_NAME].values
+    restored_draws = restored.sample_prior_predictive(draws=2, random_seed=1623)[
+        "prior_predictive"
+    ][OBSERVED_NAME].values
+    np.testing.assert_array_equal(original_draws, restored_draws)
+    _assert_predictive_contract(restored_draws)
