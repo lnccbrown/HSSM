@@ -357,7 +357,9 @@ def resolve_method(method: str | None, kind: str) -> str:
         # resolve_method <- _point_estimate_setup <- find_MAP/find_MLE <- user
         stacklevel=4,
     )
-    return GRADIENT_FREE_METHOD if fallback else method
+    # Narrow on `method is None` rather than `fallback`: mypy does not carry the
+    # narrowing through the intermediate boolean.
+    return GRADIENT_FREE_METHOD if method is None else method
 
 
 def gradient_available(pymc_model: "PyMCModel", objective: Any = None) -> bool:
