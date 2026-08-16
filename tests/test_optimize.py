@@ -30,6 +30,7 @@ from hssm.optimize import (
 )
 
 TRUE_DDM = {"v": 0.5, "a": 1.5, "z": 0.5, "t": 0.5}
+DATA_SEED = 10
 
 
 @pytest.fixture(autouse=True)
@@ -58,8 +59,19 @@ def _pin_float64_precision():
 
 @pytest.fixture(scope="module")
 def ddm_data():
-    """Return 500 DDM trials simulated from ``TRUE_DDM``."""
-    simulated = simulator(list(TRUE_DDM.values()), model="ddm", n_samples=500)
+    """Return 500 DDM trials simulated from ``TRUE_DDM``.
+
+    Seeded on purpose. The recovery tests assert the estimate lands within
+    ``0.2`` of the truth, but at 500 trials the drift rate `v` is the least
+    well-identified parameter: across seeds its estimate sits around `0.585`
+    with an SD near `0.055`, so an unseeded draw puts the assertion only about
+    two SDs from its bound and the suite fails a small fraction of runs for no
+    reason. This seed keeps the whole module deterministic; its worst
+    deviation from truth is `0.058` across both MAP and MLE.
+    """
+    simulated = simulator(
+        list(TRUE_DDM.values()), model="ddm", n_samples=500, random_state=DATA_SEED
+    )
     return pd.DataFrame(
         np.column_stack([simulated["rts"][:, 0], simulated["choices"][:, 0]]),
         columns=["rt", "response"],
