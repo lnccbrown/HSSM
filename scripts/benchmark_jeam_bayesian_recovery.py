@@ -14,6 +14,7 @@ import argparse
 import json
 from dataclasses import asdict, dataclass
 from time import perf_counter
+from typing import TYPE_CHECKING
 
 import arviz as az
 import numpy as np
@@ -31,6 +32,9 @@ from scripts.benchmark_jeam_objective_parity import (
     _installed_jeam_revision,
     simulate_dataset,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 DEFAULT_CHAINS = 4
 DEFAULT_TUNE = 1_500
@@ -133,6 +137,7 @@ def _summary_interval_columns(summary: pd.DataFrame) -> tuple[str, str]:
 
 def run_recovery(
     *,
+    truth: Sequence[float] = tuple(DEFAULT_TRUTH),
     trials: int = DEFAULT_TRIALS,
     data_seed: int = DEFAULT_DATA_SEED,
     chains: int = DEFAULT_CHAINS,
@@ -145,8 +150,14 @@ def run_recovery(
     """Fit the fixed circular model and collect recovery diagnostics."""
     if len(chain_seeds) != chains:
         raise ValueError("Provide exactly one random seed per MCMC chain.")
+    truth_values = np.asarray(truth, dtype=np.float64)
+    if truth_values.shape != (len(PARAMETER_ORDER),):
+        raise ValueError(
+            f"truth must follow {PARAMETER_ORDER} and have shape "
+            f"({len(PARAMETER_ORDER)},)."
+        )
 
-    data = simulate_dataset(trials=trials, seed=data_seed)
+    data = simulate_dataset(truth=truth_values, trials=trials, seed=data_seed)
     model = hssm.HSSM(
         data=pd.DataFrame(data, columns=["rt", "response"]),
         model="circular_diffusion",
@@ -180,7 +191,7 @@ def run_recovery(
         round_to=8,
     )
     interval_lower, interval_upper = _summary_interval_columns(summary)
-    truth_by_name = dict(zip(PARAMETER_ORDER, DEFAULT_TRUTH, strict=True))
+    truth_by_name = dict(zip(PARAMETER_ORDER, truth_values, strict=True))
     parameter_recovery = tuple(
         ParameterRecovery(
             name=name,
@@ -237,7 +248,7 @@ def run_recovery(
 
     return RecoveryResult(
         parameter_order=PARAMETER_ORDER,
-        truth=tuple(float(value) for value in DEFAULT_TRUTH),
+        truth=tuple(float(value) for value in truth_values),
         trials=trials,
         data_seed=data_seed,
         jeam_revision=_installed_jeam_revision(),
