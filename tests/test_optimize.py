@@ -199,6 +199,25 @@ def test_find_map_strict_raises(hierarchical_model):
         )
 
 
+def test_find_map_failure_clears_an_earlier_estimate(ddm_model):
+    """A failed run must not leave the *previous* run's estimate reachable.
+
+    The "a failed estimate is never cached" contract is what `model.map` and
+    `sample(initvals="map")`'s `_map_dict is None` guard both rest on, so it
+    has to hold on the second call as much as the first.
+    """
+    ddm_model.find_MAP(progressbar=False)
+    assert ddm_model.map is not None
+
+    with pytest.warns(UserWarning, match="find_MAP failed to converge"):
+        assert ddm_model.find_MAP(maxeval=3, progressbar=False) is None
+
+    # The attribute, not just the property: it is what `sample` branches on.
+    assert ddm_model._map_dict is None
+    with pytest.raises(ValueError, match="Please compute map first"):
+        _ = ddm_model.map
+
+
 def test_find_map_unprocessed_initvals_still_guarded(hierarchical_data):
     """With `process_initvals=False` the fix no-ops, so the guard must catch it.
 
@@ -659,6 +678,19 @@ def test_find_mle_strict_raises(ddm_model):
         ddm_model.find_MLE(maxeval=3, progressbar=False, strict=True)
 
 
+def test_find_mle_failure_clears_an_earlier_estimate(ddm_model):
+    """`find_MLE` owes `model.mle` the same contract `find_MAP` owes `model.map`."""
+    ddm_model.find_MLE(progressbar=False)
+    assert ddm_model.mle is not None
+
+    with pytest.warns(UserWarning, match="find_MLE failed to converge"):
+        assert ddm_model.find_MLE(maxeval=3, progressbar=False) is None
+
+    assert ddm_model._mle_dict is None
+    with pytest.raises(ValueError, match="Please compute mle first"):
+        _ = ddm_model.mle
+
+
 def test_find_mle_to_datatree_round_trips(ddm_model):
     """An MLE feeds the ArviZ toolchain exactly as a MAP does."""
     posterior = ddm_model.find_MLE(progressbar=False).to_datatree().posterior
@@ -743,6 +775,80 @@ def test_standard_errors_are_nan_when_the_hessian_is_not_negative_definite(
     assert np.all(np.isnan(np.asarray(list(estimate.se.values()), dtype=float)))
 
 
+def test_standard_errors_refuse_an_estimate_sitting_on_a_bound(ddm_model):
+    """A boundary estimate must give NaN, not the curvature of a continuation.
+
+    The differences are taken in constrained space, so a parameter on its bound
+    puts one stencil point outside the support. The log-density is `-inf`
+    there, but the bound enters the graph through `pt.switch`, so the *gradient*
+    stays finite --- the Hessian then comes back well conditioned and every
+    downstream guard passes, reporting a confident standard error for an
+    estimate that is pinned. Only checking the density catches it.
+    """
+    estimate = ddm_model.find_MAP(progressbar=False)
+    on_bound = {
+        name: np.asarray(value).copy() for name, value in estimate.params.items()
+    }
+    on_bound["z"] = np.array(0.0)  # `z` is Uniform(0, 1); this is its lower bound
+
+    with pytest.warns(UserWarning, match="edge of the model's support"):
+        errors = hssm.optimize.standard_errors(ddm_model.pymc_model, on_bound)
+
+    assert errors is not None
+    # Every entry, not only `z`: the errors invert the joint Hessian, so one
+    # unusable column makes the whole inverse meaningless.
+    assert np.all(np.isnan(np.asarray(list(errors.values()), dtype=float)))
+
+
+def test_standard_errors_still_finite_at_an_interior_optimum(ddm_model):
+    """The support check must not fire on an ordinary interior estimate."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        estimate = ddm_model.find_MAP(se=True, progressbar=False)
+
+    assert estimate.se is not None
+    assert np.all(np.isfinite(np.asarray(list(estimate.se.values()), dtype=float)))
+
+
+def test_standard_errors_name_a_non_finite_hessian_as_such(hierarchical_model):
+    """A non-finite Hessian is neither an edge nor a singular matrix.
+
+    At PyMC's default start the gradient has non-finite entries, so the stencil
+    stays inside the support but the Hessian never becomes invertible. Calling
+    it "singular or not negative definite" would describe a matrix that was
+    never inverted --- the same misdiagnosis the edge-of-support branch exists
+    to avoid.
+    """
+    with pytest.warns(UserWarning, match="non-finite entries"):
+        errors = hssm.optimize.standard_errors(
+            hierarchical_model.pymc_model, hierarchical_model.initial_point()
+        )
+
+    assert errors is not None
+    # Ragged: this model's group offsets are vector valued, so flatten first.
+    flat = np.concatenate(
+        [
+            np.atleast_1d(np.asarray(value, dtype=float)).ravel()
+            for value in errors.values()
+        ]
+    )
+    assert np.all(np.isnan(flat))
+
+
+def test_find_mle_consumes_include_transformed(ddm_model):
+    """`include_transformed` must not reach `scipy.optimize.minimize`.
+
+    `find_MAP` consumes it; left in `kwargs` here it lands on `minimize` as an
+    unexpected keyword, so the asymmetry surfaced as a confusing `TypeError`.
+    """
+    estimate = ddm_model.find_MLE(include_transformed=False, progressbar=False)
+
+    assert estimate is not None
+    assert not any(name.endswith("__") for name in estimate)
+    # `params` is unaffected by the flag.
+    assert set(estimate.params) == {"v", "a", "z", "t"}
+
+
 def test_standard_errors_unavailable_without_a_gradient(ddm_data):
     """Blackbox likelihoods have no gradient: warn and return the estimate."""
     model = hssm.HSSM(data=ddm_data, model="ddm", loglik_kind="blackbox")
@@ -769,12 +875,43 @@ def test_point_estimate_is_a_dict(ddm_model):
     assert "t_log__" in estimate
 
 
+def test_point_estimate_carries_only_the_coords_its_dims_use(ddm_model):
+    """The model's observation index has no business on a point estimate.
+
+    `coords` used to be copied from the model wholesale, hanging one entry per
+    trial off every estimate --- never read, but pickled along with it.
+    """
+    estimate = ddm_model.find_MAP(progressbar=False)
+
+    used = {dim for entry in estimate.dims.values() for dim in entry}
+    assert set(estimate.coords) <= used
+    assert "__obs__" not in estimate.coords
+    # Still enough metadata for the ArviZ conversion to succeed.
+    assert estimate.to_datatree().posterior.sizes["draw"] == 1
+
+
 def test_point_estimate_to_dataframe(ddm_model):
     """`to_dataframe` gives one row per scalar entry, no `se` column by default."""
     frame = ddm_model.find_MAP(progressbar=False).to_dataframe()
 
     assert list(frame.columns) == ["estimate"]
     assert set(frame.index) == {"v", "a", "z", "t"}
+
+
+def test_point_estimate_to_dataframe_keeps_an_all_nan_se_column(ddm_model):
+    """An all-NaN `se` is a result, not an absence, and must stay visible.
+
+    NaN across the board is exactly what a boundary estimate produces. Dropping
+    the column there would render `se=True` indistinguishable from `se=False`
+    in the primary display, for precisely the case worth noticing.
+    """
+    estimate = ddm_model.find_MAP(progressbar=False)
+    estimate.se = {name: np.array(np.nan) for name in estimate.params}
+
+    frame = estimate.to_dataframe()
+
+    assert list(frame.columns) == ["estimate", "se"]
+    assert frame["se"].isna().all()
 
 
 def test_point_estimate_to_datatree_feeds_arviz(ddm_model):
@@ -1015,6 +1152,34 @@ def test_points_equal_sees_an_untouched_zero_as_unmoved():
     """
     assert points_equal({"offset": np.array(1e-17)}, {"offset": np.array(0.0)})
     assert not points_equal({"offset": np.array(0.5)}, {"offset": np.array(0.0)})
+
+
+def test_scoring_a_constrained_only_estimate_says_what_is_wrong(ddm_model):
+    """A point missing its transformed entries is unscoreable, not zero-density.
+
+    `include_transformed=False` drops exactly the `*_log__`/`*_interval__`
+    entries the scorer indexes, so the failure has to name that cause. Silently
+    returning `-inf` would report the estimate as infinitely improbable.
+    """
+    estimate = ddm_model.find_MAP(include_transformed=False, progressbar=False)
+
+    with pytest.raises(KeyError, match="include_transformed=False"):
+        score_point(ddm_model.pymc_model, estimate)
+
+
+def test_strict_failure_message_fits_the_strict_path():
+    """Under `strict` the call raises, so the warning's wording does not fit.
+
+    Nothing is returned, and recommending `strict=True` would be advising the
+    mode already in force.
+    """
+    with pytest.raises(RuntimeError) as excinfo:
+        hssm.optimize.report_failure("MAP", [["it failed"]], strict=True)
+
+    message = str(excinfo.value)
+    assert "No estimate was stored" in message
+    assert "returned None" not in message
+    assert "strict=True" not in message
 
 
 def test_failure_message_does_not_advertise_return_raw():

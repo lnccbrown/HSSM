@@ -92,7 +92,8 @@ REPR_MAX_ROWS = 20
 
 #: Above this many scalar parameters, ``standard_errors`` logs what it is
 #: about to do: the finite-difference Hessian costs ``2 * size`` full gradient
-#: evaluations plus a ``size x size`` inverse, which can take minutes.
+#: evaluations, ``2 * size`` cheaper log-density evaluations for the support
+#: check, and a ``size x size`` inverse, which can take minutes.
 _SE_SIZE_HINT = 100
 
 
@@ -113,7 +114,8 @@ class PointEstimate(dict):
     mapping itself is what the optimizer returned --- constrained values,
     transformed value-variable names (``t_log__``, ``z_interval__``) and
     deterministics --- while ``params`` holds only the constrained free
-    parameters.
+    parameters. The transformed entries are absent when the estimate was
+    produced with ``include_transformed=False``; ``params`` is unaffected.
 
     Attributes
     ----------
@@ -123,7 +125,10 @@ class PointEstimate(dict):
         The constrained free parameters only, with transformed duplicates and
         deterministics dropped.
     success
-        Whether the optimizer converged.
+        Always ``True``. A run that did not converge never becomes a
+        ``PointEstimate`` --- ``find_MAP``/``find_MLE`` warn and return ``None``
+        instead --- so this exists for the shape of the record, not as a check
+        worth branching on.
     message
         The optimizer's termination message.
     logp
@@ -147,8 +152,11 @@ class PointEstimate(dict):
         deviations under a Laplace (normal) approximation around the mode, which
         is a different object that happens to be computed the same way.
     opt_result
-        The raw ``scipy.optimize.OptimizeResult``, or ``None`` when the
-        optimizer was interrupted or exhausted ``maxeval``.
+        The raw ``scipy.optimize.OptimizeResult``. Never ``None`` on an
+        estimate that was returned: a missing result is one of the conditions
+        ``audit_result`` fails a start on, so a run that exhausted ``maxeval``
+        or was interrupted yields ``None`` from ``find_MAP``/``find_MLE``
+        rather than an estimate carrying no result.
 
     Notes
     -----
@@ -246,7 +254,9 @@ class PointEstimate(dict):
         """Return the estimate as a tidy DataFrame, one row per scalar entry.
 
         Vector-valued parameters are expanded to ``name[i]`` rows. An ``se``
-        column is included only when standard errors were computed.
+        column is included whenever standard errors were requested, even if
+        every entry is ``NaN`` --- that is the result at a boundary estimate,
+        not an absence of one.
 
         Returns
         -------
@@ -280,7 +290,11 @@ class PointEstimate(dict):
             {"estimate": estimates, "se": errors},
             index=pd.Index(names, name="parameter"),
         )
-        if frame["se"].isna().all():
+        # Dropped only when standard errors were never computed. An all-`NaN`
+        # column is itself the result --- it is what a boundary estimate
+        # produces --- and hiding it would render `se=True` indistinguishable
+        # from `se=False` for exactly the case worth noticing.
+        if self.se is None:
             frame = frame.drop(columns=["se"])
         return frame
 
@@ -357,7 +371,9 @@ def resolve_method(method: str | None, kind: str) -> str:
         # resolve_method <- _point_estimate_setup <- find_MAP/find_MLE <- user
         stacklevel=4,
     )
-    return GRADIENT_FREE_METHOD if fallback else method
+    # Narrow on `method is None` rather than `fallback`: mypy does not carry the
+    # narrowing through the intermediate boolean.
+    return GRADIENT_FREE_METHOD if method is None else method
 
 
 def gradient_available(pymc_model: "PyMCModel", objective: Any = None) -> bool:
@@ -606,16 +622,23 @@ def report_failure(kind: str, failures: list[list[str]], strict: bool) -> None:
     """
     # Deliberately does not point at `return_raw=True`: a failed run returns
     # `None` before that branch is reached, so it is not an inspection channel.
-    message = (
+    # The two branches differ in what actually happened, so they cannot share a
+    # closing sentence: under `strict` nothing is returned (this raises) and
+    # recommending `strict=True` would be advising the mode already in force.
+    common = (
         f"find_{kind} failed to converge: "
         + describe_failures(failures)
-        + f". No estimate was stored, and `find_{kind}` returned None. "
-        "Try `n_starts>1`, a different `method=`, or a different `start=`; "
-        "`strict=True` raises instead of warning."
+        + ". No estimate was stored. "
+        "Try `n_starts>1`, a different `method=`, or a different `start=`"
     )
     if strict:
-        raise RuntimeError(message)
-    warnings.warn(message, UserWarning, stacklevel=3)
+        raise RuntimeError(f"{common}.")
+    warnings.warn(
+        f"{common}; `strict=True` raises instead of warning. "
+        f"`find_{kind}` returned None.",
+        UserWarning,
+        stacklevel=3,
+    )
 
 
 def validate_n_starts(n_starts: int) -> None:
@@ -710,17 +733,24 @@ def drop_transformed(pymc_model: "PyMCModel", point: dict[str, Any]) -> dict[str
 def dims_and_coords(
     pymc_model: "PyMCModel", names: list[str]
 ) -> tuple[dict[str, list[str]], dict[str, list[Any]]]:
-    """Collect the ArviZ ``dims``/``coords`` metadata for ``names``."""
+    """Collect the ArviZ ``dims``/``coords`` metadata for ``names``.
+
+    Only the coords the collected ``dims`` actually reference are kept. Copying
+    ``pymc_model.coords`` wholesale would hang the model's observation index off
+    every estimate --- an entry per trial, so hundreds or thousands of strings
+    that nothing ever reads, carried through every ``pickle`` of the result.
+    """
     dims = {
         name: list(pymc_model.named_vars_to_dims[name])
         for name in names
         if name in pymc_model.named_vars_to_dims
         and pymc_model.named_vars_to_dims[name] is not None
     }
+    used = {dim for entry in dims.values() for dim in entry}
     coords = {
         key: list(value)
         for key, value in pymc_model.coords.items()
-        if value is not None
+        if value is not None and key in used
     }
     return dims, coords
 
@@ -1037,7 +1067,8 @@ def make_scorer(
     Callable
         A function taking a point (every value variable, transformed names
         included) and returning its log-density, or ``-inf`` if it could not be
-        evaluated.
+        evaluated. It raises ``KeyError`` if the point is missing any value
+        variable --- unscoreable input, rather than a point of zero density.
     """
     if function is None:
         objective = (
@@ -1050,6 +1081,21 @@ def make_scorer(
     names = value_var_names(pymc_model)
 
     def score(point: dict[str, Any]) -> float:
+        missing = [name for name in names if name not in point]
+        if missing:
+            # Not a `-inf`: that is the answer for a point of zero density, and
+            # reusing it for a malformed point would report "infinitely bad"
+            # where the truth is "unscoreable". The likeliest way to get here
+            # is scoring a `find_MAP(include_transformed=False)` estimate,
+            # which drops exactly the transformed entries needed below, so the
+            # message names that case rather than only the missing keys.
+            raise KeyError(
+                f"Cannot score this point: {', '.join(missing)} missing from "
+                "it. Scoring requires every value variable, transformed names "
+                "included; an estimate produced with "
+                "`include_transformed=False` does not carry them. Re-run "
+                "without that flag, or score the raw optimizer point."
+            )
         try:
             return float(scoring_fn({name: point[name] for name in names}))
         except (ValueError, FloatingPointError):  # pragma: no cover - defensive
@@ -1083,8 +1129,46 @@ def score_point(
     -------
     float
         The log-density, or ``-inf`` if it could not be evaluated.
+
+    Raises
+    ------
+    KeyError
+        If ``point`` is missing any of the model's value variables, as an
+        estimate produced with ``include_transformed=False`` is.
     """
     return make_scorer(pymc_model, observed_only=observed_only)(point)
+
+
+def objective_value(opt_result: Any) -> float | None:
+    """Return the objective SciPy reports at its solution, or ``None``.
+
+    ``pm.find_MAP`` minimizes the *negative* log-density, so ``opt_result.fun``
+    is that density negated at the returned point --- the same number a freshly
+    compiled scorer produces, bit-for-bit, under L-BFGS-B, Powell, Nelder-Mead
+    and BFGS. Reading it costs nothing, where compiling a scorer costs a full
+    logp graph.
+
+    ``None`` when the value is unusable: a SciPy method that leaves ``fun``
+    unset, a vector-valued residual rather than a scalar, or a non-finite
+    entry. Callers fall back to scoring the point directly.
+
+    Parameters
+    ----------
+    opt_result
+        The ``OptimizeResult`` returned alongside the point.
+
+    Returns
+    -------
+    float | None
+        The reported objective, or ``None`` if it cannot be trusted.
+    """
+    value = getattr(opt_result, "fun", None)
+    if value is None:
+        return None
+    array = np.asarray(value, dtype=float).ravel()
+    if array.size != 1 or not np.isfinite(array[0]):
+        return None
+    return float(array[0])
 
 
 def standard_errors(
@@ -1119,9 +1203,13 @@ def standard_errors(
     -------
     dict | None
         Errors keyed by constrained parameter name, or ``None`` if no gradient
-        is available (blackbox likelihoods). Individual entries are ``NaN`` when
-        the Hessian is singular or not negative definite --- which is expected
-        at an optimum sitting on a bound.
+        is available (blackbox likelihoods). All entries are ``NaN`` when the
+        Hessian is unusable --- built from a stencil that leaves the model's
+        support (as happens at an optimum sitting on a bound), carrying
+        non-finite entries, or singular or not negative definite. It is all of
+        them rather than the offending one because the errors come from
+        inverting the joint Hessian. The warning names which of the three it
+        was.
 
         For ``observed_only=True`` these are standard errors in the usual sense.
         For the joint log-density they are posterior standard deviations under a
@@ -1131,17 +1219,21 @@ def standard_errors(
     Warnings
     --------
     The cost grows with the number of scalar parameters ``n``: the central
-    differences need ``2 * n`` full-data gradient evaluations, followed by an
+    differences need ``2 * n`` full-data gradient evaluations plus ``2 * n``
+    cheaper log-density evaluations for the support check, followed by an
     ``n x n`` inverse. On a hierarchical model with hundreds of group-level
     offsets, ``se=True`` can take considerably longer than the optimization it
     follows. A line is logged at ``INFO`` before starting when ``n`` is large.
     """
     untransformed = remove_value_transforms(pymc_model)
-    objective = (
-        untransformed.observedlogp
-        if observed_only
-        else untransformed.logp(jacobian=False)
-    )
+    # The support test is always the *joint* density, never `objective`. Whether
+    # a point lies inside the model's support is a property of the model, not of
+    # the curve being measured --- and the observed log-likelihood carries none
+    # of the prior-derived bounds, so under `observed_only` it stays finite well
+    # outside the support and would wave every boundary estimate through. When
+    # they coincide the same graph is reused rather than built twice.
+    support_objective = untransformed.logp(jacobian=False)
+    objective = untransformed.observedlogp if observed_only else support_objective
     continuous = untransformed.continuous_value_vars
     names = [var.name for var in continuous]
 
@@ -1179,12 +1271,26 @@ def standard_errors(
     def gradient_at(x: np.ndarray) -> np.ndarray:
         return np.asarray(gradient_fn(RaveledVars(x, x0.point_map_info)), dtype=float)
 
+    # The gradient alone cannot tell us whether a stencil point is inside the
+    # model's support: a bound enters the graph through `pt.switch`, so outside
+    # it the log-density is `-inf` while its gradient stays perfectly finite.
+    # Only the density itself reveals the boundary, hence this second function.
+    logp_fn = DictToArrayBijection.mapf(
+        compile_point_fn(untransformed, support_objective, untransformed.value_vars),
+        base,
+    )
+
+    def in_support(x: np.ndarray) -> bool:
+        return bool(np.isfinite(logp_fn(RaveledVars(x, x0.point_map_info))))
+
     size = x0.data.size
     if size > _SE_SIZE_HINT:
         _logger.info(
             "Computing standard errors for %d parameters: %d full gradient "
-            "evaluations plus a %dx%d matrix inverse. This may take a while.",
+            "evaluations, %d log-density evaluations for the support check, "
+            "and a %dx%d matrix inverse. This may take a while.",
             size,
+            2 * size,
             2 * size,
             size,
             size,
@@ -1202,18 +1308,34 @@ def standard_errors(
         1.0, np.abs(x0.data)
     )
     hessian = np.empty((size, size))
+    # An estimate pinned to a bound puts one of its two stencil points outside
+    # the support. The gradient there is finite, so the resulting Hessian is
+    # well conditioned and every guard below would pass --- reporting the
+    # curvature of the *smooth continuation* of a density that is `-inf` on one
+    # side as if it were a standard error. That is exactly the case the
+    # docstring promises `NaN` for, so the stencil has to be checked directly.
+    stencil_in_support = True
     for index in range(size):
         forward = x0.data.astype(float).copy()
         backward = x0.data.astype(float).copy()
         forward[index] += step[index]
         backward[index] -= step[index]
+        if not (in_support(forward) and in_support(backward)):
+            stencil_in_support = False
+            break
         hessian[:, index] = (gradient_at(forward) - gradient_at(backward)) / (
             2 * step[index]
         )
-    hessian = 0.5 * (hessian + hessian.T)
 
     errors = np.full(size, np.nan)
-    if np.all(np.isfinite(hessian)):
+    # Every entry, not just the offending one: the errors come from inverting
+    # the *joint* Hessian, so one unusable column corrupts the whole inverse.
+    # The symmetrization is inside the guard because `break` above leaves most
+    # of `hessian` as uninitialized `np.empty` memory, and adding that to its
+    # own transpose can raise under a caller's `np.seterr(all="raise")`.
+    if stencil_in_support:
+        hessian = 0.5 * (hessian + hessian.T)
+    if stencil_in_support and np.all(np.isfinite(hessian)):
         try:
             # `inv` alone is not a test of the documented precondition: it raises
             # only on *exact* singularity, so a merely ill-conditioned Hessian
@@ -1233,10 +1355,27 @@ def standard_errors(
             pass
 
     if not np.all(np.isfinite(errors)):
+        # Three distinct failures, and only the last is about a bad matrix.
+        # Reporting "singular" for the other two would describe a matrix that
+        # was either never built or never inverted.
+        if not stencil_in_support:
+            reason = (
+                "the estimate lies within one finite-difference step of the "
+                "edge of the model's support, so the Hessian cannot be "
+                "evaluated there"
+            )
+        elif not np.all(np.isfinite(hessian)):
+            reason = (
+                "the finite-difference Hessian has non-finite entries, so it "
+                "could not be inverted --- usually a non-finite gradient "
+                "somewhere in the stencil"
+            )
+        else:
+            reason = "the Hessian at the estimate is singular or not negative definite"
         warnings.warn(
-            "The Hessian at the estimate is singular or not negative definite, "
-            "so some standard errors are NaN. This is expected when the optimum "
-            "sits on a parameter bound or a parameter is weakly identified.",
+            f"Standard errors are all NaN: {reason}. This is expected when the "
+            "optimum sits on a parameter bound or a parameter is weakly "
+            "identified.",
             UserWarning,
             stacklevel=4,
         )

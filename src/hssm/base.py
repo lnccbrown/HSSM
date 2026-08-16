@@ -624,6 +624,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             This matters: PyMC's default start (`t=2.0`, `a=2.0`) puts many
             models where the gradient of the log-density is non-finite, from
             which the optimizer cannot move.
+
+            Those defaults come from HSSM's per-parameter settings and are not
+            reconciled against the prior you supply, so a prior whose support
+            excludes them --- `v ~ HalfNormal` against the default `v = 0.0`,
+            say --- makes PyMC reject the start and the run fail with a
+            warning. Pass an explicit `start` inside the support to work around
+            it; `sample()` is affected by the same mismatch.
         method : optional
             Any `scipy.optimize.minimize` method. Defaults to `"L-BFGS-B"`, or
             to the gradient-free `"Powell"` when the model runs at `float32`
@@ -642,7 +649,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             these are posterior standard deviations under a Laplace (normal)
             approximation around the mode, not standard errors in the sampling
             sense --- see `find_MLE` for those. Not available for `blackbox`
-            likelihoods. Costs `2 * n_parameters` gradient evaluations plus an
+            likelihoods. Costs `2 * n_parameters` gradient evaluations, as many
+            cheaper log-density evaluations for the support check, and an
             `n x n` inverse, which is noticeable on large hierarchies. Defaults
             to False.
         seed : optional
@@ -654,7 +662,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             `model.map.opt_result`.
         kwargs
             Other arguments passed to `pymc.find_MAP` (`vars`, `maxeval`,
-            `progressbar`, `include_transformed`, ...).
+            `progressbar`, ...). `include_transformed` is the exception:
+            HSSM consumes it rather than forwarding it, because scoring and the
+            convergence audit both need the transformed names. PyMC is always
+            asked for them and they are dropped afterwards, so the result is
+            the same as PyMC's.
 
         Returns
         -------
@@ -694,9 +706,26 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # names, so always ask PyMC for them and drop them afterwards if the
         # caller asked for a constrained-only point.
         include_transformed = kwargs.pop("include_transformed", True)
-        # Compiled once rather than per candidate: multi-start runs would
-        # otherwise pay the compile cost on every start.
-        score_candidate = optimize.make_scorer(self.pymc_model)
+        # No scorer is compiled up front. `pm.find_MAP` already reports the
+        # joint log-density at the point it found, as `opt_result.fun` negated,
+        # and that agrees with a freshly compiled scorer bit-for-bit under
+        # L-BFGS-B, Powell, Nelder-Mead and BFGS. Compiling a second evaluator
+        # for a number PyMC hands back costs a full logp compile --- about a
+        # tenth of a `find_MAP` on an analytical DDM, and considerably more on
+        # an ONNX/JAX likelihood. `scorer` below is the fallback for a SciPy
+        # method that leaves `fun` unset, built at most once and usually never.
+        scorer: Callable[[dict], float] | None = None
+
+        def candidate_score(point: dict, opt_result: Any) -> float:
+            """Return the joint log-density at a converged candidate."""
+            nonlocal scorer
+            reported = optimize.objective_value(opt_result)
+            if reported is not None:
+                return -reported
+            if scorer is None:
+                scorer = optimize.make_scorer(self.pymc_model)
+            return scorer(point)
+
         # The (possibly partial) start is expanded once, here, rather than once
         # per candidate inside the loop. That gives the audit the *complete*
         # start it needs to tell "the optimizer never moved" from "one parameter
@@ -706,22 +735,24 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         base_start = optimize.make_start_point(
             self.pymc_model, resolved_start, seed=run_seed, validate=False
         )
-        # Only a *jittered* candidate has to be mapped back to the constrained
-        # overrides `pm.find_MAP` takes, so the expander --- which costs a
-        # compile --- is built only when there will be one. The default
-        # `n_starts=1` keeps paying nothing for the multi-start machinery.
-        expander = (
-            optimize.make_point_expander(self.pymc_model) if n_starts > 1 else None
-        )
 
-        def constrained_overrides(index: int, candidate: dict) -> dict:
-            """Return the constrained ``start=`` for this candidate."""
-            if expander is None or index == 0:
+        def candidate_overrides(index: int, candidate: dict) -> dict:
+            """Return the ``start=`` override for this candidate.
+
+            A jittered candidate is handed over in transformed space as it
+            stands: `pm.find_MAP` routes `start=` through
+            `convert_str_to_rv_dict`, which recognizes transformed names and
+            back-transforms them itself. Expanding to constrained space here
+            instead would buy a compiled pytensor function and, on a regression
+            model, an evaluation of every trial-wise deterministic per
+            candidate --- all of it discarded by the same call.
+            """
+            if index == 0:
                 # The first candidate is the unjittered start, which PyMC
                 # expands itself from `resolved_start` under the same seed ---
                 # the very point `base_start` already holds.
                 return resolved_start
-            return optimize.constrained_params(self.pymc_model, expander(candidate))
+            return candidate
 
         best_point: dict | None = None
         best_result: Any = None
@@ -734,7 +765,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         ):
             try:
                 point, opt_result = pm.find_MAP(
-                    start=constrained_overrides(index, candidate_start),
+                    start=candidate_overrides(index, candidate_start),
                     method=resolved_method,
                     model=self.pymc_model,
                     return_raw=True,
@@ -757,11 +788,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 continue
 
             n_converged += 1
-            score = score_candidate(point)
+            score = candidate_score(point, opt_result)
             if score > best_score:
                 best_point, best_result, best_score = point, opt_result, score
 
         if best_point is None:
+            # Drop any estimate an *earlier* successful call cached. Without
+            # this the "a failed estimate is never cached" contract holds only
+            # on a first run: `model.map` would keep returning the stale point
+            # instead of raising, and `sample(initvals="map")` would slip past
+            # its `_map_dict is None` guard and initialize from it.
+            self._map_dict = None
             optimize.report_failure("MAP", failures, strict)
             return None
 
@@ -824,7 +861,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         se : optional
             If True, also compute standard errors from the observed information
             (the inverse Hessian of the observed log-likelihood). Costs
-            `2 * n_parameters` gradient evaluations plus an `n x n` inverse.
+            `2 * n_parameters` gradient evaluations, as many cheaper log-density
+            evaluations for the support check, and an `n x n` inverse.
             Defaults to False.
         seed : optional
             Seed for the jitter applied when `n_starts > 1`.
@@ -841,6 +879,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             True.
         kwargs
             Other arguments passed to `scipy.optimize.minimize`.
+            `include_transformed` is the exception, and mirrors `find_MAP`:
+            HSSM consumes it rather than forwarding it, because scoring and the
+            convergence audit both need the transformed names. They are always
+            computed and dropped from the returned mapping afterwards.
 
         Returns
         -------
@@ -876,6 +918,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         *bounded* MLE, which may sit on a boundary.
         """
         optimize.validate_n_starts(n_starts)
+        # Consumed here, exactly as `find_MAP` does: the scorer and the audit
+        # both need the transformed names, so they are always requested and
+        # dropped afterwards. Left in `kwargs` it would reach
+        # `scipy.optimize.minimize` as an unexpected keyword.
+        include_transformed = kwargs.pop("include_transformed", True)
         terms = optimize.group_specific_terms(self)
         if terms and not allow_unidentified:
             raise ValueError(
@@ -975,6 +1022,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 best_method = used_method
 
         if best_point is None:
+            # See the matching comment in `find_MAP`: a failed run must not
+            # leave a previous run's estimate reachable through `model.mle`.
+            self._mle_dict = None
             optimize.report_failure("MLE", failures, strict)
             return None
 
@@ -991,6 +1041,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             n_converged=n_converged,
             se=se,
             observed_only=True,
+            include_transformed=include_transformed,
         )
 
         self._mle_dict = estimate
