@@ -1,7 +1,7 @@
 """Type definitions for the HSSM package."""
 
 from os import PathLike
-from typing import Any, Callable, Literal, Optional, TypedDict, Union
+from typing import Any, Callable, Literal, NotRequired, Optional, TypedDict, Union
 
 import bambi as bmb
 import numpy as np
@@ -30,6 +30,8 @@ SupportedModels = Literal[
     "softmax_inv_temperature_3",
 ]
 
+ResponseKind = Literal["categorical", "continuous", "circular"]
+
 
 LoglikKind = Literal["analytical", "approx_differentiable", "blackbox"]
 
@@ -52,7 +54,10 @@ class DefaultConfig(TypedDict):
 
     response: list[str]
     list_params: list[str]
-    choices: list[int]
+    choices: list[int] | None
+    response_kind: NotRequired[ResponseKind]
+    response_bounds: NotRequired[dict[str, tuple[float, float]]]
+    rv: NotRequired[Any]
     description: Optional[str]
     likelihoods: LoglikConfigs
 
