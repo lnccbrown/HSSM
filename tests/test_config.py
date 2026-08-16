@@ -1,10 +1,12 @@
 import logging
+from copy import deepcopy
+from dataclasses import asdict
 
-import pytest
 import numpy as np
+import pytest
 
-from hssm.config import Config, ModelConfig
 import hssm
+from hssm.config import Config, ModelConfig
 
 
 hssm.set_floatX("float32")
@@ -19,6 +21,9 @@ def test_from_defaults():
     assert config1.list_params == ["v", "a", "z", "t"]
     assert config1.loglik_kind == "analytical"
     assert config1.loglik is not None
+    assert config1.response_kind == "categorical"
+    assert config1.response_bounds == {}
+    assert config1.choices == (-1, 1)
     assert "t" in config1.default_priors
     assert "v" in config1.bounds
     assert not config1.is_choice_only
@@ -90,6 +95,84 @@ def test_update_config():
 
     assert v_prior.name == "Normal"
     assert v_bounds == (-np.inf, np.inf)
+
+
+def test_non_categorical_response_metadata_round_trips():
+    bounds = {"response": (-np.pi, np.pi)}
+    user_config = ModelConfig(
+        response=("rt", "response"),
+        response_kind="circular",
+        response_bounds=bounds,
+        list_params=["v_x", "v_y", "a", "t"],
+    )
+
+    config = Config.from_defaults("custom", "blackbox")
+    config.update_config(deepcopy(user_config))
+    config.update_loglik(lambda *args: None)
+    config.validate()
+
+    assert config.response_kind == "circular"
+    assert config.response_bounds == bounds
+    assert config.choices is None
+    assert asdict(config)["response_bounds"] == bounds
+    assert user_config.response_bounds == bounds
+
+    config.response_bounds["response"] = (-1.0, 1.0)
+    assert user_config.response_bounds == bounds
+
+
+@pytest.mark.parametrize("response_kind", ["continuous", "circular"])
+def test_non_categorical_responses_reject_choices(response_kind):
+    config = Config(
+        model_name="custom",
+        response_kind=response_kind,
+        response_bounds={"response": (-np.pi, np.pi)},
+        choices=(0, 1),
+        list_params=["v"],
+        loglik_kind="blackbox",
+        loglik=lambda *args: None,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="`choices` must be None for continuous or circular responses",
+    ):
+        config.validate()
+
+
+def test_categorical_responses_require_choices():
+    config = Config(
+        model_name="custom",
+        choices=None,
+        list_params=["v"],
+        loglik_kind="blackbox",
+        loglik=lambda *args: None,
+    )
+
+    with pytest.raises(ValueError, match="choices.*categorical responses"):
+        config.validate()
+
+
+def test_circular_responses_require_valid_bounds():
+    config = Config(
+        model_name="custom",
+        response_kind="circular",
+        choices=None,
+        list_params=["v"],
+        loglik_kind="blackbox",
+        loglik=lambda *args: None,
+    )
+
+    with pytest.raises(ValueError, match="bounds are required.*response"):
+        config.validate()
+
+    config.response_bounds = {"response": (np.pi, -np.pi)}
+    with pytest.raises(ValueError, match="lower < upper"):
+        config.validate()
+
+    config.response_bounds = {"response": (-np.inf, np.inf)}
+    with pytest.raises(ValueError, match="must be finite"):
+        config.validate()
 
 
 class TestConfigBuildModelConfigExtraLogic:

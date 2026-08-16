@@ -6,6 +6,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
+from math import isfinite
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
 from bambi import Prior
@@ -32,6 +33,7 @@ DEFAULT_SSM_OBSERVED_DATA = ["rt", "response"]
 DEFAULT_SSM_CHOICES = (0, 1)
 
 ParamSpec = Union[float, dict[str, Any], Prior, None]
+ResponseKind = Literal["categorical", "continuous", "circular"]
 
 
 @dataclass
@@ -45,6 +47,8 @@ class BaseModelConfig(ABC):
     # Data specification
     response: list[str] | None = field(default_factory=DEFAULT_SSM_OBSERVED_DATA.copy)
     choices: tuple[int, ...] | None = DEFAULT_SSM_CHOICES
+    response_kind: ResponseKind = "categorical"
+    response_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
 
     # Parameter specification
     list_params: list[str] | None = None
@@ -85,6 +89,60 @@ class BaseModelConfig(ABC):
     def is_choice_only(self) -> bool:
         """Return whether the model is choice-only (no RT)."""
         return self.response is not None and len(self.response) == 1
+
+    def validate_response(self) -> None:
+        """Validate the response-domain metadata shared by HSSM model configs.
+
+        Bounds are keyed by observed response column. Continuous bounds are
+        optional and closed when present. Circular bounds are required, finite,
+        and interpreted as a lower-inclusive, upper-exclusive interval.
+        """
+        if self.response is None:
+            raise ValueError("Please provide `response` columns in the configuration.")
+
+        if self.response_kind not in {"categorical", "continuous", "circular"}:
+            raise ValueError(
+                "`response_kind` must be one of 'categorical', 'continuous', or "
+                "'circular'."
+            )
+
+        if self.response_kind == "categorical":
+            if self.choices is None:
+                raise ValueError("Please provide `choices` for categorical responses.")
+            return
+
+        if self.choices is not None:
+            raise ValueError(
+                "`choices` must be None for continuous or circular responses."
+            )
+
+        response_columns = self.response if self.is_choice_only else self.response[1:]
+        unexpected_columns = set(self.response_bounds) - set(response_columns)
+        if unexpected_columns:
+            names = ", ".join(sorted(unexpected_columns))
+            raise ValueError(
+                f"Response bounds were provided for unrecognized column(s): {names}."
+            )
+
+        if self.response_kind == "circular":
+            missing_columns = set(response_columns) - set(self.response_bounds)
+            if missing_columns:
+                names = ", ".join(sorted(missing_columns))
+                raise ValueError(
+                    f"Circular response bounds are required for column(s): {names}."
+                )
+
+        for column, (lower, upper) in self.response_bounds.items():
+            if lower >= upper:
+                raise ValueError(
+                    f"Response bounds for {column!r} must satisfy lower < upper."
+                )
+            if self.response_kind == "circular" and not (
+                isfinite(lower) and isfinite(upper)
+            ):
+                raise ValueError(
+                    f"Circular response bounds for {column!r} must be finite."
+                )
 
 
 @dataclass
@@ -226,6 +284,12 @@ class Config(BaseModelConfig):
         """
         if user_config.response is not None:
             self.response = list(user_config.response)  # type: ignore[assignment]
+        if user_config.response_kind is not None:
+            self.response_kind = user_config.response_kind
+            if self.response_kind != "categorical" and user_config.choices is None:
+                self.choices = None
+        if user_config.response_bounds is not None:
+            self.response_bounds = deepcopy(user_config.response_bounds)
         if user_config.list_params is not None:
             self.list_params = user_config.list_params
         if user_config.choices is not None:
@@ -245,12 +309,9 @@ class Config(BaseModelConfig):
 
     def validate(self) -> None:
         """Ensure that mandatory fields are not None."""
-        if self.response is None:
-            raise ValueError("Please provide `response` columns in the configuration.")
+        self.validate_response()
         if self.list_params is None:
             raise ValueError("Please provide `list_params`.")
-        if self.choices is None:
-            raise ValueError("Please provide `choices`.")
         if self.loglik is None:
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
@@ -324,6 +385,8 @@ class ModelConfig:
     """Representation for model_config provided by the user."""
 
     response: tuple[str, ...] | None = None
+    response_kind: ResponseKind | None = None
+    response_bounds: dict[str, tuple[float, float]] | None = None
     list_params: list[str] | None = None
     choices: tuple[int, ...] | None = None
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
