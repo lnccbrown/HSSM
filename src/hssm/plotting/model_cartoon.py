@@ -61,6 +61,18 @@ class PlotFunctionProtocol(Protocol):
         ...
 
 
+def _require_categorical_choices(
+    choices: list[int] | tuple[int, ...] | None, model_name: str
+) -> list[int]:
+    """Return model choices or reject non-categorical cartoon requests."""
+    if choices is None:
+        raise ValueError(
+            "Model cartoons currently require categorical responses with explicit "
+            f"choices; model {model_name!r} has non-categorical responses."
+        )
+    return list(choices)
+
+
 def _cartoon_model_meta(model) -> tuple[list[str], list[int]]:
     """Return ``(list_params, choices)`` for a fitted model.
 
@@ -73,9 +85,13 @@ def _cartoon_model_meta(model) -> tuple[list[str], list[int]]:
     """
     cfg = default_model_config.get(model.model_name)
     if cfg is not None:
-        return list(cfg["list_params"]), list(cfg["choices"])
+        return list(cfg["list_params"]), _require_categorical_choices(
+            cfg["choices"], model.model_name
+        )
     mc = model.model_config
-    return list(mc.list_params), list(mc.choices)
+    return list(mc.list_params), _require_categorical_choices(
+        mc.choices, model.model_name
+    )
 
 
 def _resolve_uncertainty_from_legacy(
@@ -191,7 +207,9 @@ def _plot_model_cartoon_1D(
     if list_params is None or choices is None:
         config_tmp = default_model_config[cast("SupportedModels", model_name)]
         list_params = list_params or config_tmp["list_params"]
-        choices = choices or config_tmp["choices"]
+        choices = _require_categorical_choices(
+            choices if choices is not None else config_tmp["choices"], model_name
+        )
     model_params = list_params
 
     n_choices = len(choices)
@@ -2834,6 +2852,7 @@ def plot_func_model_n(
     # fall back to the registry for built-in models called directly.
     if choices is None:
         choices = default_model_config[cast("SupportedModels", model_name)]["choices"]
+    choices = _require_categorical_choices(choices, model_name)
 
     # Shared bin edges for every histogram on this axis (see plot_func_model).
     if bins is None:
