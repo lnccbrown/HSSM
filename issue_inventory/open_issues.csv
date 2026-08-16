@@ -1,0 +1,109 @@
+number,title,url,state,author,labels,comments,created_at,updated_at,age_days,days_since_update,category
+1189,az.summary HTML repr ignores pandas display.max_rows (arviz-stats SummaryDataFrame),https://github.com/lnccbrown/hssm/issues/1189,open,AlexanderFengler,,1,2026-08-13T22:31:15Z,2026-08-13T22:31:19Z,3,3,Other / Bugs
+1185,drift: HSSM scheduled checks failing,https://github.com/lnccbrown/hssm/issues/1185,open,github-actions,drift,1,2026-08-13T20:36:44Z,2026-08-13T20:36:48Z,3,3,CI / Release
+1146,hssm.load_data() typing,https://github.com/lnccbrown/hssm/issues/1146,open,digicosmos86,,1,2026-08-06T13:32:08Z,2026-08-06T13:32:13Z,10,10,Architecture / API
+1139,Reduce the number of parameters in integration tests,https://github.com/lnccbrown/hssm/issues/1139,open,digicosmos86,,1,2026-08-05T15:30:57Z,2026-08-05T15:31:01Z,11,11,Tests / Test suite
+1138,Move integration tests to tests/integration folder,https://github.com/lnccbrown/hssm/issues/1138,open,digicosmos86,,1,2026-08-05T15:30:08Z,2026-08-05T15:30:12Z,11,11,Tests / Test suite
+1128,plot_model_cartoon: remove the deprecation shims (two minor releases after #1124),https://github.com/lnccbrown/hssm/issues/1128,open,AlexanderFengler,,1,2026-08-02T15:59:40Z,2026-08-02T15:59:43Z,14,14,Plotting
+1126,"plot_model_cartoon: kind=""kde"" with NDT-boundary-corrected kernels",https://github.com/lnccbrown/hssm/issues/1126,open,AlexanderFengler,,2,2026-08-02T15:59:37Z,2026-08-02T20:13:47Z,14,14,Plotting
+1120,Misc unit tests moves,https://github.com/lnccbrown/hssm/issues/1120,open,cpaniaguam,,1,2026-07-28T19:52:46Z,2026-07-28T20:42:27Z,19,19,Tests / Test suite
+1103,Organize plotting tests,https://github.com/lnccbrown/hssm/issues/1103,open,cpaniaguam,,1,2026-07-27T17:34:57Z,2026-07-27T17:35:02Z,20,20,Tests / Test suite
+1102,add MAP /MLE functions,https://github.com/lnccbrown/hssm/issues/1102,open,frankmj,,1,2026-07-27T15:57:29Z,2026-07-27T15:57:33Z,20,20,Sampling / Inference
+1092,Fixing a parameter with backend='jax' fails with a bare AssertionError in specifyshape,https://github.com/lnccbrown/hssm/issues/1092,open,AlexanderFengler,,1,2026-07-26T04:09:36Z,2026-07-26T04:09:40Z,21,21,Other / Bugs
+1089,Group unit tests,https://github.com/lnccbrown/hssm/issues/1089,open,cpaniaguam,,1,2026-07-24T15:54:00Z,2026-07-24T15:54:16Z,23,23,Tests / Test suite
+1088,Restructure tests,https://github.com/lnccbrown/hssm/issues/1088,open,digicosmos86,,1,2026-07-24T13:48:08Z,2026-07-24T13:48:12Z,23,23,Tests / Test suite
+1085,New aDDM estimation function,https://github.com/lnccbrown/hssm/issues/1085,open,JamesWeiChen,,5,2026-07-22T12:24:02Z,2026-07-29T20:44:08Z,25,18,aDDM
+1083,Tracking: eliminate the release-CI timeout and speed up the test suite,https://github.com/lnccbrown/hssm/issues/1083,open,AlexanderFengler,github_actions;release,1,2026-07-15T18:34:57Z,2026-07-15T18:35:02Z,32,32,CI / Release
+1082,CI: pilot pytest-xdist on one slow batch,https://github.com/lnccbrown/hssm/issues/1082,open,AlexanderFengler,enhancement;github_actions,1,2026-07-15T18:34:55Z,2026-07-15T18:34:59Z,32,32,CI / Release
+1081,"tests: batch of small measured trims (~5-8 min slow suite, ~1-2 min fast suite)",https://github.com/lnccbrown/hssm/issues/1081,open,AlexanderFengler,chore,1,2026-07-15T18:34:54Z,2026-07-15T18:35:11Z,32,32,Tests / Test suite
+1080,tests: test_plotting_cartoon re-samples predictives in every parametrization - ship predictive groups in the cartoon fixtures,https://github.com/lnccbrown/hssm/issues/1080,open,AlexanderFengler,refactor,1,2026-07-15T18:34:52Z,2026-07-15T18:34:57Z,32,32,Tests / Test suite
+1079,tests: test_sample_posterior_predictive - 4 cases x ~128 s predict over all 500 posterior draws; use a thinned fixture variant,https://github.com/lnccbrown/hssm/issues/1079,open,AlexanderFengler,refactor,1,2026-07-15T18:34:50Z,2026-07-15T18:34:54Z,32,32,Tests / Test suite
+1078,tests: reduce the cloned 20-row sampler-dispatch grids to a coverage-preserving 9-row design,https://github.com/lnccbrown/hssm/issues/1078,open,AlexanderFengler,refactor;chore,1,2026-07-15T18:34:48Z,2026-07-15T18:34:53Z,32,32,Tests / Test suite
+1077,CI: rebalance the slow-test batches (19.8 / 22.9 / 53.3 min -> ~29 / 29 / 29),https://github.com/lnccbrown/hssm/issues/1077,open,AlexanderFengler,github_actions;chore,1,2026-07-15T18:34:47Z,2026-07-15T18:34:51Z,32,32,CI / Release
+1076,CI: coverage.yml re-runs the full suite serially (~2 h) on every main push - upload per-batch coverage instead,https://github.com/lnccbrown/hssm/issues/1076,open,AlexanderFengler,github_actions;chore,1,2026-07-15T18:34:45Z,2026-07-15T18:34:49Z,32,32,CI / Release
+1075,"tests: pytest addopts cleanup - drop global --cov/--exitfirst/--capture=no, add --durations, raise --timeout",https://github.com/lnccbrown/hssm/issues/1075,open,AlexanderFengler,chore,1,2026-07-15T18:34:43Z,2026-07-15T18:34:47Z,32,32,Tests / Test suite
+1074,tests: test_addm_waic_loo costs 16.6 min per CI run - deterministic timeout + untimed rerun; replace MCMC with a synthetic posterior,https://github.com/lnccbrown/hssm/issues/1074,open,AlexanderFengler,bug;chore,1,2026-07-15T18:34:41Z,2026-07-15T18:34:45Z,32,32,Tests / Test suite
+1073,CI: release publish gate runs the full test suite serially in one 90-min job - reuse the 3-batch slow split,https://github.com/lnccbrown/hssm/issues/1073,open,AlexanderFengler,bug;github_actions;release,1,2026-07-15T18:34:39Z,2026-07-15T18:34:43Z,32,32,CI / Release
+1072,Publish workflow: workflow_dispatch builds main instead of the release tag; no version-vs-tag guard; main version regressed to 0.4.0,https://github.com/lnccbrown/hssm/issues/1072,open,AlexanderFengler,,1,2026-07-15T18:29:25Z,2026-07-15T18:29:30Z,32,32,CI / Release
+1061,CI: test job can hang 90 min when HuggingFace download stalls during pytest collection,https://github.com/lnccbrown/hssm/issues/1061,open,AlexanderFengler,,1,2026-07-14T01:02:09Z,2026-07-14T01:02:13Z,33,33,CI / Release
+1052,Choice-only RLSSM: ssms.rl presets (ssm-simulators >= 0.13) not buildable through the RV path - smoke tests skipped,https://github.com/lnccbrown/hssm/issues/1052,open,AlexanderFengler,,3,2026-07-13T04:23:24Z,2026-07-13T21:00:45Z,34,34,RLSSM
+1046,Add outputs to recommend GPU usage,https://github.com/lnccbrown/hssm/issues/1046,open,frankmj,,1,2026-07-09T15:55:48Z,2026-07-09T15:55:51Z,38,38,Architecture / API
+1045,add function for Savage Dickey Ratio test,https://github.com/lnccbrown/hssm/issues/1045,open,frankmj,,1,2026-07-09T15:53:54Z,2026-07-09T15:53:58Z,38,38,Sampling / Inference
+1039,aDDM model cartoon: condition on observed fixations + honor continuation policy (currently generic-SSM re-simulation),https://github.com/lnccbrown/hssm/issues/1039,open,AlexanderFengler,,1,2026-07-08T12:24:09Z,2026-07-08T12:24:12Z,39,39,aDDM
+1038,Report metrics on inference speed changes before and after the PyMC6 migration,https://github.com/lnccbrown/hssm/issues/1038,open,digicosmos86,,1,2026-07-07T18:14:52Z,2026-07-07T18:14:55Z,40,40,Sampling / Inference
+1031,"Generalize the model-config registry to support subclass models (aDDM, RLSSM)",https://github.com/lnccbrown/hssm/issues/1031,open,AlexanderFengler,,1,2026-07-05T19:16:51Z,2026-07-05T19:16:54Z,42,42,Architecture / API
+1012,[ADDM] Review of v0 of ADDM subclass integration,https://github.com/lnccbrown/hssm/issues/1012,open,AndrewZhang599,,1,2026-06-26T06:06:36Z,2026-06-26T06:06:40Z,51,51,aDDM
+972,Populate supported models from registry,https://github.com/lnccbrown/hssm/issues/972,open,cpaniaguam,,0,2026-06-01T20:27:51Z,2026-06-01T20:28:45Z,76,76,Architecture / API
+959,Misleading initial values output after HSSM clears PyMC initial-value registry,https://github.com/lnccbrown/hssm/issues/959,open,krishnbera,bug,0,2026-05-11T17:52:52Z,2026-05-11T17:52:52Z,97,97,Other / Bugs
+958,Isolate single stage aDDM from `efficient-fpt` repo and make it an analytical `angle` likelihood,https://github.com/lnccbrown/hssm/issues/958,open,AlexanderFengler,model;likeliihood,0,2026-05-10T04:42:27Z,2026-05-10T04:42:27Z,98,98,aDDM
+954,Proper Bayesfow integration,https://github.com/lnccbrown/hssm/issues/954,open,AlexanderFengler,enhancement,2,2026-05-06T00:11:04Z,2026-05-20T17:59:24Z,102,88,BayesFlow / SBI
+952,Deprecate legacy `include` in model classes,https://github.com/lnccbrown/hssm/issues/952,open,cpaniaguam,,0,2026-04-28T19:02:36Z,2026-04-28T19:02:36Z,110,110,Architecture / API
+942,Create base.py anew to facilitate merge conflict resolution,https://github.com/lnccbrown/hssm/issues/942,open,cpaniaguam,,0,2026-04-02T17:13:17Z,2026-04-02T17:13:34Z,136,136,Architecture / API
+939,Add save_model / load_model to RLSSM,https://github.com/lnccbrown/hssm/issues/939,open,cpaniaguam,,0,2026-03-27T14:34:38Z,2026-03-27T14:34:38Z,142,142,RLSSM
+934,Access configs from config objects,https://github.com/lnccbrown/hssm/issues/934,open,cpaniaguam,,0,2026-03-13T13:40:00Z,2026-03-13T13:40:00Z,156,156,Architecture / API
+932,Clarify support for `choices` as int in HSSM class,https://github.com/lnccbrown/hssm/issues/932,open,cpaniaguam,,1,2026-03-11T18:58:16Z,2026-03-11T19:01:11Z,158,158,Architecture / API
+930,Pass configs via dependency injection into model classes (BaseModelConfig-only; dict supported),https://github.com/lnccbrown/hssm/issues/930,open,cpaniaguam,dependencies,0,2026-03-11T14:26:51Z,2026-03-11T14:26:51Z,158,158,Architecture / API
+925,Incorporate choice-only simulator from `ssm-simulators` once implemented,https://github.com/lnccbrown/hssm/issues/925,open,digicosmos86,,0,2026-03-10T13:33:43Z,2026-03-10T13:34:14Z,159,159,Models / Likelihoods
+916,Add poisson race tutorial to docs properly,https://github.com/lnccbrown/hssm/issues/916,open,AlexanderFengler,,0,2026-03-03T16:54:31Z,2026-03-03T16:54:31Z,166,166,Documentation
+895,Make _make_model_distribution an abstract method in HSSMBase,https://github.com/lnccbrown/hssm/issues/895,open,cpaniaguam,,0,2026-02-11T18:38:26Z,2026-02-11T18:38:26Z,186,186,Architecture / API
+894,MCMC sampling hangs in tests/test_save_load.py::test_save_load_vi_mcmc possibly after external dependency updates,https://github.com/lnccbrown/hssm/issues/894,open,cpaniaguam,,1,2026-02-11T17:53:16Z,2026-02-11T17:53:46Z,186,186,Tests / Test suite
+881,Fully support choice only models,https://github.com/lnccbrown/hssm/issues/881,open,AlexanderFengler,,3,2026-01-22T06:17:19Z,2026-01-25T15:40:22Z,206,203,Models / Likelihoods
+873,Create the `HSSMBase` class that `HSSM` and `RLSSM` classes both inheirt from,https://github.com/lnccbrown/hssm/issues/873,open,digicosmos86,,0,2026-01-13T15:47:54Z,2026-01-13T15:48:02Z,215,215,Architecture / API
+872,"Now that we want to be type-safe, we should make protocols for learning process and decision process functions with different metatdata requirements",https://github.com/lnccbrown/hssm/issues/872,open,cpaniaguam,,0,2026-01-09T20:13:15Z,2026-01-09T20:13:15Z,219,219,RLSSM
+871,Generalize target param computation framework,https://github.com/lnccbrown/hssm/issues/871,open,cpaniaguam,,0,2026-01-09T20:11:08Z,2026-01-09T20:11:08Z,219,219,RLSSM
+870,Support padding in RLSSM,https://github.com/lnccbrown/hssm/issues/870,open,cpaniaguam,,0,2026-01-09T16:06:19Z,2026-01-09T16:06:39Z,219,219,RLSSM
+869,High number of divergences in DDM sampling,https://github.com/lnccbrown/hssm/issues/869,open,morgbead,,0,2026-01-07T15:11:21Z,2026-01-07T15:45:03Z,221,221,Sampling / Inference
+865,Ensure ssm_logp_func are compatible with blackbox/analytical likelihoods,https://github.com/lnccbrown/hssm/issues/865,open,cpaniaguam,,0,2025-12-16T15:08:00Z,2025-12-16T15:08:00Z,243,243,Models / Likelihoods
+856,hssm.graph() does not render in marimo notebook,https://github.com/lnccbrown/hssm/issues/856,open,Jovan-Kemp,,1,2025-12-06T21:18:15Z,2025-12-11T19:07:33Z,253,248,Plotting
+855,`params_is_reg` argument should accept a dictionary.,https://github.com/lnccbrown/hssm/issues/855,open,AlexanderFengler,,0,2025-12-02T18:05:45Z,2025-12-02T18:05:45Z,257,257,Architecture / API
+844,Broadcasting error when using default intercept (1) on DDM model,https://github.com/lnccbrown/hssm/issues/844,open,morgbead,bug,4,2025-11-04T22:18:31Z,2025-12-12T19:28:19Z,285,247,Other / Bugs
+842,fixed vector parameters should be possible,https://github.com/lnccbrown/hssm/issues/842,open,AlexanderFengler,enhancement,0,2025-11-02T03:57:11Z,2025-11-02T19:15:50Z,287,287,Architecture / API
+841,Print out should include whether model uses centered or non-centered parameterization,https://github.com/lnccbrown/hssm/issues/841,open,AlexanderFengler,enhancement;good first issue,0,2025-10-29T15:28:57Z,2025-10-29T15:28:57Z,291,291,Architecture / API
+816,Failing parameter recovery on truncated data,https://github.com/lnccbrown/hssm/issues/816,open,ddgpalmer,,1,2025-10-01T22:33:32Z,2025-10-15T18:27:28Z,319,305,Sampling / Inference
+813,Plotting utilities for RLSSM models,https://github.com/lnccbrown/hssm/issues/813,open,krishnbera,,0,2025-09-21T18:48:06Z,2025-09-21T18:53:39Z,329,329,RLSSM
+812,RLSSM simulators,https://github.com/lnccbrown/hssm/issues/812,open,krishnbera,,0,2025-09-21T18:47:46Z,2026-05-20T00:03:14Z,329,88,RLSSM
+811,RLSSM posterior predictive checks,https://github.com/lnccbrown/hssm/issues/811,open,krishnbera,,0,2025-09-21T18:47:19Z,2025-09-21T18:53:26Z,329,329,RLSSM
+810,Incorporate RLSSM likelihoods,https://github.com/lnccbrown/hssm/issues/810,open,krishnbera,,0,2025-09-21T18:46:51Z,2025-09-21T20:11:53Z,329,329,RLSSM
+809,Creating pymc Distribution objects,https://github.com/lnccbrown/hssm/issues/809,open,krishnbera,,0,2025-09-21T18:42:37Z,2025-09-21T18:42:37Z,329,329,RLSSM
+808,Parameter processing for RLSSM models,https://github.com/lnccbrown/hssm/issues/808,open,krishnbera,,0,2025-09-21T18:39:01Z,2025-09-21T19:39:24Z,329,329,RLSSM
+807,Adjust logic in the HSSM class for missing data and deadlines,https://github.com/lnccbrown/hssm/issues/807,open,krishnbera,,0,2025-09-21T18:37:34Z,2025-09-21T19:30:53Z,329,329,RLSSM
+806,Add data validators for RLSSM models,https://github.com/lnccbrown/hssm/issues/806,open,krishnbera,,0,2025-09-21T18:36:34Z,2025-09-21T19:38:54Z,329,329,RLSSM
+804,Full integration of RLSSM,https://github.com/lnccbrown/hssm/issues/804,open,krishnbera,,0,2025-09-21T18:15:14Z,2025-09-21T18:15:14Z,329,329,RLSSM
+801,New Analytical Models: Poisson Race Model,https://github.com/lnccbrown/hssm/issues/801,open,AlexanderFengler,enhancement;good first issue,1,2025-09-12T14:50:16Z,2025-09-18T23:07:23Z,338,332,Models / Likelihoods
+800,New Analytical Models: Extrema Detection,https://github.com/lnccbrown/hssm/issues/800,open,AlexanderFengler,enhancement;good first issue,0,2025-09-12T14:43:51Z,2025-09-12T14:43:51Z,338,338,Models / Likelihoods
+799,New Analytical Models: Racing Diffusion,https://github.com/lnccbrown/hssm/issues/799,open,AlexanderFengler,enhancement;good first issue,0,2025-09-12T14:42:08Z,2025-09-12T14:42:08Z,338,338,Models / Likelihoods
+798,New models: ExGaussian and Shifted Wald,https://github.com/lnccbrown/hssm/issues/798,open,AlexanderFengler,enhancement;good first issue,1,2025-09-12T14:40:40Z,2025-10-03T15:45:33Z,338,317,Models / Likelihoods
+794,Always include `p_outlier` in `make_distribution`,https://github.com/lnccbrown/hssm/issues/794,open,digicosmos86,,0,2025-09-10T14:13:27Z,2025-09-10T14:13:27Z,340,340,p_outlier
+793,Always include `p_outlier` in `make_hssm_rv`,https://github.com/lnccbrown/hssm/issues/793,open,digicosmos86,,0,2025-09-10T14:12:30Z,2025-09-10T14:12:30Z,340,340,p_outlier
+792,Always add `p_outlier` to `list_params` in HSSM,https://github.com/lnccbrown/hssm/issues/792,open,digicosmos86,,0,2025-09-10T14:10:12Z,2025-09-10T14:10:12Z,340,340,p_outlier
+791,fix confusion around `p_outlier`,https://github.com/lnccbrown/hssm/issues/791,open,digicosmos86,,0,2025-09-10T14:09:38Z,2025-09-10T14:09:38Z,340,340,p_outlier
+777,Fix header and title for HSSM MathPsych tutorial 2025,https://github.com/lnccbrown/hssm/issues/777,open,AlexanderFengler,,0,2025-08-03T20:24:46Z,2025-08-03T20:24:46Z,378,378,Documentation
+776,BayesFlow native contribution pipeline,https://github.com/lnccbrown/hssm/issues/776,open,AlexanderFengler,,0,2025-08-02T20:13:47Z,2025-08-02T20:13:47Z,379,379,BayesFlow / SBI
+775,Example: BayesFlow Likelihood as serialized JAX function,https://github.com/lnccbrown/hssm/issues/775,open,AlexanderFengler,,0,2025-08-02T20:10:52Z,2025-08-02T20:11:08Z,379,379,BayesFlow / SBI
+754,`p_outlier` has strictly equality above 0?,https://github.com/lnccbrown/hssm/issues/754,open,AlexanderFengler,enhancement,3,2025-07-03T08:59:48Z,2025-08-05T13:51:54Z,409,376,p_outlier
+739,Refactor: A more general JAX to Pytensor Op wrapper that handles both differentiable and non-differentiable cases,https://github.com/lnccbrown/hssm/issues/739,open,digicosmos86,,2,2025-06-25T12:56:41Z,2025-08-05T14:05:45Z,417,376,Architecture / API
+721,Posterior predictive checks within HSSM,https://github.com/lnccbrown/hssm/issues/721,open,AbsDey,,4,2025-05-03T18:05:17Z,2025-05-06T17:55:34Z,470,467,Sampling / Inference
+720,Boundary parameter a model instability without intercept leads to NaN r_hat,https://github.com/lnccbrown/hssm/issues/720,open,YuanboBQ,,1,2025-04-24T13:51:04Z,2025-05-31T03:36:30Z,479,442,Sampling / Inference
+702,Consider allowing passing a pymc distribution directly when applying lapse distribution,https://github.com/lnccbrown/hssm/issues/702,open,cpaniaguam,,0,2025-04-05T23:31:24Z,2025-04-05T23:31:24Z,498,498,Architecture / API
+697,consistent treatment of `dt` parameter,https://github.com/lnccbrown/hssm/issues/697,open,AlexanderFengler,enhancement;chore,0,2025-03-30T19:18:41Z,2025-08-02T19:40:33Z,504,379,Architecture / API
+685,Default priors are the same for the centered and non-centered parametrization,https://github.com/lnccbrown/hssm/issues/685,open,igrahek,,1,2025-03-12T00:46:55Z,2025-03-19T02:37:42Z,522,515,Priors
+661,Update docs/tutorials/main_tutorial.ipynb,https://github.com/lnccbrown/hssm/issues/661,open,cpaniaguam,documentation,1,2025-02-14T19:57:02Z,2025-03-13T01:32:25Z,548,521,Documentation
+659,Import config functions on demand,https://github.com/lnccbrown/hssm/issues/659,open,cpaniaguam,,2,2025-02-14T17:21:19Z,2025-08-02T19:43:54Z,548,379,Architecture / API
+645,"Add go / no-go capability and opn / cpn networks for: 'ddm', 'angle', 'weibull'",https://github.com/lnccbrown/hssm/issues/645,open,AlexanderFengler,pipeline,1,2025-01-31T13:31:55Z,2025-04-09T15:50:35Z,562,494,Models / Likelihoods
+642,Unify prior definitions within code base,https://github.com/lnccbrown/hssm/issues/642,open,cpaniaguam,nice to have,0,2025-01-28T18:41:05Z,2025-01-28T18:42:13Z,565,565,Priors
+602,A tutorial for fitting the DDM to conflic task,https://github.com/lnccbrown/hssm/issues/602,open,suwangcn,,1,2024-11-16T00:47:28Z,2024-11-28T03:44:30Z,638,626,Documentation
+587,Reconciling the issues with under-the-hood truncation in HSSM,https://github.com/lnccbrown/hssm/issues/587,open,digicosmos86,,0,2024-09-20T13:34:56Z,2024-09-20T13:36:39Z,695,695,Sampling / Inference
+512,Cannot use specific parameter title for custom model config,https://github.com/lnccbrown/hssm/issues/512,open,AndrewZhang599,,3,2024-07-20T15:47:12Z,2024-08-22T15:25:46Z,757,724,Architecture / API
+498,Different coordinates for some parameters in the inference data,https://github.com/lnccbrown/hssm/issues/498,open,hyang336,bug;upstream,2,2024-07-18T22:58:51Z,2025-01-21T13:32:59Z,759,572,Other / Bugs
+494,using hierarchical models with random slope resutling in sampling problem,https://github.com/lnccbrown/hssm/issues/494,open,YuanboBQ,,8,2024-07-17T04:07:06Z,2024-07-17T16:28:36Z,760,760,Sampling / Inference
+472,(Documentation) Add details in huggingface repo for further development of LANs,https://github.com/lnccbrown/hssm/issues/472,open,jainraj,,1,2024-06-24T05:50:26Z,2024-06-25T02:00:22Z,783,782,Documentation
+462,Convergence issues when running model with categorical covariates in hierarchy,https://github.com/lnccbrown/hssm/issues/462,open,AlexanderFengler,,3,2024-06-14T16:51:58Z,2025-01-21T13:41:42Z,793,572,Sampling / Inference
+458,Add test configuration for `test_hssm.py` that includes categorial covariates,https://github.com/lnccbrown/hssm/issues/458,open,AlexanderFengler,,0,2024-06-13T15:42:29Z,2024-06-13T15:42:29Z,794,794,Tests / Test suite
+456,"`nan` grads when running `find_MAP()` on `analytic`, `ddm`",https://github.com/lnccbrown/hssm/issues/456,open,AlexanderFengler,bug,0,2024-06-11T02:29:21Z,2024-06-13T15:31:23Z,796,794,Sampling / Inference
+449,Prior bounds should override explicit bounds,https://github.com/lnccbrown/hssm/issues/449,open,AlexanderFengler,enhancement,0,2024-05-25T23:47:23Z,2024-05-25T23:47:24Z,813,813,Priors
+412,Add `ddm_sdv` onnx model to HF,https://github.com/lnccbrown/hssm/issues/412,open,jainraj,bug,3,2024-05-06T13:47:47Z,2024-06-21T05:50:32Z,832,786,Models / Likelihoods
+387,Specifying priors for categorical variables in regression does not work,https://github.com/lnccbrown/hssm/issues/387,open,eort,bug;upstream,11,2024-04-05T13:18:49Z,2026-07-30T16:34:48Z,863,17,Priors
+353,LANs for full DDM,https://github.com/lnccbrown/hssm/issues/353,open,igrahek,enhancement,1,2024-02-15T22:57:31Z,2024-05-23T14:56:48Z,913,815,Models / Likelihoods
+347,Add DIC function as util method,https://github.com/lnccbrown/hssm/issues/347,open,AlexanderFengler,enhancement,0,2024-01-29T15:18:42Z,2024-01-29T15:18:43Z,930,930,Sampling / Inference
+312,Add some example datasets to package for testing robustness of priors,https://github.com/lnccbrown/hssm/issues/312,open,AlexanderFengler,enhancement,0,2023-11-01T18:45:56Z,2023-11-01T18:45:56Z,1019,1019,Priors
+285,Add note on `a` parameter meaning to docs,https://github.com/lnccbrown/hssm/issues/285,open,AlexanderFengler,documentation,1,2023-09-22T20:15:40Z,2023-09-27T17:37:43Z,1059,1054,Documentation
