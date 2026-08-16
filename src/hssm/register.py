@@ -61,16 +61,19 @@ def register_model(
     if name in registered_models:
         raise ValueError(f"Model '{name}' already exists")
 
-    _config = {
+    _config: dict[str, Any] = {
         "response": response,
         "list_params": list_params,
         "choices": choices,
-        "response_kind": response_kind,
-        "response_bounds": response_bounds or {},
-        "rv": rv,
         "description": description,
         "likelihoods": likelihoods,
     }
+    if response_kind != "categorical":
+        _config["response_kind"] = response_kind
+    if response_bounds is not None:
+        _config["response_bounds"] = response_bounds
+    if rv is not None:
+        _config["rv"] = rv
     config = cast("DefaultConfig", _config)
 
     # TODO: validate provided configs?
