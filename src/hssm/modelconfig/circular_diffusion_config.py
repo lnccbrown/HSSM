@@ -3,7 +3,11 @@
 from math import pi
 
 from .._types import DefaultConfig
-from ..integrations.jeam import logp_circular_diffusion, simulate_circular_diffusion
+from ..integrations.jeam import (
+    logp_circular_diffusion,
+    logp_circular_diffusion_jax,
+    simulate_circular_diffusion,
+)
 
 
 def get_circular_diffusion_config() -> DefaultConfig:
@@ -24,7 +28,25 @@ def get_circular_diffusion_config() -> DefaultConfig:
             "Experimental fixed-boundary JEAM circular diffusion model with "
             "Cartesian drift"
         ),
+        "default_loglik_kind": "blackbox",
         "likelihoods": {
+            "approx_differentiable": {
+                "loglik": logp_circular_diffusion_jax,
+                "backend": "jax",
+                "default_priors": {
+                    "t": {
+                        "name": "HalfNormal",
+                        "sigma": 2.0,
+                    },
+                },
+                "bounds": {
+                    "v_x": (-3.0, 3.0),
+                    "v_y": (-3.0, 3.0),
+                    "a": (0.1, 3.0),
+                    "t": (0.0, 2.0),
+                },
+                "extra_fields": None,
+            },
             "blackbox": {
                 "loglik": logp_circular_diffusion,
                 "backend": None,
@@ -41,6 +63,6 @@ def get_circular_diffusion_config() -> DefaultConfig:
                     "t": (0.0, 2.0),
                 },
                 "extra_fields": None,
-            }
+            },
         },
     }

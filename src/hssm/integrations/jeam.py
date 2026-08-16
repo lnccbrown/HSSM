@@ -24,6 +24,30 @@ def _load_circular_diffusion_model() -> Callable[..., Any]:
     return CircularDiffusionModel
 
 
+def _load_fixed_cdm_logpdf_single() -> Callable[..., Any]:
+    """Load JEAM's JAX kernel without importing JEAM from base HSSM paths."""
+    try:
+        from jeam.likelihoods.jax_fixed import fixed_cdm_logpdf_single
+    except ModuleNotFoundError as exc:
+        if exc.name == "jeam" or (
+            exc.name is not None and exc.name.startswith("jeam.")
+        ):
+            raise ImportError(
+                "The experimental JEAM integration requires the "
+                "`jeam-prototype` dependency group. Install it with "
+                "`uv sync --group jeam-prototype`."
+            ) from exc
+        raise
+    except ImportError as exc:
+        raise ImportError(
+            "The installed JEAM revision does not provide the differentiable "
+            "fixed-CDM likelihood. Refresh it with "
+            "`uv sync --group jeam-prototype --locked`."
+        ) from exc
+
+    return fixed_cdm_logpdf_single
+
+
 def _broadcast_parameter(
     value: float | np.ndarray, name: str, n_observations: int
 ) -> np.ndarray:
@@ -124,6 +148,33 @@ def logp_circular_diffusion(
     return logp
 
 
+def logp_circular_diffusion_jax(
+    data: Any,
+    v_x: Any,
+    v_y: Any,
+    a: Any,
+    t: Any,
+) -> Any:
+    """Evaluate one strict fixed-CDM log density through JEAM's JAX kernel.
+
+    ``data`` is one HSSM observation in ``[rt, response]`` order. HSSM's standard
+    differentiable-likelihood builder vmaps this single-trial callable according to
+    the model's scalar and regression-generated parameter shapes. The diffusion scale
+    is fixed to one, matching :func:`logp_circular_diffusion`; no finite density floor
+    is applied on this strict inference path.
+    """
+    fixed_cdm_logpdf_single = _load_fixed_cdm_logpdf_single()
+    return fixed_cdm_logpdf_single(
+        data[0],
+        data[1],
+        v_x,
+        v_y,
+        a,
+        t,
+        sigma=1.0,
+    )
+
+
 def _normalize_simulator_theta(theta: np.ndarray) -> np.ndarray:
     """Normalize HSSM simulator parameters to one ``[v_x, v_y, a, t]`` row."""
     try:
@@ -222,4 +273,8 @@ setattr(simulate_circular_diffusion, "choices", [])
 setattr(simulate_circular_diffusion, "obs_dim", 2)
 
 
-__all__ = ["logp_circular_diffusion", "simulate_circular_diffusion"]
+__all__ = [
+    "logp_circular_diffusion",
+    "logp_circular_diffusion_jax",
+    "simulate_circular_diffusion",
+]

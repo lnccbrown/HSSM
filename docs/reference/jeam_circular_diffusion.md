@@ -20,7 +20,7 @@ uv sync --group jeam-prototype
 ```
 
 The group pins the HSSM fork of JEAM to
-[`a9f547b3630ae8ff31ccec1b904e0c02fdba6d99`](https://github.com/AlexanderFengler/JEAM/commit/a9f547b3630ae8ff31ccec1b904e0c02fdba6d99).
+[`0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce`](https://github.com/AlexanderFengler/JEAM/commit/0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce).
 It is not installed with ordinary HSSM, and no public `hssm[jeam]` extra exists yet.
 See [Installation](../getting_started/installation.md#experimental-circular-diffusion-with-jeam)
 for the dependency-policy rationale.
@@ -80,6 +80,23 @@ gradient-free step method. The linked intercept-only tutorial assigns one `pm.Sl
 step to each free PyMC variable. NUTS, the JAX samplers, and variational inference are
 not available for this black-box route.
 
+An opt-in, strict JAX likelihood is also registered through HSSM's ordinary
+configuration surface:
+
+```python
+model = hssm.HSSM(
+    data=data,
+    model="circular_diffusion",
+    loglik_kind="approx_differentiable",
+    p_outlier=None,
+)
+```
+
+This path preserves JEAM's pointwise values and exposes reverse-mode parameter gradients
+through HSSM's existing JAX/PyTensor bridge. It is still under sampler recovery and
+efficiency evaluation; NUTS, JAX samplers, and variational inference are not promoted as
+supported workflows for this model yet.
+
 Prior and posterior predictive sampling use JEAM's simulator through HSSM and accept
 HSSM's seeded random-state interface. Draws preserve the final `[rt, response]` order.
 The [complete marimo walkthrough](../tutorials/jeam_circular_diffusion.py) demonstrates
@@ -93,7 +110,8 @@ not currently provide:
 
 - continuous-response lapse or outlier mixtures (`p_outlier` must be `None`);
 - native circular versions of HSSM's category-oriented plotting functions;
-- differentiable, JAX, LAN, or variational likelihood paths;
+- a promoted differentiable sampler default, LAN likelihood, or validated variational
+  workflow;
 - collapsing or custom thresholds, or nonzero $s_v$ or $s_t$;
 - spherical, hyperspherical, projected, categorical, or ordinary continuous-response
   JEAM model registrations; or
