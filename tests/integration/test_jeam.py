@@ -7,8 +7,8 @@ pytest.importorskip("jeam")
 
 import jax
 import jax.numpy as jnp
+from jeam.likelihoods.jax_fixed import fixed_cdm_logpdf, fixed_cdm_logpdf_single
 from jeam.Models.Circular import CircularDiffusionModel
-from jeam.likelihoods import fixed_cdm_logpdf, fixed_cdm_logpdf_single
 
 from hssm.distribution_utils.dist import (
     LOGP_LB,
@@ -74,13 +74,11 @@ def test_jax_adapter_parameter_gradient_matches_the_direct_jeam_kernel():
     data = jnp.asarray([0.53, 0.7])
     parameters = jnp.asarray([0.45, -0.30, 1.20, 0.08])
 
-    observed = jax.grad(
-        lambda values: logp_circular_diffusion_jax(data, *values)
-    )(parameters)
+    observed = jax.grad(lambda values: logp_circular_diffusion_jax(data, *values))(
+        parameters
+    )
     expected = jax.grad(
-        lambda values: fixed_cdm_logpdf_single(
-            data[0], data[1], *values
-        )
+        lambda values: fixed_cdm_logpdf_single(data[0], data[1], *values)
     )(parameters)
 
     np.testing.assert_allclose(observed, expected, rtol=5e-7, atol=5e-7)
@@ -190,7 +188,7 @@ def test_adapter_preserves_jeam_impossible_rt_support_value():
     observed = logp_circular_diffusion(data, v_x=v_x, v_y=v_y, a=threshold, t=ndt)
 
     np.testing.assert_allclose(observed, expected, rtol=0.0, atol=0.0)
-    np.testing.assert_allclose(observed, np.log(1e-14), rtol=0.0, atol=1e-12)
+    np.testing.assert_array_equal(observed, -np.inf)
 
 
 def test_compiled_hssm_distribution_matches_adapter_and_direct_jeam(
@@ -234,7 +232,7 @@ def test_compiled_hssm_distribution_accepts_a_trialwise_drift(
 
 
 def test_hssm_distribution_applies_standard_ndt_support_mask(circular_distribution):
-    """HSSM should replace JEAM's finite floor when nondecision time reaches RT."""
+    """HSSM should replace JEAM's strict support value with its standard mask."""
     data = np.array([[0.18, -0.4], [0.37, 0.6], [0.82, 1.2]])
     ndt = np.array([0.08, 0.37, 0.90])
 
@@ -248,7 +246,7 @@ def test_hssm_distribution_applies_standard_ndt_support_mask(circular_distributi
         adapted[0], rel=COMPILED_RTOL, abs=COMPILED_ATOL
     )
     np.testing.assert_array_equal(compiled[1:], lower_bound)
-    np.testing.assert_allclose(adapted[1:], np.log(1e-14), atol=1e-12)
+    np.testing.assert_array_equal(adapted[1:], -np.inf)
 
 
 def test_hssm_distribution_applies_parameter_bounds_pointwise(

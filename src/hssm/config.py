@@ -181,11 +181,17 @@ class Config(BaseModelConfig):
                 raise ValueError(
                     "When using a custom model, please provide a `loglik_kind.`"
                 )
+            model_name = cast("SupportedModels", model_name)
+            default_config = deepcopy(default_model_config[model_name])
+            default_loglik_kind = default_config.get("default_loglik_kind")
+            if default_loglik_kind is not None:
+                return cls._from_registered_default(
+                    model_name, default_loglik_kind, default_config
+                )
+
             # Setting loglik_kind to be the first of analytical or
             # approx_differentiable
             for kind in ["analytical", "approx_differentiable", "blackbox"]:
-                model_name = cast("SupportedModels", model_name)
-                default_config = deepcopy(default_model_config[model_name])
                 if kind in default_config["likelihoods"]:
                     kind = cast("LoglikKind", kind)
                     return cls._from_registered_default(
