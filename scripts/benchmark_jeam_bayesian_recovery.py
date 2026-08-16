@@ -152,10 +152,14 @@ def run_recovery(
         model="circular_diffusion",
         p_outlier=None,
     )
+    slice_steps = [
+        pm.Slice(vars=[model.pymc_model[name]], model=model.pymc_model)
+        for name in PARAMETER_ORDER
+    ]
     started = perf_counter()
     traces = model.sample(
         sampler="pymc",
-        step=pm.Slice(model=model.pymc_model),
+        step=slice_steps,
         chains=chains,
         cores=1,
         tune=tune,
@@ -238,7 +242,7 @@ def run_recovery(
         data_seed=data_seed,
         jeam_revision=_installed_jeam_revision(),
         pytensor_floatx=pytensor.config.floatX,
-        sampler="pymc.Slice",
+        sampler="pymc.Slice[a,t,v_x,v_y]",
         chains=chains,
         tune=tune,
         draws=draws,

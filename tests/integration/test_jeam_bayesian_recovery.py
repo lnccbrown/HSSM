@@ -54,7 +54,7 @@ def test_recovery_uses_the_declared_gradient_free_sampler(recovery_result):
     """The integration must use PyMC Slice and expose no NUTS statistics."""
     diagnostics = recovery_result.slice_diagnostics
 
-    assert recovery_result.sampler == "pymc.Slice"
+    assert recovery_result.sampler == "pymc.Slice[a,t,v_x,v_y]"
     assert diagnostics.sample_stats == ("nstep_in", "nstep_out")
     assert diagnostics.mean_steps_in > 0.0
     assert diagnostics.mean_steps_out > 0.0
@@ -90,5 +90,5 @@ def test_recovery_report_records_provenance_and_efficiency(recovery_result):
     assert recovery_result.predictive_seconds > 0.0
 
     payload = json.loads(json.dumps(asdict(recovery_result)))
-    assert payload["sampler"] == "pymc.Slice"
+    assert payload["sampler"] == "pymc.Slice[a,t,v_x,v_y]"
     assert payload["jeam_revision"] == PINNED_JEAM_REVISION
