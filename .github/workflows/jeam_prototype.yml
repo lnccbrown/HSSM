@@ -27,3 +27,6 @@ jobs:
 
       - name: Smoke-test optional imports
         run: uv run --group jeam-prototype python -c "import hssm; import jeam"
+
+      - name: Verify the JEAM likelihood handshake
+        run: uv run --group jeam-prototype pytest tests/integration/test_jeam.py
