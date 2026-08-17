@@ -7,6 +7,8 @@ on:
       - ".github/workflows/jeam_prototype.yml"
       - "src/hssm/integrations/jeam.py"
       - "src/hssm/modelconfig/circular_diffusion_config.py"
+      - "docs/reference/jeam_circular_diffusion.md"
+      - "docs/tutorials/jeam_circular_diffusion.py"
       - "scripts/benchmark_jeam_bayesian_recovery.py"
       - "scripts/benchmark_jeam_objective_parity.py"
       - "tests/integration/test_jeam_bayesian_recovery.py"
@@ -31,11 +33,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Sync JEAM prototype group
-        run: uv sync --group jeam-prototype --locked
+      - name: Sync JEAM prototype and docs groups
+        run: uv sync --group docs --group jeam-prototype --locked
 
       - name: Smoke-test optional imports
         run: uv run --group jeam-prototype python -c "import hssm; import jeam"
+
+      - name: Validate the JEAM comparison notebook
+        run: >-
+          uv run --group docs --group jeam-prototype marimo check --strict
+          docs/tutorials/jeam_circular_diffusion.py
 
       - name: Verify the JEAM likelihood and simulator handshake
         run: >-
