@@ -21,6 +21,10 @@ BOUNDS = {
     "a": (0.1, 3.0),
     "t": (0.0, 2.0),
 }
+# HSSM test modules may select float32 globally during collection. Allow several
+# float32 ULPs while keeping the direct adapter comparisons at float64 precision.
+COMPILED_RTOL = 5e-7
+COMPILED_ATOL = 5e-7
 
 
 @pytest.fixture(scope="module")
@@ -146,7 +150,7 @@ def test_compiled_hssm_distribution_matches_adapter_and_direct_jeam(
     )
 
     np.testing.assert_allclose(adapted, direct, rtol=1e-12, atol=1e-12)
-    np.testing.assert_allclose(compiled, direct, rtol=1e-7, atol=1e-7)
+    np.testing.assert_allclose(compiled, direct, rtol=COMPILED_RTOL, atol=COMPILED_ATOL)
 
 
 def test_compiled_hssm_distribution_accepts_a_trialwise_drift(
@@ -166,7 +170,7 @@ def test_compiled_hssm_distribution_accepts_a_trialwise_drift(
     )
 
     np.testing.assert_allclose(adapted, direct, rtol=1e-12, atol=1e-12)
-    np.testing.assert_allclose(compiled, direct, rtol=1e-7, atol=1e-7)
+    np.testing.assert_allclose(compiled, direct, rtol=COMPILED_RTOL, atol=COMPILED_ATOL)
 
 
 def test_hssm_distribution_applies_standard_ndt_support_mask(circular_distribution):
@@ -180,7 +184,9 @@ def test_hssm_distribution_applies_standard_ndt_support_mask(circular_distributi
     )
     lower_bound = float(np.asarray(LOGP_LB))
 
-    assert compiled[0] == pytest.approx(adapted[0], rel=1e-7)
+    assert compiled[0] == pytest.approx(
+        adapted[0], rel=COMPILED_RTOL, abs=COMPILED_ATOL
+    )
     np.testing.assert_array_equal(compiled[1:], lower_bound)
     np.testing.assert_allclose(adapted[1:], np.log(1e-14), atol=1e-12)
 
@@ -198,5 +204,10 @@ def test_hssm_distribution_applies_parameter_bounds_pointwise(
     )
     lower_bound = float(np.asarray(LOGP_LB))
 
-    np.testing.assert_allclose(compiled[[0, 2]], adapted[[0, 2]], rtol=1e-7)
+    np.testing.assert_allclose(
+        compiled[[0, 2]],
+        adapted[[0, 2]],
+        rtol=COMPILED_RTOL,
+        atol=COMPILED_ATOL,
+    )
     assert compiled[1] == lower_bound
