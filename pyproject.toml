@@ -258,7 +258,7 @@ publish-url = "https://test.pypi.org/legacy/"
 
 [tool.uv.sources]
 hssm = { workspace = true }
-jeam = { git = "https://github.com/AlexanderFengler/JEAM.git", rev = "a27e99a30e1c93d1667a7dab1e8766f1abb5a88e" }
+jeam = { git = "https://github.com/AlexanderFengler/JEAM.git", rev = "1d7112757d8b2d27a31437255fc679194d39ab89" }
 
 [tool.pyrefly]
 preset = "legacy"

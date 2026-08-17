@@ -14,7 +14,7 @@ pytestmark = pytest.mark.slow
 
 from scripts.benchmark_jeam_bayesian_recovery import run_recovery
 
-PINNED_JEAM_REVISION = "a27e99a30e1c93d1667a7dab1e8766f1abb5a88e"
+PINNED_JEAM_REVISION = "1d7112757d8b2d27a31437255fc679194d39ab89"
 MEAN_ERROR_LIMITS = {"a": 0.10, "t": 0.04, "v_x": 0.15, "v_y": 0.15}
 MAX_RHAT = 1.01
 MIN_ESS = 1_000.0
