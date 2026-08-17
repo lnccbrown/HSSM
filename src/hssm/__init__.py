@@ -18,6 +18,7 @@ from .defaults import show_defaults
 from .hssm import HSSM
 from .link import Link
 from .modelconfig import list_models
+from .optimize import PointEstimate
 from .param import UserParam as Param
 from .prior import Prior
 from .register import register_model
@@ -42,6 +43,7 @@ __all__ = [
     "load_data",
     "ModelConfig",
     "Param",
+    "PointEstimate",
     "Prior",
     "check_data_for_rl",
     "register_model",

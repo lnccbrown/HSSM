@@ -53,6 +53,7 @@ nav:
           - Set initial values: tutorials/initial_values.ipynb
           - Use alternative samplers (Bayeux): tutorials/tutorial_bayeux.ipynb
           - Run variational inference: tutorials/variational_inference.ipynb
+          - Find MAP and MLE point estimates: tutorials/map_mle.ipynb
       - Working with results:
           - Plot posteriors and predictions: tutorials/plotting.ipynb
           - Posterior predictive plot gallery: tutorials/ppc_gallery.ipynb
@@ -84,6 +85,7 @@ nav:
           - hssm.ModelConfig: api/model_config.md
           - hssm.Prior: api/prior.md
           - hssm.Link: api/link.md
+          - hssm.PointEstimate: api/point_estimate.md
           - hssm.rl: api/rl.md
       - Useful functions:
           - hssm.load_data: api/load_data.md
@@ -152,6 +154,7 @@ plugins:
         - tutorials/ppc_gallery.ipynb
         - tutorials/cartoon_gallery.ipynb
         - tutorials/scientific_workflow_hssm.ipynb
+        - tutorials/map_mle.ipynb
         - archive/pymc_to_hssm.ipynb
         - tutorials/tutorial_bayeux.ipynb
         - tutorials/bayesflow_lre_integration.ipynb
