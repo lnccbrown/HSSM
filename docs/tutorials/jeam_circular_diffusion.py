@@ -529,6 +529,7 @@ def _(
     np,
     observations,
     pd,
+    perf_counter,
     pm,
 ):
     direct_jeam = CircularDiffusionModel(threshold_dynamic="fixed")
@@ -553,6 +554,7 @@ def _(
         ),
         dtype=np.float64,
     )
+    _blackbox_objective_started = perf_counter()
     blackbox_logp = np.asarray(
         blackbox_model.model_distribution.logp(
             observations,
@@ -563,6 +565,8 @@ def _(
         ).eval(),
         dtype=np.float64,
     )
+    blackbox_objective_seconds = perf_counter() - _blackbox_objective_started
+    _analytical_objective_started = perf_counter()
     analytical_logp = np.asarray(
         analytical_model.model_distribution.logp(
             observations,
@@ -573,6 +577,7 @@ def _(
         ).eval(),
         dtype=np.float64,
     )
+    analytical_objective_seconds = perf_counter() - _analytical_objective_started
     logp_by_likelihood = {
         "blackbox": blackbox_logp,
         "analytical": analytical_logp,
@@ -581,6 +586,7 @@ def _(
         likelihood: np.abs(values - direct_logp)
         for likelihood, values in logp_by_likelihood.items()
     }
+    _gradient_compile_started = perf_counter()
     _transformed_initial_point = pm.initial_point.make_initial_point_fn(
         model=analytical_model.pymc_model,
         overrides=analytical_model.initvals,
@@ -590,6 +596,7 @@ def _(
         analytical_model.pymc_model.compile_dlogp()(_transformed_initial_point),
         dtype=np.float64,
     )
+    analytical_gradient_compile_seconds = perf_counter() - _gradient_compile_started
     assert analytical_gradient.shape == (4,)
     assert np.all(np.isfinite(analytical_gradient))
     assert np.any(analytical_gradient != 0.0)
@@ -600,10 +607,20 @@ def _(
                 "HSSM likelihood": likelihood,
                 "summed log likelihood": values.sum(),
                 "maximum error vs direct JEAM": logp_absolute_errors[likelihood].max(),
+                "objective evaluation seconds": (
+                    analytical_objective_seconds
+                    if likelihood == "analytical"
+                    else blackbox_objective_seconds
+                ),
                 "parameter gradient": (
                     "finite, nonzero (4 components)"
                     if likelihood == "analytical"
                     else "not exposed"
+                ),
+                "gradient compile + first eval seconds": (
+                    analytical_gradient_compile_seconds
+                    if likelihood == "analytical"
+                    else np.nan
                 ),
             }
             for likelihood, values in logp_by_likelihood.items()
