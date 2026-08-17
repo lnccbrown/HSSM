@@ -291,6 +291,35 @@ def make_jax_logp_ops(
     return LANLogpOp(logp, logp_nojit, LANLogpVJPOp(logp_vjp, n_params), n_params)
 
 
+def _scalarize_unmapped_inputs(logp: Callable, in_axes: list[int | None]) -> Callable:
+    """Pass unmapped (``in_axes=None``) inputs to `logp` as scalars.
+
+    ``vmap`` slices the batch axis off mapped inputs, so a mapped parameter
+    already arrives as a scalar (and ``data`` as a single row).  Unmapped
+    inputs are forwarded whole, which for a non-trialwise parameter means a
+    ``(1,)``-shaped array rather than a scalar.  Squeezing that one axis keeps
+    the single-trial calling convention uniform.
+
+    Only a rank-1, length-1 input is scalarized.  A non-trialwise parameter is
+    always shaped ``(1,)`` at this point (PyMC adds the axis to the scalar RV),
+    so anything else is a shape this layer does not understand and is passed
+    through untouched rather than silently flattened.
+    """
+
+    def _scalarize(inp, axis):
+        if axis is not None:
+            return inp
+        arr = jnp.asarray(inp)
+        return arr.reshape(()) if arr.ndim == 1 and arr.shape[0] == 1 else arr
+
+    def scalarized(*inputs):
+        return logp(
+            *(_scalarize(inp, axis) for inp, axis in zip(inputs, in_axes, strict=True))
+        )
+
+    return scalarized
+
+
 @overload
 def make_jax_logp_funcs_from_callable(
     logp: Callable,
@@ -324,6 +353,13 @@ def make_jax_logp_funcs_from_callable(
         extra_fields are optional additional fields that can be used in the
         likelihood computation. The `data` argument is a two-column numpy array
         with response time and response.
+
+        When `vmap` is `True`, the callable is a *single-trial* function: `data`
+        is one row, **every** parameter arrives as a 0-d scalar -- trialwise
+        ones because `vmap` slices off the batch axis, non-trialwise ones
+        because they are squeezed from the `(1,)` shape PyMC gives a scalar
+        random variable -- and the return value must be a scalar for that
+        trial. Do not index a parameter (`a[0]`, `len(a)`); use it directly.
     vmap:
         If `True`, the function will be vectorized using JAX's vmap. If `False`, the
         function is assumed to be already vectorized.
@@ -376,6 +412,19 @@ def make_jax_logp_funcs_from_callable(
             raise ValueError(
                 "No vmap is needed in your use case, since all parameters are scalars."
             )
+
+        # Non-trialwise parameters reach the single-trial callable as
+        # `(1,)`-shaped tensors (bambi emits those for intercept-only
+        # parameters; see the broadcast note in `make_distribution`) and
+        # `in_axes=None` passes them through un-sliced.  Any arithmetic in the
+        # callable then produces a `(1,)` per-trial result, so the vmapped
+        # output is `(n_obs, 1)` while `LANLogpOp` declares a vector.  Squeeze
+        # them here so every parameter arrives as a scalar --- the same
+        # convention vmap already gives mapped parameters, and what the ONNX
+        # wrapper does for itself in its `not params_only` branch (see the
+        # `inp.squeeze()` in `make_jax_logp_funcs_from_onnx`; its `params_only`
+        # branch does *not* squeeze, and is not covered by this).
+        logp = _scalarize_unmapped_inputs(logp, in_axes)
 
         if return_jit:
             return make_vmap_func(

@@ -419,3 +419,97 @@ def test_lan_logp_op_locks_data_configuration():
 
     with pytest.raises(ValueError, match="previously applied with data"):
         logp_op(None, v)
+
+
+def test_callable_receives_scalar_unmapped_params():
+    """Non-trialwise params reach the single-trial callable as scalars.
+
+    Regression test for #1092.  Bambi emits ``(1,)``-shaped tensors for
+    intercept-only parameters, and ``in_axes=None`` forwards them un-sliced.
+    Without squeezing, the callable returns a ``(1,)`` per-trial value, the
+    vmapped output is ``(n_obs, 1)`` instead of ``(n_obs,)``, and the graph
+    later fails in PyTensor's JAX ``SpecifyShape`` with a bare
+    ``AssertionError``.
+    """
+    seen = {}
+
+    def logp(data, v, a):
+        seen["v"] = jax.numpy.shape(v)
+        seen["a"] = jax.numpy.shape(a)
+        return data[0] * v + a
+
+    logp_vec, _, _ = make_jax_logp_funcs_from_callable(
+        logp, vmap=True, params_is_reg=[True, False]
+    )
+
+    n_obs = 7
+    data = np.ones((n_obs, 2), dtype=np.float32)
+    v = np.full((n_obs,), 2.0, dtype=np.float32)  # trialwise -> mapped
+    a = np.array([3.0], dtype=np.float32)  # non-trialwise -> (1,)-shaped
+
+    out = logp_vec(data, v, a)
+
+    assert seen["v"] == (), "mapped params should arrive as scalars"
+    assert seen["a"] == (), "unmapped params should be squeezed to scalars"
+    assert np.shape(out) == (n_obs,), (
+        f"vmapped logp must be 1-D to match LANLogpOp's declared vector output, "
+        f"got {np.shape(out)}"
+    )
+    np.testing.assert_allclose(np.asarray(out), np.full((n_obs,), 5.0), rtol=1e-6)
+
+
+def test_scalarize_handles_params_only_signature():
+    """`params_only=True` omits the data entry in `in_axes`; alignment must hold.
+
+    Without a leading `data` axis the zip over `(inputs, in_axes)` is offset by
+    one relative to the usual case, so a non-trialwise parameter in first
+    position is the discriminating arrangement.
+    """
+    seen = {}
+
+    def cpn_logp(v, a, z, t):
+        seen["shapes"] = tuple(jax.numpy.shape(p) for p in (v, a, z, t))
+        return v + a + z + t
+
+    logp_vec, _, _ = make_jax_logp_funcs_from_callable(
+        cpn_logp,
+        vmap=True,
+        params_is_reg=[False, True, False, False],
+        params_only=True,
+    )
+
+    n_obs = 5
+    a = np.linspace(1.0, 1.4, n_obs, dtype=np.float32)  # trialwise -> mapped
+    out = logp_vec(
+        np.array([0.3], dtype=np.float32),  # non-trialwise -> (1,)-shaped
+        a,
+        np.array([0.5], dtype=np.float32),
+        np.array([0.2], dtype=np.float32),
+    )
+
+    assert seen["shapes"] == ((), (), (), ())
+    assert np.shape(out) == (n_obs,)
+    np.testing.assert_allclose(np.asarray(out), 0.3 + a + 0.5 + 0.2, rtol=1e-6)
+
+
+def test_unmapped_inputs_that_are_not_length_one_pass_through():
+    """Only the `(1,)` axis PyMC adds is squeezed; other shapes are untouched."""
+    seen = {}
+
+    def logp(data, v, w):
+        seen["w"] = jax.numpy.shape(w)
+        return data[0] * v + jax.numpy.sum(w)
+
+    logp_vec, _, _ = make_jax_logp_funcs_from_callable(
+        logp, vmap=True, params_is_reg=[True, False]
+    )
+
+    n_obs = 4
+    out = logp_vec(
+        np.ones((n_obs, 2), dtype=np.float32),
+        np.full((n_obs,), 2.0, dtype=np.float32),
+        np.array([1.0, 2.0, 3.0], dtype=np.float32),  # rank-1 but not length-1
+    )
+
+    assert seen["w"] == (3,), "a multi-element unmapped input must not be flattened"
+    assert np.shape(out) == (n_obs,)
