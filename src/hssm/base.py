@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from pytensor.tensor.variable import TensorVariable
 
 from hssm import _vi_compat
-from hssm._types import SupportedModels
+from hssm._types import SamplerName, SupportedModels
 from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
@@ -568,8 +568,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
     def sample(
         self,
-        sampler: Literal["pymc", "numpyro", "blackjax", "nutpie", "laplace"]
-        | None = None,
+        sampler: SamplerName | None = None,
         init: str | None = None,
         initvals: str | dict | None = None,
         include_response_params: bool = False,
@@ -634,6 +633,24 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 "Please use the vi() method instead."
             )
 
+        if sampler is None:
+            if (
+                self.loglik_kind == "approx_differentiable"
+                and self.model_config.backend == "jax"
+            ):
+                sampler = "numpyro"
+            else:
+                sampler = "pymc"
+
+        supported_samplers = self.model_config.supported_samplers
+        if supported_samplers is not None and sampler not in supported_samplers:
+            supported = ", ".join(repr(name) for name in supported_samplers)
+            raise ValueError(
+                f"Sampler {sampler!r} is not supported for model "
+                f"{self.model_name!r} with loglik_kind={self.loglik_kind!r}. "
+                f"Supported samplers: {supported}."
+            )
+
         if initvals is not None:
             if isinstance(initvals, dict):
                 kwargs["initvals"] = initvals
@@ -658,15 +675,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         else:
             kwargs["initvals"] = self._initvals
             _logger.info("Using default initvals. \n")
-
-        if sampler is None:
-            if (
-                self.loglik_kind == "approx_differentiable"
-                and self.model_config.backend == "jax"
-            ):
-                sampler = "numpyro"
-            else:
-                sampler = "pymc"
 
         if self.loglik_kind == "blackbox":
             if sampler in ["blackjax", "numpyro", "nutpie"]:

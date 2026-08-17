@@ -36,6 +36,8 @@ ResponseKind = Literal["categorical", "continuous", "circular"]
 
 LoglikKind = Literal["analytical", "approx_differentiable", "blackbox"]
 
+SamplerName = Literal["pymc", "numpyro", "blackjax", "nutpie", "laplace"]
+
 
 class LoglikConfig(TypedDict):
     """Type for the value of LoglikConfig."""
@@ -46,6 +48,7 @@ class LoglikConfig(TypedDict):
     default_priors: dict[str, ParamSpec]
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]
+    supported_samplers: NotRequired[tuple[SamplerName, ...]]
 
 
 LoglikConfigs = dict[LoglikKind, LoglikConfig]
