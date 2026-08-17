@@ -161,6 +161,11 @@ def _make_model(data: np.ndarray):
     )
 
 
+def _contract_float(value: Any) -> float:
+    """Normalize equivalent float32/float64 metadata for exact JSON checks."""
+    return round(float(np.asarray(value)), 7)
+
+
 def _prior_signature(model) -> dict[str, dict[str, float | str]]:
     """Return JSON-safe structural prior metadata from an HSSM model."""
     signature: dict[str, dict[str, float | str]] = {}
@@ -171,8 +176,7 @@ def _prior_signature(model) -> dict[str, dict[str, float | str]]:
         signature[name] = {
             "distribution": str(prior.name),
             **{
-                key: float(np.asarray(value))
-                for key, value in sorted(prior.args.items())
+                key: _contract_float(value) for key, value in sorted(prior.args.items())
             },
         }
     return signature
@@ -180,13 +184,13 @@ def _prior_signature(model) -> dict[str, dict[str, float | str]]:
 
 def _initval_signature(model) -> dict[str, float]:
     """Return untransformed scalar initial values in public parameter order."""
-    return {name: float(np.asarray(model.initvals[name])) for name in model.list_params}
+    return {name: _contract_float(model.initvals[name]) for name in model.list_params}
 
 
 def _bounds_signature(model) -> dict[str, list[float]]:
     """Return JSON-safe registered parameter bounds."""
     return {
-        name: [float(value) for value in model.params[name].bounds]
+        name: [_contract_float(value) for value in model.params[name].bounds]
         for name in model.list_params
     }
 
