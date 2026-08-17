@@ -1,4 +1,4 @@
-"""Fit JEAM's circular diffusion model through ordinary HSSM.
+"""Compare JEAM's blackbox and analytical circular likelihoods through HSSM.
 
 From the HSSM repository root, install the pinned prototype and open this marimo
 notebook with::
@@ -7,12 +7,16 @@ notebook with::
     uv run --group docs --group jeam-prototype \
         marimo edit docs/tutorials/jeam_circular_diffusion.py
 
-The default two-chain fit is intentionally small enough for an interactive tutorial.
-For a longer local run, set ``FULL_RUN=1`` before starting marimo. The repeated-recovery
-benchmark in ``docs/tutorials/jeam_repeated_recovery.py`` remains the scientific gate.
+Choose the likelihood and sampler, adjust tune/draw counts, and click Run in the
+notebook. The default two-chain fit is intentionally small enough for an interactive
+tutorial. For a longer local run, set ``FULL_RUN=1`` before starting marimo. For a
+plumbing-only run that bypasses the Run button, set
+``JEAM_NOTEBOOK_SMOKE=1``. The repeated-recovery benchmark in
+``docs/tutorials/jeam_repeated_recovery.py`` remains the scientific gate.
 """
 
 # ruff: noqa: B018, D401, E501, PLR1711
+
 import marimo
 
 __generated_with = "0.23.14"
@@ -23,6 +27,7 @@ app = marimo.App(width="medium")
 def _():
     import importlib.metadata
     import json
+    import logging
     import os
     import warnings
     from time import perf_counter
@@ -45,6 +50,7 @@ def _():
         hssm,
         importlib,
         json,
+        logging,
         mo,
         np,
         os,
@@ -61,12 +67,12 @@ def _():
 @app.cell
 def _(mo):
     mo.md(r"""
-    # Fit a circular diffusion model with HSSM and JEAM
+    # Compare JEAM likelihood routes through HSSM
 
     This tutorial exercises the complete prototype handshake: simulate angular
-    responses with JEAM, construct an **ordinary `hssm.HSSM` object**, verify its
-    likelihood numerically against JEAM, fit it with a gradient-free sampler, and
-    perform posterior predictive checks.
+    responses with JEAM, construct **ordinary `hssm.HSSM` objects**, compare both
+    registered likelihoods against direct JEAM, compile the analytical gradient,
+    fit a selected likelihood/sampler route, and perform posterior predictive checks.
     """)
     return
 
@@ -106,28 +112,53 @@ def _(mo):
     FULL_RUN=1 uv run --group docs --group jeam-prototype \
       marimo edit docs/tutorials/jeam_circular_diffusion.py
     ```
+
+    Automated or plumbing-only checks can use 24 trials and 10 tune plus 10
+    posterior draws per chain:
+
+    ```bash
+    JEAM_NOTEBOOK_SMOKE=1 uv run --group docs --group jeam-prototype \
+      marimo export html docs/tutorials/jeam_circular_diffusion.py \
+      -o /tmp/jeam-circular-smoke.html
+    ```
     """)
     return
 
 
 @app.cell
-def _(hssm, os, pytensor, warnings):
+def _(hssm, logging, os, pytensor, warnings):
     warnings.filterwarnings(
         "ignore",
         message=r"Numba will use object mode to run .*",
         category=UserWarning,
         module=r"pytensor\.link\.numba\.dispatch\.basic",
     )
+    warnings.filterwarnings(
+        "ignore",
+        message=r"`init='adapt_diag'` is ignored by `nuts_sampler='numpyro'`.*",
+        category=UserWarning,
+        module=r"bambi\.backend\.pymc",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r"There are not enough devices to run parallel chains:.*",
+        category=UserWarning,
+        module=r"pymc\.sampling\.jax",
+    )
+    logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)
     hssm.set_floatX("float64")
     FULL_RUN = os.getenv("FULL_RUN", "0") == "1"
+    SMOKE_RUN = os.getenv("JEAM_NOTEBOOK_SMOKE", "0") == "1"
+    if FULL_RUN and SMOKE_RUN:
+        raise RuntimeError("FULL_RUN and JEAM_NOTEBOOK_SMOKE cannot both be enabled.")
     RUN_CONFIG = {
-        "mode": "full" if FULL_RUN else "tutorial",
-        "trials": 300 if FULL_RUN else 120,
+        "mode": "full" if FULL_RUN else "smoke" if SMOKE_RUN else "tutorial",
+        "trials": 300 if FULL_RUN else 24 if SMOKE_RUN else 120,
         "chains": 2,
-        "tune": 1_500 if FULL_RUN else 500,
-        "draws": 1_500 if FULL_RUN else 500,
-        "prior_draws": 20 if FULL_RUN else 8,
-        "predictive_draws": 100 if FULL_RUN else 30,
+        "tune": 1_500 if FULL_RUN else 10 if SMOKE_RUN else 500,
+        "draws": 1_500 if FULL_RUN else 10 if SMOKE_RUN else 500,
+        "prior_draws": 20 if FULL_RUN else 2 if SMOKE_RUN else 8,
+        "predictive_draws": 100 if FULL_RUN else 2 if SMOKE_RUN else 30,
         "data_seed": 1_492,
         "chain_seeds": (3_101, 3_102),
         "prior_seed": 6_101,
@@ -142,6 +173,7 @@ def _(hssm, os, pytensor, warnings):
         HSSM_PARAMETER_ORDER,
         PARAMETER_ORDER,
         RUN_CONFIG,
+        SMOKE_RUN,
         TRUTH,
     )
 
@@ -166,7 +198,7 @@ def _(importlib, json, mo):
         f"Verified installed JEAM revision `{installed_jeam_revision}`.",
         kind="success",
     )
-    return expected_jeam_revision, installed_jeam_revision
+    return
 
 
 @app.cell
@@ -206,7 +238,7 @@ def _(RUN_CONFIG, TRUTH, np, pd, simulate_circular_diffusion):
     data = pd.DataFrame(observations, columns=["rt", "response"])
     assert np.all(data["rt"] > 0.0)
     assert np.all((-np.pi <= data["response"]) & (data["response"] < np.pi))
-    return data, observations, simulator_theta
+    return data, observations
 
 
 @app.cell
@@ -271,21 +303,44 @@ def _(mo):
 
 
 @app.cell
-def _(data, hssm):
-    circular_model = hssm.HSSM(
-        data=data,
-        model="circular_diffusion",
-        p_outlier=None,
+def _(mo, os):
+    inference_routes = {
+        "Blackbox + PyMC Slice": "blackbox_pymc",
+        "Analytical + PyMC NUTS": "analytical_pymc",
+        "Analytical + NumPyro NUTS": "analytical_numpyro",
+    }
+    default_route = os.getenv("JEAM_INFERENCE_ROUTE", "blackbox_pymc")
+    if default_route not in inference_routes.values():
+        raise RuntimeError(
+            "JEAM_INFERENCE_ROUTE must be one of "
+            f"{tuple(inference_routes.values())}, not {default_route!r}."
+        )
+    default_route_label = next(
+        label for label, value in inference_routes.items() if value == default_route
     )
-    return (circular_model,)
+    inference_route = mo.ui.dropdown(
+        options=inference_routes,
+        value=default_route_label,
+        label="Likelihood and sampler",
+    )
+    inference_route
+    return (inference_route,)
 
 
 @app.cell
 def _(mo):
-    mo.md("""
-    ## 2. Build an ordinary HSSM model
+    mo.md(r"""
+    ## 2. Build both ordinary HSSM models
 
-    No `HSSMCircular` subclass is involved. HSSM discovers the likelihood,
+    Use the dropdown above to choose the route that will be sampled later. The
+    notebook always constructs and numerically checks **both** likelihoods on the
+    same observations:
+
+    - `blackbox` calls JEAM's NumPy implementation and requires gradient-free Slice;
+    - `analytical` evaluates JEAM's truncated first-passage series with JAX and
+      exposes parameter gradients for NUTS.
+
+    There is no `HSSMCircular` subclass. HSSM discovers each likelihood, the shared
     simulator, bounds, and response semantics from the registered
     `circular_diffusion` model configuration.
     """)
@@ -293,12 +348,56 @@ def _(mo):
 
 
 @app.cell
-def _(circular_model, hssm, mo, np, pd):
+def _(data, hssm, inference_route):
+    blackbox_model = hssm.HSSM(
+        data=data,
+        model="circular_diffusion",
+        loglik_kind="blackbox",
+        p_outlier=None,
+    )
+    analytical_model = hssm.HSSM(
+        data=data,
+        model="circular_diffusion",
+        loglik_kind="analytical",
+        p_outlier=None,
+    )
+    models_by_likelihood = {
+        "blackbox": blackbox_model,
+        "analytical": analytical_model,
+    }
+    selected_likelihood, selected_sampler = inference_route.value.split("_", 1)
+    circular_model = models_by_likelihood[selected_likelihood]
+    return (
+        analytical_model,
+        blackbox_model,
+        circular_model,
+        selected_likelihood,
+        selected_sampler,
+    )
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ### Selected HSSM contract
+    """)
+    return
+
+
+@app.cell
+def _(circular_model, hssm, inference_route, mo, np, pd, selected_sampler):
+    supported_samplers = circular_model.model_config.supported_samplers
     model_contract = pd.DataFrame(
         [
+            {"property": "selected route", "value": inference_route.selected_key},
             {"property": "Python class", "value": type(circular_model).__name__},
             {"property": "model name", "value": circular_model.model_name},
             {"property": "likelihood", "value": circular_model.loglik_kind},
+            {"property": "sampler", "value": selected_sampler},
+            {
+                "property": "supported samplers",
+                "value": ", ".join(supported_samplers or ()),
+            },
             {"property": "response kind", "value": circular_model.response_kind},
             {
                 "property": "angle bounds",
@@ -311,16 +410,18 @@ def _(circular_model, hssm, mo, np, pd):
     )
     assert type(circular_model) is hssm.HSSM
     assert circular_model.response_bounds == {"response": (-np.pi, np.pi)}
+    assert selected_sampler in (supported_samplers or ())
     mo.ui.table(model_contract, selection=None, pagination=False)
-    return (model_contract,)
+    return
 
 
 @app.cell
-def _(RUN_CONFIG, data, hssm):
+def _(RUN_CONFIG, data, hssm, selected_likelihood):
     # Keep prior draws separate from the HSSM object that will hold posterior traces.
     _prior_check_model = hssm.HSSM(
         data=data,
         model="circular_diffusion",
+        loglik_kind=selected_likelihood,
         p_outlier=None,
     )
     prior_predictive = _prior_check_model.sample_prior_predictive(
@@ -328,7 +429,7 @@ def _(RUN_CONFIG, data, hssm):
         random_seed=RUN_CONFIG["prior_seed"],
     )
     prior_values = prior_predictive["prior_predictive"]["rt,response"].values
-    return prior_predictive, prior_values
+    return (prior_values,)
 
 
 @app.cell
@@ -398,15 +499,17 @@ def _(mo):
     observed likelihood is used. For an applied analysis, replace default priors with
     domain-informed priors rather than treating this picture as a one-time ritual.
 
-    ## 3. Verify the numerical handshake
+    ## 3. Verify both numerical handshakes
 
-    The next cell evaluates every observation twice at the known parameters:
+    The next cell evaluates every observation three ways at the known parameters:
 
-    1. directly through JEAM's `CircularDiffusionModel.joint_lpdf`, and
-    2. through the distribution constructed by this exact HSSM object.
+    1. directly through JEAM's `CircularDiffusionModel.joint_lpdf`;
+    2. through HSSM's registered `blackbox` distribution; and
+    3. through HSSM's registered `analytical` distribution.
 
-    Agreement checks the objective itself, not merely whether both APIs return finite
-    numbers.
+    It also compiles the analytical model's four-parameter gradient at HSSM's initial
+    point and requires every component to be finite. Agreement checks the objectives
+    themselves, rather than merely whether all three APIs return finite numbers.
     """)
     return
 
@@ -415,10 +518,13 @@ def _(mo):
 def _(
     CircularDiffusionModel,
     TRUTH,
-    circular_model,
+    analytical_model,
+    blackbox_model,
     np,
     observations,
     pd,
+    perf_counter,
+    pm,
 ):
     direct_jeam = CircularDiffusionModel(threshold_dynamic="fixed")
     direct_logp = np.asarray(
@@ -442,8 +548,9 @@ def _(
         ),
         dtype=np.float64,
     )
-    hssm_logp = np.asarray(
-        circular_model.model_distribution.logp(
+    _blackbox_objective_started = perf_counter()
+    blackbox_logp = np.asarray(
+        blackbox_model.model_distribution.logp(
             observations,
             TRUTH["v_x"],
             TRUTH["v_y"],
@@ -452,88 +559,186 @@ def _(
         ).eval(),
         dtype=np.float64,
     )
-    logp_absolute_error = np.abs(hssm_logp - direct_logp)
-    logp_comparison = pd.DataFrame(
+    blackbox_objective_seconds = perf_counter() - _blackbox_objective_started
+    _analytical_objective_started = perf_counter()
+    analytical_logp = np.asarray(
+        analytical_model.model_distribution.logp(
+            observations,
+            TRUTH["v_x"],
+            TRUTH["v_y"],
+            TRUTH["a"],
+            TRUTH["t"],
+        ).eval(),
+        dtype=np.float64,
+    )
+    analytical_objective_seconds = perf_counter() - _analytical_objective_started
+    logp_by_likelihood = {
+        "blackbox": blackbox_logp,
+        "analytical": analytical_logp,
+    }
+    logp_absolute_errors = {
+        likelihood: np.abs(values - direct_logp)
+        for likelihood, values in logp_by_likelihood.items()
+    }
+    _gradient_compile_started = perf_counter()
+    _transformed_initial_point = pm.initial_point.make_initial_point_fn(
+        model=analytical_model.pymc_model,
+        overrides=analytical_model.initvals,
+        return_transformed=True,
+    )(None)
+    analytical_gradient = np.asarray(
+        analytical_model.pymc_model.compile_dlogp()(_transformed_initial_point),
+        dtype=np.float64,
+    )
+    analytical_gradient_compile_seconds = perf_counter() - _gradient_compile_started
+    assert analytical_gradient.shape == (4,)
+    assert np.all(np.isfinite(analytical_gradient))
+    assert np.any(analytical_gradient != 0.0)
+
+    likelihood_comparison = pd.DataFrame(
         [
             {
-                "quantity": "summed log likelihood",
-                "direct JEAM": direct_logp.sum(),
-                "HSSM distribution": hssm_logp.sum(),
-                "absolute error": abs(hssm_logp.sum() - direct_logp.sum()),
-            },
-            {
-                "quantity": "largest pointwise absolute error",
-                "direct JEAM": np.nan,
-                "HSSM distribution": np.nan,
-                "absolute error": logp_absolute_error.max(),
-            },
+                "HSSM likelihood": likelihood,
+                "summed log likelihood": values.sum(),
+                "maximum error vs direct JEAM": logp_absolute_errors[likelihood].max(),
+                "objective evaluation seconds": (
+                    analytical_objective_seconds
+                    if likelihood == "analytical"
+                    else blackbox_objective_seconds
+                ),
+                "parameter gradient": (
+                    "finite, nonzero (4 components)"
+                    if likelihood == "analytical"
+                    else "not exposed"
+                ),
+                "gradient compile + first eval seconds": (
+                    analytical_gradient_compile_seconds
+                    if likelihood == "analytical"
+                    else np.nan
+                ),
+            }
+            for likelihood, values in logp_by_likelihood.items()
         ]
     )
-    np.testing.assert_allclose(hssm_logp, direct_logp, rtol=1e-6, atol=5e-5)
-    return (
-        direct_jeam,
-        direct_logp,
-        hssm_logp,
-        logp_absolute_error,
-        logp_comparison,
-    )
+    for _values in logp_by_likelihood.values():
+        np.testing.assert_allclose(_values, direct_logp, rtol=1e-6, atol=5e-5)
+    return analytical_gradient, likelihood_comparison, logp_absolute_errors
 
 
 @app.cell
-def _(logp_comparison, mo):
-    mo.ui.table(logp_comparison.round(8), selection=None, pagination=False)
+def _(likelihood_comparison, mo):
+    mo.ui.table(likelihood_comparison.round(10), selection=None, pagination=False)
     return
 
 
 @app.cell
-def _(mo):
-    mo.md(r"""
-    ## 4. Fit with explicit PyMC Slice steps
+def _(RUN_CONFIG, mo):
+    tune_count = mo.ui.number(
+        start=10,
+        stop=5_000,
+        step=10,
+        value=RUN_CONFIG["tune"],
+        label="Tune per chain",
+    )
+    draw_count = mo.ui.number(
+        start=10,
+        stop=5_000,
+        step=10,
+        value=RUN_CONFIG["draws"],
+        label="Draws per chain",
+    )
+    run_inference = mo.ui.run_button(label="Run selected fit")
+    mo.hstack([tune_count, draw_count, run_inference], justify="start")
+    return draw_count, run_inference, tune_count
 
-    This likelihood crosses a Python/NumPy black-box boundary and does **not** provide
-    gradients to PyTensor. Consequently:
 
-    - this tutorial uses one explicit PyMC `Slice` step per parameter;
-    - NUTS, JAX NUTS (`numpyro`, `blackjax`, or `nutpie`), and variational inference
-      are not supported by this prototype;
-    - `cores=1` keeps the notebook portable and reproducible; and
-    - `p_outlier=None` is required because HSSM's categorical lapse mixture is not a
-      density over continuous angles.
+@app.cell
+def _(inference_route, mo):
+    mo.md(f"""
+    ## 4. Fit the selected route through HSSM
 
-    The short default run demonstrates the workflow. It is not a replacement for the
-    four-scenario, predeclared recovery benchmark in
-    `docs/tutorials/jeam_repeated_recovery.py`.
+    **Selected:** `{inference_route.selected_key}`.
+
+    The blackbox route uses one explicit PyMC `Slice` step per parameter. The
+    analytical routes use NUTS through either PyMC or NumPyro. Every route uses the
+    same model formulas, priors, observed dataset, chain seeds, tune count, and draw
+    count; only the likelihood implementation and sampler change.
+
+    Adjust the tune and draw counts, then click **Run selected fit**. Ordinary notebook
+    loading stops at this gate, so changing explanatory controls does not accidentally
+    launch MCMC. `JEAM_NOTEBOOK_SMOKE=1` deliberately bypasses the button for automated
+    end-to-end checks.
+
+    `cores=1` keeps the notebook portable and reproducible. Runtime here is descriptive,
+    not a benchmark: JAX compilation and short-run warmup costs are a large fraction of
+    an interactive run. The repeated recovery and efficiency gates remain separate from
+    this workflow demonstration.
     """)
     return
 
 
 @app.cell
-def _(PARAMETER_ORDER, RUN_CONFIG, circular_model, perf_counter, pm):
-    slice_steps = [
-        pm.Slice(
-            vars=[circular_model.pymc_model[name]],
-            model=circular_model.pymc_model,
-        )
-        for name in PARAMETER_ORDER
-    ]
-    sampling_started = perf_counter()
-    traces = circular_model.sample(
-        sampler="pymc",
-        step=slice_steps,
-        chains=RUN_CONFIG["chains"],
-        cores=1,
-        tune=RUN_CONFIG["tune"],
-        draws=RUN_CONFIG["draws"],
-        random_seed=list(RUN_CONFIG["chain_seeds"]),
-        progressbar=False,
-        idata_kwargs={"log_likelihood": False},
+def _(
+    PARAMETER_ORDER,
+    RUN_CONFIG,
+    SMOKE_RUN,
+    circular_model,
+    draw_count,
+    mo,
+    perf_counter,
+    pm,
+    run_inference,
+    selected_likelihood,
+    selected_sampler,
+    tune_count,
+):
+    mo.stop(
+        not (SMOKE_RUN or run_inference.value),
+        mo.callout(
+            "Choose a route and sampling counts, then click Run selected fit.",
+            kind="info",
+        ),
     )
+    _sample_kwargs = {
+        "sampler": selected_sampler,
+        "chains": RUN_CONFIG["chains"],
+        "cores": 1,
+        "tune": tune_count.value,
+        "draws": draw_count.value,
+        "random_seed": list(RUN_CONFIG["chain_seeds"]),
+        "progressbar": False,
+        "idata_kwargs": {"log_likelihood": False},
+    }
+    if selected_likelihood == "blackbox":
+        _sample_kwargs["step"] = [
+            pm.Slice(
+                vars=[circular_model.pymc_model[name]],
+                model=circular_model.pymc_model,
+            )
+            for name in PARAMETER_ORDER
+        ]
+    sampling_started = perf_counter()
+    traces = circular_model.sample(**_sample_kwargs)
     sampling_seconds = perf_counter() - sampling_started
-    return sampling_seconds, slice_steps, traces
+    return sampling_seconds, traces
 
 
 @app.cell
-def _(FULL_RUN, PARAMETER_ORDER, TRUTH, az, np, pd, sampling_seconds, traces):
+def _(
+    FULL_RUN,
+    PARAMETER_ORDER,
+    SMOKE_RUN,
+    TRUTH,
+    az,
+    np,
+    pd,
+    sampling_seconds,
+    selected_likelihood,
+    selected_sampler,
+    draw_count,
+    traces,
+    tune_count,
+):
     posterior_summary = az.summary(
         traces,
         var_names=list(PARAMETER_ORDER),
@@ -564,6 +769,18 @@ def _(FULL_RUN, PARAMETER_ORDER, TRUTH, az, np, pd, sampling_seconds, traces):
     sample_stat_names = tuple(
         sorted(str(name) for name in traces["sample_stats"].data_vars)
     )
+    nuts_statistics = {
+        "acceptance_rate",
+        "diverging",
+        "n_steps",
+        "step_size",
+        "tree_depth",
+    }
+    sampler_statistics_ok = (
+        sample_stat_names == ("nstep_in", "nstep_out")
+        if selected_likelihood == "blackbox"
+        else nuts_statistics <= set(sample_stat_names)
+    )
     maximum_rhat = float(posterior_summary["r_hat"].max())
     minimum_bulk_ess = float(posterior_summary["ess_bulk"].min())
     diagnostic_limits = {
@@ -571,13 +788,22 @@ def _(FULL_RUN, PARAMETER_ORDER, TRUTH, az, np, pd, sampling_seconds, traces):
         "minimum bulk ESS": 400.0 if FULL_RUN else 100.0,
     }
     diagnostics_ok = (
-        np.isfinite(maximum_rhat)
+        not SMOKE_RUN
+        and np.isfinite(maximum_rhat)
         and maximum_rhat <= diagnostic_limits["maximum R-hat"]
         and minimum_bulk_ess >= diagnostic_limits["minimum bulk ESS"]
     )
     sampling_report = pd.DataFrame(
         [
+            {"diagnostic": "likelihood", "observed": selected_likelihood},
+            {"diagnostic": "sampler", "observed": selected_sampler},
+            {"diagnostic": "tune per chain", "observed": tune_count.value},
+            {"diagnostic": "draws per chain", "observed": draw_count.value},
             {"diagnostic": "sampler statistics", "observed": str(sample_stat_names)},
+            {
+                "diagnostic": "sampler statistics match route",
+                "observed": sampler_statistics_ok,
+            },
             {"diagnostic": "sampling seconds", "observed": sampling_seconds},
             {"diagnostic": "maximum R-hat", "observed": maximum_rhat},
             {"diagnostic": "minimum bulk ESS", "observed": minimum_bulk_ess},
@@ -587,7 +813,7 @@ def _(FULL_RUN, PARAMETER_ORDER, TRUTH, az, np, pd, sampling_seconds, traces):
             },
         ]
     )
-    assert sample_stat_names == ("nstep_in", "nstep_out")
+    assert sampler_statistics_ok
     return (
         diagnostic_limits,
         diagnostics_ok,
@@ -596,26 +822,41 @@ def _(FULL_RUN, PARAMETER_ORDER, TRUTH, az, np, pd, sampling_seconds, traces):
         minimum_bulk_ess,
         posterior_summary,
         recovery_table,
-        sample_stat_names,
+        sampler_statistics_ok,
         sampling_report,
         upper_column,
     )
 
 
 @app.cell
-def _(diagnostic_limits, diagnostics_ok, maximum_rhat, minimum_bulk_ess, mo):
+def _(
+    SMOKE_RUN,
+    diagnostic_limits,
+    diagnostics_ok,
+    maximum_rhat,
+    minimum_bulk_ess,
+    mo,
+):
     _message = (
-        f"The diagnostic screen passed: maximum R-hat is {maximum_rhat:.3f} "
-        f"(limit {diagnostic_limits['maximum R-hat']:.2f}) and minimum bulk ESS "
-        f"is {minimum_bulk_ess:.0f} "
-        f"(limit {diagnostic_limits['minimum bulk ESS']:.0f})."
-        if diagnostics_ok
-        else f"Treat the posterior as provisional: maximum R-hat is "
-        f"{maximum_rhat:.3f} and minimum bulk ESS is {minimum_bulk_ess:.0f}. "
-        "Run FULL_RUN=1, inspect the chains, and revise the model before "
-        "substantive interpretation."
+        "Smoke mode only checks execution and sampler identity; 10 draws per chain "
+        "cannot support convergence or recovery claims."
+        if SMOKE_RUN
+        else (
+            f"The diagnostic screen passed: maximum R-hat is {maximum_rhat:.3f} "
+            f"(limit {diagnostic_limits['maximum R-hat']:.2f}) and minimum bulk ESS "
+            f"is {minimum_bulk_ess:.0f} "
+            f"(limit {diagnostic_limits['minimum bulk ESS']:.0f})."
+            if diagnostics_ok
+            else f"Treat the posterior as provisional: maximum R-hat is "
+            f"{maximum_rhat:.3f} and minimum bulk ESS is {minimum_bulk_ess:.0f}. "
+            "Run FULL_RUN=1, inspect the chains, and revise the model before "
+            "substantive interpretation."
+        )
     )
-    mo.callout(_message, kind="success" if diagnostics_ok else "warn")
+    mo.callout(
+        _message,
+        kind="info" if SMOKE_RUN else "success" if diagnostics_ok else "warn",
+    )
     return
 
 
@@ -664,7 +905,14 @@ def _(lower_column, mo, recovery_table, upper_column):
 
 
 @app.cell
-def _(PARAMETER_ORDER, TRUTH, lower_column, posterior_summary, plt, upper_column):
+def _(
+    PARAMETER_ORDER,
+    TRUTH,
+    lower_column,
+    plt,
+    posterior_summary,
+    upper_column,
+):
     _positions = list(range(len(PARAMETER_ORDER)))
     _means = posterior_summary.loc[list(PARAMETER_ORDER), "mean"].to_numpy()
     _lower = posterior_summary.loc[list(PARAMETER_ORDER), lower_column].to_numpy()
@@ -717,7 +965,7 @@ def _(RUN_CONFIG, circular_model, perf_counter, traces):
     posterior_predictive_values = posterior_predictive["posterior_predictive"][
         "rt,response"
     ].values
-    return posterior_predictive, posterior_predictive_values, predictive_seconds
+    return posterior_predictive_values, predictive_seconds
 
 
 @app.cell
@@ -878,19 +1126,28 @@ def _(mo, predictive_summary):
 @app.cell
 def _(
     HSSM_PARAMETER_ORDER,
+    analytical_gradient,
     circular_model,
     hssm,
-    logp_absolute_error,
+    logp_absolute_errors,
     np,
     pd,
     posterior_predictive_values,
-    sample_stat_names,
+    sampler_statistics_ok,
 ):
     predictive_support_ok = bool(
         np.all(np.isfinite(posterior_predictive_values))
         and np.all(posterior_predictive_values[..., 0] > 0.0)
         and np.all(posterior_predictive_values[..., 1] >= -np.pi)
         and np.all(posterior_predictive_values[..., 1] < np.pi)
+    )
+    both_likelihoods_match = all(
+        float(errors.max()) <= 5e-5 for errors in logp_absolute_errors.values()
+    )
+    analytical_gradient_ok = bool(
+        analytical_gradient.shape == (4,)
+        and np.all(np.isfinite(analytical_gradient))
+        and np.any(analytical_gradient != 0.0)
     )
     validation_table = pd.DataFrame(
         [
@@ -903,12 +1160,16 @@ def _(
                 "result": tuple(circular_model.list_params) == HSSM_PARAMETER_ORDER,
             },
             {
-                "workflow gate": "direct JEAM vs HSSM logp",
-                "result": float(logp_absolute_error.max()) <= 5e-5,
+                "workflow gate": "both HSSM likelihoods vs direct JEAM",
+                "result": both_likelihoods_match,
             },
             {
-                "workflow gate": "explicit Slice statistics",
-                "result": sample_stat_names == ("nstep_in", "nstep_out"),
+                "workflow gate": "finite nonzero analytical gradient",
+                "result": analytical_gradient_ok,
+            },
+            {
+                "workflow gate": "selected sampler statistics",
+                "result": sampler_statistics_ok,
             },
             {
                 "workflow gate": "posterior predictive support",
@@ -917,7 +1178,7 @@ def _(
         ]
     )
     assert validation_table["result"].all()
-    return predictive_support_ok, validation_table
+    return (validation_table,)
 
 
 @app.cell
@@ -935,15 +1196,17 @@ def _(mo, validation_table):
 
 
 @app.cell
-def _(mo):
-    mo.md(r"""
-    The notebook has now exercised the same registered likelihood and random variable
-    in both directions: inference consumed JEAM log densities, and predictive sampling
-    called JEAM's simulator through HSSM.
+def _(inference_route, mo):
+    mo.md(rf"""
+    The notebook has now checked both registered HSSM likelihoods against direct JEAM,
+    verified that the analytical route exposes a finite nonzero parameter gradient,
+    and completed inference with **{inference_route.selected_key}**. Predictive sampling
+    called JEAM's simulator through the selected ordinary HSSM object.
 
     Before using this prototype for substantive work:
 
-    1. run `FULL_RUN=1` and require satisfactory diagnostics for your data;
+    1. run `FULL_RUN=1` for each route you intend to evaluate and require satisfactory
+       diagnostics for your data;
     2. choose and justify domain-specific priors;
     3. compare posterior predictions to all scientifically important summaries;
     4. consult `docs/tutorials/jeam_repeated_recovery.py` for the predeclared
@@ -951,7 +1214,8 @@ def _(mo):
     5. retain the exact JEAM revision in the analysis environment.
 
     The integration remains deliberately narrow: fixed CDM, two-dimensional angular
-    responses, no lapse mixture, and gradient-free PyMC sampling.
+    responses, and no lapse mixture. Successful NUTS execution here is a capability
+    check, not yet a scientific recovery or efficiency recommendation.
     """)
     return
 
