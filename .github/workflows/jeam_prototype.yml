@@ -5,12 +5,18 @@ on:
     paths:
       - "pyproject.toml"
       - ".github/workflows/jeam_prototype.yml"
+      - "src/hssm/_types.py"
       - "src/hssm/base.py"
+      - "src/hssm/config.py"
       - "src/hssm/distribution_utils/blackbox.py"
       - "src/hssm/distribution_utils/dist.py"
+      - "src/hssm/distribution_utils/func_utils.py"
+      - "src/hssm/distribution_utils/jax.py"
       - "src/hssm/hssm.py"
       - "src/hssm/integrations/jeam.py"
       - "src/hssm/modelconfig/circular_diffusion_config.py"
+      - "src/hssm/register.py"
+      - "src/hssm/utils.py"
       - "scripts/benchmark_jeam_bayesian_recovery.py"
       - "scripts/benchmark_jeam_objective_parity.py"
       - "scripts/benchmark_jeam_recovery_bundle.py"
@@ -18,6 +24,7 @@ on:
       - "scripts/benchmark_jeam_repeated_recovery.py"
       - "tests/test_jeam_recovery_evidence_bundle.py"
       - "tests/test_jeam_recovery_evidence_io.py"
+      - "tests/test_jeam_modelconfig.py"
       - "tests/integration/test_jeam_bayesian_evidence_capture.py"
       - "tests/integration/test_jeam_bayesian_recovery.py"
       - "tests/integration/test_jeam.py"
@@ -27,6 +34,7 @@ on:
       - "tests/integration/test_jeam_repeated_recovery.py"
       - "tests/integration/test_jeam_repeated_recovery_evidence.py"
       - "tests/integration/test_jeam_simulator.py"
+      - "tests/integration/test_jeam_sampler_capabilities.py"
   workflow_dispatch:
 
 jobs:
@@ -56,6 +64,11 @@ jobs:
           tests/integration/test_jeam_objective_parity.py
           tests/integration/test_jeam_predictive.py
           tests/integration/test_jeam_simulator.py
+
+      - name: Verify JEAM sampler capabilities and NUTS backends
+        run: >-
+          uv run --group jeam-prototype pytest
+          tests/integration/test_jeam_sampler_capabilities.py
 
       - name: Run the Bayesian recovery preflight and gate
         run: >-
