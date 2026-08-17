@@ -37,10 +37,6 @@ def _make_analytical_model(data: pd.DataFrame) -> hssm.HSSM:
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Sampler capability metadata is introduced by the next commit.",
-)
 def test_circular_config_declares_verified_sampler_combinations():
     """Each likelihood route should advertise only its verified samplers."""
     config = get_default_model_config("circular_diffusion")
@@ -52,10 +48,6 @@ def test_circular_config_declares_verified_sampler_combinations():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Early per-likelihood sampler validation is introduced by the next commit.",
-)
 @pytest.mark.parametrize("sampler", ["blackjax", "nutpie", "laplace"])
 def test_unverified_analytical_samplers_fail_before_backend_dispatch(
     circular_data: pd.DataFrame,

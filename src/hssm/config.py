@@ -13,7 +13,14 @@ from typing import Any, Literal, Union, cast, get_args
 from bambi import Prior
 from ssms.config import model_config as ssms_model_config
 
-from ._types import DefaultConfig, LogLik, LoglikKind, ResponseKind, SupportedModels
+from ._types import (
+    DefaultConfig,
+    LogLik,
+    LoglikKind,
+    ResponseKind,
+    SamplerName,
+    SupportedModels,
+)
 from .defaults import (
     default_model_config,
 )
@@ -52,6 +59,7 @@ class BaseModelConfig(ABC):
     loglik: LogLik | None = None
     loglik_kind: LoglikKind | None = None
     backend: Literal["jax", "pytensor"] | None = None
+    supported_samplers: tuple[SamplerName, ...] | None = None
 
     # Additional data requirements
     extra_fields: list[str] | None = None
@@ -321,6 +329,16 @@ class Config(BaseModelConfig):
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
             raise ValueError("Please provide `backend` via `model_config`.")
+        if self.supported_samplers is not None:
+            if not self.supported_samplers:
+                raise ValueError("`supported_samplers` cannot be empty when provided.")
+            allowed_samplers = set(get_args(SamplerName))
+            invalid_samplers = set(self.supported_samplers) - allowed_samplers
+            if invalid_samplers:
+                invalid = ", ".join(sorted(invalid_samplers))
+                raise ValueError(f"Unrecognized supported sampler(s): {invalid}.")
+            if len(self.supported_samplers) != len(set(self.supported_samplers)):
+                raise ValueError("`supported_samplers` cannot contain duplicates.")
 
     def get_defaults(
         self, param: str
