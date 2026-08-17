@@ -4,31 +4,31 @@ Base IO code for datasets.
 Heavily influenced by Arviz's(scikit-learn's, and Bambi's) implementation.
 """
 
-import os
+from pathlib import Path
 from typing import NamedTuple
 
 import pandas as pd
 
-base_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+base_dir = Path(__file__).resolve().parent.parent
 
 
 class FileMetadata(NamedTuple):
     """Typing for dataset metadata."""
 
     filename: str
-    path: str
+    path: Path
     description: str
 
 
 DATASETS = {
     "cavanagh_theta": FileMetadata(
         filename="cavanagh_theta",
-        path=os.path.join(base_dir, "hssm/datasets/cavanagh_theta_nn.csv"),
+        path=base_dir / "hssm/datasets/cavanagh_theta_nn.csv",
         description="Description for cavanagh_theta dataset",
     ),
     "cavanagh_theta_old": FileMetadata(
         filename="cavanagh_theta",
-        path=os.path.join(base_dir, "hssm/datasets/cavanagh_theta_nn_old.csv"),
+        path=base_dir / "hssm/datasets/cavanagh_theta_nn_old.csv",
         description="Description for the original cavanagh_theta dataset",
     ),
 }
@@ -65,7 +65,7 @@ def load_data(dataset: str) -> pd.DataFrame:
 
     file_path = DATASETS[dataset].path
 
-    if not os.path.exists(file_path):
+    if not file_path.exists():
         raise ValueError(f"File {file_path} does not exist.")
 
     return pd.read_csv(file_path)
@@ -100,7 +100,7 @@ def _list_datasets() -> str:
         file_path = resource.path
         location = (
             "location: file does not exist"
-            if not os.path.exists(file_path)
+            if not file_path.exists()
             else f"location: {file_path}"
         )
         lines.append(
