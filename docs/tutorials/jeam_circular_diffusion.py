@@ -96,7 +96,7 @@ def _(mo):
     ```
 
     The dependency group resolves the HSSM fork of JEAM at commit
-    `0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce`. This is a VCS-pinned prototype,
+    `a27e99a30e1c93d1667a7dab1e8766f1abb5a88e`. This is a VCS-pinned prototype,
     not a released HSSM runtime dependency.
 
     The default run below uses 120 trials and two short chains. Start marimo with
@@ -148,7 +148,7 @@ def _(hssm, os, pytensor, warnings):
 
 @app.cell
 def _(importlib, json, mo):
-    expected_jeam_revision = "0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce"
+    expected_jeam_revision = "a27e99a30e1c93d1667a7dab1e8766f1abb5a88e"
     _distribution = importlib.metadata.distribution("jeam")
     _direct_url_text = _distribution.read_text("direct_url.json")
     if _direct_url_text is None:
