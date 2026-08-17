@@ -95,13 +95,35 @@ model = hssm.HSSM(
 This semi-analytical path evaluates JEAM's truncated first-passage series directly; it is
 not a learned likelihood approximation. It preserves JEAM's pointwise values and exposes
 reverse-mode parameter gradients through HSSM's existing JAX/PyTensor bridge. It is still
-under sampler recovery and efficiency evaluation; NUTS, JAX samplers, and variational
-inference are not promoted as supported workflows for this model yet.
+under sampler recovery and efficiency evaluation; NUTS is not yet recommended for
+substantive inference, and variational inference has not been validated.
+
+### Sampler capability matrix
+
+“CI-supported” means that HSSM runs a real one-chain compilation smoke test and verifies
+finite gradients, posterior variables, and sampler-specific statistics. It is weaker than
+a recovery or efficiency recommendation.
+
+| Likelihood | Sampler | Works | CI-supported | Recommended |
+|---|---|---:|---:|---:|
+| `blackbox` | PyMC Slice | yes | yes | yes, current baseline |
+| `analytical` | PyMC NUTS | yes | yes | not yet |
+| `analytical` | NumPyro NUTS | yes | yes | not yet |
+| `analytical` | BlackJAX | not enabled | no | no |
+| `analytical` | nutpie | not enabled | no | no |
+| `analytical` | Laplace | not enabled | no | no |
+
+The likelihood choice does not silently change HSSM's global sampler policy. With the
+analytical likelihood, select either `sampler="pymc"` or `sampler="numpyro"` explicitly
+when the backend distinction matters. Unverified `sampler=` backend combinations fail
+before dispatch with the currently enabled choices in the error message. This capability
+metadata governs backend selection, not arbitrary `step=` objects supplied within the
+PyMC backend; the black-box tutorial's explicit Slice steps are the validated baseline.
 
 The analytical route requires JAX x64 execution. HSSM checks
-`jax.config.jax_enable_x64` during model construction and does not change the global JAX
-setting. Call `hssm.set_floatX("float64")` before constructing this route. When x64 is
-disabled, the `blackbox` likelihood and its PyMC Slice workflow remain available.
+`jax.config.jax_enable_x64` during model construction, which does not change the global
+JAX setting. Call `hssm.set_floatX("float64")` before constructing this route. When x64
+is disabled, the `blackbox` likelihood and its PyMC Slice workflow remain available.
 The gate checks JAX execution precision, not input dtype: float32 model inputs remain
 supported when JAX x64 execution is enabled independently.
 
