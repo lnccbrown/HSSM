@@ -291,6 +291,26 @@ def make_jax_logp_ops(
     return LANLogpOp(logp, logp_nojit, LANLogpVJPOp(logp_vjp, n_params), n_params)
 
 
+def _scalarize_unmapped_inputs(logp: Callable, in_axes: list[int | None]) -> Callable:
+    """Pass unmapped (``in_axes=None``) inputs to `logp` as scalars.
+
+    ``vmap`` slices the batch axis off mapped inputs, so those already arrive
+    as scalars.  Unmapped inputs are forwarded whole, which for a non-trialwise
+    parameter means a ``(1,)``-shaped array rather than a scalar.  Squeezing
+    keeps the single-trial calling convention uniform.
+    """
+
+    def scalarized(*inputs):
+        return logp(
+            *(
+                jnp.squeeze(inp) if axis is None else inp
+                for inp, axis in zip(inputs, in_axes, strict=True)
+            )
+        )
+
+    return scalarized
+
+
 @overload
 def make_jax_logp_funcs_from_callable(
     logp: Callable,
@@ -376,6 +396,17 @@ def make_jax_logp_funcs_from_callable(
             raise ValueError(
                 "No vmap is needed in your use case, since all parameters are scalars."
             )
+
+        # Non-trialwise parameters reach the single-trial callable as
+        # `(1,)`-shaped tensors (bambi emits those for intercept-only
+        # parameters; see the broadcast note in `make_distribution`) and
+        # `in_axes=None` passes them through un-sliced.  Any arithmetic in the
+        # callable then produces a `(1,)` per-trial result, so the vmapped
+        # output is `(n_obs, 1)` while `LANLogpOp` declares a vector.  Squeeze
+        # them here so every parameter arrives as a scalar --- the same
+        # convention vmap already gives mapped parameters, and what the ONNX
+        # wrapper does for itself in `make_jax_logp_funcs_from_onnx`.
+        logp = _scalarize_unmapped_inputs(logp, in_axes)
 
         if return_jit:
             return make_vmap_func(
