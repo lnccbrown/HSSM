@@ -154,7 +154,7 @@ def test_adapter_rejects_an_unexpected_jeam_output_shape(monkeypatch):
     "loader",
     [
         jeam_integration._load_circular_diffusion_model,
-        jeam_integration._load_fixed_cdm_logpdf_single,
+        jeam_integration._load_fixed_cdm_logpdf,
     ],
 )
 def test_loaders_explain_how_to_install_the_optional_dependency(monkeypatch, loader):
@@ -178,7 +178,7 @@ def test_jax_loader_explains_how_to_refresh_a_stale_jeam_revision(monkeypatch):
 
     def import_without_jax_kernel(name, *args, **kwargs):
         if name == "jeam.likelihoods.jax_fixed":
-            raise ImportError("missing fixed_cdm_logpdf_single")
+            raise ImportError("missing fixed_cdm_logpdf")
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", import_without_jax_kernel)
@@ -187,4 +187,4 @@ def test_jax_loader_explains_how_to_refresh_a_stale_jeam_revision(monkeypatch):
         ImportError,
         match=r"uv sync --group jeam-prototype --locked",
     ):
-        jeam_integration._load_fixed_cdm_logpdf_single()
+        jeam_integration._load_fixed_cdm_logpdf()

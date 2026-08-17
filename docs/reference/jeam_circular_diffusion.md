@@ -87,15 +87,16 @@ configuration surface:
 model = hssm.HSSM(
     data=data,
     model="circular_diffusion",
-    loglik_kind="approx_differentiable",
+    loglik_kind="analytical",
     p_outlier=None,
 )
 ```
 
-This path preserves JEAM's pointwise values and exposes reverse-mode parameter gradients
-through HSSM's existing JAX/PyTensor bridge. It is still under sampler recovery and
-efficiency evaluation; NUTS, JAX samplers, and variational inference are not promoted as
-supported workflows for this model yet.
+This semi-analytical path evaluates JEAM's truncated first-passage series directly; it is
+not a learned likelihood approximation. It preserves JEAM's pointwise values and exposes
+reverse-mode parameter gradients through HSSM's existing JAX/PyTensor bridge. It is still
+under sampler recovery and efficiency evaluation; NUTS, JAX samplers, and variational
+inference are not promoted as supported workflows for this model yet.
 
 Prior and posterior predictive sampling use JEAM's simulator through HSSM and accept
 HSSM's seeded random-state interface. Draws preserve the final `[rt, response]` order.

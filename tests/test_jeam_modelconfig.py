@@ -44,12 +44,12 @@ def test_get_circular_diffusion_config():
     assert blackbox["default_priors"] == {"t": {"name": "HalfNormal", "sigma": 2.0}}
     assert blackbox["extra_fields"] is None
 
-    differentiable = config["likelihoods"]["approx_differentiable"]
-    assert differentiable["loglik"] is logp_circular_diffusion_jax
-    assert differentiable["backend"] == "jax"
-    assert differentiable["bounds"] == blackbox["bounds"]
-    assert differentiable["default_priors"] == blackbox["default_priors"]
-    assert differentiable["extra_fields"] is None
+    analytical = config["likelihoods"]["analytical"]
+    assert analytical["loglik"] is logp_circular_diffusion_jax
+    assert analytical["backend"] == "jax"
+    assert analytical["bounds"] == blackbox["bounds"]
+    assert analytical["default_priors"] == blackbox["default_priors"]
+    assert analytical["extra_fields"] is None
 
 
 def test_circular_diffusion_from_defaults_preserves_domain_and_rv():
@@ -68,11 +68,11 @@ def test_circular_diffusion_from_defaults_preserves_domain_and_rv():
     config.validate()
 
 
-def test_circular_diffusion_differentiable_likelihood_is_explicitly_selectable():
-    """The JAX path should be opt-in until its recovery promotion gate passes."""
-    config = Config.from_defaults("circular_diffusion", "approx_differentiable")
+def test_circular_diffusion_analytical_likelihood_is_explicitly_selectable():
+    """The semi-analytical JAX path remains opt-in until its promotion gate passes."""
+    config = Config.from_defaults("circular_diffusion", "analytical")
 
-    assert config.loglik_kind == "approx_differentiable"
+    assert config.loglik_kind == "analytical"
     assert config.backend == "jax"
     assert config.loglik is logp_circular_diffusion_jax
     assert config.rv is simulate_circular_diffusion

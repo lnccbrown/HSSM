@@ -47,12 +47,12 @@ def test_differentiable_circular_data_builds_an_ordinary_hssm_model():
     model = hssm.HSSM(
         data=data,
         model="circular_diffusion",
-        loglik_kind="approx_differentiable",
+        loglik_kind="analytical",
         p_outlier=None,
     )
 
     assert type(model) is hssm.HSSM
-    assert model.loglik_kind == "approx_differentiable"
+    assert model.loglik_kind == "analytical"
     assert model.model_config.backend == "jax"
     assert model.response_kind == "circular"
     assert model.list_params == ["v_x", "v_y", "a", "t"]

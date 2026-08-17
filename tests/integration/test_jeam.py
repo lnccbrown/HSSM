@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 import pytensor
 import pytensor.tensor as pt
-from jeam.likelihoods.jax_fixed import fixed_cdm_logpdf, fixed_cdm_logpdf_single
+from jeam.likelihoods.jax_fixed import fixed_cdm_logpdf
 from jeam.Models.Circular import CircularDiffusionModel
 from pytensor.compile.mode import Mode
 
@@ -41,49 +41,42 @@ GRADIENT_ATOL = 1e-5
 PYTHON_MODE = Mode(linker="py", optimizer="fast_compile")
 
 
-def _make_differentiable_distribution(
-    params_is_trialwise: list[bool],
-):
-    """Build the ordinary HSSM distribution around the single-trial JAX bridge."""
+def _make_analytical_distribution():
+    """Build the ordinary HSSM distribution around JEAM's batched JAX bridge."""
     likelihood = make_likelihood_callable(
         loglik=logp_circular_diffusion_jax,
-        loglik_kind="approx_differentiable",
+        loglik_kind="analytical",
         backend="jax",
-        params_is_reg=params_is_trialwise,
     )
     return make_distribution(
         rv="circular_diffusion",
         loglik=likelihood,
         list_params=PARAMETERS.copy(),
         bounds=BOUNDS,
-        params_is_trialwise=params_is_trialwise,
     )
 
 
-def test_jax_adapter_preserves_the_single_trial_data_contract():
-    """The JAX bridge should map ``[rt, response]`` onto JEAM without reordering."""
-    data = jnp.asarray([0.37, -0.65])
+def test_jax_adapter_preserves_the_batched_data_contract():
+    """The JAX bridge should map batched ``[rt, response]`` data without reordering."""
+    data = jnp.asarray([[0.37, -0.65], [0.82, 1.20]])
     parameters = (0.45, -0.30, 1.20, 0.08)
 
     observed = logp_circular_diffusion_jax(data, *parameters)
-    expected = fixed_cdm_logpdf_single(data[0], data[1], *parameters)
+    expected = fixed_cdm_logpdf(data[:, 0], data[:, 1], *parameters)
 
     np.testing.assert_allclose(observed, expected, rtol=0.0, atol=0.0)
-    assert observed.shape == ()
+    assert observed.shape == (2,)
 
 
-def test_jax_adapter_vmaps_scalar_and_trialwise_parameters_in_row_order():
-    """HSSM's vmap patterns should retain scalar sharing and trial association."""
+def test_jax_adapter_broadcasts_scalar_and_trialwise_parameters_in_row_order():
+    """The batched bridge should retain scalar sharing and trial association."""
     data = jnp.asarray([[0.21, -1.7], [0.46, 0.2], [0.91, 2.2]])
     v_x = jnp.asarray([0.55, -0.20, 0.35])
     v_y = -0.25
     threshold = jnp.asarray([1.00, 1.25, 1.10])
     ndt = jnp.asarray([0.04, 0.11, 0.17])
 
-    observed = jax.vmap(
-        logp_circular_diffusion_jax,
-        in_axes=(0, 0, None, 0, 0),
-    )(data, v_x, v_y, threshold, ndt)
+    observed = logp_circular_diffusion_jax(data, v_x, v_y, threshold, ndt)
     expected = fixed_cdm_logpdf(
         data[:, 0],
         data[:, 1],
@@ -98,14 +91,14 @@ def test_jax_adapter_vmaps_scalar_and_trialwise_parameters_in_row_order():
 
 def test_jax_adapter_parameter_gradient_matches_the_direct_jeam_kernel():
     """The HSSM argument bridge must leave JEAM's four-parameter gradient intact."""
-    data = jnp.asarray([0.53, 0.7])
+    data = jnp.asarray([[0.53, 0.7], [0.84, -1.1]])
     parameters = jnp.asarray([0.45, -0.30, 1.20, 0.08])
 
-    observed = jax.grad(lambda values: logp_circular_diffusion_jax(data, *values))(
-        parameters
-    )
+    observed = jax.grad(
+        lambda values: logp_circular_diffusion_jax(data, *values).sum()
+    )(parameters)
     expected = jax.grad(
-        lambda values: fixed_cdm_logpdf_single(data[0], data[1], *values)
+        lambda values: fixed_cdm_logpdf(data[:, 0], data[:, 1], *values).sum()
     )(parameters)
 
     np.testing.assert_allclose(observed, expected, rtol=5e-7, atol=5e-7)
@@ -300,7 +293,7 @@ def test_hssm_distribution_applies_parameter_bounds_pointwise(
 
 def test_differentiable_distribution_matches_jeam_through_both_linkers():
     """PyTensor and JAX lowering should preserve direct JAX and NumPy values."""
-    distribution = _make_differentiable_distribution([False] * 4)
+    distribution = _make_analytical_distribution()
     dtype = pytensor.config.floatX
     data = np.asarray(
         [[0.081, -2.1], [0.090, 0.35], [0.370, 2.4]],
@@ -335,7 +328,7 @@ def test_differentiable_distribution_matches_jeam_through_both_linkers():
 
 def test_differentiable_distribution_symbolic_gradients_match_direct_jax():
     """HSSM's VJP Op and JAX lowering should retain all four scalar gradients."""
-    distribution = _make_differentiable_distribution([False] * 4)
+    distribution = _make_analytical_distribution()
     dtype = pytensor.config.floatX
     data = np.asarray(
         [[0.23, -1.4], [0.51, 0.25], [0.94, 2.1]],
@@ -382,7 +375,7 @@ def test_differentiable_distribution_symbolic_gradients_match_direct_jax():
 
 def test_differentiable_distribution_preserves_trialwise_values_and_gradients():
     """Regression-generated ``v_x`` and ``t`` vectors should remain row-aligned."""
-    distribution = _make_differentiable_distribution([True, False, False, True])
+    distribution = _make_analytical_distribution()
     dtype = pytensor.config.floatX
     data = np.asarray(
         [[0.24, -1.7], [0.49, 0.2], [0.91, 2.2]],
