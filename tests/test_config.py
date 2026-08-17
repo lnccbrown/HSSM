@@ -175,6 +175,29 @@ def test_circular_responses_require_valid_bounds():
         config.validate()
 
 
+@pytest.mark.parametrize(
+    ("supported_samplers", "message"),
+    [
+        ((), "cannot be empty"),
+        (("stan",), "Unrecognized supported sampler.*stan"),
+        (("pymc", "pymc"), "cannot contain duplicates"),
+    ],
+)
+def test_supported_sampler_metadata_is_validated(supported_samplers, message):
+    """Sampler restrictions should be nonempty, recognized, and unique."""
+    config = Config(
+        model_name="custom",
+        choices=(0, 1),
+        list_params=["v"],
+        loglik_kind="analytical",
+        loglik=lambda *args: None,
+        supported_samplers=supported_samplers,
+    )
+
+    with pytest.raises(ValueError, match=message):
+        config.validate()
+
+
 class TestConfigBuildModelConfigExtraLogic:
     def test_build_model_config_dict_with_choices_conflict(self, caplog):
         # model 'ddm' has defaults in hssm.defaults; use a minimal dict override

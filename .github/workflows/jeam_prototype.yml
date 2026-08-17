@@ -15,6 +15,7 @@ on:
       - "tests/integration/test_jeam_objective_parity.py"
       - "tests/integration/test_jeam_predictive.py"
       - "tests/integration/test_jeam_simulator.py"
+      - "tests/integration/test_jeam_sampler_capabilities.py"
   workflow_dispatch:
 
 jobs:
@@ -49,4 +50,10 @@ jobs:
         run: >-
           uv run --group jeam-prototype pytest
           tests/integration/test_jeam_bayesian_recovery.py
+          -m slow
+
+      - name: Smoke-test the verified JEAM NUTS backends
+        run: >-
+          uv run --group jeam-prototype pytest
+          tests/integration/test_jeam_sampler_capabilities.py
           -m slow
