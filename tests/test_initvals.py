@@ -93,10 +93,17 @@ def test_sample_map(caplog, loglik_kind, model, sampler, initvals):
         # point moved, not where it landed.
         estimate = model_on.map
         assert estimate.success, "MAP estimation reported failure"
+        # Established before the movement check: with no shared names the
+        # generator below is empty, `any` is False, and the failure would blame
+        # a stationary optimizer for what is really a key mismatch.
+        shared = [name for name in estimate.params if name in model_on.initvals]
+        assert shared, (
+            "no parameter names shared between the estimate and the initial "
+            f"values: {sorted(estimate.params)} vs {sorted(model_on.initvals)}"
+        )
         assert any(
             not np.allclose(estimate.params[name], model_on.initvals[name], atol=1e-4)
-            for name in estimate.params
-            if name in model_on.initvals
+            for name in shared
         ), "MAP estimate never moved off the initial point"
 
 

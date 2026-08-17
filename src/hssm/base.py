@@ -770,6 +770,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     model=self.pymc_model,
                     return_raw=True,
                     seed=run_seed,
+                    # Stated rather than inherited. PyMC currently defaults this
+                    # to True, but the audit and the fallback scorer *require*
+                    # the transformed names --- the scorer raises `KeyError`
+                    # without them --- so the dependency is pinned here instead
+                    # of resting on someone else's default. The caller's own
+                    # `include_transformed` was popped above and is applied to
+                    # the returned mapping later.
+                    include_transformed=True,
                     **kwargs,
                 )
             # Only `SamplingError` means "PyMC rejected this start". Catching
