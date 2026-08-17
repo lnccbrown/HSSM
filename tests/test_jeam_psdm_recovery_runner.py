@@ -9,6 +9,7 @@ from scripts.benchmark_jeam_psdm_recovery import (
     DEFAULT_SPEC_PATH,
     REPO_ROOT,
     _assert_model_contract,
+    _configure_precision,
     _load_json,
     _make_model,
     _make_objectives,
@@ -62,19 +63,53 @@ def test_public_model_resolves_the_frozen_priors_bounds_and_initvals(spec, tiny_
     }
 
 
+@pytest.mark.parametrize("float_dtype", ["float32", "float64"])
+def test_public_model_contract_is_stable_across_pytensor_precision(
+    spec, tiny_data, float_dtype
+):
+    """Runtime scalar representation must not change the frozen contract."""
+    import pytensor
+
+    import hssm
+
+    original_dtype = pytensor.config.floatX
+    try:
+        hssm.set_floatX(float_dtype)
+        contract = _assert_model_contract(_make_model(tiny_data), spec)
+    finally:
+        hssm.set_floatX(original_dtype)
+
+    assert contract == {
+        "priors": spec["priors_and_initialization"]["priors"],
+        "initvals": spec["priors_and_initialization"][
+            "resolved_untransformed_initvals"
+        ],
+        "bounds": spec["priors_and_initialization"]["configured_bounds"],
+    }
+
+
 def test_direct_and_compiled_objectives_match_on_asymmetric_data(spec, tiny_data):
     """The canonical optimizer comparison should preserve actual pointwise math."""
-    direct, compiled = _make_objectives(tiny_data)
-    candidates = (
-        np.array([0.6, 1.0, 1.1, 0.2]),
-        np.array([0.48, 1.1, 1.02, 0.17]),
-    )
+    import pytensor
 
-    for candidate in candidates:
-        assert compiled(candidate) == pytest.approx(
-            direct(candidate),
-            abs=spec["scientific_acceptance"]["maximum_objective_absolute_error"],
+    import hssm
+
+    original_dtype = pytensor.config.floatX
+    try:
+        _configure_precision()
+        direct, compiled = _make_objectives(tiny_data)
+        candidates = (
+            np.array([0.6, 1.0, 1.1, 0.2]),
+            np.array([0.48, 1.1, 1.02, 0.17]),
         )
+
+        for candidate in candidates:
+            assert compiled(candidate) == pytest.approx(
+                direct(candidate),
+                abs=spec["scientific_acceptance"]["maximum_objective_absolute_error"],
+            )
+    finally:
+        hssm.set_floatX(original_dtype)
 
 
 def test_optimizer_bounds_respect_the_observed_ndt_support(spec, tiny_data):
