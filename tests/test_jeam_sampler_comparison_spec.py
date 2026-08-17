@@ -107,6 +107,8 @@ def test_sampler_comparison_freezes_fair_execution(spec):
     assert execution["chains"] == 4
     assert execution["tune"] == execution["draws"] == 1000
     assert execution["cores"] == 1
+    assert execution["blas_cores"] == 1
+    assert execution["compute_convergence_checks_during_sampling"] is True
     assert execution["fresh_subprocess_per_scenario_sampler"] is True
     assert execution["posterior_hdi_probability"] == pytest.approx(0.94)
     assert execution["posterior_predictive_draws"] == 40
