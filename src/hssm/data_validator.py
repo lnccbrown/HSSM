@@ -5,6 +5,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
 _logger = logging.getLogger("hssm")
 
@@ -14,8 +15,10 @@ class DataValidatorMixin:
 
     data: pd.DataFrame
     response: list[str]
-    choices: list[int]
-    n_choices: int
+    choices: list[int] | tuple[int, ...] | None
+    response_kind: str
+    response_bounds: dict[str, tuple[float, float]]
+    n_choices: int | None
     extra_fields: list[str] | None
     deadline: bool
     deadline_name: str
@@ -49,31 +52,42 @@ class DataValidatorMixin:
     def _post_check_data_sanity(self):
         """Check if the data is clean enough for the model."""
         if self.is_choice_only:
-            return
-        if self.deadline or self.missing_data:
-            if -999.0 not in self.data["rt"].unique():
-                raise ValueError(
-                    "You have no missing data in your dataset, "
-                    + "which is not allowed when `missing_data` or `deadline` is set to"
-                    + " True."
-                )
-            rt_filtered = self.data.rt[self.data.rt != -999.0]
+            if self.response_kind == "categorical":
+                return
+            valid_data = self.data
         else:
-            rt_filtered = self.data.rt
+            if self.deadline or self.missing_data:
+                if -999.0 not in self.data["rt"].unique():
+                    raise ValueError(
+                        "You have no missing data in your dataset, "
+                        + "which is not allowed when `missing_data` or `deadline` is "
+                        + "set to True."
+                    )
+                rt_filtered = self.data.rt[self.data.rt != -999.0]
+            else:
+                rt_filtered = self.data.rt
 
-        if np.any(rt_filtered.isna(), axis=None):
-            raise ValueError(
-                "You have NaN response times in your dataset, "
-                + "which is not allowed."
-            )
+            if np.any(rt_filtered.isna(), axis=None):
+                raise ValueError(
+                    "You have NaN response times in your dataset, "
+                    + "which is not allowed."
+                )
 
-        if not np.all(rt_filtered >= 0):
-            raise ValueError(
-                "You have negative response times in your dataset, "
-                + "which is not allowed."
-            )
+            if not np.all(rt_filtered >= 0):
+                raise ValueError(
+                    "You have negative response times in your dataset, "
+                    + "which is not allowed."
+                )
 
-        valid_responses = self.data.loc[self.data["rt"] != -999.0, "response"]
+            valid_data = self.data.loc[self.data["rt"] != -999.0]
+
+        if self.response_kind != "categorical":
+            self._validate_non_categorical_responses(valid_data)
+            return
+
+        assert self.choices is not None
+        assert self.n_choices is not None
+        valid_responses = valid_data["response"]
         unique_responses = valid_responses.unique().astype(int)
 
         if np.any(~np.isin(unique_responses, self.choices)):
@@ -96,6 +110,46 @@ class DataValidatorMixin:
                 UserWarning,
                 stacklevel=2,
             )
+
+    def _validate_non_categorical_responses(self, data: pd.DataFrame) -> None:
+        """Validate continuous or circular response columns without coercion."""
+        response_columns = list(self.response)
+        if self.deadline and self.deadline_name in response_columns:
+            response_columns.remove(self.deadline_name)
+        if not self.is_choice_only:
+            response_columns = response_columns[1:]
+
+        for column in response_columns:
+            values = data[column]
+            if is_bool_dtype(values.dtype) or not is_numeric_dtype(values.dtype):
+                raise ValueError(
+                    f"Response column {column!r} must contain numeric, finite values."
+                )
+
+            values_array = values.to_numpy()
+            if not np.all(np.isfinite(values_array)):
+                raise ValueError(
+                    f"Response column {column!r} must contain numeric, finite values."
+                )
+
+            if column not in self.response_bounds:
+                continue
+
+            lower, upper = self.response_bounds[column]
+            upper_invalid = (
+                values_array >= upper
+                if self.response_kind == "circular"
+                else values_array > upper
+            )
+            invalid = (values_array < lower) | upper_invalid
+            if np.any(invalid):
+                interval_end = ")" if self.response_kind == "circular" else "]"
+                invalid_values = np.unique(values_array[invalid]).tolist()
+                raise ValueError(
+                    f"{self.response_kind.capitalize()} responses in column "
+                    f"{column!r} must lie in [{lower}, {upper}{interval_end}. "
+                    f"Invalid values: {invalid_values}"
+                )
 
     # AF-TODO: We probably want to incorporate some of the
     # remaining check on missing data
@@ -124,12 +178,12 @@ class DataValidatorMixin:
             ]
 
     def _validate_choices(self):
-        """
-        Ensure that `choices` is provided (not None).
-
-        Raises ValueError if choices is None.
-        """
-        if self.choices is None:
+        """Validate that categorical response metadata includes choices."""
+        if self.response_kind == "categorical" and self.choices is None:
             raise ValueError(
                 "`choices` must be provided either in `model_config` or as an argument."
+            )
+        if self.response_kind != "categorical" and self.choices is not None:
+            raise ValueError(
+                "`choices` must be None for continuous or circular responses."
             )
