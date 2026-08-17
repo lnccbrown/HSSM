@@ -73,9 +73,9 @@ model = hssm.HSSM(
 
 ## Inference and prediction
 
-The established default remains the NumPy/Python `blackbox` likelihood. It does not
-expose gradients to PyTensor, so use the PyMC backend with an explicitly gradient-free
-step method such as one `pm.Slice` step for each parameter.
+The NumPy/Python `blackbox` likelihood remains the independent compatibility baseline.
+It does not expose gradients to PyTensor, so it requires an explicitly gradient-free
+step method such as one PyMC `pm.Slice` step for each parameter.
 
 An opt-in, strict JAX likelihood is also registered through HSSM's ordinary
 configuration surface:
@@ -91,9 +91,20 @@ model = hssm.HSSM(
 
 This semi-analytical path evaluates JEAM's truncated first-passage series directly; it is
 not a learned likelihood approximation. It preserves JEAM's pointwise values and exposes
-reverse-mode parameter gradients through HSSM's existing JAX/PyTensor bridge. It is still
-under sampler recovery and efficiency evaluation; NUTS is not yet recommended for
-substantive inference, and variational inference has not been validated.
+reverse-mode parameter gradients through HSSM's existing JAX/PyTensor bridge.
+
+For substantive fixed-CDM inference, the evidence-backed first recommendation is the
+analytical likelihood with PyMC NUTS:
+
+```python
+traces = model.sample(
+    sampler="pymc",
+    target_accept=0.9,
+)
+```
+
+NumPyro NUTS is also scientifically validated and was faster in the preregistered local
+comparison. Variational inference has not been validated.
 
 ### Sampler capability matrix
 
@@ -103,17 +114,17 @@ a recovery or efficiency recommendation.
 
 | Likelihood | Sampler | Works | CI-supported | Recommended |
 |---|---|---:|---:|---:|
-| `blackbox` | PyMC Slice | yes | yes | yes, current baseline |
-| `analytical` | PyMC NUTS | yes | yes | not yet |
-| `analytical` | NumPyro NUTS | yes | yes | not yet |
+| `blackbox` | PyMC Slice | yes | yes | yes, reference fallback |
+| `analytical` | PyMC NUTS | yes | yes | yes, ordinary first recommendation |
+| `analytical` | NumPyro NUTS | yes | yes | yes, validated alternative |
 | `analytical` | BlackJAX | not enabled | no | no |
 | `analytical` | nutpie | not enabled | no | no |
 | `analytical` | Laplace | not enabled | no | no |
 
-The likelihood choice does not silently change HSSM's global sampler policy. With the
-analytical likelihood, select either `sampler="pymc"` or `sampler="numpyro"` explicitly
-when the backend distinction matters. Unverified combinations fail before backend
-dispatch with the two currently enabled choices in the error message.
+The likelihood choice does not silently change HSSM's global sampler policy. Select
+`loglik_kind="analytical"` and either `sampler="pymc"` or `sampler="numpyro"`
+explicitly. Unverified combinations fail before backend dispatch with the two currently
+enabled choices in the error message.
 
 Prior and posterior predictive sampling use JEAM's simulator through HSSM and accept
 HSSM's seeded random-state interface. Draws preserve the final `[rt, response]` order.
@@ -121,6 +132,9 @@ The [complete marimo comparison lab](../tutorials/jeam_circular_diffusion.py) ch
 both likelihoods against direct JEAM, compiles the analytical parameter gradient, and
 lets users fit the same simulated dataset with blackbox/PyMC Slice, analytical/PyMC
 NUTS, or analytical/NumPyro NUTS before running diagnostics and predictive checks.
+The artifact-backed [NUTS recovery and efficiency report](../tutorials/jeam_nuts_recovery.py)
+then shows the preregistered four-scenario recovery, diagnostics, predictive checks,
+objective parity, timing decomposition, and 1,500-trial scaling evidence.
 
 ## Current boundary
 
@@ -129,7 +143,7 @@ not currently provide:
 
 - continuous-response lapse or outlier mixtures (`p_outlier` must be `None`);
 - native circular versions of HSSM's category-oriented plotting functions;
-- a promoted differentiable sampler default, LAN likelihood, or validated variational
+- automatic likelihood/sampler selection, a LAN likelihood, or a validated variational
   workflow;
 - collapsing or custom thresholds, or nonzero $s_v$ or $s_t$;
 - spherical, hyperspherical, projected, categorical, or ordinary continuous-response
@@ -139,8 +153,10 @@ not currently provide:
 The wrapper has pointwise direct-JEAM/HSSM likelihood parity tests, deterministic
 predictive tests, a marked-slow Bayesian recovery test, and a predeclared four-scenario
 [repeated-recovery study](../tutorials/jeam_repeated_recovery.py). This evidence validates
-the narrow handshake; it is not a claim of production-scale sampler performance or
-long-run frequentist calibration.
+the narrow handshake. A separate preregistered comparison supports PyMC and NumPyro NUTS
+for the fixed CDM and promotes both over the Slice baseline on the measured local
+efficiency gates. Neither study is a claim of long-run frequentist calibration or broad
+hierarchical-workload performance.
 
 ## Promotion checklist
 
