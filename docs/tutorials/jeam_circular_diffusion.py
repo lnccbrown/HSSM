@@ -7,9 +7,10 @@ notebook with::
     uv run --group docs --group jeam-prototype \
         marimo edit docs/tutorials/jeam_circular_diffusion.py
 
-Choose the likelihood and sampler in the notebook. The default two-chain fit is
-intentionally small enough for an interactive tutorial. For a longer local run, set
-``FULL_RUN=1`` before starting marimo. For a plumbing-only run, set
+Choose the likelihood and sampler, adjust tune/draw counts, and click Run in the
+notebook. The default two-chain fit is intentionally small enough for an interactive
+tutorial. For a longer local run, set ``FULL_RUN=1`` before starting marimo. For a
+plumbing-only run that bypasses the Run button, set
 ``JEAM_NOTEBOOK_SMOKE=1``. The repeated-recovery benchmark in
 ``docs/tutorials/jeam_repeated_recovery.py`` remains the scientific gate.
 """
@@ -614,6 +615,27 @@ def _(likelihood_comparison, mo):
 
 
 @app.cell
+def _(RUN_CONFIG, mo):
+    tune_count = mo.ui.number(
+        start=10,
+        stop=5_000,
+        step=10,
+        value=RUN_CONFIG["tune"],
+        label="Tune per chain",
+    )
+    draw_count = mo.ui.number(
+        start=10,
+        stop=5_000,
+        step=10,
+        value=RUN_CONFIG["draws"],
+        label="Draws per chain",
+    )
+    run_inference = mo.ui.run_button(label="Run selected fit")
+    mo.hstack([tune_count, draw_count, run_inference], justify="start")
+    return draw_count, run_inference, tune_count
+
+
+@app.cell
 def _(inference_route, mo):
     mo.md(f"""
     ## 4. Fit the selected route through HSSM
@@ -625,10 +647,15 @@ def _(inference_route, mo):
     same model formulas, priors, observed dataset, chain seeds, tune count, and draw
     count; only the likelihood implementation and sampler change.
 
-    `cores=1` keeps the notebook portable and reproducible. Runtime here is
-    descriptive, not a benchmark: JAX compilation and short-run warmup costs are a
-    large fraction of an interactive run. The repeated recovery and efficiency gates
-    remain separate from this workflow demonstration.
+    Adjust the tune and draw counts, then click **Run selected fit**. Ordinary notebook
+    loading stops at this gate, so changing explanatory controls does not accidentally
+    launch MCMC. `JEAM_NOTEBOOK_SMOKE=1` deliberately bypasses the button for automated
+    end-to-end checks.
+
+    `cores=1` keeps the notebook portable and reproducible. Runtime here is descriptive,
+    not a benchmark: JAX compilation and short-run warmup costs are a large fraction of
+    an interactive run. The repeated recovery and efficiency gates remain separate from
+    this workflow demonstration.
     """)
     return
 
@@ -637,18 +664,30 @@ def _(inference_route, mo):
 def _(
     PARAMETER_ORDER,
     RUN_CONFIG,
+    SMOKE_RUN,
     circular_model,
+    draw_count,
+    mo,
     perf_counter,
     pm,
+    run_inference,
     selected_likelihood,
     selected_sampler,
+    tune_count,
 ):
+    mo.stop(
+        not (SMOKE_RUN or run_inference.value),
+        mo.callout(
+            "Choose a route and sampling counts, then click Run selected fit.",
+            kind="info",
+        ),
+    )
     _sample_kwargs = {
         "sampler": selected_sampler,
         "chains": RUN_CONFIG["chains"],
         "cores": 1,
-        "tune": RUN_CONFIG["tune"],
-        "draws": RUN_CONFIG["draws"],
+        "tune": tune_count.value,
+        "draws": draw_count.value,
         "random_seed": list(RUN_CONFIG["chain_seeds"]),
         "progressbar": False,
         "idata_kwargs": {"log_likelihood": False},
@@ -679,7 +718,9 @@ def _(
     sampling_seconds,
     selected_likelihood,
     selected_sampler,
+    draw_count,
     traces,
+    tune_count,
 ):
     posterior_summary = az.summary(
         traces,
@@ -739,6 +780,8 @@ def _(
         [
             {"diagnostic": "likelihood", "observed": selected_likelihood},
             {"diagnostic": "sampler", "observed": selected_sampler},
+            {"diagnostic": "tune per chain", "observed": tune_count.value},
+            {"diagnostic": "draws per chain", "observed": draw_count.value},
             {"diagnostic": "sampler statistics", "observed": str(sample_stat_names)},
             {
                 "diagnostic": "sampler statistics match route",
