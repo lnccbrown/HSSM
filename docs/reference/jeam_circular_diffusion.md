@@ -92,8 +92,28 @@ model = hssm.HSSM(
 This semi-analytical path evaluates JEAM's truncated first-passage series directly; it is
 not a learned likelihood approximation. It preserves JEAM's pointwise values and exposes
 reverse-mode parameter gradients through HSSM's existing JAX/PyTensor bridge. It is still
-under sampler recovery and efficiency evaluation; NUTS, JAX samplers, and variational
-inference are not promoted as supported workflows for this model yet.
+under sampler recovery and efficiency evaluation; NUTS is not yet recommended for
+substantive inference, and variational inference has not been validated.
+
+### Sampler capability matrix
+
+“CI-supported” means that HSSM runs a real one-chain compilation smoke test and verifies
+finite gradients, posterior variables, and sampler-specific statistics. It is weaker than
+a recovery or efficiency recommendation.
+
+| Likelihood | Sampler | Works | CI-supported | Recommended |
+|---|---|---:|---:|---:|
+| `blackbox` | PyMC Slice | yes | yes | yes, current baseline |
+| `analytical` | PyMC NUTS | yes | yes | not yet |
+| `analytical` | NumPyro NUTS | yes | yes | not yet |
+| `analytical` | BlackJAX | not enabled | no | no |
+| `analytical` | nutpie | not enabled | no | no |
+| `analytical` | Laplace | not enabled | no | no |
+
+The likelihood choice does not silently change HSSM's global sampler policy. With the
+analytical likelihood, select either `sampler="pymc"` or `sampler="numpyro"` explicitly
+when the backend distinction matters. Unverified combinations fail before backend
+dispatch with the two currently enabled choices in the error message.
 
 Prior and posterior predictive sampling use JEAM's simulator through HSSM and accept
 HSSM's seeded random-state interface. Draws preserve the final `[rt, response]` order.
