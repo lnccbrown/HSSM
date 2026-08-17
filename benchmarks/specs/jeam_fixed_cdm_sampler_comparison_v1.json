@@ -261,9 +261,9 @@
       "backend": "numpyro",
       "step": "NumPyro NUTS through PyMC and Bambi",
       "target_accept": 0.9,
-      "nuts_sampler_kwargs": {
-        "chain_method": "sequential"
-      }
+      "nuts_sampler_kwargs": null,
+      "chain_execution": "Expose exactly one JAX CPU device and use PyMC's default parallel request; NumPyro then executes its documented automatic sequential fallback.",
+      "random_seed_semantics": "PyMC external NUTS consumes the first listed chain seed as one master seed and splits it deterministically across chains."
     }
   ],
   "execution": {
@@ -272,6 +272,7 @@
     "draws": 1000,
     "cores": 1,
     "blas_cores": 1,
+    "jax_host_device_count": 1,
     "init": "adapt_diag",
     "progressbar": false,
     "compute_convergence_checks_during_sampling": true,
