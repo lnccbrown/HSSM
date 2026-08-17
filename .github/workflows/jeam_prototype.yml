@@ -9,6 +9,9 @@ on:
       - "src/hssm/modelconfig/circular_diffusion_config.py"
       - "docs/reference/jeam_circular_diffusion.md"
       - "docs/tutorials/jeam_circular_diffusion.py"
+      - "docs/tutorials/jeam_nuts_recovery.py"
+      - "scripts/jeam_sampler_comparison_report.py"
+      - "tests/test_jeam_sampler_comparison_report.py"
       - "scripts/benchmark_jeam_bayesian_recovery.py"
       - "scripts/benchmark_jeam_objective_parity.py"
       - "tests/integration/test_jeam_bayesian_recovery.py"
@@ -43,6 +46,12 @@ jobs:
         run: >-
           uv run --group docs --group jeam-prototype marimo check --strict
           docs/tutorials/jeam_circular_diffusion.py
+          docs/tutorials/jeam_nuts_recovery.py
+
+      - name: Verify the JEAM sampler report transformations
+        run: >-
+          uv run --group jeam-prototype pytest
+          tests/test_jeam_sampler_comparison_report.py
 
       - name: Verify the JEAM likelihood and simulator handshake
         run: >-
