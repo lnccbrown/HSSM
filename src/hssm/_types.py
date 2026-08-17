@@ -61,6 +61,7 @@ class DefaultConfig(TypedDict):
     rv: NotRequired[Any]
     description: Optional[str]
     likelihoods: LoglikConfigs
+    default_loglik_kind: NotRequired[LoglikKind]
 
 
 DefaultConfigs = dict[SupportedModels, DefaultConfig]
