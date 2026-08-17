@@ -24,10 +24,10 @@ def _load_circular_diffusion_model() -> Callable[..., Any]:
     return CircularDiffusionModel
 
 
-def _load_fixed_cdm_logpdf_single() -> Callable[..., Any]:
-    """Load JEAM's JAX kernel without importing JEAM from base HSSM paths."""
+def _load_fixed_cdm_logpdf() -> Callable[..., Any]:
+    """Load JEAM's batched JAX kernel without importing it from base HSSM paths."""
     try:
-        from jeam.likelihoods.jax_fixed import fixed_cdm_logpdf_single
+        from jeam.likelihoods.jax_fixed import fixed_cdm_logpdf
     except ModuleNotFoundError as exc:
         if exc.name == "jeam" or (
             exc.name is not None and exc.name.startswith("jeam.")
@@ -45,7 +45,7 @@ def _load_fixed_cdm_logpdf_single() -> Callable[..., Any]:
             "`uv sync --group jeam-prototype --locked`."
         ) from exc
 
-    return fixed_cdm_logpdf_single
+    return fixed_cdm_logpdf
 
 
 def _broadcast_parameter(
@@ -155,18 +155,19 @@ def logp_circular_diffusion_jax(
     a: Any,
     t: Any,
 ) -> Any:
-    """Evaluate one strict fixed-CDM log density through JEAM's JAX kernel.
+    """Evaluate strict fixed-CDM log densities through JEAM's JAX kernel.
 
-    ``data`` is one HSSM observation in ``[rt, response]`` order. HSSM's standard
-    differentiable-likelihood builder vmaps this single-trial callable according to
-    the model's scalar and regression-generated parameter shapes. The diffusion scale
-    is fixed to one, matching :func:`logp_circular_diffusion`; no finite density floor
-    is applied on this strict inference path.
+    ``data`` contains HSSM observations in ``[rt, response]`` order. JEAM's public
+    batched evaluator broadcasts scalar and regression-generated parameters across the
+    observations. This lets HSSM classify the semi-analytical likelihood as
+    ``analytical`` instead of routing it through the LAN-oriented single-trial vmap
+    path. The diffusion scale is fixed to one, matching
+    :func:`logp_circular_diffusion`; no finite density floor is applied.
     """
-    fixed_cdm_logpdf_single = _load_fixed_cdm_logpdf_single()
-    return fixed_cdm_logpdf_single(
-        data[0],
-        data[1],
+    fixed_cdm_logpdf = _load_fixed_cdm_logpdf()
+    return fixed_cdm_logpdf(
+        data[:, 0],
+        data[:, 1],
         v_x,
         v_y,
         a,

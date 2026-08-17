@@ -30,7 +30,7 @@ def get_circular_diffusion_config() -> DefaultConfig:
         ),
         "default_loglik_kind": "blackbox",
         "likelihoods": {
-            "approx_differentiable": {
+            "analytical": {
                 "loglik": logp_circular_diffusion_jax,
                 "backend": "jax",
                 "default_priors": {
