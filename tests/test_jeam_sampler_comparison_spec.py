@@ -108,6 +108,7 @@ def test_sampler_comparison_freezes_fair_execution(spec):
     assert execution["tune"] == execution["draws"] == 1000
     assert execution["cores"] == 1
     assert execution["blas_cores"] == 1
+    assert execution["jax_host_device_count"] == 1
     assert execution["compute_convergence_checks_during_sampling"] is True
     assert execution["fresh_subprocess_per_scenario_sampler"] is True
     assert execution["posterior_hdi_probability"] == pytest.approx(0.94)
@@ -134,9 +135,11 @@ def test_sampler_comparison_freezes_fair_execution(spec):
         assert samplers[name]["likelihood"] == "analytical"
         assert samplers[name]["backend"] == backend
         assert samplers[name]["target_accept"] == pytest.approx(0.9)
-    assert samplers["numpyro_nuts"]["nuts_sampler_kwargs"] == {
-        "chain_method": "sequential"
-    }
+    assert samplers["numpyro_nuts"]["nuts_sampler_kwargs"] is None
+    assert (
+        "automatic sequential fallback" in samplers["numpyro_nuts"]["chain_execution"]
+    )
+    assert "master seed" in samplers["numpyro_nuts"]["random_seed_semantics"]
 
 
 def test_scientific_and_promotion_gates_are_separate_and_exact(spec):
