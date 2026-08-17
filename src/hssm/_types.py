@@ -29,6 +29,7 @@ SupportedModels = Literal[
     "softmax_inv_temperature_2",
     "softmax_inv_temperature_3",
     "circular_diffusion",
+    "projected_spherical_diffusion",
 ]
 
 ResponseKind = Literal["categorical", "continuous", "circular"]
