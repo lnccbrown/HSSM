@@ -117,9 +117,10 @@ dispatch with the two currently enabled choices in the error message.
 
 Prior and posterior predictive sampling use JEAM's simulator through HSSM and accept
 HSSM's seeded random-state interface. Draws preserve the final `[rt, response]` order.
-The [complete marimo walkthrough](../tutorials/jeam_circular_diffusion.py) demonstrates
-construction, explicit Slice sampling, likelihood parity, diagnostics, and predictive
-checks.
+The [complete marimo comparison lab](../tutorials/jeam_circular_diffusion.py) checks
+both likelihoods against direct JEAM, compiles the analytical parameter gradient, and
+lets users fit the same simulated dataset with blackbox/PyMC Slice, analytical/PyMC
+NUTS, or analytical/NumPyro NUTS before running diagnostics and predictive checks.
 
 ## Current boundary
 
