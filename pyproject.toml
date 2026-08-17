@@ -49,6 +49,8 @@ cuda12 = ["jax[cuda12]>=0.7.0"]
 cuda13 = ["jax[cuda13]>=0.7.0"]
 
 [dependency-groups]
+jeam-prototype = ["jeam"]
+
 dev = [
     "coverage>=7.6.4",
     "mypy>=2.1",
@@ -256,6 +258,7 @@ publish-url = "https://test.pypi.org/legacy/"
 
 [tool.uv.sources]
 hssm = { workspace = true }
+jeam = { git = "https://github.com/AlexanderFengler/JEAM.git", rev = "a9f547b3630ae8ff31ccec1b904e0c02fdba6d99" }
 
 [tool.pyrefly]
 preset = "legacy"
