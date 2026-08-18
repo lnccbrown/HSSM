@@ -1,5 +1,9 @@
 # Changelog
 
+### Unreleased
+
+1. **The non-decision-time support guard now accounts for trial-to-trial variability in `t`** (#1292). `ensure_positive_ndt` replaced the log-likelihood with `LOGP_LB` wherever `rt <= t`, which is the correct support edge only for a fixed non-decision time. For any model carrying `st` the trial non-decision time is `Uniform(t - st, t + st)`, so the fastest admissible response time is `t - st` and the whole band `[t - st, t]` carries real density that the guard was discarding — silently, because the `p_outlier` lapse mixture re-emitted the floored trials at `log(p_outlier / 20)` instead of at `LOGP_LB`. Measured on a `ddm_st` model whose likelihood is the exact quadrature, the guard accounted for discrepancies of -5.3 to -12586.8 nats against that quadrature called directly; with the edge corrected the two agree exactly. The shift applies only to `st`: `sz` and `sv` are variability in parameters that do not move the response-time support, and are deliberately not consulted. `full_ddm` is unaffected in value — its `hddm_wfpt` likelihood parameterizes `st` as the full width, with its own zero-density edge at `t - st / 2`, and already returns the same lower bound across the wider band.
+
 ### 0.5.0
 
 This version includes the following changes:
