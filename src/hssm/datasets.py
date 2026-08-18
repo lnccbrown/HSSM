@@ -4,75 +4,84 @@ Base IO code for datasets.
 Heavily influenced by Arviz's(scikit-learn's, and Bambi's) implementation.
 """
 
-import os
-from typing import NamedTuple, Optional
+from pathlib import Path
+from typing import NamedTuple
 
 import pandas as pd
 
-base_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+base_dir = Path(__file__).resolve().parent.parent
 
 
 class FileMetadata(NamedTuple):
     """Typing for dataset metadata."""
 
     filename: str
-    path: str
+    path: Path
     description: str
 
 
 DATASETS = {
     "cavanagh_theta": FileMetadata(
         filename="cavanagh_theta",
-        path=os.path.join(base_dir, "hssm/datasets/cavanagh_theta_nn.csv"),
+        path=base_dir / "hssm/datasets/cavanagh_theta_nn.csv",
         description="Description for cavanagh_theta dataset",
     ),
     "cavanagh_theta_old": FileMetadata(
         filename="cavanagh_theta",
-        path=os.path.join(base_dir, "hssm/datasets/cavanagh_theta_nn_old.csv"),
+        path=base_dir / "hssm/datasets/cavanagh_theta_nn_old.csv",
         description="Description for the original cavanagh_theta dataset",
     ),
 }
 
 
-def load_data(dataset: Optional[str] = None) -> pd.DataFrame | str:
+def load_data(dataset: str) -> pd.DataFrame:
     """
-    Load a dataset as a pandas DataFrame.
+    Load a built-in dataset as a pandas DataFrame.
 
-    If a valid dataset name is provided, this function will return the
-    corresponding DataFrame. Otherwise, it lists the available datasets.
+    Use `hssm.list_data` to see the names of the available datasets.
 
     Parameters
     ----------
-    dataset : str, optional
-        Name of the dataset to load. If not provided, a list
-        of available datasets is returned.
+    dataset : str
+        Name of the dataset to load.
 
     Raises
     ------
     ValueError
-        If the provided dataset name does not match any of the available datasets.
+        If the provided dataset name does not match any of the available
+        datasets, or if the dataset is known but its file is missing from the
+        installation.
 
     Returns
     -------
-    pd.DataFrame or str
-        Loaded dataset as a DataFrame if a valid dataset name was provided,
-        otherwise a string listing the available datasets.
+    pd.DataFrame
+        The loaded dataset.
     """
-    if dataset in DATASETS:
-        datafile = DATASETS[dataset]
-        file_path = datafile.path
+    if dataset not in DATASETS:
+        raise ValueError(
+            f"Dataset {dataset!r} not found! The following are available:\n"
+            f"{_list_datasets()}"
+        )
 
-        if not os.path.exists(file_path):
-            raise ValueError(f"File {file_path} does not exist.")
+    file_path = DATASETS[dataset].path
 
-        return pd.read_csv(file_path)
+    if not file_path.exists():
+        raise ValueError(f"File {file_path} does not exist.")
 
-    if dataset is None:
-        return _list_datasets()
+    return pd.read_csv(file_path)
 
-    raise ValueError(
-        f"Dataset {dataset} not found! The following are available:\n{_list_datasets()}"
-    )
+
+def list_data() -> tuple[str, ...]:
+    """Return the names of the built-in HSSM datasets.
+
+    Use `hssm.load_data` to load any of them by name.
+
+    Returns
+    -------
+    tuple[str, ...]
+        A tuple containing all built-in HSSM dataset names.
+    """
+    return tuple(DATASETS)
 
 
 def _list_datasets() -> str:
@@ -91,7 +100,7 @@ def _list_datasets() -> str:
         file_path = resource.path
         location = (
             "location: file does not exist"
-            if not os.path.exists(file_path)
+            if not file_path.exists()
             else f"location: {file_path}"
         )
         lines.append(
