@@ -9,6 +9,7 @@ on:
       - "src/hssm/modelconfig/circular_diffusion_config.py"
       - "tests/integration/test_jeam.py"
       - "tests/integration/test_jeam_model.py"
+      - "tests/integration/test_jeam_predictive.py"
       - "tests/integration/test_jeam_simulator.py"
   workflow_dispatch:
 
@@ -36,4 +37,5 @@ jobs:
           uv run --group jeam-prototype pytest
           tests/integration/test_jeam.py
           tests/integration/test_jeam_model.py
+          tests/integration/test_jeam_predictive.py
           tests/integration/test_jeam_simulator.py

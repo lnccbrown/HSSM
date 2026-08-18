@@ -205,6 +205,7 @@ class aDDM(HSSMBase):
         kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
+        random_seed: int | np.random.Generator | None = None,
         continuation_mode: str | None = None,
         continuation_params: dict | None = None,
     ) -> DataTree | None:
@@ -234,7 +235,14 @@ class aDDM(HSSMBase):
         self._continuation_override: tuple[str, dict | None] | None = (mode, params)
         try:
             return super().sample_posterior_predictive(
-                dt, data, inplace, include_group_specific, kind, draws, safe_mode
+                dt=dt,
+                data=data,
+                inplace=inplace,
+                include_group_specific=include_group_specific,
+                kind=kind,
+                draws=draws,
+                safe_mode=safe_mode,
+                random_seed=random_seed,
             )
         finally:
             self._continuation_override = None
