@@ -1,11 +1,12 @@
 """Module for registering custom models in HSSM."""
 
 from pprint import pformat, pp
-from typing import cast
+from typing import Any, cast
 
 from ._types import (
     DefaultConfig,
     LoglikConfigs,
+    ResponseKind,
     SupportedModels,
 )
 from .defaults import (
@@ -17,9 +18,12 @@ def register_model(
     name: SupportedModels,
     response: list[str],
     list_params: list[str],
-    choices: list[int],
+    choices: list[int] | None,
     likelihoods: LoglikConfigs,
     description: str | None,
+    response_kind: ResponseKind = "categorical",
+    response_bounds: dict[str, tuple[float, float]] | None = None,
+    rv: Any | None = None,
 ) -> None:
     """Register a new model in HSSM.
 
@@ -31,12 +35,18 @@ def register_model(
         List of response variables
     list_params : list[str]
         List of parameters
-    choices : list[int]
-        List of possible choices
+    choices : list[int] | None
+        List of possible categorical choices, or None for non-categorical responses.
     description : str
         Description of the model
     likelihoods : LoglikConfigs
         Dictionary of likelihood configurations
+    response_kind : ResponseKind
+        Type of observed response. Defaults to categorical.
+    response_bounds : dict[str, tuple[float, float]] | None
+        Optional bounds keyed by non-RT response column.
+    rv : optional
+        RandomVariable or simulator callable used for predictive sampling.
 
     Returns
     -------
@@ -51,7 +61,19 @@ def register_model(
     if name in registered_models:
         raise ValueError(f"Model '{name}' already exists")
 
-    _config = {k: v for k, v in locals().items() if k != "name"}
+    _config: dict[str, Any] = {
+        "response": response,
+        "list_params": list_params,
+        "choices": choices,
+        "description": description,
+        "likelihoods": likelihoods,
+    }
+    if response_kind != "categorical":
+        _config["response_kind"] = response_kind
+    if response_bounds is not None:
+        _config["response_bounds"] = response_bounds
+    if rv is not None:
+        _config["rv"] = rv
     config = cast("DefaultConfig", _config)
 
     # TODO: validate provided configs?

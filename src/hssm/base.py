@@ -338,6 +338,16 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
 
         # region ===== Process lapse distribution =====
+        if self.response_kind != "categorical" and p_outlier is not None:
+            if self.is_choice_only:
+                raise ValueError(
+                    "The default choice-only lapse requires categorical responses "
+                    "with `choices`. Set `p_outlier=None`."
+                )
+            raise ValueError(
+                "`p_outlier` is not supported for continuous or circular "
+                "responses. Set `p_outlier=None`."
+            )
         self.has_lapse = p_outlier is not None and p_outlier != 0
         self._check_lapse(lapse)
         # endregion
