@@ -456,3 +456,66 @@ def test_callable_receives_scalar_unmapped_params():
         f"got {np.shape(out)}"
     )
     np.testing.assert_allclose(np.asarray(out), np.full((n_obs,), 5.0), rtol=1e-6)
+
+
+def test_extra_fields_do_not_break_in_axes_alignment():
+    """`params_is_reg` covers extra_fields, so `in_axes` must line up exactly.
+
+    ``hssm.py`` appends one ``True`` per extra field to
+    ``params_is_trialwise`` before handing it to the vmap layer, so the zip
+    over ``(inputs, in_axes)`` must consume both sequences without a leftover.
+    """
+    seen = {}
+
+    def logp(data, v, a, ef1, ef2):
+        seen["shapes"] = (
+            jax.numpy.shape(v),
+            jax.numpy.shape(a),
+            jax.numpy.shape(ef1),
+            jax.numpy.shape(ef2),
+        )
+        return data[0] * v + a + ef1 + ef2
+
+    logp_vec, _, _ = make_jax_logp_funcs_from_callable(
+        logp, vmap=True, params_is_reg=[True, False, True, True]
+    )
+
+    n_obs = 5
+    out = logp_vec(
+        np.ones((n_obs, 2), dtype=np.float32),
+        np.full((n_obs,), 2.0, dtype=np.float32),  # trialwise param
+        np.array([3.0], dtype=np.float32),  # non-trialwise param
+        np.arange(n_obs, dtype=np.float32),  # extra field
+        np.ones((n_obs,), dtype=np.float32),  # extra field
+    )
+
+    assert seen["shapes"] == ((), (), (), ())
+    assert np.shape(out) == (n_obs,)
+
+
+@pytest.mark.parametrize("mode", [None, "JAX"], ids=["default", "jax_linker"])
+def test_logp_output_ndim_is_validated(mode):
+    """A wrong-ndim log-likelihood raises a diagnosable error on both linkers.
+
+    Regression test for the second half of #1092.  ``LANLogpOp`` declares a
+    vector output but never checked it, so a mismatch surfaced far from its
+    cause: garbage values on the default backend (an oversized array written
+    into a vector-typed storage cell), and a bare, message-less
+    ``AssertionError`` inside PyTensor's JAX ``SpecifyShape`` dispatch.
+    """
+    n_obs = 6
+
+    def bad_logp(data, v, a):
+        # Pre-vectorised, but returns (n_obs, 1) rather than (n_obs,).
+        return (data[:, 0] * v + a)[:, None]
+
+    logp_op = make_jax_logp_ops(
+        *make_jax_logp_funcs_from_callable(bad_logp, vmap=False)
+    )
+    v = pt.vector("v")
+    a = pt.vector("a")
+    out = logp_op(pt.as_tensor_variable(np.ones((n_obs, 2), dtype=np.float32)), v, a)
+
+    with pytest.raises(ValueError, match="must return one value per trial"):
+        fn = pytensor.function([v, a], out, mode=mode)
+        fn(np.full((n_obs,), 2.0, dtype=np.float32), np.array([1.0], dtype=np.float32))

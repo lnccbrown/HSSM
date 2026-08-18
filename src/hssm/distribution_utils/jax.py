@@ -1,6 +1,6 @@
 """Utilities for wraping JAX likelihoods in Pytensor Ops."""
 
-from typing import Callable, Literal, overload
+from typing import Any, Callable, Literal, overload
 
 import jax.numpy as jnp
 import numpy as np
@@ -12,6 +12,32 @@ from pytensor.link.jax.dispatch import jax_funcify
 
 from .._types import LogLikeFunc, LogLikeGrad
 from .func_utils import make_vjp_func, make_vmap_func
+
+
+def _check_logp_ndim(result: Any, expected_ndim: int) -> None:
+    """Validate the ndim of a wrapped log-likelihood's output.
+
+    ``LANLogpOp`` declares a vector output, but nothing forces the wrapped
+    JAX function to honour that.  When it does not, the mismatch surfaces far
+    from its cause: PyTensor's default backend writes the oversized array into
+    a vector-typed storage cell (yielding garbage values), while the JAX
+    linker fails inside ``SpecifyShape`` with a bare, message-less
+    ``AssertionError``.  Checking here turns both into a diagnosable error.
+    """
+    actual_ndim = getattr(result, "ndim", None)
+    if actual_ndim is None or actual_ndim == expected_ndim:
+        return
+
+    shape = getattr(result, "shape", "unknown")
+    raise ValueError(
+        "The log-likelihood wrapped by LANLogpOp must return one value per "
+        f"trial ({expected_ndim}-D), but it returned a {actual_ndim}-D array "
+        f"of shape {shape}.\n"
+        "This usually means the single-trial function returns a length-1 "
+        "array instead of a scalar -- for example because a parameter reached "
+        "it as a `(1,)`-shaped array rather than a scalar. Make sure the "
+        "function returns a scalar for each trial."
+    )
 
 
 class LANLogpVJPOp(Op):  # pylint: disable=W0223
@@ -182,8 +208,9 @@ class LANLogpOp(Op):  # pylint: disable=W0223
             output_storage. There is one storage cell for each output of
             the Op.
         """
-        result = self.logp(*inputs)
-        output_storage[0][0] = np.asarray(result, dtype=node.outputs[0].dtype)
+        result = np.asarray(self.logp(*inputs), dtype=node.outputs[0].dtype)
+        _check_logp_ndim(result, node.outputs[0].type.ndim)
+        output_storage[0][0] = result
 
     def pullback(self, inputs, outputs, cotangents):
         """Construct the graph for the VJP (reverse-mode gradient) of the Op.
@@ -233,9 +260,20 @@ class LANLogpOp(Op):  # pylint: disable=W0223
 # Unwraps the JAX function for compilation with the JAX linker (e.g. sampling
 # through numpyro/blackjax, or pm.fit / pm.sample with backend="jax").
 @jax_funcify.register(LANLogpOp)
-def lan_logp_op_dispatch(op, **kwargs):  # pylint: disable=W0613
-    """Return the non-jitted forward function for the JAX linker."""
-    return op.logp_nojit
+def lan_logp_op_dispatch(op, node, **kwargs):  # pylint: disable=W0613
+    """Return the non-jitted forward function for the JAX linker.
+
+    The output is shape-checked at trace time, so the guard costs nothing per
+    call but still fires before a bad shape reaches ``SpecifyShape``.
+    """
+    expected_ndim = node.outputs[0].type.ndim
+
+    def lan_logp_jax(*inputs):
+        result = op.logp_nojit(*inputs)
+        _check_logp_ndim(result, expected_ndim)
+        return result
+
+    return lan_logp_jax
 
 
 # Required when PyTensor differentiates LANLogpOp symbolically (e.g. ADVI
