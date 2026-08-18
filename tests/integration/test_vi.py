@@ -20,6 +20,8 @@ import xarray as xr
 
 import hssm
 
+from tests.integration.regression_priors import A_REG, V_REG
+
 hssm.set_floatX("float32", update_jax=True)
 
 # AF-TODO: Include more tests that use different link functions!
@@ -29,29 +31,6 @@ hssm.set_floatX("float32", update_jax=True)
 # still broken, so these rows cannot yet be asserted either way:
 #     ("analytical", "pytensor", "advi")
 #     ("analytical", "pytensor", "fullrank_advi")
-
-V_REG = dict(
-    formula="v ~ 1 + x + y",
-    prior={
-        "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-        "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-        "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-    },
-)
-
-A_REG = dict(
-    formula="a ~ 1 + m + n",
-    prior={
-        "Intercept": {
-            "name": "Normal",
-            "mu": 1.0,
-            "sigma": 0.5,
-        },
-        "m": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
-        "n": {"name": "Uniform", "lower": 0.0, "upper": 0.2},
-    },
-    link="identity",
-)
 
 # Model shape -> (data fixture name, extra HSSM kwargs).
 MODEL_SHAPES = {

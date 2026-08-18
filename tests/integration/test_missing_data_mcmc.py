@@ -27,6 +27,8 @@ import pytest
 import xarray as xr
 
 import hssm
+
+from tests.integration.regression_priors import V_REG
 from hssm.utils import _rearrange_data
 
 hssm.set_floatX("float32", update_jax=True)
@@ -39,15 +41,6 @@ NETWORKS = {
     "cpn": FIXTURES / "ddm_cpn.onnx",
     "opn": FIXTURES / "ddm_opn.onnx",
 }
-
-V_REG = dict(
-    formula="v ~ 1 + x + y",
-    prior={
-        "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
-        "x": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-        "y": {"name": "Uniform", "lower": -0.50, "upper": 0.50},
-    },
-)
 
 # Model shape -> (data fixture name, extra HSSM kwargs).
 MODEL_SHAPES = {
