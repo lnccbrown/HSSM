@@ -12,6 +12,7 @@ LogLik = Union[str, PathLike, Callable, Op, type[Distribution]]
 ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
 
 SupportedModels = Literal[
+    "dev_rlddm",
     "ddm",
     "ddm_sdv",
     "full_ddm",
