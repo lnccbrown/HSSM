@@ -110,7 +110,7 @@ Two separate skip mechanisms for notebooks:
 | `linting_and_type_checking.yml` | ruff + pyrefly + mypy |
 | `check_notebooks.yml` | Execute all non-skipped notebooks |
 | `coverage.yml` | Code coverage |
-| `build_docs.yml` | Build documentation |
+| `docs.yml` | Build documentation |
 | `build_and_publish.yml` | Release to PyPI (triggered on release publish) |
 | `prepare-release.yml` | Release preparation automation |
 

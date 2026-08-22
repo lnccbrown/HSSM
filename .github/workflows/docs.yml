@@ -1,0 +1,43 @@
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/docs.yml"
+      - ".lychee.toml"
+      - ".lycheeignore"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "README.md"
+      - "scripts/check_docs_weight.py"
+      - "scripts/docs.sh"
+      - "src/hssm/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/docs.yml"
+      - ".lychee.toml"
+      - ".lycheeignore"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "README.md"
+      - "scripts/check_docs_weight.py"
+      - "scripts/docs.sh"
+      - "src/hssm/**"
+  schedule:
+    # Retain the established Monday 05:50 UTC rendered-link check.
+    - cron: "50 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  docs:
+    uses: lnccbrown/HSSMSpine/.github/workflows/reusable-docs.yml@1c8129bb4c0997ada5b4d062e05357757c86eb90
+    with:
+      system-profile: blas-lapack
