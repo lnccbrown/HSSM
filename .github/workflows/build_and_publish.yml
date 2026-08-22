@@ -12,7 +12,7 @@ jobs:
     uses: ./.github/workflows/linting_and_type_checking.yml
 
   publish:
-    name: Build wheel and publish to test-PyPI, then PyPI, and publish docs
+    name: Build wheel and publish to TestPyPI, then PyPI
     needs: [lint_and_typecheck]
     runs-on: ubuntu-latest
 
@@ -40,6 +40,3 @@ jobs:
       - name: Publish to PyPI
         run: |
           uv publish --token ${{ secrets.PYPI_TOKEN }}
-
-      - name: Build and publish docs
-        run: uv run --group notebook --group docs mkdocs gh-deploy --force
