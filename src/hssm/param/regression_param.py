@@ -239,6 +239,8 @@ class RegressionParam(Param):
         specified_priors = (
             set(self.prior.keys()) if isinstance(self.prior, dict) else set()
         )
+        has_common_wildcard = "common" in specified_priors
+        has_group_wildcard = "group_specific" in specified_priors
 
         # For each term in the design matrix, if the prior is not already specified,
         # add the default prior for that term.
@@ -253,7 +255,7 @@ class RegressionParam(Param):
                     # rejected at model build. Leaving it out defers to bambi's
                     # automatic HSGP priors.
                     continue
-                if name not in specified_priors:
+                if name not in specified_priors and not has_common_wildcard:
                     if term.kind == "intercept":
                         safe_priors[name] = get_prior(
                             "common_intercept", self.name, self.bounds, self.link
@@ -265,7 +267,7 @@ class RegressionParam(Param):
 
         if dm.group is not None:
             for name, term in dm.group.terms.items():
-                if name not in specified_priors:
+                if name not in specified_priors and not has_group_wildcard:
                     if term.kind == "intercept":
                         self.terms.append(name)
                         if name in self._group_terms_with_common:

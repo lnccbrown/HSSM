@@ -38,6 +38,26 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger("hssm")
 
+# Distributions whose ``mu`` parameter translates the entire distribution.
+# Only these families have the exact fixed-effect / group-mean shift invariance
+# described by ``check_user_priors_for_location_overparameterization``. Other
+# distributions may call a mean or shape parameter ``mu`` without being a
+# location family (for example, Gamma).
+_ADDITIVE_LOCATION_PRIORS = frozenset(
+    {
+        "AsymmetricLaplace",
+        "ExGaussian",
+        "Gumbel",
+        "Laplace",
+        "Logistic",
+        "Moyal",
+        "Normal",
+        "SkewNormal",
+        "SkewStudentT",
+        "StudentT",
+    }
+)
+
 
 @dataclass
 class PriorMismatch:
@@ -97,8 +117,13 @@ def _iter_user_group_priors(
     group_term_names: dict[str, str] = getattr(param, "_group_term_names", {})
     groups_with_common: set[str] = getattr(param, "_group_terms_with_common", set())
     for term_name, expression_name in group_term_names.items():
-        prior = prior_dict.get(term_name)
-        if term_name not in user_keys or not isinstance(prior, bmb.Prior):
+        if term_name in user_keys:
+            prior = prior_dict.get(term_name)
+        elif "group_specific" in user_keys:
+            prior = prior_dict.get("group_specific")
+        else:
+            continue
+        if not isinstance(prior, bmb.Prior):
             continue
         yield term_name, expression_name, term_name in groups_with_common, prior
 
@@ -242,9 +267,10 @@ def check_user_priors_for_location_overparameterization(
     """Detect centered group means that collide with matching common effects.
 
     When a Formulae group expression also occurs as a common term and the user
-    supplies a free ``mu`` for that group-specific Normal under centering, the
-    linear predictor sees only ``beta + mu``. The likelihood is invariant under
-    shifts of mass between those parameters, so the posterior has a ridge.
+    supplies a free ``mu`` for a group-specific translation-family prior under
+    centering, the linear predictor sees only ``beta + mu``. The likelihood is
+    invariant under shifts of mass between those parameters, so the posterior
+    has a ridge.
 
     This check is intentionally silent for fixed ``mu`` values, unmatched
     group-only expressions, and effective non-centering. Non-centered problems
@@ -256,7 +282,7 @@ def check_user_priors_for_location_overparameterization(
         for term_name, expression_name, has_common, prior in _iter_user_group_priors(
             param
         ):
-            if not has_common or prior.name != "Normal":
+            if not has_common or prior.name not in _ADDITIVE_LOCATION_PRIORS:
                 continue
             if not isinstance(prior.args.get("mu"), bmb.Prior):
                 continue

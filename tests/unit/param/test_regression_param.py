@@ -313,6 +313,82 @@ def test_safe_priors_preserve_explicit_matched_group_prior(cavanagh_test):
     assert param.prior["theta|participant_id"] is user_prior
 
 
+def test_safe_priors_preserve_common_wildcard(cavanagh_test):
+    """A user common wildcard prevents shadowing exact safe defaults."""
+    wildcard = bmb.Prior("Laplace", mu=3.0, b=4.0)
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + theta + (1 + theta | participant_id)",
+        prior={"common": wildcard},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param.prior["common"] is wildcard
+    assert "Intercept" not in param.prior
+    assert "theta" not in param.prior
+    _check_group_prior_with_common(param.prior["1|participant_id"])
+    _check_group_prior_with_common(param.prior["theta|participant_id"])
+
+
+def test_safe_priors_preserve_group_specific_wildcard(cavanagh_test):
+    """A user group wildcard prevents shadowing exact safe defaults."""
+    wildcard = bmb.Prior(
+        "Normal",
+        mu=0.0,
+        sigma=bmb.Prior("HalfNormal", sigma=0.75),
+    )
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + theta + (1 + theta | participant_id)",
+        prior={"group_specific": wildcard},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param.prior["group_specific"] is wildcard
+    assert "1|participant_id" not in param.prior
+    assert "theta|participant_id" not in param.prior
+    assert isinstance(param.prior["Intercept"], Prior)
+    assert isinstance(param.prior["theta"], bmb.Prior)
+
+
+def test_safe_priors_exact_terms_take_precedence_over_wildcards(cavanagh_test):
+    """Retain exact user terms alongside category-wide Bambi wildcards."""
+    common_wildcard = bmb.Prior("Laplace", mu=3.0, b=4.0)
+    group_wildcard = bmb.Prior(
+        "Normal",
+        mu=0.0,
+        sigma=bmb.Prior("HalfNormal", sigma=0.75),
+    )
+    exact_common = bmb.Prior("Normal", mu=8.0, sigma=2.0)
+    exact_group = bmb.Prior(
+        "Normal",
+        mu=0.0,
+        sigma=bmb.Prior("HalfNormal", sigma=1.25),
+    )
+    specified = {
+        "common": common_wildcard,
+        "group_specific": group_wildcard,
+        "theta": exact_common,
+        "theta|participant_id": exact_group,
+    }
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + theta + (1 + theta | participant_id)",
+        prior=specified,
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param.prior == specified
+    assert param.prior["theta"] is exact_common
+    assert param.prior["theta|participant_id"] is exact_group
+
+
 def test_safe_priors_preserve_unmatched_group_location(cavanagh_test):
     """Retain the existing free-mean policy for a genuinely group-only slope."""
     param = RegressionParam(

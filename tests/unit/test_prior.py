@@ -216,6 +216,58 @@ class TestPriorIntegration:
             "theta|participant_id",
         }
 
+    @pytest.mark.parametrize(
+        ("prior_settings", "noncentered", "reason_fragment", "has_orphan"),
+        [
+            (None, False, "non-identifiable", False),
+            ("safe", True, "disconnected", True),
+        ],
+    )
+    def test_group_wildcard_drives_targeted_diagnostics(
+        self,
+        cavanagh_test,
+        caplog,
+        prior_settings,
+        noncentered,
+        reason_fragment,
+        has_orphan,
+    ):
+        """Expand a user group wildcard over Formulae terms for warnings."""
+        group_wildcard = {
+            "name": "Normal",
+            "mu": {"name": "Normal", "mu": 0.0, "sigma": 0.5},
+            "sigma": {"name": "HalfNormal", "sigma": 0.5},
+        }
+        with caplog.at_level(logging.WARNING, logger="hssm"):
+            model = hssm.HSSM(
+                data=cavanagh_test,
+                model="ddm",
+                include=[
+                    {
+                        "name": "v",
+                        "formula": "v ~ 0 + theta + (0 + theta|participant_id)",
+                        "prior": {"group_specific": group_wildcard},
+                    }
+                ],
+                prior_settings=prior_settings,
+                p_outlier=0.0,
+                noncentered=noncentered,
+                process_initvals=False,
+            )
+
+        targeted = [
+            record.getMessage()
+            for record in caplog.records
+            if "User prior" in record.getMessage()
+        ]
+        assert len(targeted) == 1
+        assert "theta|participant_id" in targeted[0]
+        assert reason_fragment in targeted[0]
+        assert "theta|participant_id" not in model.params["v"].prior
+        assert isinstance(model.params["v"].prior["group_specific"], bmb.Prior)
+        disconnected = find_disconnected_free_rvs(model.pymc_model)
+        assert any(name.endswith("_mu") for name in disconnected) is has_orphan
+
     def test_group_only_slope_not_flagged_by_unrelated_intercept(
         self, cavanagh_test, caplog
     ):
@@ -375,6 +427,37 @@ class TestPriorParameterizationUnit:
             assert "common 'theta'" in flagged[0].suggestion
             assert "non-identifiable" in flagged[0].reason
 
+    def test_centered_location_ridge_is_not_normal_specific(self):
+        """A free location in another location family creates the same ridge."""
+        prior = bmb.Prior(
+            "StudentT",
+            nu=4,
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+
+        flagged = check_user_priors_for_location_overparameterization(
+            _fake_params(prior), False
+        )
+
+        assert len(flagged) == 1
+        assert flagged[0].term == GROUP_TERM
+        assert "non-identifiable" in flagged[0].reason
+
+    def test_centered_non_location_mu_does_not_report_exact_ridge(self):
+        """A Gamma mean is not an additive location despite being named mu."""
+        prior = bmb.Prior(
+            "Gamma",
+            mu=bmb.Prior("HalfNormal", sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+
+        flagged = check_user_priors_for_location_overparameterization(
+            _fake_params(prior), False
+        )
+
+        assert flagged == []
+
     def test_noncentered_suggestion_uses_structural_expression(self):
         """Suggestions use Formulae metadata for matched and unmatched groups."""
         prior = _group_prior(
@@ -409,6 +492,31 @@ class TestPriorParameterizationUnit:
                 check_user_priors_for_location_overparameterization(params, False) == []
             )
 
+    @pytest.mark.parametrize(
+        ("noncentered", "check"),
+        [
+            (True, check_user_priors_against_parameterization),
+            (False, check_user_priors_for_location_overparameterization),
+        ],
+    )
+    def test_exact_group_prior_precedes_wildcard_in_diagnostics(
+        self, noncentered, check
+    ):
+        """Diagnose the wildcard only where no exact user group prior exists."""
+        wildcard = _group_prior(
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        exact = _group_prior(
+            mu=0.0,
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        params = _fake_wildcard_params(wildcard, exact)
+
+        flagged = check(params, noncentered)
+
+        assert [mismatch.term for mismatch in flagged] == ["1|participant_id"]
+
 
 GROUP_TERM = "theta|participant_id"
 
@@ -434,3 +542,18 @@ def _fake_params(prior, *, matched=True, user_specified=True):
     return {
         "v": _FakeRegressionParam(prior, matched=matched, user_specified=user_specified)
     }
+
+
+def _fake_wildcard_params(wildcard, exact):
+    param = _FakeRegressionParam(exact, matched=True, user_specified=True)
+    param.prior = {
+        "group_specific": wildcard,
+        GROUP_TERM: exact,
+    }
+    param._user_specified_prior_keys = {"group_specific", GROUP_TERM}
+    param._group_term_names = {
+        "1|participant_id": "Intercept",
+        GROUP_TERM: "theta",
+    }
+    param._group_terms_with_common = set(param._group_term_names)
+    return {"v": param}
