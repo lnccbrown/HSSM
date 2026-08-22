@@ -35,13 +35,14 @@ def _():
     import marimo as mo
     import numpy as np
     import pandas as pd
+    import pymc as pm
     from formulae import design_matrices
 
     import hssm
     from hssm.param.parameterization_check import find_disconnected_free_rvs
 
     hssm.set_floatX("float64")
-    return bmb, design_matrices, find_disconnected_free_rvs, hssm, mo, np, pd
+    return bmb, design_matrices, find_disconnected_free_rvs, hssm, mo, np, pd, pm
 
 
 @app.cell
@@ -367,8 +368,117 @@ def _(mo, safe_disconnected):
 
 @app.cell
 def _(mo):
+    graph_view = mo.ui.dropdown(
+        options={
+            "Safe defaults, non-centered": "safe_noncentered",
+            "Safe defaults, centered": "safe_centered",
+            "Explicit zero means, non-centered": "workaround",
+        },
+        value="Safe defaults, non-centered",
+        label="Model graph",
+    )
+    mo.md(f"""
+    ## 6. Inspect the actual PyMC model graphs
+
+    {graph_view}
+
+    These are the graphs PyMC builds, not hand-drawn summaries. Follow the
+    arrows to the observed `rt,response` node:
+
+    - **red** nodes are free random variables with no path to the likelihood;
+    - **amber** nodes are estimated participant-level population means; and
+    - **blue** nodes are the matching common slopes.
+
+    In the affected non-centered model, the three red `*_mu` nodes are isolated.
+    In the centered model they become connected, but each amber group mean now
+    competes with a blue common slope for the same population location. In the
+    workaround graph, the `*_mu` nodes are absent because those means are fixed
+    at zero.
+    """)
+    return (graph_view,)
+
+
+@app.cell
+def _(
+    graph_view,
+    pm,
+    safe_centered_model,
+    safe_disconnected,
+    safe_noncentered_model,
+    workaround_model,
+):
+    _models = {
+        "safe_noncentered": safe_noncentered_model,
+        "safe_centered": safe_centered_model,
+        "workaround": workaround_model,
+    }
+    _selected_model = _models[graph_view.value]
+    _disconnected_names = (
+        set(safe_disconnected) if graph_view.value == "safe_noncentered" else set()
+    )
+    _common_slope_names = {
+        "v_blocktype2_num",
+        "v_task_num",
+        "v_blocktype2_num:task_num",
+    }
+    _group_mean_names = {
+        _name
+        for _name in _selected_model.pymc_model.named_vars
+        if "|participant_id_mu" in _name
+    }
+
+    def _free_rv_formatter(variable):
+        _operator_name = getattr(variable.owner.op, "name", None)
+        _distribution_name = (
+            _operator_name[0].upper() + _operator_name[1:]
+            if _operator_name
+            else variable.owner.op.__class__.__name__.removesuffix("RV")
+        )
+        _attributes = {
+            "shape": "ellipse",
+            "label": f"{variable.name}\n~\n{_distribution_name}",
+        }
+
+        if variable.name in _disconnected_names:
+            _attributes.update(
+                color="#b42318",
+                fillcolor="#fee4e2",
+                fontcolor="#912018",
+                penwidth="3",
+                style="filled",
+            )
+        elif variable.name in _group_mean_names:
+            _attributes.update(
+                color="#b54708",
+                fillcolor="#fef0c7",
+                fontcolor="#93370d",
+                penwidth="2",
+                style="filled",
+            )
+        elif variable.name in _common_slope_names:
+            _attributes.update(
+                color="#175cd3",
+                fillcolor="#d1e9ff",
+                fontcolor="#1849a9",
+                penwidth="2",
+                style="filled",
+            )
+
+        return _attributes
+
+    selected_model_graph = pm.model_to_graphviz(
+        _selected_model.pymc_model,
+        node_formatters={"Free Random Variable": _free_rv_formatter},
+        graph_attr={"bgcolor": "transparent", "rankdir": "LR"},
+    )
+    selected_model_graph
+    return
+
+
+@app.cell
+def _(mo):
     mo.md(r"""
-    ## 6. Why switching to centered is not the workaround
+    ## 7. Why switching to centered is not the workaround
 
     For slope (k) and participant (g), a centered group coefficient can be
     written as
@@ -403,7 +513,7 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.md("""
-    ## 7. Current workaround
+    ## 8. Current workaround
 
     Keep `noncentered=True` and explicitly provide a scalar `mu=0.0` for every
     participant-level coefficient:
