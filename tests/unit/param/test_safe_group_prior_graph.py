@@ -7,7 +7,6 @@ import pytest
 import hssm
 from hssm.param.parameterization_check import find_disconnected_free_rvs
 
-
 GROUP_SLOPES = {
     "blocktype2_num|participant_id",
     "task_num|participant_id",

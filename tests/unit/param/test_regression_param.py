@@ -235,6 +235,7 @@ def test_prepare_formula_terms_caches_structural_names(cavanagh_test):
         ("v ~ 1 + (0 + theta | participant_id)", set()),
         ("v ~ 0 + theta + (0 + theta | participant_id)", {"theta|participant_id"}),
         ("v ~ 1 + theta + (0 + dbs | participant_id)", set()),
+        ("v ~ 0 + theta:dbs + (0 + dbs:theta | participant_id)", set()),
     ],
 )
 def test_prepare_formula_terms_matches_exact_expressions(
