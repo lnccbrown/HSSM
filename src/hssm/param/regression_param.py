@@ -244,7 +244,6 @@ class RegressionParam(Param):
         # add the default prior for that term.
         # We do this separately for common and group terms.
         # We also handle intercept and non-intercept terms separately.
-        has_common_intercept = False
         if dm.common is not None:
             for name, term in dm.common.terms.items():
                 self.terms.append(name)
@@ -256,7 +255,6 @@ class RegressionParam(Param):
                     continue
                 if name not in specified_priors:
                     if term.kind == "intercept":
-                        has_common_intercept = True
                         safe_priors[name] = get_prior(
                             "common_intercept", self.name, self.bounds, self.link
                         )
@@ -264,16 +262,13 @@ class RegressionParam(Param):
                         safe_priors[name] = get_prior(
                             "common", self.name, bounds=None, link=self.link
                         )
-                else:
-                    if term.kind == "intercept":
-                        has_common_intercept = True
 
         if dm.group is not None:
             for name, term in dm.group.terms.items():
                 if name not in specified_priors:
                     if term.kind == "intercept":
                         self.terms.append(name)
-                        if has_common_intercept:
+                        if name in self._group_terms_with_common:
                             safe_priors[name] = get_prior(
                                 "group_intercept_with_common",
                                 self.name,
@@ -295,8 +290,7 @@ class RegressionParam(Param):
                                 link=self.link,
                             )
                     else:
-                        has_common = dm.common is not None and name in dm.common.terms
-                        if has_common:
+                        if name in self._group_terms_with_common:
                             safe_priors[name] = get_prior(
                                 "group_specific_with_common",
                                 self.name,
