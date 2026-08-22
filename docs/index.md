@@ -112,12 +112,12 @@ the reasoning behind a choice, and **Reference** for the API.
 
 ## Part of a larger toolchain
 
-HSSM is the inference layer of a four-package ecosystem: `ssm-simulators`
-supplies the models and simulated data, LANfactory trains the likelihood
-networks that make otherwise-intractable models estimable, and HSSM consumes
-them. Most users never need the other three. See
-[The HSSM ecosystem](ecosystem/index.md) for the map, including which package
-answers which question and how versions fit together.
+HSSM is the inference layer of a larger ecosystem: `ssm-simulators` supplies
+the models and simulated data, LANfactory trains the likelihood networks that
+make otherwise-intractable models estimable, and HSSM consumes them. Most users
+never need the other repositories. See the canonical
+[HSSM ecosystem map](ecosystem/index.md) for
+ownership boundaries, contributor routes, and the complete site directory.
 
 ## What HSSM gives you
 
@@ -134,9 +134,12 @@ answers which question and how versions fit together.
 
 ## Citation
 
-Fengler, A., Xu, Y., Bera, K., Omar, A., Frank, M.J. (in preparation). HSSM: A
-generalized toolbox for hierarchical bayesian estimation of computational
-models in cognitive neuroscience.
+Fengler, A., Xu, Y., Bera, K., Paniagua, C., Omar, A., and Frank, M. J. HSSM: A
+Widely Applicable Toolbox for Hierarchical Bayesian Neurocognitive Modeling.
+bioRxiv 2026.06.05.730398.
+
+- DOI: [https://doi.org/10.64898/2026.06.05.730398](https://doi.org/10.64898/2026.06.05.730398)
+- bioRxiv: [https://www.biorxiv.org/content/10.1101/2026.06.05.730398v1](https://www.biorxiv.org/content/10.1101/2026.06.05.730398v1)
 
 ## Community
 
