@@ -392,11 +392,12 @@ def _(mo):
     - **amber** nodes are estimated participant-level population means; and
     - **blue** nodes are the matching common slopes.
 
-    In the affected non-centered model, the three red `*_mu` nodes are isolated.
-    In the centered model they become connected, but each amber group mean now
-    competes with a blue common slope for the same population location. In the
-    workaround graph, the `*_mu` nodes are absent because those means are fixed
-    at zero.
+    On an affected HSSM build, the non-centered graph has three isolated red
+    `*_mu` nodes. Switching those same generated priors to centered connects the
+    nodes, but each amber group mean then competes with a blue common slope for
+    the same population location. In the workaround graph, the `*_mu` nodes are
+    absent because those means are fixed at zero. After the matcher is fixed,
+    both safe-default graphs should lose the unintended `*_mu` nodes too.
     """)
     return (graph_view,)
 
