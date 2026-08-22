@@ -89,8 +89,9 @@ def _(bmb, hssm, mo):
     4. explicitly setting every participant-level mean to zero produces the
        intended hierarchical model.
 
-    The notebook is version-adaptive: after HSSM is fixed, it will report that
-    the safe defaults already agree with the workaround instead of failing.
+    The notebook is version-adaptive: on a fixed HSSM checkout, it reports that
+    the generated group means agree with the explicit workaround and that both
+    safe-default graphs omit the unintended `*_mu` variables.
     """)
     return
 
@@ -195,12 +196,12 @@ def _(matcher_table, mo):
     mo.md("""
     ## 3. The exact matching error
 
-    HSSM currently compares the complete group name with the common-term keys.
-    A name such as `blocktype2_num|participant_id` cannot equal
-    `blocktype2_num`. Formulae already exposes the correct structural name as
-    `term.expr.name`.
+    Affected HSSM versions compare the complete group name with the common-term
+    keys. A name such as `blocktype2_num|participant_id` cannot equal
+    `blocktype2_num`. Formulae exposes the correct structural name as
+    `term.expr.name`, which fixed versions now use.
 
-    The two Boolean columns below reproduce the current and intended matching
+    The two Boolean columns below reproduce the affected and corrected matching
     rules. The full names never match; every underlying expression does.
     """)
     matcher_table
@@ -281,7 +282,11 @@ def _(bmb, pd, safe_noncentered_model, workaround_model):
 
     safe_prior_table = group_prior_table(safe_noncentered_model)
     workaround_prior_table = group_prior_table(workaround_model)
-    return safe_prior_table, workaround_prior_table
+    safe_means_match_workaround = (
+        safe_prior_table.set_index("term")["mu"].to_dict()
+        == workaround_prior_table.set_index("term")["mu"].to_dict()
+    )
+    return safe_means_match_workaround, safe_prior_table, workaround_prior_table
 
 
 @app.cell
@@ -364,15 +369,17 @@ def _(graph_table, mo):
     free random variables without a path to the likelihood. Fixing `mu=0`
     prevents those variables from being created.
 
-    The centered model has no disconnected means because Bambi uses them in the
-    group distributions. That does **not** make the centered model identified.
+    On an affected build, the centered model has no disconnected means because
+    Bambi uses them in the group distributions. That does **not** make that
+    affected model identified. A fixed build does not generate those free means
+    in either parameterization.
     """)
     graph_table
     return
 
 
 @app.cell
-def _(mo, safe_disconnected):
+def _(mo, safe_disconnected, safe_means_match_workaround):
     if safe_disconnected:
         matcher_status = mo.callout(
             "This HSSM build still generates disconnected random-slope means "
@@ -380,10 +387,16 @@ def _(mo, safe_disconnected):
             "them.",
             kind="warn",
         )
+    elif not safe_means_match_workaround:
+        matcher_status = mo.callout(
+            "This HSSM build has no disconnected safe-prior means, but its "
+            "generated group means differ from the explicit zero-mean reference.",
+            kind="warn",
+        )
     else:
         matcher_status = mo.callout(
             "This HSSM build contains the matcher fix: the safe defaults are "
-            "already zero-centered and agree with the workaround.",
+            "structurally matched, zero-centered, and agree with the workaround.",
             kind="success",
         )
     matcher_status
@@ -503,7 +516,7 @@ def _(
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## 7. Why switching to centered is not the workaround
+    ## 7. Why centering an affected model is not the workaround
 
     For slope (k) and participant (g), a centered group coefficient can be
     written as
@@ -528,9 +541,10 @@ def _(mo):
     make the posterior proper, but the two locations are not separately informed
     by the data.
 
-    Therefore `noncentered=False` trades the disconnected-variable symptom for a
-    location ridge. The intended model keeps the common slope and fixes the group
-    deviation mean at zero.
+    For the affected free-mean priors, `noncentered=False` trades the
+    disconnected-variable symptom for a location ridge. The intended—and now
+    generated—model keeps the common slope and fixes the group deviation mean at
+    zero.
     """)
     return
 
@@ -538,10 +552,10 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.md("""
-    ## 8. Current workaround
+    ## 8. Workaround for affected releases
 
-    Keep `noncentered=True` and explicitly provide a scalar `mu=0.0` for every
-    participant-level coefficient:
+    On an affected HSSM release, keep `noncentered=True` and explicitly provide
+    a scalar `mu=0.0` for every participant-level coefficient:
 
     ```python
     def zero_mean_participant_prior():
@@ -569,9 +583,11 @@ def _(mo):
     ```
 
     Supply `priors` as the regression parameter's `prior` dictionary. The random
-    intercept is already zero-centered by current safe defaults, but specifying
+    intercept was already zero-centered by affected safe defaults, but specifying
     all four terms makes the model intent explicit and keeps the workaround
-    self-contained.
+    self-contained. On fixed HSSM `main`, exact common/group matches receive these
+    scalar-zero means automatically; the explicit dictionary remains valid but is
+    no longer required.
     """)
     return
 
@@ -581,16 +597,18 @@ def _(mo):
     mo.md("""
     ## Takeaway
 
-    The 2x2 regression is full rank. The problematic overparameterization is
-    introduced by affected HSSM versions when safe-prior generation gives a
-    matching random slope its own population mean. Explicit zero-mean group
-    priors are a safe workaround until HSSM matches group expressions to their
-    common counterparts structurally.
+    The 2x2 regression is full rank. The problematic overparameterization was
+    introduced by affected HSSM versions when safe-prior generation gave a
+    matching random slope its own population mean. Fixed HSSM versions match
+    group expressions to common counterparts through Formulae metadata and
+    generate scalar-zero group means. For affected releases, explicit zero-mean
+    group priors remain the safe workaround shown above.
 
     Relevant implementation discussions:
 
     - [HSSM discussion #948](https://github.com/lnccbrown/HSSM/discussions/948)
     - [HSSM issue #1224](https://github.com/lnccbrown/HSSM/issues/1224)
+    - [HSSM group-only policy follow-up #1225](https://github.com/lnccbrown/HSSM/issues/1225)
     - [Bambi issue #1003](https://github.com/bambinos/bambi/issues/1003)
     - [Formulae term structure](https://github.com/bambinos/formulae/blob/main/formulae/terms/terms.py)
     """)

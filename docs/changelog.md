@@ -8,6 +8,8 @@
 
 3. **`plot_model_cartoon` accepts `hist_height="auto"`** (#1127): fits the tallest RT-histogram curve to 90% of the vertical headroom between the histogram baseline (ribbon-aware — expanding bounds are cleared too) and the upper y-limit, so histograms can never overrun the axes; resolves per facet. Its mirror image, `ylims="auto"`, keeps the raw density scale and grows the frame around the content instead (never below the default limits; the two spellings are mutually exclusive). The defaults remain unchanged. The >2-choice renderer now also draws per-choice drift-uncertainty cones in band mode (graded fills in each accumulator's color; previously slope uncertainty appeared only as per-draw spaghetti in the samples display).
 
+4. **Safe priors now zero-center matching group-specific effects** (#1224). HSSM matches each Formulae group expression to an exact common-term counterpart and assigns the generated group deviation `mu=0`. This removes disconnected group-mean variables under non-centering and the redundant common/group location under centering. Explicit priors remain authoritative; parameterization diagnostics now warn only about the graph Bambi actually builds. The existing policy for unmatched group-only effects is unchanged and tracked in #1225.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
