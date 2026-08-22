@@ -9,6 +9,7 @@ validation:
   # phase-2 consolidation targets, deliberately unlisted until then
 not_in_nav: |
   tutorials/attentional_ddm.py
+  tutorials/random_slope_safe_priors.py
   absolute_links: warn
   unrecognized_links: warn
   anchors: warn
@@ -121,6 +122,7 @@ plugins:
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
         - tutorials/attentional_ddm.py
+        - tutorials/random_slope_safe_priors.py
         - tutorials/hsgp_regression.ipynb
         - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
