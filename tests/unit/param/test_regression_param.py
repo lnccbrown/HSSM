@@ -194,6 +194,60 @@ def test_validate():
     assert v.link.bounds == (0.0, 1.0)
 
 
+def test_prepare_formula_terms_caches_structural_names(cavanagh_test):
+    """Cache normalized Formulae names for varied common and group terms."""
+    param = RegressionParam(
+        name="v",
+        formula=(
+            "v ~ 1 + theta * dbs + C(stim) + np.exp(theta) + "
+            "(1 + theta * dbs + C(stim) + np.exp(theta) | participant_id) + "
+            "(0 + theta | conf)"
+        ),
+    )
+
+    design = param._prepare_formula_terms(cavanagh_test, {"np": np})
+
+    assert design.common is not None
+    assert design.group is not None
+    assert param._common_term_names == {
+        "Intercept",
+        "theta",
+        "dbs",
+        "theta:dbs",
+        "C(stim)",
+        "np.exp(theta)",
+    }
+    assert param._group_term_names == {
+        "1|participant_id": "Intercept",
+        "theta|participant_id": "theta",
+        "dbs|participant_id": "dbs",
+        "theta:dbs|participant_id": "theta:dbs",
+        "C(stim)|participant_id": "C(stim)",
+        "np.exp(theta)|participant_id": "np.exp(theta)",
+        "theta|conf": "theta",
+    }
+    assert param._group_terms_with_common == set(param._group_term_names)
+
+
+@pytest.mark.parametrize(
+    ("formula", "expected_matches"),
+    [
+        ("v ~ 1 + (0 + theta | participant_id)", set()),
+        ("v ~ 0 + theta + (0 + theta | participant_id)", {"theta|participant_id"}),
+        ("v ~ 1 + theta + (0 + dbs | participant_id)", set()),
+    ],
+)
+def test_prepare_formula_terms_matches_exact_expressions(
+    cavanagh_test, formula, expected_matches
+):
+    """Match group expressions to common terms by exact Formulae names."""
+    param = RegressionParam(name="v", formula=formula)
+
+    param._prepare_formula_terms(cavanagh_test, {})
+
+    assert param._group_terms_with_common == expected_matches
+
+
 angle_config = get_default_model_config("angle")
 angle_params = angle_config["list_params"]
 angle_bounds = angle_config["likelihoods"]["approx_differentiable"]["bounds"].values()

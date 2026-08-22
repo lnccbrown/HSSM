@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from bambi.utils import is_hsgp_term
 from formulae import design_matrices
+from formulae.matrices import DesignMatrices
 
 from ..link import Link
 from ..prior import get_default_prior, get_hddm_default_prior
@@ -74,6 +75,9 @@ class RegressionParam(Param):
     """
 
     terms: list[str]
+    _common_term_names: set[str]
+    _group_term_names: dict[str, str]
+    _group_terms_with_common: set[str]
     _user_specified_prior_keys: set[str]
 
     def __init__(
@@ -89,6 +93,9 @@ class RegressionParam(Param):
             name, prior, formula, link, bounds=bounds, user_param=user_param
         )
         self.terms = []
+        self._common_term_names = set()
+        self._group_term_names = {}
+        self._group_terms_with_common = set()
         # Snapshot of the prior keys the user explicitly supplied, taken
         # before make_safe_priors merges defaults in. Used by the
         # parameterization-mismatch check to scope warnings to user intent.
@@ -221,8 +228,12 @@ class RegressionParam(Param):
         use_hddm
             Whether to use HDDM default priors.
         """
+        dm = self._prepare_formula_terms(data, eval_env)
+        self._make_safe_priors(dm, is_ddm)
+
+    def _make_safe_priors(self, dm: DesignMatrices, is_ddm: bool) -> None:
+        """Populate safe priors from already-prepared Formulae matrices."""
         safe_priors = {}
-        dm = self._get_design_matrices(data, eval_env)
 
         get_prior = get_hddm_default_prior if is_ddm else get_default_prior
         specified_priors = (
@@ -300,6 +311,35 @@ class RegressionParam(Param):
             self.prior = cast("dict[str, Any]", self.prior)
             safe_priors.update(self.prior)
         self.prior = safe_priors
+
+    def _prepare_formula_terms(
+        self, data: pd.DataFrame, extra_namespace: dict[str, Any]
+    ) -> DesignMatrices:
+        """Build design matrices and cache their structural term names.
+
+        The returned Formulae matrices are intended for immediate use by safe-prior
+        generation. Only normalized strings are retained on the parameter so later
+        diagnostics do not keep Formulae matrices or term objects alive.
+        """
+        # HSSM accepts both full formulas and RHS-only shorthand. Structural
+        # preparation now happens before ``process_prior()``, so normalize here
+        # before extracting the response-free Formulae design.
+        self.reformat_formula()
+        dm = self._get_design_matrices(data, extra_namespace)
+        self._common_term_names = (
+            set(dm.common.terms) if dm.common is not None else set()
+        )
+        self._group_term_names = (
+            {name: term.expr.name for name, term in dm.group.terms.items()}
+            if dm.group is not None
+            else {}
+        )
+        self._group_terms_with_common = {
+            name
+            for name, expression_name in self._group_term_names.items()
+            if expression_name in self._common_term_names
+        }
+        return dm
 
     def _get_design_matrices(self, data: pd.DataFrame, extra_namespace: dict[str, Any]):
         """Get the design matrices for the regression.

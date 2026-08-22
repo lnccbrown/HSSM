@@ -281,9 +281,12 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
         else:
             param = make_param_from_defaults(model, name)
 
-        if model.prior_settings == "safe":
-            if isinstance(param, RegressionParam):
-                param.make_safe_priors(model.data, model.additional_namespace, is_ddm)
+        if isinstance(param, RegressionParam):
+            design_matrices = param._prepare_formula_terms(
+                model.data, model.additional_namespace
+            )
+            if model.prior_settings == "safe":
+                param._make_safe_priors(design_matrices, is_ddm)
 
         param.process_prior()
         params[name] = param
