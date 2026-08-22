@@ -8,11 +8,14 @@ and demonstrates the explicit zero-mean workaround.
 
 No sampling or network access is needed. From the HSSM repository root::
 
-    uv run --group docs marimo edit docs/tutorials/random_slope_safe_priors.py
-    uv run --group docs marimo check --strict docs/tutorials/random_slope_safe_priors.py
-    uv run --group docs marimo export html \
+    uv run --group notebook --group docs marimo edit docs/tutorials/random_slope_safe_priors.py
+    uv run --group notebook --group docs marimo check --strict docs/tutorials/random_slope_safe_priors.py
+    uv run --group notebook --group docs marimo export html \
         docs/tutorials/random_slope_safe_priors.py \
         --output /tmp/random-slope-safe-priors.html --force
+
+The graph cells also require the Graphviz ``dot`` executable (for example,
+``brew install graphviz`` on macOS).
 """
 
 # ruff: noqa: B018, D401, E501, PLR1711  (generated marimo notebook: prose, cell display expressions, and bare returns)
