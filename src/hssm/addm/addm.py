@@ -205,9 +205,9 @@ class aDDM(HSSMBase):
         kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
-        random_seed: int | np.random.Generator | None = None,
         continuation_mode: str | None = None,
         continuation_params: dict | None = None,
+        random_seed: int | np.random.Generator | None = None,
     ) -> DataTree | None:
         """Posterior-predictive draws with a per-call fixation-continuation policy.
 

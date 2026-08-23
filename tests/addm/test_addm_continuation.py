@@ -34,8 +34,46 @@ needs_addm_continuation = pytest.mark.skipif(
 
 import hssm  # noqa: E402
 from hssm.addm.config import aDDMConfig  # noqa: E402
+from hssm.base import HSSMBase  # noqa: E402
 
 _GAMMA = {"dist": "gamma", "dist_params": {"a": 2.0, "scale": 0.3}}
+
+
+def test_addm_ppc_preserves_positional_continuation_arguments(monkeypatch):
+    """Adding ``random_seed`` must not change existing positional bindings."""
+    model = object.__new__(hssm.aDDM)
+    model.model_config = aDDMConfig()
+    received: dict = {}
+
+    def fake_sample_posterior_predictive(self, **kwargs):
+        received.update(kwargs)
+        received["continuation_override"] = self._continuation_override
+
+    monkeypatch.setattr(
+        HSSMBase, "sample_posterior_predictive", fake_sample_posterior_predictive
+    )
+
+    # Keep the pre-random_seed positional order intact: the established continuation
+    # arguments remain positions 8 and 9, and the new seed is appended at position 10.
+    model.sample_posterior_predictive(
+        None,
+        None,
+        True,
+        False,
+        "response",
+        4,
+        False,
+        "sample_continuation",
+        _GAMMA,
+        519,
+    )
+
+    assert received["continuation_override"] == ("sample_continuation", _GAMMA)
+    assert received["random_seed"] == 519
+    assert received["include_group_specific"] is False
+    assert received["draws"] == 4
+    assert received["safe_mode"] is False
+    assert model._continuation_override is None
 
 
 @needs_addm_continuation
