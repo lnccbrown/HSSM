@@ -988,6 +988,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
+        *,
+        random_seed: int | np.random.Generator | None = None,
     ) -> DataTree | None:
         """Perform posterior predictive sampling from the HSSM model.
 
@@ -1028,6 +1030,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         safe_mode: bool
             If True, the function will split the draws into chunks of 10 to avoid memory
             issues. Defaults to True.
+        random_seed
+            Seed or NumPy Generator for reproducible posterior predictive draws. A
+            single Generator stream is advanced across safe-mode chunks.
 
         Raises
         ------
@@ -1075,6 +1080,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         assert isinstance(draws, np.ndarray)
 
+        predict_kwargs: dict[str, Any] = {}
+        if random_seed is not None:
+            predict_kwargs["random_seed"] = np.random.default_rng(random_seed)
+
         # Make a copy of dt, set the `posterior` group to be a random sub-sample
         # of the original (draw dimension gets sub-sampled)
 
@@ -1099,7 +1108,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     tmp_posterior = dt["posterior"].sel(draw=samples_tmp)
                     dt_copy["posterior"] = tmp_posterior
                     self.model.predict(
-                        dt_copy, kind, data, True, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        True,
+                        include_group_specific,
+                        **predict_kwargs,
                     )
                     posterior_predictive_list.append(dt_copy["posterior_predictive"])
 
@@ -1130,7 +1144,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     # .predict() is called on the copy of dt
                     # since we still subsampled (or assigned) the draws
                     self.model.predict(
-                        dt_copy, kind, data, True, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        True,
+                        include_group_specific,
+                        **predict_kwargs,
                     )
 
                     # posterior predictive group added to dt
@@ -1143,7 +1162,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     # .predict(). It just operates on the
                     # dt_copy object
                     return self.model.predict(
-                        dt_copy, kind, data, False, include_group_specific
+                        dt_copy,
+                        kind,
+                        data,
+                        False,
+                        include_group_specific,
+                        **predict_kwargs,
                     )
         elif kind == "response_params":
             # If kind == 'response_params', we don't need to run the RV directly,
@@ -1154,7 +1178,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 "The kind argument is set to 'mean', but 'draws' argument "
                 + "is not None: The draws argument will be ignored!"
             )
-            return self.model.predict(dt, kind, data, inplace, include_group_specific)
+            return self.model.predict(
+                dt,
+                kind,
+                data,
+                inplace,
+                include_group_specific,
+                **predict_kwargs,
+            )
         else:
             raise ValueError("`kind` must be either 'response' or 'response_params'.")
 
@@ -1241,7 +1272,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         draws: int = 500,
         var_names: str | list[str] | None = None,
         omit_offsets: bool = True,
-        random_seed: np.random.Generator | None = None,
+        random_seed: int | np.random.Generator | None = None,
     ) -> DataTree:
         """Generate samples from the prior predictive distribution.
 

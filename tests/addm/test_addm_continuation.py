@@ -9,6 +9,7 @@ Requires the ssm-simulators build with ``cssm.addm`` AND the ``fixation_continua
 module; skips otherwise (like the aDDM PPC tests).
 """
 
+import inspect
 import sys
 from pathlib import Path
 
@@ -34,8 +35,59 @@ needs_addm_continuation = pytest.mark.skipif(
 
 import hssm  # noqa: E402
 from hssm.addm.config import aDDMConfig  # noqa: E402
+from hssm.base import HSSMBase  # noqa: E402
 
 _GAMMA = {"dist": "gamma", "dist_params": {"a": 2.0, "scale": 0.3}}
+
+
+def test_addm_ppc_preserves_positional_continuation_arguments(monkeypatch):
+    """Adding ``random_seed`` must not change existing positional bindings."""
+    model = object.__new__(hssm.aDDM)
+    model.model_config = aDDMConfig()
+    received: dict = {}
+
+    assert (
+        inspect.signature(HSSMBase.sample_posterior_predictive)
+        .parameters["random_seed"]
+        .kind
+        is inspect.Parameter.KEYWORD_ONLY
+    )
+    assert (
+        inspect.signature(hssm.aDDM.sample_posterior_predictive)
+        .parameters["random_seed"]
+        .kind
+        is inspect.Parameter.KEYWORD_ONLY
+    )
+
+    def fake_sample_posterior_predictive(self, **kwargs):
+        received.update(kwargs)
+        received["continuation_override"] = self._continuation_override
+
+    monkeypatch.setattr(
+        HSSMBase, "sample_posterior_predictive", fake_sample_posterior_predictive
+    )
+
+    # Keep the established continuation arguments in positions 8 and 9 while the
+    # newly introduced seed is keyword-only in both the base and subclass methods.
+    model.sample_posterior_predictive(
+        None,
+        None,
+        True,
+        False,
+        "response",
+        4,
+        False,
+        "sample_continuation",
+        _GAMMA,
+        random_seed=519,
+    )
+
+    assert received["continuation_override"] == ("sample_continuation", _GAMMA)
+    assert received["random_seed"] == 519
+    assert received["include_group_specific"] is False
+    assert received["draws"] == 4
+    assert received["safe_mode"] is False
+    assert model._continuation_override is None
 
 
 @needs_addm_continuation
