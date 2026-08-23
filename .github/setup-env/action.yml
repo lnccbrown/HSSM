@@ -4,6 +4,10 @@ inputs:
   python-version:
     description: "The Python version to set up"
     required: true
+  install-blas:
+    description: "Whether to install the system BLAS and LAPACK development packages"
+    required: false
+    default: "true"
 
 runs:
   using: "composite"
@@ -16,6 +20,7 @@ runs:
     # packages the linker cannot resolve those flags and PyTensor's C backend
     # fails to compile any BLAS-using op.
     - name: Install BLAS and LAPACK
+      if: ${{ inputs.install-blas == 'true' }}
       run: sudo apt-get update && sudo apt-get install -y libblas-dev liblapack-dev
       shell: bash
 

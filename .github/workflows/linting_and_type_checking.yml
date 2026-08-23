@@ -21,6 +21,7 @@ jobs:
         uses: ./.github/setup-env
         with:
           python-version: ${{ matrix.python-version }}
+          install-blas: "false"
 
       - name: Run pyrefly
         run: uv run pyrefly check
