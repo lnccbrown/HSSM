@@ -5,8 +5,10 @@ on:
     paths:
       - "pyproject.toml"
       - ".github/workflows/jeam_prototype.yml"
+      - "src/hssm/base.py"
       - "src/hssm/distribution_utils/blackbox.py"
       - "src/hssm/distribution_utils/dist.py"
+      - "src/hssm/hssm.py"
       - "src/hssm/integrations/jeam.py"
       - "src/hssm/modelconfig/circular_diffusion_config.py"
       - "scripts/benchmark_jeam_bayesian_recovery.py"
