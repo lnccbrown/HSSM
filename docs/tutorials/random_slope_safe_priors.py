@@ -48,12 +48,20 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     import logging
+    import os
     import warnings
 
+    # Molab's server image may expose a CUDA JAX plugin even when the temporary
+    # server has no usable GPU. Keep this construction-only notebook on CPU and
+    # prevent that unused plugin from probing CUDA during discovery.
+    os.environ["JAX_PLATFORMS"] = "cpu"
+    os.environ["JAX_SKIP_CUDA_CONSTRAINTS_CHECK"] = "1"
+
     warnings.filterwarnings("ignore")
-    logging.getLogger("jax._src.xla_bridge").setLevel(logging.ERROR)
+    logging.getLogger("jax._src.xla_bridge").setLevel(logging.CRITICAL)
 
     import bambi as bmb
+    import jax
     import marimo as mo
     import numpy as np
     import pandas as pd
@@ -65,11 +73,12 @@ def _():
 
     logging.getLogger("hssm").setLevel(logging.ERROR)
     hssm.set_floatX("float64")
-    return bmb, design_matrices, find_disconnected_free_rvs, hssm, mo, np, pd, pm
+    assert jax.default_backend() == "cpu"
+    return bmb, design_matrices, find_disconnected_free_rvs, hssm, jax, mo, np, pd, pm
 
 
 @app.cell
-def _(bmb, hssm, mo):
+def _(bmb, hssm, jax, mo):
     mo.md(f"""
     # Random-slope safe priors and parameterization diagnostics
 
@@ -82,6 +91,10 @@ def _(bmb, hssm, mo):
     The hosted environment is pinned to the reviewed HSSM #1224 implementation
     at `944eacb0`. When opened from an HSSM checkout with `--no-sandbox`, the
     notebook instead validates that checkout.
+
+    This construction-only notebook explicitly uses the **{jax.default_backend()}**
+    JAX backend so it also runs on Molab servers whose base image exposes an
+    unavailable CUDA plugin.
 
     We will establish four things without running MCMC:
 
