@@ -9,6 +9,7 @@ Requires the ssm-simulators build with ``cssm.addm`` AND the ``fixation_continua
 module; skips otherwise (like the aDDM PPC tests).
 """
 
+import inspect
 import sys
 from pathlib import Path
 
@@ -45,6 +46,19 @@ def test_addm_ppc_preserves_positional_continuation_arguments(monkeypatch):
     model.model_config = aDDMConfig()
     received: dict = {}
 
+    assert (
+        inspect.signature(HSSMBase.sample_posterior_predictive)
+        .parameters["random_seed"]
+        .kind
+        is inspect.Parameter.KEYWORD_ONLY
+    )
+    assert (
+        inspect.signature(hssm.aDDM.sample_posterior_predictive)
+        .parameters["random_seed"]
+        .kind
+        is inspect.Parameter.KEYWORD_ONLY
+    )
+
     def fake_sample_posterior_predictive(self, **kwargs):
         received.update(kwargs)
         received["continuation_override"] = self._continuation_override
@@ -53,8 +67,8 @@ def test_addm_ppc_preserves_positional_continuation_arguments(monkeypatch):
         HSSMBase, "sample_posterior_predictive", fake_sample_posterior_predictive
     )
 
-    # Keep the pre-random_seed positional order intact: the established continuation
-    # arguments remain positions 8 and 9, and the new seed is appended at position 10.
+    # Keep the established continuation arguments in positions 8 and 9 while the
+    # newly introduced seed is keyword-only in both the base and subclass methods.
     model.sample_posterior_predictive(
         None,
         None,
@@ -65,7 +79,7 @@ def test_addm_ppc_preserves_positional_continuation_arguments(monkeypatch):
         False,
         "sample_continuation",
         _GAMMA,
-        519,
+        random_seed=519,
     )
 
     assert received["continuation_override"] == ("sample_continuation", _GAMMA)

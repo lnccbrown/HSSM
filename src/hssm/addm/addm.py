@@ -207,6 +207,7 @@ class aDDM(HSSMBase):
         safe_mode: bool = True,
         continuation_mode: str | None = None,
         continuation_params: dict | None = None,
+        *,
         random_seed: int | np.random.Generator | None = None,
     ) -> DataTree | None:
         """Posterior-predictive draws with a per-call fixation-continuation policy.

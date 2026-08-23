@@ -988,6 +988,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         kind: Literal["response", "response_params"] = "response",
         draws: int | float | list[int] | np.ndarray | None = None,
         safe_mode: bool = True,
+        *,
         random_seed: int | np.random.Generator | None = None,
     ) -> DataTree | None:
         """Perform posterior predictive sampling from the HSSM model.
