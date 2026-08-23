@@ -77,6 +77,7 @@ nav:
       - Coming from HDDM: explanations/coming_from_hddm.md
       - Understanding likelihoods in HSSM: tutorials/likelihoods.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
+      - Random-slope prior diagnostics: tutorials/random_slope_safe_priors.ipynb
       - Choosing a parameterization per parameter: tutorials/parameterization_per_parameter.ipynb
   - Reference:
       - HSSM core classes:
@@ -113,6 +114,8 @@ plugins:
         tutorials/pymc_to_hssm.md: https://lnccbrown.github.io/HSSM/archive/pymc_to_hssm/
         tutorials/variational_inference_hierarchical.md: https://lnccbrown.github.io/HSSM/tutorials/variational_inference/
   - mkdocs-jupyter:
+      ignore:
+        - tutorials/random_slope_safe_priors.py
       execute: true
       execute_ignore:
         - getting_started/getting_started.ipynb
@@ -122,7 +125,7 @@ plugins:
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
         - tutorials/attentional_ddm.py
-        - tutorials/random_slope_safe_priors.py
+        - tutorials/random_slope_safe_priors.ipynb
         - tutorials/hsgp_regression.ipynb
         - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
