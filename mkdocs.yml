@@ -6,12 +6,13 @@ edit_uri: edit/main/docs
 
 validation:
   omitted_files: warn
-  # phase-2 consolidation targets, deliberately unlisted until then
-not_in_nav: |
-  tutorials/attentional_ddm.py
   absolute_links: warn
   unrecognized_links: warn
   anchors: warn
+
+# phase-2 consolidation targets, deliberately unlisted until then
+not_in_nav: |
+  tutorials/attentional_ddm.py
 
 nav:
   - Home:

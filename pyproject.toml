@@ -93,7 +93,7 @@ docs = [
     "mkdocs>=1.6.0",
     "mkdocs-jupyter>=0.25.1",
     "mkdocstrings-python>=1.10.0",
-    "mkdocs-redirects>=1.2.0",
+    "mkdocs-redirects==1.2.2",
 ]
 
 [tool.ruff]
