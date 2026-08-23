@@ -86,9 +86,13 @@ def test_recovery_report_records_provenance_and_efficiency(recovery_result):
     assert recovery_result.jeam_revision == PINNED_JEAM_REVISION
     assert recovery_result.pytensor_floatx == "float64"
     assert recovery_result.trials == 300
+    assert recovery_result.predictive_draws == 100
+    assert recovery_result.predictive_seed == 7291
     assert recovery_result.sampling_seconds > 0.0
     assert recovery_result.predictive_seconds > 0.0
 
     payload = json.loads(json.dumps(asdict(recovery_result)))
     assert payload["sampler"] == "pymc.Slice[a,t,v_x,v_y]"
     assert payload["jeam_revision"] == PINNED_JEAM_REVISION
+    assert payload["predictive_draws"] == 100
+    assert payload["predictive_seed"] == 7291

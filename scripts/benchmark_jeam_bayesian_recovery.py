@@ -96,6 +96,8 @@ class RecoveryResult:
     tune: int
     draws: int
     chain_seeds: tuple[int, ...]
+    predictive_draws: int
+    predictive_seed: int
     sampling_seconds: float
     predictive_seconds: float
     parameters: tuple[ParameterRecovery, ...]
@@ -247,6 +249,8 @@ def run_recovery(
         tune=tune,
         draws=draws,
         chain_seeds=chain_seeds,
+        predictive_draws=predictive_draws,
+        predictive_seed=predictive_seed,
         sampling_seconds=sampling_seconds,
         predictive_seconds=predictive_seconds,
         parameters=parameter_recovery,
