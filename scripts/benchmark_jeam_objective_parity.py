@@ -39,6 +39,7 @@ DEFAULT_OPTIMIZER_SEED = 8675309
 DEFAULT_TRIALS = 300
 DEFAULT_MAXITER = 14
 DEFAULT_POPSIZE = 15
+NDT_SUPPORT_MARGIN = 1e-12
 
 HSSM_PARAMETER_ORDER = ["v_x", "v_y", "a", "t"]
 HSSM_BOUNDS = {
@@ -178,7 +179,9 @@ def make_compiled_hssm_objective(
 def optimization_bounds(data: np.ndarray) -> tuple[tuple[float, float], ...]:
     """Return bounds wholly inside both HSSM and dataset-specific RT support."""
     min_rt = float(np.min(np.asarray(data)[:, 0]))
-    t_upper = np.nextafter(min_rt, -np.inf)
+    # HSSM excludes rt - t <= 1e-15 before evaluating the model likelihood.
+    # Keep the optimizer endpoint comfortably inside that shared support.
+    t_upper = min(HSSM_BOUNDS["t"][1], min_rt - NDT_SUPPORT_MARGIN)
     if t_upper <= 0.05:
         raise ValueError(
             "The simulated dataset leaves no valid optimization range for t."
@@ -244,15 +247,21 @@ def run_benchmark(
     data = simulate_dataset(trials=trials, seed=data_seed)
     direct = make_direct_objective(data)
     compiled = make_compiled_hssm_objective(data)
+    bounds = optimization_bounds(data)
     candidates = (
         tuple(float(value) for value in DEFAULT_TRUTH),
         (1.00, 0.10, 0.40, -0.30),
         (1.50, 0.12, 1.10, -0.80),
+        (
+            float(DEFAULT_TRUTH[0]),
+            bounds[1][1],
+            float(DEFAULT_TRUTH[2]),
+            float(DEFAULT_TRUTH[3]),
+        ),
     )
     candidate_arrays = tuple(np.asarray(candidate) for candidate in candidates)
     direct_objectives = tuple(direct(candidate) for candidate in candidate_arrays)
     compiled_objectives = tuple(compiled(candidate) for candidate in candidate_arrays)
-    bounds = optimization_bounds(data)
     direct_fit = _fit(
         direct,
         bounds,

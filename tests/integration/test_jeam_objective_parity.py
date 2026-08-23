@@ -11,8 +11,11 @@ pytest.importorskip("jeam")
 from scripts.benchmark_jeam_objective_parity import (
     DEFAULT_MAXITER,
     DEFAULT_POPSIZE,
+    HSSM_BOUNDS,
     PARAMETER_ORDER,
+    optimization_bounds,
     run_benchmark,
+    simulate_dataset,
 )
 
 PINNED_JEAM_REVISION = "a9f547b3630ae8ff31ccec1b904e0c02fdba6d99"
@@ -27,15 +30,20 @@ def parity_result():
 
 
 def test_objective_grid_matches_direct_jeam(parity_result):
-    """Compiled HSSM should preserve direct JEAM objectives away from one point."""
+    """Compiled HSSM should preserve direct JEAM objectives through the bounds."""
     np.testing.assert_allclose(
         parity_result.compiled_objectives,
         parity_result.direct_objectives,
         rtol=OBJECTIVE_RTOL,
         atol=OBJECTIVE_ATOL,
     )
-    assert len(parity_result.candidate_parameters) == 3
+    assert len(parity_result.candidate_parameters) == 4
     assert parity_result.parameter_order == PARAMETER_ORDER
+
+    data = simulate_dataset()
+    ndt_upper = optimization_bounds(data)[1][1]
+    assert np.min(data[:, 0]) - ndt_upper > 1e-15
+    assert parity_result.candidate_parameters[-1][1] == ndt_upper
 
 
 def test_fixed_budget_optimizer_follows_the_same_path(parity_result):
@@ -60,6 +68,15 @@ def test_fixed_budget_optimizer_follows_the_same_path(parity_result):
     assert direct.evaluations == compiled.evaluations == expected_evaluations
     assert direct.iterations == compiled.iterations == DEFAULT_MAXITER
     assert direct.objective < parity_result.direct_objectives[0]
+
+
+def test_optimization_bounds_respect_hssm_ndt_upper_bound():
+    """High-RT datasets must not expand the optimizer beyond HSSM support."""
+    data = np.array([[2.5, 0.0], [3.0, 0.5]], dtype=np.float64)
+    ndt_upper = optimization_bounds(data)[1][1]
+
+    assert ndt_upper == HSSM_BOUNDS["t"][1]
+    assert ndt_upper < np.min(data[:, 0])
 
 
 def test_benchmark_records_provenance_and_machine_readable_output(parity_result):
