@@ -234,6 +234,19 @@ def generate_prior(
     return prior
 
 
+def _is_identity_link(link: str | bmb.Link | None) -> bool:
+    """Return whether a link leaves coefficients on the response scale.
+
+    A missing link is semantically identity because ``RegressionParam.validate``
+    normalizes it to ``"identity"`` after safe-prior generation.
+    """
+    if link is None:
+        return True
+    if isinstance(link, str):
+        return link == "identity"
+    return link.name == "identity"
+
+
 # AF-TODO: Docstring could benefit from some more details here.
 def get_default_prior(
     term_type: str,

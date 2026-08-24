@@ -14,6 +14,7 @@ from hssm.param.parameterization_check import (
     check_user_priors_for_location_overparameterization,
     find_disconnected_free_rvs,
 )
+from hssm.prior import _is_identity_link
 
 hssm.set_floatX("float32")
 
@@ -73,6 +74,45 @@ class TestPriorUnit:
         assert hssm_prior == bounded_prior2
 
         assert dist_hssm_prior == dist_bmb_prior
+
+    @pytest.mark.parametrize(
+        "link",
+        [
+            None,
+            "identity",
+            bmb.Link("identity"),
+            hssm.Link("identity"),
+        ],
+        ids=["omitted", "string", "bambi-object", "hssm-object"],
+    )
+    def test_identity_link_classification(self, link):
+        """Recognize every spelling of the effective identity link."""
+        assert _is_identity_link(link)
+
+    @pytest.mark.parametrize(
+        "link",
+        [
+            "log",
+            "logit",
+            bmb.Link("log"),
+            bmb.Link("logit"),
+            hssm.Link("log"),
+            hssm.Link("logit"),
+            hssm.Link("gen_logit", bounds=(0.0, 1.0)),
+        ],
+        ids=[
+            "log-string",
+            "logit-string",
+            "bambi-log",
+            "bambi-logit",
+            "hssm-log",
+            "hssm-logit",
+            "hssm-gen-logit",
+        ],
+    )
+    def test_transformed_link_classification(self, link):
+        """Classify non-identity strings and link objects as transformed."""
+        assert not _is_identity_link(link)
 
 
 # ---------------------------------------------------------------------------
