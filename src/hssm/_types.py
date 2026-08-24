@@ -21,6 +21,7 @@ SupportedModels = Literal[
     "weibull",
     "race_no_bias_angle_4",
     "ddm_seq2_no_bias",
+    "gamma_drift",
     "lba3",
     "lba4",
     "lba2",
