@@ -107,8 +107,10 @@ explains the tradeoff and when each is the better choice.
   priors, an omitted link, `"identity"`, `bambi.Link("identity")`, and
   `hssm.Link("identity")` are equivalent: each keeps the intercept on the
   response scale and uses the HDDM-derived prior. A transformed link instead
-  uses a coefficient-scale `Normal(mu=0, sigma=0.25)`. An explicit prior always
-  wins. Unmatched group-only terms retain their existing behavior, tracked in
+  uses a coefficient-scale `Normal(mu=0, sigma=0.25)`. [Link functions and safe
+  priors](../tutorials/link_functions.ipynb) explains that scale change from
+  first principles. An explicit prior always wins. Unmatched group-only terms
+  retain their existing behavior, tracked in
   [#1225](https://github.com/lnccbrown/HSSM/issues/1225). The broader rule is
   the likelihood: these defaults apply unless you use the neural
   (`approx_differentiable`) likelihood, which has its own priors derived from
