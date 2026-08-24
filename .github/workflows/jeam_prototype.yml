@@ -13,7 +13,9 @@ on:
       - "src/hssm/modelconfig/circular_diffusion_config.py"
       - "scripts/benchmark_jeam_bayesian_recovery.py"
       - "scripts/benchmark_jeam_objective_parity.py"
+      - "scripts/benchmark_jeam_recovery_evidence.py"
       - "scripts/benchmark_jeam_repeated_recovery.py"
+      - "tests/test_jeam_recovery_evidence_io.py"
       - "tests/integration/test_jeam_bayesian_recovery.py"
       - "tests/integration/test_jeam.py"
       - "tests/integration/test_jeam_model.py"
@@ -60,3 +62,8 @@ jobs:
         run: >-
           uv run --group jeam-prototype pytest
           tests/integration/test_jeam_repeated_recovery.py
+
+      - name: Verify durable recovery checkpoints
+        run: >-
+          uv run --group jeam-prototype pytest
+          tests/test_jeam_recovery_evidence_io.py
