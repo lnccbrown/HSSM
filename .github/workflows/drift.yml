@@ -101,9 +101,18 @@ jobs:
             FAILED_JOBS="$FAILED_JOBS (force_fail rehearsal)"
           fi
 
-          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label drift \
-            --state open --search "in:body \"$KEY\"" \
-            --json number --jq '.[0].number // empty')
+          # Match the exact marker this job writes, not GitHub's full-text
+          # search. `--search 'in:body "drift-key: HSSM-scheduled"'` tokenizes
+          # and drops punctuation, so an issue that merely *quotes* the key in
+          # prose scores as a match. #1220 — a hand-filed report *about* this
+          # workflow, which necessarily quotes the key — was picked up that way
+          # and silently absorbed every "Still failing" comment for two weeks,
+          # while the real drift issue was never filed. Filtering the labelled
+          # set locally on the literal HTML comment makes that impossible.
+          MARKER="<!-- $KEY -->"
+          EXISTING=$(MARKER="$MARKER" gh issue list --repo "$GITHUB_REPOSITORY" \
+            --label drift --state open --limit 100 --json number,body \
+            --jq 'map(select(.body // "" | contains(env.MARKER))) | .[0].number // empty')
 
           if [ -z "$FAILED_JOBS" ]; then
             if [ -n "$SUCCEEDED" ] && [ -z "$CANCELLED_JOBS" ]; then
