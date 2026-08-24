@@ -16,6 +16,7 @@ on:
       - "scripts/benchmark_jeam_recovery_evidence.py"
       - "scripts/benchmark_jeam_repeated_recovery.py"
       - "tests/test_jeam_recovery_evidence_io.py"
+      - "tests/integration/test_jeam_bayesian_evidence_capture.py"
       - "tests/integration/test_jeam_bayesian_recovery.py"
       - "tests/integration/test_jeam.py"
       - "tests/integration/test_jeam_model.py"
@@ -56,6 +57,7 @@ jobs:
       - name: Run the Bayesian recovery preflight and gate
         run: >-
           uv run --group jeam-prototype pytest
+          tests/integration/test_jeam_bayesian_evidence_capture.py
           tests/integration/test_jeam_bayesian_recovery.py
 
       - name: Verify the repeated-recovery protocol contract
