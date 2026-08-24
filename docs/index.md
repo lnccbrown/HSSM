@@ -106,9 +106,11 @@ model.sample()
 
 </div>
 
-Beyond the paths, the docs are organised by what you are doing: **Learn** for
-guided material, **How-to guides** for a specific task, **Explanations** for
-the reasoning behind a choice, and **Reference** for the API.
+Beyond the paths, the docs are organised by what you are doing:
+[Learn](learn/index.md) for guided material,
+[How-to guides](how_to/index.md) for a specific task, **Explanations** for the
+reasoning behind a choice, and [Reference](reference/index.md) for exact APIs
+and project metadata.
 
 ## Part of a larger toolchain
 
