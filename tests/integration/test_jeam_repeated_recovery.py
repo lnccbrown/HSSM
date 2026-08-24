@@ -1,12 +1,21 @@
 """Fast contracts for the multi-scenario JEAM recovery protocol."""
 
-from dataclasses import astuple, replace
+from dataclasses import asdict, astuple, replace
 
 import numpy as np
 import pytest
 
 pytest.importorskip("jeam")
 
+from scripts.benchmark_jeam_bayesian_recovery import (
+    PredictiveRecovery,
+    PriorPredictiveCheck,
+    SliceDiagnostics,
+)
+from scripts.benchmark_jeam_objective_parity import (
+    PARAMETER_ORDER,
+    FitSummary,
+)
 from scripts.benchmark_jeam_repeated_recovery import (
     DEFAULT_MAXITER,
     DEFAULT_POPSIZE,
@@ -29,16 +38,6 @@ from scripts.benchmark_jeam_repeated_recovery import (
     evaluate_gate,
 )
 
-from scripts.benchmark_jeam_bayesian_recovery import (
-    PredictiveRecovery,
-    PriorPredictiveCheck,
-    SliceDiagnostics,
-)
-from scripts.benchmark_jeam_objective_parity import (
-    PARAMETER_ORDER,
-    FitSummary,
-)
-
 LIMITS = DEFAULT_THRESHOLDS
 
 
@@ -58,7 +57,7 @@ def _parameter(name: str, truth: float, error: float) -> ScenarioParameterResult
         ess_bulk=LIMITS.minimum_bulk_ess,
         ess_tail=LIMITS.minimum_tail_ess,
         mcse_mean=mcse_mean,
-        mcse_sd_ratio=_mcse_sd_ratio(mcse_mean, posterior_sd),
+        mcse_sd_ratio=LIMITS.maximum_mcse_sd_ratio,
         ess_bulk_per_second=10.0,
     )
 
@@ -170,10 +169,16 @@ def test_protocol_defaults_are_frozen_independently():
     # fmt: off
     assert astuple(LIMITS) == (
         5e-5, 1e-12, 5e-5, 1.01, 500.0, 500.0, 0.75, 0.05, 0.1, 20.0, 0.12, 0.10, 0.08,
+        (0.12, 0.04, 0.20, 0.20), (0.18, 0.05, 0.28, 0.28),
+    )
+    # fmt: on
+    limits = asdict(LIMITS)
+    assert (limits["maximum_absolute_bias"], limits["maximum_rmse"]) == (
         {"a": 0.12, "t": 0.04, "v_x": 0.20, "v_y": 0.20},
         {"a": 0.18, "t": 0.05, "v_x": 0.28, "v_y": 0.28},
     )
-    # fmt: on
+    with pytest.raises(KeyError):
+        LIMITS.maximum_absolute_bias["unknown"]
 
 
 def test_aggregate_results_use_fixed_budget_and_hdi_terminology():
@@ -193,6 +198,7 @@ def test_aggregate_results_use_fixed_budget_and_hdi_terminology():
             parameter.hdi_inclusion_fraction,
             parameter.maximum_mcse_sd_ratio,
         ) == pytest.approx((0.1, 0.1, -0.1, 0.1, 1.0, 0.05))
+    assert _mcse_sd_ratio(0.01, 0.2) == pytest.approx(0.05)
     assert all(np.isinf(_mcse_sd_ratio(0.1, scale)) for scale in (0.0, -1.0, np.nan))
     with pytest.raises(ValueError, match="At least one completed scenario"):
         aggregate_results(())
