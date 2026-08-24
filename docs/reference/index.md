@@ -7,11 +7,17 @@ This section records the public HSSM interfaces and project metadata. Use the
 ## Core modeling interfaces
 
 - [`hssm.HSSM`](../api/hssm.md) builds and fits an HSSM model.
+- [`hssm.aDDM` and `hssm.aDDMConfig`](../api/addm.md) provide the specialized
+  attentional drift-diffusion interface.
 - [`hssm.Param`](../api/param.md), [`hssm.Prior`](../api/prior.md), and
   [`hssm.Link`](../api/link.md) describe parameter formulas, priors, and links.
 - [`hssm.ModelConfig`](../api/model_config.md) describes registered model
   configurations.
 - [`hssm.rl`](../api/rl.md) contains the reinforcement-learning interfaces.
+- [Built-in models and likelihoods](models-and-likelihoods.md) records every
+  `hssm.HSSM(model=...)` name, configured likelihood kind, parameter, and choice.
+- [The ONNX likelihood contract](../how_to/custom_onnx_likelihoods.md) records
+  the portable artifact boundary for approximate differentiable likelihoods.
 
 ## Functions and specialized modules
 
@@ -20,6 +26,8 @@ This section records the public HSSM interfaces and project metadata. Use the
 - [`hssm.show_defaults`](../api/show_defaults.md) inspects model defaults.
 - [`hssm.set_floatX`](../api/set_floatx.md) selects floating-point precision.
 - [`hssm.check_data_for_rl`](../api/check_data_for_rl.md) validates RLSSM data.
+- [`hssm.list_models` and `hssm.register_model`](../api/model_registry.md)
+  discover and extend the HSSM model registry.
 - [`hssm.likelihoods`](../api/likelihoods.md) records likelihood interfaces.
 - [`hssm.distribution_utils`](../api/distribution_utils.md) records distribution
   helpers.

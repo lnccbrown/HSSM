@@ -31,7 +31,7 @@ focuses on a concrete modeling, inference, analysis, or extension task.
 ## Extend HSSM
 
 Begin with the [custom-likelihood route table](external_trainers.md). For ONNX,
-read the [ONNX likelihood contract](custom_onnx_likelihoods.ipynb) before using
+read the [ONNX likelihood contract](custom_onnx_likelihoods.md) before using
 the sbi, BayesFlow, JAX-callable, or black-box walkthrough linked there.
 
 For a contribution to HSSM itself, follow the

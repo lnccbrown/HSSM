@@ -39,7 +39,7 @@ that matches your data:
 
 - [Coming from HDDM](../explanations/coming_from_hddm.md) maps familiar HDDM
   concepts to HSSM.
-- [Understanding likelihoods](../tutorials/likelihoods.ipynb) explains the
+- [Likelihood kinds in HSSM](../explanations/likelihoods.md) explains the
   available likelihood kinds.
 - [Centered and non-centered parameterizations](../tutorials/centered_vs_noncentered_basic_logic.ipynb)
   establish the basic trade-off.
