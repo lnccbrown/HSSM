@@ -386,12 +386,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         #    (e.g. nested `mu` hyperprior on a group-specific Normal under
         #    non-centered);
         #  * priors whose group-specific `mu` is statistically redundant
-        #    with the common `Intercept` (location non-identifiability).
+        #    with an exact matching common effect (location non-identifiability).
         emit_parameterization_warnings(
             check_user_priors_against_parameterization(
                 self.params, kwargs.get("noncentered", True)
             )
-            + check_user_priors_for_location_overparameterization(self.params)
+            + check_user_priors_for_location_overparameterization(
+                self.params, kwargs.get("noncentered", True)
+            )
         )
 
         self.model = bmb.Model(
