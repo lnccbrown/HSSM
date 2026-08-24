@@ -27,8 +27,8 @@ docs/              # MkDocs documentation source
 
 ## Build & Tooling
 
-- **Build system:** hatchling
-- **Package manager:** uv (with `uv.lock`)
+- **Build system:** uv_build
+- **Package manager:** uv (fresh resolution; `uv.lock` is intentionally untracked)
 - **Python:** >=3.12, <3.15
 - **Linting/formatting:** ruff (via pre-commit)
 - **Type checking:** pyrefly (main; via pre-commit) + mypy (kept in CI)

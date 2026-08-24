@@ -67,7 +67,7 @@ The preferred workflow for contributing to HSSM is to fork the GitHub repository
 > ```
 > uv add <package-name>
 > ```
-> Replace `<package-name>` with the name of the library you need to add. This command will update the `pyproject.toml` file and install the new dependency. It will also add changes to the [`uv.lock`](https://docs.astral.sh/uv/guides/projects/#uvlock) file.
+> Replace `<package-name>` with the name of the library you need to add. This command updates `pyproject.toml`, installs the dependency, and refreshes your local `uv.lock`. HSSM intentionally does not commit the lockfile, so stage only `pyproject.toml`.
 >
 > Remember to commit the newly changed files.
 > ```
