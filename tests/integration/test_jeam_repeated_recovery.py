@@ -1,12 +1,15 @@
 """Fast contracts for the multi-scenario JEAM recovery protocol."""
 
+import json
 from dataclasses import asdict, astuple, replace
+from inspect import signature
 
 import numpy as np
 import pytest
 
 pytest.importorskip("jeam")
 
+import scripts.benchmark_jeam_repeated_recovery as repeated
 from scripts.benchmark_jeam_bayesian_recovery import (
     PredictiveRecovery,
     PriorPredictiveCheck,
@@ -330,3 +333,105 @@ def test_gate_rejects_invalid_slice_mcse_and_nonfinite_metrics():
     )
     # fmt: on
     assert all(expected in failure_text for expected in expected_failures)
+
+
+@pytest.fixture
+def benchmark_execution(monkeypatch):
+    """Run canonical orchestration with every expensive scenario stubbed."""
+    template = _scenario("serialized")
+    calls = []
+
+    def fake_run_scenario(scenario, **kwargs):
+        calls.append((scenario, kwargs))
+        return replace(template, name=scenario.name)
+
+    monkeypatch.setattr(repeated, "run_scenario", fake_run_scenario)
+    monkeypatch.setattr(
+        repeated.objective, "_installed_jeam_revision", lambda: "revision"
+    )
+    return repeated.run_benchmark(), calls
+
+
+def test_schema_v2_serialization_is_canonical_and_finite(
+    benchmark_execution, monkeypatch
+):
+    """The schema must state and serialize the exact canonical execution."""
+    result, calls = benchmark_execution
+    assert not signature(repeated.run_benchmark).parameters
+    assert tuple(scenario.name for scenario, _ in calls) == tuple(
+        scenario.name for scenario in DEFAULT_SCENARIOS
+    )
+    expected_kwargs = {
+        "trials": DEFAULT_TRIALS,
+        "tune": DEFAULT_REPEATED_TUNE,
+        "draws": DEFAULT_REPEATED_DRAWS,
+        "prior_draws": DEFAULT_REPEATED_PRIOR_DRAWS,
+        "predictive_draws": DEFAULT_REPEATED_PREDICTIVE_DRAWS,
+        "optimizer_maxiter": DEFAULT_MAXITER,
+        "optimizer_popsize": DEFAULT_POPSIZE,
+    }
+    assert all(kwargs == expected_kwargs for _, kwargs in calls)
+
+    monkeypatch.setattr("sys.argv", ["benchmark"])
+    assert vars(repeated._parse_args()) == {"output": None, "compact": False}
+    monkeypatch.setattr("sys.argv", ["benchmark", "--scenario", "baseline"])
+    with pytest.raises(SystemExit):
+        repeated._parse_args()
+
+    payload = json.loads(repeated._json_payload(result, compact=True))
+    assert [
+        payload[name]
+        for name in (
+            "schema_version",
+            "trials_per_scenario",
+            "chains",
+            "tune",
+            "draws",
+            "hdi_probability",
+            "prior_draws",
+            "predictive_draws",
+            "optimizer_maxiter",
+            "optimizer_popsize",
+        )
+    ] == [2, 300, 4, 1_000, 1_000, 0.94, 100, 40, 14, 15]
+    assert "four-scenario deterministic recovery smoke" in payload["benchmark"]
+    assert "not a calibration study" in payload["interpretation"]
+    assert payload["reproduction_command"].endswith(
+        "benchmarks/results/jeam_repeated_recovery_v2.json"
+    )
+    assert tuple(item["name"] for item in payload["scenarios"]) == tuple(
+        scenario.name for scenario in DEFAULT_SCENARIOS
+    )
+    serialized = payload["scenarios"][0]
+    assert (serialized["prior_seed"], serialized["predictive_seed"]) == (501, 401)
+    assert serialized["initial_point"] == [1.0, 0.1, 0.0, 0.0]
+    assert {"prior_predictive", "predictive", "slice_diagnostics"} <= serialized.keys()
+    assert "mle" not in json.dumps(payload).lower()
+
+    with pytest.raises(ValueError, match="Out of range float values"):
+        repeated._json_payload(
+            replace(result, total_runtime_seconds=np.nan), compact=True
+        )
+    assert "posterior_sd" in asdict(result.scenarios[0].parameters[0])
+
+
+def test_cli_writes_compact_output_and_enforces_the_gate(
+    benchmark_execution, monkeypatch, tmp_path, capsys
+):
+    """The CLI must write strict JSON before reporting a failed gate."""
+    result, _ = benchmark_execution
+    output = tmp_path / "nested" / "recovery.json"
+    monkeypatch.setattr(repeated, "run_benchmark", lambda: result)
+    monkeypatch.setattr("sys.argv", ["benchmark", "--output", str(output), "--compact"])
+
+    repeated.main()
+
+    text = output.read_text(encoding="utf-8")
+    assert capsys.readouterr().out.strip() == str(output)
+    assert text.endswith("\n") and text.count("\n") == 1
+    assert json.loads(text)["gate"] == {"passed": True, "failures": []}
+
+    failed = replace(result, gate=GateResult(False, ("forced failure",)))
+    monkeypatch.setattr(repeated, "run_benchmark", lambda: failed)
+    with pytest.raises(SystemExit, match="forced failure"):
+        repeated.main()
