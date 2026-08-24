@@ -887,7 +887,7 @@ def _(mo):
     - [HSSM issue #1224](https://github.com/lnccbrown/HSSM/issues/1224)
     - [HSSM group-only policy follow-up #1225](https://github.com/lnccbrown/HSSM/issues/1225)
     - [Bambi issue #1003](https://github.com/bambinos/bambi/issues/1003)
-    - [Formulae term structure](https://github.com/bambinos/formulae/blob/main/formulae/terms/terms.py)
+    - [Formulae term structure](https://github.com/bambinos/formulae/blob/master/formulae/terms/terms.py)
     """)
     return
 

@@ -1,0 +1,22 @@
+{# Material 9.7.7 replaces every occurrence of "edit" when deriving the raw
+   source URL, corrupting names such as credits.md. Replace only the URL path
+   segment while preserving both page actions. #}
+{% if page.edit_url %}
+  {% if "content.action.edit" in features %}
+    <a href="{{ page.edit_url }}" title="{{ lang.t('action.edit') }}" class="md-content__button md-icon" rel="edit">
+      {% set icon = config.theme.icon.edit or "material/file-edit-outline" %}
+      {% include ".icons/" ~ icon ~ ".svg" %}
+    </a>
+  {% endif %}
+  {% if "content.action.view" in features %}
+    {% if "/blob/" in page.edit_url %}
+      {% set view_url = page.edit_url | replace("/blob/", "/raw/") %}
+    {% else %}
+      {% set view_url = page.edit_url | replace("/edit/", "/raw/") %}
+    {% endif %}
+    <a href="{{ view_url }}" title="{{ lang.t('action.view') }}" class="md-content__button md-icon">
+      {% set icon = config.theme.icon.view or "material/file-eye-outline" %}
+      {% include ".icons/" ~ icon ~ ".svg" %}
+    </a>
+  {% endif %}
+{% endif %}
