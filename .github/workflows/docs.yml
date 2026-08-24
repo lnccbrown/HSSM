@@ -12,8 +12,10 @@ on:
       - "pyproject.toml"
       - "README.md"
       - "scripts/check_docs_weight.py"
+      - "scripts/check_docs_notebook_paths.py"
       - "scripts/docs.sh"
       - "src/hssm/**"
+      - "tests/test_docs_notebook_paths.py"
   push:
     branches: [main]
     paths:
@@ -26,8 +28,10 @@ on:
       - "pyproject.toml"
       - "README.md"
       - "scripts/check_docs_weight.py"
+      - "scripts/check_docs_notebook_paths.py"
       - "scripts/docs.sh"
       - "src/hssm/**"
+      - "tests/test_docs_notebook_paths.py"
   schedule:
     # Retain the established Monday 05:50 UTC rendered-link check.
     - cron: "50 5 * * 1"

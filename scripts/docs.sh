@@ -37,6 +37,14 @@ uv run \
   --no-sync \
   python scripts/check_docs_weight.py
 
+uv run \
+  --python 3.12 \
+  --group dev \
+  --group notebook \
+  --group docs \
+  --no-sync \
+  python scripts/check_docs_notebook_paths.py
+
 case "$command" in
   build)
     uv run \
