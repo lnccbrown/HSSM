@@ -13,11 +13,13 @@ on:
       - "src/hssm/modelconfig/circular_diffusion_config.py"
       - "scripts/benchmark_jeam_bayesian_recovery.py"
       - "scripts/benchmark_jeam_objective_parity.py"
+      - "scripts/benchmark_jeam_repeated_recovery.py"
       - "tests/integration/test_jeam_bayesian_recovery.py"
       - "tests/integration/test_jeam.py"
       - "tests/integration/test_jeam_model.py"
       - "tests/integration/test_jeam_objective_parity.py"
       - "tests/integration/test_jeam_predictive.py"
+      - "tests/integration/test_jeam_repeated_recovery.py"
       - "tests/integration/test_jeam_simulator.py"
   workflow_dispatch:
 
@@ -53,3 +55,8 @@ jobs:
         run: >-
           uv run --group jeam-prototype pytest
           tests/integration/test_jeam_bayesian_recovery.py
+
+      - name: Verify the repeated-recovery protocol contract
+        run: >-
+          uv run --group jeam-prototype pytest
+          tests/integration/test_jeam_repeated_recovery.py
