@@ -38,6 +38,29 @@ class Link(bmb.Link):
         ``name`` is a known name.
     bounds : optional
         Bounds of the response scale. Only needed when ``name`` is ``gen_logit``.
+
+    Examples
+    --------
+    Use any link name supported by Bambi:
+
+    >>> import hssm
+    >>> identity_link = hssm.Link("identity")
+
+    A custom link requires forward, inverse, and PyTensor-compatible inverse
+    functions:
+
+    >>> import numpy as np
+    >>> import pytensor.tensor as pt
+    >>> custom_log = hssm.Link(
+    ...     "custom_log",
+    ...     link=np.log,
+    ...     linkinv=np.exp,
+    ...     linkinv_backend=pt.exp,
+    ... )
+
+    HSSM also provides a generalized logit for bounded response scales:
+
+    >>> bounded_link = hssm.Link("gen_logit", bounds=(0.1, 0.9))
     """
 
     def __init__(
