@@ -435,3 +435,8 @@ def test_cli_writes_compact_output_and_enforces_the_gate(
     monkeypatch.setattr(repeated, "run_benchmark", lambda: failed)
     with pytest.raises(SystemExit, match="forced failure"):
         repeated.main()
+
+    assert json.loads(output.read_text(encoding="utf-8"))["gate"] == {
+        "passed": False,
+        "failures": ["forced failure"],
+    }
