@@ -88,12 +88,14 @@ notebook = [
 ]
 
 docs = [
-    "marimo>=0.23.13",
-    "mkdocs-material>=9.5.21",
-    "mkdocs>=1.6.0",
-    "mkdocs-jupyter>=0.25.1",
-    "mkdocstrings-python>=1.10.0",
+    "marimo==0.24.0",
+    "mkdocs==1.6.1",
+    "mkdocs-autorefs==1.4.4",
+    "mkdocs-jupyter==0.26.3",
+    "mkdocs-material==9.7.7",
     "mkdocs-redirects==1.2.2",
+    "mkdocstrings==1.0.6",
+    "mkdocstrings-python==2.0.5",
 ]
 
 [tool.ruff]

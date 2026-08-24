@@ -15,6 +15,9 @@ not_in_nav: |
   tutorials/attentional_ddm.py
   tutorials/random_slope_safe_priors.py
 
+exclude_docs: |
+  overrides/
+
 nav:
   - Home:
       - Overview: index.md
@@ -74,6 +77,9 @@ nav:
           - Integrate a BayesFlow LRE (JAX callable): tutorials/bayesflow_lre_integration.ipynb
           - Use the low-level API with PyMC: tutorials/pymc.ipynb
           - Compile a log-likelihood function: tutorials/compile_logp.ipynb
+      - Contributing to HSSM:
+          - Developing locally: local_development.md
+          - Contribution guide: CONTRIBUTING.md
   - Explanations:
       - Coming from HDDM: explanations/coming_from_hddm.md
       - Understanding likelihoods in HSSM: tutorials/likelihoods.ipynb
@@ -100,10 +106,6 @@ nav:
           - hssm.distribution_utils: api/distribution_utils.md
       - Plotting:
           - hssm.plotting: api/plotting.md
-  - Contributing:
-      - Developing locally: local_development.md
-      - Contributing: CONTRIBUTING.md
-
 plugins:
   - search
   - autorefs
@@ -241,6 +243,7 @@ theme:
         name: Switch to system preference
 
 extra:
+  release_announcement: true
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/lnccbrown/HSSM
@@ -269,8 +272,4 @@ markdown_extensions:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
-copyright: >-
-  Copyright &copy; Brown University —
-  <a href="https://lnccbrown.github.io/HSSM/">HSSM</a> ·
-  <a href="https://lnccbrown.github.io/ssm-simulators/">ssm-simulators</a> ·
-  <a href="https://lnccbrown.github.io/LANfactory/">LANfactory</a>
+copyright: Copyright © 2023 Brown University. All Rights Reserved.

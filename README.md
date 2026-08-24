@@ -143,10 +143,12 @@ regression, [ArviZ](https://python.arviz.org/) for diagnostics and model
 comparison, and JAX/PyTensor for computation.
 
 Within the broader ecosystem,
-[ssm-simulators](https://github.com/lnccbrown/ssm-simulators) supplies simulator
+[ssm-simulators](https://lnccbrown.github.io/ssm-simulators/) supplies simulator
 and model definitions, while
-[LANfactory](https://github.com/lnccbrown/LANfactory) supports likelihood
-approximation workflows used to develop new likelihoods.
+[LANfactory](https://lnccbrown.github.io/LANfactory/) supports likelihood
+approximation workflows used to develop new likelihoods. The canonical
+[ecosystem map](https://lnccbrown.github.io/HSSM/ecosystem/) routes
+cross-repository questions and contributor work.
 
 ## Citation
 
@@ -164,6 +166,7 @@ Modeling. bioRxiv 2026.06.05.730398.
 ## Next Steps
 
 - [Documentation](https://lnccbrown.github.io/HSSM/)
+- [HSSM ecosystem map](https://lnccbrown.github.io/HSSM/ecosystem/)
 - [Getting started](https://lnccbrown.github.io/HSSM/getting_started/getting_started/)
 - [Main tutorial](https://lnccbrown.github.io/HSSM/tutorials/main_tutorial/)
 - [Scientific workflow tutorial](https://lnccbrown.github.io/HSSM/tutorials/scientific_workflow_hssm/)

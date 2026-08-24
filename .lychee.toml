@@ -1,0 +1,4 @@
+cache = true
+max_cache_age = "1d"
+max_retries = 3
+timeout = 30

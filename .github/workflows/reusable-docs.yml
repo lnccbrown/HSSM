@@ -1,0 +1,142 @@
+name: Reusable native docs
+
+on:
+  workflow_call:
+    inputs:
+      system-profile:
+        description: Linux system dependencies (none, blas-lapack, or gsl)
+        required: false
+        default: none
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Validate system profile
+        shell: bash
+        env:
+          SYSTEM_PROFILE: ${{ inputs['system-profile'] }}
+        run: |
+          case "$SYSTEM_PROFILE" in
+            none|blas-lapack|gsl) ;;
+            *)
+              echo "Unsupported system-profile: $SYSTEM_PROFILE" >&2
+              exit 2
+              ;;
+          esac
+
+      - name: Check out caller repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.2"
+          enable-cache: true
+
+      - name: Install system dependencies
+        shell: bash
+        env:
+          SYSTEM_PROFILE: ${{ inputs['system-profile'] }}
+        run: |
+          case "$SYSTEM_PROFILE" in
+            none)
+              exit 0
+              ;;
+            blas-lapack)
+              packages=(libblas-dev liblapack-dev)
+              ;;
+            gsl)
+              packages=(libgsl-dev)
+              ;;
+          esac
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends "${packages[@]}"
+
+      - name: Build documentation
+        run: ./scripts/docs.sh build
+
+      - name: Verify Pages output
+        run: test -f site/index.html
+
+      # GitHub project sites are served below /<repository>/. Mount site/ at
+      # that path so Lychee can resolve Material's root-relative URLs against
+      # the current artifact instead of requiring an already-deployed site.
+      - name: Mount rendered site at Pages path
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REPOSITORY" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "Unsupported repository name: $GITHUB_REPOSITORY" >&2
+            exit 2
+          fi
+          docs_project="${GITHUB_REPOSITORY#*/}"
+          if [[ "$docs_project" == "." || "$docs_project" == ".." ]]; then
+            echo "Unsupported Pages project path: $docs_project" >&2
+            exit 2
+          fi
+          docs_link_root="$RUNNER_TEMP/docs-link-root"
+          mkdir -p -- "$docs_link_root"
+          ln -s -- "$GITHUB_WORKSPACE/site" "$docs_link_root/$docs_project"
+
+      # Link-check rendered HTML so generated reference and notebook links are
+      # covered. Schedules and manual dispatches remain in the caller workflow.
+      - name: Check rendered links
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: >-
+            --config '${{ github.workspace }}/.lychee.toml'
+            --root-dir '${{ runner.temp }}/docs-link-root'
+            --no-progress
+            '${{ github.workspace }}/site/**/*.html'
+          fail: true
+          failIfEmpty: true
+
+      - name: Upload Pages artifact
+        if: >-
+          github.ref == 'refs/heads/main' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    name: Deploy documentation
+    needs: build
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: docs-pages-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
