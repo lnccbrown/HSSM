@@ -11,6 +11,8 @@ The synthetic data is built directly with numpy (no efficient_fpt dependency).
 collapses near t≈a/b=0.5), so the init log-likelihood is finite.
 """
 
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -84,6 +86,29 @@ def test_construct_explicit_config():
     df = make_addm_dataframe(20)
     model = hssm.aDDM(data=df, model_config=aDDMConfig())
     assert isinstance(model, aDDM)
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "invalid_value", "preset"),
+    [
+        ("prior_settings", "SAFE", "safe"),
+        ("link_settings", "LOG_LOGIT", "log_logit"),
+    ],
+)
+def test_addm_rejects_invalid_setting_presets(setting_name, invalid_value, preset):
+    """The aDDM constructor reaches the guard before parameter construction."""
+    with patch("hssm.base.Params.from_user_specs") as make_params:
+        with pytest.raises(
+            ValueError,
+            match=rf"`{setting_name}` must be either '{preset}' or None",
+        ):
+            hssm.aDDM(
+                data=make_addm_dataframe(4),
+                process_initvals=False,
+                **{setting_name: invalid_value},
+            )
+
+    make_params.assert_not_called()
 
 
 def test_is_hssmbase_subclass():

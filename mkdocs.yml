@@ -13,6 +13,7 @@ validation:
 # phase-2 consolidation targets, deliberately unlisted until then
 not_in_nav: |
   tutorials/link_functions.py
+  tutorials/poisson_race.py
   tutorials/random_slope_safe_priors.py
 
 exclude_docs: |
@@ -131,6 +132,7 @@ plugins:
   - mkdocs-jupyter:
       ignore:
         - tutorials/link_functions.py
+        - tutorials/poisson_race.py
         - tutorials/random_slope_safe_priors.py
       execute: true
       execute_ignore:

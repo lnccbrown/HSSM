@@ -1,7 +1,7 @@
 """Tests for the HSSM public model interface."""
 
 from copy import deepcopy
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pymc as pm
@@ -26,6 +26,13 @@ param_v = {
 }
 
 param_a = param_v | dict(name="a", formula="a ~ 1 + x + y")
+
+
+class _EqualitySpoof:
+    """Object that compares equal to every preset string."""
+
+    def __eq__(self, other):
+        return True
 
 
 @pytest.mark.slow
@@ -400,6 +407,110 @@ def test_model_creation_all_parameters_constant(data_ddm):
 
 
 # Prior settings
+@pytest.mark.parametrize(
+    ("setting_name", "preset"),
+    [("prior_settings", "safe"), ("link_settings", "log_logit")],
+)
+@pytest.mark.parametrize(
+    "invalid_value",
+    [
+        pytest.param("SAFE", id="wrong-case-safe"),
+        pytest.param("LOG_LOGIT", id="wrong-case-log-logit"),
+        pytest.param("banana", id="arbitrary-string"),
+        pytest.param(False, id="false"),
+        pytest.param(True, id="true"),
+        pytest.param(0, id="zero"),
+        pytest.param(1, id="one"),
+        pytest.param(1.5, id="float"),
+        pytest.param({}, id="mapping"),
+        pytest.param([], id="sequence"),
+        pytest.param((), id="tuple"),
+        pytest.param(np.array(["safe"]), id="array"),
+        pytest.param(_EqualitySpoof(), id="equality-spoof"),
+        pytest.param(object(), id="object"),
+    ],
+)
+def test_invalid_setting_presets_fail_before_model_preparation(
+    cavanagh_test, setting_name, preset, invalid_value
+):
+    """Reject invalid presets before parameter or Bambi model construction."""
+    with patch("hssm.base.Params.from_user_specs") as make_params:
+        with pytest.raises(
+            ValueError,
+            match=rf"`{setting_name}` must be either '{preset}' or None",
+        ):
+            HSSM(
+                data=cavanagh_test,
+                p_outlier=0.0,
+                process_initvals=False,
+                **{setting_name: invalid_value},
+            )
+
+    make_params.assert_not_called()
+
+
+def test_valid_prior_settings_preserve_regression_and_simple_prior_scope(
+    cavanagh_test,
+):
+    """None delegates regression terms while simple HSSM defaults remain."""
+    model_kwargs = {
+        "data": cavanagh_test.iloc[:12],
+        "include": [{"name": "v", "formula": "v ~ 1 + theta"}],
+        "p_outlier": 0.0,
+        "process_initvals": False,
+        "initval_jitter": 0.0,
+    }
+
+    delegated_model = HSSM(**model_kwargs, prior_settings=None)
+    safe_model = HSSM(**model_kwargs, prior_settings="safe")
+
+    assert delegated_model.params["v"].prior is None
+    assert delegated_model.model.components["v"].intercept_term.prior is not None
+    assert isinstance(safe_model.params["v"].prior, dict)
+
+    for name in ("a", "z", "t"):
+        delegated_prior = delegated_model.params[name].prior
+        safe_prior = safe_model.params[name].prior
+        assert delegated_prior is not None
+        assert safe_prior is not None
+        assert delegated_prior == safe_prior
+
+
+def test_valid_link_settings_preserve_links_precedence_and_repr(cavanagh_test):
+    """Valid link presets retain assignment, explicit precedence, and repr behavior."""
+    model_kwargs = {
+        "data": cavanagh_test.iloc[:12],
+        "include": [{"name": "a", "formula": "a ~ 1 + theta"}],
+        "v": 0.0,
+        "z": 0.5,
+        "t": 0.2,
+        "p_outlier": 0.0,
+        "prior_settings": None,
+        "process_initvals": False,
+        "initval_jitter": 0.0,
+    }
+
+    identity_model = HSSM(**model_kwargs, link_settings=None)
+    transformed_model = HSSM(**model_kwargs, link_settings="log_logit")
+    explicit_model = HSSM(
+        **(
+            model_kwargs
+            | {
+                "include": [
+                    {"name": "a", "formula": "a ~ 1 + theta", "link": "identity"}
+                ]
+            }
+        ),
+        link_settings="log_logit",
+    )
+
+    assert identity_model.params["a"].link == "identity"
+    assert transformed_model.params["a"].link == "log"
+    assert explicit_model.params["a"].link == "identity"
+    assert "(ignored due to link function)" not in repr(identity_model)
+    assert "(ignored due to link function)" in repr(transformed_model)
+
+
 @pytest.mark.slow
 def test_prior_settings_basic(cavanagh_test):
     """Apply requested prior-setting modes."""
