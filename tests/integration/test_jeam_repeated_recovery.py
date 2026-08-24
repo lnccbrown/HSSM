@@ -369,12 +369,28 @@ def test_schema_v2_serialization_is_canonical_and_finite(
         "predictive_draws": DEFAULT_REPEATED_PREDICTIVE_DRAWS,
         "optimizer_maxiter": DEFAULT_MAXITER,
         "optimizer_popsize": DEFAULT_POPSIZE,
+        "evidence_writer": None,
     }
     assert all(kwargs == expected_kwargs for _, kwargs in calls)
 
     monkeypatch.setattr("sys.argv", ["benchmark"])
-    assert vars(repeated._parse_args()) == {"output": None, "compact": False}
+    assert vars(repeated._parse_args()) == {
+        "output": None,
+        "evidence_dir": None,
+        "compact": False,
+    }
     monkeypatch.setattr("sys.argv", ["benchmark", "--scenario", "baseline"])
+    with pytest.raises(SystemExit):
+        repeated._parse_args()
+    monkeypatch.setattr(
+        "sys.argv", ["benchmark", "--evidence-dir", "bundle", "--compact"]
+    )
+    with pytest.raises(SystemExit):
+        repeated._parse_args()
+    monkeypatch.setattr(
+        "sys.argv",
+        ["benchmark", "--output", "result.json", "--evidence-dir", "bundle"],
+    )
     with pytest.raises(SystemExit):
         repeated._parse_args()
 
@@ -440,3 +456,10 @@ def test_cli_writes_compact_output_and_enforces_the_gate(
         "passed": False,
         "failures": ["forced failure"],
     }
+    capsys.readouterr()
+
+    evidence_dir = tmp_path / "evidence"
+    monkeypatch.setattr(repeated, "run_evidence_benchmark", lambda _: result)
+    monkeypatch.setattr("sys.argv", ["benchmark", "--evidence-dir", str(evidence_dir)])
+    repeated.main()
+    assert capsys.readouterr().out.strip() == str(evidence_dir / "manifest.json")
