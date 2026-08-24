@@ -10,6 +10,8 @@
 
 4. **Safe priors now zero-center matching group-specific effects** (#1224). HSSM matches each Formulae group expression to an exact common-term counterpart and assigns the generated group deviation `mu=0`. This removes disconnected group-mean variables under non-centering and the redundant common/group location under centering. Explicit priors remain authoritative, including Bambi's `common` and `group_specific` wildcards; parameterization diagnostics now warn only about the graph Bambi actually builds. The existing policy for unmatched group-only effects is unchanged and tracked in #1225.
 
+5. **`hssm.Link` now constructs Bambi built-in and custom links** (#1231). Standard links delegate correctly to Bambi, while HSSM's bounded `gen_logit` behavior remains unchanged.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
