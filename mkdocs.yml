@@ -12,25 +12,19 @@ validation:
 
 # phase-2 consolidation targets, deliberately unlisted until then
 not_in_nav: |
-  tutorials/attentional_ddm.py
   tutorials/link_functions.py
   tutorials/random_slope_safe_priors.py
 
 exclude_docs: |
   overrides/
+  tutorials/likelihoods.ipynb
+  how_to/custom_onnx_likelihoods.ipynb
 
 nav:
   - Home:
       - Overview: index.md
-      - Credits: credits.md
-      - License: license.md
-      - Changelog: changelog.md
-      - The HSSM ecosystem: ecosystem/index.md
-      - Archive:
-          - Winterbrain 2025 — Talk 1 (snapshot): archive/hssm_tutorial_workshop_1.ipynb
-          - Winterbrain 2025 — Talk 2 (snapshot): archive/hssm_tutorial_workshop_2.ipynb
-          - PyMC to HSSM — MathPsych 2025 (snapshot): archive/pymc_to_hssm.ipynb
   - Learn:
+      - Overview: learn/index.md
       - Get started:
           - Installation: getting_started/installation.md
           - Quickstart: getting_started/getting_started.ipynb
@@ -42,6 +36,7 @@ nav:
           - Choice-only models: tutorials/choice_only_models.ipynb
           - Poisson race models: tutorials/poisson_race.ipynb
           - HMM with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
+          - Attentional DDM (aDDM): tutorials/attentional_ddm.py
       - Reinforcement learning models:
           - RLSSM basics: tutorials/rlssm_basic.ipynb
           - Choice-only RLSSM: tutorials/choice_only_rlssm.ipynb
@@ -49,6 +44,7 @@ nav:
           - A restless learner: tutorials/rlssm_restless_learner.ipynb
           - Registering custom RLSSMs in HSSM: tutorials/rlssm_hssm_custom_models.ipynb
   - How-to guides:
+      - Overview: how_to/index.md
       - Building models:
           - Specify priors and fix parameters: how_to/specify_priors.ipynb
           - Model outliers with lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
@@ -69,7 +65,6 @@ nav:
           - Simulate data with the do-operator: tutorials/do_operator.ipynb
           - Save and load models: tutorials/save_load_tutorial.ipynb
       - Custom likelihoods and models:
-          - The ONNX likelihood contract: how_to/custom_onnx_likelihoods.ipynb
           - Bring your own likelihood (external trainers): how_to/external_trainers.md
           - Custom models from JAX callables: tutorials/jax_callable_contribution_onnx_example.ipynb
           - Custom models from ONNX files (blackbox): tutorials/blackbox_contribution_onnx_example.ipynb
@@ -83,20 +78,25 @@ nav:
           - Contribution guide: CONTRIBUTING.md
   - Explanations:
       - Coming from HDDM: explanations/coming_from_hddm.md
-      - Understanding likelihoods in HSSM: tutorials/likelihoods.ipynb
+      - Likelihood kinds in HSSM: explanations/likelihoods.md
       - Link functions and safe priors: tutorials/link_functions.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
       - Random-slope prior diagnostics: tutorials/random_slope_safe_priors.ipynb
       - Choosing a parameterization per parameter: tutorials/parameterization_per_parameter.ipynb
   - Reference:
+      - Overview: reference/index.md
+      - Built-in models and likelihoods: reference/models-and-likelihoods.md
+      - The ONNX likelihood contract: how_to/custom_onnx_likelihoods.md
       - HSSM core classes:
           - hssm.HSSM: api/hssm.md
+          - hssm.aDDM and hssm.aDDMConfig: api/addm.md
           - hssm.Param: api/param.md
           - hssm.ModelConfig: api/model_config.md
           - hssm.Prior: api/prior.md
           - hssm.Link: api/link.md
           - hssm.rl: api/rl.md
       - Useful functions:
+          - Model discovery and registration: api/model_registry.md
           - hssm.load_data: api/load_data.md
           - hssm.simulate_data: api/simulate_data.md
           - hssm.set_floatX: api/set_floatx.md
@@ -108,12 +108,22 @@ nav:
           - hssm.distribution_utils: api/distribution_utils.md
       - Plotting:
           - hssm.plotting: api/plotting.md
+      - Project and site:
+          - Changelog: changelog.md
+          - The HSSM ecosystem: ecosystem/index.md
+          - Credits: credits.md
+          - License: license.md
+      - Historical tutorial snapshots:
+          - Winterbrain 2025 — Talk 1: archive/hssm_tutorial_workshop_1.ipynb
+          - Winterbrain 2025 — Talk 2: archive/hssm_tutorial_workshop_2.ipynb
+          - PyMC to HSSM — MathPsych 2025: archive/pymc_to_hssm.ipynb
 plugins:
   - search
   - autorefs
   - redirects:
       redirect_maps:
         api/defaults.md: api/show_defaults.md
+        tutorials/likelihoods.md: explanations/likelihoods.md
         tutorials/hssm_tutorial_workshop_1.md: https://lnccbrown.github.io/HSSM/archive/hssm_tutorial_workshop_1/
         tutorials/hssm_tutorial_workshop_2.md: https://lnccbrown.github.io/HSSM/archive/hssm_tutorial_workshop_2/
         tutorials/pymc_to_hssm.md: https://lnccbrown.github.io/HSSM/archive/pymc_to_hssm/
@@ -126,7 +136,6 @@ plugins:
       execute_ignore:
         - getting_started/getting_started.ipynb
         - how_to/specify_priors.ipynb
-        - how_to/custom_onnx_likelihoods.ipynb
         - how_to/compare_models.ipynb
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
@@ -137,7 +146,6 @@ plugins:
         - tutorials/ddm_hierarchical_tutorial.ipynb
         - tutorials/choice_only_models.ipynb
         - tutorials/choice_only_rlssm.ipynb
-        - tutorials/likelihoods.ipynb
         - tutorials/variational_inference.ipynb
         - tutorials/centered_vs_noncentered_basic_logic.ipynb
         - tutorials/parameterization_per_parameter.ipynb

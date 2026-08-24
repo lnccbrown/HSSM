@@ -24,7 +24,7 @@ and transfer the pattern:
 1. **Simulate** training data from a known ground truth (`ssm-simulators` or `hssm.simulate_data`).
 2. **Train** the surrogate in its home library.
 3. **Export** — for the ONNX routes, via LANfactory's exporters, which enforce
-   [the ONNX likelihood contract](custom_onnx_likelihoods.ipynb) by construction
+   [the ONNX likelihood contract](custom_onnx_likelihoods.md) by construction
    (see LANfactory's [sbi](https://lnccbrown.github.io/LANfactory/exporting_sbi_models/)
    and [BayesFlow](https://lnccbrown.github.io/LANfactory/exporting_bayesflow_models/)
    export guides for the framework-specific constraints).
@@ -36,6 +36,6 @@ and transfer the pattern:
 
 ## See also
 
-- [The ONNX likelihood contract](custom_onnx_likelihoods.ipynb) — the rules an ONNX artifact must satisfy, runnable
+- [The ONNX likelihood contract](custom_onnx_likelihoods.md) — the rules an ONNX artifact must satisfy
 - [Custom models from JAX callables](../tutorials/jax_callable_contribution_onnx_example.ipynb) — the same callable gesture without an external trainer
-- [Understanding likelihood functions in HSSM](../tutorials/likelihoods.ipynb) — where `approx_differentiable` fits among the likelihood kinds
+- [Likelihood kinds in HSSM](../explanations/likelihoods.md) — where `approx_differentiable` fits among the likelihood kinds
