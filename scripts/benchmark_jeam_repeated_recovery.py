@@ -335,13 +335,12 @@ def _scenario_gate_failures(
 ) -> list[str]:
     """Return parity, predictive, sampler, and MCSE failures for one scenario."""
     predictive = scenario.predictive
-    rt_error = max(
-        abs(predicted - observed)
-        for predicted, observed in zip(
-            predictive.predictive_rt_quantiles,
-            predictive.observed_rt_quantiles,
-            strict=True,
-        )
+    expected_rt_probabilities = tuple(float(value) for value in RT_QUANTILES)
+    valid_rt_quantiles = (
+        predictive.rt_probabilities == expected_rt_probabilities
+        and len(predictive.observed_rt_quantiles)
+        == len(predictive.predictive_rt_quantiles)
+        == len(expected_rt_probabilities)
     )
     checks = {
         "objective parity": (
@@ -355,10 +354,6 @@ def _scenario_gate_failures(
         "optimizer objective parity": (
             scenario.optimizer_objective_absolute_error,
             thresholds.optimizer_objective_absolute_error,
-        ),
-        "posterior predictive RT quantiles": (
-            rt_error,
-            thresholds.maximum_rt_quantile_absolute_error,
         ),
         "posterior predictive mean angle": (
             predictive.mean_angle_distance,
@@ -377,6 +372,19 @@ def _scenario_gate_failures(
         for label, (value, limit) in checks.items()
         if value > limit
     ]
+    if not valid_rt_quantiles:
+        failures.append(f"{scenario.name}: posterior predictive RT quantile schema")
+    else:
+        rt_error = max(
+            abs(predicted - observed)
+            for predicted, observed in zip(
+                predictive.predictive_rt_quantiles,
+                predictive.observed_rt_quantiles,
+                strict=True,
+            )
+        )
+        if rt_error > thresholds.maximum_rt_quantile_absolute_error:
+            failures.append(f"{scenario.name}: posterior predictive RT quantiles")
     diagnostics = scenario.slice_diagnostics
     if diagnostics.sample_stats != ("nstep_in", "nstep_out"):
         failures.append(f"{scenario.name}: Slice sample statistics")

@@ -225,6 +225,25 @@ def test_gate_accepts_exact_boundaries_and_retained_diagnostics():
     assert scenarios[0].predictive.rt_probabilities == (0.1, 0.5, 0.9)
 
 
+@pytest.mark.parametrize(
+    "predictive",
+    (
+        replace(_scenario("grid").predictive, rt_probabilities=(0.2, 0.5, 0.8)),
+        replace(_scenario("length").predictive, observed_rt_quantiles=(0.0, 0.0)),
+    ),
+)
+def test_gate_rejects_predictive_quantile_schema(predictive):
+    """Wrong probability grids and mismatched quantile lengths must fail cleanly."""
+    scenario = replace(_scenario("invalid predictive schema"), predictive=predictive)
+
+    gate = evaluate_gate((scenario,), aggregate_results((scenario,)), LIMITS)
+
+    assert not gate.passed
+    assert gate.failures == (
+        "invalid predictive schema: posterior predictive RT quantile schema",
+    )
+
+
 def test_gate_rejects_invalid_slice_mcse_and_nonfinite_metrics():
     """Invalid sampler, precision, and finite-value diagnostics must fail."""
     scenario = _scenario("invalid")
