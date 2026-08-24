@@ -142,7 +142,7 @@ Widely Applicable Toolbox for Hierarchical Bayesian Neurocognitive Modeling.
 bioRxiv 2026.06.05.730398.
 
 - DOI: [https://doi.org/10.64898/2026.06.05.730398](https://doi.org/10.64898/2026.06.05.730398)
-- bioRxiv: [https://www.biorxiv.org/content/10.1101/2026.06.05.730398v1](https://www.biorxiv.org/content/10.1101/2026.06.05.730398v1)
+- bioRxiv: [https://www.biorxiv.org/content/10.64898/2026.06.05.730398v1](https://www.biorxiv.org/content/10.64898/2026.06.05.730398v1)
 
 ## Community
 
