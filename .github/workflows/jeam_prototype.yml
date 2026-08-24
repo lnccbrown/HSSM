@@ -49,8 +49,7 @@ jobs:
           tests/integration/test_jeam_predictive.py
           tests/integration/test_jeam_simulator.py
 
-      - name: Run the marked-slow Bayesian recovery gate
+      - name: Run the Bayesian recovery preflight and gate
         run: >-
           uv run --group jeam-prototype pytest
           tests/integration/test_jeam_bayesian_recovery.py
-          -m slow
