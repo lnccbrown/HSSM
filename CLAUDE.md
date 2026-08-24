@@ -44,7 +44,7 @@ HSSM uses PEP 735 dependency groups alongside traditional optional-dependencies:
 - **Optional extras** (`[project.optional-dependencies]`): `cuda12`, `cuda13` (GPU-enabled JAX; e.g. `pip install hssm[cuda13]` or `uv sync --extra cuda13`)
 - **Dependency groups** (`[dependency-groups]`):
   - `dev` — pytest, ruff, mypy, pre-commit, coverage
-  - `notebook` — jupyterlab, nbconvert, graphviz, bayesflow (dev branch), keras
+  - `notebook` — jupyterlab, nbconvert, graphviz, bayesflow `>=2.0.12`, keras
   - `docs` — mkdocs-material, mkdocs-jupyter, mkdocstrings-python
 
 ## Common Commands
@@ -123,5 +123,8 @@ Two separate skip mechanisms for notebooks:
 ## Known Issues / Notes
 
 - **Multiprocessing in notebooks:** PyMC's NUTS sampler with `cores>1` can cause `EOFError` in notebook execution contexts. Fix by adding `cores=1, chains=1` to `sample()` calls.
-- **bayesflow:** Currently installed from dev branch (`git+https://github.com/bayesflow-org/bayesflow@dev`) in the notebook group only, because PyPI release (2.0.8) doesn't yet include `RatioApproximator`. Not exposed as a user-facing optional extra until a stable release is available.
+- **bayesflow:** Installed from PyPI (`>=2.0.12`) in the notebook group only;
+  the stable release includes `RatioApproximator`, and there is no uv source
+  override. It remains a documentation/notebook dependency rather than a
+  user-facing optional extra.
 - **Notebook kernels:** Some notebooks may have hardcoded kernel specs (e.g., `hssm-dev`). These should use `python3` instead.
