@@ -1,0 +1,29 @@
+{#- HSSM ecosystem shared announcement banner.
+    VENDORED COPY — source of truth: https://github.com/lnccbrown/HSSMSpine
+    (docs-brand/main.html). Edit there and re-sync; local edits will be
+    flagged as drift. Repo-agnostic: the release link derives from
+    config.repo_url; questions route to the ecosystem's shared forum
+    (HSSM Discussions) by design. -#}
+{% extends "base.html" %}
+{% block announce %}
+<span class="show-on-small right-margin">
+    <span class="twemoji right-margin show-on-small move-down">
+        {% include ".icons/fontawesome/solid/angles-down.svg" %}
+    </span>
+    Navigate the site here!
+</span>
+<span class="right-margin">
+    <a href="{{ config.repo_url | trim('/') }}/releases/latest">
+        A new release is out — read the release notes
+    </a>
+</span>
+<span>
+    <span class="twemoji">
+        {% include ".icons/material/head-question.svg" %}
+    </span>
+    Questions?
+    <a href="https://github.com/lnccbrown/HSSM/discussions">
+        Open a discussion!
+    </a>
+</span>
+{% endblock %}

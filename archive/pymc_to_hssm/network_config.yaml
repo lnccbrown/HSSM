@@ -1,0 +1,23 @@
+NETWORK_TYPE: "lan"
+CPU_BATCH_SIZE: 8192
+GPU_BATCH_SIZE: 8192
+GENERATOR_APPROACH: "lan"
+OPTIMIZER_: "adam"
+N_EPOCHS: 3
+MODEL: "ddm"
+SHUFFLE: True
+LAYER_SIZES: [[100, 100, 100, 1]]
+ACTIVATIONS: [['tanh', 'tanh', 'tanh']] # specifies all but output layer activation (output layer activation is determined by)
+WEIGHT_DECAY: 0.0
+TRAIN_VAL_SPLIT: 0.5
+TRAINING_DATA_FOLDER: "torch_nb_data/training_data"
+N_TRAINING_FILES: 10000 # can be list
+LABELS_LOWER_BOUND: np.log(1e-7)
+LEARNING_RATE: 0.001
+LR_SCHEDULER: 'reduce_on_plateau'
+LR_SCHEDULER_PARAMS:
+  factor: 0.1
+  patience: 2
+  threshold: 0.001
+  min_lr: 0.00000001
+  verbose: True
