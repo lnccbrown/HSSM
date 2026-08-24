@@ -25,17 +25,20 @@ class Link(bmb.Link):
         any other arguments because functions are already defined internally. If not
         known, all of `link``, ``linkinv`` and ``linkinv_backend`` must be specified.
     link : optional
-        A function that maps the response to the linear predictor. Known as the
-        :math:`g` function in GLM jargon. Does not need to be specified when ``name``
-        is a known name.
+        A numerical function that maps the response to the linear predictor. Known as
+        the :math:`g` function in GLM jargon. This function operates outside the PyMC
+        graph and does not need to support PyTensor tensors. It does not need to be
+        specified when ``name`` is a known name.
     linkinv : optional
-        A function that maps the linear predictor to the response. Known as the
-        :math:`g^{-1}` function in GLM jargon. Does not need to be specified when
-        ``name`` is a known name.
+        A numerical function that maps the linear predictor to the response. Known as
+        the :math:`g^{-1}` function in GLM jargon, it is used for operations such as
+        posterior prediction outside the PyMC graph. It does not need to be specified
+        when ``name`` is a known name.
     linkinv_backend : optional
-        Same than ``linkinv`` but must be something that works with PyMC backend
-        (i.e. it must work with PyTensor tensors). Does not need to be specified when
-        ``name`` is a known name.
+        The symbolic inverse link used to build the PyMC graph. It must accept PyTensor
+        tensors and return a symbolic PyTensor expression. It does not need to be
+        specified when ``name`` is a known name because Bambi supplies the backend
+        implementation for built-in links.
     bounds : optional
         Bounds of the response scale. Only needed when ``name`` is ``gen_logit``.
 
@@ -53,9 +56,9 @@ class Link(bmb.Link):
     >>> import pytensor.tensor as pt
     >>> custom_log = hssm.Link(
     ...     "custom_log",
-    ...     link=np.log,
-    ...     linkinv=np.exp,
-    ...     linkinv_backend=pt.exp,
+    ...     link=np.log,  # Numerical: response -> linear predictor
+    ...     linkinv=np.exp,  # Numerical: predictions outside the PyMC graph
+    ...     linkinv_backend=pt.exp,  # Symbolic: used inside the PyMC graph
     ... )
 
     HSSM also provides a generalized logit for bounded response scales:

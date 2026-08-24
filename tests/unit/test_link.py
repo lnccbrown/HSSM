@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytensor.tensor as pt
 import pytest
+from pytensor.tensor.variable import TensorVariable
 
 from hssm import HSSM, Link
 
@@ -54,6 +55,10 @@ def test_custom_link_matches_bambi_semantics():
     assert link.linkinv is np.expm1
     assert link.linkinv_backend is pt.expm1
     assert link.bounds == (-1.0, np.inf)
+    response_values = np.array([0.0, 0.5, 2.0])
+    np.testing.assert_allclose(
+        link.linkinv(link.link(response_values)), response_values
+    )
 
 
 def test_incomplete_custom_link_uses_bambi_validation():
@@ -91,8 +96,8 @@ def test_generalized_logit_round_trip():
     assert str(link) == "Generalized logit link function with bounds (-2.0, 3.0)"
 
 
-def test_link_object_builds_hssm_regression():
-    """Pass an HSSM Link object through a structure-only model build."""
+def test_custom_link_builds_symbolic_hssm_regression():
+    """Use the custom backend inverse with a symbolic HSSM predictor."""
     data = pd.DataFrame(
         {
             "rt": [0.4, 0.5, 0.6, 0.7],
@@ -100,7 +105,18 @@ def test_link_object_builds_hssm_regression():
             "x": [-1.0, -0.5, 0.5, 1.0],
         }
     )
-    link = Link("identity")
+    backend_inputs = []
+
+    def inverse_backend(value):
+        backend_inputs.append(value)
+        return pt.exp(value)
+
+    link = Link(
+        "custom_log",
+        link=np.log,
+        linkinv=np.exp,
+        linkinv_backend=inverse_backend,
+    )
 
     model = HSSM(
         data=data,
@@ -115,3 +131,5 @@ def test_link_object_builds_hssm_regression():
 
     assert model.params["v"].link is link
     assert model.model.family.link["v"] is link
+    assert backend_inputs
+    assert all(isinstance(value, TensorVariable) for value in backend_inputs)
