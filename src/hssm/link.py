@@ -59,7 +59,12 @@ class Link(bmb.Link):
                 self.linkinv = self._make_generalized_sigmoid_simple(*bounds)
                 self.linkinv_backend = self._make_generalized_sigmoid_simple(*bounds)
         else:
-            bmb.Link.__init__(name, link, linkinv, linkinv_backend)
+            super().__init__(
+                name=name,
+                link=link,
+                linkinv=linkinv,
+                linkinv_backend=linkinv_backend,
+            )
 
         self.bounds = bounds
 
