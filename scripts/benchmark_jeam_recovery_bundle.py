@@ -7,6 +7,7 @@ import importlib.metadata as importlib_metadata
 import platform
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,8 @@ from scripts.benchmark_jeam_recovery_evidence import (
     _RAW_GROUPS,
     _atomic_bytes,
     _canonical_json_bytes,
+    _fsync_directory,
+    _require_posix_durability,
     _sha256_file,
 )
 
@@ -59,6 +62,38 @@ def _environment_snapshot(*, hssm_revision: str, jeam_revision: str) -> bytes:
     ).encode()
 
 
+def _durable_mkdir(directory: Path) -> None:
+    """Create a directory chain and flush every new parent entry."""
+    missing: list[Path] = []
+    cursor = directory
+    while not cursor.exists():
+        missing.append(cursor)
+        cursor = cursor.parent
+    if not cursor.is_dir():
+        raise NotADirectoryError(cursor)
+    for path in reversed(missing):
+        path.mkdir()
+        _fsync_directory(path.parent)
+
+
+def _declared_jeam_revision(repository: Path) -> str:
+    """Return the exact JEAM commit declared by the HSSM source tree."""
+    with (repository / "pyproject.toml").open("rb") as source_file:
+        configuration = tomllib.load(source_file)
+    try:
+        source = configuration["tool"]["uv"]["sources"]["jeam"]
+    except (KeyError, TypeError) as error:
+        raise RuntimeError("HSSM must declare an exact JEAM source pin.") from error
+    if (
+        not isinstance(source, dict)
+        or source.get("git") != _JEAM_REPOSITORY_URL
+        or not isinstance(revision := source.get("rev"), str)
+        or re.fullmatch(r"[0-9a-f]{40}", revision) is None
+    ):
+        raise RuntimeError("HSSM must declare an exact JEAM Git revision.")
+    return revision
+
+
 def prepare_evidence_bundle(
     directory: str | Path,
     *,
@@ -69,6 +104,7 @@ def prepare_evidence_bundle(
     source_paths: Sequence[str | Path],
 ) -> dict[str, object]:
     """Preflight a clean source tree and create a provenance-bound bundle root."""
+    _require_posix_durability()
     target, repo = Path(directory), Path(repository).resolve()
     imported = Path(imported_hssm_file).resolve()
     if target.exists():
@@ -80,6 +116,12 @@ def prepare_evidence_bundle(
     if status := _git_output(repo, "status", "--porcelain", "--untracked-files=all"):
         raise RuntimeError(f"Evidence capture requires a clean worktree: {status}")
     _git_output(repo, "merge-base", "--is-ancestor", protocol_base_revision, "HEAD")
+    declared_jeam_revision = _declared_jeam_revision(repo)
+    if jeam_revision != declared_jeam_revision:
+        raise RuntimeError(
+            "Installed JEAM revision does not match HSSM's declared pin: "
+            f"{jeam_revision!r} != {declared_jeam_revision!r}."
+        )
     revision = _git_output(repo, "rev-parse", "HEAD")
     tree = _git_output(repo, "rev-parse", "HEAD^{tree}")
 
@@ -93,8 +135,8 @@ def prepare_evidence_bundle(
         hssm_revision=revision, jeam_revision=jeam_revision
     )
 
-    target.mkdir(parents=True)
-    (target / "scenarios").mkdir()
+    _durable_mkdir(target)
+    _durable_mkdir(target / "scenarios")
     _atomic_bytes(target / "environment.txt", environment)
     return {
         "producer_revision": revision,
@@ -155,6 +197,15 @@ def _artifact_record(root: Path, path: Path, role: str) -> dict[str, object]:
     return record
 
 
+def _write_or_attest(target: Path, payload: bytes) -> None:
+    """Create a final document, or accept an identical retry checkpoint."""
+    if target.exists():
+        if not target.is_file() or target.read_bytes() != payload:
+            raise FileExistsError(f"{target} already records different content.")
+        return
+    _atomic_bytes(target, payload)
+
+
 def finalize_evidence_bundle(
     directory: str | Path,
     *,
@@ -168,11 +219,8 @@ def finalize_evidence_bundle(
     result_payload = _canonical_json_bytes(result)
     protocol_sha256 = hashlib.sha256(_canonical_json_bytes(protocol)).hexdigest()
     result_path = root / "result.json"
-    _atomic_bytes(result_path, result_payload)
-
     expected: dict[Path, str] = {
         root / "environment.txt": "environment",
-        result_path: "derived_result",
         **{
             root / "scenarios" / name / filename: role
             for name in names
@@ -187,10 +235,13 @@ def finalize_evidence_bundle(
     if missing:
         relative = ", ".join(path.relative_to(root).as_posix() for path in missing)
         raise RuntimeError(f"Evidence bundle is incomplete: {relative}")
+    environment_hash = _sha256_file(root / "environment.txt")
+    if provenance.get("environment_sha256") != environment_hash:
+        raise RuntimeError("Evidence environment no longer matches its provenance.")
     actual = {
         path
         for path in root.rglob("*")
-        if path.is_file() and path.name != "manifest.json"
+        if path.is_file() and path not in {root / "manifest.json", result_path}
     }
     if unexpected := actual - expected.keys():
         relative = ", ".join(
@@ -198,9 +249,13 @@ def finalize_evidence_bundle(
         )
         raise RuntimeError(f"Evidence bundle has unexpected files: {relative}")
 
-    artifacts = [
-        _artifact_record(root, path, role) for path, role in sorted(expected.items())
-    ]
+    records = {
+        path: _artifact_record(root, path, role) for path, role in expected.items()
+    }
+    _write_or_attest(result_path, result_payload)
+    expected[result_path] = "derived_result"
+    records[result_path] = _artifact_record(root, result_path, "derived_result")
+    artifacts = [records[path] for path in sorted(expected)]
     manifest = {
         "schema_version": 1,
         "bundle": "JEAM repeated-recovery durable evidence",
@@ -210,5 +265,5 @@ def finalize_evidence_bundle(
         "artifacts": artifacts,
     }
     manifest_path = root / "manifest.json"
-    _atomic_bytes(manifest_path, _canonical_json_bytes(manifest))
+    _write_or_attest(manifest_path, _canonical_json_bytes(manifest))
     return manifest_path

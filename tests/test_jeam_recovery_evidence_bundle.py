@@ -18,13 +18,24 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+JEAM_REVISION = "a9f547b3630ae8ff31ccec1b904e0c02fdba6d99"
+
+
 def _repository(tmp_path: Path) -> tuple[Path, Path, Path]:
     repository = tmp_path / "repository"
     package = repository / "src" / "hssm" / "__init__.py"
     package.parent.mkdir(parents=True)
     package.write_text("", encoding="utf-8")
     source = repository / "pyproject.toml"
-    source.write_text("[project]\nname='hssm'\n", encoding="utf-8")
+    source.write_text(
+        "[project]\n"
+        "name='hssm'\n"
+        "[tool.uv.sources]\n"
+        "jeam = { git = "
+        "'https://github.com/AlexanderFengler/JEAM.git', "
+        f"rev = '{JEAM_REVISION}' }}\n",
+        encoding="utf-8",
+    )
     return repository, package, source
 
 
@@ -66,7 +77,7 @@ def _prepare(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, dic
         repository=repository,
         imported_hssm_file=package,
         protocol_base_revision="base",
-        jeam_revision="jeam-revision",
+        jeam_revision=JEAM_REVISION,
         source_paths=("pyproject.toml",),
     )
     return root, provenance
@@ -90,12 +101,17 @@ def test_prepare_attests_clean_source_and_path_free_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Bind clean source, source hashes, and a path-free environment."""
+    synced = []
+    monkeypatch.setattr(bundle, "_fsync_directory", synced.append)
     root, provenance = _prepare(tmp_path, monkeypatch)
     environment = (root / "environment.txt").read_bytes()
 
     assert environment.splitlines() == [
         b"hssm @ git+https://github.com/lnccbrown/HSSM.git@producer",
-        b"jeam @ git+https://github.com/AlexanderFengler/JEAM.git@jeam-revision",
+        (
+            b"jeam @ git+https://github.com/AlexanderFengler/JEAM.git@"
+            + JEAM_REVISION.encode()
+        ),
         b"numpy==2.4.0",
     ]
     assert str(tmp_path).encode() not in environment
@@ -108,6 +124,52 @@ def test_prepare_attests_clean_source_and_path_free_environment(
         "pyproject.toml": hashlib.sha256(source.read_bytes()).hexdigest()
     }
     assert provenance["environment_sha256"] == hashlib.sha256(environment).hexdigest()
+    assert synced == [tmp_path, root]
+
+
+def test_prepare_rejects_drifted_jeam_before_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Never start canonical capture with a JEAM revision other than the source pin."""
+    repository, package, _ = _repository(tmp_path)
+    _clean_environment(monkeypatch, repository)
+    root = tmp_path / "bundle"
+
+    with pytest.raises(RuntimeError, match="Installed JEAM revision"):
+        bundle.prepare_evidence_bundle(
+            root,
+            repository=repository,
+            imported_hssm_file=package,
+            protocol_base_revision="base",
+            jeam_revision="deadbeef",
+            source_paths=("pyproject.toml",),
+        )
+
+    assert not root.exists()
+
+
+def test_prepare_rejects_unsupported_platform_without_side_effects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reject unsupported durability before creating any bundle parent."""
+    target = tmp_path / "absent" / "bundle"
+
+    def reject() -> None:
+        raise RuntimeError("POSIX durability required")
+
+    monkeypatch.setattr(bundle, "_require_posix_durability", reject)
+
+    with pytest.raises(RuntimeError, match="POSIX durability"):
+        bundle.prepare_evidence_bundle(
+            target,
+            repository=tmp_path,
+            imported_hssm_file=tmp_path / "hssm.py",
+            protocol_base_revision="base",
+            jeam_revision=JEAM_REVISION,
+            source_paths=(),
+        )
+
+    assert not target.parent.exists()
 
 
 @pytest.mark.parametrize(
@@ -199,6 +261,60 @@ def test_manifest_rejects_missing_or_extra_files(fault: str, tmp_path: Path) -> 
             root,
             result={"schema_version": 2},
             protocol={"scenarios": [{"name": name}]},
-            provenance={},
+            provenance={
+                "environment_sha256": hashlib.sha256(b"numpy==2\n").hexdigest()
+            },
         )
+    assert not (root / "result.json").exists()
     assert not (root / "manifest.json").exists()
+
+
+def test_manifest_retry_attests_the_completed_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Resume finalization after a manifest-write fault without replacing output."""
+    root, provenance = _prepare(tmp_path, monkeypatch)
+    _complete_scenario(root, "first")
+    protocol = {"scenarios": [{"name": "first"}]}
+    result = {"schema_version": 2, "gate": {"passed": True}}
+    atomic_bytes = bundle._atomic_bytes
+    failed = False
+
+    def fail_manifest(path: Path, payload: bytes) -> None:
+        nonlocal failed
+        if path.name == "manifest.json" and not failed:
+            failed = True
+            raise OSError("injected manifest failure")
+        atomic_bytes(path, payload)
+
+    monkeypatch.setattr(bundle, "_atomic_bytes", fail_manifest)
+    with pytest.raises(OSError, match="injected manifest failure"):
+        bundle.finalize_evidence_bundle(
+            root, result=result, protocol=protocol, provenance=provenance
+        )
+    assert (root / "result.json").is_file()
+    assert not (root / "manifest.json").exists()
+
+    manifest = bundle.finalize_evidence_bundle(
+        root, result=result, protocol=protocol, provenance=provenance
+    )
+    assert manifest.is_file()
+
+
+def test_manifest_rejects_environment_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reject a changed environment record instead of authenticating two hashes."""
+    root, provenance = _prepare(tmp_path, monkeypatch)
+    _complete_scenario(root, "first")
+    (root / "environment.txt").write_text("changed\n")
+
+    with pytest.raises(RuntimeError, match="environment"):
+        bundle.finalize_evidence_bundle(
+            root,
+            result={"schema_version": 2},
+            protocol={"scenarios": [{"name": "first"}]},
+            provenance=provenance,
+        )
+
+    assert not (root / "result.json").exists()
