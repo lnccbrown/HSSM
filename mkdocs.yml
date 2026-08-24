@@ -13,6 +13,7 @@ validation:
 # phase-2 consolidation targets, deliberately unlisted until then
 not_in_nav: |
   tutorials/attentional_ddm.py
+  tutorials/link_functions.py
   tutorials/random_slope_safe_priors.py
 
 exclude_docs: |
@@ -83,6 +84,7 @@ nav:
   - Explanations:
       - Coming from HDDM: explanations/coming_from_hddm.md
       - Understanding likelihoods in HSSM: tutorials/likelihoods.ipynb
+      - Link functions and safe priors: tutorials/link_functions.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
       - Random-slope prior diagnostics: tutorials/random_slope_safe_priors.ipynb
       - Choosing a parameterization per parameter: tutorials/parameterization_per_parameter.ipynb
@@ -118,6 +120,7 @@ plugins:
         tutorials/variational_inference_hierarchical.md: https://lnccbrown.github.io/HSSM/tutorials/variational_inference/
   - mkdocs-jupyter:
       ignore:
+        - tutorials/link_functions.py
         - tutorials/random_slope_safe_priors.py
       execute: true
       execute_ignore:
@@ -128,6 +131,7 @@ plugins:
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
         - tutorials/attentional_ddm.py
+        - tutorials/link_functions.ipynb
         - tutorials/random_slope_safe_priors.ipynb
         - tutorials/hsgp_regression.ipynb
         - tutorials/ddm_hierarchical_tutorial.ipynb

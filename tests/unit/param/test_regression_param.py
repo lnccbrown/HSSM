@@ -416,6 +416,168 @@ ddm_bounds = ddm_config["likelihoods"]["blackbox"]["bounds"].values()
 param_and_bounds_ddm = list(zip(ddm_params, ddm_bounds, [True] * len(ddm_params)))
 
 
+HDDM_LOCATION_PRIOR_CASES = [
+    pytest.param(
+        "v",
+        (-np.inf, np.inf),
+        "Normal",
+        {"mu": 2.0, "sigma": 3.0},
+        False,
+        id="v",
+    ),
+    pytest.param(
+        "a",
+        (0.0, np.inf),
+        "Gamma",
+        {"mu": 1.5, "sigma": 0.75},
+        True,
+        id="a",
+    ),
+    pytest.param(
+        "z",
+        (0.0, 1.0),
+        "Beta",
+        {"alpha": 10.0, "beta": 10.0},
+        True,
+        id="z",
+    ),
+    pytest.param(
+        "t",
+        (0.0, np.inf),
+        "Gamma",
+        {"mu": 0.2, "sigma": 0.2},
+        True,
+        id="t",
+    ),
+    pytest.param(
+        "sv",
+        (0.0, np.inf),
+        "HalfNormal",
+        {"sigma": 2.0},
+        True,
+        id="sv",
+    ),
+    pytest.param(
+        "sz",
+        (0.0, np.inf),
+        "HalfNormal",
+        {"sigma": 0.5},
+        True,
+        id="sz",
+    ),
+    pytest.param(
+        "st",
+        (0.0, np.inf),
+        "HalfNormal",
+        {"sigma": 0.3},
+        True,
+        id="st",
+    ),
+    pytest.param(
+        "p_outlier",
+        None,
+        "Beta",
+        {"alpha": 5.0, "beta": 100.0},
+        False,
+        id="p-outlier",
+    ),
+]
+
+IDENTITY_LINK_CASES = [
+    pytest.param(None, id="omitted"),
+    pytest.param("identity", id="string"),
+    pytest.param(bmb.Link("identity"), id="bambi-object"),
+    pytest.param(hssm.Link("identity"), id="hssm-object"),
+]
+
+
+def _assert_scalar_prior_contract(
+    prior,
+    *,
+    name,
+    args,
+    bounds,
+    is_truncated,
+):
+    """Assert the complete scalar prior contract, including hidden bound args."""
+    assert isinstance(prior, Prior)
+    assert prior.name == name
+    assert prior.bounds == bounds
+    assert prior.is_truncated is is_truncated
+    assert (prior.dist is not None) is is_truncated
+
+    effective_args = prior._args if prior.is_truncated else prior.args
+    assert set(effective_args) == set(args)
+    for key, expected in args.items():
+        np.testing.assert_allclose(effective_args[key], expected)
+
+
+@pytest.mark.parametrize("link", IDENTITY_LINK_CASES)
+@pytest.mark.parametrize(
+    ("param_name", "bounds", "prior_name", "prior_args", "is_truncated"),
+    HDDM_LOCATION_PRIOR_CASES,
+)
+def test_hddm_safe_common_intercept_uses_response_scale_prior_for_identity_links(
+    cavanagh_test,
+    param_name,
+    bounds,
+    prior_name,
+    prior_args,
+    is_truncated,
+    link,
+):
+    """Route every identity spelling through RegressionParam before validation."""
+    param = RegressionParam(
+        name=param_name,
+        formula=f"{param_name} ~ 1 + theta",
+        bounds=bounds,
+        link=link,
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=True)
+    param.process_prior()
+
+    _assert_scalar_prior_contract(
+        param.prior["Intercept"],
+        name=prior_name,
+        args=prior_args,
+        bounds=bounds,
+        is_truncated=is_truncated,
+    )
+    _assert_scalar_prior_contract(
+        param.prior["theta"],
+        name="Normal",
+        args={"mu": 0.0, "sigma": 0.25},
+        bounds=None,
+        is_truncated=False,
+    )
+    assert getattr(param.link, "name", param.link) == "identity"
+
+
+@pytest.mark.parametrize(
+    "link",
+    [*IDENTITY_LINK_CASES, pytest.param("log", id="log-control")],
+)
+def test_safe_priors_preserve_explicit_common_priors_across_links(cavanagh_test, link):
+    """Never replace exact user intercept or slope priors based on link semantics."""
+    intercept_prior = bmb.Prior("StudentT", nu=4.0, mu=1.0, sigma=0.5)
+    slope_prior = bmb.Prior("Laplace", mu=-0.2, b=0.3)
+    param = RegressionParam(
+        name="a",
+        formula="a ~ 1 + theta",
+        prior={"Intercept": intercept_prior, "theta": slope_prior},
+        bounds=(0.0, np.inf),
+        link=link,
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=True)
+    param.process_prior()
+
+    assert set(param.prior) == {"Intercept", "theta"}
+    assert param.prior["Intercept"] is intercept_prior
+    assert param.prior["theta"] is slope_prior
+
+
 @pytest.mark.parametrize(
     ("param_name", "bounds", "is_ddm"),
     param_and_bounds_angle,

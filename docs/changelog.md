@@ -12,6 +12,8 @@
 
 5. **`hssm.Link` now constructs Bambi built-in and custom links** (#1231). Standard links delegate correctly to Bambi, while HSSM's bounded `gen_logit` behavior remains unchanged.
 
+6. **Safe common-intercept priors now recognize every identity-link spelling consistently** (#1232). An omitted link, `"identity"`, `bambi.Link("identity")`, and `hssm.Link("identity")` all retain response-scale priors, including HDDM-derived priors; transformed links use a coefficient-scale `Normal(mu=0, sigma=0.25)`. Explicit priors still win, and unmatched group-only terms remain unchanged pending [#1225](https://github.com/lnccbrown/HSSM/issues/1225). See [Link functions and safe priors](tutorials/link_functions.ipynb) for the underlying model-design logic.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.

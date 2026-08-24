@@ -234,6 +234,19 @@ def generate_prior(
     return prior
 
 
+def _is_identity_link(link: str | bmb.Link | None) -> bool:
+    """Return whether a link leaves coefficients on the response scale.
+
+    A missing link is semantically identity because ``RegressionParam.validate``
+    normalizes it to ``"identity"`` after safe-prior generation.
+    """
+    if link is None:
+        return True
+    if isinstance(link, str):
+        return link == "identity"
+    return link.name == "identity"
+
+
 # AF-TODO: Docstring could benefit from some more details here.
 def get_default_prior(
     term_type: str,
@@ -274,10 +287,10 @@ def get_default_prior(
     if term_type == "common":
         prior = generate_prior("Normal", bounds=None)
     elif term_type == "common_intercept":
-        # We ignore bounds if link is used, since boundaries loose their meaning.
+        # Bounds are response-scale constraints, so they only apply under identity.
         # TODO: This is a temporary solution, this can prob benefit form a bit of a
         # refactoring, to define settings in a more general way.
-        if (link is not None) or (bounds is None):
+        if not _is_identity_link(link) or bounds is None:
             prior = generate_prior("Normal")
         elif bounds is not None:
             if any(np.isinf(b) for b in bounds):
@@ -310,7 +323,7 @@ def get_hddm_default_prior(
     elif term_type == "common_intercept":
         # TODO: This is a temporary solution, this can prob benefit form a bit of a
         # refactoring, to define settings in a more general way.
-        if link is not None:
+        if not _is_identity_link(link):
             prior = generate_prior("Normal")
         else:
             prior = generate_prior(HDDM_MU[param], bounds=bounds)
