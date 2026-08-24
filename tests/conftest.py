@@ -37,7 +37,7 @@ def _slow_test_memory(request):
     buffers) that Python allocators never see. Without releasing it between tests
     a serial run grows RSS until the process is OOM-killed. Gated on the ``slow``
     marker so the fast suite is unaffected, and applies wherever the slow test
-    lives (not just ``tests/slow/``).
+    lives (not just ``tests/integration/``).
 
     Reclamation and RSS logging live in one fixture on purpose: two separate
     autouse fixtures have no guaranteed teardown order, so the logged RSS could
