@@ -14,9 +14,43 @@ from hssm.param.parameterization_check import (
     check_user_priors_for_location_overparameterization,
     find_disconnected_free_rvs,
 )
-from hssm.prior import _is_identity_link
+from hssm.prior import (
+    _is_identity_link,
+    get_default_prior,
+    get_hddm_default_prior,
+)
 
 hssm.set_floatX("float32")
+
+
+IDENTITY_LINKS = [
+    pytest.param(None, id="omitted"),
+    pytest.param("identity", id="string"),
+    pytest.param(bmb.Link("identity"), id="bambi-object"),
+    pytest.param(hssm.Link("identity"), id="hssm-object"),
+]
+
+TRANSFORMED_LINKS = [
+    pytest.param("log", id="log-string"),
+    pytest.param("logit", id="logit-string"),
+    pytest.param(bmb.Link("log"), id="bambi-log"),
+    pytest.param(bmb.Link("logit"), id="bambi-logit"),
+    pytest.param(hssm.Link("log"), id="hssm-log"),
+    pytest.param(hssm.Link("logit"), id="hssm-logit"),
+    pytest.param(hssm.Link("gen_logit", bounds=(0.0, 1.0)), id="hssm-gen-logit"),
+]
+
+
+def _assert_prior_spec(prior, name, args, bounds):
+    """Assert a generated HSSM prior's distribution, arguments, and support."""
+    assert isinstance(prior, Prior)
+    assert prior.name == name
+    actual_args = prior._args if prior.is_truncated else prior.args
+    assert actual_args == args
+    assert prior.bounds == bounds
+    expected_truncated = bounds is not None and any(np.isfinite(bounds))
+    assert prior.is_truncated is expected_truncated
+    assert callable(prior.dist) is expected_truncated
 
 
 class TestPriorUnit:
@@ -77,13 +111,7 @@ class TestPriorUnit:
 
     @pytest.mark.parametrize(
         "link",
-        [
-            None,
-            "identity",
-            bmb.Link("identity"),
-            hssm.Link("identity"),
-        ],
-        ids=["omitted", "string", "bambi-object", "hssm-object"],
+        IDENTITY_LINKS,
     )
     def test_identity_link_classification(self, link):
         """Recognize every spelling of the effective identity link."""
@@ -91,28 +119,127 @@ class TestPriorUnit:
 
     @pytest.mark.parametrize(
         "link",
-        [
-            "log",
-            "logit",
-            bmb.Link("log"),
-            bmb.Link("logit"),
-            hssm.Link("log"),
-            hssm.Link("logit"),
-            hssm.Link("gen_logit", bounds=(0.0, 1.0)),
-        ],
-        ids=[
-            "log-string",
-            "logit-string",
-            "bambi-log",
-            "bambi-logit",
-            "hssm-log",
-            "hssm-logit",
-            "hssm-gen-logit",
-        ],
+        TRANSFORMED_LINKS,
     )
     def test_transformed_link_classification(self, link):
         """Classify non-identity strings and link objects as transformed."""
         assert not _is_identity_link(link)
+
+    @pytest.mark.parametrize("link", IDENTITY_LINKS)
+    @pytest.mark.parametrize(
+        ("bounds", "expected_args"),
+        [
+            pytest.param((-2.0, 3.0), {"mu": 0.5, "sigma": 0.25}, id="finite"),
+            pytest.param((0.0, np.inf), {"mu": 0.0, "sigma": 0.25}, id="lower-bounded"),
+            pytest.param(
+                (-np.inf, 4.0), {"mu": 0.0, "sigma": 0.25}, id="upper-bounded"
+            ),
+            pytest.param((-np.inf, np.inf), {"mu": 0.0, "sigma": 0.25}, id="unbounded"),
+            pytest.param(None, {"mu": 0.0, "sigma": 0.25}, id="no-bounds"),
+        ],
+    )
+    def test_generic_common_intercept_identity_equivalence(
+        self, link, bounds, expected_args
+    ):
+        """Use response-scale bounds for every spelling of identity."""
+        prior = get_default_prior("common_intercept", "x", bounds, link)
+
+        _assert_prior_spec(prior, "Normal", expected_args, bounds)
+
+    @pytest.mark.parametrize("link", TRANSFORMED_LINKS)
+    def test_generic_common_intercept_transformed_link(self, link):
+        """Keep transformed-link intercept priors on the coefficient scale."""
+        prior = get_default_prior("common_intercept", "x", (-2.0, 3.0), link)
+
+        _assert_prior_spec(prior, "Normal", {"mu": 0.0, "sigma": 0.25}, bounds=None)
+
+    @pytest.mark.parametrize("link", IDENTITY_LINKS)
+    @pytest.mark.parametrize(
+        ("param", "bounds", "name", "expected_args"),
+        [
+            pytest.param(
+                "v",
+                (-np.inf, np.inf),
+                "Normal",
+                {"mu": 2.0, "sigma": 3.0},
+                id="v",
+            ),
+            pytest.param(
+                "a",
+                (0.0, np.inf),
+                "Gamma",
+                {"mu": 1.5, "sigma": 0.75},
+                id="a",
+            ),
+            pytest.param("z", (0.0, 1.0), "Beta", {"alpha": 10, "beta": 10}, id="z"),
+            pytest.param(
+                "t",
+                (0.0, np.inf),
+                "Gamma",
+                {"mu": 0.2, "sigma": 0.2},
+                id="t",
+            ),
+            pytest.param(
+                "sv",
+                (0.0, np.inf),
+                "HalfNormal",
+                {"sigma": 2.0},
+                id="sv",
+            ),
+            pytest.param(
+                "sz",
+                (0.0, np.inf),
+                "HalfNormal",
+                {"sigma": 0.5},
+                id="sz",
+            ),
+            pytest.param(
+                "st",
+                (0.0, np.inf),
+                "HalfNormal",
+                {"sigma": 0.3},
+                id="st",
+            ),
+            pytest.param(
+                "p_outlier",
+                None,
+                "Beta",
+                {"alpha": 5, "beta": 100},
+                id="p-outlier",
+            ),
+        ],
+    )
+    def test_hddm_common_intercept_identity_equivalence(
+        self, link, param, bounds, name, expected_args
+    ):
+        """Retain every HDDM location prior under explicit identity links."""
+        prior = get_hddm_default_prior("common_intercept", param, bounds, link)
+
+        _assert_prior_spec(prior, name, expected_args, bounds)
+
+    @pytest.mark.parametrize("link", TRANSFORMED_LINKS)
+    def test_hddm_common_intercept_transformed_link(self, link):
+        """Keep transformed HDDM intercepts on the coefficient scale."""
+        prior = get_hddm_default_prior("common_intercept", "z", (0.0, 1.0), link)
+
+        _assert_prior_spec(prior, "Normal", {"mu": 0.0, "sigma": 0.25}, bounds=None)
+
+    @pytest.mark.parametrize("link", [*IDENTITY_LINKS, *TRANSFORMED_LINKS])
+    def test_common_slopes_are_link_invariant(self, link):
+        """Keep ordinary and HDDM common slopes independent of link spelling."""
+        generic = get_default_prior("common", "x", (-2.0, 3.0), link)
+        hddm = get_hddm_default_prior("common", "z", (0.0, 1.0), link)
+
+        for prior in (generic, hddm):
+            _assert_prior_spec(prior, "Normal", {"mu": 0.0, "sigma": 0.25}, bounds=None)
+
+    def test_hddm_group_only_identity_policy_is_deferred(self):
+        """Leave the link-presence policy for unmatched group terms to #1225."""
+        omitted = get_hddm_default_prior("group_intercept", "z", None, None)
+        explicit = get_hddm_default_prior("group_intercept", "z", None, "identity")
+
+        assert omitted.name == "Beta"
+        assert explicit.name == "Normal"
 
 
 # ---------------------------------------------------------------------------
