@@ -1,4 +1,4 @@
-"""Atomic on-disk checkpoints for one JEAM recovery scenario."""
+"""POSIX-durable on-disk checkpoints for one JEAM recovery scenario."""
 
 from __future__ import annotations
 
@@ -59,8 +59,28 @@ def _atomic_write(
             os.fsync(staged.fileno())
         install = os.replace if replace else os.link
         install(temporary, target)
+        _fsync_directory(target.parent)
     finally:
-        temporary.unlink(missing_ok=True)
+        if temporary.exists():
+            temporary.unlink()
+            _fsync_directory(target.parent)
+
+
+def _require_posix_durability() -> None:
+    if os.name != "posix":
+        raise RuntimeError(
+            "Durable recovery evidence requires POSIX directory fsync support."
+        )
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Flush an installed directory entry so the checkpoint survives a crash."""
+    _require_posix_durability()
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _atomic_bytes(target: Path, payload: bytes) -> None:
@@ -129,8 +149,10 @@ class ScenarioEvidenceWriter:
     """Build one scenario directory through durable ordered checkpoints."""
 
     def __init__(self, directory: str | Path) -> None:
+        _require_posix_durability()
         self.directory = Path(directory)
         self.directory.mkdir()
+        _fsync_directory(self.directory.parent)
         self.dataset_path = self.directory / "dataset.npy"
         self.raw_path = self.directory / "raw.nc"
         self.measurements_path = self.directory / "measurements.json"
@@ -158,6 +180,7 @@ class ScenarioEvidenceWriter:
 
     def record_prior(self, tree: xr.DataTree) -> Path:
         """Create the first raw checkpoint from prior and observed groups."""
+        self._attest_observed_data(tree)
         return self._checkpoint(tree, _PRIOR_GROUPS)
 
     def record_posterior(self, tree: xr.DataTree) -> Path:
@@ -178,6 +201,16 @@ class ScenarioEvidenceWriter:
     def _require_dataset(self) -> None:
         if not self.dataset_path.is_file():
             raise RuntimeError("record_dataset() must complete first.")
+
+    def _attest_observed_data(self, tree: xr.DataTree) -> None:
+        self._require_dataset()
+        observed = _group_dataset(tree, "observed_data")
+        if tuple(observed.data_vars) != ("rt,response",):
+            raise ValueError("observed_data must contain the canonical 'rt,response'.")
+        stored = np.load(self.dataset_path, allow_pickle=False)
+        values = np.asarray(observed["rt,response"].values)
+        if not _arrays_identical(stored, values):
+            raise ValueError("observed_data does not match the recorded dataset.")
 
     def _read_raw(self, expected_groups: Sequence[str]) -> xr.DataTree:
         if not self.raw_path.is_file():

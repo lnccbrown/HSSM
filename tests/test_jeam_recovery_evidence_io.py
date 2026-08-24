@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
+import scripts.benchmark_jeam_recovery_evidence as evidence
 from scripts.benchmark_jeam_recovery_evidence import (
     ScenarioEvidenceWriter,
     _canonical_json_bytes,
@@ -28,7 +29,9 @@ def _trees() -> tuple[xr.DataTree, xr.DataTree, xr.DataTree]:
         "prior_predictive": xr.Dataset(
             {"response": (("draw", "obs"), [[0.2, 0.4], [0.3, 0.5]])}
         ),
-        "observed_data": xr.Dataset({"rt,response": (("obs", "response_dim"), DATA)}),
+        "observed_data": xr.Dataset(
+            {"rt,response": (("obs", "response_dim"), DATA.copy())}
+        ),
         "posterior": xr.Dataset({"a": (("chain", "draw"), [[1.0, 1.1], [0.9, 1.0]])}),
         "sample_stats": xr.Dataset({"nstep_in": (("chain", "draw"), [[2, 3], [4, 5]])}),
         "posterior_predictive": xr.Dataset(
@@ -122,6 +125,27 @@ def test_dataset_and_final_json_round_trip_strictly_without_overwrite(
     assert _canonical_json_bytes(value) == expected
 
 
+def test_atomic_install_flushes_the_parent_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Flush the directory entry after installing a durable checkpoint."""
+    synced = []
+    fsync_directory = evidence._fsync_directory
+    monkeypatch.setattr(evidence, "_fsync_directory", synced.append)
+    writer = ScenarioEvidenceWriter(tmp_path / "scenario")
+
+    writer.record_dataset(DATA)
+
+    assert synced[0] == tmp_path
+    assert writer.directory in synced[1:]
+
+    monkeypatch.setattr(evidence, "_fsync_directory", fsync_directory)
+    monkeypatch.setattr(evidence.os, "name", "nt")
+    with pytest.raises(RuntimeError, match="POSIX directory fsync"):
+        ScenarioEvidenceWriter(tmp_path / "unsupported")
+    assert not (tmp_path / "unsupported").exists()
+
+
 def test_invalid_order_or_group_never_creates_a_raw_checkpoint(tmp_path: Path) -> None:
     """Reject invalid progression without leaving a partial checkpoint."""
     writer = ScenarioEvidenceWriter(tmp_path / "scenario")
@@ -139,6 +163,32 @@ def test_invalid_order_or_group_never_creates_a_raw_checkpoint(tmp_path: Path) -
         )
     assert not writer.raw_path.exists()
     assert not tuple(writer.directory.glob(".*.tmp"))
+
+
+@pytest.mark.parametrize("fault", ["values", "name"])
+def test_prior_rejects_observed_data_that_contradicts_the_dataset(
+    fault: str,
+    tmp_path: Path,
+) -> None:
+    """Bind the exact dataset bytes semantically to PyMC's observed-data group."""
+    writer = ScenarioEvidenceWriter(tmp_path / "scenario")
+    writer.record_dataset(DATA)
+    prior, _, _ = _trees()
+    if fault == "values":
+        prior["observed_data"]["rt,response"][0, 0] = 9.9
+    else:
+        datasets = {
+            group: prior[group].to_dataset(inherit=False) for group in GROUPS[:3]
+        }
+        datasets["observed_data"] = datasets["observed_data"].rename(
+            {"rt,response": "wrong_name"}
+        )
+        prior = xr.DataTree.from_dict(datasets)
+
+    with pytest.raises(ValueError, match="observed_data"):
+        writer.record_prior(prior)
+
+    assert not writer.raw_path.exists()
 
 
 @pytest.mark.parametrize("group", ["observed_data", "posterior"])
