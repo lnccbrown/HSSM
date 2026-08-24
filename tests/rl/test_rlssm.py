@@ -124,6 +124,36 @@ def _register_custom_rldm(
 class TestRLSSMInit:
     """Basic construction and invalid-input guards at construction time."""
 
+    @pytest.mark.parametrize(
+        ("setting_name", "invalid_value", "preset"),
+        [
+            ("prior_settings", "SAFE", "safe"),
+            ("link_settings", "LOG_LOGIT", "log_logit"),
+        ],
+    )
+    def test_invalid_setting_presets(
+        self,
+        rldm_data,
+        rlssm_config,
+        setting_name,
+        invalid_value,
+        preset,
+    ) -> None:
+        """RLSSM reaches the shared preset guard before parameter construction."""
+        with patch("hssm.base.Params.from_user_specs") as make_params:
+            with pytest.raises(
+                ValueError,
+                match=rf"`{setting_name}` must be either '{preset}' or None",
+            ):
+                RLSSM(
+                    data=rldm_data,
+                    model_config=rlssm_config,
+                    process_initvals=False,
+                    **{setting_name: invalid_value},
+                )
+
+        make_params.assert_not_called()
+
     def test_rlssm_init(self, rldm_data, rlssm_config) -> None:
         """Basic RLSSM initialisation should succeed and return an RLSSM instance."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)

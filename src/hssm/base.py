@@ -78,6 +78,14 @@ _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
 }
 
 
+def _validate_setting_preset(name: str, value: object, preset: str) -> None:
+    """Validate a model-level preset selector at the public boundary."""
+    if value is not None and (not isinstance(value, str) or value != preset):
+        raise ValueError(
+            f"`{name}` must be either {preset!r} or None, but got {value!r}."
+        )
+
+
 class classproperty:
     """A decorator that combines the behavior of @property and @classmethod.
 
@@ -257,6 +265,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
+        _validate_setting_preset("link_settings", link_settings, "log_logit")
+        _validate_setting_preset("prior_settings", prior_settings, "safe")
+
         # ===== Input Data & Configuration =====
         self.data = data.copy()
         self.global_formula = global_formula
