@@ -1,20 +1,32 @@
-"""Define the JEAM/HSSM four-scenario deterministic recovery-smoke protocol.
+"""Run the JEAM/HSSM four-scenario deterministic recovery smoke.
+
+Run its module with the ``jeam-prototype`` dependency group installed; ``--output``
+accepts the schema-v2 result path.
 
 The frozen scenarios span opposing drifts and different threshold/nondecision-time
 scales. Fixed-budget JEAM estimates remain distinct from HSSM posterior means; the
 compiled optimizer checks objective preservation only. This is a non-calibration
-protocol definition, not durable evidence or an execution entry point.
+protocol runner, not durable evidence. Its schema-v2 evidence is generated separately.
+The command emits JSON and exits nonzero when a predeclared gate fails.
 """
 
 from __future__ import annotations
 
+import argparse
+import json
 import math
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass, is_dataclass
+from datetime import UTC, datetime
 from numbers import Real
+from pathlib import Path
+from time import perf_counter
+from typing import Literal, cast
 
 import numpy as np
+import pytensor
 
+import hssm
 from scripts import benchmark_jeam_bayesian_recovery as bayesian
 from scripts import benchmark_jeam_objective_parity as objective
 
@@ -257,6 +269,151 @@ def _mcse_sd_ratio(mcse_mean: float, posterior_sd: float) -> float:
     return mcse_mean / posterior_sd if posterior_sd > 0.0 else math.inf
 
 
+def _scenario_parameters(
+    recovery: bayesian.RecoveryResult,
+    optimizer_estimate: Sequence[float],
+) -> tuple[ScenarioParameterResult, ...]:
+    """Combine the fixed-budget estimate and posterior without conflating them."""
+    return tuple(
+        ScenarioParameterResult(
+            name=parameter.name,
+            truth=parameter.truth,
+            jeam_fixed_budget_estimate=float(estimate),
+            posterior_mean=parameter.posterior_mean,
+            posterior_sd=parameter.posterior_sd,
+            interval_lower=parameter.interval_lower,
+            interval_upper=parameter.interval_upper,
+            hdi_contains_truth=parameter.interval_lower
+            <= parameter.truth
+            <= parameter.interval_upper,
+            rhat=parameter.rhat,
+            ess_bulk=parameter.ess_bulk,
+            ess_tail=parameter.ess_tail,
+            mcse_mean=parameter.mcse_mean,
+            mcse_sd_ratio=_mcse_sd_ratio(parameter.mcse_mean, parameter.posterior_sd),
+            ess_bulk_per_second=parameter.ess_bulk_per_second,
+        )
+        for parameter, estimate in zip(
+            recovery.parameters, optimizer_estimate, strict=True
+        )
+    )
+
+
+def run_scenario(
+    scenario: Scenario,
+    *,
+    trials: int,
+    tune: int,
+    draws: int,
+    prior_draws: int,
+    predictive_draws: int,
+    optimizer_maxiter: int,
+    optimizer_popsize: int,
+) -> ScenarioResult:
+    """Run fixed-budget objective parity and HSSM posterior recovery."""
+    truth = np.asarray(scenario.truth, dtype=np.float64)
+    data = objective.simulate_dataset(
+        truth=truth, trials=trials, seed=scenario.data_seed
+    )
+    direct_objective = objective.make_direct_objective(data)
+    compiled_objective = objective.make_compiled_hssm_objective(data)
+    bounds = objective.optimization_bounds(data)
+
+    direct_started = perf_counter()
+    direct_optimizer = objective._fit(
+        direct_objective,
+        bounds,
+        seed=scenario.optimizer_seed,
+        maxiter=optimizer_maxiter,
+        popsize=optimizer_popsize,
+    )
+    direct_seconds = perf_counter() - direct_started
+    compiled_started = perf_counter()
+    compiled_optimizer = objective._fit(
+        compiled_objective,
+        bounds,
+        seed=scenario.optimizer_seed,
+        maxiter=optimizer_maxiter,
+        popsize=optimizer_popsize,
+    )
+    compiled_seconds = perf_counter() - compiled_started
+
+    candidates = (
+        tuple(float(value) for value in truth),
+        direct_optimizer.parameters,
+        compiled_optimizer.parameters,
+    )
+    candidate_arrays = tuple(np.asarray(candidate) for candidate in candidates)
+    direct_objectives = tuple(
+        direct_objective(candidate) for candidate in candidate_arrays
+    )
+    compiled_objectives = tuple(
+        compiled_objective(candidate) for candidate in candidate_arrays
+    )
+
+    recovery = bayesian.run_recovery(
+        truth=scenario.truth,
+        trials=trials,
+        data_seed=scenario.data_seed,
+        chains=len(scenario.chain_seeds),
+        tune=tune,
+        draws=draws,
+        chain_seeds=scenario.chain_seeds,
+        prior_draws=prior_draws,
+        prior_seed=scenario.prior_seed,
+        predictive_draws=predictive_draws,
+        predictive_seed=scenario.predictive_seed,
+    )
+    if recovery.sampler != "pymc.Slice[a,t,v_x,v_y]":
+        raise RuntimeError(f"Unexpected sampler: {recovery.sampler}")
+    if recovery.hdi_probability != HDI_PROBABILITY:
+        raise RuntimeError(f"Unexpected HDI probability: {recovery.hdi_probability}")
+
+    objective_error = float(
+        np.max(np.abs(np.subtract(direct_objectives, compiled_objectives)))
+    )
+    optimizer_parameter_error = float(
+        np.max(
+            np.abs(
+                np.subtract(direct_optimizer.parameters, compiled_optimizer.parameters)
+            )
+        )
+    )
+    return ScenarioResult(
+        name=scenario.name,
+        truth=scenario.truth,
+        data_seed=scenario.data_seed,
+        optimizer_seed=scenario.optimizer_seed,
+        chain_seeds=scenario.chain_seeds,
+        prior_seed=scenario.prior_seed,
+        predictive_seed=scenario.predictive_seed,
+        direct_objectives=direct_objectives,
+        compiled_objectives=compiled_objectives,
+        objective_candidates=candidates,
+        maximum_objective_absolute_error=objective_error,
+        direct_jeam_fixed_budget_optimizer=direct_optimizer,
+        compiled_hssm_fixed_budget_optimizer=compiled_optimizer,
+        maximum_optimizer_parameter_absolute_error=optimizer_parameter_error,
+        optimizer_objective_absolute_error=abs(
+            direct_optimizer.objective - compiled_optimizer.objective
+        ),
+        minimum_observed_rt=recovery.minimum_observed_rt,
+        initial_point=recovery.initial_point,
+        initial_logp=recovery.initial_logp,
+        parameters=_scenario_parameters(recovery, direct_optimizer.parameters),
+        slice_diagnostics=recovery.slice_diagnostics,
+        prior_predictive=recovery.prior_predictive,
+        predictive=recovery.predictive,
+        runtime=ScenarioRuntime(
+            direct_jeam_fixed_budget_optimizer_seconds=direct_seconds,
+            compiled_hssm_fixed_budget_optimizer_seconds=compiled_seconds,
+            hssm_prior_predictive_seconds=recovery.prior_predictive_seconds,
+            hssm_sampling_seconds=recovery.sampling_seconds,
+            hssm_predictive_seconds=recovery.predictive_seconds,
+        ),
+    )
+
+
 def aggregate_results(
     scenarios: Sequence[ScenarioResult],
 ) -> tuple[AggregateParameterResult, ...]:
@@ -463,3 +620,101 @@ def evaluate_gate(
         for path in _nonfinite_metric_paths(finite_metrics, "result")
     )
     return GateResult(passed=not failures, failures=tuple(failures))
+
+
+def run_benchmark() -> MultiScenarioRecoveryResult:
+    """Run the frozen four-scenario protocol under float64."""
+    started = perf_counter()
+    original_floatx = cast("Literal['float32', 'float64']", pytensor.config.floatX)
+    hssm.set_floatX("float64")
+    try:
+        results = tuple(
+            run_scenario(
+                scenario,
+                trials=DEFAULT_TRIALS,
+                tune=DEFAULT_REPEATED_TUNE,
+                draws=DEFAULT_REPEATED_DRAWS,
+                prior_draws=DEFAULT_REPEATED_PRIOR_DRAWS,
+                predictive_draws=DEFAULT_REPEATED_PREDICTIVE_DRAWS,
+                optimizer_maxiter=DEFAULT_MAXITER,
+                optimizer_popsize=DEFAULT_POPSIZE,
+            )
+            for scenario in DEFAULT_SCENARIOS
+        )
+    finally:
+        hssm.set_floatX(original_floatx)
+    aggregate = aggregate_results(results)
+    total_runtime_seconds = perf_counter() - started
+    gate = evaluate_gate(
+        results,
+        aggregate,
+        DEFAULT_THRESHOLDS,
+        total_runtime_seconds=total_runtime_seconds,
+    )
+    return MultiScenarioRecoveryResult(
+        schema_version=2,
+        benchmark=(
+            "JEAM fixed circular diffusion four-scenario deterministic recovery smoke"
+        ),
+        interpretation=(
+            "This protocol smoke is not a calibration study or durable evidence; "
+            "committed schema-v2 evidence is generated separately."
+        ),
+        generated_at_utc=datetime.now(UTC).isoformat(),
+        reproduction_command=(
+            "uv run --group jeam-prototype python "
+            "-m scripts.benchmark_jeam_repeated_recovery "
+            "--output benchmarks/results/jeam_repeated_recovery_v2.json"
+        ),
+        parameter_order=objective.PARAMETER_ORDER,
+        jeam_revision=objective._installed_jeam_revision(),
+        pytensor_floatx="float64",
+        sampler="pymc.Slice[a,t,v_x,v_y]",
+        trials_per_scenario=DEFAULT_TRIALS,
+        chains=len(DEFAULT_SCENARIOS[0].chain_seeds),
+        tune=DEFAULT_REPEATED_TUNE,
+        draws=DEFAULT_REPEATED_DRAWS,
+        hdi_probability=HDI_PROBABILITY,
+        prior_draws=DEFAULT_REPEATED_PRIOR_DRAWS,
+        predictive_draws=DEFAULT_REPEATED_PREDICTIVE_DRAWS,
+        optimizer_maxiter=DEFAULT_MAXITER,
+        optimizer_popsize=DEFAULT_POPSIZE,
+        thresholds=DEFAULT_THRESHOLDS,
+        scenarios=results,
+        aggregate=aggregate,
+        total_runtime_seconds=total_runtime_seconds,
+        gate=gate,
+    )
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--compact", action="store_true")
+    return parser.parse_args()
+
+
+def _json_payload(result: MultiScenarioRecoveryResult, *, compact: bool) -> str:
+    """Serialize a finite standards-compliant result payload."""
+    return json.dumps(asdict(result), indent=None if compact else 2, allow_nan=False)
+
+
+def main() -> None:
+    """Run the protocol, write optional JSON, and enforce its gate."""
+    args = _parse_args()
+    result = run_benchmark()
+    payload = _json_payload(result, compact=args.compact)
+    if args.output is None:
+        print(payload)
+    else:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(f"{payload}\n", encoding="utf-8")
+        print(args.output)
+    if not result.gate.passed:
+        raise SystemExit(
+            "Multi-scenario recovery gate failed: " + "; ".join(result.gate.failures)
+        )
+
+
+if __name__ == "__main__":
+    main()
