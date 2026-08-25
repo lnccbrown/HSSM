@@ -37,6 +37,8 @@ from scripts.benchmark_jeam_objective_parity import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from scripts.benchmark_jeam_recovery_evidence import ScenarioEvidenceWriter
+
 DEFAULT_CHAINS = 4
 DEFAULT_TUNE = 1_500
 DEFAULT_DRAWS = 1_500
@@ -149,6 +151,29 @@ def _circular_summary(angles: np.ndarray) -> tuple[float, float]:
 def _circular_distance(first: float, second: float) -> float:
     """Return the absolute shortest angular distance in radians."""
     return float(abs(np.angle(np.exp(1j * (first - second)))))
+
+
+def _validated_dataset(data: object, *, trials: int) -> np.ndarray:
+    """Return an immutable float64 copy of one supported circular dataset."""
+    if not isinstance(data, np.ndarray):
+        raise TypeError("data must be a numpy.ndarray.")
+    if data.dtype != np.dtype(np.float64):
+        raise TypeError("data must use the concrete float64 dtype.")
+    expected_shape = (trials, 2)
+    if data.shape != expected_shape:
+        raise ValueError(
+            f"data must have shape {expected_shape}; received {data.shape}."
+        )
+    if not np.all(np.isfinite(data)):
+        raise ValueError("data must contain only finite values.")
+    if np.any(data[:, 0] <= 0.0):
+        raise ValueError("data response times must be strictly positive.")
+    if np.any(data[:, 1] < -np.pi) or np.any(data[:, 1] >= np.pi):
+        raise ValueError("data angles must lie in [-pi, pi).")
+
+    validated = np.array(data, dtype=np.float64, order="C", copy=True)
+    validated.flags.writeable = False
+    return validated
 
 
 def _summary_interval_columns(summary: pd.DataFrame) -> tuple[str, str]:
@@ -276,6 +301,7 @@ def run_recovery(
     truth: Sequence[float] = tuple(DEFAULT_TRUTH),
     trials: int = DEFAULT_TRIALS,
     data_seed: int = DEFAULT_DATA_SEED,
+    data: np.ndarray | None = None,
     chains: int = DEFAULT_CHAINS,
     tune: int = DEFAULT_TUNE,
     draws: int = DEFAULT_DRAWS,
@@ -284,6 +310,7 @@ def run_recovery(
     prior_seed: int = DEFAULT_PRIOR_SEED,
     predictive_draws: int = DEFAULT_PREDICTIVE_DRAWS,
     predictive_seed: int = DEFAULT_PREDICTIVE_SEED,
+    evidence_writer: ScenarioEvidenceWriter | None = None,
 ) -> RecoveryResult:
     """Fit the fixed circular model and collect recovery diagnostics."""
     if len(chain_seeds) != chains:
@@ -295,13 +322,17 @@ def run_recovery(
             f"({len(PARAMETER_ORDER)},)."
         )
 
-    data = simulate_dataset(truth=truth_values, trials=trials, seed=data_seed)
+    if data is None:
+        data = simulate_dataset(truth=truth_values, trials=trials, seed=data_seed)
+    dataset = _validated_dataset(data, trials=trials)
+    if evidence_writer is not None:
+        evidence_writer.record_dataset(dataset)
     model = hssm.HSSM(
-        data=pd.DataFrame(data, columns=["rt", "response"]),
+        data=pd.DataFrame(dataset, columns=["rt", "response"], copy=False),
         model="circular_diffusion",
         p_outlier=None,
     )
-    minimum_observed_rt = float(np.min(data[:, 0]))
+    minimum_observed_rt = float(np.min(dataset[:, 0]))
     initial_point = _resolved_initial_point(minimum_observed_rt)
     initial_values = dict(zip(PARAMETER_ORDER, initial_point, strict=True))
     initial_logp = float(model.compile_logp()(initial_values))
@@ -311,6 +342,8 @@ def run_recovery(
         random_seed=prior_seed,
     )
     prior_predictive_seconds = perf_counter() - started
+    if evidence_writer is not None:
+        evidence_writer.record_prior(prior)
     prior_values = np.asarray(
         prior["prior_predictive"].to_dataset()["rt,response"].values
     )
@@ -320,7 +353,7 @@ def run_recovery(
             f"Expected prior-predictive shape {expected_prior_shape}, "
             f"received {prior_values.shape}."
         )
-    observed_rt = np.quantile(data[:, 0], PRIOR_RT_QUANTILES)
+    observed_rt = np.quantile(dataset[:, 0], PRIOR_RT_QUANTILES)
     prior_rt = np.quantile(prior_values[..., 0], PRIOR_RT_QUANTILES)
     prior_predictive = PriorPredictiveCheck(
         shape=prior_values.shape,
@@ -357,6 +390,8 @@ def run_recovery(
     sampling_seconds = perf_counter() - started
     if not isinstance(traces, xr.DataTree):
         raise RuntimeError("Expected PyMC sampling to return an xarray DataTree.")
+    if evidence_writer is not None:
+        evidence_writer.record_posterior(traces)
 
     summary = az.summary(
         traces,
@@ -405,11 +440,13 @@ def run_recovery(
     predictive_seconds = perf_counter() - started
     if predictive is None:
         raise RuntimeError("Expected non-inplace posterior predictive output.")
+    if evidence_writer is not None:
+        evidence_writer.record_predictive(predictive)
     predictive_dataset = predictive["posterior_predictive"].to_dataset()
     values = predictive_dataset["rt,response"].values
-    observed_angle, observed_resultant = _circular_summary(data[:, 1])
+    observed_angle, observed_resultant = _circular_summary(dataset[:, 1])
     predictive_angle, predictive_resultant = _circular_summary(values[..., 1])
-    observed_rt = np.quantile(data[:, 0], RT_QUANTILES)
+    observed_rt = np.quantile(dataset[:, 0], RT_QUANTILES)
     predictive_rt = np.quantile(values[..., 0], RT_QUANTILES)
     predictive_recovery = PredictiveRecovery(
         rt_probabilities=tuple(float(value) for value in RT_QUANTILES),
