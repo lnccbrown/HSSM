@@ -16,12 +16,12 @@ import argparse
 import json
 import math
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from datetime import UTC, datetime
 from numbers import Real
 from pathlib import Path
 from time import perf_counter
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 import pytensor
@@ -29,6 +29,14 @@ import pytensor
 import hssm
 from scripts import benchmark_jeam_bayesian_recovery as bayesian
 from scripts import benchmark_jeam_objective_parity as objective
+from scripts.benchmark_jeam_recovery_bundle import (
+    finalize_evidence_bundle,
+    prepare_evidence_bundle,
+)
+from scripts.benchmark_jeam_recovery_evidence import ScenarioEvidenceWriter
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 DEFAULT_TRIALS = objective.DEFAULT_TRIALS
 DEFAULT_MAXITER = objective.DEFAULT_MAXITER
@@ -40,6 +48,15 @@ DEFAULT_REPEATED_TUNE = 1_000
 DEFAULT_REPEATED_DRAWS = 1_000
 DEFAULT_REPEATED_PRIOR_DRAWS = bayesian.DEFAULT_PRIOR_DRAWS
 DEFAULT_REPEATED_PREDICTIVE_DRAWS = 40
+PROTOCOL_BASE_REVISION = "cd3fe0a1decc963a9db160a72597e6715b895a5c"
+EVIDENCE_SOURCE_PATHS = (
+    "pyproject.toml",
+    "scripts/benchmark_jeam_bayesian_recovery.py",
+    "scripts/benchmark_jeam_objective_parity.py",
+    "scripts/benchmark_jeam_recovery_bundle.py",
+    "scripts/benchmark_jeam_recovery_evidence.py",
+    "scripts/benchmark_jeam_repeated_recovery.py",
+)
 
 
 @dataclass(frozen=True)
@@ -309,12 +326,15 @@ def run_scenario(
     predictive_draws: int,
     optimizer_maxiter: int,
     optimizer_popsize: int,
+    evidence_writer: ScenarioEvidenceWriter | None = None,
 ) -> ScenarioResult:
     """Run fixed-budget objective parity and HSSM posterior recovery."""
     truth = np.asarray(scenario.truth, dtype=np.float64)
     data = objective.simulate_dataset(
         truth=truth, trials=trials, seed=scenario.data_seed
     )
+    if evidence_writer is not None:
+        evidence_writer.record_dataset(data)
     direct_objective = objective.make_direct_objective(data)
     compiled_objective = objective.make_compiled_hssm_objective(data)
     bounds = objective.optimization_bounds(data)
@@ -363,6 +383,8 @@ def run_scenario(
         prior_seed=scenario.prior_seed,
         predictive_draws=predictive_draws,
         predictive_seed=scenario.predictive_seed,
+        data=data,
+        evidence_writer=evidence_writer,
     )
     if recovery.sampler != "pymc.Slice[a,t,v_x,v_y]":
         raise RuntimeError(f"Unexpected sampler: {recovery.sampler}")
@@ -379,7 +401,7 @@ def run_scenario(
             )
         )
     )
-    return ScenarioResult(
+    result = ScenarioResult(
         name=scenario.name,
         truth=scenario.truth,
         data_seed=scenario.data_seed,
@@ -412,6 +434,43 @@ def run_scenario(
             hssm_predictive_seconds=recovery.predictive_seconds,
         ),
     )
+    if evidence_writer is not None:
+        evidence_writer.write_measurements(
+            {
+                "schema_version": 1,
+                "parameter_order": list(objective.PARAMETER_ORDER),
+                "scenario": {
+                    "name": scenario.name,
+                    "truth": list(scenario.truth),
+                    "trials": trials,
+                    "data_seed": scenario.data_seed,
+                    "optimizer_seed": scenario.optimizer_seed,
+                    "chain_seeds": list(scenario.chain_seeds),
+                    "prior_seed": scenario.prior_seed,
+                    "predictive_seed": scenario.predictive_seed,
+                    "tune": tune,
+                    "draws": draws,
+                    "prior_draws": prior_draws,
+                    "predictive_draws": predictive_draws,
+                    "optimizer_maxiter": optimizer_maxiter,
+                    "optimizer_popsize": optimizer_popsize,
+                },
+                "objective": {
+                    "candidates": [list(values) for values in candidates],
+                    "direct_values": list(direct_objectives),
+                    "compiled_values": list(compiled_objectives),
+                    "direct_fixed_budget_optimizer": asdict(direct_optimizer),
+                    "compiled_hssm_fixed_budget_optimizer": asdict(compiled_optimizer),
+                },
+                "initialization": {
+                    "minimum_observed_rt": recovery.minimum_observed_rt,
+                    "point": list(recovery.initial_point),
+                    "logp": recovery.initial_logp,
+                },
+                "runtime_seconds": asdict(result.runtime),
+            }
+        )
+    return result
 
 
 def aggregate_results(
@@ -622,31 +681,37 @@ def evaluate_gate(
     return GateResult(passed=not failures, failures=tuple(failures))
 
 
-def run_benchmark() -> MultiScenarioRecoveryResult:
-    """Run the frozen four-scenario protocol under float64."""
+def _run_benchmark(
+    evidence_writer: Callable[[Scenario], ScenarioEvidenceWriter] | None = None,
+) -> MultiScenarioRecoveryResult:
+    """Run the frozen protocol, optionally retaining each scenario's raw stages."""
     started = perf_counter()
     original_floatx = cast("Literal['float32', 'float64']", pytensor.config.floatX)
     hssm.set_floatX("float64")
     try:
-        results = tuple(
-            run_scenario(
-                scenario,
-                trials=DEFAULT_TRIALS,
-                tune=DEFAULT_REPEATED_TUNE,
-                draws=DEFAULT_REPEATED_DRAWS,
-                prior_draws=DEFAULT_REPEATED_PRIOR_DRAWS,
-                predictive_draws=DEFAULT_REPEATED_PREDICTIVE_DRAWS,
-                optimizer_maxiter=DEFAULT_MAXITER,
-                optimizer_popsize=DEFAULT_POPSIZE,
+        results = []
+        for scenario in DEFAULT_SCENARIOS:
+            writer = evidence_writer(scenario) if evidence_writer is not None else None
+            results.append(
+                run_scenario(
+                    scenario,
+                    trials=DEFAULT_TRIALS,
+                    tune=DEFAULT_REPEATED_TUNE,
+                    draws=DEFAULT_REPEATED_DRAWS,
+                    prior_draws=DEFAULT_REPEATED_PRIOR_DRAWS,
+                    predictive_draws=DEFAULT_REPEATED_PREDICTIVE_DRAWS,
+                    optimizer_maxiter=DEFAULT_MAXITER,
+                    optimizer_popsize=DEFAULT_POPSIZE,
+                    evidence_writer=writer,
+                )
             )
-            for scenario in DEFAULT_SCENARIOS
-        )
+        scenario_results = tuple(results)
     finally:
         hssm.set_floatX(original_floatx)
-    aggregate = aggregate_results(results)
+    aggregate = aggregate_results(scenario_results)
     total_runtime_seconds = perf_counter() - started
     gate = evaluate_gate(
-        results,
+        scenario_results,
         aggregate,
         DEFAULT_THRESHOLDS,
         total_runtime_seconds=total_runtime_seconds,
@@ -680,18 +745,89 @@ def run_benchmark() -> MultiScenarioRecoveryResult:
         optimizer_maxiter=DEFAULT_MAXITER,
         optimizer_popsize=DEFAULT_POPSIZE,
         thresholds=DEFAULT_THRESHOLDS,
-        scenarios=results,
+        scenarios=scenario_results,
         aggregate=aggregate,
         total_runtime_seconds=total_runtime_seconds,
         gate=gate,
     )
 
 
+def run_benchmark() -> MultiScenarioRecoveryResult:
+    """Run the frozen four-scenario protocol under float64."""
+    return _run_benchmark()
+
+
+def _evidence_protocol() -> dict[str, object]:
+    """Return the fully resolved protocol recorded by a durable bundle."""
+    return {
+        "schema_version": 1,
+        "result_schema_version": 2,
+        "parameter_order": list(objective.PARAMETER_ORDER),
+        "sampler": "pymc.Slice[a,t,v_x,v_y]",
+        "pytensor_floatx": "float64",
+        "trials_per_scenario": DEFAULT_TRIALS,
+        "chains": len(DEFAULT_SCENARIOS[0].chain_seeds),
+        "tune": DEFAULT_REPEATED_TUNE,
+        "draws": DEFAULT_REPEATED_DRAWS,
+        "hdi_probability": HDI_PROBABILITY,
+        "prior_draws": DEFAULT_REPEATED_PRIOR_DRAWS,
+        "predictive_draws": DEFAULT_REPEATED_PREDICTIVE_DRAWS,
+        "optimizer_maxiter": DEFAULT_MAXITER,
+        "optimizer_popsize": DEFAULT_POPSIZE,
+        "thresholds": asdict(DEFAULT_THRESHOLDS),
+        "scenarios": [asdict(scenario) for scenario in DEFAULT_SCENARIOS],
+    }
+
+
+def run_evidence_benchmark(directory: str | Path) -> MultiScenarioRecoveryResult:
+    """Run once from clean source and retain a hash-bound raw evidence bundle."""
+    root = Path(directory)
+    repository = Path(__file__).resolve().parents[1]
+    if hssm.__file__ is None:
+        raise RuntimeError("Cannot locate the imported hssm package.")
+    jeam_revision = objective._installed_jeam_revision()
+    provenance = prepare_evidence_bundle(
+        root,
+        repository=repository,
+        imported_hssm_file=hssm.__file__,
+        protocol_base_revision=PROTOCOL_BASE_REVISION,
+        jeam_revision=jeam_revision,
+        source_paths=EVIDENCE_SOURCE_PATHS,
+    )
+    result = _run_benchmark(
+        lambda scenario: ScenarioEvidenceWriter(root / "scenarios" / scenario.name)
+    )
+    result = replace(
+        result,
+        interpretation=(
+            "This deterministic smoke is not a calibration study; its derived "
+            "report is accompanied by hash-bound datasets and raw draws."
+        ),
+        reproduction_command=(
+            "uv run --group jeam-prototype python "
+            "-m scripts.benchmark_jeam_repeated_recovery "
+            "--evidence-dir benchmarks/evidence/jeam_repeated_recovery_v2"
+        ),
+    )
+    finalize_evidence_bundle(
+        root,
+        result=asdict(result),
+        protocol=_evidence_protocol(),
+        provenance=provenance,
+    )
+    return result
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path)
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument("--output", type=Path)
+    output.add_argument("--evidence-dir", type=Path)
     parser.add_argument("--compact", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.evidence_dir is not None and args.compact:
+        parser.error("--compact cannot be used with --evidence-dir")
+    return args
 
 
 def _json_payload(result: MultiScenarioRecoveryResult, *, compact: bool) -> str:
@@ -702,14 +838,18 @@ def _json_payload(result: MultiScenarioRecoveryResult, *, compact: bool) -> str:
 def main() -> None:
     """Run the protocol, write optional JSON, and enforce its gate."""
     args = _parse_args()
-    result = run_benchmark()
-    payload = _json_payload(result, compact=args.compact)
-    if args.output is None:
-        print(payload)
+    if args.evidence_dir is not None:
+        result = run_evidence_benchmark(args.evidence_dir)
+        print(args.evidence_dir / "manifest.json")
     else:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(f"{payload}\n", encoding="utf-8")
-        print(args.output)
+        result = run_benchmark()
+        payload = _json_payload(result, compact=args.compact)
+        if args.output is None:
+            print(payload)
+        else:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(f"{payload}\n", encoding="utf-8")
+            print(args.output)
     if not result.gate.passed:
         raise SystemExit(
             "Multi-scenario recovery gate failed: " + "; ".join(result.gate.failures)
