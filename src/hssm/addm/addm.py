@@ -43,17 +43,17 @@ class aDDM(HSSMBase):
     include
         Optional list of regression/parameter specifications (HSSM's standard
         ``include=[...]`` machinery), e.g. a hierarchical regression on ``eta``.
-    link_settings
-        Link-function preset for regression parameters without an explicit link.
-        Accepts ``"log_logit"`` or ``None`` and is forwarded through ``**kwargs``.
-        Defaults to ``None``.
     prior_settings
         Generated regression-term prior preset. ``"safe"`` uses HSSM defaults;
         ``None`` delegates missing regression-term priors to Bambi. Parameters without
         regressions retain their explicit, model-config, or bounds-derived priors.
         Defaults to ``"safe"``.
-    p_outlier, lapse, missing_data, deadline, **kwargs
+    p_outlier, lapse, missing_data, deadline
         Forwarded to :class:`hssm.base.HSSMBase`.
+    **kwargs
+        Additional keyword arguments forwarded to :class:`hssm.base.HSSMBase`,
+        including ``link_settings``. That link-function preset accepts
+        ``"log_logit"`` or ``None`` and defaults to ``None``.
     """
 
     def __init__(
