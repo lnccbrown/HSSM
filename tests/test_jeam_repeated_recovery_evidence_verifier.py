@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import shutil
 from pathlib import Path
 
@@ -19,6 +20,13 @@ BUNDLE = (
 def _copy_bundle(tmp_path: Path, name: str = "bundle") -> Path:
     target = tmp_path / name
     return Path(shutil.copytree(BUNDLE, target))
+
+
+@pytest.fixture(scope="module")
+def recomputed_science():
+    """Load authenticated primary evidence and recompute its scientific result."""
+    _, stored, measurements, datasets, groups = verifier._load_verified_bundle(BUNDLE)
+    return stored, verifier._recompute_science(measurements, datasets, groups)
 
 
 def test_canonical_integrity_and_exact_raw_contract() -> None:
@@ -240,3 +248,155 @@ def test_malformed_raw_contract_is_rejected(
 
     with pytest.raises(verifier.EvidenceMismatch, match=message):
         verifier._validate_raw(raw, dataset)
+
+
+def test_raw_evidence_recomputes_16_of_16_truths_and_the_full_gate(
+    recomputed_science,
+) -> None:
+    """Recompute posterior summaries, PPCs, aggregation, and every science gate."""
+    stored, science = recomputed_science
+    verifier._assert_same_science(
+        verifier.scientific_projection(science),
+        verifier.scientific_projection(stored),
+    )
+    assert [row["runtime"] for row in science["scenarios"]] == [
+        row["runtime"] for row in stored["scenarios"]
+    ]
+    assert [row["mean_bulk_ess_per_second"] for row in science["aggregate"]] == (
+        pytest.approx([row["mean_bulk_ess_per_second"] for row in stored["aggregate"]])
+    )
+
+    assert science["gate"] == {"passed": True, "failures": []}
+    assert (
+        sum(
+            row["hdi_contains_truth"]
+            for scenario in science["scenarios"]
+            for row in scenario["parameters"]
+        )
+        == 16
+    )
+    assert all(row["hdi_inclusion_fraction"] == 1.0 for row in science["aggregate"])
+    assert verifier.verify_evidence(BUNDLE) == {
+        "artifacts": 14,
+        "scenarios": 4,
+        "hdi_inclusions": 16,
+        "hdi_total": 16,
+        "gate": "passed",
+    }
+
+
+def test_primary_objective_measurements_are_not_rerun_or_trusted_inconsistently(
+    recomputed_science,
+) -> None:
+    """Hash-bound optimizer values remain primary but must agree internally."""
+    _, science = recomputed_science
+    scenario = science["scenarios"][0]
+    direct = np.asarray(scenario["direct_objectives"])
+    compiled = np.asarray(scenario["compiled_objectives"])
+
+    assert scenario["maximum_objective_absolute_error"] == pytest.approx(
+        np.max(np.abs(direct - compiled))
+    )
+    assert scenario["maximum_optimizer_parameter_absolute_error"] == 0.0
+    assert scenario["optimizer_objective_absolute_error"] == 0.0
+
+    _, _, measurements, datasets, _ = verifier._load_verified_bundle(BUNDLE)
+    altered = copy.deepcopy(measurements["baseline_asymmetric"])
+    objective = altered["objective"]
+    assert isinstance(objective, dict)
+    direct_fit = objective["direct_fixed_budget_optimizer"]
+    assert isinstance(direct_fit, dict)
+    direct_objective = direct_fit["objective"]
+    assert isinstance(direct_objective, float)
+    direct_fit["objective"] = direct_objective + 1.0
+    with pytest.raises(verifier.EvidenceMismatch, match="internally inconsistent"):
+        verifier._measurement_science(
+            "baseline_asymmetric", altered, datasets["baseline_asymmetric"]
+        )
+
+
+def test_scientific_gate_boundaries_are_inclusive(recomputed_science) -> None:
+    """Every exact preregistered threshold must remain a passing boundary."""
+    _, original = recomputed_science
+    science = copy.deepcopy(original)
+    scenario = science["scenarios"][0]
+    scenario["maximum_objective_absolute_error"] = 5e-5
+    scenario["maximum_optimizer_parameter_absolute_error"] = 1e-12
+    scenario["optimizer_objective_absolute_error"] = 5e-5
+    scenario["predictive"].update(
+        observed_rt_quantiles=[0.0, 0.0, 0.0],
+        predictive_rt_quantiles=[0.12, 0.12, 0.12],
+        mean_angle_distance=0.1,
+        observed_resultant_length=0.0,
+        predictive_resultant_length=0.08,
+    )
+    scenario["prior_predictive"]["prior_to_observed_rt_ratios"] = [0.1, 20.0]
+    for parameter in scenario["parameters"]:
+        parameter["mcse_sd_ratio"] = 0.05
+    for aggregate in science["aggregate"]:
+        name = aggregate["name"]
+        aggregate.update(
+            jeam_fixed_budget_bias=verifier.THRESHOLDS["maximum_absolute_bias"][name],
+            jeam_fixed_budget_rmse=verifier.THRESHOLDS["maximum_rmse"][name],
+            hssm_posterior_bias=-verifier.THRESHOLDS["maximum_absolute_bias"][name],
+            hssm_posterior_rmse=verifier.THRESHOLDS["maximum_rmse"][name],
+            hdi_inclusion_fraction=0.75,
+            maximum_rhat=1.01,
+            minimum_bulk_ess=500.0,
+            minimum_tail_ess=500.0,
+        )
+
+    assert verifier._science_failures(science) == []
+
+
+def test_stored_thresholds_cannot_relax_independent_gate(recomputed_science) -> None:
+    """The evaluator must ignore artifact-owned limits and reject a true overrun."""
+    stored, original = recomputed_science
+    science = copy.deepcopy(original)
+    science["thresholds"]["maximum_rhat"] = 1e9
+    science["aggregate"][0]["maximum_rhat"] = np.nextafter(1.01, np.inf)
+
+    assert "a: R-hat" in verifier._science_failures(science)
+
+    altered_stored = copy.deepcopy(stored)
+    altered_stored["thresholds"]["maximum_rhat"] = 1e9
+    with pytest.raises(verifier.EvidenceMismatch, match="thresholds"):
+        verifier._assert_same_science(
+            verifier.scientific_projection(original),
+            verifier.scientific_projection(altered_stored),
+        )
+
+
+def test_descriptive_telemetry_is_excluded_from_science(recomputed_science) -> None:
+    """Timestamps, runtime, and ESS/second cannot change scientific conclusions."""
+    stored, _ = recomputed_science
+    altered = copy.deepcopy(stored)
+    altered["generated_at_utc"] = "2099-01-01T00:00:00+00:00"
+    altered["total_runtime_seconds"] = 1.0
+    for scenario in altered["scenarios"]:
+        scenario["runtime"] = {key: 1.0 for key in scenario["runtime"]}
+        for parameter in scenario["parameters"]:
+            parameter["ess_bulk_per_second"] = 1.0
+    for aggregate in altered["aggregate"]:
+        aggregate["mean_bulk_ess_per_second"] = 1.0
+
+    assert verifier.scientific_projection(altered) == verifier.scientific_projection(
+        stored
+    )
+
+
+def test_cli_defaults_to_canonical_and_returns_nonzero_on_mismatch(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The standalone command verifies the canonical default and fails closed."""
+    assert verifier.main([]) == 0
+    assert '"gate": "passed"' in capsys.readouterr().out
+
+    root = _copy_bundle(tmp_path)
+    dataset = root / "scenarios" / "baseline_asymmetric" / "dataset.npy"
+    payload = bytearray(dataset.read_bytes())
+    payload[-1] ^= 1
+    dataset.write_bytes(payload)
+
+    assert verifier.main([str(root)]) == 1
+    assert "SHA256 mismatch" in capsys.readouterr().err
