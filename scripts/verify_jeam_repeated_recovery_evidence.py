@@ -15,16 +15,19 @@ import os
 import re
 import stat
 import sys
+from collections.abc import Mapping
 from io import BytesIO
+from numbers import Real
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
+import arviz as az
 import numpy as np
 import xarray as xr
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
-    from typing import Never
+    from collections.abc import Sequence
+    from typing import Any, Never
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 DEFAULT_BUNDLE = REPOSITORY / "benchmarks/evidence/jeam_repeated_recovery_v2"
@@ -39,45 +42,16 @@ RAW_GROUPS = (
     "sample_stats",
     "posterior_predictive",
 )
+# Rows: name, truth, data/optimizer seeds, chain seeds, prior/predictive seeds.
+# fmt: off
 SCENARIOS = (
-    (
-        "baseline_asymmetric",
-        (1.2, 0.15, 0.8, -0.5),
-        1492,
-        8675309,
-        (3101, 3102, 3103, 3104),
-        6101,
-        7291,
-    ),
-    (
-        "reversed_drift",
-        (1.05, 0.1, -0.9, 0.65),
-        2603,
-        54021,
-        (4201, 4202, 4203, 4204),
-        7101,
-        8291,
-    ),
-    (
-        "high_threshold_strong_drift",
-        (1.6, 0.22, 1.25, 0.3),
-        3714,
-        64031,
-        (5301, 5302, 5303, 5304),
-        8101,
-        9291,
-    ),
-    (
-        "low_threshold_negative_drift",
-        (0.75, 0.07, -0.45, -1.15),
-        4825,
-        74041,
-        (6401, 6402, 6403, 6404),
-        9101,
-        10291,
-    ),
+    ("baseline_asymmetric", (1.2, 0.15, 0.8, -0.5), 1492, 8675309, (3101, 3102, 3103, 3104), 6101, 7291),  # noqa: E501
+    ("reversed_drift", (1.05, 0.1, -0.9, 0.65), 2603, 54021, (4201, 4202, 4203, 4204), 7101, 8291),  # noqa: E501
+    ("high_threshold_strong_drift", (1.6, 0.22, 1.25, 0.3), 3714, 64031, (5301, 5302, 5303, 5304), 8101, 9291),  # noqa: E501
+    ("low_threshold_negative_drift", (0.75, 0.07, -0.45, -1.15), 4825, 74041, (6401, 6402, 6403, 6404), 9101, 10291),  # noqa: E501
 )
-THRESHOLDS = {
+# fmt: on
+THRESHOLDS: dict[str, Any] = {
     "objective_absolute_error": 5e-5,
     "optimizer_parameter_absolute_error": 1e-12,
     "optimizer_objective_absolute_error": 5e-5,
@@ -558,10 +532,552 @@ def _load_verified_bundle(
     return manifest, result, measurements, datasets, groups
 
 
+def _object(value: object, keys: set[str], label: str) -> dict[str, Any]:
+    """Require one JSON object with an exact schema."""
+    if not isinstance(value, dict) or set(value) != keys:
+        _fail(f"{label} schema mismatch.")
+    return value
+
+
+_MEASUREMENT_KEYS: set[str] = set(
+    "schema_version parameter_order scenario objective initialization "
+    "runtime_seconds".split()
+)
+_OBJECTIVE_KEYS: set[str] = set(
+    "candidates direct_values compiled_values direct_fixed_budget_optimizer "
+    "compiled_hssm_fixed_budget_optimizer".split()
+)
+_RUNTIME_KEYS: set[str] = set(
+    "direct_jeam_fixed_budget_optimizer_seconds "
+    "compiled_hssm_fixed_budget_optimizer_seconds hssm_prior_predictive_seconds "
+    "hssm_sampling_seconds hssm_predictive_seconds".split()
+)
+
+
+def _number(value: object, label: str) -> float:
+    """Return one finite non-boolean JSON number."""
+    if not isinstance(value, Real) or isinstance(value, bool):
+        _fail(f"{label} must be numeric.")
+    result = float(value)
+    if not math.isfinite(result):
+        _fail(f"{label} must be finite.")
+    return result
+
+
+def _numbers(value: object, length: int, label: str) -> list[float]:
+    """Return one exact-length finite numeric JSON vector."""
+    if not isinstance(value, list) or len(value) != length:
+        _fail(f"{label} shape mismatch.")
+    return [_number(item, f"{label}[{index}]") for index, item in enumerate(value)]
+
+
+def _close(first: float, second: float) -> bool:
+    """Compare independently recomputed finite measurements tightly."""
+    return math.isclose(first, second, rel_tol=1e-12, abs_tol=1e-12)
+
+
+def _fit(value: object, label: str) -> dict[str, Any]:
+    """Validate one hash-bound fixed-budget optimizer measurement."""
+    fit = _object(
+        value, set("parameters objective evaluations iterations".split()), label
+    )
+    parameters = _numbers(fit["parameters"], 4, f"{label}.parameters")
+    objective = _number(fit["objective"], f"{label}.objective")
+    if fit["evaluations"] != 900 or fit["iterations"] != 14:
+        _fail(f"{label} budget mismatch.")
+    return {
+        "parameters": parameters,
+        "objective": objective,
+        "evaluations": 900,
+        "iterations": 14,
+    }
+
+
+def _measurement_science(
+    name: str, document: Mapping[str, object], dataset: np.ndarray
+) -> dict[str, Any]:
+    """Validate primary measurements and derive their parity fields."""
+    document = _object(document, _MEASUREMENT_KEYS, f"{name} measurements")
+    if document["schema_version"] != 1 or document["parameter_order"] != list(
+        PARAMETERS
+    ):
+        _fail(f"{name} measurement header mismatch.")
+    frozen = next(item for item in _scenario_documents() if item["name"] == name)
+    expected_scenario = frozen | {
+        "trials": 300,
+        "tune": 1000,
+        "draws": 1000,
+        "prior_draws": 100,
+        "predictive_draws": 40,
+        "optimizer_maxiter": 14,
+        "optimizer_popsize": 15,
+    }
+    if document["scenario"] != expected_scenario:
+        _fail(f"{name} frozen scenario mismatch.")
+
+    objective = _object(document["objective"], _OBJECTIVE_KEYS, f"{name} objective")
+    raw_candidates = objective["candidates"]
+    if not isinstance(raw_candidates, list) or len(raw_candidates) != 3:
+        _fail(f"{name} objective candidate shape mismatch.")
+    candidates = [
+        _numbers(row, 4, f"{name}.objective.candidates") for row in raw_candidates
+    ]
+    direct_values = _numbers(objective["direct_values"], 3, f"{name}.direct")
+    compiled_values = _numbers(objective["compiled_values"], 3, f"{name}.compiled")
+    direct_fit = _fit(
+        objective["direct_fixed_budget_optimizer"], f"{name} direct optimizer"
+    )
+    compiled_fit = _fit(
+        objective["compiled_hssm_fixed_budget_optimizer"],
+        f"{name} compiled optimizer",
+    )
+    truth = _numbers(frozen["truth"], 4, f"{name} truth")
+    if (
+        candidates[0] != truth
+        or candidates[1] != direct_fit["parameters"]
+        or candidates[2] != compiled_fit["parameters"]
+        or not _close(direct_fit["objective"], direct_values[1])
+        or not _close(compiled_fit["objective"], compiled_values[2])
+    ):
+        _fail(f"{name} objective measurements are internally inconsistent.")
+
+    initialization = _object(
+        document["initialization"],
+        {"minimum_observed_rt", "point", "logp"},
+        f"{name} initialization",
+    )
+    minimum_rt = _number(
+        initialization["minimum_observed_rt"], f"{name} minimum observed RT"
+    )
+    point = _numbers(initialization["point"], 4, f"{name} initial point")
+    initial_logp = _number(initialization["logp"], f"{name} initial logp")
+    expected_minimum = float(np.min(dataset[:, 0]))
+    expected_point = [1.0, min(0.1, expected_minimum / 2.0), 0.0, 0.0]
+    if not _close(minimum_rt, expected_minimum) or point != expected_point:
+        _fail(f"{name} initialization does not bind the retained dataset.")
+
+    raw_runtime = _object(document["runtime_seconds"], _RUNTIME_KEYS, f"{name} runtime")
+    runtime = {
+        key: _number(value, f"{name} runtime.{key}")
+        for key, value in raw_runtime.items()
+    }
+    if any(value <= 0.0 for value in runtime.values()):
+        _fail(f"{name} runtime must be positive.")
+
+    direct = np.asarray(direct_values)
+    compiled = np.asarray(compiled_values)
+    direct_parameters = np.asarray(direct_fit["parameters"])
+    compiled_parameters = np.asarray(compiled_fit["parameters"])
+    return {
+        **{key: frozen[key] for key in frozen if key != "truth"},
+        "truth": truth,
+        "direct_objectives": direct_values,
+        "compiled_objectives": compiled_values,
+        "objective_candidates": candidates,
+        "maximum_objective_absolute_error": float(np.max(np.abs(direct - compiled))),
+        "direct_jeam_fixed_budget_optimizer": direct_fit,
+        "compiled_hssm_fixed_budget_optimizer": compiled_fit,
+        "maximum_optimizer_parameter_absolute_error": float(
+            np.max(np.abs(direct_parameters - compiled_parameters))
+        ),
+        "optimizer_objective_absolute_error": abs(
+            _number(direct_fit["objective"], "direct objective")
+            - _number(compiled_fit["objective"], "compiled objective")
+        ),
+        "minimum_observed_rt": minimum_rt,
+        "initial_point": point,
+        "initial_logp": initial_logp,
+        "runtime": runtime,
+    }
+
+
+def _circular_summary(values: np.ndarray) -> tuple[float, float]:
+    """Return circular mean direction and resultant length."""
+    resultant = np.mean(np.exp(1j * values))
+    return float(np.angle(resultant)), float(np.abs(resultant))
+
+
+def _scenario_science(
+    name: str,
+    measurements: Mapping[str, object],
+    dataset: np.ndarray,
+    groups: Mapping[str, xr.Dataset],
+) -> dict[str, Any]:
+    """Recompute posterior, prior, Slice, and predictive science for one scenario."""
+    scenario = _measurement_science(name, measurements, dataset)
+    summary = az.summary(
+        groups["posterior"],
+        var_names=list(PARAMETERS),
+        ci_prob=0.94,
+        ci_kind="hdi",
+        round_to=8,
+    )
+    lower = [
+        column
+        for column in summary
+        if column.startswith("hdi") and column.endswith("_lb")
+    ]
+    upper = [
+        column
+        for column in summary
+        if column.startswith("hdi") and column.endswith("_ub")
+    ]
+    if len(lower) != 1 or len(upper) != 1:
+        _fail(f"{name} ArviZ HDI schema mismatch.")
+    truth = dict(zip(PARAMETERS, scenario["truth"], strict=True))
+    estimate = dict(
+        zip(
+            PARAMETERS,
+            scenario["direct_jeam_fixed_budget_optimizer"]["parameters"],
+            strict=True,
+        )
+    )
+    parameters = []
+    for parameter in PARAMETERS:
+        posterior_sd = float(summary.loc[parameter, "sd"])
+        if posterior_sd <= 0.0:
+            _fail(f"{name} {parameter} posterior SD must be positive.")
+        interval = (
+            float(summary.loc[parameter, lower[0]]),
+            float(summary.loc[parameter, upper[0]]),
+        )
+        mcse = float(summary.loc[parameter, "mcse_mean"])
+        ess_bulk = float(summary.loc[parameter, "ess_bulk"])
+        parameters.append(
+            {
+                "name": parameter,
+                "truth": truth[parameter],
+                "jeam_fixed_budget_estimate": estimate[parameter],
+                "posterior_mean": float(summary.loc[parameter, "mean"]),
+                "posterior_sd": posterior_sd,
+                "interval_lower": interval[0],
+                "interval_upper": interval[1],
+                "hdi_contains_truth": interval[0] <= truth[parameter] <= interval[1],
+                "rhat": float(summary.loc[parameter, "r_hat"]),
+                "ess_bulk": ess_bulk,
+                "ess_bulk_per_second": (
+                    ess_bulk / scenario["runtime"]["hssm_sampling_seconds"]
+                ),
+                "ess_tail": float(summary.loc[parameter, "ess_tail"]),
+                "mcse_mean": mcse,
+                "mcse_sd_ratio": mcse / posterior_sd,
+            }
+        )
+    scenario["parameters"] = parameters
+
+    stats = groups["sample_stats"]
+    scenario["slice_diagnostics"] = {
+        "sample_stats": sorted(str(key) for key in stats.data_vars),
+        "mean_steps_in": float(np.asarray(stats["nstep_in"]).mean()),
+        "mean_steps_out": float(np.asarray(stats["nstep_out"]).mean()),
+    }
+    prior = np.asarray(groups["prior_predictive"]["rt,response"].values)
+    predictive = np.asarray(groups["posterior_predictive"]["rt,response"].values)
+    for label, values in (("prior", prior), ("posterior predictive", predictive)):
+        if (
+            np.any(values[..., 0] <= 0.0)
+            or np.any(values[..., 1] < -np.pi)
+            or np.any(values[..., 1] >= np.pi)
+        ):
+            _fail(f"{name} {label} support mismatch.")
+
+    observed_prior_rt = np.quantile(dataset[:, 0], (0.5, 0.9))
+    prior_rt = np.quantile(prior[..., 0], (0.5, 0.9))
+    scenario["prior_predictive"] = {
+        "shape": list(prior.shape),
+        "all_finite": bool(np.all(np.isfinite(prior))),
+        "minimum_rt": float(np.min(prior[..., 0])),
+        "maximum_rt": float(np.max(prior[..., 0])),
+        "minimum_angle": float(np.min(prior[..., 1])),
+        "maximum_angle": float(np.max(prior[..., 1])),
+        "rt_probabilities": [0.5, 0.9],
+        "observed_rt_quantiles": observed_prior_rt.tolist(),
+        "prior_rt_quantiles": prior_rt.tolist(),
+        "prior_to_observed_rt_ratios": (prior_rt / observed_prior_rt).tolist(),
+    }
+    observed_angle, observed_resultant = _circular_summary(dataset[:, 1])
+    predictive_angle, predictive_resultant = _circular_summary(predictive[..., 1])
+    angle_distance = abs(np.angle(np.exp(1j * (observed_angle - predictive_angle))))
+    scenario["predictive"] = {
+        "rt_probabilities": [0.1, 0.5, 0.9],
+        "observed_rt_quantiles": np.quantile(dataset[:, 0], (0.1, 0.5, 0.9)).tolist(),
+        "predictive_rt_quantiles": np.quantile(
+            predictive[..., 0], (0.1, 0.5, 0.9)
+        ).tolist(),
+        "observed_mean_angle": observed_angle,
+        "predictive_mean_angle": predictive_angle,
+        "mean_angle_distance": float(angle_distance),
+        "observed_resultant_length": observed_resultant,
+        "predictive_resultant_length": predictive_resultant,
+    }
+    return scenario
+
+
+def _aggregate(scenarios: Sequence[Mapping[str, Any]]) -> list[dict[str, object]]:
+    """Recompute all four cross-scenario parameter summaries."""
+    result: list[dict[str, object]] = []
+    for name in PARAMETERS:
+        rows = [
+            next(row for row in scenario["parameters"] if row["name"] == name)
+            for scenario in scenarios
+        ]
+        truth = np.asarray([row["truth"] for row in rows])
+        fixed = np.asarray([row["jeam_fixed_budget_estimate"] for row in rows])
+        posterior = np.asarray([row["posterior_mean"] for row in rows])
+        fixed_error, posterior_error = fixed - truth, posterior - truth
+        result.append(
+            {
+                "name": name,
+                "scenarios": 4,
+                "jeam_fixed_budget_bias": float(np.mean(fixed_error)),
+                "jeam_fixed_budget_rmse": float(np.sqrt(np.mean(fixed_error**2))),
+                "hssm_posterior_bias": float(np.mean(posterior_error)),
+                "hssm_posterior_rmse": float(np.sqrt(np.mean(posterior_error**2))),
+                "hdi_inclusion_fraction": float(
+                    np.mean([row["hdi_contains_truth"] for row in rows])
+                ),
+                "maximum_rhat": float(max(row["rhat"] for row in rows)),
+                "minimum_bulk_ess": float(min(row["ess_bulk"] for row in rows)),
+                "minimum_tail_ess": float(min(row["ess_tail"] for row in rows)),
+                "maximum_mcse_sd_ratio": float(
+                    max(row["mcse_sd_ratio"] for row in rows)
+                ),
+                "mean_bulk_ess_per_second": float(
+                    np.mean([row["ess_bulk_per_second"] for row in rows])
+                ),
+            }
+        )
+    return result
+
+
+def _science_failures(science: Mapping[str, Any]) -> list[str]:
+    """Evaluate all inclusive gates using only verifier-owned thresholds."""
+    failures: list[str] = []
+    for scenario in science["scenarios"]:
+        name = scenario["name"]
+        predictive, prior = scenario["predictive"], scenario["prior_predictive"]
+        checks = {
+            "objective parity": (
+                scenario["maximum_objective_absolute_error"],
+                THRESHOLDS["objective_absolute_error"],
+            ),
+            "optimizer parameter parity": (
+                scenario["maximum_optimizer_parameter_absolute_error"],
+                THRESHOLDS["optimizer_parameter_absolute_error"],
+            ),
+            "optimizer objective parity": (
+                scenario["optimizer_objective_absolute_error"],
+                THRESHOLDS["optimizer_objective_absolute_error"],
+            ),
+            "posterior predictive mean angle": (
+                predictive["mean_angle_distance"],
+                THRESHOLDS["maximum_mean_angle_distance"],
+            ),
+            "posterior predictive resultant length": (
+                abs(
+                    predictive["predictive_resultant_length"]
+                    - predictive["observed_resultant_length"]
+                ),
+                THRESHOLDS["maximum_resultant_length_absolute_error"],
+            ),
+        }
+        failures.extend(
+            f"{name}: {label}"
+            for label, (value, limit) in checks.items()
+            if value > limit
+        )
+        rt_error = max(
+            abs(predicted - observed)
+            for predicted, observed in zip(
+                predictive["predictive_rt_quantiles"],
+                predictive["observed_rt_quantiles"],
+                strict=True,
+            )
+        )
+        if (
+            predictive["rt_probabilities"] != [0.1, 0.5, 0.9]
+            or rt_error > THRESHOLDS["maximum_rt_quantile_absolute_error"]
+        ):
+            failures.append(f"{name}: posterior predictive RT quantiles")
+        diagnostic = scenario["slice_diagnostics"]
+        if diagnostic["sample_stats"] != ["nstep_in", "nstep_out"]:
+            failures.append(f"{name}: Slice sample statistics")
+        if diagnostic["mean_steps_in"] <= 0.0 or diagnostic["mean_steps_out"] <= 0.0:
+            failures.append(f"{name}: Slice steps")
+        failures.extend(
+            f"{name}: {row['name']} MCSE/SD"
+            for row in scenario["parameters"]
+            if row["mcse_sd_ratio"] > THRESHOLDS["maximum_mcse_sd_ratio"]
+        )
+        expected_point = [
+            1.0,
+            min(0.1, scenario["minimum_observed_rt"] / 2.0),
+            0.0,
+            0.0,
+        ]
+        if scenario["initial_point"] != expected_point:
+            failures.append(f"{name}: resolved initial point support")
+        if not math.isfinite(scenario["initial_logp"]):
+            failures.append(f"{name}: initial logp")
+        if (
+            not prior["all_finite"]
+            or prior["shape"] != [1, 100, 300, 2]
+            or prior["minimum_rt"] <= 0.0
+            or prior["maximum_rt"] < prior["minimum_rt"]
+            or prior["rt_probabilities"] != [0.5, 0.9]
+            or len(prior["prior_to_observed_rt_ratios"]) != 2
+            or any(
+                ratio < THRESHOLDS["minimum_prior_to_observed_rt_ratio"]
+                or ratio > THRESHOLDS["maximum_prior_to_observed_rt_ratio"]
+                for ratio in prior["prior_to_observed_rt_ratios"]
+            )
+            or prior["minimum_angle"] < -np.pi
+            or prior["maximum_angle"] >= np.pi
+            or prior["maximum_angle"] < prior["minimum_angle"]
+        ):
+            failures.append(f"{name}: prior predictive contract")
+
+    for row in science["aggregate"]:
+        name = row["name"]
+        for estimator in ("jeam_fixed_budget", "hssm_posterior"):
+            if (
+                abs(row[f"{estimator}_bias"])
+                > THRESHOLDS["maximum_absolute_bias"][name]
+            ):
+                failures.append(f"{name}: {estimator} bias")
+            if row[f"{estimator}_rmse"] > THRESHOLDS["maximum_rmse"][name]:
+                failures.append(f"{name}: {estimator} RMSE")
+        if row["hdi_inclusion_fraction"] < THRESHOLDS["minimum_hdi_inclusion_fraction"]:
+            failures.append(f"{name}: HDI inclusion fraction")
+        if row["maximum_rhat"] > THRESHOLDS["maximum_rhat"]:
+            failures.append(f"{name}: R-hat")
+        if row["minimum_bulk_ess"] < THRESHOLDS["minimum_bulk_ess"]:
+            failures.append(f"{name}: bulk ESS")
+        if row["minimum_tail_ess"] < THRESHOLDS["minimum_tail_ess"]:
+            failures.append(f"{name}: tail ESS")
+    return failures
+
+
+_SCIENCE_HEADER = tuple(
+    "schema_version benchmark interpretation parameter_order jeam_revision "
+    "pytensor_floatx sampler trials_per_scenario chains tune draws hdi_probability "
+    "prior_draws predictive_draws optimizer_maxiter optimizer_popsize thresholds "
+    "gate".split()
+)
+
+
+def scientific_projection(document: Mapping[str, Any]) -> dict[str, Any]:
+    """Remove timestamps, runtime, and ESS-per-second descriptive telemetry."""
+    projection: dict[str, Any] = {key: document[key] for key in _SCIENCE_HEADER}
+    projection["scenarios"] = [
+        {
+            **{key: value for key, value in scenario.items() if key != "runtime"},
+            "parameters": [
+                {
+                    key: value
+                    for key, value in parameter.items()
+                    if key != "ess_bulk_per_second"
+                }
+                for parameter in scenario["parameters"]
+            ],
+        }
+        for scenario in document["scenarios"]
+    ]
+    projection["aggregate"] = [
+        {key: value for key, value in row.items() if key != "mean_bulk_ess_per_second"}
+        for row in document["aggregate"]
+    ]
+    return projection
+
+
+def _assert_same_science(
+    expected: object, observed: object, path: str = "result"
+) -> None:
+    """Compare a scientific projection recursively with tight numeric tolerance."""
+    if isinstance(expected, Mapping) and isinstance(observed, Mapping):
+        if set(expected) != set(observed):
+            _fail(f"Scientific key mismatch at {path}.")
+        for key in expected:
+            _assert_same_science(expected[key], observed[key], f"{path}.{key}")
+        return
+    if isinstance(expected, list) and isinstance(observed, list):
+        if len(expected) != len(observed):
+            _fail(f"Scientific length mismatch at {path}.")
+        for index, (left, right) in enumerate(zip(expected, observed, strict=True)):
+            _assert_same_science(left, right, f"{path}[{index}]")
+        return
+    if (
+        isinstance(expected, Real)
+        and not isinstance(expected, bool)
+        and isinstance(observed, Real)
+        and not isinstance(observed, bool)
+    ):
+        if not _close(float(expected), float(observed)):
+            _fail(f"Scientific value mismatch at {path}.")
+        return
+    if expected != observed:
+        _fail(f"Scientific value mismatch at {path}.")
+
+
+def _recompute_science(
+    measurements: Mapping[str, Mapping[str, object]],
+    datasets: Mapping[str, np.ndarray],
+    groups: Mapping[str, Mapping[str, xr.Dataset]],
+) -> dict[str, Any]:
+    """Recompute the complete scientific document from primary retained evidence."""
+    scenarios = [
+        _scenario_science(name, measurements[name], datasets[name], groups[name])
+        for name, *_ in SCENARIOS
+    ]
+    protocol = _expected_protocol()
+    science = {
+        "schema_version": 2,
+        "benchmark": (
+            "JEAM fixed circular diffusion four-scenario deterministic recovery smoke"
+        ),
+        "interpretation": (
+            "This deterministic smoke is not a calibration study; its derived report "
+            "is accompanied by hash-bound datasets and raw draws."
+        ),
+        "jeam_revision": EXPECTED_PROVENANCE["jeam_revision"],
+        **{
+            key: value
+            for key, value in protocol.items()
+            if key not in {"schema_version", "result_schema_version", "scenarios"}
+        },
+        "scenarios": scenarios,
+        "aggregate": _aggregate(scenarios),
+    }
+    failures = _science_failures(science)
+    science["gate"] = {"passed": not failures, "failures": failures}
+    return science
+
+
 def verify_integrity(root: str | Path = DEFAULT_BUNDLE) -> dict[str, object]:
     """Verify every canonical byte and raw storage contract."""
     manifest, *_ = _load_verified_bundle(Path(root))
     return manifest
+
+
+def verify_evidence(root: str | Path = DEFAULT_BUNDLE) -> dict[str, object]:
+    """Authenticate the bundle, recompute its science, and enforce every gate."""
+    _, stored, measurements, datasets, groups = _load_verified_bundle(Path(root))
+    science = _recompute_science(measurements, datasets, groups)
+    _assert_same_science(scientific_projection(science), scientific_projection(stored))
+    if failures := science["gate"]["failures"]:
+        _fail(f"Scientific gate failed: {'; '.join(failures)}")
+    inclusions = sum(
+        parameter["hdi_contains_truth"]
+        for scenario in science["scenarios"]
+        for parameter in scenario["parameters"]
+    )
+    return {
+        "artifacts": len(_expected_artifacts()),
+        "scenarios": len(science["scenarios"]),
+        "hdi_inclusions": inclusions,
+        "hdi_total": len(science["scenarios"]) * len(PARAMETERS),
+        "gate": "passed",
+    }
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -575,11 +1091,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Verify the bundle and return a process-compatible status."""
     root = _parse_args(argv).bundle
     try:
-        verify_integrity(root)
+        report = verify_evidence(root)
     except (EvidenceMismatch, OSError) as error:
         print(f"JEAM evidence verification failed: {error}", file=sys.stderr)
         return 1
-    print(json.dumps({"artifacts": 14, "integrity": "passed"}, sort_keys=True))
+    print(json.dumps(report, sort_keys=True))
     return 0
 
 
