@@ -55,9 +55,7 @@ jobs:
           # against. The page says so in its own text. Everything else runs —
           # this workflow is dispatch/drift-only, so "too heavy for the PR
           # check" no longer applies: there is no PR check.
-          SKIP_NOTEBOOKS=(
-            "docs/tutorials/tutorial_bayeux.ipynb"
-          )
+          mapfile -t SKIP_NOTEBOOKS < .github/notebook-skip-list.txt
 
           EXIT_CODE=0
           INDEX=0

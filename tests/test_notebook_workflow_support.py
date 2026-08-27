@@ -54,9 +54,21 @@ class NotebookTargetTests(unittest.TestCase):
             text=True,
         )
         self.good = self.root / "docs" / "tutorials" / "good.ipynb"
+        self.skipped = self.root / "docs" / "tutorials" / "skipped.ipynb"
         _write_notebook(self.good)
+        _write_notebook(self.skipped)
+        skip_list = self.root / ".github" / "notebook-skip-list.txt"
+        skip_list.parent.mkdir(parents=True)
+        skip_list.write_text("docs/tutorials/skipped.ipynb\n")
         subprocess.run(
-            ["git", "-C", str(self.root), "add", "docs/tutorials/good.ipynb"],
+            [
+                "git",
+                "-C",
+                str(self.root),
+                "add",
+                "docs/tutorials/good.ipynb",
+                "docs/tutorials/skipped.ipynb",
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -89,6 +101,13 @@ class NotebookTargetTests(unittest.TestCase):
 
         with self.assertRaisesRegex(NotebookTargetError, "does not exist"):
             validate_notebook_target("docs/tutorials/good.ipynb", repo_root=self.root)
+
+    def test_rejects_a_notebook_disabled_by_ci_policy(self) -> None:
+        """Apply the shared full-suite skip policy to targeted runs."""
+        with self.assertRaisesRegex(NotebookTargetError, "CI skip policy"):
+            validate_notebook_target(
+                "docs/tutorials/skipped.ipynb", repo_root=self.root
+            )
 
     def test_rejects_a_symlink_that_escapes_docs(self) -> None:
         """Resolve symlinks before enforcing the documentation root."""
@@ -178,6 +197,15 @@ class ExecutedNotebookTests(unittest.TestCase):
             notebook.write_text("not json")
 
             with self.assertRaisesRegex(ExecutedNotebookError, "cannot read"):
+                execution_errors(notebook)
+
+    def test_rejects_a_non_object_notebook_root(self) -> None:
+        """Return a controlled error for valid JSON with the wrong root type."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            notebook = pathlib.Path(temp_dir) / "list.ipynb"
+            notebook.write_text("[]")
+
+            with self.assertRaisesRegex(ExecutedNotebookError, "not a JSON object"):
                 execution_errors(notebook)
 
 

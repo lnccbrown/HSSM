@@ -17,9 +17,11 @@ class ExecutedNotebookError(ValueError):
 def execution_errors(notebook: pathlib.Path) -> list[str]:
     """Return ordered summaries for all code-cell error outputs."""
     try:
-        content: dict[str, Any] = json.loads(notebook.read_text())
+        content: Any = json.loads(notebook.read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise ExecutedNotebookError(f"cannot read {notebook}: {error}") from error
+    if not isinstance(content, dict):
+        raise ExecutedNotebookError(f"{notebook} notebook root is not a JSON object")
 
     cells = content.get("cells")
     if not isinstance(cells, list):

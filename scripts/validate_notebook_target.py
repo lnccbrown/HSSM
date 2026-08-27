@@ -9,6 +9,7 @@ import subprocess
 import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+SKIP_LIST = pathlib.Path(".github/notebook-skip-list.txt")
 
 
 class NotebookTargetError(ValueError):
@@ -57,6 +58,18 @@ def validate_notebook_target(
         raise NotebookTargetError("the resolved path escapes docs/")
     if not candidate.is_file():
         raise NotebookTargetError("the requested notebook does not exist")
+
+    skip_list = root / SKIP_LIST
+    try:
+        skipped_notebooks = set(skip_list.read_text().splitlines())
+    except OSError as error:
+        raise NotebookTargetError(
+            f"cannot read the notebook skip policy at {SKIP_LIST}"
+        ) from error
+    if target in skipped_notebooks:
+        raise NotebookTargetError(
+            "the requested notebook is disabled by the notebook CI skip policy"
+        )
 
     tracked = subprocess.run(
         ["git", "-C", str(root), "ls-files", "--error-unmatch", "--", target],
