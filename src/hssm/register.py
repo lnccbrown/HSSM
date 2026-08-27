@@ -6,6 +6,7 @@ from typing import Any, cast
 from ._types import (
     DefaultConfig,
     LoglikConfigs,
+    LoglikKind,
     ResponseKind,
     SupportedModels,
 )
@@ -24,6 +25,7 @@ def register_model(
     response_kind: ResponseKind = "categorical",
     response_bounds: dict[str, tuple[float, float]] | None = None,
     rv: Any | None = None,
+    default_loglik_kind: LoglikKind | None = None,
 ) -> None:
     """Register a new model in HSSM.
 
@@ -47,6 +49,8 @@ def register_model(
         Optional bounds keyed by non-RT response column.
     rv : optional
         RandomVariable or simulator callable used for predictive sampling.
+    default_loglik_kind : optional
+        Explicit likelihood kind selected when callers do not provide one.
 
     Returns
     -------
@@ -60,6 +64,11 @@ def register_model(
     # Ensure no collisions with existing models
     if name in registered_models:
         raise ValueError(f"Model '{name}' already exists")
+    if default_loglik_kind is not None and default_loglik_kind not in likelihoods:
+        raise ValueError(
+            f"Default likelihood kind {default_loglik_kind!r} is not registered "
+            f"for model {name!r}."
+        )
 
     _config: dict[str, Any] = {
         "response": response,
@@ -74,6 +83,8 @@ def register_model(
         _config["response_bounds"] = response_bounds
     if rv is not None:
         _config["rv"] = rv
+    if default_loglik_kind is not None:
+        _config["default_loglik_kind"] = default_loglik_kind
     config = cast("DefaultConfig", _config)
 
     # TODO: validate provided configs?

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-JEAM_REVISION = "a9f547b3630ae8ff31ccec1b904e0c02fdba6d99"
+JEAM_REVISION = "ede7a4f4faf226e4dae52c84dfb01012939cccdc"
 
 
 def _repository(tmp_path: Path) -> tuple[Path, Path, Path]:

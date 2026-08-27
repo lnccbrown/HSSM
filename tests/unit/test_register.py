@@ -30,6 +30,7 @@ def test_register_model_preserves_non_categorical_metadata():
             response_kind="circular",
             response_bounds={"response": (-3.14, 3.14)},
             rv=simulator,
+            default_loglik_kind="blackbox",
             description="A registration-contract test model",
             likelihoods={
                 "blackbox": {
@@ -42,7 +43,7 @@ def test_register_model_preserves_non_categorical_metadata():
             },
         )
 
-        config = Config.from_defaults(name, "blackbox")
+        config = Config.from_defaults(name, None)
 
         assert config.choices is None
         assert config.response_kind == "circular"
@@ -51,6 +52,28 @@ def test_register_model_preserves_non_categorical_metadata():
         config.validate()
     finally:
         registered_models.pop(name, None)
+
+
+def test_register_model_rejects_an_unregistered_default_likelihood():
+    """An explicit default must identify one of the supplied likelihood configs."""
+    with pytest.raises(ValueError, match="is not registered"):
+        register_model(
+            name="invalid_default_likelihood_test_model",
+            response=["rt", "response"],
+            list_params=["v"],
+            choices=[-1, 1],
+            description=None,
+            default_loglik_kind="approx_differentiable",
+            likelihoods={
+                "blackbox": {
+                    "loglik": lambda data, v: data[:, 0] * 0.0 + v * 0.0,
+                    "backend": None,
+                    "bounds": {"v": (-1.0, 1.0)},
+                    "default_priors": {},
+                    "extra_fields": None,
+                }
+            },
+        )
 
 
 @pytest.mark.slow
