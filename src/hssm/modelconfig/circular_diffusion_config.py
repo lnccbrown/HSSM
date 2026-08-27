@@ -47,6 +47,7 @@ def get_circular_diffusion_config() -> DefaultConfig:
                     "t": (0.0, 2.0),
                 },
                 "extra_fields": None,
+                "supported_samplers": ("pymc", "numpyro"),
             },
             "blackbox": {
                 "loglik": logp_circular_diffusion,
@@ -64,6 +65,7 @@ def get_circular_diffusion_config() -> DefaultConfig:
                     "t": (0.0, 2.0),
                 },
                 "extra_fields": None,
+                "supported_samplers": ("pymc",),
             },
         },
     }
