@@ -8,8 +8,9 @@ notebook with::
         marimo edit docs/tutorials/jeam_circular_diffusion.py
 
 The default two-chain fit is intentionally small enough for an interactive tutorial.
-For a longer local run, set ``FULL_RUN=1`` before starting marimo. The repeated-recovery
-benchmark in ``docs/tutorials/jeam_repeated_recovery.py`` remains the scientific gate.
+For a longer local run, set ``FULL_RUN=1`` before starting marimo. The artifact-backed,
+four-scenario report in ``docs/tutorials/jeam_repeated_recovery.py`` provides the broader
+recovery smoke evidence; it is not simulation-based calibration.
 """
 
 # ruff: noqa: B018, D401, E501, PLR1711
@@ -63,7 +64,7 @@ def _(mo):
     mo.md(r"""
     # Fit a circular diffusion model with HSSM and JEAM
 
-    This tutorial exercises the complete prototype handshake: simulate angular
+    This tutorial exercises the complete black-box prototype handshake: simulate angular
     responses with JEAM, construct an **ordinary `hssm.HSSM` object**, verify its
     likelihood numerically against JEAM, fit it with a gradient-free sampler, and
     perform posterior predictive checks.
@@ -106,6 +107,10 @@ def _(mo):
     FULL_RUN=1 uv run --group docs --group jeam-prototype \
       marimo edit docs/tutorials/jeam_circular_diffusion.py
     ```
+
+    `FULL_RUN=1` only lengthens this one illustrative two-chain analysis. It does
+    not reproduce the artifact-backed four-scenario recovery smoke or establish
+    simulation-based calibration.
     """)
     return
 
@@ -275,6 +280,7 @@ def _(data, hssm):
     circular_model = hssm.HSSM(
         data=data,
         model="circular_diffusion",
+        loglik_kind="blackbox",
         p_outlier=None,
     )
     return (circular_model,)
@@ -287,7 +293,9 @@ def _(mo):
 
     No `HSSMCircular` subclass is involved. HSSM discovers the likelihood,
     simulator, bounds, and response semantics from the registered
-    `circular_diffusion` model configuration.
+    `circular_diffusion` model configuration. This walkthrough selects the
+    `blackbox` likelihood explicitly so its sampler guidance remains local to
+    that route.
     """)
     return
 
@@ -321,6 +329,7 @@ def _(RUN_CONFIG, data, hssm):
     _prior_check_model = hssm.HSSM(
         data=data,
         model="circular_diffusion",
+        loglik_kind="blackbox",
         p_outlier=None,
     )
     prior_predictive = _prior_check_model.sample_prior_predictive(
@@ -490,18 +499,18 @@ def _(mo):
     mo.md(r"""
     ## 4. Fit with explicit PyMC Slice steps
 
-    This likelihood crosses a Python/NumPy black-box boundary and does **not** provide
-    gradients to PyTensor. Consequently:
+    This explicitly selected `blackbox` likelihood crosses a Python/NumPy boundary and
+    does **not** provide gradients to PyTensor. Consequently, for this route:
 
     - this tutorial uses one explicit PyMC `Slice` step per parameter;
     - NUTS, JAX NUTS (`numpyro`, `blackjax`, or `nutpie`), and variational inference
-      are not supported by this prototype;
+      are not available;
     - `cores=1` keeps the notebook portable and reproducible; and
     - `p_outlier=None` is required because HSSM's categorical lapse mixture is not a
       density over continuous angles.
 
     The short default run demonstrates the workflow. It is not a replacement for the
-    four-scenario, predeclared recovery benchmark in
+    artifact-backed, schema-v2 four-scenario deterministic recovery smoke in
     `docs/tutorials/jeam_repeated_recovery.py`.
     """)
     return
@@ -946,12 +955,13 @@ def _(mo):
     1. run `FULL_RUN=1` and require satisfactory diagnostics for your data;
     2. choose and justify domain-specific priors;
     3. compare posterior predictions to all scientifically important summaries;
-    4. consult `docs/tutorials/jeam_repeated_recovery.py` for the predeclared
-       multi-dataset recovery evidence; and
+    4. consult `docs/tutorials/jeam_repeated_recovery.py` for the artifact-backed,
+       four-scenario deterministic recovery smoke (not calibration); and
     5. retain the exact JEAM revision in the analysis environment.
 
     The integration remains deliberately narrow: fixed CDM, two-dimensional angular
-    responses, no lapse mixture, and gradient-free PyMC sampling.
+    responses, no lapse mixture, and a black-box likelihood with gradient-free PyMC
+    Slice sampling.
     """)
     return
 
