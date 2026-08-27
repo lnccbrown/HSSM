@@ -30,8 +30,8 @@ BOUNDS = {
     "a": (0.1, 3.0),
     "t": (0.0, 2.0),
 }
-# HSSM test modules may select float32 globally during collection. Allow several
-# float32 ULPs while keeping the direct adapter comparisons at float64 precision.
+# Allow small linker round-trip differences while keeping direct adapter comparisons
+# at exact float64 precision.
 COMPILED_RTOL = 5e-7
 COMPILED_ATOL = 5e-7
 JAX_RTOL = 2e-5
@@ -39,6 +39,18 @@ JAX_ATOL = 2e-6
 GRADIENT_RTOL = 2e-4
 GRADIENT_ATOL = 1e-5
 PYTHON_MODE = Mode(linker="py", optimizer="fast_compile")
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _pin_fixed_cdm_x64():
+    """Run fixed-CDM JAX checks in their supported precision mode."""
+    original_floatx = pytensor.config.floatX
+    original_jax_x64 = jax.config.jax_enable_x64
+    pytensor.config.floatX = "float64"
+    jax.config.update("jax_enable_x64", True)
+    yield
+    pytensor.config.floatX = original_floatx
+    jax.config.update("jax_enable_x64", original_jax_x64)
 
 
 def _make_analytical_distribution():
@@ -66,6 +78,26 @@ def test_jax_adapter_preserves_the_batched_data_contract():
 
     np.testing.assert_allclose(observed, expected, rtol=0.0, atol=0.0)
     assert observed.shape == (2,)
+
+
+def test_jax_adapter_preserves_jeam_x64_guard():
+    """The HSSM wrapper must not bypass or mutate JEAM's precision contract."""
+    jax.config.update("jax_enable_x64", False)
+    try:
+        with pytest.raises(
+            RuntimeError,
+            match=r"requires JAX x64 execution.*jax_enable_x64.*disabled",
+        ):
+            logp_circular_diffusion_jax(
+                jnp.asarray([[0.37, -0.65]]),
+                0.45,
+                -0.30,
+                1.20,
+                0.08,
+            )
+        assert jax.config.jax_enable_x64 is False
+    finally:
+        jax.config.update("jax_enable_x64", True)
 
 
 def test_jax_adapter_broadcasts_scalar_and_trialwise_parameters_in_row_order():

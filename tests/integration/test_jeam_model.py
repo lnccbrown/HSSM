@@ -6,8 +6,22 @@ import pytest
 
 pytest.importorskip("jeam")
 
+import jax
+import pytensor
+
 import hssm
 from hssm.integrations.jeam import simulate_circular_diffusion
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _pin_fixed_cdm_x64():
+    """Construct analytical models in JEAM's supported precision mode."""
+    original_floatx = pytensor.config.floatX
+    original_jax_x64 = jax.config.jax_enable_x64
+    hssm.set_floatX("float64")
+    yield
+    pytensor.config.floatX = original_floatx
+    jax.config.update("jax_enable_x64", original_jax_x64)
 
 
 def test_simulated_circular_data_builds_an_ordinary_hssm_model():
