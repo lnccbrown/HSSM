@@ -75,7 +75,35 @@ packages installed for additional features such as sampling with `blackjax` or G
 for `JAX`. Please follow the instructions below if you need any of these additional
 features:
 
-### 1. Sampling with JAX through `numpyro`, `nutpie` or `blackjax`
+### Experimental circular diffusion with JEAM
+
+The experimental `circular_diffusion` model is available only from an HSSM source
+checkout that contains the integration. Install its dependency with:
+
+```bash
+uv sync --group jeam-prototype
+```
+
+The group resolves the HSSM fork of JEAM at the immutable commit
+[`a9f547b3630ae8ff31ccec1b904e0c02fdba6d99`](https://github.com/AlexanderFengler/JEAM/commit/a9f547b3630ae8ff31ccec1b904e0c02fdba6d99).
+To run the [circular-diffusion tutorial](../tutorials/jeam_circular_diffusion.py),
+also install the documentation dependencies:
+
+```bash
+uv sync --group docs --group jeam-prototype
+uv run --group docs --group jeam-prototype \
+  marimo edit docs/tutorials/jeam_circular_diffusion.py
+```
+
+This is deliberately a uv dependency group, not a published package extra. JEAM does
+not yet have the versioned release needed for stable HSSM package metadata, so the
+prototype pins the audited Git revision through `[tool.uv.sources]`. Dependency groups
+are source-checkout tooling and are omitted from HSSM's built wheel metadata. Therefore:
+
+- installing ordinary HSSM does not install or import JEAM; and
+- `pip install hssm[jeam]` is not supported yet.
+
+### Sampling with JAX through `numpyro`, `nutpie` or `blackjax`
 
 JAX-based sampling is done through `numpyro`, `nutpie`, or `blackjax`. `numpyro` is installed as
 a dependency by default. You need to have `blackjax` installed if you want to use the
@@ -85,7 +113,7 @@ a dependency by default. You need to have `blackjax` installed if you want to us
 pip install blackjax nutpie
 ```
 
-### 2. Visualizing the model with `graphviz`
+### Visualizing the model with `graphviz`
 
 Model graphs are created with `model.graph()` through `graphviz`. You need to have
 the Graphviz binaries available on your `PATH` (the `dot` command) and then install
