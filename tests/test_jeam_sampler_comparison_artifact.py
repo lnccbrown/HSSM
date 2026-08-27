@@ -2,12 +2,21 @@
 
 import hashlib
 import json
+import shutil
 import statistics
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import pytest
+
+from scripts.verify_jeam_sampler_comparison_evidence import (
+    SamplerEvidenceMismatch,
+    load_verified_sampler_comparison,
+)
+from scripts.verify_jeam_sampler_comparison_evidence import (
+    main as verify_sampler_evidence,
+)
 
 REPO_ROOT = Path(__file__).parents[1]
 SPEC_PATH = (
@@ -19,6 +28,28 @@ ARTIFACT_PATH = (
 EXPECTED_SPEC_REVISION = "e8d0e45de1a72d9a3682cf165bb13f3d5b57c474"
 EXPECTED_PRODUCER_REVISION = "8bd70a873e856d2b876acddf1371e2776a8f0cca"
 EXPECTED_JEAM_REVISION = "0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce"
+EXPECTED_ARTIFACT_SHA256 = (
+    "35b154b55228ca179c14d89f39491ba9d1a9d0b27a3c8b4131e842f99abf5d39"
+)
+EXPECTED_ADDENDUM_SHA256 = (
+    "15adf910a626c87d14a73d7b937b257793693beafb71ccaca76a657eba56299d"
+)
+EXPECTED_SCALE_SHA256 = (
+    "253a16585d6c2bb0b0aa91f8b6fbaabd5609e284a1d2d2bad61bc97266d9e826"
+)
+ADDENDUM_PATH = (
+    REPO_ROOT
+    / "benchmarks"
+    / "results"
+    / "jeam_fixed_cdm_sampler_comparison_v1_addendum.json"
+)
+SCALE_PATH = (
+    REPO_ROOT
+    / "benchmarks"
+    / "evidence"
+    / "jeam_fixed_cdm_sampler_comparison_v1"
+    / "baseline_asymmetric_scale_1500.npy"
+)
 
 
 @pytest.fixture(scope="module")
@@ -31,6 +62,12 @@ def spec():
 def artifact():
     """Load compact evidence without importing HSSM or optional JEAM."""
     return json.loads(ARTIFACT_PATH.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def verified_evidence():
+    """Authenticate and independently derive the compact evidence boundary."""
+    return load_verified_sampler_comparison()
 
 
 def _sha256(path: Path) -> str:
@@ -47,6 +84,7 @@ def _circular_distance(first: float, second: float) -> float:
 
 def test_artifact_postdates_and_identifies_the_frozen_protocol(spec, artifact):
     """The result must be complete and tied to immutable producer inputs."""
+    assert _sha256(ARTIFACT_PATH) == EXPECTED_ARTIFACT_SHA256
     assert artifact["schema_version"] == spec["schema_version"] == 1
     assert artifact["study_id"] == spec["study_id"]
     assert artifact["status"] == "canonical-complete"
@@ -67,8 +105,8 @@ def test_artifact_postdates_and_identifies_the_frozen_protocol(spec, artifact):
     assert artifact["execution"] == spec["execution"]
 
 
-def test_data_and_shared_preflight_are_recomputed_from_raw_rows(spec, artifact):
-    """Dataset, prior, and objective gates must not trust stored PASS flags."""
+def test_data_and_shared_preflight_are_recomputed_from_compact_rows(spec, artifact):
+    """Compact dataset, prior, and objective rows must not trust PASS flags."""
     scenarios = {row["name"]: row for row in spec["scenarios"]}
     data_rows = {row["scenario"]: row for row in artifact["data"]}
     preflight_rows = {row["scenario"]: row for row in artifact["shared_preflight"]}
@@ -134,8 +172,8 @@ def test_data_and_shared_preflight_are_recomputed_from_raw_rows(spec, artifact):
         assert observed_maximum <= objective_gate["maximum_absolute_error"]
 
 
-def test_every_fit_preserves_raw_diagnostics_and_trace_evidence(spec, artifact):
-    """Recompute derived fit fields before applying any scientific thresholds."""
+def test_every_fit_preserves_compact_diagnostics_and_trace_metadata(spec, artifact):
+    """Recompute compact fit fields while treating trace entries as metadata."""
     scenarios = {row["name"]: row for row in spec["scenarios"]}
     samplers = {row["id"]: row for row in spec["samplers"]}
     data_hashes = {row["scenario"]: row["sha256"] for row in artifact["data"]}
@@ -376,3 +414,75 @@ def test_promotion_gate_is_recomputed_from_local_efficiency_rows(spec, artifact)
         assert stored["passed"] is True
         assert stored["decision"] == "recommend default"
         assert stored["failures"] == []
+
+
+def test_addendum_freezes_historical_and_current_evidence_scopes(verified_evidence):
+    """The sidecar must not turn the historical result into a current-stack claim."""
+    assert _sha256(ADDENDUM_PATH) == EXPECTED_ADDENDUM_SHA256
+    assert verified_evidence["evidence_class"] == (
+        "authenticated compact-only smoke benchmark"
+    )
+    assert verified_evidence["jeam_revisions"] == {
+        "historical_analytical_result": ("0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce"),
+        "durable_blackbox_reference": ("a9f547b3630ae8ff31ccec1b904e0c02fdba6d99"),
+        "current_safety_revision": ("ede7a4f4faf226e4dae52c84dfb01012939cccdc"),
+    }
+    assert verified_evidence["counts"] == {
+        "scenarios": 5,
+        "canonical_scenarios": 4,
+        "samplers": 3,
+        "fits": 15,
+        "canonical_scenario_parameter_truths": 16,
+        "canonical_route_hdi_checks": 48,
+        "canonical_route_hdi_inclusions": 48,
+        "canonical_nuts_fits": 8,
+        "all_nuts_fits": 10,
+        "all_nuts_divergences": 0,
+        "trace_records": 15,
+        "retained_trace_files": 0,
+    }
+    assert verified_evidence["ecosystem_promotion"]["blocked"] is True
+
+
+def test_addendum_binds_durable_canonical_and_reconstructed_scale_data(
+    verified_evidence,
+):
+    """All study inputs are durable without mislabeling reconstructed scale bytes."""
+    assert _sha256(SCALE_PATH) == EXPECTED_SCALE_SHA256
+    scale = np.load(SCALE_PATH, allow_pickle=False)
+    baseline_path = (
+        REPO_ROOT
+        / "benchmarks/evidence/jeam_repeated_recovery_v2/scenarios"
+        / "baseline_asymmetric/dataset.npy"
+    )
+    baseline = np.load(baseline_path, allow_pickle=False)
+    assert scale.shape == (1500, 2)
+    assert scale.dtype.str == "<f8"
+    np.testing.assert_array_equal(scale[:300], baseline)
+    assert verified_evidence["reconstructed_scale_dataset_sha256"] == (
+        EXPECTED_SCALE_SHA256
+    )
+    retention = verified_evidence["retention"]
+    assert retention["historical_scale_dataset_bytes_retained"] is False
+    assert retention["post_hoc_scale_dataset_bytes_retained"] is True
+
+
+def test_verifier_authenticates_before_parsing_mutated_result(tmp_path):
+    """A coordinated-looking compact edit cannot cross the pinned hash boundary."""
+    copied = tmp_path / "benchmarks"
+    shutil.copytree(REPO_ROOT / "benchmarks", copied)
+    result_path = copied / "results/jeam_fixed_cdm_sampler_comparison_v1.json"
+    mutated = result_path.read_bytes().replace(b'"passed": true', b'"passed":false', 1)
+    result_path.write_bytes(mutated)
+
+    with pytest.raises(SamplerEvidenceMismatch, match="SHA256 mismatch"):
+        load_verified_sampler_comparison(tmp_path)
+
+
+def test_verifier_cli_never_upgrades_compact_evidence(capsys):
+    """The user-facing summary must retain the promotion blocker."""
+    assert verify_sampler_evidence([]) == 0
+    output = capsys.readouterr().out
+    assert "compact-only sampler evidence PASS" in output
+    assert "promotion blocked" in output
+    assert "durable analytical" not in output
