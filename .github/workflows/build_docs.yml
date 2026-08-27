@@ -4,23 +4,35 @@ on:
   pull_request:
     paths:
       - ".github/workflows/build_docs.yml"
+      - "benchmarks/evidence/jeam_fixed_cdm_sampler_comparison_v1/**"
       - "benchmarks/evidence/jeam_repeated_recovery_v2/**"
+      - "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1.json"
+      - "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1_addendum.json"
+      - "benchmarks/specs/jeam_fixed_cdm_sampler_comparison_v1.json"
       - "docs/**"
       - "mkdocs.yml"
       - "pyproject.toml"
       - "scripts/jeam_repeated_recovery_report.py"
+      - "scripts/jeam_sampler_comparison_report.py"
       - "scripts/verify_jeam_repeated_recovery_evidence.py"
+      - "scripts/verify_jeam_sampler_comparison_evidence.py"
       - "src/hssm/**"
   push:
     branches: [main]
     paths:
       - ".github/workflows/build_docs.yml"
+      - "benchmarks/evidence/jeam_fixed_cdm_sampler_comparison_v1/**"
       - "benchmarks/evidence/jeam_repeated_recovery_v2/**"
+      - "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1.json"
+      - "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1_addendum.json"
+      - "benchmarks/specs/jeam_fixed_cdm_sampler_comparison_v1.json"
       - "docs/**"
       - "mkdocs.yml"
       - "pyproject.toml"
       - "scripts/jeam_repeated_recovery_report.py"
+      - "scripts/jeam_sampler_comparison_report.py"
       - "scripts/verify_jeam_repeated_recovery_evidence.py"
+      - "scripts/verify_jeam_sampler_comparison_evidence.py"
       - "src/hssm/**"
   release:
     types: [published]
@@ -64,8 +76,45 @@ jobs:
             echo "JEAM recovery report contains a host path or execution error"
             exit 1
           fi
+      - name: Validate archived JEAM sampler report
+        env:
+          MPLCONFIGDIR: /tmp/hssm-jeam-sampler-report-matplotlib
+          XDG_CACHE_HOME: /tmp/hssm-jeam-sampler-report-cache
+        run: |
+          mkdir -p "$MPLCONFIGDIR" "$XDG_CACHE_HOME"
+          uv run --group docs marimo check --strict docs/tutorials/jeam_nuts_recovery.py
+          uv run --group docs marimo export html docs/tutorials/jeam_nuts_recovery.py \
+            -o /tmp/jeam-nuts-recovery.html --force --no-include-code \
+            > /tmp/jeam-nuts-recovery-export.log 2>&1
+          cat /tmp/jeam-nuts-recovery-export.log
+          grep -Fq "16 unique truths" /tmp/jeam-nuts-recovery.html
+          grep -Fq "48/48 route HDI checks" /tmp/jeam-nuts-recovery.html
+          grep -Fq "Promotion remains blocked" /tmp/jeam-nuts-recovery.html
+          if grep -Eq '/Users/|/home/|/private/|/var/folders/|file://|Traceback|MarimoExceptionRaisedError|ModuleNotFoundError' \
+            /tmp/jeam-nuts-recovery.html /tmp/jeam-nuts-recovery-export.log; then
+            echo "JEAM sampler report contains a host path or execution error"
+            exit 1
+          fi
       - name: Build docs (strict)
-        run: uv run --group notebook --group docs mkdocs build --strict
+        env:
+          MPLCONFIGDIR: /tmp/hssm-jeam-sampler-report-matplotlib
+          XDG_CACHE_HOME: /tmp/hssm-jeam-sampler-report-cache
+        run: |
+          mkdir -p "$MPLCONFIGDIR" "$XDG_CACHE_HOME"
+          uv run --group notebook --group docs mkdocs build --strict
+          report_page=site/tutorials/jeam_nuts_recovery/index.html
+          grep -Fq "16 unique truths" "$report_page"
+          grep -Fq "48/48 route HDI checks" "$report_page"
+          grep -Fq "Promotion remains blocked" "$report_page"
+          if [ "$(grep -o 'data:image/png' "$report_page" | wc -l)" -lt 7 ]; then
+            echo "Built JEAM sampler report is missing figure outputs"
+            exit 1
+          fi
+          if grep -Eq '/Users/|/home/|/private/|/var/folders/|file://|Traceback|MarimoExceptionRaisedError|ModuleNotFoundError' \
+            "$report_page"; then
+            echo "Built JEAM sampler report contains contamination"
+            exit 1
+          fi
 
   deploy:
     if: github.event_name == 'release' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'

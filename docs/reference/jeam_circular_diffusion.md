@@ -134,6 +134,27 @@ both likelihoods against direct JEAM, compiles the analytical parameter gradient
 lets users fit the same simulated dataset with blackbox/PyMC Slice, analytical/PyMC
 NUTS, or analytical/NumPyro NUTS before running diagnostics and predictive checks.
 
+### Archived sampler-comparison evidence
+
+The artifact-backed [fixed-CDM sampler report](../tutorials/jeam_nuts_recovery.py)
+renders a historical compact result without importing HSSM or JEAM and without running
+sampling. On the recorded macOS ARM machine, all 15 fits completed, all 16 unique
+scenario-parameter truths fell inside every route's interval (48/48 route HDI checks),
+both analytical NUTS routes reported zero divergences, and both passed the predeclared
+machine-local efficiency thresholds. Those observations are a bounded recovery smoke
+benchmark, not simulation-based calibration or portable performance evidence.
+
+The comparison's analytical fits were produced with JEAM
+[`0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce`](https://github.com/AlexanderFengler/JEAM/commit/0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce),
+not the currently pinned safety revision `ede7a4f4`. The blackbox reference is separately
+anchored by the durable repeated-recovery bundle produced with JEAM
+[`a9f547b3630ae8ff31ccec1b904e0c02fdba6d99`](https://github.com/AlexanderFengler/JEAM/commit/a9f547b3630ae8ff31ccec1b904e0c02fdba6d99).
+Ecosystem promotion remains blocked because the current JEAM revision has not been rerun
+and the historical raw posterior traces, raw prior- and posterior-predictive draws,
+sampler-backend trace attributes, and `uv.lock` bytes were not retained. Consequently,
+this report does not change HSSM's default, the blackbox/Slice fallback, or the
+“not yet recommended” status of either analytical NUTS route above.
+
 ## Current boundary
 
 The prototype supports only the fixed circular diffusion model described above. It does
