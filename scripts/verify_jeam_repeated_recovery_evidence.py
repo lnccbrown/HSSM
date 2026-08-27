@@ -1059,13 +1059,21 @@ def verify_integrity(root: str | Path = DEFAULT_BUNDLE) -> dict[str, object]:
     return manifest
 
 
-def verify_evidence(root: str | Path = DEFAULT_BUNDLE) -> dict[str, object]:
-    """Authenticate the bundle, recompute its science, and enforce every gate."""
-    _, stored, measurements, datasets, groups = _load_verified_bundle(Path(root))
+def load_verified_evidence(
+    root: str | Path = DEFAULT_BUNDLE,
+) -> tuple[dict[str, object], dict[str, Any]]:
+    """Return the authenticated manifest and independently recomputed science."""
+    manifest, stored, measurements, datasets, groups = _load_verified_bundle(Path(root))
     science = _recompute_science(measurements, datasets, groups)
     _assert_same_science(scientific_projection(science), scientific_projection(stored))
     if failures := science["gate"]["failures"]:
         _fail(f"Scientific gate failed: {'; '.join(failures)}")
+    return manifest, science
+
+
+def verify_evidence(root: str | Path = DEFAULT_BUNDLE) -> dict[str, object]:
+    """Authenticate the bundle, recompute its science, and enforce every gate."""
+    _, science = load_verified_evidence(root)
     inclusions = sum(
         parameter["hdi_contains_truth"]
         for scenario in science["scenarios"]
