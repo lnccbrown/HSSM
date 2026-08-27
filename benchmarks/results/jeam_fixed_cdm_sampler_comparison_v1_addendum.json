@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "addendum_id": "jeam-fixed-cdm-sampler-comparison-v1-provenance-addendum-1",
+  "study_id": "jeam-fixed-cdm-sampler-comparison-v1",
+  "status": "compact-evidence-authenticated-promotion-blocked",
+  "interpretation": {
+    "study_class": "fixed-CDM sampler smoke benchmark, not a calibration study",
+    "numeric_contract": "PyTensor float64 with JAX x64 enabled",
+    "recorded_machine": "macOS arm64 with the JAX CPU backend",
+    "portability": "scientific smoke results and recorded-machine timings are not portable performance or calibration evidence"
+  },
+  "authenticated_inputs": {
+    "specification": {
+      "path": "benchmarks/specs/jeam_fixed_cdm_sampler_comparison_v1.json",
+      "sha256": "a09b5760ede85bae4b1869c0cb98d8ba9bb78d09032f9e62221dbafe74b3d0e5"
+    },
+    "compact_result": {
+      "path": "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1.json",
+      "sha256": "35b154b55228ca179c14d89f39491ba9d1a9d0b27a3c8b4131e842f99abf5d39"
+    },
+    "durable_blackbox_manifest": {
+      "path": "benchmarks/evidence/jeam_repeated_recovery_v2/manifest.json",
+      "sha256": "d8a5c458d2194f1fb7031f6bc5ca5add3cd67afabd028880dc0bfed887ef9972",
+      "result_schema_version": 2,
+      "verification_api": "scripts.verify_jeam_repeated_recovery_evidence.verify_integrity"
+    },
+    "reconstructed_scale_dataset": {
+      "path": "benchmarks/evidence/jeam_fixed_cdm_sampler_comparison_v1/baseline_asymmetric_scale_1500.npy",
+      "sha256": "253a16585d6c2bb0b0aa91f8b6fbaabd5609e284a1d2d2bad61bc97266d9e826",
+      "shape": [
+        1500,
+        2
+      ],
+      "dtype": "<f8",
+      "exact_prefix_scenario": "baseline_asymmetric",
+      "exact_prefix_rows": 300
+    }
+  },
+  "jeam_revisions": {
+    "historical_analytical_result": {
+      "revision": "0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce",
+      "role": "producer used for the recorded sampler comparison"
+    },
+    "durable_blackbox_reference": {
+      "revision": "a9f547b3630ae8ff31ccec1b904e0c02fdba6d99",
+      "role": "producer authenticated by the retained schema-v2 repeated-recovery bundle"
+    },
+    "current_safety_revision": {
+      "revision": "ede7a4f4faf226e4dae52c84dfb01012939cccdc",
+      "role": "current supported producer safety revision",
+      "sampler_comparison_rerun": false
+    }
+  },
+  "dataset_binding": {
+    "canonical_scenario_sha256": {
+      "baseline_asymmetric": "35a870cd1816f5d742e55fc7d17092146846d8b7b48f0a1fb7b874eeb518703e",
+      "high_threshold_strong_drift": "f1a39603d1ff5f44011d6c9aab22a411b79e502215656e8552e3c80f2592a05b",
+      "low_threshold_negative_drift": "c29446378351ae39b8542a9d05d727034ab5712a1ecfdc27a6875d1c66aecfea",
+      "reversed_drift": "4390c0ee3c207b62b87203bd44360e974b987b52993173030e194fccf923a0b8"
+    },
+    "canonical_dataset_source": "authenticated schema-v2 repeated-recovery manifest",
+    "scale_dataset_historically_retained": false,
+    "scale_dataset_post_hoc_reconstructed": true,
+    "scale_dataset_restores_input_only": true
+  },
+  "evidence_accounting": {
+    "canonical_scenarios": 4,
+    "samplers": 3,
+    "fits_recorded": 15,
+    "canonical_scenario_parameter_truths": 16,
+    "canonical_route_hdi_checks": 48,
+    "trace_hashes_and_sizes_recorded": 15,
+    "raw_trace_files_retained": 0,
+    "raw_prior_predictive_draws_retained": false,
+    "raw_posterior_predictive_draws_retained": false,
+    "sampler_backend_trace_attributes_retained": false,
+    "historical_scale_dataset_bytes_retained": false,
+    "post_hoc_scale_dataset_bytes_retained": true,
+    "historical_uv_lock_sha256_recorded": true,
+    "historical_uv_lock_bytes_retained": false
+  },
+  "verification_boundary": {
+    "recomputed": [
+      "fit and route counts",
+      "canonical dataset hash bindings",
+      "scale dataset shape, dtype, support, and canonical prefix",
+      "compact preflight and scientific gates",
+      "NUTS divergence totals",
+      "canonical HDI inclusion counts",
+      "recorded-machine efficiency and runtime ratios"
+    ],
+    "not_recomputed": [
+      "posterior summaries from raw draws",
+      "prior-predictive support and quantiles from raw draws",
+      "posterior-predictive support, quantiles, and circular summaries from raw draws",
+      "sampler backend identity from retained trace attributes",
+      "trace hashes or sizes from retained trace bytes",
+      "historical timings",
+      "historical environment from retained uv.lock bytes"
+    ],
+    "runtime_constraints": [
+      "no HSSM import",
+      "no JEAM import",
+      "no network access",
+      "no sampling"
+    ]
+  },
+  "promotion": {
+    "compact_scientific_smoke_gate": "recompute from authenticated compact rows",
+    "recorded_machine_efficiency_gate": "recompute from authenticated compact rows",
+    "ecosystem_promotion": "blocked",
+    "blockers": [
+      "the 15 recorded posterior trace files are not retained, so posterior diagnostics and sampler backend identity cannot be independently recomputed",
+      "raw prior- and posterior-predictive draws are not retained, so their compact summaries cannot be independently recomputed",
+      "the historical uv.lock bytes are not retained",
+      "the current JEAM safety revision was not rerun"
+    ]
+  }
+}

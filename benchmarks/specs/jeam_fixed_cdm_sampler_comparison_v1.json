@@ -1,0 +1,369 @@
+{
+  "schema_version": 1,
+  "study_id": "jeam-fixed-cdm-sampler-comparison-v1",
+  "status": "preregistered-before-canonical-run",
+  "frozen_at_utc": "2026-08-17T01:28:50Z",
+  "question": "Does the analytical fixed-CDM likelihood support scientifically valid and practically competitive NUTS inference relative to the established ordered-Slice baseline?",
+  "canonical_results_must_postdate_this_file_commit": true,
+  "scope": {
+    "model": "circular_diffusion",
+    "response_columns": [
+      "rt",
+      "response"
+    ],
+    "response_contract": {
+      "rt": "finite and strictly positive",
+      "response": "finite radians in [-pi, pi)"
+    },
+    "scientific_parameter_order": [
+      "a",
+      "t",
+      "v_x",
+      "v_y"
+    ],
+    "hssm_parameter_order": [
+      "v_x",
+      "v_y",
+      "a",
+      "t"
+    ],
+    "fixed_model_settings": {
+      "sigma": 1.0,
+      "s_v": 0.0,
+      "s_t": 0.0,
+      "threshold_dynamic": "fixed",
+      "decay": 0.0,
+      "threshold_function": null,
+      "p_outlier": null
+    }
+  },
+  "provenance": {
+    "hssm_stack_base_revision": "54e5cb656ac5111112f5a7992b51bcf9f0027c95",
+    "jeam_revision": "0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce",
+    "python_minor": "3.12",
+    "pytensor_floatx": "float64",
+    "environment": "the committed HSSM uv.lock plus the jeam-prototype dependency group",
+    "required_result_metadata": [
+      "hssm_revision",
+      "jeam_revision",
+      "uv_lock_sha256",
+      "python_version",
+      "package_versions",
+      "platform",
+      "processor",
+      "logical_cpu_count",
+      "jax_backend",
+      "jax_devices"
+    ]
+  },
+  "priors_and_initialization": {
+    "priors": {
+      "v_x": {
+        "distribution": "Uniform",
+        "lower": -3.0,
+        "upper": 3.0
+      },
+      "v_y": {
+        "distribution": "Uniform",
+        "lower": -3.0,
+        "upper": 3.0
+      },
+      "a": {
+        "distribution": "Uniform",
+        "lower": 0.1,
+        "upper": 3.0
+      },
+      "t": {
+        "distribution": "HalfNormal",
+        "sigma": 2.0
+      }
+    },
+    "configured_bounds": {
+      "v_x": [
+        -3.0,
+        3.0
+      ],
+      "v_y": [
+        -3.0,
+        3.0
+      ],
+      "a": [
+        0.1,
+        3.0
+      ],
+      "t": [
+        0.0,
+        2.0
+      ]
+    },
+    "resolved_untransformed_initvals": {
+      "v_x": 0.0,
+      "v_y": 0.0,
+      "a": 1.5,
+      "t": 0.025
+    },
+    "policy": "Construct every likelihood route with HSSM defaults, assert the resolved priors and initvals equal this specification, and pass those same initvals to every sampler without additional sampler-side jitter."
+  },
+  "scenarios": [
+    {
+      "name": "baseline_asymmetric",
+      "role": "canonical",
+      "truth": [
+        1.2,
+        0.15,
+        0.8,
+        -0.5
+      ],
+      "trials": 300,
+      "data_seed": 1492,
+      "chain_seeds": [
+        3101,
+        3102,
+        3103,
+        3104
+      ],
+      "prior_predictive_seed": 6101,
+      "posterior_predictive_seed": 7291
+    },
+    {
+      "name": "reversed_drift",
+      "role": "canonical",
+      "truth": [
+        1.05,
+        0.1,
+        -0.9,
+        0.65
+      ],
+      "trials": 300,
+      "data_seed": 2603,
+      "chain_seeds": [
+        4201,
+        4202,
+        4203,
+        4204
+      ],
+      "prior_predictive_seed": 7101,
+      "posterior_predictive_seed": 8291
+    },
+    {
+      "name": "high_threshold_strong_drift",
+      "role": "canonical",
+      "truth": [
+        1.6,
+        0.22,
+        1.25,
+        0.3
+      ],
+      "trials": 300,
+      "data_seed": 3714,
+      "chain_seeds": [
+        5301,
+        5302,
+        5303,
+        5304
+      ],
+      "prior_predictive_seed": 8101,
+      "posterior_predictive_seed": 9291
+    },
+    {
+      "name": "low_threshold_negative_drift",
+      "role": "canonical",
+      "truth": [
+        0.75,
+        0.07,
+        -0.45,
+        -1.15
+      ],
+      "trials": 300,
+      "data_seed": 4825,
+      "chain_seeds": [
+        6401,
+        6402,
+        6403,
+        6404
+      ],
+      "prior_predictive_seed": 9101,
+      "posterior_predictive_seed": 10291
+    },
+    {
+      "name": "baseline_asymmetric_scale_1500",
+      "role": "scale",
+      "truth": [
+        1.2,
+        0.15,
+        0.8,
+        -0.5
+      ],
+      "trials": 1500,
+      "data_seed": 1492,
+      "chain_seeds": [
+        3101,
+        3102,
+        3103,
+        3104
+      ],
+      "prior_predictive_seed": 6101,
+      "posterior_predictive_seed": 7291,
+      "exact_prefix_of": "baseline_asymmetric",
+      "exact_prefix_rows": 300
+    }
+  ],
+  "objective_parity": {
+    "candidate_rule": "Add each offset to the scenario truth in scientific_parameter_order; negative t offsets keep every candidate inside observed support.",
+    "offsets": [
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        -0.08,
+        -0.02,
+        0.1,
+        -0.1
+      ],
+      [
+        0.08,
+        -0.03,
+        -0.1,
+        0.1
+      ]
+    ],
+    "implementations": [
+      "direct JEAM NumPy joint_lpdf",
+      "JEAM JAX fixed_cdm_logpdf",
+      "compiled HSSM analytical logp"
+    ],
+    "comparison": "summed log likelihood",
+    "maximum_absolute_error": 1e-08
+  },
+  "samplers": [
+    {
+      "id": "slice",
+      "likelihood": "blackbox",
+      "backend": "pymc",
+      "step": "one pm.Slice step per parameter in scientific_parameter_order",
+      "target_accept": null,
+      "nuts_sampler_kwargs": null
+    },
+    {
+      "id": "pymc_nuts",
+      "likelihood": "analytical",
+      "backend": "pymc",
+      "step": "automatic PyMC NUTS",
+      "target_accept": 0.9,
+      "nuts_sampler_kwargs": null
+    },
+    {
+      "id": "numpyro_nuts",
+      "likelihood": "analytical",
+      "backend": "numpyro",
+      "step": "NumPyro NUTS through PyMC and Bambi",
+      "target_accept": 0.9,
+      "nuts_sampler_kwargs": null,
+      "chain_execution": "Expose exactly one JAX CPU device and use PyMC's default parallel request; NumPyro then executes its documented automatic sequential fallback.",
+      "random_seed_semantics": "PyMC external NUTS consumes the first listed chain seed as one master seed and splits it deterministically across chains."
+    }
+  ],
+  "execution": {
+    "chains": 4,
+    "tune": 1000,
+    "draws": 1000,
+    "cores": 1,
+    "blas_cores": 1,
+    "jax_host_device_count": 1,
+    "init": "adapt_diag",
+    "progressbar": false,
+    "compute_convergence_checks_during_sampling": true,
+    "compute_log_likelihood_during_sampling": false,
+    "prior_predictive_draws": 100,
+    "posterior_predictive_draws": 40,
+    "posterior_hdi_probability": 0.94,
+    "rt_quantile_probabilities": [
+      0.1,
+      0.5,
+      0.9
+    ],
+    "fresh_subprocess_per_scenario_sampler": true,
+    "sampler_order": [
+      "slice",
+      "pymc_nuts",
+      "numpyro_nuts"
+    ],
+    "data_policy": "Generate each dataset once from the specification, save its float64 bytes and SHA256, and require every sampler subprocess to load the same bytes.",
+    "prior_predictive_policy": "Generate one shared prior-predictive check per scenario after asserting that blackbox and analytical models resolve identical priors.",
+    "trace_policy": "Save each returned DataTree to NetCDF immediately after sampling and before summaries or posterior prediction; record the file SHA256 and byte count in the compact result.",
+    "timing_fields_seconds": [
+      "model_build",
+      "objective_compile_and_first_eval",
+      "gradient_compile_and_first_eval",
+      "sampling_call_including_backend_kernel_compilation",
+      "posterior_predictive",
+      "total"
+    ],
+    "timing_policy": "Use perf_counter. Report compile and first-evaluation fields separately; sampling_call includes any sampler-internal compilation that cannot be isolated without changing the fitted computation.",
+    "scale_scenario_posterior_predictive": false
+  },
+  "preflight_gates": {
+    "prior_predictive": {
+      "all_values_finite": true,
+      "all_rt_strictly_positive": true,
+      "all_angles_in_half_open_domain": true,
+      "rt_quantile_ratio_to_observed_lower": 0.1,
+      "rt_quantile_ratio_to_observed_upper": 20.0,
+      "ratio_probabilities": [
+        0.5,
+        0.9
+      ]
+    },
+    "initial_point": {
+      "finite_joint_logp": true,
+      "analytical_gradient_shape": [
+        4
+      ],
+      "analytical_gradient_all_finite": true,
+      "analytical_gradient_any_nonzero": true
+    }
+  },
+  "scientific_acceptance": {
+    "applies_to": "every sampler in every canonical scenario",
+    "zero_divergences_for_nuts": true,
+    "maximum_rhat_exclusive": 1.01,
+    "minimum_bulk_ess_exclusive": 400.0,
+    "minimum_tail_ess_exclusive": 400.0,
+    "maximum_mcse_over_posterior_sd_exclusive": 0.05,
+    "every_parameter_truth_in_94_percent_hdi": true,
+    "maximum_rt_quantile_absolute_error": 0.12,
+    "maximum_circular_mean_angle_distance": 0.1,
+    "maximum_mean_resultant_length_absolute_error": 0.08,
+    "objective_parity_maximum_absolute_error": 1e-08,
+    "scale_scenario": {
+      "zero_divergences_for_nuts": true,
+      "maximum_rhat_exclusive": 1.01,
+      "minimum_bulk_ess_exclusive": 400.0,
+      "minimum_tail_ess_exclusive": 400.0,
+      "maximum_mcse_over_posterior_sd_exclusive": 0.05
+    }
+  },
+  "promotion_decision": {
+    "separate_from_scientific_acceptance": true,
+    "evaluate_each_nuts_backend_independently": true,
+    "canonical_minimum_median_bulk_ess_per_sampling_second_ratio_vs_slice": 1.5,
+    "canonical_maximum_total_seconds_ratio_vs_slice_per_scenario": 1.25,
+    "scale_normalized_efficiency_definition": "minimum bulk ESS * trials / sampling_call_including_backend_kernel_compilation seconds",
+    "scale_reference_scenario": "baseline_asymmetric",
+    "scale_minimum_normalized_efficiency_ratio_vs_reference": 0.8,
+    "decision_rule": "Recommend a NUTS backend as a default only if it passes all scientific gates and all three promotion thresholds. A scientific pass without a promotion pass supports opt-in use only."
+  },
+  "reporting_and_deviation_policy": {
+    "result_path": "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1.json",
+    "raw_traces_committed": false,
+    "compact_result_committed": true,
+    "no_manual_chain_exclusions": true,
+    "no_interim_stopping": true,
+    "failed_sampling_is_a_recorded_result": true,
+    "infrastructure_retry": "Retry only a documented failure that occurs before a posterior is returned; retain the failed-attempt metadata and rerun the complete affected scenario-sampler subprocess.",
+    "protocol_change": "Do not edit v1 after canonical execution begins. Correct a scientific or implementation defect by adding a new versioned specification and report v1 as superseded."
+  }
+}
