@@ -150,7 +150,8 @@ not currently provide:
 
 The wrapper has pointwise direct-JEAM/HSSM likelihood parity tests, deterministic
 predictive tests, a marked-slow Bayesian recovery test, and an artifact-backed,
-schema-v2 four-scenario deterministic [recovery smoke](../tutorials/jeam_repeated_recovery.py).
+schema-v2 four-scenario deterministic [recovery smoke](../tutorials/jeam_repeated_recovery.py)
+for the blackbox/PyMC Slice route.
 This evidence validates the narrow handshake; it is not a claim of production-scale
 sampler performance or simulation-based calibration.
 

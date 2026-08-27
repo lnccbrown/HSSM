@@ -13,7 +13,7 @@ tutorial. For a longer local run, set ``FULL_RUN=1`` before starting marimo. For
 plumbing-only run that bypasses the Run button, set
 ``JEAM_NOTEBOOK_SMOKE=1``. The artifact-backed, four-scenario report in
 ``docs/tutorials/jeam_repeated_recovery.py`` provides the broader deterministic
-recovery-smoke evidence; it is not simulation-based calibration.
+blackbox/PyMC Slice recovery-smoke evidence; it is not simulation-based calibration.
 """
 
 # ruff: noqa: B018, D401, E501, PLR1711
@@ -34,6 +34,7 @@ def _():
     from time import perf_counter
 
     import arviz as az
+    import jax
     import marimo as mo
     import matplotlib.pyplot as plt
     import numpy as np
@@ -50,6 +51,7 @@ def _():
         az,
         hssm,
         importlib,
+        jax,
         json,
         logging,
         mo,
@@ -106,6 +108,11 @@ def _(mo):
     `ede7a4f4faf226e4dae52c84dfb01012939cccdc`. This is a VCS-pinned prototype,
     not a released HSSM runtime dependency.
 
+    This notebook deliberately owns its process-wide precision setup: it calls
+    `hssm.set_floatX("float64")` and asserts both PyTensor float64 and JAX x64 before
+    constructing either model. Model construction validates that state without changing
+    it.
+
     The default run below uses 120 trials and two short chains. Start marimo with
     `FULL_RUN=1` to use 300 trials and longer chains:
 
@@ -124,14 +131,14 @@ def _(mo):
     ```
 
     Both modes exercise this one illustrative two-chain analysis. Neither reproduces
-    the artifact-backed four-scenario recovery smoke nor establishes simulation-based
-    calibration.
+    the artifact-backed blackbox/PyMC Slice four-scenario recovery smoke nor establishes
+    simulation-based calibration.
     """)
     return
 
 
 @app.cell
-def _(hssm, logging, os, pytensor, warnings):
+def _(hssm, jax, logging, os, pytensor, warnings):
     warnings.filterwarnings(
         "ignore",
         message=r"Numba will use object mode to run .*",
@@ -173,6 +180,7 @@ def _(hssm, logging, os, pytensor, warnings):
     PARAMETER_ORDER = ("a", "t", "v_x", "v_y")
     HSSM_PARAMETER_ORDER = ("v_x", "v_y", "a", "t")
     assert pytensor.config.floatX == "float64"
+    assert jax.config.jax_enable_x64
     return (
         FULL_RUN,
         HSSM_PARAMETER_ORDER,
@@ -354,7 +362,7 @@ def _(mo):
 
 
 @app.cell
-def _(data, hssm, inference_route):
+def _(data, hssm):
     blackbox_model = hssm.HSSM(
         data=data,
         model="circular_diffusion",
@@ -371,15 +379,14 @@ def _(data, hssm, inference_route):
         "blackbox": blackbox_model,
         "analytical": analytical_model,
     }
+    return analytical_model, blackbox_model, models_by_likelihood
+
+
+@app.cell
+def _(inference_route, models_by_likelihood):
     selected_likelihood, selected_sampler = inference_route.value.split("_", 1)
     circular_model = models_by_likelihood[selected_likelihood]
-    return (
-        analytical_model,
-        blackbox_model,
-        circular_model,
-        selected_likelihood,
-        selected_sampler,
-    )
+    return circular_model, selected_likelihood, selected_sampler
 
 
 @app.cell
@@ -680,8 +687,8 @@ def _(inference_route, mo):
 
     `cores=1` keeps the notebook portable and reproducible. Runtime here is descriptive,
     not a benchmark: JAX compilation and short-run warmup costs are a large fraction of
-    an interactive run. The artifact-backed, schema-v2 recovery smoke and any efficiency
-    gate remain separate from this workflow demonstration.
+    an interactive run. The artifact-backed, schema-v2 blackbox/PyMC Slice recovery
+    smoke and any efficiency gate remain separate from this workflow demonstration.
     """)
     return
 
@@ -778,6 +785,8 @@ def _(
     sample_stat_names = tuple(
         sorted(str(name) for name in traces["sample_stats"].data_vars)
     )
+    inference_library = str(traces["posterior"].attrs.get("inference_library", ""))
+    backend_provenance_ok = inference_library == selected_sampler
     nuts_statistics = {
         "acceptance_rate",
         "diverging",
@@ -806,6 +815,7 @@ def _(
         [
             {"diagnostic": "likelihood", "observed": selected_likelihood},
             {"diagnostic": "sampler", "observed": selected_sampler},
+            {"diagnostic": "trace backend", "observed": inference_library},
             {"diagnostic": "tune per chain", "observed": tune_count.value},
             {"diagnostic": "draws per chain", "observed": draw_count.value},
             {"diagnostic": "sampler statistics", "observed": str(sample_stat_names)},
@@ -822,8 +832,10 @@ def _(
             },
         ]
     )
+    assert backend_provenance_ok
     assert sampler_statistics_ok
     return (
+        backend_provenance_ok,
         diagnostic_limits,
         diagnostics_ok,
         lower_column,
@@ -870,7 +882,8 @@ def _(
 
 
 @app.cell
-def _(mo):
+def _(mo, sampling_report):
+    assert not sampling_report.empty
     mo.md("""
     ### Diagnose before interpreting
     """)
@@ -884,7 +897,8 @@ def _(mo, sampling_report):
 
 
 @app.cell
-def _(mo):
+def _(mo, recovery_table):
+    assert not recovery_table.empty
     mo.md("""
     ### Parameter recovery in this one illustrative dataset
     """)
@@ -978,7 +992,8 @@ def _(RUN_CONFIG, circular_model, perf_counter, traces):
 
 
 @app.cell
-def _(mo):
+def _(mo, posterior_predictive_values):
+    assert posterior_predictive_values.shape[-1] == 2
     predictive_view = mo.ui.dropdown(
         options={
             "Response time and angle": "both",
@@ -1115,7 +1130,8 @@ def _(data, np, pd, posterior_predictive_values, predictive_seconds):
 
 
 @app.cell
-def _(mo):
+def _(mo, predictive_summary):
+    assert not predictive_summary.empty
     mo.md("""
     ## 5. Check posterior predictions
 
@@ -1136,6 +1152,7 @@ def _(mo, predictive_summary):
 def _(
     HSSM_PARAMETER_ORDER,
     analytical_gradient,
+    backend_provenance_ok,
     circular_model,
     hssm,
     logp_absolute_errors,
@@ -1177,6 +1194,10 @@ def _(
                 "result": analytical_gradient_ok,
             },
             {
+                "workflow gate": "selected sampler backend",
+                "result": backend_provenance_ok,
+            },
+            {
                 "workflow gate": "selected sampler statistics",
                 "result": sampler_statistics_ok,
             },
@@ -1191,7 +1212,8 @@ def _(
 
 
 @app.cell
-def _(mo):
+def _(mo, validation_table):
+    assert validation_table["result"].all()
     mo.md("""
     ## What this run established
     """)
@@ -1205,7 +1227,8 @@ def _(mo, validation_table):
 
 
 @app.cell
-def _(inference_route, mo):
+def _(inference_route, mo, validation_table):
+    assert validation_table["result"].all()
     mo.md(rf"""
     The notebook has now checked both registered HSSM likelihoods against direct JEAM,
     verified that the analytical route exposes a finite nonzero parameter gradient,
@@ -1219,7 +1242,8 @@ def _(inference_route, mo):
     2. choose and justify domain-specific priors;
     3. compare posterior predictions to all scientifically important summaries;
     4. consult `docs/tutorials/jeam_repeated_recovery.py` for the artifact-backed,
-       four-scenario deterministic recovery smoke (not calibration); and
+       blackbox/PyMC Slice four-scenario deterministic recovery smoke (not calibration);
+       and
     5. retain the exact JEAM revision in the analysis environment.
 
     The integration remains deliberately narrow: fixed CDM, two-dimensional angular
