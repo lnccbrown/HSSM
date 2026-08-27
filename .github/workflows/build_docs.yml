@@ -2,10 +2,26 @@ name: Docs
 
 on:
   pull_request:
-    paths: ["docs/**", "mkdocs.yml", "pyproject.toml", "src/hssm/**"]
+    paths:
+      - ".github/workflows/build_docs.yml"
+      - "benchmarks/evidence/jeam_repeated_recovery_v2/**"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "scripts/jeam_repeated_recovery_report.py"
+      - "scripts/verify_jeam_repeated_recovery_evidence.py"
+      - "src/hssm/**"
   push:
     branches: [main]
-    paths: ["docs/**", "mkdocs.yml", "pyproject.toml", "src/hssm/**"]
+    paths:
+      - ".github/workflows/build_docs.yml"
+      - "benchmarks/evidence/jeam_repeated_recovery_v2/**"
+      - "docs/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "scripts/jeam_repeated_recovery_report.py"
+      - "scripts/verify_jeam_repeated_recovery_evidence.py"
+      - "src/hssm/**"
   release:
     types: [published]
   schedule:
@@ -28,6 +44,26 @@ jobs:
       # re-execution adds a permanent blob. Catch growth at review time.
       - name: Check docs weight
         run: python scripts/check_docs_weight.py
+      - name: Validate JEAM repeated-recovery report
+        env:
+          MPLCONFIGDIR: /tmp/hssm-jeam-report-matplotlib
+          XDG_CACHE_HOME: /tmp/hssm-jeam-report-cache
+        run: |
+          mkdir -p "$MPLCONFIGDIR" "$XDG_CACHE_HOME"
+          uv run --group docs marimo check --strict docs/tutorials/jeam_repeated_recovery.py
+          uv run --group docs marimo export html docs/tutorials/jeam_repeated_recovery.py \
+            -o /tmp/jeam-repeated-recovery.html --force --no-include-code \
+            > /tmp/jeam-repeated-recovery-export.log 2>&1
+          cat /tmp/jeam-repeated-recovery-export.log
+          grep -Fq "16/16" /tmp/jeam-repeated-recovery.html
+          grep -Fq "not simulation-based calibration" /tmp/jeam-repeated-recovery.html
+          grep -Fq "d8a5c458d2194f1fb7031f6bc5ca5add3cd67afabd028880dc0bfed887ef9972" \
+            /tmp/jeam-repeated-recovery.html
+          if grep -Eq '/Users/|/home/|/private/|/var/folders/|file://|Traceback|MarimoExceptionRaisedError|ModuleNotFoundError' \
+            /tmp/jeam-repeated-recovery.html /tmp/jeam-repeated-recovery-export.log; then
+            echo "JEAM recovery report contains a host path or execution error"
+            exit 1
+          fi
       - name: Build docs (strict)
         run: uv run --group notebook --group docs mkdocs build --strict
 
