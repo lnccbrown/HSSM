@@ -141,11 +141,18 @@ def test_report_ratios_use_inclusive_frozen_limits(report) -> None:
     assert summarize_science(altered)["maximum_rhat"] == pytest.approx(1.5)
 
 
-def test_report_helper_cannot_run_inference_or_read_compact_results() -> None:
-    """The helper may only present the public network-free verifier result."""
-    source = (
-        Path(__file__).parents[1] / "scripts" / "jeam_repeated_recovery_report.py"
-    ).read_text(encoding="utf-8")
+@pytest.mark.parametrize(
+    "relative_path",
+    (
+        "scripts/jeam_repeated_recovery_report.py",
+        "docs/tutorials/jeam_repeated_recovery.py",
+    ),
+)
+def test_report_surface_cannot_run_inference_or_read_compact_results(
+    relative_path: str,
+) -> None:
+    """The report may only present the public network-free verifier result."""
+    source = (Path(__file__).parents[1] / relative_path).read_text(encoding="utf-8")
     tree = ast.parse(source)
     imports = {
         alias.name.split(".")[0]
