@@ -70,7 +70,7 @@ nav:
           - Custom models from JAX callables: tutorials/jax_callable_contribution_onnx_example.ipynb
           - Custom models from ONNX files (blackbox): tutorials/blackbox_contribution_onnx_example.ipynb
           - Integrate an sbi NRE (ONNX): tutorials/sbi_nre_integration.ipynb
-          - Integrate a BayesFlow NLE (ONNX): tutorials/bayesflow_nle_onnx_integration.ipynb
+          - Integrate a BayesFlow NRE (ONNX): tutorials/bayesflow_nle_onnx_integration.ipynb
           - Integrate a BayesFlow LRE (JAX callable): tutorials/bayesflow_lre_integration.ipynb
           - Use the low-level API with PyMC: tutorials/pymc.ipynb
           - Compile a log-likelihood function: tutorials/compile_logp.ipynb

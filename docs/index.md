@@ -102,7 +102,7 @@ model.sample()
     1. [Likelihood kinds in HSSM](explanations/likelihoods.md) — analytical, `approx_differentiable`, and blackbox, and when each applies.
     2. [The ONNX likelihood contract](how_to/custom_onnx_likelihoods.md) — the exact rules an approximate differentiable ONNX file must satisfy.
     3. [Bring your own likelihood](how_to/external_trainers.md) — the route table for networks trained in sbi or BayesFlow.
-    4. Then the walkthrough for your route — [sbi NRE](tutorials/sbi_nre_integration.ipynb), [BayesFlow NLE](tutorials/bayesflow_nle_onnx_integration.ipynb), [BayesFlow LRE](tutorials/bayesflow_lre_integration.ipynb), or [JAX callables](tutorials/jax_callable_contribution_onnx_example.ipynb).
+    4. Then the walkthrough for your route — [sbi NRE](tutorials/sbi_nre_integration.ipynb), [BayesFlow NRE](tutorials/bayesflow_nle_onnx_integration.ipynb), [BayesFlow LRE](tutorials/bayesflow_lre_integration.ipynb), or [JAX callables](tutorials/jax_callable_contribution_onnx_example.ipynb).
     5. [Use the low-level API with PyMC](tutorials/pymc.ipynb) — when the formula interface is the constraint.
 
 </div>
