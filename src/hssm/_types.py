@@ -42,6 +42,7 @@ class LoglikConfig(TypedDict):
 
     loglik: LogLik
     backend: Optional[Literal["jax", "pytensor"]]
+    requires_jax_x64: NotRequired[bool]
     default_priors: dict[str, ParamSpec]
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]

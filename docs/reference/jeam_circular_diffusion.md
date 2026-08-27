@@ -98,6 +98,13 @@ reverse-mode parameter gradients through HSSM's existing JAX/PyTensor bridge. It
 under sampler recovery and efficiency evaluation; NUTS, JAX samplers, and variational
 inference are not promoted as supported workflows for this model yet.
 
+The analytical route requires JAX x64 execution. HSSM checks
+`jax.config.jax_enable_x64` during model construction and does not change the global JAX
+setting. Call `hssm.set_floatX("float64")` before constructing this route. When x64 is
+disabled, the `blackbox` likelihood and its PyMC Slice workflow remain available.
+The gate checks JAX execution precision, not input dtype: float32 model inputs remain
+supported when JAX x64 execution is enabled independently.
+
 Prior and posterior predictive sampling use JEAM's simulator through HSSM and accept
 HSSM's seeded random-state interface. Draws preserve the final `[rt, response]` order.
 The [complete marimo walkthrough](../tutorials/jeam_circular_diffusion.py) demonstrates

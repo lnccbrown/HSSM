@@ -33,6 +33,7 @@ def get_circular_diffusion_config() -> DefaultConfig:
             "analytical": {
                 "loglik": logp_circular_diffusion_jax,
                 "backend": "jax",
+                "requires_jax_x64": True,
                 "default_priors": {
                     "t": {
                         "name": "HalfNormal",

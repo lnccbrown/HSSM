@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from math import isfinite
 from typing import Any, Literal, Union, cast, get_args
 
+import jax
 from bambi import Prior
 from ssms.config import model_config as ssms_model_config
 
@@ -144,6 +145,7 @@ class Config(BaseModelConfig):
     """Config class that stores the configurations for models."""
 
     rv: Any | None = None
+    requires_jax_x64: bool = False
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
 
@@ -321,6 +323,13 @@ class Config(BaseModelConfig):
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
             raise ValueError("Please provide `backend` via `model_config`.")
+        if self.requires_jax_x64 and not jax.config.jax_enable_x64:
+            raise ValueError(
+                f"The {self.model_name!r} {self.loglik_kind!r} likelihood requires "
+                "JAX x64 execution, but `jax_enable_x64` is disabled. Enable JAX "
+                "x64 before constructing the model; HSSM does not mutate global "
+                "JAX configuration."
+            )
 
     def get_defaults(
         self, param: str
