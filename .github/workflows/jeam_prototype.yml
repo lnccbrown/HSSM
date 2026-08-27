@@ -17,7 +17,6 @@ on:
       - "src/hssm/modelconfig/circular_diffusion_config.py"
       - "src/hssm/register.py"
       - "src/hssm/utils.py"
-      - "docs/reference/jeam_circular_diffusion.md"
       - "docs/tutorials/jeam_circular_diffusion.py"
       - "scripts/benchmark_jeam_bayesian_recovery.py"
       - "scripts/benchmark_jeam_objective_parity.py"
@@ -62,6 +61,28 @@ jobs:
         run: >-
           uv run --group docs --group jeam-prototype marimo check --strict
           docs/tutorials/jeam_circular_diffusion.py
+
+      - name: Export the JEAM comparison notebook without sampling
+        env:
+          MPLCONFIGDIR: /tmp/hssm-jeam-comparison-matplotlib
+          XDG_CACHE_HOME: /tmp/hssm-jeam-comparison-cache
+        run: |
+          mkdir -p "$MPLCONFIGDIR" "$XDG_CACHE_HOME"
+          uv run --group docs --group jeam-prototype marimo export html \
+            docs/tutorials/jeam_circular_diffusion.py \
+            -o /tmp/jeam-circular-default.html --force --no-include-code \
+            > /tmp/jeam-circular-default-export.log 2>&1
+          cat /tmp/jeam-circular-default-export.log
+          grep -Fq "Choose a route and sampling counts" /tmp/jeam-circular-default.html
+          if grep -Fq "completed inference with" /tmp/jeam-circular-default.html; then
+            echo "JEAM comparison notebook crossed its explicit sampling gate"
+            exit 1
+          fi
+          if grep -Eq '/Users/|/home/|/private/|/var/folders/|file://|Traceback|MarimoExceptionRaisedError|ModuleNotFoundError' \
+            /tmp/jeam-circular-default.html /tmp/jeam-circular-default-export.log; then
+            echo "JEAM comparison notebook contains a host path or execution error"
+            exit 1
+          fi
 
       - name: Verify the JEAM likelihood and simulator handshake
         run: >-
