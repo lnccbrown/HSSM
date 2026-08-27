@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pymc as pm
 import pytensor
 import pytest
 import xarray as xr
@@ -15,6 +16,7 @@ from hssm.utils import (
     _compute_log_likelihood,
     _generate_random_indices,
     _random_sample,
+    log_likelihood,
     set_floatX,
 )
 
@@ -150,6 +152,7 @@ def _fake_log_likelihood(family, **kwargs):
     assert family is kwargs["model"].family
     assert kwargs["data"] is None
     assert kwargs["posterior"].name == "posterior"
+    assert kwargs["compile_mode"] is None
     return xr.DataArray(
         np.array([[[-1.0], [-2.0]]]),
         dims=("chain", "draw", "__obs__"),
@@ -205,6 +208,48 @@ def test_compute_log_likelihood_warns_and_replaces_existing_group(
         np.array([[[-1.0], [-2.0]]]),
     )
     assert "Replacing existing log_likelihood group in dt." in caplog.text
+
+
+def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
+    """Post-sampling likelihoods honor the requested JAX compiler."""
+    compile_calls = []
+
+    def fake_compile(inputs, outputs, **kwargs):
+        compile_calls.append((inputs, outputs, kwargs))
+        return lambda **values: np.full(2, -1.0)
+
+    family = SimpleNamespace(
+        likelihood=SimpleNamespace(dist=pm.Normal, name="Normal"),
+        _make_dist_kwargs_and_coords=lambda model, posterior, **kwargs: (
+            {
+                "mu": np.zeros((1, 1, 2)),
+                "sigma": np.ones((1, 1, 2)),
+            },
+            {
+                "chain": pd.Index([0]),
+                "draw": pd.Index([0]),
+                "__obs__": pd.Index([0, 1]),
+            },
+        ),
+    )
+    model = SimpleNamespace(
+        response_component=SimpleNamespace(
+            term=SimpleNamespace(data=np.array([0.0, 1.0]), is_constrained=False)
+        ),
+        family=family,
+    )
+    monkeypatch.setattr("hssm.utils.pm.compile", fake_compile)
+
+    result = log_likelihood(
+        family,
+        model,
+        posterior=xr.DataArray(),
+        compile_mode="JAX",
+    )
+
+    assert result.shape == (1, 1, 2)
+    assert len(compile_calls) == 1
+    assert compile_calls[0][2]["mode"] == "JAX"
 
 
 @pytest.mark.parametrize(
