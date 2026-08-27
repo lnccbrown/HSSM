@@ -129,9 +129,10 @@ supported when JAX x64 execution is enabled independently.
 
 Prior and posterior predictive sampling use JEAM's simulator through HSSM and accept
 HSSM's seeded random-state interface. Draws preserve the final `[rt, response]` order.
-The [complete marimo walkthrough](../tutorials/jeam_circular_diffusion.py) demonstrates
-construction, explicit Slice sampling, likelihood parity, diagnostics, and predictive
-checks.
+The [complete marimo comparison lab](../tutorials/jeam_circular_diffusion.py) checks
+both likelihoods against direct JEAM, compiles the analytical parameter gradient, and
+lets users fit the same simulated dataset with blackbox/PyMC Slice, analytical/PyMC
+NUTS, or analytical/NumPyro NUTS before running diagnostics and predictive checks.
 
 ## Current boundary
 
@@ -149,7 +150,8 @@ not currently provide:
 
 The wrapper has pointwise direct-JEAM/HSSM likelihood parity tests, deterministic
 predictive tests, a marked-slow Bayesian recovery test, and an artifact-backed,
-schema-v2 four-scenario deterministic [recovery smoke](../tutorials/jeam_repeated_recovery.py).
+schema-v2 four-scenario deterministic [recovery smoke](../tutorials/jeam_repeated_recovery.py)
+for the blackbox/PyMC Slice route.
 This evidence validates the narrow handshake; it is not a claim of production-scale
 sampler performance or simulation-based calibration.
 
