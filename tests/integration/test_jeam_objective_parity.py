@@ -18,7 +18,7 @@ from scripts.benchmark_jeam_objective_parity import (
     simulate_dataset,
 )
 
-PINNED_JEAM_REVISION = "0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce"
+PINNED_JEAM_REVISION = "ede7a4f4faf226e4dae52c84dfb01012939cccdc"
 OBJECTIVE_RTOL = 1e-6
 OBJECTIVE_ATOL = 5e-5
 

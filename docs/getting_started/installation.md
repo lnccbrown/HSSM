@@ -85,7 +85,7 @@ uv sync --group jeam-prototype
 ```
 
 The group resolves the HSSM fork of JEAM at the immutable commit
-[`0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce`](https://github.com/AlexanderFengler/JEAM/commit/0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce).
+[`ede7a4f4faf226e4dae52c84dfb01012939cccdc`](https://github.com/AlexanderFengler/JEAM/commit/ede7a4f4faf226e4dae52c84dfb01012939cccdc).
 To run the [circular-diffusion tutorial](../tutorials/jeam_circular_diffusion.py),
 also install the documentation dependencies:
 

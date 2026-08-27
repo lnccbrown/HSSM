@@ -20,7 +20,7 @@ uv sync --group jeam-prototype
 ```
 
 The group pins the HSSM fork of JEAM to
-[`0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce`](https://github.com/AlexanderFengler/JEAM/commit/0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce).
+[`ede7a4f4faf226e4dae52c84dfb01012939cccdc`](https://github.com/AlexanderFengler/JEAM/commit/ede7a4f4faf226e4dae52c84dfb01012939cccdc).
 It is not installed with ordinary HSSM, and no public `hssm[jeam]` extra exists yet.
 See [Installation](../getting_started/installation.md#experimental-circular-diffusion-with-jeam)
 for the dependency-policy rationale.

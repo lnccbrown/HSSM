@@ -22,7 +22,7 @@ from scripts.benchmark_jeam_bayesian_recovery import (
 )
 from scripts.benchmark_jeam_objective_parity import HSSM_BOUNDS, PARAMETER_ORDER
 
-PINNED_JEAM_REVISION = "0c0ef8b834dd062ad8aea5ff8e7a09dfb55492ce"
+PINNED_JEAM_REVISION = "ede7a4f4faf226e4dae52c84dfb01012939cccdc"
 MEAN_ERROR_LIMITS = {"a": 0.10, "t": 0.04, "v_x": 0.15, "v_y": 0.15}
 MAX_RHAT = 1.01
 MIN_ESS = 1_000.0
