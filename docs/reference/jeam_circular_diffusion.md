@@ -67,16 +67,18 @@ import hssm
 model = hssm.HSSM(
     data=data,
     model="circular_diffusion",
+    loglik_kind="blackbox",
     p_outlier=None,
 )
 ```
 
 ## Inference and prediction
 
-The JEAM likelihood crosses a NumPy/Python black-box boundary and does not expose
-gradients to PyTensor. Use the PyMC backend with an explicitly gradient-free step method,
-such as one `pm.Slice` step for each parameter. NUTS, the JAX samplers, and variational
-inference are not supported for this model.
+For `loglik_kind="blackbox"`, the JEAM likelihood crosses a NumPy/Python boundary and
+does not expose gradients to PyTensor. Use the PyMC backend with an explicitly
+gradient-free step method. The linked intercept-only tutorial assigns one `pm.Slice`
+step to each free PyMC variable. NUTS, the JAX samplers, and variational inference are
+not available for this black-box route.
 
 Prior and posterior predictive sampling use JEAM's simulator through HSSM and accept
 HSSM's seeded random-state interface. Draws preserve the final `[rt, response]` order.
@@ -98,10 +100,10 @@ not currently provide:
 - higher-dimensional observed responses beyond the two columns `[rt, response]`.
 
 The wrapper has pointwise direct-JEAM/HSSM likelihood parity tests, deterministic
-predictive tests, a marked-slow Bayesian recovery test, and a predeclared four-scenario
-[repeated-recovery study](../tutorials/jeam_repeated_recovery.py). This evidence validates
-the narrow handshake; it is not a claim of production-scale sampler performance or
-long-run frequentist calibration.
+predictive tests, a marked-slow Bayesian recovery test, and an artifact-backed,
+schema-v2 four-scenario deterministic [recovery smoke](../tutorials/jeam_repeated_recovery.py).
+This evidence validates the narrow handshake; it is not a claim of production-scale
+sampler performance or simulation-based calibration.
 
 ## Promotion checklist
 
@@ -111,9 +113,9 @@ Before promoting the fixed-CDM integration to HSSM's stable released surface:
   simulator contracts.
 - [ ] HSSM replaces the source-only dependency group with a public, released optional
   extra such as `hssm[jeam]` and tests installation from built wheel metadata.
-- [ ] Gradient-free inference is benchmarked on realistic hierarchical workloads, with
-  documented runtime, convergence, and effective-sample-size expectations; otherwise a
-  production-suitable likelihood strategy is selected.
+- [ ] Every candidate inference route is benchmarked on realistic hierarchical workloads,
+  with documented runtime, convergence, and effective-sample-size expectations; the
+  promoted default is selected from that evidence.
 - [ ] A density and simulator contract is designed and tested for lapse/outlier mixtures
   over continuous and circular responses.
 - [ ] Native circular diagnostics and plotting cover prior/posterior prediction without
