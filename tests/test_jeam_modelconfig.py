@@ -1,7 +1,9 @@
 """Tests for the experimental built-in JEAM model configuration."""
 
+import jax
 import numpy as np
 import pandas as pd
+import pytensor
 import pytest
 
 import hssm
@@ -13,6 +15,16 @@ from hssm.integrations.jeam import (
 )
 from hssm.modelconfig import get_default_model_config
 from hssm.plotting.model_cartoon import _require_categorical_choices
+
+
+@pytest.fixture
+def restore_precision_settings():
+    """Restore the independent PyTensor and JAX precision settings after a test."""
+    original_floatx = pytensor.config.floatX
+    original_jax_x64 = jax.config.jax_enable_x64
+    yield
+    pytensor.config.floatX = original_floatx
+    jax.config.update("jax_enable_x64", original_jax_x64)
 
 
 def test_circular_diffusion_is_a_supported_model():
@@ -47,9 +59,11 @@ def test_get_circular_diffusion_config():
     analytical = config["likelihoods"]["analytical"]
     assert analytical["loglik"] is logp_circular_diffusion_jax
     assert analytical["backend"] == "jax"
+    assert analytical["requires_jax_x64"] is True
     assert analytical["bounds"] == blackbox["bounds"]
     assert analytical["default_priors"] == blackbox["default_priors"]
     assert analytical["extra_fields"] is None
+    assert "requires_jax_x64" not in blackbox
 
 
 def test_circular_diffusion_from_defaults_preserves_domain_and_rv():
@@ -68,15 +82,77 @@ def test_circular_diffusion_from_defaults_preserves_domain_and_rv():
     config.validate()
 
 
-def test_circular_diffusion_analytical_likelihood_is_explicitly_selectable():
+def test_circular_diffusion_analytical_likelihood_is_explicitly_selectable(
+    restore_precision_settings,
+):
     """The semi-analytical JAX path remains opt-in until its promotion gate passes."""
+    hssm.set_floatX("float64")
     config = Config.from_defaults("circular_diffusion", "analytical")
 
     assert config.loglik_kind == "analytical"
     assert config.backend == "jax"
+    assert config.requires_jax_x64 is True
     assert config.loglik is logp_circular_diffusion_jax
     assert config.rv is simulate_circular_diffusion
     config.validate()
+
+
+def test_x64_off_rejects_only_the_analytical_model(restore_precision_settings):
+    """Float32 users should retain the black-box route and fail early on JAX."""
+    data = pd.DataFrame({"rt": [0.4, 0.8], "response": [-0.2, 0.3]})
+    hssm.set_floatX("float32")
+
+    blackbox = hssm.HSSM(
+        data=data,
+        model="circular_diffusion",
+        p_outlier=None,
+        process_initvals=False,
+        initval_jitter=0.0,
+    )
+    assert blackbox.model_config.loglik_kind == "blackbox"
+    assert blackbox.model_config.requires_jax_x64 is False
+    assert jax.config.jax_enable_x64 is False
+
+    with pytest.raises(
+        ValueError,
+        match=r"requires JAX x64 execution.*jax_enable_x64.*disabled",
+    ):
+        hssm.HSSM(
+            data=data,
+            model="circular_diffusion",
+            loglik_kind="analytical",
+            p_outlier=None,
+            process_initvals=False,
+            initval_jitter=0.0,
+        )
+
+    assert jax.config.jax_enable_x64 is False
+
+
+def test_x64_gate_reads_jax_execution_state(restore_precision_settings):
+    """The capability gate must not infer JAX precision from PyTensor floatX."""
+    hssm.set_floatX("float64")
+    jax.config.update("jax_enable_x64", False)
+    with pytest.raises(ValueError, match="requires JAX x64 execution"):
+        Config._build_model_config(
+            model="circular_diffusion",
+            loglik_kind="analytical",
+            model_config=None,
+            choices=None,
+        )
+
+    hssm.set_floatX("float32")
+    jax.config.update("jax_enable_x64", True)
+    config = Config._build_model_config(
+        model="circular_diffusion",
+        loglik_kind="analytical",
+        model_config=None,
+        choices=None,
+    )
+
+    assert pytensor.config.floatX == "float32"
+    assert config.requires_jax_x64 is True
+    assert jax.config.jax_enable_x64 is True
 
 
 @pytest.mark.parametrize("p_outlier", [0.0, 0.05])
