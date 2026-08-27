@@ -71,6 +71,9 @@
     "canonical_route_hdi_checks": 48,
     "trace_hashes_and_sizes_recorded": 15,
     "raw_trace_files_retained": 0,
+    "raw_prior_predictive_draws_retained": false,
+    "raw_posterior_predictive_draws_retained": false,
+    "sampler_backend_trace_attributes_retained": false,
     "historical_scale_dataset_bytes_retained": false,
     "post_hoc_scale_dataset_bytes_retained": true,
     "historical_uv_lock_sha256_recorded": true,
@@ -88,7 +91,9 @@
     ],
     "not_recomputed": [
       "posterior summaries from raw draws",
-      "posterior-predictive summaries from raw draws",
+      "prior-predictive support and quantiles from raw draws",
+      "posterior-predictive support, quantiles, and circular summaries from raw draws",
+      "sampler backend identity from retained trace attributes",
       "trace hashes or sizes from retained trace bytes",
       "historical timings",
       "historical environment from retained uv.lock bytes"
@@ -105,7 +110,8 @@
     "recorded_machine_efficiency_gate": "recompute from authenticated compact rows",
     "ecosystem_promotion": "blocked",
     "blockers": [
-      "the 15 recorded trace files are not retained",
+      "the 15 recorded posterior trace files are not retained, so posterior diagnostics and sampler backend identity cannot be independently recomputed",
+      "raw prior- and posterior-predictive draws are not retained, so their compact summaries cannot be independently recomputed",
       "the historical uv.lock bytes are not retained",
       "the current JEAM safety revision was not rerun"
     ]

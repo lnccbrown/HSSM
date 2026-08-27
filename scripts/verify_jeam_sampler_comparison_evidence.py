@@ -23,7 +23,7 @@ RESULT = "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1.json"
 SCALE = "benchmarks/evidence/jeam_fixed_cdm_sampler_comparison_v1/baseline_asymmetric_scale_1500.npy"  # noqa: E501
 BUNDLE = "benchmarks/evidence/jeam_repeated_recovery_v2"
 PINS = {
-    ADDENDUM: "15adf910a626c87d14a73d7b937b257793693beafb71ccaca76a657eba56299d",
+    ADDENDUM: "07ca04c8aa52f672b654835e63ff35af31f4ff197a3c95d2cb256ef2ab91b33f",
     SPEC: "a09b5760ede85bae4b1869c0cb98d8ba9bb78d09032f9e62221dbafe74b3d0e5",
     RESULT: "35b154b55228ca179c14d89f39491ba9d1a9d0b27a3c8b4131e842f99abf5d39",
     SCALE: "253a16585d6c2bb0b0aa91f8b6fbaabd5609e284a1d2d2bad61bc97266d9e826",

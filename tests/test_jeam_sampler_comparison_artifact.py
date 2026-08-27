@@ -32,7 +32,7 @@ EXPECTED_ARTIFACT_SHA256 = (
     "35b154b55228ca179c14d89f39491ba9d1a9d0b27a3c8b4131e842f99abf5d39"
 )
 EXPECTED_ADDENDUM_SHA256 = (
-    "15adf910a626c87d14a73d7b937b257793693beafb71ccaca76a657eba56299d"
+    "07ca04c8aa52f672b654835e63ff35af31f4ff197a3c95d2cb256ef2ab91b33f"
 )
 EXPECTED_SCALE_SHA256 = (
     "253a16585d6c2bb0b0aa91f8b6fbaabd5609e284a1d2d2bad61bc97266d9e826"
@@ -441,7 +441,12 @@ def test_addendum_freezes_historical_and_current_evidence_scopes(verified_eviden
         "trace_records": 15,
         "retained_trace_files": 0,
     }
-    assert verified_evidence["ecosystem_promotion"]["blocked"] is True
+    promotion = verified_evidence["ecosystem_promotion"]
+    assert promotion["blocked"] is True
+    assert any("backend identity" in item for item in promotion["blockers"])
+    assert any(
+        "prior- and posterior-predictive" in item for item in promotion["blockers"]
+    )
 
 
 def test_addendum_binds_durable_canonical_and_reconstructed_scale_data(
@@ -463,6 +468,9 @@ def test_addendum_binds_durable_canonical_and_reconstructed_scale_data(
         EXPECTED_SCALE_SHA256
     )
     retention = verified_evidence["retention"]
+    assert retention["raw_prior_predictive_draws_retained"] is False
+    assert retention["raw_posterior_predictive_draws_retained"] is False
+    assert retention["sampler_backend_trace_attributes_retained"] is False
     assert retention["historical_scale_dataset_bytes_retained"] is False
     assert retention["post_hoc_scale_dataset_bytes_retained"] is True
 
@@ -472,8 +480,7 @@ def test_verifier_authenticates_before_parsing_mutated_result(tmp_path):
     copied = tmp_path / "benchmarks"
     shutil.copytree(REPO_ROOT / "benchmarks", copied)
     result_path = copied / "results/jeam_fixed_cdm_sampler_comparison_v1.json"
-    mutated = result_path.read_bytes().replace(b'"passed": true', b'"passed":false', 1)
-    result_path.write_bytes(mutated)
+    result_path.write_bytes(b"{")
 
     with pytest.raises(SamplerEvidenceMismatch, match="SHA256 mismatch"):
         load_verified_sampler_comparison(tmp_path)
