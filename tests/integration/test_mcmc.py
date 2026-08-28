@@ -218,6 +218,7 @@ def test_default_blackbox_slice_uses_compiler_settings(
 
     def fake_fit(**kwargs):
         captured["step"] = kwargs["step"]
+        captured["fit_kwargs"] = kwargs
         raise _FitCalled
 
     monkeypatch.setattr(pm, "Slice", fake_slice)
@@ -229,6 +230,8 @@ def test_default_blackbox_slice_uses_compiler_settings(
     assert captured["slice_model"] is model.pymc_model
     assert captured["compile_kwargs"] == expected_compile_kwargs
     assert captured["step"] is sentinel_step
+    for key, value in sample_kwargs.items():
+        assert captured["fit_kwargs"][key] == value
 
 
 def test_default_blackbox_slice_resolves_backend(data_ddm, monkeypatch):
@@ -242,17 +245,19 @@ def test_default_blackbox_slice_resolves_backend(data_ddm, monkeypatch):
         return object()
 
     def fake_fit(**kwargs):
+        captured["fit_kwargs"] = kwargs
         raise _FitCalled
 
     monkeypatch.setattr(pm, "Slice", fake_slice)
     monkeypatch.setattr(model.model, "fit", fake_fit)
 
     with pytest.raises(_FitCalled):
-        model.sample(backend="jax")
+        model.sample(backend="numba")
 
     resolved = captured["compile_kwargs"]
     assert captured["slice_model"] is model.pymc_model
-    assert type(resolved["mode"].linker).__name__ == "JAXLinker"
+    assert type(resolved["mode"].linker).__name__ == "NumbaLinker"
+    assert captured["fit_kwargs"]["backend"] == "numba"
 
 
 @pytest.mark.slow
