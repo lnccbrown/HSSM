@@ -8,6 +8,11 @@ on:
         type: string
         required: false
         default: ""
+      full_run:
+        description: "Set FULL_RUN=1 for the targeted notebook"
+        type: boolean
+        required: false
+        default: false
   workflow_call:  # Called by drift.yml (monthly notebook drift run)
     inputs:
       notebook_path:
@@ -15,6 +20,11 @@ on:
         type: string
         required: false
         default: ""
+      full_run:
+        description: "Set FULL_RUN=1 for the targeted notebook"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -111,6 +121,7 @@ jobs:
       - name: Execute and inspect target notebook
         shell: bash
         env:
+          FULL_RUN: ${{ inputs.full_run && '1' || '0' }}
           TARGET_NOTEBOOK: ${{ inputs.notebook_path }}
         run: |
           set -uo pipefail
