@@ -15,6 +15,7 @@ on:
       - "src/hssm/hssm.py"
       - "src/hssm/integrations/jeam.py"
       - "src/hssm/modelconfig/circular_diffusion_config.py"
+      - "src/hssm/modelconfig/projected_spherical_diffusion_config.py"
       - "src/hssm/register.py"
       - "src/hssm/utils.py"
       - "docs/tutorials/jeam_circular_diffusion.py"
@@ -27,6 +28,7 @@ on:
       - "tests/test_jeam_recovery_evidence_io.py"
       - "tests/test_jeam_modelconfig.py"
       - "tests/test_jeam_psdm_adapter.py"
+      - "tests/test_jeam_psdm_modelconfig.py"
       - "tests/integration/test_jeam_bayesian_evidence_capture.py"
       - "tests/integration/test_jeam_bayesian_recovery.py"
       - "tests/integration/test_jeam.py"
@@ -34,6 +36,8 @@ on:
       - "tests/integration/test_jeam_objective_parity.py"
       - "tests/integration/test_jeam_predictive.py"
       - "tests/integration/test_jeam_psdm.py"
+      - "tests/integration/test_jeam_psdm_model.py"
+      - "tests/integration/test_jeam_psdm_predictive.py"
       - "tests/integration/test_jeam_repeated_recovery.py"
       - "tests/integration/test_jeam_repeated_recovery_evidence.py"
       - "tests/integration/test_jeam_simulator.py"
@@ -100,6 +104,13 @@ jobs:
           uv run --group jeam-prototype pytest
           tests/test_jeam_psdm_adapter.py
           tests/integration/test_jeam_psdm.py
+
+      - name: Verify the fixed-PSDM model lifecycle
+        run: >-
+          uv run --group jeam-prototype pytest
+          tests/test_jeam_psdm_modelconfig.py
+          tests/integration/test_jeam_psdm_model.py
+          tests/integration/test_jeam_psdm_predictive.py
 
       - name: Verify JEAM sampler capabilities and NUTS backends
         run: >-
