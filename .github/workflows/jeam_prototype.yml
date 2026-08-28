@@ -21,6 +21,7 @@ on:
       - "docs/tutorials/jeam_circular_diffusion.py"
       - "scripts/benchmark_jeam_bayesian_recovery.py"
       - "scripts/benchmark_jeam_objective_parity.py"
+      - "scripts/benchmark_jeam_psdm_recovery.py"
       - "scripts/benchmark_jeam_recovery_bundle.py"
       - "scripts/benchmark_jeam_recovery_evidence.py"
       - "scripts/benchmark_jeam_repeated_recovery.py"
@@ -29,6 +30,7 @@ on:
       - "tests/test_jeam_modelconfig.py"
       - "tests/test_jeam_psdm_adapter.py"
       - "tests/test_jeam_psdm_modelconfig.py"
+      - "tests/test_jeam_psdm_recovery_runner.py"
       - "tests/integration/test_jeam_bayesian_evidence_capture.py"
       - "tests/integration/test_jeam_bayesian_recovery.py"
       - "tests/integration/test_jeam.py"
@@ -111,6 +113,11 @@ jobs:
           tests/test_jeam_psdm_modelconfig.py
           tests/integration/test_jeam_psdm_model.py
           tests/integration/test_jeam_psdm_predictive.py
+
+      - name: Verify the archived fixed-PSDM recovery runner
+        run: >-
+          uv run --group jeam-prototype pytest
+          tests/test_jeam_psdm_recovery_runner.py
 
       - name: Verify JEAM sampler capabilities and NUTS backends
         run: >-
