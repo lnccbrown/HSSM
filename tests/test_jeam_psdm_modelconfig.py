@@ -42,6 +42,7 @@ def test_get_projected_spherical_diffusion_config():
     blackbox = config["likelihoods"]["blackbox"]
     assert blackbox["loglik"] is logp_projected_spherical_diffusion
     assert blackbox["backend"] is None
+    assert blackbox["supported_samplers"] == ("pymc",)
     assert blackbox["bounds"] == {
         "v_x": (-3.0, 3.0),
         "v_y": (0.0, 3.0),
@@ -66,7 +67,45 @@ def test_projected_spherical_defaults_preserve_domain_and_rv():
     assert config.list_params == ["v_x", "v_y", "a", "t"]
     assert config.loglik is logp_projected_spherical_diffusion
     assert config.rv is simulate_projected_spherical_diffusion
+    assert config.supported_samplers == ("pymc",)
     config.validate()
+
+
+def test_projected_spherical_rejects_unverified_sampler_before_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The fixed black-box route should reject unverified backends immediately."""
+    model = hssm.HSSM(
+        data=pd.DataFrame({"rt": [0.4, 0.8], "response": [0.2, 1.4]}),
+        model=MODEL_NAME,
+        p_outlier=None,
+    )
+
+    def unexpected_fit(**kwargs):
+        pytest.fail("Bambi.fit was called for an unsupported PSDM sampler.")
+
+    def unexpected_map():
+        pytest.fail("MAP ran for an unsupported PSDM sampler.")
+
+    monkeypatch.setattr(model.model, "fit", unexpected_fit)
+    monkeypatch.setattr(model, "find_MAP", unexpected_map)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"Sampler 'laplace' is not supported.*"
+            r"projected_spherical_diffusion.*blackbox"
+        ),
+    ):
+        model.sample(
+            sampler="laplace",
+            initvals="map",
+            chains=1,
+            cores=1,
+            tune=1,
+            draws=1,
+            progressbar=False,
+        )
 
 
 @pytest.mark.parametrize("p_outlier", [0.0, 0.05])
