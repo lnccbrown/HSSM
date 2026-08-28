@@ -66,6 +66,11 @@ def _(mo):
     This notebook: **(1)** poke the simulator, **(2)** see the covariate handshake,
     **(3)** fit a trial-wise regression and recover it. The simulator is driven via
     ssm-simulators' high-level `Simulator` class — the same path HSSM's PPC uses.
+
+    **Execution status.** This interactive marimo notebook is maintained and run
+    manually. Documentation CI renders the page but deliberately does not click
+    its button-gated sampling cells or validate the full recovery run. Run the
+    notebook locally before relying on newly generated results.
     """)
     return
 

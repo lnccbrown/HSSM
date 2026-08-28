@@ -78,6 +78,14 @@ _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
 }
 
 
+def _validate_setting_preset(name: str, value: object, preset: str) -> None:
+    """Validate a model-level preset selector at the public boundary."""
+    if value is not None and (not isinstance(value, str) or value != preset):
+        raise ValueError(
+            f"`{name}` must be either {preset!r} or None, but got {value!r}."
+        )
+
+
 class classproperty:
     """A decorator that combines the behavior of @property and @classmethod.
 
@@ -149,25 +157,30 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         parameters. If you specify parameter-wise regressions in addition, these will
         override the global regression for the respective parameter.
     link_settings : optional
-        An optional string literal that indicates the link functions to use for each
-        parameter. Helpful for hierarchical models where sampling might get stuck/
-        very slow. Can be one of the following:
+        A preset for regression parameters whose link is not specified explicitly.
+        Helpful for hierarchical models where sampling might get stuck or become very
+        slow. Can be one of the following:
 
-        - `"log_logit"`: applies log link functions to positive parameters and
-        generalized logit link functions to parameters that have explicit bounds.
-        - `None`: unless otherwise specified, the `"identity"` link functions will be
-        used.
-        The default value is `None`.
+        - `"log_logit"`: uses identity for bounds `(-inf, inf)`, log for
+        `(0, inf)`, and generalized logit when both bounds are finite.
+        - `None`: uses the `"identity"` link unless a regression parameter specifies
+        another link.
+
+        Explicit per-parameter links take precedence. Parameters without a regression
+        formula have no linear predictor and are unaffected. Defaults to `None`.
     prior_settings : optional
-        An optional string literal that indicates the prior distributions to use for
-        each parameter. Helpful for hierarchical models where sampling might get stuck/
-        very slow. Can be one of the following:
+        A preset for generated regression-term priors. Helpful for hierarchical models
+        where sampling might get stuck or become very slow. Can be one of the
+        following:
 
-        - `"safe"`: HSSM will scan all parameters in the model and apply safe priors to
-        all parameters that do not have explicit bounds.
-        - None: HSSM will use bambi to provide default priors for all parameters. Not
-        recommended when you are using hierarchical models.
-        The default value is `"safe"`.
+        - `"safe"`: fills eligible missing common and group-specific regression-term
+        priors with HSSM's weakly informative defaults.
+        - `None`: leaves missing regression-term priors to Bambi. This is not
+        recommended for hierarchical models.
+
+        Explicit regression-term priors take precedence. This setting does not alter
+        explicit, model-configuration, or bounds-derived priors for parameters without
+        a regression formula. Defaults to `"safe"`.
     extra_namespace : optional
         Additional user supplied variables with transformations or data to include in
         the environment where the formula is evaluated. Defaults to `None`.
@@ -257,6 +270,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
+        _validate_setting_preset("link_settings", link_settings, "log_logit")
+        _validate_setting_preset("prior_settings", prior_settings, "safe")
+
         # ===== Input Data & Configuration =====
         self.data = data.copy()
         self.global_formula = global_formula
@@ -926,8 +942,22 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 dt = self._inference_obj
 
+        # The response logp for JAX-backed models contains custom Ops whose
+        # ``jax_funcify`` registrations are the supported compilation path.
+        # PyMC's default compiler currently selects the Numba linker, which
+        # object-mode-lifts those Ops and cloudpickles their ONNX closures.
+        # Some valid ONNX graphs contain protobuf descriptors that cannot be
+        # pickled, so preserve the model backend for this post-sampling step.
+        compile_mode = "JAX" if self.model_config.backend == "jax" else None
+
         # Actual likelihood computation
-        dt = _compute_log_likelihood(self.model, dt, data, inplace)
+        dt = _compute_log_likelihood(
+            self.model,
+            dt,
+            data,
+            inplace,
+            compile_mode=compile_mode,
+        )
 
         # clean up posterior:
         if not keep_likelihood_params:

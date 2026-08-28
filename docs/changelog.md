@@ -14,6 +14,8 @@
 
 6. **Safe common-intercept priors now recognize every identity-link spelling consistently** (#1232). An omitted link, `"identity"`, `bambi.Link("identity")`, and `hssm.Link("identity")` all retain response-scale priors, including HDDM-derived priors; transformed links use a coefficient-scale `Normal(mu=0, sigma=0.25)`. Explicit priors still win, and unmatched group-only terms remain unchanged pending [#1225](https://github.com/lnccbrown/HSSM/issues/1225). See [Link functions and safe priors](tutorials/link_functions.ipynb) for the underlying model-design logic.
 
+7. **Invalid model-level prior and link presets now fail fast** (#1233). `prior_settings` accepts only `"safe"` or `None`, and `link_settings` accepts only `"log_logit"` or `None`; wrong-case strings, booleans, mappings, and other unsupported values now raise a clear `ValueError` instead of silently changing prior, link, initial-value, or display behavior. The API documentation now clarifies that both presets act on regression parameters: `prior_settings=None` delegates missing regression-term priors to Bambi but leaves HSSM's simple-parameter defaults unchanged. The Poisson-race tutorial has also been migrated to marimo and no longer presents `prior_settings` as a prior dictionary.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.

@@ -137,6 +137,31 @@ def _check_initval_defaults_correctness(model) -> None:
             pass
 
 
+@pytest.mark.parametrize(
+    ("link_settings", "expected_link", "expected_initval"),
+    [(None, "identity", 1.5), ("log_logit", "log", 0.0)],
+)
+def test_valid_link_settings_preserve_regression_initvals(
+    cavanagh_test, link_settings, expected_link, expected_initval
+):
+    """Both valid presets retain their documented deterministic starts."""
+    model = hssm.HSSM(
+        data=cavanagh_test.iloc[:12],
+        include=[{"name": "a", "formula": "a ~ 1 + theta"}],
+        v=0.0,
+        z=0.5,
+        t=0.2,
+        p_outlier=0.0,
+        prior_settings=None,
+        link_settings=link_settings,
+        process_initvals=True,
+        initval_jitter=0.0,
+    )
+
+    assert model.params["a"].link == expected_link
+    np.testing.assert_allclose(model._initvals["a_Intercept"], expected_initval)
+
+
 @pytest.mark.slow
 def test_basic_model(caplog):
     """Test basic model with p_outlier distribution defined."""

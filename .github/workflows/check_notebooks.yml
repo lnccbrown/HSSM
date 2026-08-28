@@ -2,12 +2,27 @@ name: Check notebooks
 
 on:
   workflow_dispatch:
+    inputs:
+      notebook_path:
+        description: "Run one tracked non-archive docs notebook instead of all shards"
+        type: string
+        required: false
+        default: ""
   workflow_call:  # Called by drift.yml (monthly notebook drift run)
+    inputs:
+      notebook_path:
+        description: "Run one tracked non-archive docs notebook instead of all shards"
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
 
 jobs:
   check_notebooks:
     runs-on: ubuntu-latest
-    if: ${{ ! contains(github.event.head_commit.message, '[skip fast tests]') }}
+    if: ${{ inputs.notebook_path == '' && ! contains(github.event.head_commit.message, '[skip fast tests]') }}
 
     name: Check notebooks (shard ${{ matrix.shard }})
     strategy:
@@ -40,9 +55,7 @@ jobs:
           # against. The page says so in its own text. Everything else runs —
           # this workflow is dispatch/drift-only, so "too heavy for the PR
           # check" no longer applies: there is no PR check.
-          SKIP_NOTEBOOKS=(
-            "docs/tutorials/tutorial_bayeux.ipynb"
-          )
+          mapfile -t SKIP_NOTEBOOKS < .github/notebook-skip-list.txt
 
           EXIT_CODE=0
           INDEX=0
@@ -75,3 +88,73 @@ jobs:
             fi
           done
           exit $EXIT_CODE
+
+  check_target_notebook:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.notebook_path != '' && ! contains(github.event.head_commit.message, '[skip fast tests]') }}
+    name: Check targeted notebook
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Validate notebook target
+        env:
+          TARGET_NOTEBOOK: ${{ inputs.notebook_path }}
+        run: python3 scripts/validate_notebook_target.py "$TARGET_NOTEBOOK"
+
+      - name: Setup environment
+        uses: ./.github/setup-env-notebooks
+        with:
+          python-version: "3.13"
+
+      - name: Execute and inspect target notebook
+        shell: bash
+        env:
+          TARGET_NOTEBOOK: ${{ inputs.notebook_path }}
+        run: |
+          set -uo pipefail
+          artifact_dir="$RUNNER_TEMP/executed-notebook"
+          mkdir -p -- "$artifact_dir"
+          printf '%s\n' "$TARGET_NOTEBOOK" > "$artifact_dir/target.txt"
+
+          echo "Cleaning $TARGET_NOTEBOOK"
+          uv run nb-clean clean -o "$TARGET_NOTEBOOK"
+
+          uv run --group notebook jupyter nbconvert \
+            --ExecutePreprocessor.timeout=10000 \
+            --ExecutePreprocessor.allow_errors=True \
+            --to notebook --execute "$TARGET_NOTEBOOK" \
+            2>&1 | tee "$artifact_dir/execution.log"
+          execution_status=${PIPESTATUS[0]}
+
+          executed_notebook="${TARGET_NOTEBOOK%.ipynb}.nbconvert.ipynb"
+          validation_status=1
+          privacy_status=1
+          if [[ -f "$executed_notebook" ]]; then
+            cp -- "$executed_notebook" "$artifact_dir/"
+
+            uv run python scripts/check_executed_notebook.py "$executed_notebook" \
+              2>&1 | tee "$artifact_dir/validation.log"
+            validation_status=${PIPESTATUS[0]}
+
+            uv run python scripts/check_docs_notebook_paths.py \
+              2>&1 | tee "$artifact_dir/privacy.log"
+            privacy_status=${PIPESTATUS[0]}
+          else
+            echo "Executed notebook was not produced: $executed_notebook" \
+              | tee "$artifact_dir/validation.log"
+          fi
+
+          if (( execution_status != 0 || validation_status != 0 || privacy_status != 0 )); then
+            exit 1
+          fi
+
+      - name: Upload executed notebook diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: executed-notebook-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/executed-notebook/
+          if-no-files-found: warn
+          retention-days: 7
