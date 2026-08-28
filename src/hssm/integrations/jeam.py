@@ -384,6 +384,18 @@ def simulate_projected_spherical_diffusion(
     mask.
     """
     parameters = _normalize_simulator_theta(theta)
+    if np.any(parameters[:, 1] < 0.0):
+        raise ValueError(
+            "JEAM projected spherical simulator parameter 'v_y' must be non-negative."
+        )
+    if np.any(parameters[:, 2] <= 0.0):
+        raise ValueError(
+            "JEAM projected spherical simulator parameter 'a' must be positive."
+        )
+    if np.any(parameters[:, 3] < 0.0):
+        raise ValueError(
+            "JEAM projected spherical simulator parameter 't' must be non-negative."
+        )
     if (
         isinstance(n_replicas, (bool, np.bool_))
         or not isinstance(n_replicas, (int, np.integer))
