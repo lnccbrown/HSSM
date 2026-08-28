@@ -692,7 +692,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 # callbacks can hold native resources such as an ONNX Runtime
                 # session, which cannot be pickled. Compile the Slice logp with
                 # PyTensor's CVM linker instead, matching the pre-PyMC-6 path
-                # while retaining parallel chain sampling.
+                # without reducing the caller's requested cores.
                 kwargs |= {
                     "step": pm.Slice(
                         model=self.pymc_model,
@@ -954,13 +954,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 dt = self._inference_obj
 
-        # The response logp for JAX-backed models contains custom Ops whose
-        # ``jax_funcify`` registrations are the supported compilation path.
-        # PyMC's default compiler currently selects the Numba linker, which
-        # object-mode-lifts those Ops and cloudpickles their ONNX closures.
-        # Some valid ONNX graphs contain protobuf descriptors that cannot be
-        # pickled, so preserve the model backend for this post-sampling step.
-        compile_mode = "JAX" if self.model_config.backend == "jax" else None
+        # Preserve the likelihood implementation's supported compilation path
+        # when attaching post-sampling log likelihoods. JAX-backed Ops use their
+        # ``jax_funcify`` registrations. Black-box Ops execute arbitrary Python
+        # callbacks, so compile them with CVM instead of PyMC 6's default Numba
+        # linker, which object-mode-lifts and cloudpickles callback closures.
+        if self.loglik_kind == "blackbox":
+            compile_mode = "cvm"
+        elif self.model_config.backend == "jax":
+            compile_mode = "JAX"
+        else:
+            compile_mode = None
 
         # Actual likelihood computation
         dt = _compute_log_likelihood(
