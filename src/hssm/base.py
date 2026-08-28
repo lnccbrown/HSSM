@@ -686,7 +686,19 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 )
 
             if "step" not in kwargs:
-                kwargs |= {"step": pm.Slice(model=self.pymc_model)}
+                # Black-box likelihoods execute arbitrary Python callbacks in
+                # ``Op.perform``. PyMC 6's default Numba linker object-mode
+                # lifts those callbacks and cloudpickles their closures; valid
+                # callbacks can hold native resources such as an ONNX Runtime
+                # session, which cannot be pickled. Compile the Slice logp with
+                # PyTensor's CVM linker instead, matching the pre-PyMC-6 path
+                # while retaining parallel chain sampling.
+                kwargs |= {
+                    "step": pm.Slice(
+                        model=self.pymc_model,
+                        compile_kwargs={"mode": "cvm"},
+                    )
+                }
 
         if (
             self.loglik_kind == "approx_differentiable"

@@ -189,6 +189,32 @@ def test_default_sampler_resolution(
     assert captured["inference_method"] == expected_sampler
 
 
+def test_default_blackbox_slice_uses_cvm(data_ddm, monkeypatch):
+    """Black-box callbacks bypass Numba's closure-serialization path."""
+    model = hssm.HSSM(data_ddm, loglik_kind="blackbox")
+    captured = {}
+    sentinel_step = object()
+
+    def fake_slice(*, model, compile_kwargs):
+        captured["slice_model"] = model
+        captured["compile_kwargs"] = compile_kwargs
+        return sentinel_step
+
+    def fake_fit(**kwargs):
+        captured["step"] = kwargs["step"]
+        raise _FitCalled
+
+    monkeypatch.setattr(pm, "Slice", fake_slice)
+    monkeypatch.setattr(model.model, "fit", fake_fit)
+
+    with pytest.raises(_FitCalled):
+        model.sample()
+
+    assert captured["slice_model"] is model.pymc_model
+    assert captured["compile_kwargs"] == {"mode": "cvm"}
+    assert captured["step"] is sentinel_step
+
+
 @pytest.mark.slow
 def test_default_sampler_end_to_end(data_ddm):
     """The default sampling path works end to end, not just in resolution."""
