@@ -1,23 +1,22 @@
-"""Run the preregistered fixed-PSDM optimizer and Slice recovery study.
+"""Archive the preregistered fixed-PSDM optimizer and Slice recovery runner.
 
 The canonical protocol lives in
-``benchmarks/specs/jeam_fixed_psdm_recovery_v1.json``. The runner generates each
-dataset once, preserves its bytes, compares direct JEAM and compiled HSSM
-objectives/optimizers, saves raw posterior traces before post-processing, and writes a
-compact JSON artifact suitable for version control.
+``benchmarks/specs/jeam_fixed_psdm_recovery_v1.json``. The historical execution
+generated each dataset once, compared direct JEAM and compiled HSSM objectives and
+fixed-budget optimizers, and wrote transient datasets and posterior traces before a
+compact JSON result. Only the later compact hashes survived; the raw files were not
+retained.
 
-Run one explicitly non-canonical smoke scenario first::
+The canonical v1 study has already run and its negative result is archived. This
+replayed runner refuses canonical execution so a modern checkout cannot create or
+overwrite an artifact labeled as the historical study. One explicitly non-canonical
+wiring smoke remains available; it is not v1 evidence::
 
     python -m scripts.benchmark_jeam_psdm_recovery \
         --smoke --scenario baseline_asymmetric \
         --work-dir /tmp/jeam-psdm-smoke \
         --output /tmp/jeam-psdm-smoke.json
 
-Run the canonical study only from a clean commit after publishing the protocol::
-
-    python -m scripts.benchmark_jeam_psdm_recovery \
-        --work-dir /tmp/jeam-psdm-recovery-v1 \
-        --output benchmarks/results/jeam_fixed_psdm_recovery_v1.json
 """
 
 from __future__ import annotations
@@ -44,6 +43,9 @@ if TYPE_CHECKING:
 REPO_ROOT = Path(__file__).parents[1]
 DEFAULT_SPEC_PATH = (
     REPO_ROOT / "benchmarks" / "specs" / "jeam_fixed_psdm_recovery_v1.json"
+)
+ARCHIVED_RESULT_PATH = (
+    REPO_ROOT / "benchmarks" / "results" / "jeam_fixed_psdm_recovery_v1.json"
 )
 PACKAGE_NAMES = (
     "hssm",
@@ -808,17 +810,12 @@ def _provenance(spec_path: Path) -> dict[str, Any]:
 
 
 def _assert_canonical_preconditions(spec_path: Path, spec: dict[str, Any]) -> None:
-    """Refuse a canonical run that cannot support exact provenance."""
-    if _git("status", "--porcelain"):
-        raise RuntimeError("Canonical recovery requires a clean HSSM worktree.")
-    provenance = _provenance(spec_path)
-    frozen = spec["provenance"]
-    if provenance["jeam_revision"] != frozen["jeam_revision"]:
-        raise RuntimeError(
-            "Installed JEAM revision does not match the protocol: "
-            f"{provenance['jeam_revision']} != {frozen['jeam_revision']}"
-        )
-    _git("merge-base", "--is-ancestor", provenance["spec_commit"], "HEAD")
+    """Refuse every canonical invocation of the archived v1 runner."""
+    raise RuntimeError(
+        "Canonical fixed-PSDM v1 recovery is archived and must not be rerun. "
+        "Use --smoke only for a noncanonical wiring check, or preregister a new "
+        "study version."
+    )
 
 
 def run_study(
@@ -829,8 +826,13 @@ def run_study(
     scenario_names: Sequence[str] | None = None,
     smoke: bool = False,
 ) -> dict[str, Any]:
-    """Run selected smoke scenarios or the complete canonical study."""
+    """Run selected noncanonical smoke scenarios; reject canonical v1 execution."""
     spec = _load_json(spec_path)
+    if output_path.resolve() == ARCHIVED_RESULT_PATH.resolve():
+        raise RuntimeError(
+            "The archived fixed-PSDM v1 result path is immutable; choose a different "
+            "output path for a noncanonical smoke check."
+        )
     if not smoke:
         _assert_canonical_preconditions(spec_path, spec)
     _configure_precision()
