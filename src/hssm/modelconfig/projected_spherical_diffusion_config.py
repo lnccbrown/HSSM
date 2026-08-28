@@ -45,6 +45,7 @@ def get_projected_spherical_diffusion_config() -> DefaultConfig:
                     "t": (0.0, 2.0),
                 },
                 "extra_fields": None,
+                "supported_samplers": ("pymc",),
             },
         },
     }
