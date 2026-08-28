@@ -42,7 +42,7 @@ RUN printf '%s\n' \
       '30 of the 34 tutorials run as-is. Four advanced ones need heavy extras that are' \
       'left out to keep the image small:' \
       '' \
-      '  - bayesflow_lre_integration, bayesflow_nle_onnx_integration  -> bayesflow, keras' \
+      '  - bayesflow_lre_integration, bayesflow_nre_onnx_integration  -> bayesflow, keras' \
       '  - sbi_nre_integration                                        -> sbi, torch' \
       '  - jax_callable_contribution_onnx_example                     -> lanfactory' \
       '' \

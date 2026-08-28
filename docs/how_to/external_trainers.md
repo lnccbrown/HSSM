@@ -10,7 +10,7 @@ to the right integration path.
 | Route | Source | Mechanism | When to use | Tutorial |
 |-------|--------|-----------|-------------|----------|
 | **NRE → ONNX** | sbi | `lanfactory.onnx.transform_sbi_to_onnx` → `loglik="file.onnx"` | Portable, shareable artifact; ratio estimators | [sbi NRE integration](../tutorials/sbi_nre_integration.ipynb) |
-| **NRE → ONNX** | BayesFlow | `lanfactory.onnx.transform_bayesflow_to_onnx` → `loglik="file.onnx"` | Portable artifact; ratio estimators for mixed observations | [BayesFlow NRE integration](../tutorials/bayesflow_nle_onnx_integration.ipynb) |
+| **NRE → ONNX** | BayesFlow | `lanfactory.onnx.transform_bayesflow_to_onnx` → `loglik="file.onnx"` | Portable artifact; ratio estimators for mixed observations | [BayesFlow NRE integration](../tutorials/bayesflow_nre_onnx_integration.ipynb) |
 | **LRE → JAX callable** | BayesFlow | in-memory JAX function → `loglik=<callable>` | Fast iteration during model development; no export step | [BayesFlow LRE integration](../tutorials/bayesflow_lre_integration.ipynb) |
 
 The BayesFlow continuous-density NLE exporter does not support mixed

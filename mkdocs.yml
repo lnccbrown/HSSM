@@ -70,7 +70,7 @@ nav:
           - Custom models from JAX callables: tutorials/jax_callable_contribution_onnx_example.ipynb
           - Custom models from ONNX files (blackbox): tutorials/blackbox_contribution_onnx_example.ipynb
           - Integrate an sbi NRE (ONNX): tutorials/sbi_nre_integration.ipynb
-          - Integrate a BayesFlow NRE (ONNX): tutorials/bayesflow_nle_onnx_integration.ipynb
+          - Integrate a BayesFlow NRE (ONNX): tutorials/bayesflow_nre_onnx_integration.ipynb
           - Integrate a BayesFlow LRE (JAX callable): tutorials/bayesflow_lre_integration.ipynb
           - Use the low-level API with PyMC: tutorials/pymc.ipynb
           - Compile a log-likelihood function: tutorials/compile_logp.ipynb
@@ -129,6 +129,7 @@ plugins:
         tutorials/hssm_tutorial_workshop_2.md: https://lnccbrown.github.io/HSSM/archive/hssm_tutorial_workshop_2/
         tutorials/pymc_to_hssm.md: https://lnccbrown.github.io/HSSM/archive/pymc_to_hssm/
         tutorials/variational_inference_hierarchical.md: https://lnccbrown.github.io/HSSM/tutorials/variational_inference/
+        tutorials/bayesflow_nle_onnx_integration.md: https://lnccbrown.github.io/HSSM/tutorials/bayesflow_nre_onnx_integration/
   - mkdocs-jupyter:
       ignore:
         - tutorials/link_functions.py
@@ -177,7 +178,7 @@ plugins:
         - archive/pymc_to_hssm.ipynb
         - tutorials/tutorial_bayeux.ipynb
         - tutorials/bayesflow_lre_integration.ipynb
-        - tutorials/bayesflow_nle_onnx_integration.ipynb
+        - tutorials/bayesflow_nre_onnx_integration.ipynb
         - tutorials/sbi_nre_integration.ipynb
         - tutorials/poisson_race.ipynb
         - .ipynb_checkpoints/*.ipynb
