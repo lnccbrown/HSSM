@@ -1,0 +1,330 @@
+{
+  "schema_version": 1,
+  "study_id": "jeam-fixed-psdm-recovery-v1",
+  "status": "preregistered-before-canonical-run",
+  "frozen_at_utc": "2026-08-17T04:04:00Z",
+  "question": "Does the fixed projected-spherical JEAM likelihood preserve its optimizer inside HSSM and support converged ordered-Slice recovery with calibrated polar predictive summaries?",
+  "canonical_results_must_postdate_this_file_commit": true,
+  "scope": {
+    "model": "projected_spherical_diffusion",
+    "response_columns": [
+      "rt",
+      "response"
+    ],
+    "response_contract": {
+      "rt": "finite and strictly positive",
+      "response": "finite polar angle in the closed interval [0, pi]"
+    },
+    "density_measure": "d(rt) d(response)",
+    "parameter_order": [
+      "v_x",
+      "v_y",
+      "a",
+      "t"
+    ],
+    "parameter_meaning": {
+      "v_x": "axial drift",
+      "v_y": "nonnegative projected-radial drift",
+      "a": "fixed threshold",
+      "t": "nondecision time"
+    },
+    "fixed_model_settings": {
+      "sigma": 1.0,
+      "s_v": 0.0,
+      "s_t": 0.0,
+      "threshold_dynamic": "fixed",
+      "decay": 0.0,
+      "threshold_function": null,
+      "p_outlier": null
+    }
+  },
+  "provenance": {
+    "hssm_stack_base_revision": "11fdc2236711f46d3bd6ba19589947fc20285ff1",
+    "jeam_revision": "1d7112757d8b2d27a31437255fc679194d39ab89",
+    "python_minor": "3.12",
+    "pytensor_floatx": "float64",
+    "environment": "HSSM pyproject optional JEAM source pinned to the recorded immutable revision",
+    "required_result_metadata": [
+      "hssm_revision",
+      "jeam_revision",
+      "pyproject_sha256",
+      "python_version",
+      "package_versions",
+      "platform",
+      "processor",
+      "logical_cpu_count"
+    ]
+  },
+  "priors_and_initialization": {
+    "policy": "Construct the ordinary built-in HSSM model with its public defaults, assert the resolved priors and initvals equal this specification, and pass the same initvals to every ordered-Slice fit without jitter.",
+    "priors": {
+      "v_x": {
+        "distribution": "Uniform",
+        "lower": -3.0,
+        "upper": 3.0
+      },
+      "v_y": {
+        "distribution": "Uniform",
+        "lower": 0.0,
+        "upper": 3.0
+      },
+      "a": {
+        "distribution": "Uniform",
+        "lower": 0.1,
+        "upper": 3.0
+      },
+      "t": {
+        "distribution": "HalfNormal",
+        "sigma": 2.0
+      }
+    },
+    "configured_bounds": {
+      "v_x": [
+        -3.0,
+        3.0
+      ],
+      "v_y": [
+        0.0,
+        3.0
+      ],
+      "a": [
+        0.1,
+        3.0
+      ],
+      "t": [
+        0.0,
+        2.0
+      ]
+    },
+    "resolved_untransformed_initvals": {
+      "v_x": 0.0,
+      "v_y": 1.5,
+      "a": 1.5,
+      "t": 0.025
+    }
+  },
+  "scenarios": [
+    {
+      "name": "baseline_asymmetric",
+      "truth": [
+        0.6,
+        1.0,
+        1.1,
+        0.2
+      ],
+      "trials": 400,
+      "data_seed": 1592,
+      "optimizer_seed": 8695309,
+      "chain_seeds": [
+        7101,
+        7102,
+        7103,
+        7104
+      ],
+      "prior_predictive_seed": 11101,
+      "posterior_predictive_seed": 11291
+    },
+    {
+      "name": "reverse_axial_weak_radial",
+      "truth": [
+        -0.7,
+        0.45,
+        0.85,
+        0.1
+      ],
+      "trials": 400,
+      "data_seed": 2703,
+      "optimizer_seed": 54221,
+      "chain_seeds": [
+        8201,
+        8202,
+        8203,
+        8204
+      ],
+      "prior_predictive_seed": 12101,
+      "posterior_predictive_seed": 12291
+    },
+    {
+      "name": "high_threshold_strong_radial",
+      "truth": [
+        0.3,
+        1.25,
+        1.5,
+        0.22
+      ],
+      "trials": 400,
+      "data_seed": 3814,
+      "optimizer_seed": 64231,
+      "chain_seeds": [
+        9301,
+        9302,
+        9303,
+        9304
+      ],
+      "prior_predictive_seed": 13101,
+      "posterior_predictive_seed": 13291
+    },
+    {
+      "name": "low_threshold_balanced_drift",
+      "truth": [
+        0.9,
+        0.75,
+        0.7,
+        0.07
+      ],
+      "trials": 400,
+      "data_seed": 4925,
+      "optimizer_seed": 74241,
+      "chain_seeds": [
+        10401,
+        10402,
+        10403,
+        10404
+      ],
+      "prior_predictive_seed": 14101,
+      "posterior_predictive_seed": 14291
+    }
+  ],
+  "objective_and_optimizer": {
+    "implementations": [
+      "direct JEAM ProjectedSphericalDiffusionModel.joint_lpdf",
+      "compiled HSSM blackbox logp"
+    ],
+    "candidate_offsets": [
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.12,
+        -0.1,
+        0.08,
+        -0.02
+      ],
+      [
+        -0.12,
+        0.1,
+        -0.08,
+        -0.03
+      ]
+    ],
+    "optimizer": "scipy.optimize.differential_evolution",
+    "maxiter": 20,
+    "popsize": 15,
+    "polish": false,
+    "workers": 1,
+    "bounds": {
+      "v_x": [
+        -2.0,
+        2.0
+      ],
+      "v_y": [
+        0.02,
+        2.0
+      ],
+      "a": [
+        0.4,
+        2.0
+      ],
+      "t_lower": 0.02,
+      "t_upper": "nextafter(minimum observed rt, -infinity)"
+    }
+  },
+  "execution": {
+    "sampler": "one pymc.Slice step per parameter in parameter_order",
+    "likelihood": "blackbox",
+    "backend": "pymc",
+    "chains": 4,
+    "tune": 1000,
+    "draws": 1000,
+    "cores": 1,
+    "blas_cores": 1,
+    "init": "adapt_diag",
+    "progressbar": false,
+    "compute_convergence_checks_during_sampling": true,
+    "compute_log_likelihood_during_sampling": false,
+    "prior_predictive_draws": 100,
+    "posterior_predictive_draws": 40,
+    "posterior_hdi_probability": 0.94,
+    "rt_quantile_probabilities": [
+      0.1,
+      0.5,
+      0.9
+    ],
+    "data_policy": "Generate each dataset once through the public HSSM adapter, save its float64 bytes and SHA256, and reuse those exact bytes for optimizer and posterior inference.",
+    "trace_policy": "Save every returned DataTree to NetCDF immediately after sampling and before summaries or posterior prediction; record its SHA256 and byte count in the compact result.",
+    "predictive_angle_summary": "mean polar unit-vector components [mean(sin(response)), mean(cos(response))]",
+    "timing_policy": "Record optimizer, model build, sampling, posterior predictive, and total wall time descriptively with perf_counter; never make wall time a pass/fail criterion."
+  },
+  "preflight_gates": {
+    "prior_predictive": {
+      "all_values_finite": true,
+      "all_rt_strictly_positive": true,
+      "all_angles_in_closed_domain": true,
+      "rt_quantile_ratio_to_observed_lower": 0.05,
+      "rt_quantile_ratio_to_observed_upper": 30.0,
+      "ratio_probabilities": [
+        0.5,
+        0.9
+      ]
+    },
+    "initial_point": {
+      "finite_joint_logp": true
+    }
+  },
+  "scientific_acceptance": {
+    "maximum_objective_absolute_error": 1e-08,
+    "maximum_optimizer_parameter_absolute_error": 1e-09,
+    "maximum_optimizer_objective_absolute_error": 1e-06,
+    "optimizer_recovery": {
+      "maximum_absolute_error": {
+        "v_x": 0.45,
+        "v_y": 0.45,
+        "a": 0.25,
+        "t": 0.08
+      },
+      "maximum_rmse": {
+        "v_x": 0.35,
+        "v_y": 0.35,
+        "a": 0.18,
+        "t": 0.06
+      }
+    },
+    "posterior_recovery": {
+      "maximum_rhat_exclusive": 1.01,
+      "minimum_bulk_ess_exclusive": 400.0,
+      "minimum_tail_ess_exclusive": 400.0,
+      "maximum_mcse_over_posterior_sd_exclusive": 0.05,
+      "minimum_94_percent_hdi_coverage_per_parameter": 0.75,
+      "minimum_overall_94_percent_hdi_coverage": 0.75,
+      "maximum_absolute_bias": {
+        "v_x": 0.3,
+        "v_y": 0.3,
+        "a": 0.15,
+        "t": 0.04
+      },
+      "maximum_rmse": {
+        "v_x": 0.4,
+        "v_y": 0.4,
+        "a": 0.22,
+        "t": 0.06
+      }
+    },
+    "posterior_predictive": {
+      "maximum_rt_quantile_absolute_error": 0.15,
+      "maximum_polar_unit_vector_component_absolute_error": 0.08
+    }
+  },
+  "reporting_and_deviation_policy": {
+    "result_path": "benchmarks/results/jeam_fixed_psdm_recovery_v1.json",
+    "raw_traces_committed": false,
+    "compact_result_committed": true,
+    "no_manual_chain_exclusions": true,
+    "no_interim_stopping": true,
+    "failed_sampling_is_a_recorded_result": true,
+    "infrastructure_retry": "Retry only a documented failure that occurs before a posterior is returned; retain failed-attempt metadata and rerun the complete affected scenario.",
+    "protocol_change": "Do not edit v1 after canonical execution begins. Correct a scientific or implementation defect by adding a new versioned specification and report v1 as superseded."
+  }
+}

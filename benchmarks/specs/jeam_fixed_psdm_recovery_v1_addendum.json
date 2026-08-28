@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "addendum_id": "jeam-fixed-psdm-recovery-v1-archive-scope-1",
+  "study_id": "jeam-fixed-psdm-recovery-v1",
+  "status": "historical-preregistration-archived-promotion-blocked",
+  "document_role": "Post-hoc archival interpretation only; this file does not amend or preregister the v1 protocol.",
+  "immutable_protocol": {
+    "path": "benchmarks/specs/jeam_fixed_psdm_recovery_v1.json",
+    "original_freeze_commit": "c1c68ef3c0ebdf78b4a950c4e62e61bee55b0961",
+    "sha256": "2a9fabe13e612a59f7c2138e4e36ae4e01d4bde5e226c16c8572d5ebe3594198",
+    "replay_policy": "Replay the frozen bytes patch-identically; a replay is not a new preregistration."
+  },
+  "historical_execution": {
+    "hssm_stack_base_revision": "11fdc2236711f46d3bd6ba19589947fc20285ff1",
+    "hssm_runner_revision": "ebbd68ee6dcaad644505ae7f3739b7b1f0ba3794",
+    "jeam_revision": "1d7112757d8b2d27a31437255fc679194d39ab89",
+    "python_minor": "3.12",
+    "pytensor_floatx": "float64"
+  },
+  "current_safety_revision": {
+    "jeam_revision": "ede7a4f4faf226e4dae52c84dfb01012939cccdc",
+    "v1_recovery_rerun": false
+  },
+  "scope": {
+    "study_class": "seeded four-scenario recovery smoke, not a calibration study",
+    "model_contract": "ordinary scalar/intercept-only public-default HSSM model",
+    "formula_or_regression_support_evaluated": false,
+    "t_prior": "untruncated HalfNormal(sigma=2)",
+    "configured_t_bounds": [
+      0.0,
+      2.0
+    ],
+    "prior_and_bounds_are_distinct_contracts": true,
+    "configured_t_bound_truncated_the_prior": false,
+    "posterior_likelihood_support": "t < minimum observed rt"
+  },
+  "known_v1_outcome": {
+    "result_path": "benchmarks/results/jeam_fixed_psdm_recovery_v1.json",
+    "result_commit": "d76f995d501603cc56f895e5fa429ce2be14e468",
+    "result_sha256": "cede87d5a5a2c9789939b66962ebb025b270a13966aa2d657d5b0cbb95e9c2c4",
+    "canonical_started_at_utc": "2026-08-17T04:15:03.738704+00:00",
+    "overall_pass": false,
+    "truth_in_hdi": 14,
+    "truth_total": 16,
+    "interpretation": "Recovery was not demonstrated under the frozen v1 design and budget; this is not evidence that fixed PSDM recovery is impossible."
+  },
+  "evidence_boundary": {
+    "dataset_hashes_recorded": true,
+    "trace_hashes_recorded": true,
+    "raw_datasets_retained_in_git": 0,
+    "raw_traces_retained_in_git": 0,
+    "raw_prior_predictive_draws_retained": false,
+    "raw_posterior_predictive_draws_retained": false,
+    "independent_raw_reverification": "blocked",
+    "fixed_psdm_public_support_or_promotion": "blocked"
+  },
+  "successor_policy": {
+    "v2a_and_v2b_require_new_preregistrations": true,
+    "mixing_and_identifiability_are_hypotheses_not_v1_conclusions": true
+  }
+}
