@@ -26,12 +26,14 @@ on:
       - "tests/test_jeam_recovery_evidence_bundle.py"
       - "tests/test_jeam_recovery_evidence_io.py"
       - "tests/test_jeam_modelconfig.py"
+      - "tests/test_jeam_psdm_adapter.py"
       - "tests/integration/test_jeam_bayesian_evidence_capture.py"
       - "tests/integration/test_jeam_bayesian_recovery.py"
       - "tests/integration/test_jeam.py"
       - "tests/integration/test_jeam_model.py"
       - "tests/integration/test_jeam_objective_parity.py"
       - "tests/integration/test_jeam_predictive.py"
+      - "tests/integration/test_jeam_psdm.py"
       - "tests/integration/test_jeam_repeated_recovery.py"
       - "tests/integration/test_jeam_repeated_recovery_evidence.py"
       - "tests/integration/test_jeam_simulator.py"
@@ -92,6 +94,12 @@ jobs:
           tests/integration/test_jeam_objective_parity.py
           tests/integration/test_jeam_predictive.py
           tests/integration/test_jeam_simulator.py
+
+      - name: Verify the fixed-PSDM adapter handshake
+        run: >-
+          uv run --group jeam-prototype pytest
+          tests/test_jeam_psdm_adapter.py
+          tests/integration/test_jeam_psdm.py
 
       - name: Verify JEAM sampler capabilities and NUTS backends
         run: >-
