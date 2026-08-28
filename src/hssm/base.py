@@ -28,6 +28,7 @@ import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
+from pymc.pytensorf import resolve_backend_compile_kwargs
 from pymc.variational import Approximation
 from xarray import DataTree
 
@@ -693,10 +694,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 # session, which cannot be pickled. Compile the Slice logp with
                 # PyTensor's CVM linker instead, matching the pre-PyMC-6 path
                 # without reducing the caller's requested cores.
+                slice_compile_kwargs = resolve_backend_compile_kwargs(
+                    kwargs.get("backend"), kwargs.get("compile_kwargs")
+                )
+                slice_compile_kwargs.setdefault("mode", "cvm")
                 kwargs |= {
                     "step": pm.Slice(
                         model=self.pymc_model,
-                        compile_kwargs={"mode": "cvm"},
+                        compile_kwargs=slice_compile_kwargs,
                     )
                 }
 
