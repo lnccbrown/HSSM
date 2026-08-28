@@ -295,14 +295,20 @@ def test_add_likelihood_parameters_to_data(data_ddm):
 
 
 @pytest.mark.parametrize(
-    ("backend", "expected_compile_mode"),
-    [(None, None), ("pytensor", None), ("jax", "JAX")],
+    ("loglik_kind", "backend", "expected_compile_mode"),
+    [
+        ("analytical", None, None),
+        ("approx_differentiable", "pytensor", None),
+        ("approx_differentiable", "jax", "JAX"),
+        ("blackbox", None, "cvm"),
+    ],
 )
-def test_log_likelihood_uses_model_backend_compile_mode(
-    data_ddm, monkeypatch, backend, expected_compile_mode
+def test_log_likelihood_uses_likelihood_compile_mode(
+    data_ddm, monkeypatch, loglik_kind, backend, expected_compile_mode
 ):
-    """Attached traces stay immutable and select the model's compile backend."""
+    """Attached traces stay immutable and use the likelihood's compiler."""
     model = HSSM(data=data_ddm)
+    model.loglik_kind = loglik_kind
     model.model_config.backend = backend
     traces = xr.DataTree.from_dict(
         {"posterior": xr.Dataset({"v": (("chain", "draw"), np.array([[0.5]]))})}

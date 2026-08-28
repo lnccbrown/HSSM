@@ -28,6 +28,7 @@ import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
+from pymc.pytensorf import resolve_backend_compile_kwargs
 from pymc.variational import Approximation
 from xarray import DataTree
 
@@ -686,7 +687,23 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 )
 
             if "step" not in kwargs:
-                kwargs |= {"step": pm.Slice(model=self.pymc_model)}
+                # Black-box likelihoods execute arbitrary Python callbacks in
+                # ``Op.perform``. PyMC 6's default Numba linker object-mode
+                # lifts those callbacks and cloudpickles their closures; valid
+                # callbacks can hold native resources such as an ONNX Runtime
+                # session, which cannot be pickled. Compile the Slice logp with
+                # PyTensor's CVM linker instead, matching the pre-PyMC-6 path
+                # without reducing the caller's requested cores.
+                slice_compile_kwargs = resolve_backend_compile_kwargs(
+                    kwargs.get("backend"), kwargs.get("compile_kwargs")
+                )
+                slice_compile_kwargs.setdefault("mode", "cvm")
+                kwargs |= {
+                    "step": pm.Slice(
+                        model=self.pymc_model,
+                        compile_kwargs=slice_compile_kwargs,
+                    )
+                }
 
         if (
             self.loglik_kind == "approx_differentiable"
@@ -942,13 +959,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 dt = self._inference_obj
 
-        # The response logp for JAX-backed models contains custom Ops whose
-        # ``jax_funcify`` registrations are the supported compilation path.
-        # PyMC's default compiler currently selects the Numba linker, which
-        # object-mode-lifts those Ops and cloudpickles their ONNX closures.
-        # Some valid ONNX graphs contain protobuf descriptors that cannot be
-        # pickled, so preserve the model backend for this post-sampling step.
-        compile_mode = "JAX" if self.model_config.backend == "jax" else None
+        # Preserve the likelihood implementation's supported compilation path
+        # when attaching post-sampling log likelihoods. JAX-backed Ops use their
+        # ``jax_funcify`` registrations. Black-box Ops execute arbitrary Python
+        # callbacks, so compile them with CVM instead of PyMC 6's default Numba
+        # linker, which object-mode-lifts and cloudpickles callback closures.
+        if self.loglik_kind == "blackbox":
+            compile_mode = "cvm"
+        elif self.model_config.backend == "jax":
+            compile_mode = "JAX"
+        else:
+            compile_mode = None
 
         # Actual likelihood computation
         dt = _compute_log_likelihood(
