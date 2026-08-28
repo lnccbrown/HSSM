@@ -99,7 +99,7 @@ def test_compiled_distribution_matches_adapter_and_direct_jeam():
 
 
 def test_compiled_distribution_accepts_trialwise_radial_drift():
-    """Regression-shaped radial drift should reach JEAM row by row."""
+    """Positive trial-wise radial-drift vectors should reach JEAM row by row."""
     model = _build_projected_spherical_model()
     data = np.array([[0.28, 0.2], [0.53, 1.4], [0.91, 2.7]])
     radial_drift = np.array([0.70, 0.55, 0.40])
