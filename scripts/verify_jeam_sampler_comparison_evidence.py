@@ -418,7 +418,9 @@ def _ratios(
     }
 
 
-def _load(root: Path) -> dict[str, Any]:
+def _load(
+    root: Path,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     snapshots, documents = _authenticate(root)
     addendum, spec, result = documents[ADDENDUM], documents[SPEC], documents[RESULT]
     _check_provenance(addendum, result)
@@ -454,7 +456,7 @@ def _load(root: Path) -> dict[str, Any]:
     expected = (5, 4, 3, 15, 16, 48, 48, 8, 10, 0, 15, 0)
     if tuple(counts.values()) != expected:
         _fail("Recomputed evidence counts mismatch.")
-    return {
+    verification = {
         "study_id": spec["study_id"],
         "evidence_class": "authenticated compact-only smoke benchmark",
         "counts": counts,
@@ -471,18 +473,39 @@ def _load(root: Path) -> dict[str, Any]:
             "blockers": addendum["promotion"]["blockers"],
         },
     }
+    return verification, spec, result
 
 
-def load_verified_sampler_comparison(
-    root: str | Path = REPO_ROOT,
-) -> dict[str, Any]:
-    """Authenticate compact evidence and return independently derived boundaries."""
+def _load_verified(
+    root: str | Path,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Load one authenticated snapshot behind both public verifier APIs."""
     try:
         return _load(Path(root))
     except SamplerEvidenceMismatch:
         raise
     except (ImportError, KeyError, OSError, TypeError, ValueError) as error:
         raise SamplerEvidenceMismatch(f"Invalid sampler evidence: {error}") from error
+
+
+def load_verified_sampler_comparison(
+    root: str | Path = REPO_ROOT,
+) -> dict[str, Any]:
+    """Authenticate compact evidence and return independently derived boundaries."""
+    verification, _, _ = _load_verified(root)
+    return verification
+
+
+def load_verified_sampler_report_evidence(
+    root: str | Path = REPO_ROOT,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Return verification, spec, and result from one authenticated snapshot.
+
+    This is the reporting API. The specification and compact result are parsed only
+    after their pinned bytes authenticate, and the returned documents are the same
+    objects used to derive the verification summary.
+    """
+    return _load_verified(root)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
