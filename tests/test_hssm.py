@@ -311,6 +311,7 @@ def test_log_likelihood_uses_model_backend_compile_mode(
     calls = []
 
     def fake_compute_log_likelihood(bambi_model, dt, data, inplace, *, compile_mode):
+        """Record the compiler forwarded by the public method."""
         calls.append((bambi_model, dt, data, inplace, compile_mode))
         result = dt.copy(deep=True)
         result["log_likelihood"] = xr.Dataset(

@@ -149,6 +149,7 @@ def _log_likelihood_model(family):
 
 
 def _fake_log_likelihood(family, **kwargs):
+    """Return deterministic likelihood values for DataTree plumbing tests."""
     assert family is kwargs["model"].family
     assert kwargs["data"] is None
     assert kwargs["posterior"].name == "posterior"
@@ -215,6 +216,7 @@ def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     compile_calls = []
 
     def fake_compile(inputs, outputs, **kwargs):
+        """Capture the compiler mode passed to PyMC."""
         compile_calls.append((inputs, outputs, kwargs))
         return lambda **values: np.full(2, -1.0)
 
