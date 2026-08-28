@@ -942,8 +942,22 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 dt = self._inference_obj
 
+        # The response logp for JAX-backed models contains custom Ops whose
+        # ``jax_funcify`` registrations are the supported compilation path.
+        # PyMC's default compiler currently selects the Numba linker, which
+        # object-mode-lifts those Ops and cloudpickles their ONNX closures.
+        # Some valid ONNX graphs contain protobuf descriptors that cannot be
+        # pickled, so preserve the model backend for this post-sampling step.
+        compile_mode = "JAX" if self.model_config.backend == "jax" else None
+
         # Actual likelihood computation
-        dt = _compute_log_likelihood(self.model, dt, data, inplace)
+        dt = _compute_log_likelihood(
+            self.model,
+            dt,
+            data,
+            inplace,
+            compile_mode=compile_mode,
+        )
 
         # clean up posterior:
         if not keep_likelihood_params:

@@ -294,17 +294,25 @@ def test_add_likelihood_parameters_to_data(data_ddm):
     )
 
 
-def test_log_likelihood_uses_attached_traces_and_returns_copy(data_ddm, monkeypatch):
-    """Attached traces are the default input without being mutated."""
+@pytest.mark.parametrize(
+    ("backend", "expected_compile_mode"),
+    [(None, None), ("pytensor", None), ("jax", "JAX")],
+)
+def test_log_likelihood_uses_model_backend_compile_mode(
+    data_ddm, monkeypatch, backend, expected_compile_mode
+):
+    """Attached traces stay immutable and select the model's compile backend."""
     model = HSSM(data=data_ddm)
+    model.model_config.backend = backend
     traces = xr.DataTree.from_dict(
         {"posterior": xr.Dataset({"v": (("chain", "draw"), np.array([[0.5]]))})}
     )
     model._inference_obj = traces
     calls = []
 
-    def fake_compute_log_likelihood(bambi_model, dt, data, inplace):
-        calls.append((bambi_model, dt, data, inplace))
+    def fake_compute_log_likelihood(bambi_model, dt, data, inplace, *, compile_mode):
+        """Record the compiler forwarded by the public method."""
+        calls.append((bambi_model, dt, data, inplace, compile_mode))
         result = dt.copy(deep=True)
         result["log_likelihood"] = xr.Dataset(
             {"rt,response": (("chain", "draw"), np.array([[-1.0]]))}
@@ -325,6 +333,7 @@ def test_log_likelihood_uses_attached_traces_and_returns_copy(data_ddm, monkeypa
     assert calls[0][1] is traces
     assert calls[0][2] is None
     assert calls[0][3] is False
+    assert calls[0][4] == expected_compile_mode
     assert result is not traces
     assert isinstance(result, xr.DataTree)
     assert "log_likelihood" in result
