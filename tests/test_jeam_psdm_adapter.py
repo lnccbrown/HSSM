@@ -10,13 +10,6 @@ from ssms.hssm_support import validate_simulator_fun
 
 from hssm.integrations import jeam as jeam_integration
 
-pytestmark = pytest.mark.xfail(
-    not hasattr(jeam_integration, "logp_projected_spherical_diffusion"),
-    reason="projected-spherical JEAM adapters are not implemented yet",
-    raises=AttributeError,
-    strict=True,
-)
-
 
 class _RecordingProjectedSphericalModel:
     likelihood_calls: list[dict] = []
@@ -274,6 +267,32 @@ def test_simulator_preserves_trial_major_replica_order(_fake_jeam):
     )
     np.testing.assert_array_equal(call["threshold"], [1.20, 1.20, 0.90, 0.90])
     np.testing.assert_array_equal(call["ndt"], [0.08, 0.08, 0.12, 0.12])
+
+
+@pytest.mark.parametrize(
+    ("theta", "message"),
+    [
+        ([0.45, -0.01, 1.20, 0.08], "v_y.*non-negative"),
+        ([0.45, 0.70, 0.00, 0.08], "a.*positive"),
+        ([0.45, 0.70, 1.20, -0.01], "t.*non-negative"),
+        (
+            [[0.45, 0.70, 1.20, 0.08], [0.20, -0.01, 0.90, 0.12]],
+            "v_y.*non-negative",
+        ),
+    ],
+)
+def test_simulator_rejects_parameters_outside_the_psdm_domain(
+    _fake_jeam, theta, message
+):
+    """Invalid fixed-PSDM parameters should fail before loading the producer."""
+    with pytest.raises(ValueError, match=message):
+        jeam_integration.simulate_projected_spherical_diffusion(
+            np.asarray(theta),
+            random_state=1947,
+            n_replicas=2,
+        )
+
+    assert _RecordingProjectedSphericalModel.simulator_calls == []
 
 
 @pytest.mark.parametrize(
