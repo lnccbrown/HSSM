@@ -125,6 +125,30 @@ def test_archive_states_the_historical_scope_and_negative_outcome():
     assert boundary["raw_posterior_predictive_draws_retained"] is False
     assert boundary["independent_raw_reverification"] == "blocked"
     assert boundary["fixed_psdm_public_support_or_promotion"] == "blocked"
+    assert addendum["runner_archive"] == {
+        "canonical_execution_on_replayed_code": "disabled",
+        "archived_result_path_writes": "disabled for canonical and smoke modes",
+        "historical_canonical_runner_revision": (
+            "ebbd68ee6dcaad644505ae7f3739b7b1f0ba3794"
+        ),
+        "smoke_mode_role": "noncanonical wiring check only; not v1 evidence",
+        "optimizer_interpretation": (
+            "fixed-budget differential-evolution endpoints with maxiter=20 and "
+            "polish=false; not demonstrated converged optima or MLEs"
+        ),
+        "optimizer_t_upper_endpoint": ("nextafter(minimum observed rt, -infinity)"),
+        "optimizer_t_endpoint_limitation": (
+            "the frozen endpoint is mathematically below the minimum RT but lies "
+            "inside HSSM's 1e-15 numerical positive-NDT floor; v2 must preregister "
+            "a real support margin"
+        ),
+        "objective_parity_interpretation": (
+            "adapter fidelity to the same historical JEAM producer, not an "
+            "independent likelihood validation"
+        ),
+        "ordered_slice_identity_independently_authenticated": False,
+        "runtime_hssm_import_bound_to_recorded_checkout": False,
+    }
     assert addendum["successor_policy"] == {
         "v2a_and_v2b_require_new_preregistrations": True,
         "mixing_and_identifiability_are_hypotheses_not_v1_conclusions": True,
