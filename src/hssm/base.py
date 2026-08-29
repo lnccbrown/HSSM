@@ -126,9 +126,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
         "full_ddm", "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4",
-        "ddm_seq2_no_bias". If any other string is passed, the model will be considered
-        custom, in which case all `model_config`, `loglik`, and `loglik_kind` have to be
-        provided by the user.
+        "ddm_seq2_no_bias", "gamma_drift". If any other string is passed, the model
+        will be considered custom, in which case all `model_config`, `loglik`, and
+        `loglik_kind` have to be provided by the user.
     choices : optional
         When an `int`, the number of choices that the participants can make. If `2`, the
         choices are [-1, 1] by default. If anything greater than `2`, the choices are
