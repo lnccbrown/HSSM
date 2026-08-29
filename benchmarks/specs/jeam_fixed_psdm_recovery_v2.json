@@ -1,0 +1,1072 @@
+{
+  "schema_version": 1,
+  "study_id": "jeam-fixed-psdm-recovery-v2-decision-contract",
+  "status": "preregistered-before-dataset-recovery-or-execution",
+  "frozen_at_utc": "2026-08-29T02:04:24Z",
+  "canonical_results_must_postdate_this_file_commit": true,
+  "questions": {
+    "mixing_v2a": "On the exact four v1 datasets, do three new ordered-Slice seed blocks pass the frozen diagnostics at 4,000 retained draws, and do their paired 1,000-draw prefixes show frozen diagnostic-gate sensitivity to retained-draw count without attributing the historical v1 failure?",
+    "information_v2b": "Conditional on every v2a full window passing, does the seeded trial-count by threshold by radial-drift factorial design meet the frozen v_y recovery, posterior-contraction, and paired trial-count gates under the same ordered-Slice contract?"
+  },
+  "execution_order": [
+    "recover_v1_datasets",
+    "mixing_v2a",
+    "information_v2b"
+  ],
+  "historical_bindings": {
+    "v1_spec": {
+      "path": "benchmarks/specs/jeam_fixed_psdm_recovery_v1.json",
+      "original_freeze_commit": "c1c68ef3c0ebdf78b4a950c4e62e61bee55b0961",
+      "sha256": "2a9fabe13e612a59f7c2138e4e36ae4e01d4bde5e226c16c8572d5ebe3594198"
+    },
+    "v1_addendum": {
+      "path": "benchmarks/specs/jeam_fixed_psdm_recovery_v1_addendum.json",
+      "sha256": "42d4627f7e4eadd9c1ba656095cb3edf5af17d04bd03ad11ede476f78149d8f1"
+    },
+    "v1_result": {
+      "path": "benchmarks/results/jeam_fixed_psdm_recovery_v1.json",
+      "commit": "d76f995d501603cc56f895e5fa429ce2be14e468",
+      "sha256": "cede87d5a5a2c9789939b66962ebb025b270a13966aa2d657d5b0cbb95e9c2c4"
+    },
+    "historical_hssm_stack_base_revision": "11fdc2236711f46d3bd6ba19589947fc20285ff1",
+    "historical_hssm_runner_revision": "ebbd68ee6dcaad644505ae7f3739b7b1f0ba3794",
+    "historical_jeam_revision": "1d7112757d8b2d27a31437255fc679194d39ab89",
+    "current_safety_jeam_revision": "ede7a4f4faf226e4dae52c84dfb01012939cccdc",
+    "known_v1_outcome": {
+      "overall_pass": false,
+      "truth_in_hdi": 14,
+      "truth_total": 16,
+      "mixing_and_identifiability_are_hypotheses": true
+    },
+    "datasets": [
+      {
+        "name": "baseline_asymmetric",
+        "truth": [
+          0.6,
+          1.0,
+          1.1,
+          0.2
+        ],
+        "data_seed": 1592,
+        "artifact": {
+          "bytes": 6528,
+          "dtype": "float64",
+          "shape": [
+            400,
+            2
+          ],
+          "sha256": "5b39ad8f2453871a15f574437b1b62d20372476e814019caa9e028f85c0f9726"
+        }
+      },
+      {
+        "name": "reverse_axial_weak_radial",
+        "truth": [
+          -0.7,
+          0.45,
+          0.85,
+          0.1
+        ],
+        "data_seed": 2703,
+        "artifact": {
+          "bytes": 6528,
+          "dtype": "float64",
+          "shape": [
+            400,
+            2
+          ],
+          "sha256": "e2228ec7b121758e5a1599cdda54018caea95940caaa33cc10ae4beafebcba82"
+        }
+      },
+      {
+        "name": "high_threshold_strong_radial",
+        "truth": [
+          0.3,
+          1.25,
+          1.5,
+          0.22
+        ],
+        "data_seed": 3814,
+        "artifact": {
+          "bytes": 6528,
+          "dtype": "float64",
+          "shape": [
+            400,
+            2
+          ],
+          "sha256": "a598a0c5f76e54c4019ccefa027714c47f13525668ef3e2ef328a2cb13f21cc7"
+        }
+      },
+      {
+        "name": "low_threshold_balanced_drift",
+        "truth": [
+          0.9,
+          0.75,
+          0.7,
+          0.07
+        ],
+        "data_seed": 4925,
+        "artifact": {
+          "bytes": 6528,
+          "dtype": "float64",
+          "shape": [
+            400,
+            2
+          ],
+          "sha256": "bba3bae04b0cc329586f9bce82a14aaacf51117c5009f3a5e01942c205857cc8"
+        }
+      }
+    ]
+  },
+  "common_contract": {
+    "model": {
+      "name": "projected_spherical_diffusion",
+      "likelihood": "blackbox",
+      "response_columns": [
+        "rt",
+        "response"
+      ],
+      "response_contract": {
+        "rt": "finite and strictly positive",
+        "response": "finite polar angle in the closed interval [0, pi]"
+      },
+      "density_measure": "d(rt) d(response)",
+      "parameter_order": [
+        "v_x",
+        "v_y",
+        "a",
+        "t"
+      ],
+      "fixed_settings": {
+        "sigma": 1.0,
+        "s_v": 0.0,
+        "s_t": 0.0,
+        "threshold_dynamic": "fixed",
+        "decay": 0.0,
+        "threshold_function": null,
+        "p_outlier": null
+      }
+    },
+    "priors": {
+      "v_x": {
+        "distribution": "Uniform",
+        "lower": -3.0,
+        "upper": 3.0
+      },
+      "v_y": {
+        "distribution": "Uniform",
+        "lower": 0.0,
+        "upper": 3.0
+      },
+      "a": {
+        "distribution": "Uniform",
+        "lower": 0.1,
+        "upper": 3.0
+      },
+      "t": {
+        "distribution": "HalfNormal",
+        "sigma": 2.0
+      }
+    },
+    "configured_bounds": {
+      "v_x": [
+        -3.0,
+        3.0
+      ],
+      "v_y": [
+        0.0,
+        3.0
+      ],
+      "a": [
+        0.1,
+        3.0
+      ],
+      "t": [
+        0.0,
+        2.0
+      ]
+    },
+    "prior_and_bound_interpretation": "the configured t bound is model metadata and does not truncate the HalfNormal(2) prior; posterior likelihood support additionally requires t to remain below every observed response time",
+    "initialization": {
+      "untransformed": {
+        "v_x": 0.0,
+        "v_y": 1.5,
+        "a": 1.5,
+        "t": 0.025
+      },
+      "same_exact_mapping_passed_to_every_chain_and_arm": true,
+      "jitter": false,
+      "hssm_sample_init_argument": null,
+      "resolved_pymc_init_argument": "adapt_diag",
+      "minimum_rt_minus_t_at_least": 1e-06,
+      "finite_transformed_point_required": true,
+      "finite_joint_logp_required": true,
+      "record_untransformed_and_resolved_transformed_points": true
+    },
+    "sampling": {
+      "backend": "pymc",
+      "sampler": "one pymc.Slice step per parameter in parameter_order",
+      "chains": 4,
+      "tune": 1000,
+      "draws": 4000,
+      "cores": 1,
+      "blas_cores": 1,
+      "discard_tuned_samples": false,
+      "progressbar": false,
+      "compute_convergence_checks_during_sampling": true,
+      "compute_log_likelihood_during_sampling": false
+    },
+    "posterior_predictive": {
+      "draws_per_chain": 100,
+      "draw_selection": "integer draws=100 resolves to zero-based posterior draw indices [0, 100) in every chain",
+      "kind": "response",
+      "safe_mode": true,
+      "include_group_specific": true,
+      "inplace": false,
+      "random_seed": "the preregistered posterior_predictive_seed for the scenario or run"
+    },
+    "summaries": {
+      "posterior_hdi_probability": 0.94,
+      "arviz_summary_call": "arviz.summary(data, var_names=[v_x, v_y, a, t], sample_dims=[chain, draw], kind=all, ci_prob=0.94, ci_kind=hdi, round_to=none, skipna=false)",
+      "diagnostic_sample_dims": [
+        "chain",
+        "draw"
+      ],
+      "diagnostic_columns": {
+        "rhat": "r_hat",
+        "bulk_ess": "ess_bulk",
+        "tail_ess": "ess_tail",
+        "mcse_over_posterior_sd": "mcse_mean / sd"
+      },
+      "diagnostic_estimators": {
+        "rhat": "arviz.rhat(data, var_names=[v_x, v_y, a, t], sample_dims=[chain, draw], method=rank)",
+        "bulk_ess": "arviz.ess(data, var_names=[v_x, v_y, a, t], sample_dims=[chain, draw], method=bulk, relative=false, prob=null)",
+        "tail_ess": "arviz.ess(data, var_names=[v_x, v_y, a, t], sample_dims=[chain, draw], method=tail, relative=false, prob=null)",
+        "mcse_mean": "arviz.mcse(data, var_names=[v_x, v_y, a, t], sample_dims=[chain, draw], method=mean, prob=null)",
+        "posterior_sd": "numpy.std over pooled chain and draw values with ddof=1"
+      },
+      "hdi_truth_containment": "inclusive lower <= truth <= upper",
+      "round_to": 8,
+      "rounding_is_display_only": true,
+      "gate_values_use_unrounded_raw_recomputation": true,
+      "rt_quantile_probabilities": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "predictive_angle_summary": "mean polar unit-vector components [mean(sin(response)), mean(cos(response))]"
+    },
+    "preflight": {
+      "observed_data_all_finite": true,
+      "observed_rt_strictly_positive": true,
+      "observed_angles_in_closed_domain": true,
+      "prior_predictive_all_finite": true,
+      "prior_predictive_rt_strictly_positive": true,
+      "prior_predictive_angles_in_closed_domain": true,
+      "prior_to_observed_rt_quantile_ratio_probabilities": [
+        0.5,
+        0.9
+      ],
+      "prior_to_observed_rt_quantile_ratio_inclusive_bounds": [
+        0.05,
+        30.0
+      ],
+      "initialization_checked_before_sampling": true
+    },
+    "diagnostic_gates": {
+      "maximum_rhat_exclusive": 1.01,
+      "minimum_bulk_ess_exclusive": 400.0,
+      "minimum_tail_ess_exclusive": 400.0,
+      "maximum_mcse_over_posterior_sd_exclusive": 0.05
+    },
+    "environment": {
+      "development_base_revision": "cdc6e8841bdfc72b4fadac0b7f6e8db7fa386374",
+      "protocol_freeze_revision_policy": "record the commit that first contains these exact protocol bytes before dataset recovery",
+      "hssm_revision_policy": "clean execution commit descending from the recorded protocol freeze commit",
+      "current_pyproject_sha256": "16825707e994ecf68c2ccad2d30916993ce449878e97ecf67866c85f481b1b4a",
+      "jeam_revision": "ede7a4f4faf226e4dae52c84dfb01012939cccdc",
+      "python_version": "3.12.13",
+      "pytensor_floatx": "float64",
+      "jax_enable_x64": true,
+      "package_versions": {
+        "hssm": "0.4.0",
+        "jeam": "0.1.0",
+        "pymc": "6.3.1",
+        "arviz": "1.3.0",
+        "bambi": "0.20.0",
+        "pytensor": "3.3.0",
+        "numpy": "2.4.6",
+        "pandas": "3.0.5",
+        "scipy": "1.18.0",
+        "xarray": "2026.7.0",
+        "numba": "0.66.0",
+        "llvmlite": "0.48.0",
+        "h5netcdf": "1.8.1",
+        "h5py": "3.16.0",
+        "jax": "0.11.0",
+        "numpyro": "0.21.0"
+      },
+      "platform_policy": "record exact platform and processor; make no portable performance claim",
+      "lock_file": "uv.lock",
+      "lock_policy": "resolve the frozen pyproject and JEAM revision into uv.lock, hash and retain that exact lock before dataset recovery or sampling, and refuse execution if its resolved versions differ from package_versions",
+      "preexecution_manifest_file": "preexecution.json",
+      "preexecution_freeze_policy": "before dataset recovery or v2b generation, commit the executor, verifier, protocol, tests, manifest schema, and uv.lock; record that commit, tree, and every source SHA256 in immutable preexecution.json",
+      "post_observation_change_policy": "after any generated or recovered dataset is inspected, every executor, verifier, source, environment, or protocol change requires a new versioned protocol and fresh v2b seeds; v2a recovered bytes remain historical inputs only",
+      "runtime_import_policy": "fail unless HSSM and JEAM import from the recorded clean revisions"
+    },
+    "evidence": {
+      "canonical_root": "benchmarks/evidence/jeam_fixed_psdm_recovery_v2",
+      "arm_directories": {
+        "mixing_v2a": "mixing_v2a",
+        "information_v2b": "information_v2b"
+      },
+      "publication_policy": "canonical evidence is incomplete until every payload plus its network-free verifier is committed under canonical_root; local-only or compact-only retention is insufficient",
+      "atomic_checkpoints": true,
+      "retain_every_failed_attempt": true,
+      "completed_attempt_required_groups": [
+        "prior",
+        "prior_predictive",
+        "warmup_posterior",
+        "warmup_sample_stats",
+        "posterior",
+        "sample_stats",
+        "posterior_predictive",
+        "observed_data"
+      ],
+      "failed_attempt_checkpoint_policy": "retain every successfully written stage before failure, record the failed stage, and never treat a partial checkpoint as gate-passing evidence",
+      "required_bundle_files": [
+        "manifest.json",
+        "preexecution.json",
+        "environment.txt",
+        "uv.lock",
+        "result.json"
+      ],
+      "required_scenario_files": [
+        "dataset.npy",
+        "measurements.json",
+        "raw.nc"
+      ],
+      "record_sampler_classes_and_variable_order": true,
+      "record_runtime_import_paths_and_source_hashes": true,
+      "record_complete_environment_and_lock": true,
+      "hash_every_payload_before_interpretation": true,
+      "preserve_last_valid_checkpoint_on_failure": true,
+      "compact_only_result_is_sufficient": false,
+      "verifier_contract": {
+        "json": "UTF-8, reject duplicate keys and nonfinite constants, and serialize generated JSON with sort_keys=true, ensure_ascii=false, separators=[comma,colon], allow_nan=false, and exactly one terminal newline",
+        "authentication": "freeze the protocol SHA256 and exact safe inventory, require regular non-symlink files, snapshot and hash every byte once before parsing, and reject size or digest mismatch",
+        "recomputation": "recompute every scientific summary and gate from authenticated datasets and raw groups using verifier-owned thresholds; never trust stored gate booleans or thresholds",
+        "execution_boundary": "network-free and import no HSSM, JEAM, PyMC, benchmark runner, or model stack"
+      }
+    }
+  },
+  "studies": {
+    "mixing_v2a": {
+      "study_id": "jeam-fixed-psdm-mixing-v2a",
+      "result_path": "benchmarks/results/jeam_fixed_psdm_recovery_v2a.json",
+      "preregistered_hypothesis": "The v1 a/t diagnostic failures may be sensitive to retained-draw count or to changed random streams and runtime under ordered Slice; this arm compares gate status without identifying causality.",
+      "data_source": "all four byte-identical v1 datasets",
+      "dataset_recovery_method": {
+        "generator": "hssm.integrations.jeam.simulate_projected_spherical_diffusion backed by the pinned JEAM revision",
+        "scenario_inputs": "use each historical_bindings.datasets truth and data_seed with n_replicas=400",
+        "resolved_jeam_simulator_arguments": {
+          "threshold_dynamic": "fixed",
+          "decay": 0.0,
+          "threshold_function": null,
+          "s_v": 0.0,
+          "s_t": 0.0,
+          "sigma": 1.0,
+          "dt": 0.001,
+          "n_sample": 400,
+          "max_time": 20.0,
+          "random_state": "the historical data_seed"
+        },
+        "attempts_per_scenario": 1,
+        "serialization": "numpy.save(path, float64_array, allow_pickle=false)",
+        "write_and_hash_before_array_inspection": true,
+        "alternate_environment_seed_or_algorithm_permitted": false,
+        "omitted_nonfinite_or_invalid_output_policy": "fail and retain the recovery attempt; do not resimulate"
+      },
+      "dataset_recovery_gate": {
+        "required_exact_matches": 4,
+        "comparison": "complete .npy bytes and SHA256",
+        "allclose_permitted": false,
+        "partial_acceptance_permitted": false,
+        "ad_hoc_environment_tuning_permitted": false,
+        "on_any_mismatch": "stop mixing_v2a without model construction"
+      },
+      "optimizer_run": false,
+      "objective_parity_rerun": false,
+      "prior_predictive_draws": 100,
+      "posterior_predictive_draws_per_chain": 100,
+      "windows": {
+        "paired_prefix_draws": 1000,
+        "full_draws": 4000,
+        "prefix_is_first_retained_draws_of_full_run": true,
+        "prefix_extraction": "for each chain, posterior and sample_stats isel(draw=slice(0, 1000)) after warmup",
+        "thinning_or_resampling": false
+      },
+      "diagnostic_aggregation": "every parameter in every scenario and seed block must pass separately",
+      "prefix_gate_interpretation": "compare only frozen diagnostic-gate status; fixed ESS floors make draw-count dependence partly mechanical and do not identify the cause of the historical v1 failure",
+      "diagnostic_threshold_semantics": "strict inequalities exactly as named in common_contract.diagnostic_gates",
+      "scenarios": [
+        {
+          "name": "baseline_asymmetric",
+          "prior_predictive_seed": 411001,
+          "sampling_blocks": [
+            {
+              "id": 1,
+              "chain_seeds": [
+                211011,
+                211012,
+                211013,
+                211014
+              ],
+              "posterior_predictive_seed": 311011
+            },
+            {
+              "id": 2,
+              "chain_seeds": [
+                211021,
+                211022,
+                211023,
+                211024
+              ],
+              "posterior_predictive_seed": 311021
+            },
+            {
+              "id": 3,
+              "chain_seeds": [
+                211031,
+                211032,
+                211033,
+                211034
+              ],
+              "posterior_predictive_seed": 311031
+            }
+          ]
+        },
+        {
+          "name": "reverse_axial_weak_radial",
+          "prior_predictive_seed": 411002,
+          "sampling_blocks": [
+            {
+              "id": 1,
+              "chain_seeds": [
+                212011,
+                212012,
+                212013,
+                212014
+              ],
+              "posterior_predictive_seed": 312011
+            },
+            {
+              "id": 2,
+              "chain_seeds": [
+                212021,
+                212022,
+                212023,
+                212024
+              ],
+              "posterior_predictive_seed": 312021
+            },
+            {
+              "id": 3,
+              "chain_seeds": [
+                212031,
+                212032,
+                212033,
+                212034
+              ],
+              "posterior_predictive_seed": 312031
+            }
+          ]
+        },
+        {
+          "name": "high_threshold_strong_radial",
+          "prior_predictive_seed": 411003,
+          "sampling_blocks": [
+            {
+              "id": 1,
+              "chain_seeds": [
+                213011,
+                213012,
+                213013,
+                213014
+              ],
+              "posterior_predictive_seed": 313011
+            },
+            {
+              "id": 2,
+              "chain_seeds": [
+                213021,
+                213022,
+                213023,
+                213024
+              ],
+              "posterior_predictive_seed": 313021
+            },
+            {
+              "id": 3,
+              "chain_seeds": [
+                213031,
+                213032,
+                213033,
+                213034
+              ],
+              "posterior_predictive_seed": 313031
+            }
+          ]
+        },
+        {
+          "name": "low_threshold_balanced_drift",
+          "prior_predictive_seed": 411004,
+          "sampling_blocks": [
+            {
+              "id": 1,
+              "chain_seeds": [
+                214011,
+                214012,
+                214013,
+                214014
+              ],
+              "posterior_predictive_seed": 314011
+            },
+            {
+              "id": 2,
+              "chain_seeds": [
+                214021,
+                214022,
+                214023,
+                214024
+              ],
+              "posterior_predictive_seed": 314021
+            },
+            {
+              "id": 3,
+              "chain_seeds": [
+                214031,
+                214032,
+                214033,
+                214034
+              ],
+              "posterior_predictive_seed": 314031
+            }
+          ]
+        }
+      ],
+      "decision_matrix": {
+        "any_full_window_fails": "ordered-Slice mixing remains unresolved",
+        "all_full_windows_pass_and_any_prefix_fails": "at least one frozen diagnostic gate is sensitive to retained-draw count in the new traces; the cause of the v1 failure remains unresolved",
+        "all_full_and_prefix_windows_pass": "the new seed and runtime combination passes both windows; the cause of the v1 failure remains unresolved"
+      },
+      "claims_excluded": [
+        "v_y information or identifiability resolved",
+        "simulation-based calibration",
+        "fixed-PSDM public support or promotion"
+      ]
+    },
+    "information_v2b": {
+      "study_id": "jeam-fixed-psdm-information-v2b",
+      "result_path": "benchmarks/results/jeam_fixed_psdm_recovery_v2b.json",
+      "preregistered_hypothesis": "Increasing from the exact 400-row prefix to 1,200 rows may contract marginal v_y posterior uncertainty across the frozen a and v_y grid once the sampler prerequisite is satisfied.",
+      "execution_prerequisite": "every mixing_v2a full window passes every diagnostic gate",
+      "data_source": "eight independent 1,200-row source datasets generated across a, v_y, and replicate only after this protocol and preexecution manifest are committed; each n400 dataset is nested within its matched n1200 source",
+      "reuse_v1_data": false,
+      "optimizer_run": false,
+      "prior_predictive_draws": 100,
+      "posterior_predictive_draws_per_chain": 100,
+      "factors": {
+        "trials": [
+          400,
+          1200
+        ],
+        "a": [
+          0.7,
+          1.5
+        ],
+        "v_y": [
+          0.45,
+          1.25
+        ],
+        "independent_data_replicates_per_a_v_y_pair": 2,
+        "trial_count_pairing": "n400 is the exact first-400-row prefix of its matched n1200 dataset"
+      },
+      "fixed_truth": {
+        "v_x": 0.6,
+        "t": 0.1
+      },
+      "data_generation": {
+        "generator": "hssm.integrations.jeam.simulate_projected_spherical_diffusion backed by the pinned JEAM revision",
+        "generate_rows_per_a_v_y_replicate": 1200,
+        "hssm_adapter_arguments": {
+          "theta": "one [v_x, v_y, a, t] truth row for the a, v_y pair",
+          "random_state": "the source_data_seed",
+          "n_replicas": 1200
+        },
+        "resolved_jeam_simulator_arguments": {
+          "threshold_dynamic": "fixed",
+          "decay": 0.0,
+          "threshold_function": null,
+          "s_v": 0.0,
+          "s_t": 0.0,
+          "sigma": 1.0,
+          "dt": 0.001,
+          "n_sample": 1200,
+          "max_time": 20.0,
+          "random_state": "the source_data_seed"
+        },
+        "source_rows_semantics": "zero-based half-open [start, stop)",
+        "n400_policy": "take source[:400] from the retained n1200 source dataset",
+        "n1200_policy": "take source[:1200] from the retained source dataset",
+        "one_generator_call_per_a_v_y_replicate": true,
+        "dtype": "float64",
+        "columns": [
+          "rt",
+          "response"
+        ],
+        "write_and_hash_source_and_both_slices_before_model_construction": true,
+        "source_hash_binds_both_trial_count_artifacts": true,
+        "resimulation_after_an_array_is_returned": false,
+        "omitted_nonfinite_or_invalid_output_policy": "fail and retain the source attempt; never resimulate under the same or a replacement seed"
+      },
+      "design_cells": [
+        {
+          "name": "n400_a0p7_vy0p45",
+          "truth": {
+            "v_x": 0.6,
+            "v_y": 0.45,
+            "a": 0.7,
+            "t": 0.1
+          },
+          "trials": 400,
+          "replicates": [
+            {
+              "id": 1,
+              "source_data_seed": 610101,
+              "source_rows": [
+                0,
+                400
+              ],
+              "chain_seeds": [
+                710111,
+                710112,
+                710113,
+                710114
+              ],
+              "prior_predictive_seed": 810101,
+              "posterior_predictive_seed": 910101
+            },
+            {
+              "id": 2,
+              "source_data_seed": 610102,
+              "source_rows": [
+                0,
+                400
+              ],
+              "chain_seeds": [
+                710121,
+                710122,
+                710123,
+                710124
+              ],
+              "prior_predictive_seed": 810102,
+              "posterior_predictive_seed": 910102
+            }
+          ]
+        },
+        {
+          "name": "n400_a0p7_vy1p25",
+          "truth": {
+            "v_x": 0.6,
+            "v_y": 1.25,
+            "a": 0.7,
+            "t": 0.1
+          },
+          "trials": 400,
+          "replicates": [
+            {
+              "id": 1,
+              "source_data_seed": 610201,
+              "source_rows": [
+                0,
+                400
+              ],
+              "chain_seeds": [
+                710211,
+                710212,
+                710213,
+                710214
+              ],
+              "prior_predictive_seed": 810201,
+              "posterior_predictive_seed": 910201
+            },
+            {
+              "id": 2,
+              "source_data_seed": 610202,
+              "source_rows": [
+                0,
+                400
+              ],
+              "chain_seeds": [
+                710221,
+                710222,
+                710223,
+                710224
+              ],
+              "prior_predictive_seed": 810202,
+              "posterior_predictive_seed": 910202
+            }
+          ]
+        },
+        {
+          "name": "n400_a1p5_vy0p45",
+          "truth": {
+            "v_x": 0.6,
+            "v_y": 0.45,
+            "a": 1.5,
+            "t": 0.1
+          },
+          "trials": 400,
+          "replicates": [
+            {
+              "id": 1,
+              "source_data_seed": 610301,
+              "source_rows": [
+                0,
+                400
+              ],
+              "chain_seeds": [
+                710311,
+                710312,
+                710313,
+                710314
+              ],
+              "prior_predictive_seed": 810301,
+              "posterior_predictive_seed": 910301
+            },
+            {
+              "id": 2,
+              "source_data_seed": 610302,
+              "source_rows": [
+                0,
+                400
+              ],
+              "chain_seeds": [
+                710321,
+                710322,
+                710323,
+                710324
+              ],
+              "prior_predictive_seed": 810302,
+              "posterior_predictive_seed": 910302
+            }
+          ]
+        },
+        {
+          "name": "n400_a1p5_vy1p25",
+          "truth": {
+            "v_x": 0.6,
+            "v_y": 1.25,
+            "a": 1.5,
+            "t": 0.1
+          },
+          "trials": 400,
+          "replicates": [
+            {
+              "id": 1,
+              "source_data_seed": 610401,
+              "source_rows": [
+                0,
+                400
+              ],
+              "chain_seeds": [
+                710411,
+                710412,
+                710413,
+                710414
+              ],
+              "prior_predictive_seed": 810401,
+              "posterior_predictive_seed": 910401
+            },
+            {
+              "id": 2,
+              "source_data_seed": 610402,
+              "source_rows": [
+                0,
+                400
+              ],
+              "chain_seeds": [
+                710421,
+                710422,
+                710423,
+                710424
+              ],
+              "prior_predictive_seed": 810402,
+              "posterior_predictive_seed": 910402
+            }
+          ]
+        },
+        {
+          "name": "n1200_a0p7_vy0p45",
+          "truth": {
+            "v_x": 0.6,
+            "v_y": 0.45,
+            "a": 0.7,
+            "t": 0.1
+          },
+          "trials": 1200,
+          "replicates": [
+            {
+              "id": 1,
+              "source_data_seed": 610101,
+              "source_rows": [
+                0,
+                1200
+              ],
+              "chain_seeds": [
+                710511,
+                710512,
+                710513,
+                710514
+              ],
+              "prior_predictive_seed": 810501,
+              "posterior_predictive_seed": 910501
+            },
+            {
+              "id": 2,
+              "source_data_seed": 610102,
+              "source_rows": [
+                0,
+                1200
+              ],
+              "chain_seeds": [
+                710521,
+                710522,
+                710523,
+                710524
+              ],
+              "prior_predictive_seed": 810502,
+              "posterior_predictive_seed": 910502
+            }
+          ]
+        },
+        {
+          "name": "n1200_a0p7_vy1p25",
+          "truth": {
+            "v_x": 0.6,
+            "v_y": 1.25,
+            "a": 0.7,
+            "t": 0.1
+          },
+          "trials": 1200,
+          "replicates": [
+            {
+              "id": 1,
+              "source_data_seed": 610201,
+              "source_rows": [
+                0,
+                1200
+              ],
+              "chain_seeds": [
+                710611,
+                710612,
+                710613,
+                710614
+              ],
+              "prior_predictive_seed": 810601,
+              "posterior_predictive_seed": 910601
+            },
+            {
+              "id": 2,
+              "source_data_seed": 610202,
+              "source_rows": [
+                0,
+                1200
+              ],
+              "chain_seeds": [
+                710621,
+                710622,
+                710623,
+                710624
+              ],
+              "prior_predictive_seed": 810602,
+              "posterior_predictive_seed": 910602
+            }
+          ]
+        },
+        {
+          "name": "n1200_a1p5_vy0p45",
+          "truth": {
+            "v_x": 0.6,
+            "v_y": 0.45,
+            "a": 1.5,
+            "t": 0.1
+          },
+          "trials": 1200,
+          "replicates": [
+            {
+              "id": 1,
+              "source_data_seed": 610301,
+              "source_rows": [
+                0,
+                1200
+              ],
+              "chain_seeds": [
+                710711,
+                710712,
+                710713,
+                710714
+              ],
+              "prior_predictive_seed": 810701,
+              "posterior_predictive_seed": 910701
+            },
+            {
+              "id": 2,
+              "source_data_seed": 610302,
+              "source_rows": [
+                0,
+                1200
+              ],
+              "chain_seeds": [
+                710721,
+                710722,
+                710723,
+                710724
+              ],
+              "prior_predictive_seed": 810702,
+              "posterior_predictive_seed": 910702
+            }
+          ]
+        },
+        {
+          "name": "n1200_a1p5_vy1p25",
+          "truth": {
+            "v_x": 0.6,
+            "v_y": 1.25,
+            "a": 1.5,
+            "t": 0.1
+          },
+          "trials": 1200,
+          "replicates": [
+            {
+              "id": 1,
+              "source_data_seed": 610401,
+              "source_rows": [
+                0,
+                1200
+              ],
+              "chain_seeds": [
+                710811,
+                710812,
+                710813,
+                710814
+              ],
+              "prior_predictive_seed": 810801,
+              "posterior_predictive_seed": 910801
+            },
+            {
+              "id": 2,
+              "source_data_seed": 610402,
+              "source_rows": [
+                0,
+                1200
+              ],
+              "chain_seeds": [
+                710821,
+                710822,
+                710823,
+                710824
+              ],
+              "prior_predictive_seed": 810802,
+              "posterior_predictive_seed": 910802
+            }
+          ]
+        }
+      ],
+      "posterior_information_diagnostics": {
+        "marginal_v_y_sd_over_uniform_prior_sd": true,
+        "posterior_sd_required_finite_and_positive": true,
+        "absolute_v_y_correlations_with": [
+          "v_x",
+          "a",
+          "t"
+        ],
+        "posterior_mean_and_sd_calculation": "for each run, pool the aligned 4 by 4,000 full-window retained v_y draws; use the arithmetic mean and sample standard deviation with ddof=1",
+        "correlation_calculation": "for each run and nuisance parameter, pool its aligned retained draws with v_y, compute the ordinary Pearson correlation, and report its absolute value",
+        "correlation_role": "descriptive ridge geometry only; not an acceptance gate or an identifiability test",
+        "hdi_calculation": "for each run, flatten the 4 by 4,000 full-window retained v_y draws and call arviz.hdi with prob=0.94, method=nearest, circular=false, and skipna=false",
+        "truth_in_hdi": "inclusive lower <= generating v_y <= upper",
+        "matched_trial_count_comparison": "compare n1200 with its exact n400 data prefix within each a, v_y, and replicate",
+        "likelihood_profile_or_optimizer": false
+      },
+      "gate_aggregation": {
+        "diagnostics": "every parameter in every run passes separately",
+        "cell_absolute_bias": "for each of the eight trials by a by v_y cells, absolute value of the mean of its two replicate posterior means minus generating v_y; gate the maximum cell value",
+        "cell_rmse": "for each of the eight trials by a by v_y cells, square root of the mean squared posterior-mean error across its two replicates; gate the maximum cell value",
+        "overall_hdi_coverage": "16 v_y intervals",
+        "per_design_cell_hdi_coverage": "two v_y intervals per trials, a, and v_y cell",
+        "cell_posterior_sd_over_prior_sd": "for each of the eight trials by a by v_y cells, median of its two replicate posterior-SD to prior-SD ratios; gate the maximum cell value",
+        "trial_count_ratio": "eight separate ratios, each matched replicate n1200 posterior SD divided by the posterior SD from its exact n400 data prefix; every ratio must pass",
+        "nuisance_correlation": "report all 48 run-by-nuisance absolute correlations without gating"
+      },
+      "gate_membership": {
+        "global_prerequisite": [
+          "all_sampling_diagnostics_pass"
+        ],
+        "recovery": [
+          "minimum_overall_94_percent_hdi_coverage",
+          "minimum_94_percent_hdi_coverage_per_design_cell",
+          "maximum_cell_absolute_bias",
+          "maximum_cell_rmse"
+        ],
+        "trial_information": [
+          "maximum_cell_median_posterior_sd_over_prior_sd",
+          "maximum_each_matched_replicate_1200_to_400_posterior_sd_ratio"
+        ]
+      },
+      "gate_value_policy": "recompute from raw retained draws without rounding; any missing, NaN, or nonfinite required metric fails its containing gate and the attempt is retained",
+      "diagnostic_failure_policy": "if all_sampling_diagnostics_pass is false, set both recovery and trial_information false and select otherwise without interpreting posterior information metrics",
+      "acceptance_threshold_semantics": "all v_y recovery and trial-information minimum and maximum thresholds are inclusive; common sampling diagnostics retain their common exclusive semantics",
+      "v_y_acceptance": {
+        "all_sampling_diagnostics_pass": true,
+        "minimum_overall_94_percent_hdi_coverage": 0.75,
+        "minimum_94_percent_hdi_coverage_per_design_cell": 0.5,
+        "maximum_cell_absolute_bias": 0.2,
+        "maximum_cell_rmse": 0.3,
+        "prior_sd": 0.8660254037844386,
+        "maximum_cell_median_posterior_sd_over_prior_sd": 0.6,
+        "maximum_each_matched_replicate_1200_to_400_posterior_sd_ratio": 0.8
+      },
+      "decision_matrix": {
+        "recovery_and_trial_information_gates_pass": "seeded v_y recovery plus posterior contraction and trial-count sensitivity are supported within this factorial design; identifiability, calibration, and promotion remain unestablished",
+        "trial_information_only": "posterior contraction and trial-count sensitivity pass, but seeded v_y recovery is not demonstrated",
+        "recovery_without_trial_information_contrast": "seeded v_y recovery passes, but the preregistered contraction or trial-count sensitivity gate does not",
+        "otherwise": "v_y recovery and trial-count information remain unresolved within this design"
+      },
+      "claims_excluded": [
+        "simulation-based calibration",
+        "portable sampler superiority",
+        "structural or practical identifiability within or beyond the frozen grid",
+        "fixed-PSDM public support or promotion"
+      ]
+    }
+  },
+  "reporting_and_deviation_policy": {
+    "v1_files_immutable": true,
+    "result_paths": {
+      "mixing_v2a": "benchmarks/results/jeam_fixed_psdm_recovery_v2a.json",
+      "information_v2b": "benchmarks/results/jeam_fixed_psdm_recovery_v2b.json"
+    },
+    "no_threshold_changes_after_freeze": true,
+    "no_manual_chain_exclusions": true,
+    "no_unpreregistered_interim_stopping": true,
+    "no_stopping_within_a_started_arm": true,
+    "only_preregistered_between_arm_gate": "information_v2b starts only if every mixing_v2a full window passes every common diagnostic gate",
+    "failed_attempts_retained": true,
+    "infrastructure_retry": "Retry only a documented failure before any posterior is returned; retain the failed attempt, reuse any already-written and authenticated dataset bytes without resimulation, and rerun the complete affected scenario or replicate.",
+    "protocol_change": "Never edit a committed v2 specification; add a new versioned specification for every change.",
+    "wall_time_is_descriptive_only": true,
+    "calibration_claim_permitted": false,
+    "fixed_psdm_public_support_or_promotion": "blocked"
+  }
+}
