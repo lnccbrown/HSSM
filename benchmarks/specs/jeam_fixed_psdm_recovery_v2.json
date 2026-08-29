@@ -2,7 +2,7 @@
   "schema_version": 1,
   "study_id": "jeam-fixed-psdm-recovery-v2-decision-contract",
   "status": "preregistered-before-dataset-recovery-or-execution",
-  "frozen_at_utc": "2026-08-29T01:29:49Z",
+  "frozen_at_utc": "2026-08-29T02:04:24Z",
   "canonical_results_must_postdate_this_file_commit": true,
   "questions": {
     "mixing_v2a": "On the exact four v1 datasets, do three new ordered-Slice seed blocks pass the frozen diagnostics at 4,000 retained draws, and do their paired 1,000-draw prefixes show frozen diagnostic-gate sensitivity to retained-draw count without attributing the historical v1 failure?",
@@ -363,8 +363,29 @@
     "mixing_v2a": {
       "study_id": "jeam-fixed-psdm-mixing-v2a",
       "result_path": "benchmarks/results/jeam_fixed_psdm_recovery_v2a.json",
-      "causal_hypothesis": "The v1 a/t diagnostic failures may reflect retained-draw budget or random-stream/runtime sensitivity under ordered Slice.",
+      "preregistered_hypothesis": "The v1 a/t diagnostic failures may be sensitive to retained-draw count or to changed random streams and runtime under ordered Slice; this arm compares gate status without identifying causality.",
       "data_source": "all four byte-identical v1 datasets",
+      "dataset_recovery_method": {
+        "generator": "hssm.integrations.jeam.simulate_projected_spherical_diffusion backed by the pinned JEAM revision",
+        "scenario_inputs": "use each historical_bindings.datasets truth and data_seed with n_replicas=400",
+        "resolved_jeam_simulator_arguments": {
+          "threshold_dynamic": "fixed",
+          "decay": 0.0,
+          "threshold_function": null,
+          "s_v": 0.0,
+          "s_t": 0.0,
+          "sigma": 1.0,
+          "dt": 0.001,
+          "n_sample": 400,
+          "max_time": 20.0,
+          "random_state": "the historical data_seed"
+        },
+        "attempts_per_scenario": 1,
+        "serialization": "numpy.save(path, float64_array, allow_pickle=false)",
+        "write_and_hash_before_array_inspection": true,
+        "alternate_environment_seed_or_algorithm_permitted": false,
+        "omitted_nonfinite_or_invalid_output_policy": "fail and retain the recovery attempt; do not resimulate"
+      },
       "dataset_recovery_gate": {
         "required_exact_matches": 4,
         "comparison": "complete .npy bytes and SHA256",
@@ -549,7 +570,7 @@
       "result_path": "benchmarks/results/jeam_fixed_psdm_recovery_v2b.json",
       "preregistered_hypothesis": "Increasing from the exact 400-row prefix to 1,200 rows may contract marginal v_y posterior uncertainty across the frozen a and v_y grid once the sampler prerequisite is satisfied.",
       "execution_prerequisite": "every mixing_v2a full window passes every diagnostic gate",
-      "data_source": "eight independent 1,200-row source datasets generated across a, v_y, and replicate only after this protocol is committed; each n400 dataset is nested within its matched n1200 source",
+      "data_source": "eight independent 1,200-row source datasets generated across a, v_y, and replicate only after this protocol and preexecution manifest are committed; each n400 dataset is nested within its matched n1200 source",
       "reuse_v1_data": false,
       "optimizer_run": false,
       "prior_predictive_draws": 100,

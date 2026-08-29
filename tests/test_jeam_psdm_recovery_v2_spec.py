@@ -3,6 +3,7 @@
 import json
 import math
 from datetime import datetime
+from hashlib import sha256
 from pathlib import Path
 
 SPEC_PATH = (
@@ -16,6 +17,7 @@ V1_SPEC_SHA256 = "2a9fabe13e612a59f7c2138e4e36ae4e01d4bde5e226c16c8572d5ebe35941
 V1_ADDENDUM_SHA256 = "42d4627f7e4eadd9c1ba656095cb3edf5af17d04bd03ad11ede476f78149d8f1"
 V1_RESULT_SHA256 = "cede87d5a5a2c9789939b66962ebb025b270a13966aa2d657d5b0cbb95e9c2c4"
 CURRENT_JEAM_REVISION = "ede7a4f4faf226e4dae52c84dfb01012939cccdc"
+V2_SPEC_SHA256 = "ba19b38bfaf6bb3167e9ca3e7fc37b62696633bf9f07ba1160607b8e6e3825fa"
 EXPECTED_DATASETS = {
     "baseline_asymmetric": (
         (0.6, 1.0, 1.1, 0.2),
@@ -115,6 +117,16 @@ def _allocated_seeds(spec):
                 )
             )
     return data_seeds, inference_seeds
+
+
+def test_protocol_bytes_are_immutable_and_strict_json():
+    """Any committed protocol-byte change must require a new version."""
+    payload = SPEC_PATH.read_bytes()
+
+    assert sha256(payload).hexdigest() == V2_SPEC_SHA256
+    assert payload.endswith(b"\n")
+    assert not payload.endswith(b"\n\n")
+    assert _load_spec()["schema_version"] == 1
 
 
 def test_successor_contract_is_frozen_before_any_evidence():
@@ -383,7 +395,41 @@ def test_mixing_v2a_uses_paired_prefixes_and_three_new_seed_blocks():
     """V2a should isolate retained-draw budget from dataset information."""
     study = _load_spec()["studies"]["mixing_v2a"]
 
+    assert study["preregistered_hypothesis"] == (
+        "The v1 a/t diagnostic failures may be sensitive to retained-draw count "
+        "or to changed random streams and runtime under ordered Slice; this arm "
+        "compares gate status without identifying causality."
+    )
     assert study["data_source"] == "all four byte-identical v1 datasets"
+    assert study["dataset_recovery_method"] == {
+        "generator": (
+            "hssm.integrations.jeam.simulate_projected_spherical_diffusion backed "
+            "by the pinned JEAM revision"
+        ),
+        "scenario_inputs": (
+            "use each historical_bindings.datasets truth and data_seed with "
+            "n_replicas=400"
+        ),
+        "resolved_jeam_simulator_arguments": {
+            "threshold_dynamic": "fixed",
+            "decay": 0.0,
+            "threshold_function": None,
+            "s_v": 0.0,
+            "s_t": 0.0,
+            "sigma": 1.0,
+            "dt": 0.001,
+            "n_sample": 400,
+            "max_time": 20.0,
+            "random_state": "the historical data_seed",
+        },
+        "attempts_per_scenario": 1,
+        "serialization": "numpy.save(path, float64_array, allow_pickle=false)",
+        "write_and_hash_before_array_inspection": True,
+        "alternate_environment_seed_or_algorithm_permitted": False,
+        "omitted_nonfinite_or_invalid_output_policy": (
+            "fail and retain the recovery attempt; do not resimulate"
+        ),
+    }
     assert study["optimizer_run"] is False
     assert study["objective_parity_rerun"] is False
     assert study["prior_predictive_draws"] == 100
@@ -451,8 +497,8 @@ def test_information_v2b_freezes_factorial_design_and_diagnostics():
     )
     assert study["data_source"] == (
         "eight independent 1,200-row source datasets generated across a, v_y, "
-        "and replicate only after this protocol is committed; each n400 dataset "
-        "is nested within its matched n1200 source"
+        "and replicate only after this protocol and preexecution manifest are "
+        "committed; each n400 dataset is nested within its matched n1200 source"
     )
     assert study["optimizer_run"] is False
     assert study["factors"] == {
