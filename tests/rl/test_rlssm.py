@@ -462,6 +462,23 @@ class TestRLSSMSampling:
         )
         assert trace is not None
 
+    @pytest.mark.slow
+    def test_rlssm_find_map_smoke(self, rldm_data, rlssm_config) -> None:
+        """MAP estimation should work on an RLSSM, extra fields included.
+
+        RL models carry the trial-wise feedback the learning process consumes as
+        extra fields, and ``find_MAP`` runs the same extra-field refresh
+        ``sample()`` does before optimizing. This covers that path end to end;
+        it does not assert the refresh changes anything, because it currently
+        cannot -- see ``HSSMBase._point_estimate_setup``.
+        """
+        model = RLSSM(data=rldm_data, model_config=rlssm_config)
+        estimate = model.find_MAP(progressbar=False)
+
+        assert estimate is not None
+        assert estimate.success
+        assert "rl_alpha" in estimate.params
+
 
 class TestRLSSMSimplifiedInterface:
     """Public model= kwarg API coverage."""
