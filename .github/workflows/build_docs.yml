@@ -8,14 +8,19 @@ on:
       - "benchmarks/evidence/jeam_repeated_recovery_v2/**"
       - "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1.json"
       - "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1_addendum.json"
+      - "benchmarks/results/jeam_fixed_psdm_recovery_v1.json"
       - "benchmarks/specs/jeam_fixed_cdm_sampler_comparison_v1.json"
+      - "benchmarks/specs/jeam_fixed_psdm_recovery_v1.json"
+      - "benchmarks/specs/jeam_fixed_psdm_recovery_v1_addendum.json"
       - "docs/**"
       - "mkdocs.yml"
       - "pyproject.toml"
       - "scripts/jeam_repeated_recovery_report.py"
       - "scripts/jeam_sampler_comparison_report.py"
+      - "scripts/jeam_psdm_recovery_report.py"
       - "scripts/verify_jeam_repeated_recovery_evidence.py"
       - "scripts/verify_jeam_sampler_comparison_evidence.py"
+      - "scripts/verify_jeam_psdm_recovery_evidence.py"
       - "src/hssm/**"
   push:
     branches: [main]
@@ -25,14 +30,19 @@ on:
       - "benchmarks/evidence/jeam_repeated_recovery_v2/**"
       - "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1.json"
       - "benchmarks/results/jeam_fixed_cdm_sampler_comparison_v1_addendum.json"
+      - "benchmarks/results/jeam_fixed_psdm_recovery_v1.json"
       - "benchmarks/specs/jeam_fixed_cdm_sampler_comparison_v1.json"
+      - "benchmarks/specs/jeam_fixed_psdm_recovery_v1.json"
+      - "benchmarks/specs/jeam_fixed_psdm_recovery_v1_addendum.json"
       - "docs/**"
       - "mkdocs.yml"
       - "pyproject.toml"
       - "scripts/jeam_repeated_recovery_report.py"
       - "scripts/jeam_sampler_comparison_report.py"
+      - "scripts/jeam_psdm_recovery_report.py"
       - "scripts/verify_jeam_repeated_recovery_evidence.py"
       - "scripts/verify_jeam_sampler_comparison_evidence.py"
+      - "scripts/verify_jeam_psdm_recovery_evidence.py"
       - "src/hssm/**"
   release:
     types: [published]
@@ -95,6 +105,33 @@ jobs:
             echo "JEAM sampler report contains a host path or execution error"
             exit 1
           fi
+      - name: Validate archived JEAM fixed-PSDM report
+        env:
+          MPLCONFIGDIR: /tmp/hssm-jeam-psdm-report-matplotlib
+          XDG_CACHE_HOME: /tmp/hssm-jeam-psdm-report-cache
+        run: |
+          mkdir -p "$MPLCONFIGDIR" "$XDG_CACHE_HOME"
+          uv run --group docs marimo check --strict docs/tutorials/jeam_fixed_psdm_recovery.py
+          uv run --group docs marimo export html docs/tutorials/jeam_fixed_psdm_recovery.py \
+            -o /tmp/jeam-fixed-psdm-recovery.html --force --no-include-code \
+            > /tmp/jeam-fixed-psdm-recovery-export.log 2>&1
+          cat /tmp/jeam-fixed-psdm-recovery-export.log
+          grep -Fq "14/16 truths in archived HDIs" /tmp/jeam-fixed-psdm-recovery.html
+          grep -Fq "Overall gate failed" /tmp/jeam-fixed-psdm-recovery.html
+          grep -Fq "Public support remains blocked" /tmp/jeam-fixed-psdm-recovery.html
+          grep -Fq "JEAM fixed-budget endpoint" /tmp/jeam-fixed-psdm-recovery.html
+          grep -Fq "cede87d5a5a2c9789939b66962ebb025b270a13966aa2d657d5b0cbb95e9c2c4" \
+            /tmp/jeam-fixed-psdm-recovery.html
+          if grep -Eq '/Users/|/home/|/private/|/var/folders/|file://|Traceback|MarimoExceptionRaisedError|ModuleNotFoundError' \
+            /tmp/jeam-fixed-psdm-recovery.html /tmp/jeam-fixed-psdm-recovery-export.log; then
+            echo "JEAM fixed-PSDM report contains a host path or execution error"
+            exit 1
+          fi
+          if grep -Eiq 'JEAM MLE|direct maximum-likelihood|Every raw dataset|same saved datasets|Sampling [0-9]+ chain' \
+            /tmp/jeam-fixed-psdm-recovery.html /tmp/jeam-fixed-psdm-recovery-export.log; then
+            echo "JEAM fixed-PSDM report contains a stale claim or sampling output"
+            exit 1
+          fi
       - name: Build docs (strict)
         env:
           MPLCONFIGDIR: /tmp/hssm-jeam-sampler-report-matplotlib
@@ -113,6 +150,27 @@ jobs:
           if grep -Eq '/Users/|/home/|/private/|/var/folders/|file://|Traceback|MarimoExceptionRaisedError|ModuleNotFoundError' \
             "$report_page"; then
             echo "Built JEAM sampler report contains contamination"
+            exit 1
+          fi
+          psdm_report_page=site/tutorials/jeam_fixed_psdm_recovery/index.html
+          grep -Fq "14/16 truths in archived HDIs" "$psdm_report_page"
+          grep -Fq "Overall gate failed" "$psdm_report_page"
+          grep -Fq "Public support remains blocked" "$psdm_report_page"
+          grep -Fq "JEAM fixed-budget endpoint" "$psdm_report_page"
+          grep -Fq "cede87d5a5a2c9789939b66962ebb025b270a13966aa2d657d5b0cbb95e9c2c4" \
+            "$psdm_report_page"
+          if [ "$(grep -o 'data:image/png' "$psdm_report_page" | wc -l)" -lt 4 ]; then
+            echo "Built JEAM fixed-PSDM report is missing figure outputs"
+            exit 1
+          fi
+          if grep -Eq '/Users/|/home/|/private/|/var/folders/|file://|Traceback|MarimoExceptionRaisedError|ModuleNotFoundError' \
+            "$psdm_report_page"; then
+            echo "Built JEAM fixed-PSDM report contains contamination"
+            exit 1
+          fi
+          if grep -Eiq 'JEAM MLE|direct maximum-likelihood|Every raw dataset|same saved datasets|Sampling [0-9]+ chain' \
+            "$psdm_report_page"; then
+            echo "Built JEAM fixed-PSDM report contains a stale claim or sampling output"
             exit 1
           fi
 
