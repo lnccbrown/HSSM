@@ -10,7 +10,7 @@ import datetime
 import logging
 import warnings
 from abc import ABC, abstractmethod
-from copy import deepcopy
+from copy import copy, deepcopy
 from os import PathLike
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, Union, cast
@@ -309,7 +309,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.initval_jitter = initval_jitter
 
         # region ===== Store the pre-built config =====
-        self.model_config: BaseModelConfig = model_config
+        self.model_config: BaseModelConfig = copy(model_config)
+        self.model_config.response_domains = deepcopy(model_config.response_domains)
         # endregion
 
         # region ===== Set up shortcuts so old code will work ======
@@ -324,6 +325,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else None
         )
         self.choices = self.model_config.choices  # type: ignore[assignment]
+        self.response_domains = self.model_config.response_domains or {}
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
@@ -333,13 +335,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # TODO: add to HSSMBase
         self.is_choice_only: bool = self.model_config.is_choice_only
 
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )
-
-        self._validate_choices()
-
         # region Avoid mypy error later (None.append). Should list_params be Optional?
         if self.list_params is None:
             raise ValueError(
@@ -347,7 +342,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             )
         # endregion
 
-        self.n_choices = len(self.choices)  # type: ignore[arg-type]
+        self.n_choices = len(self.choices) if self.choices is not None else None
 
         self._pre_check_data_sanity()
 
@@ -565,6 +560,23 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         exclude_keys = {"self", "kwargs", "__class__"}
         result = {k: v for k, v in local_vars.items() if k not in exclude_keys}
         result.update(extra_kwargs)
+        model_config = result.get("model_config")
+        if (
+            isinstance(model_config, dict)
+            and model_config.get("response_domains") is not None
+        ):
+            model_config = model_config.copy()
+            model_config["response_domains"] = deepcopy(
+                model_config["response_domains"]
+            )
+            result["model_config"] = model_config
+        elif (
+            model_config is not None
+            and getattr(model_config, "response_domains", None) is not None
+        ):
+            model_config = copy(model_config)
+            model_config.response_domains = deepcopy(model_config.response_domains)
+            result["model_config"] = model_config
         return result
 
     def find_MAP(self, **kwargs):
@@ -1958,8 +1970,20 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     + "parameter is not None"
                 )
         if self.has_lapse:
+            domain = (
+                next(iter(self.response_domains.values()))
+                if len(self.response_domains) == 1
+                else None
+            )
+            supports_lapse = domain is not None and domain["kind"] == "categorical"
+            if not supports_lapse:
+                raise ValueError(
+                    "`p_outlier` is supported only for one categorical response "
+                    "column. Set `p_outlier=None` or `p_outlier=0` for this model."
+                )
             if lapse is None:
                 if self.is_choice_only:
+                    assert self.n_choices is not None
                     self.lapse = 1 / self.n_choices
                 else:
                     self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)

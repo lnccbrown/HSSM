@@ -83,9 +83,15 @@ part of this contract.
 3. HSSM has one normalization boundary. Legacy `choices` can create a categorical domain
    only when there is exactly one non-RT response column. Multiple response columns
    require canonical metadata.
-4. Canonical metadata combined with explicitly supplied `choices` is ambiguous and
-   fails. Resolved configs have no implicit choice default: built-in factories supply
-   their existing labels explicitly.
+4. Canonical metadata combined with explicitly supplied `choices` at a raw input
+   boundary is ambiguous and fails. A resolved config may retain an exactly matching
+   derived `choices` view so ordinary dataclass copying and validation remain
+   idempotent; conflicting values fail. Resolved configs have no implicit choice
+   default: built-in factories supply their existing labels explicitly. Resolved
+   configs are construction snapshots, not mutable domain registries. Directly
+   mutating nested canonical metadata is unsupported and a later validation fails if
+   the derived view no longer matches; construct a replacement with canonical metadata
+   and `choices=None` instead.
 5. On `main`, `choices` is derived only for exactly one categorical domain. It is `None`
    for continuous, circular, or multiple domains, including multiple categorical
    domains.

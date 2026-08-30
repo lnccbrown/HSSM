@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+from copy import deepcopy
 from dataclasses import MISSING, dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -17,7 +18,12 @@ if TYPE_CHECKING:
     from .._types import LoglikKind, SupportedModels
     from ..config import ModelConfig
 
-from ..config import DEFAULT_SSM_CHOICES, DEFAULT_SSM_OBSERVED_DATA, BaseModelConfig
+from ..config import (
+    DEFAULT_SSM_CHOICES,
+    DEFAULT_SSM_OBSERVED_DATA,
+    BaseModelConfig,
+    _resolve_response_domains,
+)
 from ..utils import annotate_function
 
 _logger = logging.getLogger("hssm")
@@ -164,7 +170,16 @@ class RLSSMConfig(BaseModelConfig):
             init_kwargs[key] = config_dict.get(key, default)
 
         _get_or_warn("response", DEFAULT_SSM_OBSERVED_DATA)
-        _get_or_warn("choices", DEFAULT_SSM_CHOICES)
+        response_domains = config_dict.get("response_domains")
+        if response_domains is not None:
+            if config_dict.get("choices") is not None:
+                raise ValueError(
+                    "Provide either `response_domains` or legacy `choices`, not both."
+                )
+            init_kwargs["response_domains"] = deepcopy(response_domains)
+            init_kwargs["choices"] = None
+        else:
+            _get_or_warn("choices", DEFAULT_SSM_CHOICES)
 
         return cls(**init_kwargs)
 
@@ -266,6 +281,13 @@ class RLSSMConfig(BaseModelConfig):
     def validate(self) -> None:  # noqa: D102
         if self.response is None:
             raise ValueError("Please provide `response` columns in the configuration.")
+        if self.response_domains is None and self.choices is None:
+            raise ValueError(
+                "Please provide `choices` or `response_domains` in the configuration."
+            )
+        self.response_domains, self.choices = _resolve_response_domains(
+            self.response, self.response_domains, self.choices
+        )
         if self.list_params is None:
             raise ValueError("Please provide `list_params` in the configuration.")
         if self.choices is None:
