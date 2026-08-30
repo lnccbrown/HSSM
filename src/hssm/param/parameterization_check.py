@@ -362,20 +362,24 @@ def check_user_priors_for_location_overparameterization(
     When a Formulae group expression also occurs as a common term and the user
     supplies a free ``mu`` for a group-specific translation-family prior under
     centering, the linear predictor sees only ``beta + mu``. The likelihood is
-    invariant under shifts of mass between those parameters, so the posterior
-    has a ridge.
+    invariant under shifts of mass between those parameters, so the likelihood
+    has a ridge and their decomposition is identified only by the priors.
 
-    This check is intentionally silent for fixed ``mu`` values, unmatched
-    group-only expressions, and effective non-centering. Non-centered problems
-    are reported separately by
-    :func:`check_user_group_prior_compatibility`.
+    The same location ridge occurs when two or more centered group terms share
+    an exact Formulae expression but no common term owns its population effect.
+    Shifting one group mean up and another down leaves the predictor unchanged.
+
+    This check is intentionally silent for fixed ``mu`` values, a single
+    unmatched free location, and effective non-centering. Non-centered problems
+    are reported separately by :func:`check_user_group_prior_compatibility`.
     """
     mismatches: list[PriorMismatch] = []
     for param_name, param in params.items():
+        unmatched_free_locations: dict[str, list[str]] = {}
         for term_name, expression_name, has_common, prior in _iter_user_group_priors(
             param
         ):
-            if not has_common or prior.name not in _ADDITIVE_LOCATION_PRIORS:
+            if prior.dist is not None or prior.name not in _ADDITIVE_LOCATION_PRIORS:
                 continue
             if not isinstance(prior.args.get("mu"), bmb.Prior):
                 continue
@@ -385,6 +389,11 @@ def check_user_priors_for_location_overparameterization(
                 prior_noncentered=getattr(prior, "noncentered", None),
             )
             if effective_nc:
+                continue
+            if not has_common:
+                unmatched_free_locations.setdefault(expression_name, []).append(
+                    term_name
+                )
                 continue
             mismatches.append(
                 PriorMismatch(
@@ -405,6 +414,38 @@ def check_user_priors_for_location_overparameterization(
                         "`mu=0` on the matching group term, or remove that "
                         "common effect if the group-level mean should own the "
                         "location."
+                    ),
+                )
+            )
+
+        for expression_name, term_names in sorted(unmatched_free_locations.items()):
+            if len(term_names) < 2:
+                continue
+            sorted_term_names = sorted(term_names)
+            formula_expression = (
+                "1" if expression_name == "Intercept" else expression_name
+            )
+            mismatches.append(
+                PriorMismatch(
+                    parameter=param_name,
+                    term=", ".join(sorted_term_names),
+                    reason=(
+                        f"User priors for group terms {sorted_term_names!r} on "
+                        "parameter "
+                        f"'{param_name}' each have a free `mu` under the effective "
+                        f"centered parameterization, and their exact Formulae "
+                        f"expression '{expression_name}' has no common effect. "
+                        "The likelihood is invariant when one group location is "
+                        "shifted up and another is shifted down; their decomposition "
+                        "is identified only by the priors, and the likelihood has a "
+                        "location ridge. Proper priors may still yield a proper "
+                        "posterior."
+                    ),
+                    suggestion=(
+                        f"Add the exact common formula term '{formula_expression}' "
+                        "and set `mu=0` on every matching group deviation, or choose "
+                        "exactly one group term to own the free population location "
+                        "and fix the other group locations intentionally."
                     ),
                 )
             )
