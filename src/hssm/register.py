@@ -1,11 +1,13 @@
 """Module for registering custom models in HSSM."""
 
+from copy import deepcopy
 from pprint import pformat, pp
 from typing import cast
 
 from ._types import (
     DefaultConfig,
     LoglikConfigs,
+    ResponseDomainSpec,
     SupportedModels,
 )
 from .defaults import (
@@ -17,9 +19,10 @@ def register_model(
     name: SupportedModels,
     response: list[str],
     list_params: list[str],
-    choices: list[int],
+    choices: list[int] | None,
     likelihoods: LoglikConfigs,
     description: str | None,
+    response_domains: dict[str, ResponseDomainSpec] | None = None,
 ) -> None:
     """Register a new model in HSSM.
 
@@ -31,8 +34,10 @@ def register_model(
         List of response variables
     list_params : list[str]
         List of parameters
-    choices : list[int]
-        List of possible choices
+    choices : list[int] or None
+        Legacy list of possible choices for one categorical response.
+    response_domains : dict or None
+        Canonical metadata keyed by each physical non-RT response column.
     description : str
         Description of the model
     likelihoods : LoglikConfigs
@@ -50,8 +55,17 @@ def register_model(
     # Ensure no collisions with existing models
     if name in registered_models:
         raise ValueError(f"Model '{name}' already exists")
+    if response_domains is not None and choices is not None:
+        raise ValueError(
+            "Provide either `response_domains` or legacy `choices`, not both."
+        )
 
     _config = {k: v for k, v in locals().items() if k != "name"}
+    if choices is None:
+        _config.pop("choices")
+    if response_domains is None:
+        _config.pop("response_domains")
+    _config = deepcopy(_config)
     config = cast("DefaultConfig", _config)
 
     # TODO: validate provided configs?

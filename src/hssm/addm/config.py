@@ -17,7 +17,7 @@ from dataclasses import dataclass, field, fields
 from typing import Any
 
 from .._types import LoglikKind
-from ..config import BaseModelConfig
+from ..config import BaseModelConfig, _resolve_response_domains
 from .attention_process import resolve_attention_process
 
 
@@ -94,6 +94,12 @@ class aDDMConfig(BaseModelConfig):
 
     def validate(self) -> None:
         """Validate the configuration (mirrors ``RLSSMConfig.validate``)."""
+        response_domains, choices = _resolve_response_domains(
+            self.response, self.response_domains, self.choices
+        )
+        assert choices is not None
+        self.response_domains = response_domains
+        self.choices = choices
         if not self.list_params:
             raise ValueError("Please provide `list_params` in the configuration.")
         # Raises ValueError (unknown name) / TypeError (bad type) on failure.

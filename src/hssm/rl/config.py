@@ -17,7 +17,12 @@ if TYPE_CHECKING:
     from .._types import LoglikKind, SupportedModels
     from ..config import ModelConfig
 
-from ..config import DEFAULT_SSM_CHOICES, DEFAULT_SSM_OBSERVED_DATA, BaseModelConfig
+from ..config import (
+    DEFAULT_SSM_CHOICES,
+    DEFAULT_SSM_OBSERVED_DATA,
+    BaseModelConfig,
+    _resolve_response_domains,
+)
 from ..utils import annotate_function
 
 _logger = logging.getLogger("hssm")
@@ -266,6 +271,13 @@ class RLSSMConfig(BaseModelConfig):
     def validate(self) -> None:  # noqa: D102
         if self.response is None:
             raise ValueError("Please provide `response` columns in the configuration.")
+        if self.response_domains is None and self.choices is None:
+            raise ValueError(
+                "Please provide `choices` or `response_domains` in the configuration."
+            )
+        self.response_domains, self.choices = _resolve_response_domains(
+            self.response, self.response_domains, self.choices
+        )
         if self.list_params is None:
             raise ValueError("Please provide `list_params` in the configuration.")
         if self.choices is None:
