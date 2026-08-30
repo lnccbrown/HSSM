@@ -255,6 +255,39 @@ def _is_identity_link(link: str | bmb.Link | None) -> bool:
     return link.name == "identity"
 
 
+def _has_finite_bounds(bounds: tuple[float, float] | None) -> bool:
+    """Return whether at least one response-scale bound is finite."""
+    return bounds is not None and any(np.isfinite(bound) for bound in bounds)
+
+
+def _make_bounded_group_intercept_prior(
+    bounds: tuple[float, float],
+) -> Prior:
+    """Build a native hierarchical ``TruncatedNormal`` within ``bounds``.
+
+    The native PyMC distribution keeps every hierarchical argument visible to
+    Bambi. This is intentionally different from ``Prior(..., bounds=...)``, whose
+    custom truncation wrapper is suitable for ordinary coefficients but hides the
+    hyperprior arguments that Bambi requires for group-specific terms.
+    """
+    lower, upper = bounds
+    mu = mean(bounds) if np.all(np.isfinite(bounds)) else 0.0
+    location = Prior(
+        "TruncatedNormal",
+        mu=mu,
+        sigma=0.25,
+        lower=lower,
+        upper=upper,
+    )
+    return Prior(
+        "TruncatedNormal",
+        mu=location,
+        sigma=generate_prior("Weibull"),
+        lower=lower,
+        upper=upper,
+    )
+
+
 # AF-TODO: Docstring could benefit from some more details here.
 def get_default_prior(
     term_type: str,
@@ -268,10 +301,10 @@ def get_default_prior(
 
     * common_intercept: Bounded Normal prior (N(mean(bounds), 0.25)).
     * common: Normal prior (N(0, 0.25)).
-    * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3)). Under a
-      transformed link this correctly lives on an unbounded predictor scale. Finite
-      coefficient bounds for identity-linked group-only intercepts are not yet
-      supported; see HSSM #1269.
+    * group_intercept: Under identity with a finite response bound, a hierarchical
+      TruncatedNormal whose location and group coefficients share that support.
+      Otherwise, Normal prior N(N(0, 0.25), Weibull(1.5, 0.3)). Transformed-link
+      coefficients correctly remain unbounded on the predictor scale.
     * group_specific: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3).
 
     This function is taken from bambi.priors.prior.py and modified to handle hssm-
@@ -311,7 +344,11 @@ def get_default_prior(
                     "Normal", mu=mean(bounds), sigma=0.25, bounds=bounds
                 )
     elif term_type == "group_intercept":
-        prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
+        if _is_identity_link(link) and _has_finite_bounds(bounds):
+            assert bounds is not None
+            prior = _make_bounded_group_intercept_prior(bounds)
+        else:
+            prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
     elif term_type == "group_specific":
         prior = generate_prior("Normal", mu="Normal", sigma="Weibull")
     elif term_type in ["group_intercept_with_common", "group_specific_with_common"]:
