@@ -16,8 +16,8 @@
 
 This construction-only marimo tutorial introduces link functions from first
 principles, compares HSSM's identity and ``log_logit`` settings, and verifies
-the link-aware safe-prior and group-location behavior corrected in HSSM #1232
-and #1225. No sampling is required.
+the current link-aware safe-prior and group-location behavior. No sampling is
+required.
 
 Run the pinned standalone environment locally or in Molab::
 
@@ -517,9 +517,9 @@ def _(mo):
     mo.md("""
     The four rows are semantically the same model and now receive the same safe
     response-scale prior. HSSM decides from the **effective link**, not from
-    whether the user happened to omit a value or wrap it in a Link object. This
-    equivalence is the behavior corrected by
-    [#1232](https://github.com/lnccbrown/HSSM/issues/1232).
+    whether the user happened to omit a value or wrap it in a Link object.
+    Omitted identity and each explicit identity spelling are therefore
+    interchangeable under the safe settings.
     """)
     return
 
@@ -603,9 +603,11 @@ def _(mo):
 
     Replacing this `mu` by zero changes the scientific model—it removes the
     population-level slope. HSSM therefore keeps the generated location-bearing
-    hierarchy and centers that term. This term-level fallback is necessary
-    because current Bambi non-centering does not retain a nonzero or estimated
-    group `mu` ([Bambi #1003](https://github.com/bambinos/bambi/issues/1003)).
+    hierarchy and centers that term. This term-level fallback preserves the
+    requested population location: current Bambi non-centering would otherwise
+    omit a nonzero or estimated group `mu`. For an explicit user prior, HSSM
+    raises before model construction rather than silently building a different
+    model.
 
     Finally, if the same unmatched expression appears under two grouping
     factors, neither has a unique claim to the location. In
@@ -616,7 +618,10 @@ def _(mo):
 
     adding a constant to every subject effect and subtracting it from every
     item effect leaves `eta` unchanged. Safe generation rejects this ambiguity
-    rather than choosing an order-dependent owner.
+    rather than choosing an order-dependent owner. Fully explicit centered priors
+    are preserved, but HSSM warns when two or more free group means create this
+    likelihood ridge: proper priors may identify the decomposition, while the data
+    still identify only the sum.
     """)
     return
 
@@ -879,8 +884,11 @@ def _(mo):
     The direct `a_1|participant_id` node receives its population location and
     scale from the Gamma hierarchy. No offset node replaces that location.
     HSSM's likelihood bounds still apply, but finite coefficient bounds are not
-    yet propagated to generic identity-linked group priors; that separate design
-    is tracked in [#1269](https://github.com/lnccbrown/HSSM/issues/1269).
+    automatically propagated to generic identity-linked group priors. A bound on
+    one coefficient would not constrain the complete predictor after other effects
+    are added. Prefer a support-respecting transformed link when appropriate; the
+    [group-prior guide](https://lnccbrown.github.io/HSSM/how_to/specify_group_priors/)
+    explains the remaining identity-link choices and limitations.
     """)
     return
 
@@ -1119,16 +1127,15 @@ def _(mo):
     - the [`hssm.Link` API](https://lnccbrown.github.io/HSSM/api/link/) for supported and custom links;
     - [Specify priors and fix parameters](https://lnccbrown.github.io/HSSM/how_to/specify_priors/) for
       explicit prior control;
+    - [Specify hierarchical group priors](https://lnccbrown.github.io/HSSM/how_to/specify_group_priors/) for
+      location ownership, parameterization compatibility, and link-scale bounds;
     - [Set initial values](https://lnccbrown.github.io/HSSM/tutorials/initial_values/) for links and initialization;
     - [Random-slope prior diagnostics](https://lnccbrown.github.io/HSSM/tutorials/random_slope_safe_priors/) for
       matching common and group-specific regression terms;
-    - [#1225](https://github.com/lnccbrown/HSSM/issues/1225) for the implemented
-      group-only location-ownership contract;
-    - [#1268](https://github.com/lnccbrown/HSSM/issues/1268) and
-      [Bambi #1003](https://github.com/bambinos/bambi/issues/1003) for eventual
-      upstream location-aware non-centering; and
-    - [#1269](https://github.com/lnccbrown/HSSM/issues/1269) for the separate
-      bound-aware identity group-prior design.
+    - [Coming from HDDM](https://lnccbrown.github.io/HSSM/explanations/coming_from_hddm/) for
+      the group-only, location-bearing hierarchy used by HDDM-style models; and
+    - Betancourt's [hierarchical modeling case study](https://betanalpha.github.io/assets/case_studies/hierarchical_modeling.html)
+      for a deeper treatment of centered and non-centered posterior geometry.
     """)
     return
 
