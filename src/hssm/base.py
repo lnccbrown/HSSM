@@ -209,8 +209,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         The jitter value for the initial values. Defaults to `0.01`.
     noncentered : optional
         Controls the centered vs. non-centered parameterization of
-        group-specific (hierarchical) terms. ``True`` (bambi's default) uses the
-        non-centered parameterization everywhere, ``False`` uses centered. A
+        group-specific (hierarchical) terms. ``True`` (bambi's default) requests
+        the non-centered parameterization and ``False`` requests centered. Safe
+        generated group-only terms that own a population location may be centered
+        term by term, with a warning, when current bambi cannot preserve that
+        location under non-centering. A
         ``dict`` keyed by HSSM parameter name (e.g. ``{"v": False, "a": True}``)
         sets it per parameter; an unknown key raises at construction. A per-prior
         ``noncentered`` field (inside a prior ``dict`` or on an ``hssm.Prior``)
@@ -412,8 +415,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self._parent,
         )
 
-        # Targeted statistical-identifiability warning for a group-specific
-        # location that is redundant with an exact matching common effect.
+        # Targeted statistical-identifiability warnings for common/group or
+        # repeated group-only population-location collisions.
         emit_parameterization_warnings(
             check_user_priors_for_location_overparameterization(
                 self.params, model_noncentered

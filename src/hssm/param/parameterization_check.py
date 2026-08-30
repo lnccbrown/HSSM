@@ -6,9 +6,10 @@ Three validation layers are exposed:
   each :class:`RegressionParam` and rejects group-specific priors that bambi
   cannot build or cannot honor under the effective parameterization.
 
-* ``check_user_priors_for_location_overparameterization`` flags a free group
-  mean only when its Formulae expression has an exact common-effect counterpart
-  and the effective parameterization is centered.
+* ``check_user_priors_for_location_overparameterization`` flags centered free
+  group means when they collide with an exact common-effect counterpart, or
+  when several unmatched group terms compete to own the same exact Formulae
+  expression's population location.
 
 * ``find_disconnected_free_rvs`` walks the PyMC graph after ``model.build()``
   and reports any free RV that is not an ancestor of an observed RV. This is
