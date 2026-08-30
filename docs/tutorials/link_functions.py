@@ -3,7 +3,7 @@
 # dependencies = [
 #     "bambi==0.20.0",
 #     "graphviz==0.21",
-#     "hssm @ git+https://github.com/lnccbrown/HSSM.git@a7f6892d387f4b19f35e5db01f648abbb8535910",
+#     "hssm @ git+https://github.com/lnccbrown/HSSM.git@f94b9e467d43386bf1e822a9e66d0fb7a9d68055",
 #     "marimo==0.24.0",
 #     "matplotlib==3.11.1",
 #     "numpy==2.4.6",
@@ -686,6 +686,28 @@ def _(build_silent_model, hssm, model_kwargs):
         },
     }
     group_location_models = {}
+    _lba_data = _group_base_kwargs["data"].copy()
+    _lba_data["response"] = (_lba_data["response"] == 1).astype(int)
+    group_location_models["bounded generic identity"] = build_silent_model(
+        data=_lba_data,
+        model="lba2",
+        loglik_kind="analytical",
+        include=[
+            {
+                "name": "b",
+                "formula": "b ~ 0 + (1 | participant_id)",
+                "link": "identity",
+            }
+        ],
+        A=0.1,
+        v0=1.0,
+        v1=1.0,
+        p_outlier=0.0,
+        prior_settings="safe",
+        noncentered=True,
+        process_initvals=False,
+        initval_jitter=0.0,
+    )
     for _label, _case in _group_cases.items():
         _spec = {
             "name": _case["parameter"],
@@ -730,26 +752,42 @@ def _(bmb, format_prior, group_location_models, link_name, mo, np, pd):
     _group_rows = []
     _group_specs = [
         (
+            "bounded generic identity",
+            "b",
+            "1|participant_id",
+            "bounded response scale",
+            "(0.2, inf)",
+        ),
+        (
             "identity HDDM location",
             "a",
             "1|participant_id",
             "response scale",
+            "(0, inf) via Gamma",
         ),
-        ("log-scale location", "a", "1|participant_id", "log-predictor scale"),
+        (
+            "log-scale location",
+            "a",
+            "1|participant_id",
+            "log-predictor scale",
+            "real line before exp",
+        ),
         (
             "generalized-logit location",
             "z",
             "1|participant_id",
             "generalized-log-odds scale",
+            "real line before gen_logit inverse",
         ),
         (
             "matched non-centered deviation",
             "v",
             "x|participant_id",
             "identity predictor scale",
+            "real line",
         ),
     ]
-    for _label, _parameter, _term, _scale in _group_specs:
+    for _label, _parameter, _term, _scale, _support in _group_specs:
         _model = group_location_models[_label]
         _prior = _model.params[_parameter].prior[_term]
         _mu = _prior.args.get("mu")
@@ -764,6 +802,7 @@ def _(bmb, format_prior, group_location_models, link_name, mo, np, pd):
                 "outer family": _prior.name,
                 "location": format_prior(_mu) if _mu_is_free else repr(_mu),
                 "location scale": _scale,
+                "group-coefficient support": _support,
                 "effective form": (
                     "centered location owner"
                     if _prior.noncentered is False
@@ -778,6 +817,11 @@ def _(bmb, format_prior, group_location_models, link_name, mo, np, pd):
     _identity_prior = (
         group_location_models["identity HDDM location"]
         .params["a"]
+        .prior["1|participant_id"]
+    )
+    _bounded_identity_prior = (
+        group_location_models["bounded generic identity"]
+        .params["b"]
         .prior["1|participant_id"]
     )
     _log_prior = (
@@ -796,6 +840,12 @@ def _(bmb, format_prior, group_location_models, link_name, mo, np, pd):
         .prior["x|participant_id"]
     )
 
+    assert _bounded_identity_prior.name == "TruncatedNormal"
+    assert _bounded_identity_prior.noncentered is False
+    assert np.isclose(float(_bounded_identity_prior.args["lower"]), 0.2)
+    assert np.isposinf(float(_bounded_identity_prior.args["upper"]))
+    assert isinstance(_bounded_identity_prior.args["mu"], bmb.Prior)
+    assert _bounded_identity_prior.args["mu"].name == "TruncatedNormal"
     assert _identity_prior.name == "Gamma"
     assert _log_prior.name == "Normal"
     assert _gen_logit_prior.name == "Normal"
@@ -804,10 +854,17 @@ def _(bmb, format_prior, group_location_models, link_name, mo, np, pd):
     assert _gen_logit_prior.noncentered is False
     assert not isinstance(_matched_prior.args["mu"], bmb.Prior)
     assert np.all(np.asarray(_matched_prior.args["mu"]) == 0.0)
-    assert group_location_prior_table.iloc[:3]["direct group RV"].all()
-    assert not group_location_prior_table.iloc[:3]["offset RV"].any()
-    assert not group_location_prior_table.iloc[3]["direct group RV"]
-    assert group_location_prior_table.iloc[3]["offset RV"]
+    _rows_by_case = group_location_prior_table.set_index("case")
+    _owner_cases = [
+        "bounded generic identity",
+        "identity HDDM location",
+        "log-scale location",
+        "generalized-logit location",
+    ]
+    assert _rows_by_case.loc[_owner_cases, "direct group RV"].all()
+    assert not _rows_by_case.loc[_owner_cases, "offset RV"].any()
+    assert not _rows_by_case.loc["matched non-centered deviation", "direct group RV"]
+    assert _rows_by_case.loc["matched non-centered deviation", "offset RV"]
     mo.Html(group_location_prior_table.to_html(index=False, border=0))
     return (group_location_prior_table,)
 
@@ -815,21 +872,24 @@ def _(bmb, format_prior, group_location_models, link_name, mo, np, pd):
 @app.cell
 def _(mo):
     mo.md("""
-    The first three rows all have one unmatched group intercept and therefore
+    The first four rows all have one unmatched group intercept and therefore
     one population-location owner. HSSM sets only those generated priors to
     `noncentered=False`, retaining a direct group random variable and its
     location hyperprior.
 
     Their links change what that location means:
 
-    - under **identity**, the `a` hierarchy is the HDDM-derived response-scale
-      `Gamma` hierarchy;
+    - under **generic identity**, the lower-bounded LBA `b` hierarchy is a native
+      response-scale `TruncatedNormal`, so the generated location and every group
+      coefficient stay above `0.2`;
+    - under **identity for an analytical DDM**, the `a` hierarchy remains the
+      calibrated HDDM-derived response-scale `Gamma` hierarchy;
     - under **log**, `exp(mu)` is a reference median on the positive parameter
       scale, not the mean after integrating over group variation; and
     - under **generalized logit**, the inverse-linked `mu` is a bounded reference
       value, again not generally an expectation.
 
-    The fourth row is different: common `x` owns the population slope, so the
+    The fifth row is different: common `x` owns the population slope, so the
     group term is a zero-mean deviation and can stay non-centered. Under a log
     link such a zero deviation would be a neutral multiplicative factor
     `exp(0)=1`; under generalized logit it would leave the common predictor
@@ -879,16 +939,54 @@ def _(group_location_models, pm):
 @app.cell
 def _(mo):
     mo.md("""
+    ### Bounded generic identity group location
+
+    The pure predictor here is `b ~ 0 + (1 | participant_id)`, so each bounded
+    group coefficient is also the complete predictor and the final identity-linked
+    parameter. HSSM generates a centered native hierarchical `TruncatedNormal`;
+    this keeps Bambi's location and scale hyperpriors visible and constrains both
+    the generated population location and each LBA threshold coefficient above
+    the configured lower bound `0.2`. LBA2 separately requires `b > A`; this
+    construction satisfies that cross-parameter condition because the example
+    fixes `A=0.1`, not because a one-coefficient prior can enforce arbitrary
+    relationships between parameters.
+
+    If a common slope, another group term, an offset, or another additive
+    contribution were present, this coefficient bound would protect only the
+    baseline—not the complete `eta`. HSSM warns for that mixed safe-generated
+    case. A transformed inverse link is what can constrain the complete additive
+    predictor when its image matches the parameter support.
+    """)
+    return
+
+
+@app.cell
+def _(make_group_location_graph):
+    bounded_identity_group_location_graph = make_group_location_graph(
+        "bounded generic identity"
+    )
+    bounded_identity_group_location_graph
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
     ### Identity-linked HDDM group location
 
     The direct `a_1|participant_id` node receives its population location and
     scale from the Gamma hierarchy. No offset node replaces that location.
-    HSSM's likelihood bounds still apply, but finite coefficient bounds are not
-    automatically propagated to generic identity-linked group priors. A bound on
-    one coefficient would not constrain the complete predictor after other effects
-    are added. Prefer a support-respecting transformed link when appropriate; the
-    [group-prior guide](https://lnccbrown.github.io/HSSM/how_to/specify_group_priors/)
-    explains the remaining identity-link choices and limitations.
+    This analytical DDM path deliberately retains the calibrated HDDM family
+    instead of replacing it with the generic bounded Normal hierarchy above.
+    Both are response-scale group locations; the distinction is the safe-prior
+    family supplied by the likelihood implementation.
+
+    Configured likelihood bounds are not themselves a hard-support prior. If a
+    complete predictor leaves them, HSSM substitutes a finite per-trial
+    log-likelihood floor of `-66.1`. The [group-prior
+    guide](https://lnccbrown.github.io/HSSM/how_to/specify_group_priors/)
+    separates coefficient support, complete-predictor support, and that finite
+    likelihood penalty.
     """)
     return
 
