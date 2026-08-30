@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+import cloudpickle
 import numpy as np
 import pandas as pd
 import pytensor.tensor as pt
@@ -237,3 +238,26 @@ def test_predictive_cleanup_uses_custom_response_name():
 
     assert model._parent in result["posterior"].data_vars
     assert response_mean not in result["posterior"].data_vars
+
+
+def test_width_four_cloudpickle_round_trip_preserves_predictive_contract():
+    """Existing model reconstruction retains width, metadata, and seeded draws."""
+    model = _synthetic_model(4)
+    restored = cloudpickle.loads(cloudpickle.dumps(model))
+
+    assert restored._obs_dim == model._obs_dim == 4
+    assert restored.response == model.response
+    assert restored.response_domains == model.response_domains
+
+    expected = model.sample_prior_predictive(
+        draws=2,
+        random_seed=np.random.default_rng(91),
+    )
+    actual = restored.sample_prior_predictive(
+        draws=2,
+        random_seed=np.random.default_rng(91),
+    )
+    xr.testing.assert_equal(
+        actual["prior_predictive"].ds,
+        expected["prior_predictive"].ds,
+    )
