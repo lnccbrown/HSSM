@@ -390,7 +390,7 @@ def test_safe_priors_exact_terms_take_precedence_over_wildcards(cavanagh_test):
 
 
 def test_safe_priors_preserve_unmatched_group_location(cavanagh_test):
-    """Retain the existing free-mean policy for a genuinely group-only slope."""
+    """Retain the free-mean family while centering a generated group-only slope."""
     param = RegressionParam(
         name="v",
         formula="v ~ 1 + (0 + theta | participant_id)",
@@ -401,6 +401,115 @@ def test_safe_priors_preserve_unmatched_group_location(cavanagh_test):
 
     assert param._group_terms_with_common == set()
     _check_group_prior(param.prior["theta|participant_id"])
+
+
+@pytest.mark.parametrize(
+    ("noncentered", "expect_warning"),
+    [
+        (True, True),
+        (False, False),
+        (None, False),
+        ({"v": True}, True),
+        ({"v": False}, False),
+        ({"a": False}, True),
+    ],
+)
+def test_safe_priors_warn_when_centering_overrides_model_setting(
+    cavanagh_test, caplog, noncentered, expect_warning
+):
+    """Explain a generated term-level centered fallback only when it overrides."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + (0 + theta | participant_id)",
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=noncentered)
+
+    messages = [
+        record.message
+        for record in caplog.records
+        if "generated location-bearing group-only term" in record.message
+    ]
+    assert bool(messages) is expect_warning
+    if expect_warning:
+        assert len(messages) == 1
+        assert "parameter 'v'" in messages[0]
+        assert "'theta|participant_id' (expression 'theta')" in messages[0]
+        assert "noncentered=False" in messages[0]
+        assert "response/parameter scale" in messages[0]
+        assert "common formula term(s) ['theta']" in messages[0]
+
+
+def test_safe_priors_warn_once_for_all_generated_group_locations(cavanagh_test, caplog):
+    """Aggregate every generated unmatched term for a component into one warning."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + (0 + theta + dbs | participant_id)",
+        link="log",
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=True)
+
+    messages = [
+        record.message
+        for record in caplog.records
+        if "generated location-bearing group-only term" in record.message
+    ]
+    assert len(messages) == 1
+    assert "theta|participant_id" in messages[0]
+    assert "dbs|participant_id" in messages[0]
+    assert "linear-predictor scale before the inverse link" in messages[0]
+    assert "common formula term(s) ['dbs', 'theta']" in messages[0]
+    assert param.prior["theta|participant_id"].noncentered is False
+    assert param.prior["dbs|participant_id"].noncentered is False
+
+
+def test_safe_priors_do_not_rewrite_explicit_unmatched_group_prior(cavanagh_test):
+    """An explicit group-only prior remains authoritative and unchanged."""
+    explicit = bmb.Prior(
+        "Normal",
+        mu=bmb.Prior("Normal", mu=1.0, sigma=0.5),
+        sigma=bmb.Prior("HalfNormal", sigma=0.75),
+        noncentered=True,
+    )
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + (0 + theta | participant_id)",
+        prior={"theta|participant_id": explicit},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=True)
+
+    assert param.prior["theta|participant_id"] is explicit
+    assert explicit.noncentered is True
+
+
+def test_safe_priors_do_not_rewrite_unmatched_group_wildcard(cavanagh_test, caplog):
+    """A group wildcard owns an unmatched term without a generated fallback."""
+    wildcard = bmb.Prior(
+        "Normal",
+        mu=0.0,
+        sigma=bmb.Prior("HalfNormal", sigma=0.75),
+        noncentered=True,
+    )
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + (0 + theta | participant_id)",
+        prior={"group_specific": wildcard},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=True)
+
+    assert param.prior["group_specific"] is wildcard
+    assert "theta|participant_id" not in param.prior
+    assert not any(
+        "generated location-bearing group-only term" in record.message
+        for record in caplog.records
+    )
 
 
 def _explicit_group_prior(scale=0.75):
@@ -849,7 +958,7 @@ def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
 
     param_no_common_intercept.make_safe_priors(cavanagh_test, {}, is_ddm=False)
 
-    assert "limitation" in caplog.records[-1].msg
+    assert any("limitation" in record.msg for record in caplog.records)
     assert "Intercept" not in param_no_common_intercept.prior
     group_intercept_prior = param_no_common_intercept.prior["1|participant_id"]
     group_slope_prior = param_no_common_intercept.prior["theta|participant_id"]
@@ -865,6 +974,7 @@ def _check_group_prior(group_prior):
     assert isinstance(group_prior, bmb.Prior)
     assert group_prior.dist is None
     assert group_prior.name == "Normal"
+    assert group_prior.noncentered is False
 
     mu = group_prior.args["mu"]
     sigma = group_prior.args["sigma"]
@@ -884,6 +994,7 @@ def _check_group_prior_with_common(group_prior):
     assert isinstance(group_prior, bmb.Prior)
     assert group_prior.dist is None
     assert group_prior.name == "Normal"
+    assert group_prior.noncentered is None
 
     mu = group_prior.args["mu"]
     sigma = group_prior.args["sigma"]
@@ -1008,6 +1119,7 @@ def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
     def _check_group_prior_intercept_ddm(group_prior, prior):
         assert isinstance(group_prior, bmb.Prior)
         assert group_prior.dist is None
+        assert group_prior.noncentered is False
         prior1 = prior.copy()
         assert group_prior.name == prior1.pop("name")
         for key, val in prior1.items():
@@ -1027,7 +1139,7 @@ def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
     )
 
     param_no_common_intercept.make_safe_priors(cavanagh_test, {}, is_ddm=True)
-    assert "limitation" in caplog.records[-1].msg
+    assert any("limitation" in record.msg for record in caplog.records)
 
     assert "Intercept" not in param_no_common_intercept.prior
     group_intercept_prior = param_no_common_intercept.prior["1|participant_id"]
