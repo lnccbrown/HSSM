@@ -314,6 +314,15 @@ def _custom_group_normal(name, mu, sigma, dims=None):
     return pm.Normal(name, mu=mu, sigma=sigma, dims=dims)
 
 
+def _free_group_location_spec():
+    """Return a fresh centered-compatible prior with a free location."""
+    return {
+        "name": "Normal",
+        "mu": {"name": "Normal", "mu": 0.0, "sigma": 0.5},
+        "sigma": {"name": "HalfNormal", "sigma": 0.5},
+    }
+
+
 class TestPriorIntegration:
     """Integration tests that build HSSM models and inspect warnings/graphs."""
 
@@ -559,6 +568,41 @@ class TestPriorIntegration:
             if "non-identifiable" in r.getMessage()
         ]
         assert overparam_messages == []
+
+    def test_centered_repeated_group_locations_warn_once(self, cavanagh_test, caplog):
+        """Surface the crossed-group location ridge without blocking build."""
+        with caplog.at_level(logging.WARNING, logger="hssm"):
+            model = hssm.HSSM(
+                data=cavanagh_test,
+                model="ddm",
+                include=[
+                    {
+                        "name": "v",
+                        "formula": (
+                            "v ~ 1 + (0 + theta|participant_id) + (0 + theta|conf)"
+                        ),
+                        "prior": {
+                            "theta|participant_id": _free_group_location_spec(),
+                            "theta|conf": _free_group_location_spec(),
+                        },
+                    }
+                ],
+                prior_settings=None,
+                p_outlier=0.0,
+                noncentered=False,
+                process_initvals=False,
+            )
+
+        ridge_messages = [
+            record.getMessage()
+            for record in caplog.records
+            if "identified only by the priors" in record.getMessage()
+        ]
+        assert len(ridge_messages) == 1
+        assert "theta|participant_id" in ridge_messages[0]
+        assert "theta|conf" in ridge_messages[0]
+        assert "common formula term 'theta'" in ridge_messages[0]
+        assert find_disconnected_free_rvs(model.pymc_model) == []
 
 
 class TestPriorParameterizationUnit:
@@ -904,6 +948,180 @@ class TestPriorParameterizationUnit:
 
         assert flagged == []
 
+    def test_repeated_unmatched_free_locations_warn_once(self):
+        """Aggregate all centered free owners of one exact expression."""
+        free_prior = _group_prior(
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        params = _fake_repeated_group_params(free_prior, free_prior)
+
+        flagged = check_user_priors_for_location_overparameterization(params, False)
+
+        assert len(flagged) == 1
+        assert flagged[0].term == "theta|conf, theta|participant_id"
+        assert "identified only by the priors" in flagged[0].reason
+        assert "exact common formula term 'theta'" in flagged[0].suggestion
+
+    @pytest.mark.parametrize(
+        ("second_prior", "noncentered"),
+        [
+            pytest.param(
+                bmb.Prior(
+                    "Normal",
+                    mu=0.0,
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                ),
+                False,
+                id="one-free-one-fixed",
+            ),
+            pytest.param(
+                bmb.Prior(
+                    "Normal",
+                    mu=1.5,
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                ),
+                False,
+                id="one-free-one-fixed-nonzero",
+            ),
+            pytest.param(
+                bmb.Prior(
+                    "Normal",
+                    mu=np.array([1.0, 2.0]),
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                ),
+                False,
+                id="one-free-one-fixed-vector",
+            ),
+            pytest.param(
+                bmb.Prior(
+                    "Normal",
+                    mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                ),
+                True,
+                id="effective-noncentered",
+            ),
+        ],
+    )
+    def test_repeated_unmatched_location_warning_requires_two_centered_free_means(
+        self, second_prior, noncentered
+    ):
+        """Do not warn for one free owner or effective non-centering."""
+        first_prior = _group_prior(
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        params = _fake_repeated_group_params(first_prior, second_prior)
+
+        flagged = check_user_priors_for_location_overparameterization(
+            params, noncentered
+        )
+
+        assert flagged == []
+
+    def test_all_fixed_unmatched_locations_do_not_warn(self):
+        """Fixed offsets contain no competing free location parameters."""
+        first = _group_prior(
+            mu=1.0,
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        second = _group_prior(
+            mu=np.array([0.0, 2.0]),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+
+        flagged = check_user_priors_for_location_overparameterization(
+            _fake_repeated_group_params(first, second), False
+        )
+
+        assert flagged == []
+
+    def test_per_prior_centered_overrides_warn_under_model_nc(self):
+        """Resolve each outer per-prior override before grouping free owners."""
+        first = _group_prior(
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+            noncentered=False,
+        )
+        second = _group_prior(
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+            noncentered=False,
+        )
+
+        flagged = check_user_priors_for_location_overparameterization(
+            _fake_repeated_group_params(first, second), True
+        )
+
+        assert len(flagged) == 1
+
+    def test_exact_fixed_prior_overrides_free_group_wildcard(self):
+        """An exact fixed location leaves only one free wildcard owner."""
+        wildcard = _group_prior(
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        fixed = _group_prior(
+            mu=0.0,
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        params = _fake_repeated_group_params(wildcard, wildcard, wildcard=True)
+        param = params["v"]
+        param.prior[SECOND_GROUP_TERM] = fixed
+        param._user_specified_prior_keys.add(SECOND_GROUP_TERM)
+
+        flagged = check_user_priors_for_location_overparameterization(params, False)
+
+        assert flagged == []
+
+    def test_repeated_intercept_suggestion_uses_formula_one(self):
+        """Translate Formulae's Intercept expression into user formula syntax."""
+        free_prior = _group_prior(
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        params = _fake_repeated_group_params(
+            free_prior,
+            free_prior,
+            expressions=("Intercept", "Intercept"),
+        )
+
+        flagged = check_user_priors_for_location_overparameterization(params, False)
+
+        assert len(flagged) == 1
+        assert "common formula term '1'" in flagged[0].suggestion
+
+    def test_differently_named_unmatched_expressions_do_not_collide(self):
+        """Keep exact Formulae names as the diagnostic boundary."""
+        free_prior = _group_prior(
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        params = _fake_repeated_group_params(
+            free_prior,
+            free_prior,
+            expressions=("theta:dbs", "dbs:theta"),
+        )
+
+        flagged = check_user_priors_for_location_overparameterization(params, False)
+
+        assert flagged == []
+
+    def test_group_wildcard_expands_into_repeated_location_warning(self):
+        """Apply one wildcard prior to every structurally matching group key."""
+        wildcard = _group_prior(
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        params = _fake_repeated_group_params(wildcard, wildcard, wildcard=True)
+
+        flagged = check_user_priors_for_location_overparameterization(params, False)
+
+        assert len(flagged) == 1
+        assert "theta|participant_id" in flagged[0].reason
+        assert "theta|conf" in flagged[0].reason
+
     def test_noncentered_suggestion_uses_structural_expression(self):
         """Suggestions use Formulae metadata for matched and unmatched groups."""
         prior = _group_prior(
@@ -1012,6 +1230,7 @@ class TestPriorParameterizationUnit:
 
 
 GROUP_TERM = "theta|participant_id"
+SECOND_GROUP_TERM = "theta|conf"
 
 
 class _FakeRegressionParam:
@@ -1049,4 +1268,29 @@ def _fake_wildcard_params(wildcard, exact):
         GROUP_TERM: "theta",
     }
     param._group_terms_with_common = set(param._group_term_names)
+    return {"v": param}
+
+
+def _fake_repeated_group_params(
+    first,
+    second,
+    *,
+    expressions=("theta", "theta"),
+    wildcard=False,
+):
+    param = _FakeRegressionParam(first, matched=False, user_specified=True)
+    if wildcard:
+        param.prior = {"group_specific": first}
+        param._user_specified_prior_keys = {"group_specific"}
+    else:
+        param.prior = {
+            GROUP_TERM: first,
+            SECOND_GROUP_TERM: second,
+        }
+        param._user_specified_prior_keys = {GROUP_TERM, SECOND_GROUP_TERM}
+    param._group_term_names = {
+        GROUP_TERM: expressions[0],
+        SECOND_GROUP_TERM: expressions[1],
+    }
+    param._group_terms_with_common = set()
     return {"v": param}
