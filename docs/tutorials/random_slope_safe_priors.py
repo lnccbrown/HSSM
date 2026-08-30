@@ -918,11 +918,18 @@ def _(mo):
     releases, explicit zero-mean group priors remain the safe workaround shown
     above.
 
+    Every group term in this tutorial has an exact common counterpart, so each
+    is a deviation whose generated mean must be zero. Truly group-only terms
+    follow a different ownership rule: HSSM preserves and centers one generated
+    location owner, but rejects multiple generated owners for the same exact
+    expression. The [link-functions tutorial](https://lnccbrown.github.io/HSSM/tutorials/link_functions/)
+    works through that distinction across identity and transformed links.
+
     Relevant implementation discussions:
 
     - [HSSM discussion #948](https://github.com/lnccbrown/HSSM/discussions/948)
     - [HSSM issue #1224](https://github.com/lnccbrown/HSSM/issues/1224)
-    - [HSSM group-only policy follow-up #1225](https://github.com/lnccbrown/HSSM/issues/1225)
+    - [HSSM group-only location ownership #1225](https://github.com/lnccbrown/HSSM/issues/1225)
     - [Bambi issue #1003](https://github.com/bambinos/bambi/issues/1003)
     - [Formulae term structure](https://github.com/bambinos/formulae/blob/master/formulae/terms/terms.py)
     """)

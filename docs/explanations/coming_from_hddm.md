@@ -88,15 +88,34 @@ HDDM models are hierarchical by default. In HSSM, a model is hierarchical
 exactly when a parameter has a group-specific term in its formula — there is
 no `hierarchical` switch to set.
 
-The parameterization also differs. HDDM's convention is what HSSM calls the
-*centered* form: drop the common intercept (`v ~ 0 + ...`) and let the
-participant-level coefficients come from one group distribution with a free
-mean and standard deviation. HSSM defaults to the *non-centered* form, which
-usually samples better. To reproduce the HDDM specification, set
-`noncentered=False`; the group distributions then appear as
-`v_1|participant_id_mu`-style nodes. [Centered vs. non-centered
-parameterizations](../tutorials/centered_vs_noncentered_basic_logic.ipynb)
-explains the tradeoff and when each is the better choice.
+The parameterization also differs. HDDM's usual hierarchy is a group-only,
+location-bearing distribution: with `v ~ 0 + (1 | participant_id)`, its free
+group mean owns the population drift. This differs from
+`v ~ 1 + (1 | participant_id)`, where the common intercept owns the population
+location and the participant term is a zero-mean deviation.
+
+HSSM requests the *non-centered* form by default, which often samples better.
+Matching zero-mean deviations honor that request. With
+`prior_settings="safe"`, however, a unique generated group-only term is centered
+automatically so its free location remains connected to the likelihood; current
+Bambi non-centering would otherwise discard it. HSSM reports this term-level
+fallback, so setting the entire model `noncentered=False` is no longer necessary
+merely to retain an HDDM-style generated group location. [Centered vs.
+non-centered parameterizations](../tutorials/centered_vs_noncentered_basic_logic.ipynb)
+explains the computational tradeoff, while [Link functions and safe
+priors](../tutorials/link_functions.ipynb) works through population-location
+ownership from first principles.
+
+HSSM never changes an explicit group prior's meaning. If current Bambi cannot
+construct it faithfully, HSSM instead raises before model construction. A group
+prior must be hierarchical; numeric regression-term priors do not fix
+coefficients. Under effective non-centering, Bambi currently supports only a
+plain built-in Normal with hierarchical `sigma`, no extra arguments, and absent
+or fixed-zero `mu`. To retain a free location or another prior family, make that
+prior—and any hierarchical nested nodes—effectively centered. If the same
+unmatched expression occurs under several grouping factors, add the exact common
+term and use zero-mean deviations, or explicitly choose one location owner;
+several free centered owners produce a likelihood ridge.
 
 ## Concepts with no direct translation
 
@@ -106,13 +125,21 @@ explains the tradeoff and when each is the better choice.
   model on these families starts from familiar ground. For safe common-intercept
   priors, an omitted link, `"identity"`, `bambi.Link("identity")`, and
   `hssm.Link("identity")` are equivalent: each keeps the intercept on the
-  response scale and uses the HDDM-derived prior. A transformed link instead
-  uses a coefficient-scale `Normal(mu=0, sigma=0.25)`. [Link functions and safe
-  priors](../tutorials/link_functions.ipynb) explains that scale change from
-  first principles. An explicit prior always wins. Unmatched group-only terms
-  retain their existing behavior, tracked in
-  [#1225](https://github.com/lnccbrown/HSSM/issues/1225). The broader rule is
-  the likelihood: these defaults apply unless you use the neural
+  response scale and uses the HDDM-derived prior. A unique generated unmatched
+  group intercept under identity likewise keeps its response-scale HDDM
+  hierarchy and is centered so its location is retained. A transformed common
+  intercept instead uses a coefficient-scale `Normal(mu=0, sigma=0.25)`, while
+  a transformed unmatched group intercept uses a hierarchical Normal on the
+  linear-predictor scale before the inverse link. For a nonlinear link,
+  `g^-1(mu)` is a reference value, not generally the parameter's expectation.
+  [Link functions and safe priors](../tutorials/link_functions.ipynb) explains
+  these scale and ownership changes from first principles. Explicit priors are
+  never rewritten, but incompatible group specifications are rejected before
+  Bambi can drop or misinterpret them. Finite coefficient bounds are not yet
+  propagated to generic identity-linked group-only intercept priors; likelihood
+  bounds still apply, and the prior design is tracked in
+  [#1269](https://github.com/lnccbrown/HSSM/issues/1269). The broader rule is the
+  likelihood: these defaults apply unless you use the neural
   (`approx_differentiable`) likelihood, which has its own priors derived from
   the network's training bounds. Specifying your own is a different interface
   — see [Specify priors and fix parameters](../how_to/specify_priors.ipynb).
@@ -123,9 +150,10 @@ explains the tradeoff and when each is the better choice.
   JAX-based samplers. `model.sample()` passes keyword arguments through to
   PyMC, so `chains`, `draws`, `tune`, and `target_accept` behave as they do in
   PyMC rather than as in HDDM's sampler.
-- **Results.** Posterior samples come back as an ArviZ `InferenceData` object
-  rather than an HDDM-specific container, so diagnostics, plots, and model
-  comparison are standard ArviZ from there on.
+- **Results.** Posterior samples come back as an `xarray.DataTree` with
+  ArviZ-compatible groups rather than an HDDM-specific container, so diagnostics,
+  plots, and model comparison use the standard ArviZ/xarray ecosystem from there
+  on.
 
 ## Where to start
 
