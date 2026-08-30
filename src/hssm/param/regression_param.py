@@ -12,9 +12,9 @@ from formulae import design_matrices
 from formulae.matrices import DesignMatrices
 
 from ..link import Link
-from ..prior import get_default_prior, get_hddm_default_prior
+from ..prior import _is_identity_link, get_default_prior, get_hddm_default_prior
 from .param import Param
-from .parameterization import NoncenteredSetting
+from .parameterization import NoncenteredSetting, _resolve_noncentered
 from .user_param import UserParam
 
 _logger = logging.getLogger("hssm")
@@ -246,11 +246,14 @@ class RegressionParam(Param):
     ) -> None:
         """Populate safe priors from already-prepared Formulae matrices.
 
-        ``noncentered`` is threaded through here so generated group priors can
-        resolve their effective parameterization alongside explicit priors.
-        This refactor intentionally leaves generation behavior unchanged.
+        Generated unmatched group terms own a population location. They are
+        therefore centered term by term so Bambi retains that location instead
+        of dropping it or rejecting a non-Normal prior. Matched group terms are
+        zero-mean deviations and continue to follow the requested model-level
+        parameterization.
         """
         safe_priors = {}
+        generated_unmatched_terms: list[tuple[str, str]] = []
 
         get_prior = get_hddm_default_prior if is_ddm else get_default_prior
         specified_priors = (
@@ -304,11 +307,16 @@ class RegressionParam(Param):
                                 " This will change in the future.",
                                 self.name,
                             )
-                            safe_priors[name] = get_prior(
+                            prior = get_prior(
                                 "group_intercept",
                                 self.name,
                                 bounds=None,
                                 link=self.link,
+                            )
+                            prior.noncentered = False
+                            safe_priors[name] = prior
+                            generated_unmatched_terms.append(
+                                (name, self._group_term_names[name])
                             )
                     else:
                         if name in self._group_terms_with_common:
@@ -319,9 +327,45 @@ class RegressionParam(Param):
                                 link=self.link,
                             )
                         else:
-                            safe_priors[name] = get_prior(
+                            prior = get_prior(
                                 "group_specific", self.name, bounds=None, link=self.link
                             )
+                            prior.noncentered = False
+                            safe_priors[name] = prior
+                            generated_unmatched_terms.append(
+                                (name, self._group_term_names[name])
+                            )
+
+        if generated_unmatched_terms and _resolve_noncentered(noncentered, self.name):
+            generated_unmatched_terms.sort(key=lambda item: (item[1], item[0]))
+            term_details = [
+                f"{term_name!r} (expression {expression_name!r})"
+                for term_name, expression_name in generated_unmatched_terms
+            ]
+            common_terms = [
+                "1" if expression_name == "Intercept" else expression_name
+                for _, expression_name in generated_unmatched_terms
+            ]
+            scale = (
+                "the response/parameter scale"
+                if _is_identity_link(self.link)
+                else "the linear-predictor scale before the inverse link"
+            )
+            _logger.warning(
+                "Safe priors for parameter %r generated location-bearing "
+                "group-only term(s) %s. The effective model/component setting "
+                "requested noncentered=True, but Bambi's current non-centered "
+                "construction cannot retain these group locations. HSSM set "
+                "noncentered=False on these generated priors, preserving their "
+                "locations on %s. Explicit priors were not changed. To use "
+                "non-centering, add the exact common formula term(s) %r so the "
+                "group effects become zero-mean deviations.",
+                self.name,
+                term_details,
+                scale,
+                common_terms,
+            )
+
         if self.prior is not None:
             self.prior = cast("dict[str, Any]", self.prior)
             safe_priors.update(self.prior)
