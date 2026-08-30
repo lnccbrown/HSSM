@@ -100,11 +100,12 @@ Matching zero-mean deviations honor that request. With
 automatically so its free location remains connected to the likelihood; current
 Bambi non-centering would otherwise discard it. HSSM reports this term-level
 fallback, so setting the entire model `noncentered=False` is no longer necessary
-merely to retain an HDDM-style generated group location. [Centered vs.
-non-centered parameterizations](../tutorials/centered_vs_noncentered_basic_logic.ipynb)
-explains the computational tradeoff, while [Link functions and safe
-priors](../tutorials/link_functions.ipynb) works through population-location
-ownership from first principles.
+merely to retain an HDDM-style generated group location. [Link functions and safe
+priors](../tutorials/link_functions.ipynb) works through current
+population-location ownership, link scale, and compatibility behavior from first
+principles. [Specify hierarchical group
+priors](../how_to/specify_group_priors.md) gives the explicit-prior rules and
+parameterization overrides.
 
 HSSM never changes an explicit group prior's meaning. If current Bambi cannot
 construct it faithfully, HSSM instead raises before model construction. A group
@@ -137,12 +138,15 @@ several free centered owners produce a likelihood ridge.
   never rewritten, but incompatible group specifications are rejected before
   Bambi can drop or misinterpret them. Finite coefficient bounds are not yet
   propagated to generic identity-linked group-only intercept priors; likelihood
-  bounds still apply, and the prior design is tracked in
-  [#1269](https://github.com/lnccbrown/HSSM/issues/1269). The broader rule is the
+  bounds still apply, and bounding one coefficient would not constrain a complete
+  identity-linked predictor after other effects are added. Prefer a
+  support-respecting transformed link when appropriate; [Specify hierarchical
+  group priors](../how_to/specify_group_priors.md) explains the remaining
+  identity-link choices and compatibility rules. The broader rule is the
   likelihood: these defaults apply unless you use the neural
   (`approx_differentiable`) likelihood, which has its own priors derived from
   the network's training bounds. Specifying your own is a different interface
-  — see [Specify priors and fix parameters](../how_to/specify_priors.ipynb).
+  through the same prior controls.
 - **Outliers.** HDDM's `p_outlier` exists in HSSM under the same name, and the
   lapse distribution is configurable rather than fixed. See [Model outliers
   with lapse probabilities](../tutorials/lapse_prob_and_dist.ipynb).
