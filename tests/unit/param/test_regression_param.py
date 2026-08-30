@@ -403,6 +403,188 @@ def test_safe_priors_preserve_unmatched_group_location(cavanagh_test):
     _check_group_prior(param.prior["theta|participant_id"])
 
 
+def _explicit_group_prior(scale=0.75):
+    """Return a valid explicit hierarchical group prior for ownership tests."""
+    return bmb.Prior(
+        "Normal",
+        mu=0.0,
+        sigma=bmb.Prior("HalfNormal", sigma=scale),
+    )
+
+
+def test_safe_priors_reject_repeated_unmatched_group_location(cavanagh_test):
+    """Do not choose a population owner between two grouping factors."""
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + (0 + theta | participant_id) + (0 + theta | conf)"),
+        bounds=(-3.0, 3.0),
+    )
+
+    with pytest.raises(ValueError) as error:
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    message = str(error.value)
+    assert "parameter 'v'" in message
+    assert "expression 'theta'" in message
+    assert "theta|participant_id" in message
+    assert "theta|conf" in message
+    assert "common formula term(s) ['theta']" in message
+    assert "non-None explicit prior or fixed value" in message
+
+
+def test_safe_priors_render_intercept_remedy_as_formula_one(cavanagh_test):
+    """Suggest formula term ``1`` for an ambiguous Formulae Intercept."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 0 + (1 | participant_id) + (1 | conf)",
+        bounds=(-3.0, 3.0),
+    )
+
+    with pytest.raises(ValueError) as error:
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    message = str(error.value)
+    assert "expression 'Intercept'" in message
+    assert "1|participant_id" in message
+    assert "1|conf" in message
+    assert "common formula term(s) ['1']" in message
+
+
+def test_safe_priors_reject_partially_explicit_group_ownership(cavanagh_test):
+    """One exact prior does not assign every competing group location."""
+    explicit = _explicit_group_prior()
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + (0 + theta | participant_id) + (0 + theta | conf)"),
+        prior={"theta|participant_id": explicit},
+        bounds=(-3.0, 3.0),
+    )
+
+    with pytest.raises(ValueError, match="theta\\|conf"):
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+
+def test_safe_priors_allow_fully_explicit_group_ownership(cavanagh_test):
+    """Preserve exact priors when users own every repeated group location."""
+    participant_prior = _explicit_group_prior(0.5)
+    conf_prior = _explicit_group_prior(1.25)
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + (0 + theta | participant_id) + (0 + theta | conf)"),
+        prior={
+            "theta|participant_id": participant_prior,
+            "theta|conf": conf_prior,
+        },
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param.prior["theta|participant_id"] is participant_prior
+    assert param.prior["theta|conf"] is conf_prior
+
+
+def test_safe_priors_allow_explicit_group_wildcard_ownership(cavanagh_test):
+    """Treat a non-None wildcard as explicit coverage with exact precedence."""
+    wildcard = _explicit_group_prior(0.5)
+    exact = _explicit_group_prior(1.25)
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + (0 + theta | participant_id) + (0 + theta | conf)"),
+        prior={"group_specific": wildcard, "theta|conf": exact},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param.prior["group_specific"] is wildcard
+    assert param.prior["theta|conf"] is exact
+    assert "theta|participant_id" not in param.prior
+
+
+@pytest.mark.parametrize(
+    "prior",
+    [
+        {"group_specific": None},
+        {"theta|participant_id": None, "theta|conf": _explicit_group_prior()},
+    ],
+    ids=["none-wildcard", "none-exact"],
+)
+def test_safe_priors_none_does_not_assign_group_location(cavanagh_test, prior):
+    """Delegation to Bambi is not an explicit population-location choice."""
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + (0 + theta | participant_id) + (0 + theta | conf)"),
+        prior=prior,
+        bounds=(-3.0, 3.0),
+    )
+
+    with pytest.raises(ValueError, match="non-None explicit prior"):
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+
+def test_safe_priors_allow_repeated_matched_group_deviations(cavanagh_test):
+    """One common effect supports zero-mean deviations for many factors."""
+    param = RegressionParam(
+        name="v",
+        formula=("v ~ 1 + theta + (0 + theta | participant_id) + (0 + theta | conf)"),
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    for term_name in ("theta|participant_id", "theta|conf"):
+        assert term_name in param._group_terms_with_common
+        assert param.prior[term_name].args["mu"] == 0.0
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "v ~ 1 + (0 + theta | participant_id) + (0 + dbs | conf)",
+        ("v ~ 1 + (0 + theta:dbs | participant_id) + (0 + dbs:theta | conf)"),
+    ],
+    ids=["different-expressions", "interaction-order-is-exact"],
+)
+def test_safe_priors_keep_distinct_unmatched_expressions_separate(
+    cavanagh_test, formula
+):
+    """Do not infer symbolic equivalence or unrelated location collisions."""
+    param = RegressionParam(name="v", formula=formula, bounds=(-3.0, 3.0))
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert len(param._group_term_names) == 2
+    assert set(param.prior).issuperset(param._group_term_names)
+
+
+def test_safe_priors_aggregate_expanded_ambiguous_expressions(cavanagh_test):
+    """Report every repeated term produced by a Formulae interaction expansion."""
+    param = RegressionParam(
+        name="v",
+        formula=(
+            "v ~ 1 + (0 + theta * dbs | participant_id) + (0 + theta * dbs | conf)"
+        ),
+        bounds=(-3.0, 3.0),
+    )
+
+    with pytest.raises(ValueError) as error:
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    message = str(error.value)
+    for expression in ("'theta'", "'dbs'", "'theta:dbs'"):
+        assert f"expression {expression}" in message
+    for term in (
+        "theta|participant_id",
+        "theta|conf",
+        "dbs|participant_id",
+        "dbs|conf",
+        "theta:dbs|participant_id",
+        "theta:dbs|conf",
+    ):
+        assert term in message
+
+
 angle_config = get_default_model_config("angle")
 angle_params = angle_config["list_params"]
 angle_bounds = angle_config["likelihoods"]["approx_differentiable"]["bounds"].values()
