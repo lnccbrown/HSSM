@@ -431,9 +431,10 @@ class RegressionParam(Param):
             f"{self.name!r}. Multiple unmatched group-specific terms compete for "
             f"the same population location ({details}). Add the exact common "
             f"formula term(s) {common_terms!r} so these group terms become "
-            "zero-mean deviations, or provide a non-None explicit prior or fixed "
-            "value for every competing group term and choose location ownership "
-            "intentionally."
+            "zero-mean deviations, or provide a non-None hierarchical explicit "
+            "prior for every competing group term and choose location ownership "
+            "intentionally. bambi does not support numeric fixed coefficients "
+            "through regression-term prior mappings."
         )
 
     def _prepare_formula_terms(

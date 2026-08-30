@@ -62,11 +62,12 @@ from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
 from .param.parameterization_check import (
-    check_user_priors_against_parameterization,
+    check_user_group_prior_compatibility,
     check_user_priors_for_location_overparameterization,
     emit_disconnected_node_warnings,
     emit_parameterization_warnings,
     find_disconnected_free_rvs,
+    raise_prior_compatibility_errors,
 )
 
 _logger = logging.getLogger("hssm")
@@ -371,6 +372,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             p_outlier=p_outlier,
             noncentered=model_noncentered,
         )
+
+        # Explicit group priors are authoritative, so reject any specification
+        # that bambi cannot build or would silently alter under the effective
+        # parameterization. Report all incompatible terms in one pre-build error.
+        raise_prior_compatibility_errors(
+            check_user_group_prior_compatibility(
+                self.params,
+                model_noncentered,
+            )
+        )
+
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
@@ -400,15 +412,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self._parent,
         )
 
-        # Targeted checks against the user's prior dict:
-        #  * priors that the chosen parameterization will silently drop
-        #    (e.g. nested `mu` hyperprior on a group-specific Normal under
-        #    non-centered);
-        #  * priors whose group-specific `mu` is statistically redundant
-        #    with an exact matching common effect (location non-identifiability).
+        # Targeted statistical-identifiability warning for a group-specific
+        # location that is redundant with an exact matching common effect.
         emit_parameterization_warnings(
-            check_user_priors_against_parameterization(self.params, model_noncentered)
-            + check_user_priors_for_location_overparameterization(
+            check_user_priors_for_location_overparameterization(
                 self.params, model_noncentered
             )
         )

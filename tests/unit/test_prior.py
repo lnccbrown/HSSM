@@ -11,9 +11,10 @@ import pytest
 import hssm
 from hssm import Prior
 from hssm.param.parameterization_check import (
-    check_user_priors_against_parameterization,
+    check_user_group_prior_compatibility,
     check_user_priors_for_location_overparameterization,
     find_disconnected_free_rvs,
+    raise_prior_compatibility_errors,
 )
 from hssm.prior import (
     HDDM_SETTINGS_GROUP,
@@ -308,30 +309,77 @@ def _hierarchical_ddm_prior_with_mu_hyperprior():
     ]
 
 
+def _custom_group_normal(name, mu, sigma, dims=None):
+    """Build a custom Normal to test centered handling of ``dist``."""
+    return pm.Normal(name, mu=mu, sigma=sigma, dims=dims)
+
+
 class TestPriorIntegration:
     """Integration tests that build HSSM models and inspect warnings/graphs."""
 
-    def test_noncentered_default_warns_on_mu_hyperprior(self, cavanagh_test, caplog):
-        """Warn when a user supplies a `mu` hyperprior under noncentered=True.
-
-        Under the default ``noncentered=True`` a Normal group-specific prior with
-        a nested ``mu`` hyperprior must trigger both the targeted warning and the
-        general disconnected-node warning naming the orphaned ``_mu`` RV.
-        """
-        with caplog.at_level(logging.WARNING, logger="hssm"):
-            model = hssm.HSSM(
+    def test_noncentered_default_rejects_mu_hyperprior(self, cavanagh_test):
+        """Reject a `mu` hyperprior before bambi can orphan it."""
+        with pytest.raises(ValueError) as error:
+            hssm.HSSM(
                 data=cavanagh_test,
                 model="ddm",
                 include=_hierarchical_ddm_prior_with_mu_hyperprior(),
                 p_outlier=0.0,
             )
 
-        messages = " ".join(record.getMessage() for record in caplog.records)
-        assert "non-centered" in messages or "noncentered" in messages.lower()
-        assert "1|participant_id" in messages
-        # The orphaned RV should appear in the disconnected-nodes warning.
-        disconnected = find_disconnected_free_rvs(model.pymc_model)
-        assert any("_mu" in name for name in disconnected), disconnected
+        message = str(error.value)
+        assert "cannot be represented faithfully" in message
+        assert "1|participant_id" in message
+        assert "disconnected node" in message
+        assert "noncentered=False" in message
+
+    def test_prior_settings_none_cannot_bypass_compatibility(self, cavanagh_test):
+        """Validate explicit group priors even when safe generation is off."""
+        with pytest.raises(ValueError, match="1\\|participant_id"):
+            hssm.HSSM(
+                data=cavanagh_test,
+                model="ddm",
+                include=_hierarchical_ddm_prior_with_mu_hyperprior(),
+                prior_settings=None,
+                p_outlier=0.0,
+                process_initvals=False,
+            )
+
+    def test_numeric_group_prior_gets_hssm_preflight_error(self, cavanagh_test):
+        """Explain that numeric regression priors do not fix coefficients."""
+        include = _hierarchical_ddm_prior_with_mu_hyperprior()
+        include[0]["prior"]["1|participant_id"] = 2.0
+
+        with pytest.raises(ValueError, match="numeric values do not fix"):
+            hssm.HSSM(
+                data=cavanagh_test,
+                model="ddm",
+                include=include,
+                prior_settings=None,
+                p_outlier=0.0,
+                process_initvals=False,
+            )
+
+    def test_supported_explicit_noncentered_prior_builds_clean_graph(
+        self, cavanagh_test
+    ):
+        """A faithful explicit NC prior builds an offset without an orphan."""
+        include = _hierarchical_ddm_prior_with_mu_hyperprior()
+        include[0]["prior"]["1|participant_id"]["mu"] = 0.0
+
+        model = hssm.HSSM(
+            data=cavanagh_test,
+            model="ddm",
+            include=include,
+            prior_settings=None,
+            p_outlier=0.0,
+            process_initvals=False,
+        )
+
+        names = set(model.pymc_model.named_vars)
+        assert "v_1|participant_id_offset" in names
+        assert "v_1|participant_id_mu" not in names
+        assert find_disconnected_free_rvs(model.pymc_model) == []
 
     def test_centered_warns_only_about_matched_location_ridge(
         self, cavanagh_test, caplog
@@ -422,23 +470,8 @@ class TestPriorIntegration:
             "theta|participant_id",
         }
 
-    @pytest.mark.parametrize(
-        ("prior_settings", "noncentered", "reason_fragment", "has_orphan"),
-        [
-            (None, False, "non-identifiable", False),
-            ("safe", True, "disconnected", True),
-        ],
-    )
-    def test_group_wildcard_drives_targeted_diagnostics(
-        self,
-        cavanagh_test,
-        caplog,
-        prior_settings,
-        noncentered,
-        reason_fragment,
-        has_orphan,
-    ):
-        """Expand a user group wildcard over Formulae terms for warnings."""
+    def test_centered_group_wildcard_drives_ridge_warning(self, cavanagh_test, caplog):
+        """Expand a centered user group wildcard over Formulae terms."""
         group_wildcard = {
             "name": "Normal",
             "mu": {"name": "Normal", "mu": 0.0, "sigma": 0.5},
@@ -455,9 +488,9 @@ class TestPriorIntegration:
                         "prior": {"group_specific": group_wildcard},
                     }
                 ],
-                prior_settings=prior_settings,
+                prior_settings=None,
                 p_outlier=0.0,
-                noncentered=noncentered,
+                noncentered=False,
                 process_initvals=False,
             )
 
@@ -468,11 +501,39 @@ class TestPriorIntegration:
         ]
         assert len(targeted) == 1
         assert "theta|participant_id" in targeted[0]
-        assert reason_fragment in targeted[0]
+        assert "non-identifiable" in targeted[0]
         assert "theta|participant_id" not in model.params["v"].prior
         assert isinstance(model.params["v"].prior["group_specific"], bmb.Prior)
-        disconnected = find_disconnected_free_rvs(model.pymc_model)
-        assert any(name.endswith("_mu") for name in disconnected) is has_orphan
+        assert find_disconnected_free_rvs(model.pymc_model) == []
+
+    def test_noncentered_group_wildcard_fails_before_build(self, cavanagh_test):
+        """Expand a non-centered wildcard into an aggregated fidelity error."""
+        group_wildcard = {
+            "name": "Normal",
+            "mu": {"name": "Normal", "mu": 0.0, "sigma": 0.5},
+            "sigma": {"name": "HalfNormal", "sigma": 0.5},
+        }
+
+        with pytest.raises(ValueError) as error:
+            hssm.HSSM(
+                data=cavanagh_test,
+                model="ddm",
+                include=[
+                    {
+                        "name": "v",
+                        "formula": "v ~ 0 + theta + (0 + theta|participant_id)",
+                        "prior": {"group_specific": group_wildcard},
+                    }
+                ],
+                prior_settings="safe",
+                p_outlier=0.0,
+                noncentered=True,
+                process_initvals=False,
+            )
+
+        message = str(error.value)
+        assert "theta|participant_id" in message
+        assert "disconnected node" in message
 
     def test_group_only_slope_not_flagged_by_unrelated_intercept(
         self, cavanagh_test, caplog
@@ -541,8 +602,8 @@ class TestPriorParameterizationUnit:
                 bmb.Prior("HalfNormal", sigma=0.5),
                 None,
             ),
-            (bmb.Prior("Normal", mu=0.0, sigma=0.5), 0.5, "cannot be built"),
-            (1.5, 0.5, None),
+            (bmb.Prior("Normal", mu=0.0, sigma=0.5), 0.5, "no hierarchical"),
+            (1.5, 0.5, "no top-level hyperprior"),
         ],
         ids=[
             "free-mu-hierarchical-sigma",
@@ -554,11 +615,11 @@ class TestPriorParameterizationUnit:
             "fixed-mu-fixed-sigma",
         ],
     )
-    def test_noncentered_warning_matrix(self, mu, sigma, reason_fragment):
-        """Warnings distinguish Bambi's orphan, ignored, and failure paths."""
+    def test_noncentered_compatibility_matrix(self, mu, sigma, reason_fragment):
+        """Compatibility checks distinguish faithful and lossy NC paths."""
         params = _fake_params(_group_prior(mu=mu, sigma=sigma))
 
-        flagged = check_user_priors_against_parameterization(params, True)
+        flagged = check_user_group_prior_compatibility(params, True)
 
         if reason_fragment is None:
             assert flagged == []
@@ -569,7 +630,186 @@ class TestPriorParameterizationUnit:
             assert flagged[0].term == GROUP_TERM
 
     @pytest.mark.parametrize(
-        ("prior_noncentered", "model_noncentered", "expect_noncentered_warning"),
+        "mu",
+        [
+            pytest.param(None, id="absent"),
+            pytest.param(0.0, id="scalar-zero"),
+            pytest.param(np.array([0.0, 0.0]), id="vector-zero"),
+        ],
+    )
+    def test_noncentered_plain_normal_accepts_supported_mu(self, mu):
+        """Accept only absent or nonempty all-zero locations under NC."""
+        kwargs = {"sigma": bmb.Prior("HalfNormal", sigma=0.5)}
+        if mu is not None:
+            kwargs["mu"] = mu
+        prior = bmb.Prior("Normal", **kwargs)
+
+        assert check_user_group_prior_compatibility(_fake_params(prior), True) == []
+
+    @pytest.mark.parametrize("noncentered", [False, True])
+    @pytest.mark.parametrize(
+        ("prior", "reason_fragment"),
+        [
+            pytest.param(2.0, "not a bambi Prior", id="numeric"),
+            pytest.param(np.array([0.0, 1.0]), "not a bambi Prior", id="numeric-array"),
+            pytest.param(
+                bmb.Prior("Normal", mu=0.0, sigma=1.0),
+                "no top-level hyperprior",
+                id="fixed-only-prior",
+            ),
+            pytest.param(
+                Prior(
+                    "Normal",
+                    bounds=(-1.0, 1.0),
+                    mu=0.0,
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                ),
+                "is truncated",
+                id="outer-truncated",
+            ),
+            pytest.param(
+                bmb.Prior(
+                    "Normal",
+                    mu=0.0,
+                    sigma=Prior(
+                        "HalfNormal",
+                        bounds=(0.0, 2.0),
+                        sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                    ),
+                ),
+                "outer prior.sigma is an HSSM truncated Prior",
+                id="nested-truncated",
+            ),
+        ],
+    )
+    def test_incompatible_under_both_parameterizations(
+        self, prior, reason_fragment, noncentered
+    ):
+        """Catch group priors bambi rejects whether centered or not."""
+        flagged = check_user_group_prior_compatibility(_fake_params(prior), noncentered)
+
+        assert len(flagged) == 1
+        assert reason_fragment in flagged[0].reason
+
+    @pytest.mark.parametrize(
+        ("prior", "reason_fragment"),
+        [
+            pytest.param(
+                bmb.Prior(
+                    "Gamma",
+                    mu=1.0,
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                ),
+                "uses 'Gamma'",
+                id="non-normal",
+            ),
+            pytest.param(
+                bmb.Prior(
+                    "Normal",
+                    dist=_custom_group_normal,
+                    mu=0.0,
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                ),
+                "uses a custom distribution",
+                id="custom",
+            ),
+            pytest.param(
+                bmb.Prior(
+                    "Normal",
+                    mu=0.0,
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                    initval=0.1,
+                ),
+                "includes argument(s) ['initval']",
+                id="extra-fixed-arg",
+            ),
+            pytest.param(
+                bmb.Prior(
+                    "Normal",
+                    mu=0.0,
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                    tau=bmb.Prior("HalfNormal", sigma=0.5),
+                ),
+                "includes argument(s) ['tau']",
+                id="extra-stochastic-arg",
+            ),
+            pytest.param(
+                bmb.Prior(
+                    "Normal",
+                    mu=0.0,
+                    sigma=bmb.Prior(
+                        "HalfNormal",
+                        sigma=bmb.Prior("Exponential", lam=1.0),
+                    ),
+                ),
+                "outer prior.sigma uses 'HalfNormal'",
+                id="nested-non-normal-hierarchy",
+            ),
+        ],
+    )
+    def test_noncentered_rejects_unsupported_prior_trees(self, prior, reason_fragment):
+        """Mirror every lossy or failing branch in bambi's NC shortcut."""
+        flagged = check_user_group_prior_compatibility(_fake_params(prior), True)
+
+        assert len(flagged) == 1
+        assert reason_fragment in flagged[0].reason
+        assert "plain built-in Normal" in flagged[0].suggestion
+        assert "noncentered=False" in flagged[0].suggestion
+
+    def test_nested_prior_override_can_make_tree_compatible(self):
+        """Honor a centered override on a nested hierarchical hyperprior."""
+        prior = bmb.Prior(
+            "Normal",
+            mu=0.0,
+            sigma=bmb.Prior(
+                "HalfNormal",
+                sigma=bmb.Prior("Exponential", lam=1.0),
+                noncentered=False,
+            ),
+        )
+
+        assert check_user_group_prior_compatibility(_fake_params(prior), True) == []
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            pytest.param(
+                bmb.Prior(
+                    "Gamma",
+                    mu=1.0,
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                ),
+                id="non-normal",
+            ),
+            pytest.param(
+                bmb.Prior(
+                    "Normal",
+                    dist=_custom_group_normal,
+                    mu=0.0,
+                    sigma=bmb.Prior("HalfNormal", sigma=0.5),
+                ),
+                id="custom-normal",
+            ),
+        ],
+    )
+    def test_centered_accepts_hierarchical_family_and_custom_dist(self, prior):
+        """Do not impose NC's outer-family shortcut on centered models."""
+        assert check_user_group_prior_compatibility(_fake_params(prior), False) == []
+
+    def test_empty_mu_vector_is_not_an_all_zero_location(self):
+        """Avoid NumPy's vacuous all-zero result for an empty location."""
+        prior = _group_prior(
+            mu=np.array([]),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+
+        flagged = check_user_group_prior_compatibility(_fake_params(prior), True)
+
+        assert len(flagged) == 1
+        assert "not fixed entirely to zero" in flagged[0].reason
+
+    @pytest.mark.parametrize(
+        ("prior_noncentered", "model_noncentered", "expect_compatibility_error"),
         [
             (False, True, False),
             (True, False, True),
@@ -585,7 +825,7 @@ class TestPriorParameterizationUnit:
         self,
         prior_noncentered,
         model_noncentered,
-        expect_noncentered_warning,
+        expect_compatibility_error,
     ):
         """Per-prior settings beat component dictionaries and model defaults."""
         prior = _group_prior(
@@ -595,15 +835,15 @@ class TestPriorParameterizationUnit:
         )
         params = _fake_params(prior)
 
-        noncentered_mismatches = check_user_priors_against_parameterization(
+        noncentered_mismatches = check_user_group_prior_compatibility(
             params, model_noncentered
         )
         ridge_mismatches = check_user_priors_for_location_overparameterization(
             params, model_noncentered
         )
 
-        assert bool(noncentered_mismatches) is expect_noncentered_warning
-        assert bool(ridge_mismatches) is (not expect_noncentered_warning)
+        assert bool(noncentered_mismatches) is expect_compatibility_error
+        assert bool(ridge_mismatches) is (not expect_compatibility_error)
 
     @pytest.mark.parametrize(
         ("matched", "mu", "noncentered", "expect_warning"),
@@ -671,15 +911,15 @@ class TestPriorParameterizationUnit:
             sigma=bmb.Prior("HalfNormal", sigma=0.5),
         )
 
-        matched = check_user_priors_against_parameterization(
+        matched = check_user_group_prior_compatibility(
             _fake_params(prior, matched=True), True
         )
-        unmatched = check_user_priors_against_parameterization(
+        unmatched = check_user_group_prior_compatibility(
             _fake_params(prior, matched=False), True
         )
 
-        assert "common 'theta'" in matched[0].suggestion
-        assert "add the common 'theta'" in unmatched[0].suggestion.lower()
+        assert "common formula term 'theta'" in matched[0].suggestion
+        assert "add the exact common formula term 'theta'" in unmatched[0].suggestion
 
     def test_checks_skip_generated_and_non_group_priors(self):
         """Only user-specified keys identified by Formulae are diagnosed."""
@@ -693,7 +933,7 @@ class TestPriorParameterizationUnit:
         fake_display_name["v"]._group_terms_with_common = set()
 
         for params in (generated, fake_display_name):
-            assert check_user_priors_against_parameterization(params, True) == []
+            assert check_user_group_prior_compatibility(params, True) == []
             assert (
                 check_user_priors_for_location_overparameterization(params, False) == []
             )
@@ -701,7 +941,7 @@ class TestPriorParameterizationUnit:
     @pytest.mark.parametrize(
         ("noncentered", "check"),
         [
-            (True, check_user_priors_against_parameterization),
+            (True, check_user_group_prior_compatibility),
             (False, check_user_priors_for_location_overparameterization),
         ],
     )
@@ -722,6 +962,53 @@ class TestPriorParameterizationUnit:
         flagged = check(params, noncentered)
 
         assert [mismatch.term for mismatch in flagged] == ["1|participant_id"]
+
+    def test_exact_none_suppresses_incompatible_wildcard(self):
+        """Mirror bambi's exact-``None`` precedence over a group wildcard."""
+        wildcard = _group_prior(
+            mu=bmb.Prior("Normal", mu=0.0, sigma=0.5),
+            sigma=bmb.Prior("HalfNormal", sigma=0.5),
+        )
+        params = _fake_wildcard_params(wildcard, None)
+
+        flagged = check_user_group_prior_compatibility(params, True)
+
+        assert [mismatch.term for mismatch in flagged] == ["1|participant_id"]
+
+    def test_compatibility_collection_does_not_mutate_prior(self):
+        """Explicit prior objects remain authoritative and untouched."""
+        mu = bmb.Prior("Normal", mu=0.0, sigma=0.5)
+        sigma = bmb.Prior("HalfNormal", sigma=0.5)
+        prior = _group_prior(mu=mu, sigma=sigma, noncentered=True)
+        original_args = prior.args.copy()
+
+        check_user_group_prior_compatibility(_fake_params(prior), False)
+
+        assert prior.args == original_args
+        assert prior.args["mu"] is mu
+        assert prior.args["sigma"] is sigma
+        assert prior.noncentered is True
+
+    def test_compatibility_errors_are_aggregated_and_sorted(self):
+        """Raise one deterministic error covering every incompatible term."""
+        params = {
+            "v": _FakeRegressionParam(2.0, matched=True, user_specified=True),
+            "a": _FakeRegressionParam(
+                bmb.Prior("Normal", mu=0.0, sigma=1.0),
+                matched=True,
+                user_specified=True,
+            ),
+        }
+        mismatches = check_user_group_prior_compatibility(params, True)
+
+        with pytest.raises(ValueError) as error:
+            raise_prior_compatibility_errors(mismatches)
+
+        message = str(error.value)
+        assert message.count("\n-") == 2
+        assert message.index("parameter 'a'") < message.index("parameter 'v'")
+        assert "no top-level hyperprior" in message
+        assert "not a bambi Prior" in message
 
 
 GROUP_TERM = "theta|participant_id"
