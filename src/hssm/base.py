@@ -2221,13 +2221,92 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         for name_, starting_value in initial_point_dict.items():
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
             if starting_value.ndim != 0 and starting_value.shape[0] != 1:
-                starting_value_tmp = starting_value + np.random.uniform(
-                    -jitter_epsilon, jitter_epsilon, starting_value.shape
-                ).astype(np.float32)
+                bounds = self._get_group_initval_bounds(name_tmp)
+                if bounds is None:
+                    starting_value_tmp = starting_value + np.random.uniform(
+                        -jitter_epsilon, jitter_epsilon, starting_value.shape
+                    ).astype(np.float32)
+                else:
+                    starting_value_tmp = self._jitter_within_bounds(
+                        starting_value, jitter_epsilon, bounds
+                    )
 
                 # Note: self._initvals shouldn't be None when this is called
                 dtype = self._initvals[name_tmp].dtype
                 self._initvals[name_tmp] = np.array(starting_value_tmp).astype(dtype)
+
+    def _get_group_initval_bounds(self, name: str) -> tuple[float, float] | None:
+        """Return native ``TruncatedNormal`` bounds for a group term."""
+        parameter_name = self._get_prefix(name)
+        parameter = self.params.get(parameter_name)
+        if parameter is None or not isinstance(parameter.prior, dict):
+            return None
+
+        prefix = f"{parameter_name}_"
+        if not name.startswith(prefix):
+            return None
+        term_name = name.removeprefix(prefix)
+        if term_name not in getattr(parameter, "_group_term_names", {}):
+            return None
+
+        prior = parameter.prior.get(term_name, parameter.prior.get("group_specific"))
+        if not isinstance(prior, bmb.Prior) or prior.name != "TruncatedNormal":
+            return None
+        lower_arg = prior.args.get("lower", -np.inf)
+        upper_arg = prior.args.get("upper", np.inf)
+        lower = np.asarray(-np.inf if lower_arg is None else lower_arg)
+        upper = np.asarray(np.inf if upper_arg is None else upper_arg)
+        if (
+            lower.ndim != 0
+            or upper.ndim != 0
+            or not np.issubdtype(lower.dtype, np.number)
+            or not np.issubdtype(upper.dtype, np.number)
+        ):
+            return None
+        return float(lower), float(upper)
+
+    @staticmethod
+    def _jitter_within_bounds(
+        starting_value: np.ndarray,
+        jitter_epsilon: float,
+        bounds: tuple[float, float],
+    ) -> np.ndarray:
+        """Jitter a constrained vector without crossing an open interval."""
+        lower, upper = bounds
+        dtype = (
+            starting_value.dtype
+            if np.issubdtype(starting_value.dtype, np.floating)
+            else np.dtype(np.float64)
+        )
+        positive_inf = np.asarray(np.inf, dtype=dtype)
+        negative_inf = np.asarray(-np.inf, dtype=dtype)
+        lower_array = np.asarray(lower, dtype=dtype)
+        upper_array = np.asarray(upper, dtype=dtype)
+        lower_limit = (
+            np.nextafter(lower_array, positive_inf).item()
+            if np.isfinite(lower)
+            else -np.inf
+        )
+        upper_limit = (
+            np.nextafter(upper_array, negative_inf).item()
+            if np.isfinite(upper)
+            else np.inf
+        )
+        if (
+            not np.all(np.isfinite(starting_value))
+            or np.any(starting_value < lower_limit)
+            or np.any(starting_value > upper_limit)
+        ):
+            # Preserve an already-invalid user value so PyMC can report it instead of
+            # silently changing the user's specification.
+            return starting_value.copy()
+
+        jitter_lower = np.maximum(-jitter_epsilon, lower_limit - starting_value)
+        jitter_upper = np.minimum(jitter_epsilon, upper_limit - starting_value)
+        jittered = starting_value + np.random.uniform(
+            jitter_lower, jitter_upper, starting_value.shape
+        ).astype(dtype)
+        return np.clip(jittered, lower_limit, upper_limit).astype(dtype, copy=False)
 
     def __jitter_initvals_all(self, jitter_epsilon: float) -> None:
         # Note: Calling our initial point function here
