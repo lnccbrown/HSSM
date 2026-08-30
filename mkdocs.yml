@@ -12,7 +12,9 @@ validation:
 
 # phase-2 consolidation targets, deliberately unlisted until then
 not_in_nav: |
+  tutorials/centered_vs_noncentered_basic_logic.py
   tutorials/link_functions.py
+  tutorials/parameterization_per_parameter.py
   tutorials/poisson_race.py
   tutorials/random_slope_safe_priors.py
 
@@ -133,7 +135,9 @@ plugins:
         tutorials/bayesflow_nle_onnx_integration.md: https://lnccbrown.github.io/HSSM/tutorials/bayesflow_nre_onnx_integration/
   - mkdocs-jupyter:
       ignore:
+        - tutorials/centered_vs_noncentered_basic_logic.py
         - tutorials/link_functions.py
+        - tutorials/parameterization_per_parameter.py
         - tutorials/poisson_race.py
         - tutorials/random_slope_safe_priors.py
       execute: true
