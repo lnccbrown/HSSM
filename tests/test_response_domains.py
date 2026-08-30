@@ -3,8 +3,10 @@
 from collections.abc import Mapping
 from typing import Any
 
+import bambi as bmb
 import pytest
 
+import hssm
 from hssm.config import Config, ModelConfig
 from hssm.defaults import default_model_config
 from hssm.register import register_model
@@ -223,3 +225,67 @@ def test_registered_domains_are_detached_and_resolve_canonically():
         assert config.choices is None
     finally:
         default_model_config.pop(name, None)  # type: ignore[arg-type]
+
+
+def _lapse_shell(
+    domains: dict[str, dict[str, Any]], *, choice_only: bool = False
+) -> hssm.HSSM:
+    model = object.__new__(hssm.HSSM)
+    model.list_params = ["v"]
+    model.response_domains = domains  # type: ignore[assignment]
+    model.has_lapse = True
+    model.is_choice_only = choice_only
+    model.n_choices = 2 if choice_only else None
+    return model
+
+
+def test_lapse_remains_available_for_established_categorical_layouts():
+    """RT+choice and choice-only models retain their established lapse behavior."""
+    domains = {"response": {"kind": "categorical", "values": (0, 1)}}
+
+    rt_model = _lapse_shell(domains)
+    rt_model._check_lapse(None)
+    assert isinstance(rt_model.lapse, bmb.Prior)
+
+    choice_only_model = _lapse_shell(domains, choice_only=True)
+    choice_only_model._check_lapse(None)
+    assert choice_only_model.lapse == 0.5
+
+
+@pytest.mark.parametrize(
+    "domains",
+    [
+        {"response": {"kind": "continuous"}},
+        {"response": {"kind": "circular", "bounds": (-3.14, 3.14)}},
+        {
+            "first": {"kind": "categorical", "values": (0, 1)},
+            "second": {"kind": "categorical", "values": (0, 1)},
+        },
+        {
+            "first": {"kind": "continuous"},
+            "second": {"kind": "categorical", "values": (0, 1)},
+        },
+    ],
+)
+def test_lapse_rejects_noncategorical_or_multiresponse_layouts(domains):
+    """Active outlier mixtures fail before unsupported domain layouts build."""
+    model = _lapse_shell(domains)
+
+    with pytest.raises(ValueError, match="only for one categorical response"):
+        model._check_lapse(None)
+
+
+def test_inactive_lapse_accepts_mixed_domains():
+    """None or zero p_outlier maps to an inactive lapse for mixed responses."""
+    model = _lapse_shell(
+        {
+            "first": {"kind": "continuous"},
+            "second": {"kind": "categorical", "values": (0, 1)},
+        }
+    )
+    model.has_lapse = False
+
+    model._check_lapse(None)
+
+    assert model.lapse is None
+    assert model.list_params == ["v"]

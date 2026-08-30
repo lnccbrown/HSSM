@@ -206,14 +206,14 @@ def test_inv_temp_softmax_preserves_lan_matrix_float_dtype():
 @pytest.mark.parametrize(
     ("responses", "match"),
     [
-        ([0, 1.5, 0, 1], "integral"),
-        ([0, "left", 0, 1], "numeric"),
-        ([0, np.inf, 0, 1], "finite"),
+        ([0, 1.5, 0, 1], "Invalid responses"),
+        ([0, "left", 0, 1], "finite numeric"),
+        ([0, np.inf, 0, 1], "finite numeric"),
         ([0, 2, 0, 1], "Invalid responses"),
     ],
 )
 def test_choice_only_rlssm_validates_response_labels(responses, match):
-    """Choice-only RLSSM response labels are checked before logp evaluation."""
+    """Choice-only labels use the same exact domain checks as other models."""
     with pytest.raises(ValueError, match=match):
         hssm.RLSSM(
             data=_fake_choice_only_data(responses),

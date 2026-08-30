@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from hssm.data_validator import DataValidatorMixin
 from hssm.defaults import MissingDataNetwork
+from hssm._types import ResponseDomainSpec
 
 
 class DataValidatorTester(DataValidatorMixin):
@@ -18,17 +19,45 @@ class DataValidatorTester(DataValidatorMixin):
         missing_data: bool = False,
         choices: list[int] | None = None,
         n_choices: int | None = None,
+        response: list[str] | None = None,
+        response_domains: dict[str, ResponseDomainSpec] | None = None,
+        is_choice_only: bool = False,
     ):
         self.data = data
-        self.response = ["rt", "response"]
-        self.choices = choices if choices is not None else [0, 1]
-        self.n_choices = n_choices if n_choices is not None else len(self.choices)
+        self.response = response or ["rt", "response"]
+        if response_domains is None:
+            self.choices = tuple(choices) if choices is not None else (0, 1)
+            self.response_domains = {
+                self.response[-1]: {
+                    "kind": "categorical",
+                    "values": self.choices,
+                }
+            }
+        else:
+            self.response_domains = response_domains
+            only_domain = (
+                next(iter(response_domains.values()))
+                if len(response_domains) == 1
+                else None
+            )
+            self.choices = (
+                tuple(only_domain["values"])
+                if only_domain is not None and only_domain["kind"] == "categorical"
+                else None
+            )
+        self.n_choices = (
+            n_choices
+            if n_choices is not None
+            else len(self.choices)
+            if self.choices is not None
+            else None
+        )
         self.extra_fields = extra_fields
         self.deadline = deadline
         self.deadline_name = "deadline"
         self.missing_data = missing_data
         self.missing_data_value = -999.0
-        self.is_choice_only = False
+        self.is_choice_only = is_choice_only
 
 
 def _base_data():
@@ -88,7 +117,7 @@ def test_constructor(base_data):
 
     assert dv.data.equals(_base_data())
     assert dv.response == ["rt", "response"]
-    assert dv.choices == [0, 1]
+    assert dv.choices == (0, 1)
     assert dv.n_choices == 2
     assert dv.extra_fields == ["extra"]
     assert dv.deadline is True
@@ -184,16 +213,147 @@ def test_update_extra_fields(monkeypatch):
         assert (dv.model_distribution.extra_fields[i] == data[field].values).all()
 
 
-def test_validate_choices():
-    # ====== Valid choices =====
-    dv = DataValidatorTester(
-        data=_base_data(),
-        choices=[0, 1],
-        n_choices=2,
+def test_mixed_domains_validate_in_physical_column_order_without_mutation():
+    """Mixed scalar columns validate against their own domains without coercion."""
+    data = pd.DataFrame(
+        {
+            "rt": [0.2, 0.3, 0.4],
+            "polar": [0.0, 1.0, 2.0],
+            "azimuth": [-np.pi, 0.0, np.nextafter(np.pi, -np.inf)],
+        }
     )
-    dv._validate_choices()  # Should not raise an exception
+    original = data.copy(deep=True)
+    validator = DataValidatorTester(
+        data,
+        response=["rt", "polar", "azimuth"],
+        response_domains={
+            "polar": {"kind": "continuous", "bounds": (0.0, 2.0)},
+            "azimuth": {"kind": "circular", "bounds": (-np.pi, np.pi)},
+        },
+    )
 
-    # ===== Invalid choices =====
-    dv.choices = None  # type: ignore[assignment]
-    with pytest.raises(ValueError, match="`choices` must be provided*."):
-        dv._validate_choices()
+    validator._post_check_data_sanity()
+
+    pd.testing.assert_frame_equal(data, original)
+
+
+def test_four_observation_columns_validate_independently():
+    """Each scalar coordinate in a wider observation has its own domain."""
+    validator = DataValidatorTester(
+        pd.DataFrame(
+            {
+                "rt": [0.2, 0.3],
+                "confidence": [0.0, 1.0],
+                "angle": [-np.pi, 0.0],
+                "choice": [0.0, 1.0],
+            }
+        ),
+        response=["rt", "confidence", "angle", "choice"],
+        response_domains={
+            "confidence": {"kind": "continuous", "bounds": (0.0, 1.0)},
+            "angle": {"kind": "circular", "bounds": (-np.pi, np.pi)},
+            "choice": {"kind": "categorical", "values": (0, 1)},
+        },
+    )
+
+    validator._post_check_data_sanity()
+
+
+def test_first_invalid_physical_column_follows_declared_order():
+    """Simultaneous failures report the first configured response coordinate."""
+    validator = DataValidatorTester(
+        pd.DataFrame({"rt": [0.2], "first": [2.0], "second": [2.0]}),
+        response=["rt", "first", "second"],
+        response_domains={
+            "first": {"kind": "continuous", "bounds": (0.0, 1.0)},
+            "second": {"kind": "continuous", "bounds": (0.0, 1.0)},
+        },
+    )
+
+    with pytest.raises(ValueError, match="column 'first'.*bounds"):
+        validator._post_check_data_sanity()
+
+
+@pytest.mark.parametrize(
+    ("kind", "bounds", "value", "passes"),
+    [
+        ("continuous", (0.0, 1.0), 0.0, True),
+        ("continuous", (0.0, 1.0), 1.0, True),
+        ("continuous", (0.0, 1.0), np.nextafter(0.0, -np.inf), False),
+        ("continuous", (0.0, 1.0), np.nextafter(1.0, np.inf), False),
+        ("circular", (-np.pi, np.pi), -np.pi, True),
+        ("circular", (-np.pi, np.pi), np.nextafter(np.pi, -np.inf), True),
+        ("circular", (-np.pi, np.pi), np.pi, False),
+        ("circular", (-np.pi, np.pi), np.nextafter(-np.pi, -np.inf), False),
+    ],
+)
+def test_continuous_and_circular_endpoint_semantics(
+    kind: str, bounds: tuple[float, float], value: float, passes: bool
+):
+    """Continuous bounds are closed while circular upper bounds are excluded."""
+    validator = DataValidatorTester(
+        pd.DataFrame({"rt": [0.2], "coordinate": [value]}),
+        response=["rt", "coordinate"],
+        response_domains={
+            "coordinate": {"kind": kind, "bounds": bounds}  # type: ignore[typeddict-item]
+        },
+    )
+
+    if passes:
+        validator._post_check_data_sanity()
+    else:
+        with pytest.raises(ValueError, match="column 'coordinate'.*bounds"):
+            validator._post_check_data_sanity()
+
+
+@pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf, "1", True])
+def test_domains_reject_nonfinite_or_nonnumeric_values(value):
+    """Every domain rejects nonfinite, nonnumeric, and Boolean observations."""
+    validator = DataValidatorTester(
+        pd.DataFrame({"rt": [0.2], "coordinate": [value]}),
+        response=["rt", "coordinate"],
+        response_domains={"coordinate": {"kind": "continuous"}},
+    )
+
+    with pytest.raises(ValueError, match="column 'coordinate'.*finite numeric"):
+        validator._post_check_data_sanity()
+
+
+def test_categorical_membership_does_not_integer_cast_fractional_values():
+    """A fractional category cannot pass by truncation to an integer label."""
+    validator = DataValidatorTester(
+        pd.DataFrame({"rt": [0.2, 0.3], "response": [0.0, 0.5]}),
+        response_domains={"response": {"kind": "categorical", "values": (0, 1)}},
+    )
+
+    with pytest.raises(ValueError, match=r"Invalid responses.*\[0\.5\]"):
+        validator._post_check_data_sanity()
+
+
+def test_missing_rt_rows_are_omitted_but_observed_rows_remain_validated():
+    """Missing-data sentinels exempt only their own response row."""
+    data = pd.DataFrame({"rt": [-999.0, 0.3], "coordinate": [99.0, 0.5]})
+    validator = DataValidatorTester(
+        data,
+        missing_data=True,
+        response=["rt", "coordinate"],
+        response_domains={"coordinate": {"kind": "continuous", "bounds": (0.0, 1.0)}},
+    )
+    validator._post_check_data_sanity()
+
+    validator.data.loc[1, "coordinate"] = 99.0
+    with pytest.raises(ValueError, match="column 'coordinate'.*bounds"):
+        validator._post_check_data_sanity()
+
+
+def test_choice_only_domain_uses_the_shared_validation_loop():
+    """A one-column choice-only response is checked by the canonical path."""
+    validator = DataValidatorTester(
+        pd.DataFrame({"choice": [0.0, 1.0, 0.5]}),
+        response=["choice"],
+        response_domains={"choice": {"kind": "categorical", "values": (0, 1)}},
+        is_choice_only=True,
+    )
+
+    with pytest.raises(ValueError, match=r"column 'choice'.*\[0\.5\]"):
+        validator._post_check_data_sanity()

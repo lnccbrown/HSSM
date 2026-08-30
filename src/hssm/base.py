@@ -324,6 +324,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else None
         )
         self.choices = self.model_config.choices  # type: ignore[assignment]
+        self.response_domains = deepcopy(self.model_config.response_domains or {})
         self.model_name = self.model_config.model_name
         self.loglik = self.model_config.loglik
         self.loglik_kind = self.model_config.loglik_kind
@@ -333,13 +334,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # TODO: add to HSSMBase
         self.is_choice_only: bool = self.model_config.is_choice_only
 
-        if self.choices is None:
-            raise ValueError(
-                "`choices` must be provided either in `model_config` or as an argument."
-            )
-
-        self._validate_choices()
-
         # region Avoid mypy error later (None.append). Should list_params be Optional?
         if self.list_params is None:
             raise ValueError(
@@ -347,7 +341,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             )
         # endregion
 
-        self.n_choices = len(self.choices)  # type: ignore[arg-type]
+        self.n_choices = len(self.choices) if self.choices is not None else None
 
         self._pre_check_data_sanity()
 
@@ -1958,8 +1952,20 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     + "parameter is not None"
                 )
         if self.has_lapse:
+            domain = (
+                next(iter(self.response_domains.values()))
+                if len(self.response_domains) == 1
+                else None
+            )
+            supports_lapse = domain is not None and domain["kind"] == "categorical"
+            if not supports_lapse:
+                raise ValueError(
+                    "`p_outlier` is supported only for one categorical response "
+                    "column. Set `p_outlier=None` or `p_outlier=0` for this model."
+                )
             if lapse is None:
                 if self.is_choice_only:
+                    assert self.n_choices is not None
                     self.lapse = 1 / self.n_choices
                 else:
                     self.lapse = bmb.Prior("Uniform", lower=0.0, upper=20.0)
