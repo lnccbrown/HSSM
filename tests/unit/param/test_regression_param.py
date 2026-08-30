@@ -538,7 +538,8 @@ def test_safe_priors_reject_repeated_unmatched_group_location(cavanagh_test):
     assert "theta|participant_id" in message
     assert "theta|conf" in message
     assert "common formula term(s) ['theta']" in message
-    assert "non-None explicit prior or fixed value" in message
+    assert "non-None hierarchical explicit prior" in message
+    assert "does not support numeric fixed coefficients" in message
 
 
 def test_safe_priors_render_intercept_remedy_as_formula_one(cavanagh_test):
@@ -628,7 +629,7 @@ def test_safe_priors_none_does_not_assign_group_location(cavanagh_test, prior):
         bounds=(-3.0, 3.0),
     )
 
-    with pytest.raises(ValueError, match="non-None explicit prior"):
+    with pytest.raises(ValueError, match="non-None hierarchical explicit prior"):
         param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
 
 
