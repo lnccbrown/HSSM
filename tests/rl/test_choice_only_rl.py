@@ -266,6 +266,7 @@ def _make_shell_rlssm(config, lapse):
     model = _RLSSM.__new__(_RLSSM)
     model.list_params = [*config.list_params, "p_outlier"]
     model.model_config = config
+    model._obs_dim = len(config.response)
     model.bounds = dict(config.bounds)
     model.lapse = lapse
     model.data = pd.DataFrame({"response": [0, 1], "rt": [0.5, 0.6]})

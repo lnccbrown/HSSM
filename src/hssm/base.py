@@ -311,14 +311,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # region ===== Store the pre-built config =====
         self.model_config: BaseModelConfig = copy(model_config)
         self.model_config.response_domains = deepcopy(model_config.response_domains)
+        configured_response = self.model_config.response
+        assert configured_response is not None
+        self._obs_dim = len(configured_response)
         # endregion
 
         # region ===== Set up shortcuts so old code will work ======
-        self.response: list[str] = (  # type: ignore[assignment]
-            list(self.model_config.response)
-            if self.model_config.response is not None
-            else []
-        )
+        self.response: list[str] = list(configured_response)  # type: ignore[assignment]
         self.list_params = (
             list(self.model_config.list_params)
             if self.model_config.list_params is not None
@@ -391,6 +390,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self.list_params,
             self.link,
             self._parent,
+            obs_dim=self._obs_dim,
         )
 
         # Targeted checks against the user's prior dict:
@@ -1277,18 +1277,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
         do_dt = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
 
-        # clean up `rt,response_mean` to `v`
-        do_dt = self._drop_parent_str_from_datatree(dt=do_dt)
-
-        # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].dims:
-            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_dims(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
-        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].coords:
-            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_vars(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
+        do_dt = self._clean_predictive_datatree(dt=do_dt)
 
         if return_model:
             return do_dt, do_model
@@ -1346,18 +1335,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     continue
                 self._inference_obj[group_name] = prior_predictive[group_name]
 
-        # clean up `rt,response_mean` to `v`
-        dt = self._drop_parent_str_from_datatree(dt=self._inference_obj)
-
-        # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in dt["prior_predictive"].dims:
-            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_dims(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
-        if "rt,response_extra_dim_0" in dt["prior_predictive"].coords:
-            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_vars(
-                name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-            )
+        dt = self._clean_predictive_datatree(dt=self._inference_obj)
 
         # Update self._inference_obj to match the cleaned datatree
         self._inference_obj = dt
@@ -2022,8 +2000,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         return var_names
 
-    def _drop_parent_str_from_datatree(self, dt: DataTree | None) -> DataTree:
-        """Drop the parent_str variable from a DataTree object.
+    def _clean_predictive_datatree(self, dt: DataTree | None) -> DataTree:
+        """Normalize generated response names and dimensions.
 
         Parameters
         ----------
@@ -2032,20 +2010,32 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         Returns
         -------
-        xr.Dataset
+        DataTree
             The modified DataTree object.
         """
         if dt is None:
             raise ValueError("Please provide a DataTree (traces) object.")
-        else:
-            for group in dt.groups:
-                if group == "/":
-                    continue
-                if ("rt,response_mean" in dt[group].data_vars) and (
-                    self._parent not in dt[group].data_vars
-                ):
-                    dt[group] = dt[group].ds.rename({"rt,response_mean": self._parent})
-            return dt
+
+        response_mean = f"{self.response_str}_mean"
+        raw_response_dim = f"{self.response_str}_extra_dim_0"
+        response_dim = f"{self.response_str}_dim"
+        for group in dt.groups:
+            if group == "/":
+                continue
+            dataset = dt[group].ds
+            rename = {}
+            if response_mean in dataset.data_vars and self._parent not in dataset:
+                rename[response_mean] = self._parent
+            if group.rsplit("/", maxsplit=1)[-1] in {
+                "posterior_predictive",
+                "prior_predictive",
+            } and (
+                raw_response_dim in dataset.dims or raw_response_dim in dataset.coords
+            ):
+                rename[raw_response_dim] = response_dim
+            if rename:
+                dt[group] = dataset.rename(rename)
+        return dt
 
     def _postprocess_initvals_deterministic(
         self, initval_settings: dict = INITVAL_SETTINGS

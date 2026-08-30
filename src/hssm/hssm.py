@@ -435,6 +435,7 @@ class HSSM(HSSMBase):
                 list_params=self.list_params or [],
                 lapse=self.lapse,
                 is_choice_only=True,
+                expected_obs_dim=self._obs_dim,
             )
 
         self.data = typing_cast("pd.DataFrame", _rearrange_data(self.data))
@@ -469,4 +470,5 @@ class HSSM(HSSMBase):
             params_is_trialwise=params_is_trialwise_base,
             # TODO: add to HSSMBase
             is_choice_only=self.is_choice_only,
+            expected_obs_dim=self._obs_dim,
         )
