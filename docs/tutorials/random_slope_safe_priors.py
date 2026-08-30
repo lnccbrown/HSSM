@@ -14,30 +14,28 @@
 
 """Validate corrected HSSM safe priors and recreate the legacy pathology.
 
-This marimo notebook uses a tiny balanced 2x2 dataset from HSSM discussion
-#948. It checks the component-design ranks, verifies the corrected safe defaults,
-and then manually supplies the legacy malformed priors to expose their centered
-and non-centered failure modes.
+This marimo notebook uses a tiny balanced 2x2 synthetic dataset. It checks the
+component-design ranks, verifies the corrected safe defaults, and then manually
+supplies the legacy malformed priors to expose their centered and non-centered
+failure modes.
 
-No sampling is needed. The inline environment pins the reviewed HSSM #1224
-fix for a reproducible standalone or Molab run::
+No sampling is needed. The inline environment pins the reviewed HSSM snapshot
+for a reproducible standalone or Molab run::
 
     uvx marimo edit --sandbox docs/tutorials/random_slope_safe_priors.py
 
-To exercise the active HSSM checkout while developing a fix, ignore the inline
-environment and use the repository environment instead::
+The pinned environment is intentional: it permits the notebook to construct the
+legacy malformed prior graph. Current HSSM rejects that explicit prior before
+model construction instead of silently dropping its location. Use the
+link-functions tutorial to exercise the current group-prior contract.
 
-    uv run --group notebook --group docs marimo edit --no-sandbox \
-        docs/tutorials/random_slope_safe_priors.py
-    uv run --group notebook --group docs marimo check --strict docs/tutorials/random_slope_safe_priors.py
-    uv run --group notebook --group docs marimo export html --no-sandbox \
-        docs/tutorials/random_slope_safe_priors.py \
-        --output /tmp/random-slope-safe-priors.html --force
+Regenerate the published static artifact from that pinned environment::
+
     HSSM_DOCS_STATIC=1 \
-      uv run --group notebook --group docs marimo export ipynb --no-sandbox \
+      uvx marimo==0.24.0 export ipynb \
         docs/tutorials/random_slope_safe_priors.py \
         --output docs/tutorials/random_slope_safe_priors.ipynb \
-        --include-outputs --force
+        --include-outputs --sandbox --force
     uv run ruff format docs/tutorials/random_slope_safe_priors.ipynb
 
 The graph cells also require the Graphviz ``dot`` executable (for example,
@@ -107,11 +105,11 @@ def _(bmb, hssm, jax, mo):
     a regression containing the same slopes at the population and participant
     levels. It then recreates the old bug explicitly, without relying on an
     affected HSSM installation. It uses **HSSM {hssm.__version__}** and
-    **Bambi {bmb.__version__}** from the active environment.
+    **Bambi {bmb.__version__}** from the pinned environment.
 
-    The hosted environment is pinned to the reviewed HSSM #1224 implementation
-    at `944eacb0`. When opened from an HSSM checkout with `--no-sandbox`, the
-    notebook instead validates that checkout.
+    The hosted environment is pinned to the reviewed HSSM implementation at
+    `944eacb0`. The pin is part of the demonstration: it can recreate the malformed
+    legacy graph that current HSSM now rejects before model construction.
 
     This construction-only notebook explicitly uses the **{jax.default_backend()}**
     JAX backend so it also runs on Molab servers whose base image exposes an
@@ -922,16 +920,18 @@ def _(mo):
     is a deviation whose generated mean must be zero. Truly group-only terms
     follow a different ownership rule: HSSM preserves and centers one generated
     location owner, but rejects multiple generated owners for the same exact
-    expression. The [link-functions tutorial](https://lnccbrown.github.io/HSSM/tutorials/link_functions/)
-    works through that distinction across identity and transformed links.
+    expression.
 
-    Relevant implementation discussions:
+    Continue with:
 
-    - [HSSM discussion #948](https://github.com/lnccbrown/HSSM/discussions/948)
-    - [HSSM issue #1224](https://github.com/lnccbrown/HSSM/issues/1224)
-    - [HSSM group-only location ownership #1225](https://github.com/lnccbrown/HSSM/issues/1225)
-    - [Bambi issue #1003](https://github.com/bambinos/bambi/issues/1003)
-    - [Formulae term structure](https://github.com/bambinos/formulae/blob/master/formulae/terms/terms.py)
+    - [Link functions and safe priors](https://lnccbrown.github.io/HSSM/tutorials/link_functions/)
+      for population-location ownership under identity and transformed links;
+    - [Specify hierarchical group priors](https://lnccbrown.github.io/HSSM/how_to/specify_group_priors/)
+      for explicit group-prior compatibility and parameterization rules;
+    - [Coming from HDDM](https://lnccbrown.github.io/HSSM/explanations/coming_from_hddm/)
+      for the group-only hierarchy used by HDDM-style models; and
+    - the official [Formulae design-matrix guide](https://bambinos.github.io/formulae/notebooks/getting_started.html)
+      for term expansion, categorical coding, interactions, and group-specific terms.
     """)
     return
 
