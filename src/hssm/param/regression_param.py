@@ -301,12 +301,25 @@ class RegressionParam(Param):
                             )
                         else:
                             # treat the term as any other group-specific term
-                            _logger.warning(
-                                "No common intercept. Bounds for parameter %s"
-                                " is not applied due to a current limitation of Bambi."
-                                " This will change in the future.",
-                                self.name,
-                            )
+                            if (
+                                _is_identity_link(self.link)
+                                and self.bounds is not None
+                                and any(np.isfinite(bound) for bound in self.bounds)
+                            ):
+                                _logger.warning(
+                                    "The generated group-only intercept for parameter "
+                                    "%s is on the response/parameter scale under the "
+                                    "identity link, but its coefficient prior does not "
+                                    "apply finite HSSM bounds %s due to a current "
+                                    "Bambi limitation. Likelihood-level parameter "
+                                    "bounds still apply. A support-respecting "
+                                    "transformed link instead uses an unconstrained "
+                                    "predictor scale; bound-aware identity group "
+                                    "priors are "
+                                    "tracked in HSSM #1269.",
+                                    self.name,
+                                    self.bounds,
+                                )
                             prior = get_prior(
                                 "group_intercept",
                                 self.name,

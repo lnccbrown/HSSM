@@ -5,6 +5,7 @@ import logging
 import bambi as bmb
 import numpy as np
 import pymc as pm
+import pytensor.tensor as pt
 import pytest
 
 import hssm
@@ -15,6 +16,7 @@ from hssm.param.parameterization_check import (
     find_disconnected_free_rvs,
 )
 from hssm.prior import (
+    HDDM_SETTINGS_GROUP,
     _is_identity_link,
     get_default_prior,
     get_hddm_default_prior,
@@ -38,6 +40,15 @@ TRANSFORMED_LINKS = [
     pytest.param(hssm.Link("log"), id="hssm-log"),
     pytest.param(hssm.Link("logit"), id="hssm-logit"),
     pytest.param(hssm.Link("gen_logit", bounds=(0.0, 1.0)), id="hssm-gen-logit"),
+    pytest.param(
+        hssm.Link(
+            "custom_log",
+            link=np.log,
+            linkinv=np.exp,
+            linkinv_backend=pt.exp,
+        ),
+        id="hssm-custom-log",
+    ),
 ]
 
 
@@ -51,6 +62,19 @@ def _assert_prior_spec(prior, name, args, bounds):
     expected_truncated = bounds is not None and any(np.isfinite(bounds))
     assert prior.is_truncated is expected_truncated
     assert callable(prior.dist) is expected_truncated
+
+
+def _assert_prior_tree(prior, specification):
+    """Recursively compare a generated hierarchical prior with its settings."""
+    if isinstance(specification, dict) and "dist" in specification:
+        expected = specification.copy()
+        assert isinstance(prior, bmb.Prior)
+        assert prior.name == expected.pop("dist")
+        assert set(prior.args) == set(expected)
+        for key, value in expected.items():
+            _assert_prior_tree(prior.args[key], value)
+        return
+    assert prior == specification
 
 
 class TestPriorUnit:
@@ -233,13 +257,28 @@ class TestPriorUnit:
         for prior in (generic, hddm):
             _assert_prior_spec(prior, "Normal", {"mu": 0.0, "sigma": 0.25}, bounds=None)
 
-    def test_hddm_group_only_identity_policy_is_deferred(self):
-        """Leave the link-presence policy for unmatched group terms to #1225."""
-        omitted = get_hddm_default_prior("group_intercept", "z", None, None)
-        explicit = get_hddm_default_prior("group_intercept", "z", None, "identity")
+    @pytest.mark.parametrize("link", IDENTITY_LINKS)
+    @pytest.mark.parametrize("param", HDDM_SETTINGS_GROUP)
+    def test_hddm_group_only_identity_equivalence(self, link, param):
+        """Use the HDDM group hierarchy for every spelling of identity."""
+        prior = get_hddm_default_prior("group_intercept", param, None, link)
 
-        assert omitted.name == "Beta"
-        assert explicit.name == "Normal"
+        _assert_prior_tree(prior, HDDM_SETTINGS_GROUP[param])
+
+    @pytest.mark.parametrize("link", TRANSFORMED_LINKS)
+    @pytest.mark.parametrize("param", HDDM_SETTINGS_GROUP)
+    def test_hddm_group_only_transformed_link(self, link, param):
+        """Use an unconstrained predictor-scale hierarchy after a transformed link."""
+        prior = get_hddm_default_prior("group_intercept", param, None, link)
+
+        _assert_prior_tree(
+            prior,
+            {
+                "dist": "Normal",
+                "mu": {"dist": "Normal", "mu": 0.0, "sigma": 0.25},
+                "sigma": {"dist": "Weibull", "alpha": 1.5, "beta": 0.3},
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
