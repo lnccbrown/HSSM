@@ -908,16 +908,16 @@ def test_hddm_safe_group_only_intercept_uses_preset_identity(cavanagh_test):
 
 
 @pytest.mark.parametrize(
-    ("link", "expect_bounds_warning"),
+    ("link", "expected_prior"),
     [
-        pytest.param(None, True, id="omitted-identity"),
-        pytest.param("identity", True, id="string-identity"),
-        pytest.param(bmb.Link("identity"), True, id="bambi-identity"),
-        pytest.param(hssm.Link("identity"), True, id="hssm-identity"),
-        pytest.param("log", False, id="log"),
+        pytest.param(None, "TruncatedNormal", id="omitted-identity"),
+        pytest.param("identity", "TruncatedNormal", id="string-identity"),
+        pytest.param(bmb.Link("identity"), "TruncatedNormal", id="bambi-identity"),
+        pytest.param(hssm.Link("identity"), "TruncatedNormal", id="hssm-identity"),
+        pytest.param("log", "Normal", id="log"),
         pytest.param(
             hssm.Link("gen_logit", bounds=(0.0, 1.0)),
-            False,
+            "Normal",
             id="gen-logit",
         ),
         pytest.param(
@@ -927,15 +927,15 @@ def test_hddm_safe_group_only_intercept_uses_preset_identity(cavanagh_test):
                 linkinv=np.exp,
                 linkinv_backend=pt.exp,
             ),
-            False,
+            "Normal",
             id="custom",
         ),
     ],
 )
-def test_group_only_bounds_warning_is_identity_specific(
-    cavanagh_test, caplog, link, expect_bounds_warning
+def test_group_only_bounds_follow_effective_link(
+    cavanagh_test, caplog, link, expected_prior
 ):
-    """Do not warn about response bounds on a transformed predictor scale."""
+    """Bound only pure identity-scale group locations without a residual warning."""
     param = RegressionParam(
         name="v",
         formula="v ~ 0 + (1 | participant_id)",
@@ -945,13 +945,72 @@ def test_group_only_bounds_warning_is_identity_specific(
 
     param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
 
+    prior = param.prior["1|participant_id"]
+    assert prior.name == expected_prior
+    assert not any(
+        "complete linear predictor" in record.message for record in caplog.records
+    )
+
+
+@pytest.mark.parametrize(
+    ("formula", "additional_term"),
+    [
+        pytest.param(
+            "v ~ 0 + theta + (1 | participant_id)", "theta", id="common-slope"
+        ),
+        pytest.param(
+            "v ~ 0 + (1 + theta | participant_id)",
+            "theta|participant_id",
+            id="group-slope",
+        ),
+        pytest.param(
+            "v ~ 0 + hsgp(theta, m=8, c=2) + (1 | participant_id)",
+            "hsgp(theta, m=8, c=2)",
+            id="hsgp",
+        ),
+    ],
+)
+def test_bounded_group_location_warns_about_additive_predictor(
+    cavanagh_test, caplog, formula, additional_term
+):
+    """Distinguish a bounded coefficient from the complete identity predictor."""
+    param = RegressionParam(
+        name="v",
+        formula=formula,
+        bounds=(0.0, 1.0),
+        link="identity",
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
+
     messages = [
-        record.message for record in caplog.records if "HSSM #1269" in record.message
+        record.message
+        for record in caplog.records
+        if "complete linear predictor" in record.message
     ]
-    assert bool(messages) is expect_bounds_warning
-    if expect_bounds_warning:
-        assert len(messages) == 1
-        assert "Likelihood-level parameter bounds still apply" in messages[0]
+    assert len(messages) == 1
+    assert "1|participant_id" in messages[0]
+    assert additional_term in messages[0]
+    assert "finite likelihood-floor penalty" in messages[0]
+
+
+def test_transformed_mixed_predictor_keeps_unbounded_group_coefficient(
+    cavanagh_test, caplog
+):
+    """Leave additive transformed-link coefficients on the predictor scale."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 0 + theta + (1 | participant_id)",
+        bounds=(0.0, np.inf),
+        link="log",
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
+
+    assert param.prior["1|participant_id"].name == "Normal"
+    assert not any(
+        "complete linear predictor" in record.message for record in caplog.records
+    )
 
 
 @pytest.mark.parametrize(
@@ -968,9 +1027,12 @@ def test_group_only_bounds_warning_requires_finite_bounds(
         link="identity",
     )
 
-    param.make_safe_priors(cavanagh_test, {}, is_ddm=True, noncentered=False)
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
 
-    assert not any("HSSM #1269" in record.message for record in caplog.records)
+    assert param.prior["1|participant_id"].name == "Normal"
+    assert not any(
+        "complete linear predictor" in record.message for record in caplog.records
+    )
 
 
 @pytest.mark.parametrize(
@@ -1086,12 +1148,12 @@ def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
 
     param_no_common_intercept.make_safe_priors(cavanagh_test, {}, is_ddm=False)
 
-    assert any("limitation" in record.msg for record in caplog.records)
+    assert any("complete linear predictor" in record.msg for record in caplog.records)
     assert "Intercept" not in param_no_common_intercept.prior
     group_intercept_prior = param_no_common_intercept.prior["1|participant_id"]
     group_slope_prior = param_no_common_intercept.prior["theta|participant_id"]
 
-    _check_group_prior(group_intercept_prior)
+    _check_bounded_group_prior(group_intercept_prior, bounds)
     _check_group_prior(group_slope_prior)
 
     # Change back after testing
@@ -1113,6 +1175,27 @@ def _check_group_prior(group_prior):
     assert mu.args["sigma"] == 0.25
 
     assert isinstance(group_prior, bmb.Prior)
+    assert sigma.name == "Weibull"
+    assert sigma.args["alpha"] == 1.5
+    assert sigma.args["beta"] == 0.3
+
+
+def _check_bounded_group_prior(group_prior, bounds):
+    assert isinstance(group_prior, bmb.Prior)
+    assert group_prior.dist is None
+    assert group_prior.name == "TruncatedNormal"
+    assert group_prior.noncentered is False
+    assert group_prior.args["lower"] == bounds[0]
+    assert group_prior.args["upper"] == bounds[1]
+
+    mu = group_prior.args["mu"]
+    assert isinstance(mu, bmb.Prior)
+    assert mu.name == "TruncatedNormal"
+    assert mu.args["lower"] == bounds[0]
+    assert mu.args["upper"] == bounds[1]
+
+    sigma = group_prior.args["sigma"]
+    assert isinstance(sigma, bmb.Prior)
     assert sigma.name == "Weibull"
     assert sigma.args["alpha"] == 1.5
     assert sigma.args["beta"] == 0.3
@@ -1267,7 +1350,9 @@ def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
     )
 
     param_no_common_intercept.make_safe_priors(cavanagh_test, {}, is_ddm=True)
-    assert any("limitation" in record.msg for record in caplog.records)
+    assert not any(
+        "complete linear predictor" in record.msg for record in caplog.records
+    )
 
     assert "Intercept" not in param_no_common_intercept.prior
     group_intercept_prior = param_no_common_intercept.prior["1|participant_id"]

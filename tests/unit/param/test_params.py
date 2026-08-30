@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 import bambi as bmb
+import numpy as np
 import pytest
 
 from hssm import HSSM, Link, Prior
@@ -10,9 +11,9 @@ from hssm.param.param import Param
 from hssm.param.params import (
     Params,
     collect_user_params,
-    make_params,
-    make_param_from_user_param,
     make_param_from_defaults,
+    make_param_from_user_param,
+    make_params,
 )
 from hssm.param.regression_param import RegressionParam
 from hssm.param.simple_param import DefaultParam, SimpleParam
@@ -436,6 +437,29 @@ def test_make_params_prepares_formula_once_for_safe_priors(data_ddm_reg, monkeyp
     assert calls == 1
     assert params["t"]._common_term_names == {"Intercept", "x", "y"}
     assert params["t"]._group_term_names == {}
+
+
+def test_approximate_ddm_uses_generic_bounded_group_location(data_ddm_reg):
+    """Use the neural training box rather than HDDM families for safe priors."""
+    model = create_mock_model(
+        "ddm", loglik_kind="approx_differentiable", prior_settings="safe"
+    )
+    model.list_params = ["v"]
+    model.data = data_ddm_reg.assign(participant_id=np.arange(len(data_ddm_reg)) % 2)
+    user_params = {
+        "v": UserParam(
+            name="v",
+            formula="v ~ 0 + (1 | participant_id)",
+        )
+    }
+
+    params = make_params(model, user_params, noncentered=True)
+
+    prior = params["v"].prior["1|participant_id"]
+    assert prior.name == "TruncatedNormal"
+    assert prior.args["lower"] == -3.0
+    assert prior.args["upper"] == 3.0
+    assert prior.noncentered is False
 
 
 def test_make_params_prepares_formula_without_safe_priors(data_ddm_reg):
