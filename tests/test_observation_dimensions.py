@@ -180,6 +180,31 @@ def test_predictive_shapes_follow_configured_response_width(obs_dim):
         )
 
 
+def test_safe_mode_preserves_width_four_draw_and_response_coordinates():
+    """Chunked prediction concatenates arbitrary-width draws without drift."""
+    model = _synthetic_model(4)
+    traces = model.sample_prior_predictive(
+        draws=12,
+        random_seed=np.random.default_rng(43),
+    )
+    traces["posterior"] = traces["prior"]
+
+    result = model.sample_posterior_predictive(
+        traces,
+        draws=12,
+        safe_mode=True,
+        inplace=False,
+    )
+
+    assert result is not None
+    response_name = model.response_str
+    response_dim = f"{response_name}_dim"
+    values = result["posterior_predictive"][response_name]
+    assert values.dims == ("chain", "draw", "__obs__", response_dim)
+    np.testing.assert_array_equal(values.coords["draw"], np.arange(12))
+    np.testing.assert_array_equal(values.coords[response_dim], np.arange(4))
+
+
 def test_choice_only_callable_width_mismatch_is_not_masked():
     """Scalar support does not hide malformed callable width metadata."""
     with pytest.raises(
@@ -220,6 +245,59 @@ def test_sample_do_dataframe_uses_physical_response_order(obs_dim):
 
     assert list(frame.columns) == ["chain", "draw", "__obs__", *model.response]
     assert len(frame) == 3 * len(model.data)
+
+
+def test_scalar_dataframe_ignores_deadline_technical_suffix():
+    """Scalar predictions use the physical response name, not its suffix."""
+    response_str = "response,deadline"
+    predictive = xr.DataTree.from_dict(
+        {
+            "posterior_predictive": xr.Dataset(
+                {
+                    response_str: (
+                        ("chain", "draw", "__obs__"),
+                        np.arange(6).reshape(1, 2, 3),
+                    )
+                }
+            )
+        }
+    )
+
+    frame = hssm.utils.predictive_dt_to_dataframe(
+        predictive,
+        response_str=response_str,
+        response_dim=f"{response_str}_dim",
+    )
+
+    assert list(frame.columns) == ["chain", "draw", "__obs__", "response"]
+    np.testing.assert_array_equal(frame["response"], np.arange(6))
+
+
+def test_dataframe_rejects_missing_vector_response_coordinate():
+    """A differently named vector dimension is not mistaken for scalar output."""
+    response_str = "rt,response"
+    predictive = xr.DataTree.from_dict(
+        {
+            "posterior_predictive": xr.Dataset(
+                {
+                    response_str: (
+                        ("chain", "draw", "__obs__", "unexpected_dim"),
+                        np.arange(12).reshape(1, 2, 3, 2),
+                    )
+                }
+            )
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Predictive response coordinate 'rt,response_dim' is missing",
+    ):
+        hssm.utils.predictive_dt_to_dataframe(
+            predictive,
+            response_str=response_str,
+            response_dim=f"{response_str}_dim",
+        )
 
 
 def test_predictive_cleanup_uses_custom_response_name():
