@@ -1,15 +1,15 @@
 import bambi as bmb
 import numpy as np
+import pytensor.tensor as pt
 import pytest
 
 import hssm
 from hssm import Prior
-from hssm.modelconfig import get_default_model_config
 from hssm.link import Link
+from hssm.modelconfig import get_default_model_config
 from hssm.param import UserParam
 from hssm.param.regression_param import RegressionParam, _make_priors_recursive
-from hssm.prior import HSSM_SETTINGS_DISTRIBUTIONS, HDDM_SETTINGS_GROUP
-
+from hssm.prior import HDDM_SETTINGS_GROUP, HSSM_SETTINGS_DISTRIBUTIONS
 
 v_reg = UserParam(
     name="v",
@@ -803,6 +803,19 @@ def _assert_scalar_prior_contract(
         np.testing.assert_allclose(effective_args[key], expected)
 
 
+def _assert_hierarchical_prior_contract(prior, specification):
+    """Recursively compare a group prior against an HSSM settings tree."""
+    if isinstance(specification, dict) and "dist" in specification:
+        expected = specification.copy()
+        assert isinstance(prior, bmb.Prior)
+        assert prior.name == expected.pop("dist")
+        assert set(prior.args) == set(expected)
+        for key, value in expected.items():
+            _assert_hierarchical_prior_contract(prior.args[key], value)
+        return
+    assert prior == specification
+
+
 @pytest.mark.parametrize("link", IDENTITY_LINK_CASES)
 @pytest.mark.parametrize(
     ("param_name", "bounds", "prior_name", "prior_args", "is_truncated"),
@@ -843,6 +856,120 @@ def test_hddm_safe_common_intercept_uses_response_scale_prior_for_identity_links
         is_truncated=False,
     )
     assert getattr(param.link, "name", param.link) == "identity"
+
+
+@pytest.mark.parametrize("link", IDENTITY_LINK_CASES)
+@pytest.mark.parametrize(
+    ("param_name", "bounds", "_prior_name", "_prior_args", "_is_truncated"),
+    HDDM_LOCATION_PRIOR_CASES,
+)
+def test_hddm_safe_group_only_intercept_uses_identity_scale_hierarchy(
+    cavanagh_test,
+    param_name,
+    bounds,
+    _prior_name,
+    _prior_args,
+    _is_truncated,
+    link,
+):
+    """Route every identity spelling through group-only safe-prior generation."""
+    param = RegressionParam(
+        name=param_name,
+        formula=f"{param_name} ~ 0 + (1 | participant_id)",
+        bounds=bounds,
+        link=link,
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=True, noncentered=False)
+    param.process_prior()
+
+    prior = param.prior["1|participant_id"]
+    assert prior.noncentered is False
+    _assert_hierarchical_prior_contract(prior, HDDM_SETTINGS_GROUP[param_name])
+    assert getattr(param.link, "name", param.link) == "identity"
+
+
+def test_hddm_safe_group_only_intercept_uses_preset_identity(cavanagh_test):
+    """Treat identity selected by the log-logit preset like omitted identity."""
+    param = RegressionParam.from_defaults(
+        name="v",
+        formula="v ~ 0 + (1 | participant_id)",
+        bounds=(-np.inf, np.inf),
+        link_settings="log_logit",
+    )
+    assert param.link == "identity"
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=True, noncentered=False)
+
+    prior = param.prior["1|participant_id"]
+    assert prior.noncentered is False
+    _assert_hierarchical_prior_contract(prior, HDDM_SETTINGS_GROUP["v"])
+
+
+@pytest.mark.parametrize(
+    ("link", "expect_bounds_warning"),
+    [
+        pytest.param(None, True, id="omitted-identity"),
+        pytest.param("identity", True, id="string-identity"),
+        pytest.param(bmb.Link("identity"), True, id="bambi-identity"),
+        pytest.param(hssm.Link("identity"), True, id="hssm-identity"),
+        pytest.param("log", False, id="log"),
+        pytest.param(
+            hssm.Link("gen_logit", bounds=(0.0, 1.0)),
+            False,
+            id="gen-logit",
+        ),
+        pytest.param(
+            hssm.Link(
+                "custom_log",
+                link=np.log,
+                linkinv=np.exp,
+                linkinv_backend=pt.exp,
+            ),
+            False,
+            id="custom",
+        ),
+    ],
+)
+def test_group_only_bounds_warning_is_identity_specific(
+    cavanagh_test, caplog, link, expect_bounds_warning
+):
+    """Do not warn about response bounds on a transformed predictor scale."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 0 + (1 | participant_id)",
+        bounds=(0.0, 1.0),
+        link=link,
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
+
+    messages = [
+        record.message for record in caplog.records if "HSSM #1269" in record.message
+    ]
+    assert bool(messages) is expect_bounds_warning
+    if expect_bounds_warning:
+        assert len(messages) == 1
+        assert "Likelihood-level parameter bounds still apply" in messages[0]
+
+
+@pytest.mark.parametrize(
+    "bounds", [None, (-np.inf, np.inf)], ids=["no-bounds", "unbounded"]
+)
+def test_group_only_bounds_warning_requires_finite_bounds(
+    cavanagh_test, caplog, bounds
+):
+    """Do not claim omitted bounds when no finite response bound exists."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 0 + (1 | participant_id)",
+        bounds=bounds,
+        link="identity",
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=True, noncentered=False)
+
+    assert not any("HSSM #1269" in record.message for record in caplog.records)
 
 
 @pytest.mark.parametrize(

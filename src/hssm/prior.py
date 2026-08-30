@@ -336,7 +336,7 @@ def get_hddm_default_prior(
         else:
             prior = generate_prior(HDDM_MU[param], bounds=bounds)
     elif term_type == "group_intercept":
-        if link is not None:
+        if not _is_identity_link(link):
             prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
         else:
             prior = generate_prior(HDDM_SETTINGS_GROUP[param], bounds=None)
