@@ -14,6 +14,7 @@ from formulae.matrices import DesignMatrices
 from ..link import Link
 from ..prior import get_default_prior, get_hddm_default_prior
 from .param import Param
+from .parameterization import NoncenteredSetting
 from .user_param import UserParam
 
 _logger = logging.getLogger("hssm")
@@ -212,7 +213,11 @@ class RegressionParam(Param):
             )
 
     def make_safe_priors(
-        self, data: pd.DataFrame, eval_env: dict[str, Any], is_ddm: bool
+        self,
+        data: pd.DataFrame,
+        eval_env: dict[str, Any],
+        is_ddm: bool,
+        noncentered: NoncenteredSetting = True,
     ):
         """Override the default priors.
 
@@ -225,14 +230,26 @@ class RegressionParam(Param):
             The data used to fit the model.
         eval_env
             The environment used to evaluate the formula.
-        use_hddm
+        is_ddm
             Whether to use HDDM default priors.
+        noncentered
+            The model-level group-specific parameterization setting.
         """
         dm = self._prepare_formula_terms(data, eval_env)
-        self._make_safe_priors(dm, is_ddm)
+        self._make_safe_priors(dm, is_ddm, noncentered)
 
-    def _make_safe_priors(self, dm: DesignMatrices, is_ddm: bool) -> None:
-        """Populate safe priors from already-prepared Formulae matrices."""
+    def _make_safe_priors(
+        self,
+        dm: DesignMatrices,
+        is_ddm: bool,
+        noncentered: NoncenteredSetting = True,
+    ) -> None:
+        """Populate safe priors from already-prepared Formulae matrices.
+
+        ``noncentered`` is threaded through here so generated group priors can
+        resolve their effective parameterization alongside explicit priors.
+        This refactor intentionally leaves generation behavior unchanged.
+        """
         safe_priors = {}
 
         get_prior = get_hddm_default_prior if is_ddm else get_default_prior

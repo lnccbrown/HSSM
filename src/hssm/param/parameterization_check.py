@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Any
 import bambi as bmb
 import numpy as np
 
+from .parameterization import NoncenteredSetting, _resolve_noncentered
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -67,29 +69,6 @@ class PriorMismatch:
     term: str
     reason: str
     suggestion: str
-
-
-def _resolve_noncentered(
-    noncentered: bool | dict[str, bool] | None,
-    component_name: str,
-    prior_noncentered: bool | None,
-) -> bool:
-    """Compute the effective ``noncentered`` flag for a single term.
-
-    Mirrors bambi's resolution order in ``Model._set_priors``:
-
-    1. A per-:class:`bmb.Prior` ``noncentered`` override takes precedence.
-    2. Otherwise the model-level value is used, which may be a ``dict`` keyed
-       by distributional component name.
-    3. Missing dict keys fall back to ``True`` (bambi's default).
-    """
-    if prior_noncentered is not None:
-        return prior_noncentered
-    if isinstance(noncentered, dict):
-        return noncentered.get(component_name, True)
-    if noncentered is None:
-        return True
-    return noncentered
 
 
 def _is_zero(value: Any) -> bool:
@@ -159,7 +138,7 @@ def _parameterization_suggestion(
 
 def check_user_priors_against_parameterization(
     params: Params,
-    noncentered: bool | dict[str, bool] | None,
+    noncentered: NoncenteredSetting,
 ) -> list[PriorMismatch]:
     """Detect user priors that conflict with non-centered bambi.
 
@@ -262,7 +241,7 @@ def check_user_priors_against_parameterization(
 
 def check_user_priors_for_location_overparameterization(
     params: Params,
-    noncentered: bool | dict[str, bool] | None,
+    noncentered: NoncenteredSetting,
 ) -> list[PriorMismatch]:
     """Detect centered group means that collide with matching common effects.
 
