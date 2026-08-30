@@ -259,6 +259,8 @@ class RegressionParam(Param):
         has_common_wildcard = "common" in specified_priors
         has_group_wildcard = "group_specific" in specified_priors
 
+        self._validate_generated_group_locations()
+
         # For each term in the design matrix, if the prior is not already specified,
         # add the default prior for that term.
         # We do this separately for common and group terms.
@@ -324,6 +326,58 @@ class RegressionParam(Param):
             self.prior = cast("dict[str, Any]", self.prior)
             safe_priors.update(self.prior)
         self.prior = safe_priors
+
+    def _validate_generated_group_locations(self) -> None:
+        """Reject ambiguous safe defaults for repeated group-only expressions.
+
+        When the same Formulae expression occurs under multiple grouping factors
+        without a matching common term, each generated hierarchical prior would
+        introduce a competing population location. HSSM cannot choose one owner
+        without changing the model, so every competing term must instead have an
+        explicit, non-``None`` user specification.
+        """
+        unmatched_by_expression: dict[str, list[str]] = {}
+        for term_name, expression_name in self._group_term_names.items():
+            if term_name in self._group_terms_with_common:
+                continue
+            unmatched_by_expression.setdefault(expression_name, []).append(term_name)
+
+        prior = self.prior if isinstance(self.prior, dict) else {}
+        group_wildcard = prior.get("group_specific")
+        ambiguous: dict[str, list[str]] = {}
+        for expression_name, term_names in unmatched_by_expression.items():
+            if len(term_names) < 2:
+                continue
+
+            has_explicit_owner = True
+            for term_name in term_names:
+                term_prior = prior.get(term_name, group_wildcard)
+                if term_prior is None:
+                    has_explicit_owner = False
+                    break
+            if not has_explicit_owner:
+                ambiguous[expression_name] = sorted(term_names)
+
+        if not ambiguous:
+            return
+
+        details = "; ".join(
+            f"expression {expression_name!r}: {term_names!r}"
+            for expression_name, term_names in sorted(ambiguous.items())
+        )
+        common_terms = [
+            "1" if expression_name == "Intercept" else expression_name
+            for expression_name in sorted(ambiguous)
+        ]
+        raise ValueError(
+            f"Cannot generate unambiguous safe group priors for parameter "
+            f"{self.name!r}. Multiple unmatched group-specific terms compete for "
+            f"the same population location ({details}). Add the exact common "
+            f"formula term(s) {common_terms!r} so these group terms become "
+            "zero-mean deviations, or provide a non-None explicit prior or fixed "
+            "value for every competing group term and choose location ownership "
+            "intentionally."
+        )
 
     def _prepare_formula_terms(
         self, data: pd.DataFrame, extra_namespace: dict[str, Any]
