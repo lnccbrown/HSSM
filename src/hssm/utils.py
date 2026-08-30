@@ -576,6 +576,11 @@ def predictive_dt_to_dataframe(
         The DataTree object to convert.
     predictive_group : Literal["posterior_predictive", "prior_predictive"]
         The predictive group to convert.
+    response_str
+        Comma-separated physical response column names in configured order.
+    response_dim
+        Name of the vector response coordinate. Scalar responses have no such
+        coordinate.
 
     Returns
     -------
@@ -583,12 +588,20 @@ def predictive_dt_to_dataframe(
         A dataframe with the predictive samples.
     """
     df = dt[predictive_group].ds.to_dataframe().reset_index(drop=False)
+    response_names = response_str.split(",")
+    if response_dim not in df.columns:
+        if len(response_names) != 1:
+            raise ValueError(
+                f"Predictive response coordinate {response_dim!r} is missing."
+            )
+        return df.loc[:, ["chain", "draw", "__obs__", response_str]]
+
     df_wide = df.pivot_table(
         index=["chain", "draw", "__obs__"], columns=response_dim, values=response_str
     ).reset_index()
 
     df_wide.columns.name = None
-    df_wide = df_wide.rename(columns={0: "rt", 1: "response"})
+    df_wide = df_wide.rename(columns=dict(enumerate(response_names)))
     return df_wide
 
 

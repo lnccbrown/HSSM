@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytensor.tensor as pt
 import pytest
+import xarray as xr
 
 import hssm
 from hssm.distribution_utils import make_distribution, make_hssm_rv
@@ -152,6 +153,7 @@ def test_predictive_shapes_follow_configured_response_width(obs_dim):
     )
     response_name = model.response_str
     response_dim = f"{response_name}_dim"
+    prior_values = prior["prior_predictive"][response_name]
     prior["posterior"] = prior["prior"]
     posterior = model.sample_posterior_predictive(
         prior,
@@ -164,11 +166,13 @@ def test_predictive_shapes_follow_configured_response_width(obs_dim):
 
     if obs_dim == 1:
         assert not hasattr(model.family, "create_extra_pps_coord")
+        assert prior_values.dims == ("chain", "draw", "__obs__")
         assert posterior_values.dims == ("chain", "draw", "__obs__")
     else:
         np.testing.assert_array_equal(
             model.family.create_extra_pps_coord(), np.arange(obs_dim)
         )
+        assert prior_values.dims[-1] == response_dim
         assert posterior_values.dims[-1] == response_dim
         np.testing.assert_array_equal(
             posterior_values.coords[response_dim], np.arange(obs_dim)
@@ -199,3 +203,37 @@ def test_choice_only_string_keeps_scalar_legacy_width():
     )
 
     assert rv.signature == "()->()"
+
+
+@pytest.mark.parametrize("obs_dim", [1, 4])
+def test_sample_do_dataframe_uses_physical_response_order(obs_dim):
+    """Intervention samples expose each configured physical response column."""
+    model = _synthetic_model(obs_dim)
+    predictive = model.sample_do(params={"v": 0.5}, draws=3)
+    frame = hssm.utils.predictive_dt_to_dataframe(
+        predictive,
+        predictive_group="prior_predictive",
+        response_str=model.response_str,
+        response_dim=f"{model.response_str}_dim",
+    )
+
+    assert list(frame.columns) == ["chain", "draw", "__obs__", *model.response]
+    assert len(frame) == 3 * len(model.data)
+
+
+def test_predictive_cleanup_uses_custom_response_name():
+    """Parent cleanup derives names from the physical response declaration."""
+    model = _synthetic_model(4)
+    response_mean = f"{model.response_str}_mean"
+    traces = xr.DataTree.from_dict(
+        {
+            "posterior": xr.Dataset(
+                {response_mean: (("chain", "draw"), np.array([[0.5]]))}
+            )
+        }
+    )
+
+    result = model._clean_predictive_datatree(traces)
+
+    assert model._parent in result["posterior"].data_vars
+    assert response_mean not in result["posterior"].data_vars

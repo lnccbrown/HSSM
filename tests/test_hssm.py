@@ -756,7 +756,7 @@ def test_vi_idata_rejects_attached_approximation(data_ddm):
         _ = model.vi_idata
 
 
-def test_drop_parent_str_requires_datatree(data_ddm):
+def test_clean_predictive_datatree_requires_datatree(data_ddm):
     """Posterior cleanup rejects a missing trace object."""
     model = HSSM(data=data_ddm)
 
@@ -764,10 +764,10 @@ def test_drop_parent_str_requires_datatree(data_ddm):
         ValueError,
         match=r"Please provide a DataTree \(traces\) object\.",
     ):
-        model._drop_parent_str_from_datatree(None)
+        model._clean_predictive_datatree(None)
 
 
-def test_drop_parent_str_renames_response_mean(data_ddm):
+def test_clean_predictive_datatree_renames_response_mean(data_ddm):
     """Posterior cleanup restores the model's response-parameter name."""
     model = HSSM(data=data_ddm)
     traces = xr.DataTree.from_dict(
@@ -783,7 +783,7 @@ def test_drop_parent_str_renames_response_mean(data_ddm):
         }
     )
 
-    result = model._drop_parent_str_from_datatree(traces)
+    result = model._clean_predictive_datatree(traces)
 
     assert result is traces
     assert model._parent in result["posterior"].data_vars
