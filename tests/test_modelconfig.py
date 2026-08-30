@@ -264,3 +264,27 @@ def test_softmax_inv_temperature_3_choices():
         "mu": 0.0,
         "sigma": 1.0,
     }
+
+
+def test_get_ddm_normal_st_config():
+    config = get_default_model_config("ddm_normal_st")
+    assert config["response"] == ["rt", "response"]
+    assert config["choices"] == [-1, 1]
+    assert config["list_params"] == ["v", "a", "z", "t", "st"]
+
+    lk = config["likelihoods"]["approx_differentiable"]
+    assert lk["loglik"] == "ddm_normal_st.onnx"
+    assert lk["backend"] == "jax"
+
+    # the bounds are the LAN's training box, so they are pinned in full: a
+    # silent widening samples the network outside the region it was trained on
+    assert lk["bounds"] == {
+        "v": (-3.0, 3.0),
+        "a": (0.3, 2.5),
+        "z": (0.3, 0.7),
+        "t": (0.25, 2.25),
+        "st": (1e-3, 0.25),
+    }
+
+    assert lk["default_priors"] == {}
+    assert lk["extra_fields"] is None
