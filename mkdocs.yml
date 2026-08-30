@@ -13,9 +13,11 @@ validation:
 # phase-2 consolidation targets, deliberately unlisted until then
 not_in_nav: |
   tutorials/attentional_ddm.py
+  tutorials/centered_vs_noncentered_basic_logic.py
   tutorials/main_tutorial.py
   tutorials/main_tutorial_scenic_route.py
   tutorials/link_functions.py
+  tutorials/parameterization_per_parameter.py
   tutorials/poisson_race.py
   tutorials/random_slope_safe_priors.py
 
@@ -139,9 +141,11 @@ plugins:
   - mkdocs-jupyter:
       ignore:
         - tutorials/attentional_ddm.py
+        - tutorials/centered_vs_noncentered_basic_logic.py
         - tutorials/main_tutorial.py
         - tutorials/main_tutorial_scenic_route.py
         - tutorials/link_functions.py
+        - tutorials/parameterization_per_parameter.py
         - tutorials/poisson_race.py
         - tutorials/random_slope_safe_priors.py
       execute: true
