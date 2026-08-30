@@ -210,8 +210,10 @@ class HSSM(HSSMBase):
         Additional arguments passed to the `bmb.Model` object. Most notably
         ``noncentered``, which controls the centered vs. non-centered
         parameterization of group-specific (hierarchical) terms: ``True``
-        (bambi's default) uses the non-centered parameterization everywhere,
-        ``False`` uses centered. A ``dict`` keyed by HSSM parameter name
+        (bambi's default) requests non-centering and ``False`` requests centered.
+        Safe generated group-only terms that own a population location may be
+        centered term by term, with a warning, when current bambi cannot preserve
+        that location under non-centering. A ``dict`` keyed by HSSM parameter name
         (e.g. ``{"v": False, "a": True}``) sets it per parameter; an unknown
         key raises at construction. A per-prior ``noncentered`` field (inside
         a prior ``dict`` or on an ``hssm.Prior``) overrides the model-level

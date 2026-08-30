@@ -2,7 +2,8 @@
 # requires-python = ">=3.12,<3.15"
 # dependencies = [
 #     "bambi==0.20.0",
-#     "hssm @ git+https://github.com/lnccbrown/HSSM.git@11752a02b2f7150d911b644d74b3912abd0bbea3",
+#     "graphviz==0.21",
+#     "hssm @ git+https://github.com/lnccbrown/HSSM.git@a7f6892d387f4b19f35e5db01f648abbb8535910",
 #     "marimo==0.24.0",
 #     "matplotlib==3.11.1",
 #     "numpy==2.4.6",
@@ -15,8 +16,8 @@
 
 This construction-only marimo tutorial introduces link functions from first
 principles, compares HSSM's identity and ``log_logit`` settings, and verifies
-the link-aware safe-prior behavior corrected in HSSM #1232. No sampling is
-required.
+the link-aware safe-prior and group-location behavior corrected in HSSM #1232
+and #1225. No sampling is required.
 
 Run the pinned standalone environment locally or in Molab::
 
@@ -68,6 +69,7 @@ def _():
     import marimo as mo
     import numpy as np
     import pandas as pd
+    import pymc as pm
     import pytensor.tensor as pt
 
     with redirect_stderr(StringIO()):
@@ -78,7 +80,7 @@ def _():
     logging.getLogger("hssm").setLevel(logging.ERROR)
     hssm.set_floatX("float64")
     pd.set_option("display.max_colwidth", 80)
-    return BytesIO, StringIO, bmb, hssm, mo, np, pd, plt, pt, redirect_stdout
+    return BytesIO, StringIO, bmb, hssm, mo, np, pd, plt, pm, pt, redirect_stdout
 
 
 @app.cell
@@ -99,6 +101,7 @@ def _(bmb, hssm, mo):
     1. What does a link do to a linear predictor?
     2. When should an HSSM parameter use identity, log, or generalized logit?
     3. Why do HSSM's safe intercept priors depend on the effective link?
+    4. Who owns a population location in a hierarchical regression?
     """)
     return
 
@@ -132,7 +135,7 @@ def _(mo):
 
 
 @app.cell
-def _(pd):
+def _(mo, pd):
     parameter_support_table = pd.DataFrame(
         [
             {
@@ -295,6 +298,8 @@ def _(StringIO, hssm, np, pd, redirect_stdout):
             "rt": 0.42 + 0.015 * np.arange(12),
             "response": np.where(np.arange(12) % 2, 1, -1),
             "x": np.linspace(-1.0, 1.0, 12),
+            "participant_id": np.repeat(np.arange(4), 3),
+            "item_id": np.tile(np.arange(3), 4),
         }
     )
     regression_specs = [
@@ -571,8 +576,386 @@ def _(mo):
 
 @app.cell
 def _(mo):
+    mo.md(r"""
+    ## 4. Group effects: who owns the population location?
+
+    Links determine the scale on which a hierarchical effect lives, but first
+    the formula must say **which term owns its population location**.
+
+    A matching common and group expression is a population effect plus a
+    deviation. For example,
+
+    \[
+    \eta_{ij}=(\beta_x+u_j)x_{ij},
+    \qquad u_j\sim\mathcal N(0,\sigma_x).
+    \]
+
+    Here `x` owns the population effect and `x|participant_id` must have mean
+    zero. It can use Bambi's non-centered `sigma * offset` form because zero is
+    the intended location.
+
+    If the common `x` is absent, one group term can instead own the location:
+
+    \[
+    \eta_{ij}=b_jx_{ij},
+    \qquad b_j\sim\mathcal N(\mu_x,\sigma_x).
+    \]
+
+    Replacing this `mu` by zero changes the scientific model—it removes the
+    population-level slope. HSSM therefore keeps the generated location-bearing
+    hierarchy and centers that term. This term-level fallback is necessary
+    because current Bambi non-centering does not retain a nonzero or estimated
+    group `mu` ([Bambi #1003](https://github.com/bambinos/bambi/issues/1003)).
+
+    Finally, if the same unmatched expression appears under two grouping
+    factors, neither has a unique claim to the location. In
+
+    \[
+    \eta_i=x_i\left(b^{(s)}_{s[i]}+b^{(r)}_{r[i]}\right),
+    \]
+
+    adding a constant to every subject effect and subtracting it from every
+    item effect leaves `eta` unchanged. Safe generation rejects this ambiguity
+    rather than choosing an order-dependent owner.
+    """)
+    return
+
+
+@app.cell
+def _(mo, pd):
+    group_ownership_table = pd.DataFrame(
+        [
+            {
+                "formula pattern": "x + (0 + x | participant_id)",
+                "population owner": "common x",
+                "generated group location": "fixed at 0 (deviation)",
+                "safe behavior": "honor requested centered/non-centered form",
+            },
+            {
+                "formula pattern": "(0 + x | participant_id)",
+                "population owner": "the one group distribution",
+                "generated group location": "estimated",
+                "safe behavior": "preserve it and center this term",
+            },
+            {
+                "formula pattern": "(0 + x | subject) + (0 + x | item)",
+                "population owner": "ambiguous",
+                "generated group location": "two competing locations",
+                "safe behavior": "reject and request an explicit owner",
+            },
+        ]
+    )
+    mo.Html(group_ownership_table.to_html(index=False, border=0))
+    return (group_ownership_table,)
+
+
+@app.cell
+def _(build_silent_model, hssm, model_kwargs):
+    _group_base_kwargs = {
+        _key: _value for _key, _value in model_kwargs.items() if _key != "include"
+    }
+    _group_cases = {
+        "identity HDDM location": {
+            "parameter": "a",
+            "formula": "a ~ 0 + (1 | participant_id)",
+            "link": "identity",
+            "fixed": {"v": 0.0, "z": 0.5, "t": 0.2},
+        },
+        "log-scale location": {
+            "parameter": "a",
+            "formula": "a ~ 0 + (1 | participant_id)",
+            "link": "log",
+            "fixed": {"v": 0.0, "z": 0.5, "t": 0.2},
+        },
+        "generalized-logit location": {
+            "parameter": "z",
+            "formula": "z ~ 0 + (1 | participant_id)",
+            "link": hssm.Link("gen_logit", bounds=(0.0, 1.0)),
+            "fixed": {"v": 0.0, "a": 1.5, "t": 0.2},
+        },
+        "matched non-centered deviation": {
+            "parameter": "v",
+            "formula": "v ~ 1 + x + (0 + x | participant_id)",
+            "link": "identity",
+            "fixed": {"a": 1.5, "z": 0.5, "t": 0.2},
+        },
+    }
+    group_location_models = {}
+    for _label, _case in _group_cases.items():
+        _spec = {
+            "name": _case["parameter"],
+            "formula": _case["formula"],
+            "link": _case["link"],
+        }
+        group_location_models[_label] = build_silent_model(
+            **_group_base_kwargs,
+            include=[_spec],
+            noncentered=True,
+            **_case["fixed"],
+        )
+
+    try:
+        build_silent_model(
+            **_group_base_kwargs,
+            include=[
+                {
+                    "name": "v",
+                    "formula": ("v ~ 1 + (0 + x | participant_id) + (0 + x | item_id)"),
+                    "link": "identity",
+                }
+            ],
+            noncentered=True,
+            a=1.5,
+            z=0.5,
+            t=0.2,
+        )
+    except ValueError as _error:
+        ambiguous_owner_error = str(_error)
+    else:
+        raise AssertionError("Ambiguous safe group locations were not rejected")
+
+    assert "Multiple unmatched group-specific terms" in ambiguous_owner_error
+    assert "x|participant_id" in ambiguous_owner_error
+    assert "x|item_id" in ambiguous_owner_error
+    return ambiguous_owner_error, group_location_models
+
+
+@app.cell
+def _(bmb, format_prior, group_location_models, link_name, mo, np, pd):
+    _group_rows = []
+    _group_specs = [
+        (
+            "identity HDDM location",
+            "a",
+            "1|participant_id",
+            "response scale",
+        ),
+        ("log-scale location", "a", "1|participant_id", "log-predictor scale"),
+        (
+            "generalized-logit location",
+            "z",
+            "1|participant_id",
+            "generalized-log-odds scale",
+        ),
+        (
+            "matched non-centered deviation",
+            "v",
+            "x|participant_id",
+            "identity predictor scale",
+        ),
+    ]
+    for _label, _parameter, _term, _scale in _group_specs:
+        _model = group_location_models[_label]
+        _prior = _model.params[_parameter].prior[_term]
+        _mu = _prior.args.get("mu")
+        _mu_is_free = isinstance(_mu, bmb.Prior)
+        _prefix = f"{_parameter}_{_term}"
+        _free_vars = {_variable.name for _variable in _model.pymc_model.free_RVs}
+        _group_rows.append(
+            {
+                "case": _label,
+                "effective link": link_name(_model.params[_parameter].link),
+                "group term": _term,
+                "outer family": _prior.name,
+                "location": format_prior(_mu) if _mu_is_free else repr(_mu),
+                "location scale": _scale,
+                "effective form": (
+                    "centered location owner"
+                    if _prior.noncentered is False
+                    else "non-centered zero-mean deviation"
+                ),
+                "direct group RV": _prefix in _free_vars,
+                "offset RV": f"{_prefix}_offset" in _free_vars,
+            }
+        )
+
+    group_location_prior_table = pd.DataFrame(_group_rows)
+    _identity_prior = (
+        group_location_models["identity HDDM location"]
+        .params["a"]
+        .prior["1|participant_id"]
+    )
+    _log_prior = (
+        group_location_models["log-scale location"]
+        .params["a"]
+        .prior["1|participant_id"]
+    )
+    _gen_logit_prior = (
+        group_location_models["generalized-logit location"]
+        .params["z"]
+        .prior["1|participant_id"]
+    )
+    _matched_prior = (
+        group_location_models["matched non-centered deviation"]
+        .params["v"]
+        .prior["x|participant_id"]
+    )
+
+    assert _identity_prior.name == "Gamma"
+    assert _log_prior.name == "Normal"
+    assert _gen_logit_prior.name == "Normal"
+    assert _identity_prior.noncentered is False
+    assert _log_prior.noncentered is False
+    assert _gen_logit_prior.noncentered is False
+    assert not isinstance(_matched_prior.args["mu"], bmb.Prior)
+    assert np.all(np.asarray(_matched_prior.args["mu"]) == 0.0)
+    assert group_location_prior_table.iloc[:3]["direct group RV"].all()
+    assert not group_location_prior_table.iloc[:3]["offset RV"].any()
+    assert not group_location_prior_table.iloc[3]["direct group RV"]
+    assert group_location_prior_table.iloc[3]["offset RV"]
+    mo.Html(group_location_prior_table.to_html(index=False, border=0))
+    return (group_location_prior_table,)
+
+
+@app.cell
+def _(mo):
     mo.md("""
-    ## 4. Built-in links versus custom links
+    The first three rows all have one unmatched group intercept and therefore
+    one population-location owner. HSSM sets only those generated priors to
+    `noncentered=False`, retaining a direct group random variable and its
+    location hyperprior.
+
+    Their links change what that location means:
+
+    - under **identity**, the `a` hierarchy is the HDDM-derived response-scale
+      `Gamma` hierarchy;
+    - under **log**, `exp(mu)` is a reference median on the positive parameter
+      scale, not the mean after integrating over group variation; and
+    - under **generalized logit**, the inverse-linked `mu` is a bounded reference
+      value, again not generally an expectation.
+
+    The fourth row is different: common `x` owns the population slope, so the
+    group term is a zero-mean deviation and can stay non-centered. Under a log
+    link such a zero deviation would be a neutral multiplicative factor
+    `exp(0)=1`; under generalized logit it would leave the common predictor
+    unchanged. Zero never means that the final HSSM parameter is forced to zero.
+
+    These ownership rules are identical for every link because all locations
+    combine on `eta` before the inverse link. The inverse link also cannot repair
+    two competing owners: it receives the same unchanged sum.
+    """)
+    return
+
+
+@app.cell
+def _(ambiguous_owner_error, mo, pd):
+    ambiguous_owner_table = pd.DataFrame(
+        [
+            {
+                "attempted formula": (
+                    "v ~ 1 + (0 + x | participant_id) + (0 + x | item_id)"
+                ),
+                "result": "rejected before Bambi model construction",
+                "reason": "two unmatched x terms compete for one population location",
+                "recommended repair": (
+                    "add common x and use zero-mean group deviations, or explicitly "
+                    "choose exactly one location owner"
+                ),
+            }
+        ]
+    )
+    assert "Add the exact common formula term" in ambiguous_owner_error
+    mo.Html(ambiguous_owner_table.to_html(index=False, border=0))
+    return (ambiguous_owner_table,)
+
+
+@app.cell
+def _(group_location_models, pm):
+    def make_group_location_graph(case):
+        """Render one construction-only PyMC graph for the selected case."""
+        return pm.model_to_graphviz(
+            group_location_models[case].pymc_model,
+            graph_attr={"bgcolor": "white", "rankdir": "LR"},
+        )
+
+    return (make_group_location_graph,)
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ### Identity-linked HDDM group location
+
+    The direct `a_1|participant_id` node receives its population location and
+    scale from the Gamma hierarchy. No offset node replaces that location.
+    HSSM's likelihood bounds still apply, but finite coefficient bounds are not
+    yet propagated to generic identity-linked group priors; that separate design
+    is tracked in [#1269](https://github.com/lnccbrown/HSSM/issues/1269).
+    """)
+    return
+
+
+@app.cell
+def _(make_group_location_graph):
+    identity_group_location_graph = make_group_location_graph("identity HDDM location")
+    identity_group_location_graph
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ### Log-linked group location
+
+    This has the same ownership structure, but the Normal hierarchy now lives
+    on the unconstrained log-predictor scale. The inverse link applies `exp` only
+    after the participant-specific predictor is assembled.
+    """)
+    return
+
+
+@app.cell
+def _(make_group_location_graph):
+    log_group_location_graph = make_group_location_graph("log-scale location")
+    log_group_location_graph
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ### Generalized-logit group location
+
+    The group hierarchy is again Normal on an unconstrained predictor. HSSM's
+    bounded inverse link maps the assembled predictor into `(0, 1)`.
+    """)
+    return
+
+
+@app.cell
+def _(make_group_location_graph):
+    gen_logit_group_location_graph = make_group_location_graph(
+        "generalized-logit location"
+    )
+    gen_logit_group_location_graph
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ### Matched non-centered deviation
+
+    Common `v_x` owns the population slope. The participant deviation has a
+    scale and offset but no free group mean, which is the faithful non-centered
+    representation for this matched case.
+    """)
+    return
+
+
+@app.cell
+def _(make_group_location_graph):
+    matched_group_deviation_graph = make_group_location_graph(
+        "matched non-centered deviation"
+    )
+    matched_group_deviation_graph
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ## 5. Built-in links versus custom links
 
     For built-in names such as `"identity"`, `"log"`, and `"logit"`, Bambi
     already knows all required numerical and symbolic functions. A custom link
@@ -684,7 +1067,7 @@ def _(pd):
 @app.cell
 def _(mo):
     mo.md("""
-    ## 5. A practical workflow
+    ## 6. A practical workflow
 
     1. **Start from support.** Ask whether the parameter is unbounded, positive,
        or bounded on both sides.
@@ -725,6 +1108,12 @@ def _(mo):
     spelling of identity alike, uses response-scale safe intercept priors for
     identity, and uses coefficient-scale priors for transformed links.
 
+    A hierarchical formula adds a separate ownership decision. A matching common
+    effect owns the population location and its group terms are zero-mean
+    deviations. One unmatched group term may own the location, so its generated
+    hierarchy is retained and centered. Several unmatched terms for the same
+    expression are ambiguous and require an explicit model decision.
+
     Continue with:
 
     - the [`hssm.Link` API](https://lnccbrown.github.io/HSSM/api/link/) for supported and custom links;
@@ -732,9 +1121,14 @@ def _(mo):
       explicit prior control;
     - [Set initial values](https://lnccbrown.github.io/HSSM/tutorials/initial_values/) for links and initialization;
     - [Random-slope prior diagnostics](https://lnccbrown.github.io/HSSM/tutorials/random_slope_safe_priors/) for
-      common and group-specific regression terms; and
-    - [#1225](https://github.com/lnccbrown/HSSM/issues/1225) for the intentionally
-      separate policy question around unmatched group-only terms.
+      matching common and group-specific regression terms;
+    - [#1225](https://github.com/lnccbrown/HSSM/issues/1225) for the implemented
+      group-only location-ownership contract;
+    - [#1268](https://github.com/lnccbrown/HSSM/issues/1268) and
+      [Bambi #1003](https://github.com/bambinos/bambi/issues/1003) for eventual
+      upstream location-aware non-centering; and
+    - [#1269](https://github.com/lnccbrown/HSSM/issues/1269) for the separate
+      bound-aware identity group-prior design.
     """)
     return
 
