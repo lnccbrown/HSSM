@@ -1,11 +1,10 @@
 """Validation hooks for centered vs. non-centered group-specific priors.
 
-Two checks are exposed:
+Three validation layers are exposed:
 
-* ``check_user_priors_against_parameterization`` looks at the user's prior dict
-  for each :class:`RegressionParam` and flags group-specific ``Normal`` priors
-  whose ``mu`` bambi cannot honor under the effective non-centered
-  parameterization.
+* ``check_user_group_prior_compatibility`` looks at the user's prior dict for
+  each :class:`RegressionParam` and rejects group-specific priors that bambi
+  cannot build or cannot honor under the effective parameterization.
 
 * ``check_user_priors_for_location_overparameterization`` flags a free group
   mean only when its Formulae expression has an exact common-effect counterpart
@@ -15,9 +14,9 @@ Two checks are exposed:
   and reports any free RV that is not an ancestor of an observed RV. This is
   the generic safety net that also catches problems we have not anticipated.
 
-Both checks only produce reports; emission of warnings is left to the caller
-so that messages can be aggregated and addressed consistently with the rest
-of the HSSM logger output.
+The two prior checks only produce reports. The caller aggregates compatibility
+errors into one exception and emits statistical-identifiability warnings via
+the HSSM logger.
 """
 
 from __future__ import annotations
@@ -74,19 +73,22 @@ class PriorMismatch:
 def _is_zero(value: Any) -> bool:
     """Whether a fixed scalar or array is entirely zero."""
     try:
-        return bool(np.all(np.asarray(value) == 0.0))
+        array = np.asarray(value)
+        return bool(array.size > 0 and np.all(array == 0.0))
     except (TypeError, ValueError):
         return False
 
 
-def _iter_user_group_priors(
+def _iter_user_group_prior_specs(
     param: Any,
-) -> Iterator[tuple[str, str, bool, bmb.Prior]]:
-    """Yield structurally identified, user-supplied group priors.
+) -> Iterator[tuple[str, str, bool, Any]]:
+    """Yield structurally identified user group-prior specifications.
 
     Formulae owns term parsing. ``RegressionParam`` caches the full group key
-    to expression-name mapping while preparing its design matrices, so warning
-    code never has to infer structure from display names such as ``x|id``.
+    to expression-name mapping while preparing its design matrices, so
+    validation never has to infer structure from display names such as
+    ``x|id``. Exact keys take precedence over the ``group_specific`` wildcard,
+    matching bambi's prior resolution.
     """
     prior_dict = getattr(param, "prior", None)
     if not isinstance(prior_dict, dict):
@@ -102,59 +104,139 @@ def _iter_user_group_priors(
             prior = prior_dict.get("group_specific")
         else:
             continue
-        if not isinstance(prior, bmb.Prior):
-            continue
         yield term_name, expression_name, term_name in groups_with_common, prior
 
 
-def _parameterization_suggestion(
+def _iter_user_group_priors(
+    param: Any,
+) -> Iterator[tuple[str, str, bool, bmb.Prior]]:
+    """Yield user-supplied group specifications that are bambi priors."""
+    for term_name, expression_name, has_common, prior in _iter_user_group_prior_specs(
+        param
+    ):
+        if isinstance(prior, bmb.Prior):
+            yield term_name, expression_name, has_common, prior
+
+
+def _noncentered_compatibility_suggestion(
     param_name: str,
     expression_name: str,
     has_common: bool,
-    free_mu: bool,
 ) -> str:
-    """Build a term-aware correction for a non-centered mismatch."""
+    """Build a complete term-aware correction for an NC incompatibility."""
+    formula_expression = "1" if expression_name == "Intercept" else expression_name
+    faithful_prior = (
+        "a plain built-in Normal with hierarchical `sigma`, absent or "
+        "fixed-all-zero `mu`, and no additional arguments"
+    )
+    centered_remedy = (
+        "set `noncentered=False` on this prior and on any nested hierarchical "
+        "hyperpriors (or remove their overrides and make the effective "
+        f"component setting for '{param_name}' centered)"
+    )
     if has_common:
-        suggestion = (
-            f"Keep the common '{expression_name}' effect and set `mu=0` on "
-            "the matching group term"
-        )
-        if free_mu:
-            return (
-                f"{suggestion}. If a free group mean is intended instead, "
-                f"remove the common '{expression_name}' effect and pass "
-                f"`noncentered=False` for '{param_name}'."
-            )
         return (
-            f"{suggestion}, or pass `noncentered=False` if the fixed group "
-            "location is intentional."
+            f"Keep the common formula term '{formula_expression}' and use "
+            f"{faithful_prior} for its zero-mean group deviation. To retain the "
+            f"explicit prior instead, {centered_remedy}; remove the common "
+            "effect as well if a free group mean should own the population "
+            "location."
         )
     return (
-        f"Either add the common '{expression_name}' effect and set `mu=0` "
-        "on the group term, or pass `noncentered=False` so the group "
-        "location is used."
+        f"Either add the exact common formula term '{formula_expression}' and "
+        f"use {faithful_prior} for the resulting zero-mean group deviation, or "
+        f"{centered_remedy} to retain the group location and explicit prior "
+        "family."
     )
 
 
-def check_user_priors_against_parameterization(
+def _prior_tree_noncentered_issues(
+    prior: bmb.Prior,
+    noncentered: NoncenteredSetting,
+    param_name: str,
+    path: str = "outer prior",
+) -> list[str]:
+    """Mirror bambi's recursive non-centering contract for a prior tree."""
+    if getattr(prior, "is_truncated", False):
+        return [
+            f"{path} is an HSSM truncated Prior, whose hidden arguments and "
+            "custom distribution cannot be built recursively as a bambi "
+            "group-prior node"
+        ]
+
+    issues: list[str] = []
+    args = prior.args
+    hyperprior_args = {
+        name for name, value in args.items() if isinstance(value, bmb.Prior)
+    }
+    for name in sorted(hyperprior_args):
+        issues.extend(
+            _prior_tree_noncentered_issues(
+                args[name],
+                noncentered,
+                param_name,
+                path=f"{path}.{name}",
+            )
+        )
+
+    effective_nc = _resolve_noncentered(
+        noncentered,
+        component_name=param_name,
+        prior_noncentered=getattr(prior, "noncentered", None),
+    )
+    if not effective_nc or not hyperprior_args:
+        return issues
+
+    if prior.name != "Normal" or prior.dist is not None:
+        family = "a custom distribution" if prior.dist is not None else repr(prior.name)
+        issues.append(
+            f"{path} uses {family}, while bambi can non-center only a built-in "
+            "untruncated Normal node with hierarchical `sigma`"
+        )
+        return issues
+
+    extra_args = sorted(set(args) - {"mu", "sigma"})
+    sigma = args.get("sigma")
+    mu_is_present = "mu" in args
+    mu = args.get("mu")
+    if extra_args:
+        issues.append(
+            f"{path} includes argument(s) {extra_args!r}, which bambi discards "
+            "when it constructs `offset * sigma`"
+        )
+    if not isinstance(sigma, bmb.Prior):
+        issues.append(
+            f"{path} has stochastic argument(s) {sorted(hyperprior_args)!r} "
+            "but no hierarchical `sigma`, so bambi cannot non-center it"
+        )
+    if isinstance(mu, bmb.Prior):
+        issues.append(
+            f"{path} supplies a `mu` hyperprior that bambi creates and then "
+            "omits from `offset * sigma`, leaving a disconnected node"
+        )
+    elif mu_is_present and not _is_zero(mu):
+        issues.append(
+            f"{path} supplies a `mu` that is not fixed entirely to zero and "
+            "would be silently ignored in `offset * sigma`"
+        )
+    return issues
+
+
+def check_user_group_prior_compatibility(
     params: Params,
     noncentered: NoncenteredSetting,
 ) -> list[PriorMismatch]:
-    """Detect user priors that conflict with non-centered bambi.
+    """Detect explicit group priors bambi cannot represent faithfully.
 
-    Iterates over each :class:`RegressionParam` and inspects structurally
-    identified, user-supplied group-specific Normal priors. When the effective
-    ``noncentered`` is ``True`` for that component, the outcome depends on
-    ``mu`` and ``sigma``:
+    A group-specific bambi prior needs at least one top-level hyperprior under
+    either parameterization. Under effective non-centering, bambi's current
+    shortcut faithfully represents only an untruncated built-in ``Normal``
+    with hierarchical ``sigma``, absent or fixed-all-zero ``mu``, and no other
+    distribution arguments. Anything else either fails during bambi model
+    construction or is silently discarded by ``offset * sigma``.
 
-    * With hierarchical ``sigma`` and free ``mu``, bambi creates ``mu`` as an
-      orphan and reparameterizes the term as ``offset * sigma``.
-    * With hierarchical ``sigma`` and fixed non-zero ``mu``, bambi silently
-      ignores the fixed location (including vector-valued locations).
-    * With fixed ``sigma`` and free ``mu``, bambi raises
-      :class:`NotImplementedError` during model construction.
-
-    Each is flagged with a message tailored to the actual outcome.
+    Explicit specifications are never rewritten. This checker reports every
+    incompatible term so the caller can raise one aggregated pre-build error.
 
     Parameters
     ----------
@@ -168,72 +250,104 @@ def check_user_priors_against_parameterization(
     Returns
     -------
     list[PriorMismatch]
-        One entry per (parameter, group-specific term) flagged. Empty if
-        nothing was flagged.
+        One entry per incompatible (parameter, group-specific term). Empty if
+        all explicit group priors are representable.
     """
     mismatches: list[PriorMismatch] = []
     for param_name, param in params.items():
-        for term_name, expression_name, has_common, prior in _iter_user_group_priors(
-            param
-        ):
-            if prior.name != "Normal":
-                continue
-            effective_nc = _resolve_noncentered(
-                noncentered,
-                component_name=param_name,
-                prior_noncentered=getattr(prior, "noncentered", None),
-            )
-            if not effective_nc:
+        for (
+            term_name,
+            expression_name,
+            has_common,
+            prior,
+        ) in _iter_user_group_prior_specs(param):
+            # ``None`` deliberately delegates this term to bambi's defaults.
+            if prior is None:
                 continue
 
-            mu = prior.args.get("mu")
-            sigma = prior.args.get("sigma")
-            free_mu = isinstance(mu, bmb.Prior)
-            hierarchical_sigma = isinstance(sigma, bmb.Prior)
+            if not isinstance(prior, bmb.Prior):
+                mismatches.append(
+                    PriorMismatch(
+                        parameter=param_name,
+                        term=term_name,
+                        reason=(
+                            f"User specification for group term '{term_name}' on "
+                            f"parameter '{param_name}' is not a bambi Prior. bambi "
+                            "requires regression group-term priors to be "
+                            "`bmb.Prior` objects; numeric values do not fix a "
+                            "group coefficient."
+                        ),
+                        suggestion=(
+                            "Supply a hierarchical `bmb.Prior` for this group "
+                            "term, or remove the explicit key to use a default."
+                        ),
+                    )
+                )
+                continue
 
-            if free_mu and hierarchical_sigma:
-                reason = (
-                    f"User prior for '{term_name}' on parameter "
-                    f"'{param_name}' supplies a hyperprior on `mu`, but the "
-                    "effective parameterization is non-centered. bambi will "
-                    "reparameterize this term as `offset * sigma` and drop "
-                    "the `mu` hyperprior, leaving it as a disconnected node "
-                    "in the PyMC graph."
+            # HSSM's truncated Prior stores its original arguments in ``_args``
+            # and exposes an empty ``args`` mapping to bambi. Consequently bambi
+            # cannot see the required top-level hyperprior for a group term.
+            if getattr(prior, "is_truncated", False):
+                mismatches.append(
+                    PriorMismatch(
+                        parameter=param_name,
+                        term=term_name,
+                        reason=(
+                            f"User prior for group term '{term_name}' on parameter "
+                            f"'{param_name}' is truncated. HSSM's truncated prior "
+                            "wrapper hides its distribution arguments from bambi, "
+                            "so bambi cannot construct it as a hierarchical "
+                            "group-specific prior."
+                        ),
+                        suggestion=(
+                            "Use an untruncated hierarchical group prior and enforce "
+                            "parameter support with an appropriate link function."
+                        ),
+                    )
                 )
-            elif free_mu:
+                continue
+
+            args = prior.args
+            hyperprior_args = {
+                name for name, value in args.items() if isinstance(value, bmb.Prior)
+            }
+            if not hyperprior_args:
                 reason = (
-                    f"User prior for '{term_name}' on parameter "
-                    f"'{param_name}' supplies a hyperprior on `mu` with a "
-                    "fixed `sigma`, but the effective "
-                    "parameterization is non-centered. bambi's non-centered "
-                    "reparameterization only supports a Normal whose `sigma` "
-                    "is itself a hyperprior, so this term cannot be built "
-                    "under non-centered: bambi raises NotImplementedError at "
-                    "model build time."
+                    f"User prior for group term '{term_name}' on parameter "
+                    f"'{param_name}' has no top-level hyperprior. bambi requires "
+                    "at least one distribution argument of every group-specific "
+                    "prior to be another `bmb.Prior`."
                 )
-            elif hierarchical_sigma and mu is not None and not _is_zero(mu):
-                reason = (
-                    f"User prior for '{term_name}' on parameter "
-                    f"'{param_name}' supplies a fixed non-zero `mu`, but the "
-                    "effective parameterization is non-centered. bambi will "
-                    "reparameterize this term as `offset * sigma` and ignore "
-                    "the specified `mu`, so the requested group location is "
-                    "not represented in the PyMC graph."
+                suggestion = (
+                    "Make at least one group-prior argument hierarchical (usually "
+                    "`sigma=bmb.Prior(...)`), or remove the explicit key to use a "
+                    "default."
                 )
             else:
-                continue
+                issues = _prior_tree_noncentered_issues(
+                    prior,
+                    noncentered,
+                    param_name,
+                )
+                if not issues:
+                    continue
+                reason = (
+                    f"User prior for group term '{term_name}' on parameter "
+                    f"'{param_name}' is incompatible with the effective "
+                    f"parameterization: {'; '.join(issues)}. Continuing would "
+                    "either fail in bambi or change the requested prior."
+                )
+                suggestion = _noncentered_compatibility_suggestion(
+                    param_name, expression_name, has_common
+                )
 
             mismatches.append(
                 PriorMismatch(
                     parameter=param_name,
                     term=term_name,
                     reason=reason,
-                    suggestion=_parameterization_suggestion(
-                        param_name,
-                        expression_name,
-                        has_common,
-                        free_mu,
-                    ),
+                    suggestion=suggestion,
                 )
             )
     return mismatches
@@ -254,7 +368,7 @@ def check_user_priors_for_location_overparameterization(
     This check is intentionally silent for fixed ``mu`` values, unmatched
     group-only expressions, and effective non-centering. Non-centered problems
     are reported separately by
-    :func:`check_user_priors_against_parameterization`.
+    :func:`check_user_group_prior_compatibility`.
     """
     mismatches: list[PriorMismatch] = []
     for param_name, param in params.items():
@@ -325,6 +439,20 @@ def emit_parameterization_warnings(mismatches: list[PriorMismatch]) -> None:
     """Log one warning per :class:`PriorMismatch` via the ``hssm`` logger."""
     for m in mismatches:
         _logger.warning("%s %s", m.reason, m.suggestion)
+
+
+def raise_prior_compatibility_errors(mismatches: list[PriorMismatch]) -> None:
+    """Raise one pre-build error containing all incompatible explicit priors."""
+    if not mismatches:
+        return
+    details = "\n".join(
+        f"- {m.reason} {m.suggestion}"
+        for m in sorted(mismatches, key=lambda item: (item.parameter, item.term))
+    )
+    raise ValueError(
+        "Explicit group-specific prior specification(s) cannot be represented "
+        f"faithfully by bambi:\n{details}"
+    )
 
 
 def emit_disconnected_node_warnings(disconnected: list[str]) -> None:
