@@ -1,0 +1,201 @@
+"""Tests for response-order-derived observation dimensions."""
+
+from collections.abc import Callable
+
+import numpy as np
+import pandas as pd
+import pytensor.tensor as pt
+import pytest
+
+import hssm
+from hssm.distribution_utils import make_distribution, make_hssm_rv
+
+
+def _synthetic_simulator(obs_dim: int, *, scalar_output: bool = False) -> Callable:
+    """Return a deterministic-contract simulator with seeded random values."""
+
+    def simulator(theta, random_state, n_replicas, **kwargs):
+        del kwargs
+        theta_array = np.asarray(theta)
+        n_rows = (
+            n_replicas if theta_array.ndim == 1 else theta_array.shape[0] * n_replicas
+        )
+        values = np.random.default_rng(random_state).normal(size=(n_rows, obs_dim))
+        return values[:, 0] if scalar_output else values
+
+    simulator.model_name = f"synthetic_{obs_dim}d"  # type: ignore[attr-defined]
+    simulator.choices = ()  # type: ignore[attr-defined]
+    simulator.obs_dim = obs_dim  # type: ignore[attr-defined]
+    return simulator
+
+
+def _synthetic_logp(data, v):
+    """Return one finite log-likelihood value per observation."""
+    if data.ndim == 1:
+        return -pt.square(data - v)
+    return -pt.sum(pt.square(data - pt.shape_padright(v)), axis=-1)
+
+
+def _synthetic_model(
+    configured_obs_dim: int,
+    *,
+    simulator_obs_dim: int | None = None,
+) -> hssm.HSSM:
+    """Build a small custom model with scalar physical response columns."""
+    simulator_obs_dim = simulator_obs_dim or configured_obs_dim
+    if configured_obs_dim == 1:
+        response = ("response",)
+        data = pd.DataFrame({"response": [0, 1, 0, 1, 0]})
+        response_domains = {"response": {"kind": "categorical", "values": (0, 1)}}
+    else:
+        response = ("rt",) + tuple(
+            f"response_{index}" for index in range(1, configured_obs_dim)
+        )
+        data = pd.DataFrame(
+            {
+                "rt": np.linspace(0.3, 0.7, 5),
+                **{column: np.linspace(-0.5, 0.5, 5) for column in response[1:]},
+            }
+        )
+        response_domains = {
+            column: {"kind": "continuous", "bounds": (-1.0, 1.0)}
+            for column in response[1:]
+        }
+
+    return hssm.HSSM(
+        data=data,
+        model="custom",
+        model_config=hssm.ModelConfig(
+            response=response,
+            response_domains=response_domains,  # type: ignore[arg-type]
+            list_params=["v"],
+            default_priors={"v": {"name": "Normal", "mu": 0.0, "sigma": 1.0}},
+            rv=_synthetic_simulator(
+                simulator_obs_dim,
+                scalar_output=configured_obs_dim == 1,
+            ),  # type: ignore[arg-type]
+        ),
+        loglik=_synthetic_logp,
+        loglik_kind="analytical",
+        p_outlier=None,
+        process_initvals=False,
+    )
+
+
+@pytest.mark.parametrize("obs_dim", [1, 2, 3, 4])
+def test_generated_rv_preserves_width_and_seed_stream(obs_dim):
+    """Generated RVs retain arbitrary widths and deterministic stream order."""
+    is_choice_only = obs_dim == 1
+    simulator = _synthetic_simulator(obs_dim, scalar_output=is_choice_only)
+    rv = make_hssm_rv(
+        simulator,
+        ["v"],
+        is_choice_only=is_choice_only,
+        expected_obs_dim=obs_dim,
+    )
+    legacy_rv = make_hssm_rv(
+        simulator,
+        ["v"],
+        is_choice_only=is_choice_only,
+    )
+    rng_a = np.random.default_rng(42)
+    rng_b = np.random.default_rng(42)
+    legacy_rng = np.random.default_rng(42)
+
+    first_a = rv.rng_fn(rng_a, 0.5, size=5)
+    second_a = rv.rng_fn(rng_a, 0.5, size=5)
+    first_b = rv.rng_fn(rng_b, 0.5, size=5)
+    second_b = rv.rng_fn(rng_b, 0.5, size=5)
+    legacy_first = legacy_rv.rng_fn(legacy_rng, 0.5, size=5)
+    legacy_second = legacy_rv.rng_fn(legacy_rng, 0.5, size=5)
+
+    expected_shape = (5,) if is_choice_only else (5, obs_dim)
+    assert first_a.shape == expected_shape
+    assert second_a.shape == expected_shape
+    np.testing.assert_array_equal(first_a, first_b)
+    np.testing.assert_array_equal(second_a, second_b)
+    np.testing.assert_array_equal(first_a, legacy_first)
+    np.testing.assert_array_equal(second_a, legacy_second)
+    assert not np.array_equal(first_a, second_a)
+
+
+def test_distribution_rejects_callable_width_mismatch():
+    """Configured response width must agree with generated-RV metadata."""
+    with pytest.raises(
+        ValueError,
+        match="simulator observation width 3.*configured response width 4",
+    ):
+        make_distribution(
+            rv=_synthetic_simulator(3),
+            loglik=_synthetic_logp,
+            list_params=["v"],
+            expected_obs_dim=4,
+        )
+
+
+def test_model_rejects_callable_width_mismatch_before_building_distribution():
+    """A custom model fails clearly when its simulator width is inconsistent."""
+    with pytest.raises(
+        ValueError,
+        match="simulator observation width 2.*configured response width 3",
+    ):
+        _synthetic_model(3, simulator_obs_dim=2)
+
+
+@pytest.mark.parametrize("obs_dim", [1, 2, 3, 4])
+def test_predictive_shapes_follow_configured_response_width(obs_dim):
+    """Prior and posterior predictions follow the physical response width."""
+    model = _synthetic_model(obs_dim)
+    prior = model.sample_prior_predictive(
+        draws=3,
+        random_seed=np.random.default_rng(41),
+    )
+    response_name = model.response_str
+    response_dim = f"{response_name}_dim"
+    prior["posterior"] = prior["prior"]
+    posterior = model.sample_posterior_predictive(
+        prior,
+        draws=2,
+        safe_mode=False,
+        inplace=False,
+    )
+    assert posterior is not None
+    posterior_values = posterior["posterior_predictive"][response_name]
+
+    if obs_dim == 1:
+        assert not hasattr(model.family, "create_extra_pps_coord")
+        assert posterior_values.dims == ("chain", "draw", "__obs__")
+    else:
+        np.testing.assert_array_equal(
+            model.family.create_extra_pps_coord(), np.arange(obs_dim)
+        )
+        assert posterior_values.dims[-1] == response_dim
+        np.testing.assert_array_equal(
+            posterior_values.coords[response_dim], np.arange(obs_dim)
+        )
+
+
+def test_choice_only_callable_width_mismatch_is_not_masked():
+    """Scalar support does not hide malformed callable width metadata."""
+    with pytest.raises(
+        ValueError,
+        match="simulator observation width 2.*configured response width 1",
+    ):
+        make_hssm_rv(
+            _synthetic_simulator(2, scalar_output=True),
+            ["v"],
+            is_choice_only=True,
+            expected_obs_dim=1,
+        )
+
+
+def test_choice_only_string_keeps_scalar_legacy_width():
+    """Legacy choice-only names retain scalar support despite wrapper metadata."""
+    rv = make_hssm_rv(
+        "choice_only_model",
+        ["beta"],
+        is_choice_only=True,
+        expected_obs_dim=1,
+    )
+
+    assert rv.signature == "()->()"

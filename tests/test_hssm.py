@@ -800,6 +800,7 @@ def test_is_choice_only_and_deadline(data_ddm):
 
     model = HSSM(data=data_ddm, model="ddm", model_config=config_choice_only)
     assert model.model_config.is_choice_only
+    assert model._obs_dim == 1
     assert model.response_c == "response"
     assert model.response_str == "response"
 
@@ -816,3 +817,4 @@ def test_is_choice_only_and_deadline(data_ddm):
     assert len(model_with_deadline.response) == 2
     assert model_with_deadline.response_c == "c(response, deadline)"
     assert model_with_deadline.response_str == "response,deadline"
+    assert model_with_deadline._obs_dim == 1

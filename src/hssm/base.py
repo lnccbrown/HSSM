@@ -311,14 +311,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # region ===== Store the pre-built config =====
         self.model_config: BaseModelConfig = copy(model_config)
         self.model_config.response_domains = deepcopy(model_config.response_domains)
+        configured_response = self.model_config.response
+        assert configured_response is not None
+        self._obs_dim = len(configured_response)
         # endregion
 
         # region ===== Set up shortcuts so old code will work ======
-        self.response: list[str] = (  # type: ignore[assignment]
-            list(self.model_config.response)
-            if self.model_config.response is not None
-            else []
-        )
+        self.response: list[str] = list(configured_response)  # type: ignore[assignment]
         self.list_params = (
             list(self.model_config.list_params)
             if self.model_config.list_params is not None
@@ -391,6 +390,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self.list_params,
             self.link,
             self._parent,
+            obs_dim=self._obs_dim,
         )
 
         # Targeted checks against the user's prior dict:
