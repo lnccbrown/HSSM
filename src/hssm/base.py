@@ -363,11 +363,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # endregion
 
         # Process all parameters
+        model_noncentered = kwargs.get("noncentered", True)
         self.params = Params.from_user_specs(
             model=self,  # type: ignore[arg-type]
             include=[] if include is None else include,
             kwargs=kwargs,
             p_outlier=p_outlier,
+            noncentered=model_noncentered,
         )
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
@@ -405,11 +407,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         #  * priors whose group-specific `mu` is statistically redundant
         #    with an exact matching common effect (location non-identifiability).
         emit_parameterization_warnings(
-            check_user_priors_against_parameterization(
-                self.params, kwargs.get("noncentered", True)
-            )
+            check_user_priors_against_parameterization(self.params, model_noncentered)
             + check_user_priors_for_location_overparameterization(
-                self.params, kwargs.get("noncentered", True)
+                self.params, model_noncentered
             )
         )
 

@@ -536,7 +536,7 @@ class TestPriorParameterizationUnit:
             (True, False, True),
             (None, False, False),
             (None, True, True),
-            (None, None, True),
+            (None, None, False),
             (None, {"v": False}, False),
             (None, {"v": True}, True),
             (None, {"a": False}, True),
