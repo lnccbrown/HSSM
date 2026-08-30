@@ -12,7 +12,12 @@ from formulae import design_matrices
 from formulae.matrices import DesignMatrices
 
 from ..link import Link
-from ..prior import _is_identity_link, get_default_prior, get_hddm_default_prior
+from ..prior import (
+    _has_finite_bounds,
+    _is_identity_link,
+    get_default_prior,
+    get_hddm_default_prior,
+)
 from .param import Param
 from .parameterization import NoncenteredSetting, _resolve_noncentered
 from .user_param import UserParam
@@ -254,6 +259,7 @@ class RegressionParam(Param):
         """
         safe_priors = {}
         generated_unmatched_terms: list[tuple[str, str]] = []
+        bounded_group_locations: list[str] = []
 
         get_prior = get_hddm_default_prior if is_ddm else get_default_prior
         specified_priors = (
@@ -300,34 +306,24 @@ class RegressionParam(Param):
                                 link=self.link,
                             )
                         else:
-                            # treat the term as any other group-specific term
-                            if (
-                                _is_identity_link(self.link)
-                                and self.bounds is not None
-                                and any(np.isfinite(bound) for bound in self.bounds)
-                            ):
-                                _logger.warning(
-                                    "The generated group-only intercept for parameter "
-                                    "%s is on the response/parameter scale under the "
-                                    "identity link, but its coefficient prior does not "
-                                    "apply finite HSSM bounds %s due to a current "
-                                    "Bambi limitation. Likelihood-level parameter "
-                                    "bounds still apply. A support-respecting "
-                                    "transformed link instead uses an unconstrained "
-                                    "predictor scale; bound-aware identity group "
-                                    "priors are "
-                                    "tracked in HSSM #1269.",
-                                    self.name,
-                                    self.bounds,
-                                )
+                            # Generic identity-scale group locations can use a native
+                            # bounded hierarchy. HDDM-derived families retain their
+                            # calibrated response-scale hierarchies.
+                            group_bounds = None if is_ddm else self.bounds
                             prior = get_prior(
                                 "group_intercept",
                                 self.name,
-                                bounds=None,
+                                bounds=group_bounds,
                                 link=self.link,
                             )
                             prior.noncentered = False
                             safe_priors[name] = prior
+                            if (
+                                not is_ddm
+                                and _is_identity_link(self.link)
+                                and _has_finite_bounds(self.bounds)
+                            ):
+                                bounded_group_locations.append(name)
                             generated_unmatched_terms.append(
                                 (name, self._group_term_names[name])
                             )
@@ -348,6 +344,10 @@ class RegressionParam(Param):
                             generated_unmatched_terms.append(
                                 (name, self._group_term_names[name])
                             )
+
+        self._warn_if_bounded_group_location_is_not_complete_predictor(
+            dm, bounded_group_locations
+        )
 
         if generated_unmatched_terms and _resolve_noncentered(noncentered, self.name):
             generated_unmatched_terms.sort(key=lambda item: (item[1], item[0]))
@@ -383,6 +383,41 @@ class RegressionParam(Param):
             self.prior = cast("dict[str, Any]", self.prior)
             safe_priors.update(self.prior)
         self.prior = safe_priors
+
+    def _warn_if_bounded_group_location_is_not_complete_predictor(
+        self,
+        dm: DesignMatrices,
+        bounded_group_locations: list[str],
+    ) -> None:
+        """Warn when a bounded group location is only one additive contribution."""
+        if not bounded_group_locations:
+            return
+
+        common_terms = sorted(dm.common.terms) if dm.common is not None else []
+        other_group_terms = (
+            sorted(
+                name for name in dm.group.terms if name not in bounded_group_locations
+            )
+            if dm.group is not None
+            else []
+        )
+        additional_terms = common_terms + other_group_terms
+        if not additional_terms:
+            return
+
+        _logger.warning(
+            "The generated identity-scale group-location prior(s) %r for parameter "
+            "%r constrain those coefficients to HSSM bounds %s, but the formula "
+            "also contains additive term(s) %r. These coefficient bounds do not "
+            "constrain the complete linear predictor or final parameter value. "
+            "Out-of-bounds final values receive HSSM's finite likelihood-floor "
+            "penalty. Inspect the complete predictor or choose an inverse link whose "
+            "image matches the required parameter support.",
+            sorted(bounded_group_locations),
+            self.name,
+            self.bounds,
+            additional_terms,
+        )
 
     def _validate_generated_group_locations(self) -> None:
         """Reject ambiguous safe defaults for repeated group-only expressions.

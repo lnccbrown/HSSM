@@ -18,6 +18,7 @@ from hssm.param.parameterization_check import (
 )
 from hssm.prior import (
     HDDM_SETTINGS_GROUP,
+    _has_finite_bounds,
     _is_identity_link,
     get_default_prior,
     get_hddm_default_prior,
@@ -150,6 +151,20 @@ class TestPriorUnit:
         """Classify non-identity strings and link objects as transformed."""
         assert not _is_identity_link(link)
 
+    @pytest.mark.parametrize(
+        ("bounds", "expected"),
+        [
+            pytest.param(None, False, id="missing"),
+            pytest.param((-np.inf, np.inf), False, id="unbounded"),
+            pytest.param((0.0, np.inf), True, id="lower-bounded"),
+            pytest.param((-np.inf, 1.0), True, id="upper-bounded"),
+            pytest.param((0.0, 1.0), True, id="finite"),
+        ],
+    )
+    def test_finite_bound_classification(self, bounds, expected):
+        """Recognize one- and two-sided finite response bounds."""
+        assert _has_finite_bounds(bounds) is expected
+
     @pytest.mark.parametrize("link", IDENTITY_LINKS)
     @pytest.mark.parametrize(
         ("bounds", "expected_args"),
@@ -177,6 +192,85 @@ class TestPriorUnit:
         prior = get_default_prior("common_intercept", "x", (-2.0, 3.0), link)
 
         _assert_prior_spec(prior, "Normal", {"mu": 0.0, "sigma": 0.25}, bounds=None)
+
+    @pytest.mark.parametrize("link", IDENTITY_LINKS)
+    @pytest.mark.parametrize(
+        ("bounds", "location"),
+        [
+            pytest.param((-2.0, 3.0), 0.5, id="finite"),
+            pytest.param((0.3, np.inf), 0.0, id="lower-bounded"),
+            pytest.param((-np.inf, 4.0), 0.0, id="upper-bounded"),
+        ],
+    )
+    def test_generic_group_intercept_uses_native_bounded_hierarchy(
+        self, link, bounds, location
+    ):
+        """Bound both the location hyperprior and identity-scale group values."""
+        prior = get_default_prior("group_intercept", "x", bounds, link)
+
+        _assert_prior_tree(
+            prior,
+            {
+                "dist": "TruncatedNormal",
+                "mu": {
+                    "dist": "TruncatedNormal",
+                    "mu": location,
+                    "sigma": 0.25,
+                    "lower": bounds[0],
+                    "upper": bounds[1],
+                },
+                "sigma": {
+                    "dist": "Weibull",
+                    "alpha": 1.5,
+                    "beta": 0.3,
+                },
+                "lower": bounds[0],
+                "upper": bounds[1],
+            },
+        )
+        assert isinstance(prior, Prior)
+        assert prior.dist is None
+        assert not prior.is_truncated
+        assert prior.bounds is None
+
+    @pytest.mark.parametrize("bounds", [None, (-np.inf, np.inf)])
+    @pytest.mark.parametrize("link", IDENTITY_LINKS)
+    def test_generic_unbounded_group_intercept_retains_normal_hierarchy(
+        self, link, bounds
+    ):
+        """Keep the existing Normal hierarchy when identity has no finite bound."""
+        prior = get_default_prior("group_intercept", "x", bounds, link)
+
+        _assert_prior_tree(
+            prior,
+            {
+                "dist": "Normal",
+                "mu": {"dist": "Normal", "mu": 0.0, "sigma": 0.25},
+                "sigma": {
+                    "dist": "Weibull",
+                    "alpha": 1.5,
+                    "beta": 0.3,
+                },
+            },
+        )
+
+    @pytest.mark.parametrize("link", TRANSFORMED_LINKS)
+    def test_generic_transformed_group_intercept_remains_unbounded(self, link):
+        """Do not apply response bounds to transformed predictor coefficients."""
+        prior = get_default_prior("group_intercept", "x", (0.0, 1.0), link)
+
+        _assert_prior_tree(
+            prior,
+            {
+                "dist": "Normal",
+                "mu": {"dist": "Normal", "mu": 0.0, "sigma": 0.25},
+                "sigma": {
+                    "dist": "Weibull",
+                    "alpha": 1.5,
+                    "beta": 0.3,
+                },
+            },
+        )
 
     @pytest.mark.parametrize("link", IDENTITY_LINKS)
     @pytest.mark.parametrize(

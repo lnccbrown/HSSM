@@ -3,12 +3,14 @@
 import bambi as bmb
 import numpy as np
 import pandas as pd
+import pymc as pm
 import pytensor.tensor as pt
 import pytest
 from pytensor.graph.traversal import ancestors
 
 import hssm
 from hssm.param.parameterization_check import find_disconnected_free_rvs
+from hssm.prior import get_default_prior
 
 
 def _group_only_data() -> pd.DataFrame:
@@ -42,6 +44,25 @@ def _build_ddm(parameter: str, formula: str, noncentered=True) -> hssm.HSSM:
         process_initvals=False,
         initval_jitter=0.0,
         **fixed,
+    )
+
+
+def _build_bounded_lba(formula: str = "b ~ 0 + (1 | participant_id)") -> hssm.HSSM:
+    """Build a lower-bounded generic analytical model without sampling."""
+    data = _group_only_data().copy()
+    data["response"] = (data["response"] == 1).astype(int)
+    return hssm.HSSM(
+        data=data,
+        model="lba2",
+        include=[{"name": "b", "formula": formula}],
+        A=0.1,
+        v0=1.0,
+        v1=1.0,
+        p_outlier=0.0,
+        prior_settings="safe",
+        noncentered=True,
+        process_initvals=False,
+        initval_jitter=0.0,
     )
 
 
@@ -170,6 +191,83 @@ def test_non_normal_group_only_intercept_builds_centered():
     assert "a_1|participant_id_sigma" in free_names
     assert "a_1|participant_id_offset" not in free_names
     assert find_disconnected_free_rvs(model.pymc_model) == []
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        pytest.param((0.1, 0.9), id="finite"),
+        pytest.param((0.1, np.inf), id="lower-bounded"),
+        pytest.param((-np.inf, 0.9), id="upper-bounded"),
+    ],
+)
+def test_native_bounded_group_hierarchy_builds_and_draws_within_support(bounds):
+    """Exercise the generated hierarchy through Bambi and PyMC directly."""
+    data = pd.DataFrame(
+        {
+            "y": np.linspace(-1.0, 1.0, 8),
+            "participant_id": np.repeat(["p0", "p1"], 4),
+        }
+    )
+    prior = get_default_prior("group_intercept", "x", bounds, "identity")
+    prior.noncentered = False
+    model = bmb.Model(
+        "y ~ 0 + (1 | participant_id)",
+        data,
+        priors={"1|participant_id": prior},
+        noncentered=True,
+    )
+    model.build()
+
+    pymc_model = model.backend.model
+    group_name = "1|participant_id"
+    group_rv = pymc_model.named_vars[group_name]
+    free_names = {rv.name for rv in pymc_model.free_RVs}
+    assert type(group_rv.owner.op).__name__ == "TruncatedNormalRV"
+    assert {group_name, f"{group_name}_mu", f"{group_name}_sigma"} <= free_names
+    assert f"{group_name}_offset" not in free_names
+    assert find_disconnected_free_rvs(pymc_model) == []
+
+    draws = pm.draw(group_rv, draws=64, random_seed=1269, backend="FAST_COMPILE")
+    lower, upper = bounds
+    if np.isfinite(lower):
+        assert np.all(draws > lower)
+    if np.isfinite(upper):
+        assert np.all(draws < upper)
+
+
+def test_generated_bounded_group_location_reaches_hssm_graph_and_parameter():
+    """Keep a pure identity predictor and its generated location inside support."""
+    model = _build_bounded_lba()
+
+    prior = model.params["b"].prior["1|participant_id"]
+    assert prior.name == "TruncatedNormal"
+    assert prior.noncentered is False
+    assert prior.args["lower"] == 0.2
+    assert np.isposinf(prior.args["upper"])
+    assert prior.args["mu"].name == "TruncatedNormal"
+
+    group_name = "b_1|participant_id"
+    group_rv = model.pymc_model.named_vars[group_name]
+    parameter = model.pymc_model.named_vars["b"]
+    free_names = {rv.name for rv in model.pymc_model.free_RVs}
+    assert type(group_rv.owner.op).__name__ == "TruncatedNormalRV"
+    assert {
+        group_name,
+        f"{group_name}_mu",
+        f"{group_name}_sigma",
+    } <= free_names
+    assert f"{group_name}_offset" not in free_names
+    assert find_disconnected_free_rvs(model.pymc_model) == []
+
+    group_draws, parameter_draws = pm.draw(
+        [group_rv, parameter],
+        draws=64,
+        random_seed=1269,
+        backend="FAST_COMPILE",
+    )
+    assert np.all(group_draws > 0.2)
+    assert np.all(parameter_draws > 0.2)
 
 
 @pytest.mark.parametrize(

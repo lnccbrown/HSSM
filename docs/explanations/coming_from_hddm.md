@@ -136,17 +136,21 @@ several free centered owners produce a likelihood ridge.
   [Link functions and safe priors](../tutorials/link_functions.ipynb) explains
   these scale and ownership changes from first principles. Explicit priors are
   never rewritten, but incompatible group specifications are rejected before
-  Bambi can drop or misinterpret them. Finite coefficient bounds are not yet
-  propagated to generic identity-linked group-only intercept priors; likelihood
-  bounds still apply, and bounding one coefficient would not constrain a complete
-  identity-linked predictor after other effects are added. Prefer a
-  support-respecting transformed link when appropriate; [Specify hierarchical
-  group priors](../how_to/specify_group_priors.md) explains the remaining
-  identity-link choices and compatibility rules. The broader rule is the
-  likelihood: these defaults apply unless you use the neural
-  (`approx_differentiable`) likelihood, which has its own priors derived from
-  the network's training bounds. Specifying your own is a different interface
-  through the same prior controls.
+  Bambi can drop or misinterpret them. For a generic identity-linked parameter,
+  a unique generated group-only intercept with a finite configured bound now
+  receives a centered native `TruncatedNormal` hierarchy. A pure group-intercept
+  predictor is therefore supported by construction. The bound still applies to
+  that coefficient, not to a complete additive predictor after slopes or other
+  effects are added; HSSM warns about that distinction. A transformed link can
+  instead constrain the assembled predictor when its inverse image matches the
+  parameter support. Values outside configured likelihood bounds receive HSSM's
+  finite per-trial log-likelihood floor (`-66.1`), not a hard-support rejection.
+  [Specify hierarchical group priors](../how_to/specify_group_priors.md) gives
+  the exact generated and explicit-prior rules. Analytical and black-box DDM
+  variants keep their calibrated HDDM Gamma, Beta, or Normal hierarchies, while
+  neural (`approx_differentiable`) variants use generic safe priors derived from
+  the network's finite training bounds. Specifying your own is a different
+  interface through the same prior controls.
 - **Outliers.** HDDM's `p_outlier` exists in HSSM under the same name, and the
   lapse distribution is configurable rather than fixed. See [Model outliers
   with lapse probabilities](../tutorials/lapse_prob_and_dist.ipynb).
