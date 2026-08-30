@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+from copy import deepcopy
 from dataclasses import MISSING, dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -169,7 +170,16 @@ class RLSSMConfig(BaseModelConfig):
             init_kwargs[key] = config_dict.get(key, default)
 
         _get_or_warn("response", DEFAULT_SSM_OBSERVED_DATA)
-        _get_or_warn("choices", DEFAULT_SSM_CHOICES)
+        response_domains = config_dict.get("response_domains")
+        if response_domains is not None:
+            if config_dict.get("choices") is not None:
+                raise ValueError(
+                    "Provide either `response_domains` or legacy `choices`, not both."
+                )
+            init_kwargs["response_domains"] = deepcopy(response_domains)
+            init_kwargs["choices"] = None
+        else:
+            _get_or_warn("choices", DEFAULT_SSM_CHOICES)
 
         return cls(**init_kwargs)
 

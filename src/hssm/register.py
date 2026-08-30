@@ -1,6 +1,5 @@
 """Module for registering custom models in HSSM."""
 
-from copy import deepcopy
 from pprint import pformat, pp
 from typing import cast
 
@@ -60,13 +59,22 @@ def register_model(
             "Provide either `response_domains` or legacy `choices`, not both."
         )
 
-    _config = {k: v for k, v in locals().items() if k != "name"}
-    if choices is None:
-        _config.pop("choices")
+    from .config import _resolve_response_domains  # noqa: PLC0415
+
+    resolved_domains, resolved_choices = _resolve_response_domains(
+        response, response_domains, choices
+    )
+    config: DefaultConfig = {
+        "response": list(response),
+        "list_params": list(list_params),
+        "likelihoods": dict(likelihoods),
+        "description": description,
+    }
     if response_domains is None:
-        _config.pop("response_domains")
-    _config = deepcopy(_config)
-    config = cast("DefaultConfig", _config)
+        assert resolved_choices is not None
+        config["choices"] = list(resolved_choices)
+    else:
+        config["response_domains"] = resolved_domains
 
     # TODO: validate provided configs?
 

@@ -1,11 +1,13 @@
-from typing import Callable
+"""Tests for response-data validation."""
 
-import pytest
-import pandas as pd
+from collections.abc import Callable
+
 import numpy as np
-from hssm.data_validator import DataValidatorMixin
-from hssm.defaults import MissingDataNetwork
+import pandas as pd
+import pytest
+
 from hssm._types import ResponseDomainSpec
+from hssm.data_validator import DataValidatorMixin
 
 
 class DataValidatorTester(DataValidatorMixin):
@@ -330,6 +332,53 @@ def test_categorical_membership_does_not_integer_cast_fractional_values():
         validator._post_check_data_sanity()
 
 
+def test_categorical_membership_preserves_large_integer_precision():
+    """Adjacent integer labels above float precision remain distinguishable."""
+    allowed = 2**53
+    validator = DataValidatorTester(
+        pd.DataFrame({"rt": [0.2], "response": [allowed + 1]}),
+        response_domains={"response": {"kind": "categorical", "values": (allowed,)}},
+    )
+
+    with pytest.raises(ValueError, match=str(allowed + 1)):
+        validator._post_check_data_sanity()
+
+
+def test_categorical_membership_supports_arbitrary_python_integers():
+    """Categorical labels are not constrained to NumPy fixed-width integers."""
+    allowed = 10**100
+    validator = DataValidatorTester(
+        pd.DataFrame(
+            {
+                "rt": [0.2],
+                "response": pd.Series([allowed], dtype=object),
+            }
+        ),
+        response_domains={"response": {"kind": "categorical", "values": (allowed,)}},
+    )
+
+    validator._post_check_data_sanity()
+
+    validator.data.loc[0, "response"] = allowed + 1
+    with pytest.raises(ValueError, match=str(allowed + 1)):
+        validator._post_check_data_sanity()
+
+
+def test_multidomain_categorical_failure_names_physical_response_column():
+    """A legacy-named column is still identified in a wider response."""
+    validator = DataValidatorTester(
+        pd.DataFrame({"rt": [0.2], "response": [2], "confidence": [0.5]}),
+        response=["rt", "response", "confidence"],
+        response_domains={
+            "response": {"kind": "categorical", "values": (0, 1)},
+            "confidence": {"kind": "continuous", "bounds": (0, 1)},
+        },
+    )
+
+    with pytest.raises(ValueError, match="column 'response'"):
+        validator._post_check_data_sanity()
+
+
 def test_missing_rt_rows_are_omitted_but_observed_rows_remain_validated():
     """Missing-data sentinels exempt only their own response row."""
     data = pd.DataFrame({"rt": [-999.0, 0.3], "coordinate": [99.0, 0.5]})
@@ -344,6 +393,19 @@ def test_missing_rt_rows_are_omitted_but_observed_rows_remain_validated():
     validator.data.loc[1, "coordinate"] = 99.0
     with pytest.raises(ValueError, match="column 'coordinate'.*bounds"):
         validator._post_check_data_sanity()
+
+
+def test_custom_missing_marker_uses_processed_internal_sentinel():
+    """A custom missing marker remains omitted after preprocessing to -999."""
+    validator = DataValidatorTester(
+        pd.DataFrame({"rt": [-999.0, 0.3], "coordinate": [99.0, 0.5]}),
+        missing_data=True,
+        response=["rt", "coordinate"],
+        response_domains={"coordinate": {"kind": "continuous", "bounds": (0, 1)}},
+    )
+    validator.missing_data_value = -123.0
+
+    validator._post_check_data_sanity()
 
 
 def test_choice_only_domain_uses_the_shared_validation_loop():

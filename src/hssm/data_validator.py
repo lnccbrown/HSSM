@@ -2,7 +2,7 @@
 
 import logging
 import warnings
-from numbers import Real
+from numbers import Integral, Real
 
 import numpy as np
 import pandas as pd
@@ -77,30 +77,31 @@ class DataValidatorMixin:
                     "You have negative response times in your dataset, "
                     + "which is not allowed."
                 )
-            valid_rows = self.data["rt"].to_numpy() != self.missing_data_value
+            valid_rows = self.data["rt"].to_numpy() != -999.0
 
         for column, domain in self.response_domains.items():
             observed = self.data.loc[valid_rows, column].to_numpy()
             if any(
                 isinstance(value, (bool, np.bool_))
                 or not isinstance(value, Real)
-                or not np.isfinite(value)
+                or (not isinstance(value, Integral) and not np.isfinite(value))
                 for value in observed
             ):
                 raise ValueError(
                     f"Response column {column!r} must contain finite numeric values."
                 )
-            numeric = observed.astype(float, copy=False)
-
             if domain["kind"] == "categorical":
                 allowed = domain["values"]
-                invalid = np.unique(numeric[~np.isin(numeric, allowed)])
-                if invalid.size:
+                observed_values = set(observed.tolist())
+                invalid = sorted(observed_values - set(allowed))
+                if invalid:
                     invalid_responses = [
-                        int(value) if value.is_integer() else float(value)
+                        int(value)
+                        if isinstance(value, Integral) or float(value).is_integer()
+                        else float(value)
                         for value in invalid
                     ]
-                    if column == "response":
+                    if column == "response" and len(self.response_domains) == 1:
                         raise ValueError(
                             "Invalid responses found in your dataset: "
                             f"{invalid_responses}"
@@ -110,7 +111,7 @@ class DataValidatorMixin:
                         f"{invalid_responses}"
                     )
 
-                missing = sorted(np.setdiff1d(allowed, np.unique(numeric)).tolist())
+                missing = sorted(set(allowed) - observed_values)
                 if missing:
                     if column == "response" and len(self.response_domains) == 1:
                         message = (
@@ -125,6 +126,7 @@ class DataValidatorMixin:
                     warnings.warn(message, UserWarning, stacklevel=2)
                 continue
 
+            numeric = observed.astype(float, copy=False)
             bounds = domain.get("bounds")
             if bounds is None:
                 continue

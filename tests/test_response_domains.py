@@ -1,12 +1,14 @@
 """Tests for canonical response-domain configuration."""
 
 from collections.abc import Mapping
+from dataclasses import fields
 from typing import Any
 
 import bambi as bmb
 import pytest
 
 import hssm
+import hssm.config as config_module
 from hssm.config import Config, ModelConfig
 from hssm.defaults import default_model_config
 from hssm.register import register_model
@@ -39,6 +41,33 @@ def test_legacy_choices_resolve_to_one_categorical_domain():
         "response": {"kind": "categorical", "values": (-1, 1)}
     }
     assert config.choices == (-1, 1)
+
+
+def test_resolved_config_accepts_matching_derived_choices():
+    """Resolved configs remain idempotent with an exact compatibility view."""
+    config = _config(
+        ["rt", "response"],
+        response_domains={"response": {"kind": "categorical", "values": (0, 1)}},
+        choices=(0, 1),
+    )
+
+    config.validate()
+    assert config.choices == (0, 1)
+
+
+def test_mutating_a_resolved_domain_snapshot_fails_closed():
+    """Nested config mutation cannot silently stale a compatibility view."""
+    config = _config(
+        ["rt", "response"],
+        response_domains={"response": {"kind": "categorical", "values": (0, 1)}},
+    )
+    config.validate()
+    assert config.response_domains is not None
+
+    config.response_domains["response"]["values"] = (2, 3)
+
+    with pytest.raises(ValueError, match="either `response_domains` or legacy"):
+        config.validate()
 
 
 def test_domains_follow_physical_response_order_and_derive_no_global_choices():
@@ -138,6 +167,12 @@ def test_single_categorical_domain_derives_legacy_choices():
         ),
         (
             ["rt", "response"],
+            {"response": {"kind": "continuous", "bounds": None}},
+            None,
+            "requires two bounds",
+        ),
+        (
+            ["rt", "response"],
             {"response": {"kind": "circular", "bounds": (0, float("inf"))}},
             None,
             "finite and strictly increasing",
@@ -225,6 +260,147 @@ def test_registered_domains_are_detached_and_resolve_canonically():
         assert config.choices is None
     finally:
         default_model_config.pop(name, None)  # type: ignore[arg-type]
+
+
+def test_registered_canonical_model_rejects_top_level_choices_override():
+    """A registered canonical source cannot be combined with legacy choices."""
+    name = "custom_registered_choice_conflict"
+    register_model(
+        name=name,  # type: ignore[arg-type]
+        response=["rt", "response"],
+        list_params=["v"],
+        choices=None,
+        response_domains={"response": {"kind": "categorical", "values": (0, 1)}},
+        likelihoods={
+            "analytical": {
+                "loglik": lambda *args: 0.0,
+                "backend": None,
+                "default_priors": {},
+                "bounds": {},
+                "extra_fields": None,
+            }
+        },  # type: ignore[arg-type]
+        description=None,
+    )
+    try:
+        with pytest.raises(ValueError, match="either `response_domains` or legacy"):
+            Config._build_model_config(
+                name, "analytical", None, choices=(0, 1), loglik=None
+            )
+    finally:
+        default_model_config.pop(name, None)  # type: ignore[arg-type]
+
+
+def test_registered_canonical_model_ignores_ssms_legacy_fallback(monkeypatch):
+    """Canonical registration wins over an ssms registry name collision."""
+    name = "custom_registered_ssms_collision"
+    register_model(
+        name=name,  # type: ignore[arg-type]
+        response=["rt", "response"],
+        list_params=["v"],
+        choices=None,
+        response_domains={"response": {"kind": "categorical", "values": (0, 1)}},
+        likelihoods={
+            "analytical": {
+                "loglik": lambda *args: 0.0,
+                "backend": None,
+                "default_priors": {},
+                "bounds": {},
+                "extra_fields": None,
+            }
+        },  # type: ignore[arg-type]
+        description=None,
+    )
+    monkeypatch.setitem(config_module.ssms_model_config, name, {"choices": (8, 9)})
+    try:
+        config = Config._build_model_config(name, "analytical", None, None)
+
+        assert config.choices == (0, 1)
+    finally:
+        default_model_config.pop(name, None)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("model", "loglik_kind", "choices"),
+    [
+        ("ddm", "analytical", (-1, 1)),
+        ("ddm_seq2_no_bias", "approx_differentiable", (0, 1, 2, 3)),
+        ("lba4", "analytical", (0, 1, 2, 3)),
+        ("softmax_inv_temperature_3", "analytical", (0, 1, 2)),
+    ],
+)
+def test_legacy_builtins_resolve_without_changing_response_or_choices(
+    model, loglik_kind, choices
+):
+    """Existing categorical factories acquire canonical internal metadata only."""
+    config = Config.from_defaults(model, loglik_kind)
+
+    config.validate()
+
+    response_column = config.response[-1]
+    assert config.response_domains == {
+        response_column: {"kind": "categorical", "values": choices}
+    }
+    assert config.choices == choices
+
+
+@pytest.mark.parametrize("as_dict", [False, True])
+def test_constructor_snapshot_detaches_nested_response_domains(as_dict):
+    """Save/load constructor arguments own their nested domain metadata."""
+    domains: dict[str, Any] = {"response": {"kind": "continuous", "bounds": [0.0, 1.0]}}
+    model_config: ModelConfig | dict[str, Any]
+    if as_dict:
+        model_config = {"response_domains": domains}
+    else:
+        model_config = ModelConfig(response_domains=domains)
+
+    snapshot = hssm.HSSM._store_init_args(
+        {"self": object(), "model_config": model_config}, {}
+    )
+    domains["response"]["bounds"][0] = -1.0
+    stored = snapshot["model_config"]
+    stored_domains = (
+        stored["response_domains"]
+        if isinstance(stored, dict)
+        else stored.response_domains
+    )
+
+    assert stored_domains["response"]["bounds"] == [0.0, 1.0]
+
+    stored_domains["response"]["bounds"][1] = 2.0
+    assert domains["response"]["bounds"] == [-1.0, 1.0]
+
+
+def test_model_config_positional_arguments_keep_their_legacy_meaning():
+    """Appending response domains does not shift existing positional fields."""
+    config = ModelConfig(("rt", "response"), ["v"], (-1, 1))
+
+    assert config.response == ("rt", "response")
+    assert config.list_params == ["v"]
+    assert config.choices == (-1, 1)
+    assert config.response_domains is None
+
+    domain_field = next(
+        field for field in fields(Config) if field.name == "response_domains"
+    )
+    assert domain_field.kw_only
+
+
+def test_live_model_owns_one_detached_response_domain_mapping():
+    """Live config and validation share one mapping detached from the caller."""
+    domains: dict[str, Any] = {"response": {"kind": "categorical", "values": [-1, 1]}}
+    model = hssm.HSSM(
+        data=hssm.load_data("cavanagh_theta").head(8),
+        model_config=ModelConfig(response_domains=domains),
+        p_outlier=None,
+        process_initvals=False,
+    )
+
+    domains["response"]["values"][0] = -2
+    assert model.response_domains == {
+        "response": {"kind": "categorical", "values": (-1, 1)}
+    }
+    assert model.response_domains is model.model_config.response_domains
 
 
 def _lapse_shell(

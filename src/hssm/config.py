@@ -48,7 +48,6 @@ class BaseModelConfig(ABC):
     # Data specification
     response: list[str] | None = field(default_factory=DEFAULT_SSM_OBSERVED_DATA.copy)
     choices: tuple[int, ...] | None = None
-    response_domains: dict[str, ResponseDomainSpec] | None = None
 
     # Parameter specification
     list_params: list[str] | None = None
@@ -64,6 +63,11 @@ class BaseModelConfig(ABC):
 
     # Random variable (simulator) for posterior predictive sampling
     rv: Any | None = None
+
+    # Canonical per-column response metadata. Appended for positional compatibility.
+    response_domains: dict[str, ResponseDomainSpec] | None = field(
+        default=None, kw_only=True
+    )
 
     @abstractmethod
     def validate(self) -> None:
@@ -236,6 +240,10 @@ class Config(BaseModelConfig):
         """
         if choices is None:
             return
+        if self.response_domains is not None:
+            raise ValueError(
+                "Provide either `response_domains` or legacy `choices`, not both."
+            )
 
         self.choices = choices
 
@@ -339,7 +347,7 @@ class Config(BaseModelConfig):
         if model not in get_args(SupportedModels):
             if choices is not None:
                 config.update_choices(choices)
-            elif model in ssms_model_config:
+            elif config.response_domains is None and model in ssms_model_config:
                 config.update_choices(ssms_model_config[model]["choices"])
                 _logger.info(
                     "choices argument passed as None, "
@@ -359,7 +367,6 @@ class ModelConfig:
     """Representation for model_config provided by the user."""
 
     response: tuple[str, ...] | None = None
-    response_domains: dict[str, ResponseDomainSpec] | None = None
     list_params: list[str] | None = None
     choices: tuple[int, ...] | None = None
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
@@ -367,6 +374,7 @@ class ModelConfig:
     backend: Literal["jax", "pytensor"] | None = None
     rv: RandomVariable | None = None
     extra_fields: list[str] | None = None
+    response_domains: dict[str, ResponseDomainSpec] | None = None
 
 
 def _normalize_model_config_with_choices(
@@ -514,7 +522,7 @@ def _resolve_response_domains(
             continue
 
         bounds = raw_spec.get("bounds")
-        if bounds is None and kind == "continuous":
+        if "bounds" not in raw_spec and kind == "continuous":
             resolved[column] = {"kind": "continuous"}
             continue
         if not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
