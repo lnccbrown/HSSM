@@ -1,5 +1,9 @@
 # Changelog
 
+### Unreleased
+
+5. **Default initial values now respect a parameter's declared bounds** (#1293). The starting values in `INITVAL_SETTINGS` are shared across models, so a model whose bounds exclude one of them — for example `t` declared as `(0.25, 2.0)` against the shared default of `0.025` — started sampling at a point with `-inf` log-probability, which no sampler can move away from: every chain froze with 100% divergences and no error was raised. `process_initvals=True` now moves such a default to a point 5% of the bound width inside the violated endpoint and logs a warning naming the parameter and the substituted value. Bounds are read from the parameter itself, so both routes work: `include=[{"name": "t", "bounds": (0.25, 2.0)}]` and `model_config=ModelConfig(bounds=...)`. Initial values you supply yourself are never touched, and defaults already inside their bounds are unchanged. Note that `initval_jitter` (default `0.01`) is applied after this clamp and does not itself consult the bounds, so a bound narrower than about `0.2` can still be jittered outside.
+
 ### 0.5.0
 
 This version includes the following changes:
