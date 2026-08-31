@@ -322,6 +322,7 @@ def _(
             if FULL_RUN
             else "<!-- hssm-full-run-artifact: false -->"
         ),
+        "deterministic_init_marker": "<!-- hssm-deterministic-init: true -->",
         "chains": N_CHAINS,
         "tune": N_TUNE,
         "draws": N_DRAWS,

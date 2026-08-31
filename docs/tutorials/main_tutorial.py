@@ -145,6 +145,7 @@ def _(FULL_RUN, N_CHAINS, N_DRAWS, N_PPC_DRAWS, N_TRIALS, N_TUNE):
             if FULL_RUN
             else "<!-- hssm-full-run-artifact: false -->"
         ),
+        "deterministic_init_marker": "<!-- hssm-deterministic-init: true -->",
         "trials": N_TRIALS,
         "chains": N_CHAINS,
         "tune": N_TUNE,
