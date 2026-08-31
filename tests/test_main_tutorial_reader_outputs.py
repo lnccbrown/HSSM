@@ -67,6 +67,21 @@ def _text_outputs(notebook: dict):
             yield cell_index, output_index, text
 
 
+def _plot_object_reprs(notebook: dict) -> list[tuple[int, int, str]]:
+    retained: list[tuple[int, int, str]] = []
+    for cell_index, cell in enumerate(notebook["cells"]):
+        for output_index, output in enumerate(cell.get("outputs", [])):
+            data = output.get("data", {})
+            text = _as_text(output.get("text")) + "".join(
+                _as_text(value)
+                for mime, value in data.items()
+                if mime.startswith("text/")
+            )
+            if PLOT_OBJECT_REPR.search(text):
+                retained.append((cell_index, output_index, text[:120]))
+    return retained
+
+
 def _is_sampling_call(expression: ast.Expr) -> bool:
     call = expression.value
     if not isinstance(call, ast.Call):
@@ -100,19 +115,7 @@ def test_tutorial_outputs_are_compact_and_reader_safe(path: Path) -> None:
     tree_outputs = [cell for cell, _, text in outputs if "<xarray.DataTree" in text]
     assert tree_outputs == [], f"DataTree representations in cells {tree_outputs}"
 
-    plot_object_reprs = []
-    for cell_index, cell in enumerate(notebook["cells"]):
-        for output_index, output in enumerate(cell.get("outputs", [])):
-            data = output.get("data", {})
-            if any(mime in STATIC_IMAGE_MIMES for mime in data):
-                continue
-            text = _as_text(output.get("text")) + "".join(
-                _as_text(value)
-                for mime, value in data.items()
-                if mime.startswith("text/")
-            )
-            if PLOT_OBJECT_REPR.search(text):
-                plot_object_reprs.append((cell_index, output_index, text[:120]))
+    plot_object_reprs = _plot_object_reprs(notebook)
     assert plot_object_reprs == [], (
         f"plot-object representations retained: {plot_object_reprs}"
     )
@@ -139,6 +142,36 @@ def test_tutorial_outputs_are_compact_and_reader_safe(path: Path) -> None:
         "aggregate text output is too large: "
         f"{aggregate_chars} > {MAX_AGGREGATE_TEXT_OUTPUT_CHARS}"
     )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_count"),
+    [
+        ("<Axes: title={'center': 'demo'}>", 1),
+        ("<arviz_plots.backends.matplotlib.TracePlot at 0x1234abcd>", 1),
+        ("<Figure size 640x480 with 1 Axes>", 0),
+    ],
+)
+def test_plot_object_guard_inspects_text_that_accompanies_images(
+    text: str, expected_count: int
+) -> None:
+    """Reject object reprs even when the same rich output contains an image."""
+    notebook = {
+        "cells": [
+            {
+                "outputs": [
+                    {
+                        "data": {
+                            "image/png": "cGxhY2Vob2xkZXI=",
+                            "text/plain": text,
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+    assert len(_plot_object_reprs(notebook)) == expected_count
 
 
 @pytest.mark.parametrize("path", TUTORIALS, ids=lambda path: path.stem)
