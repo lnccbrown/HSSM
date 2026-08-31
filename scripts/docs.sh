@@ -53,6 +53,14 @@ uv run \
   --no-sync \
   python scripts/check_docs_publication.py
 
+uv run \
+  --python 3.12 \
+  --group dev \
+  --group notebook \
+  --group docs \
+  --no-sync \
+  pytest -q tests/test_main_tutorial_reader_outputs.py
+
 case "$command" in
   build)
     uv run \
