@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import pathlib
 
@@ -201,6 +202,10 @@ def test_repository_marimo_publications_are_valid():
     assert find_publication_issues(repo_root) == []
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec("marimo") is None,
+    reason="marimo is installed by the docs/notebook groups, not the core test group",
+)
 def test_repository_marimo_sources_pass_strict_check():
     """Catch broken reactive DAGs even while an older artifact remains healthy."""
     repo_root = pathlib.Path(__file__).resolve().parent.parent
