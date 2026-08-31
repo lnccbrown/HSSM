@@ -8,7 +8,9 @@ import json
 import tomllib
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
+import xarray as xr
 
 import scripts.truncated_hierarchy_qualification as qualification
 from scripts.truncated_hierarchy_qualification import (
@@ -153,6 +155,38 @@ def _result(
     parameter_summaries: list[dict[str, object]] | None = None,
 ):
     dependency_profile = entry["scenario"].get("dependency_profile", "current-resolved")
+    scenario = entry["scenario"]
+    paired = bool(
+        scenario["tier"] == "qualification"
+        and scenario["purpose"] in {"candidate", "control"}
+        and scenario.get("calibration_kind") is None
+    )
+    pair_execution_id = None
+    pair_position = None
+    if paired:
+        if scenario["purpose"] == "candidate":
+            candidate_id = entry["scenario_id"]
+        else:
+            candidate_id = next(
+                item["scenario_id"]
+                for item in manifest["scenarios"]
+                if item.get("control_id") == entry["scenario_id"]
+            )
+        pair_key = f"{candidate_id}:{entry['replicate']}"
+        pair_execution_id = hashlib.sha256(f"pair:{pair_key}".encode()).hexdigest()
+        candidate_first = entry["replicate"] % 2 == 0
+        pair_position = int(
+            (scenario["purpose"] == "control" and candidate_first)
+            or (scenario["purpose"] == "candidate" and not candidate_first)
+        )
+        worker_identity = hashlib.sha256(f"worker:{pair_key}".encode()).hexdigest()
+    else:
+        worker_identity = hashlib.sha256(
+            f"worker:{entry['cell_id']}".encode()
+        ).hexdigest()
+    execution_attempt_id = hashlib.sha256(
+        f"attempt:{entry['cell_id']}".encode()
+    ).hexdigest()
     environment = next(
         item
         for item in environment_catalog.values()
@@ -224,6 +258,10 @@ def _result(
             "raw_chain_sha256": "c" * 64 if status == "completed" else None,
             "git_commit": environment["git"]["commit"],
             "environment_sha256": environment_sha256(environment, manifest),
+            "execution_attempt_id": execution_attempt_id,
+            "pair_execution_id": pair_execution_id,
+            "pair_position": pair_position,
+            "worker_identity_sha256": worker_identity,
         },
     }
 
@@ -290,6 +328,86 @@ def _materialize_result_artifacts(
         provenance[digest_field] = hashlib.sha256(payload).hexdigest()
 
 
+def _write_standardized_test_chain(
+    record: dict[str, object],
+    entry: dict[str, object],
+    artifact_root: Path,
+    *,
+    seed: int,
+    group_middle_shift: float = 0.0,
+) -> None:
+    """Replace the placeholder chain with one valid auditable NetCDF artifact."""
+    scenario = entry["scenario"]
+    assert isinstance(scenario, dict)
+    chains = int(scenario["chains"])
+    draws = int(scenario["draws"])
+    n_groups = int(scenario["n_groups"])
+    rng = np.random.default_rng(seed)
+    group_effect = rng.normal(size=(chains, draws, n_groups))
+    group_indices = [int(index) for index in scenario["group_indices"]]
+    group_effect[..., group_indices[1]] += group_middle_shift
+    posterior = xr.Dataset(
+        {
+            "group_location": (("chain", "draw"), rng.normal(size=(chains, draws))),
+            "group_scale": (("chain", "draw"), rng.normal(size=(chains, draws))),
+            "group_effect": (("chain", "draw", "group"), group_effect),
+            "group_first": (
+                ("chain", "draw"),
+                group_effect[..., group_indices[0]],
+            ),
+            "group_middle": (
+                ("chain", "draw"),
+                group_effect[..., group_indices[1]],
+            ),
+            "group_last": (
+                ("chain", "draw"),
+                group_effect[..., group_indices[2]],
+            ),
+        },
+        coords={
+            "chain": np.arange(chains),
+            "draw": np.arange(draws),
+            "group": np.arange(n_groups),
+        },
+    )
+    sample_stats = xr.Dataset(
+        {
+            "diverging": (
+                ("chain", "draw"),
+                np.zeros((chains, draws), dtype=bool),
+            ),
+            "energy": (("chain", "draw"), rng.normal(size=(chains, draws))),
+            "tree_depth": (
+                ("chain", "draw"),
+                np.ones((chains, draws), dtype=np.int64),
+            ),
+            "n_steps": (
+                ("chain", "draw"),
+                np.ones((chains, draws), dtype=np.int64),
+            ),
+            "step_size": (
+                ("chain", "draw"),
+                np.full((chains, draws), 0.1),
+            ),
+            "acceptance_rate": (
+                ("chain", "draw"),
+                np.full((chains, draws), 0.9),
+            ),
+        },
+        coords={"chain": np.arange(chains), "draw": np.arange(draws)},
+    )
+    chain = xr.DataTree.from_dict(
+        {"posterior": posterior, "sample_stats": sample_stats}
+    )
+    provenance = record["provenance"]
+    assert isinstance(provenance, dict)
+    relative = provenance["raw_chain_artifact"]
+    assert isinstance(relative, str)
+    path = artifact_root / relative
+    chain.to_netcdf(path)
+    provenance["raw_chain_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 @pytest.fixture(scope="module")
 def environment_record(manifest):
     """Build one exact current-profile environment sidecar."""
@@ -322,7 +440,7 @@ def test_manifest_is_frozen_and_has_all_predeclared_tiers(manifest) -> None:
     """Lock the reviewed manifest digest and exact tier/cell cardinalities."""
     assert manifest["status"] == "frozen-before-primary-runs"
     assert manifest_sha256(manifest) == (
-        "fb1886c0afcf6ea2bfd3ac4f7f6114f6a1e454883d50250d262f64a3ac7d7767"
+        "05d8be96204f124abe723fb38f65080631d2cdcb7c9b776428201ee66045e15e"
     )
     assert {scenario["tier"] for scenario in manifest["scenarios"]} == {
         "smoke",
@@ -1382,6 +1500,28 @@ def test_result_provenance_is_bound_to_environment_and_raw_artifacts(
     with pytest.raises(QualificationError, match="device does not match"):
         validate_result_record(wrong_device, entry, environment, manifest)
 
+    bad_attempt = make_result(entry)
+    bad_attempt["provenance"]["execution_attempt_id"] = "not-a-digest"
+    with pytest.raises(QualificationError, match="execution_attempt_id"):
+        validate_result_record(bad_attempt, entry, environment, manifest)
+
+    forged_pair = make_result(entry)
+    forged_pair["provenance"]["pair_execution_id"] = "d" * 64
+    forged_pair["provenance"]["pair_position"] = 0
+    with pytest.raises(QualificationError, match="null for unpaired"):
+        validate_result_record(forged_pair, entry, environment, manifest)
+
+    paired_entry = next(
+        item
+        for item in expand_plan(manifest, "qualification")
+        if item["scenario_id"] == "qual-pymc-lower-inside"
+    )
+    missing_pair = make_result(paired_entry)
+    missing_pair["provenance"]["pair_execution_id"] = None
+    missing_pair["provenance"]["pair_position"] = None
+    with pytest.raises(QualificationError, match="required by paired execution"):
+        validate_result_record(missing_pair, paired_entry, environment, manifest)
+
     wrong_pytensor_precision = make_result(entry)
     wrong_pytensor_precision["provenance"]["pytensor_floatx"] = "float32"
     with pytest.raises(QualificationError, match="pytensor_floatx does not match"):
@@ -1720,6 +1860,123 @@ def test_complete_synthetic_evidence_waits_for_raw_chain_backend_check(
     assert {item["metric"] for item in assessment["pending_evidence"]} == {
         "backend_combined_rank_rhat_max"
     }
+
+
+def test_backend_rank_rhat_is_recomputed_from_verified_raw_chains(
+    manifest, environment, make_result, tmp_path: Path
+) -> None:
+    """Hash-verified paired chains clear pending evidence and expose disagreement."""
+    plan = expand_plan(manifest, "qualification")
+    left_entry = next(
+        entry
+        for entry in plan
+        if entry["scenario_id"] == "qual-pymc-lower-outside" and entry["replicate"] == 0
+    )
+    right_entry = next(
+        entry
+        for entry in plan
+        if entry["scenario_id"] == "qual-pymc-lower-outside-numpyro"
+        and entry["replicate"] == 0
+    )
+    left = make_result(left_entry)
+    right = make_result(right_entry)
+    _materialize_result_artifacts(left, tmp_path)
+    _materialize_result_artifacts(right, tmp_path)
+    _write_standardized_test_chain(left, left_entry, tmp_path, seed=1282)
+    _write_standardized_test_chain(right, right_entry, tmp_path, seed=1283)
+    scenarios = {
+        entry["scenario_id"]: {**entry["scenario"], "replicates": 1}
+        for entry in (left_entry, right_entry)
+    }
+    pending: list[dict[str, object]] = []
+
+    checks = qualification._evaluate_backend_pairs(
+        [left, right],
+        scenarios,
+        manifest["analysis_policy"],
+        pending,
+        artifact_root=tmp_path,
+        manifest=manifest,
+    )
+
+    assert pending == []
+    rhat = next(
+        check for check in checks if check["metric"] == "backend_combined_rank_rhat_max"
+    )
+    assert rhat["passed"] is True
+    assert set(rhat["parameter_rhats"]) == set(
+        manifest["analysis_policy"]["monitored_parameters"]
+    )
+
+    _write_standardized_test_chain(
+        right,
+        right_entry,
+        tmp_path,
+        seed=1283,
+        group_middle_shift=4.0,
+    )
+    failed = qualification._evaluate_backend_pairs(
+        [left, right],
+        scenarios,
+        manifest["analysis_policy"],
+        [],
+        artifact_root=tmp_path,
+        manifest=manifest,
+    )
+    failed_rhat = next(
+        check for check in failed if check["metric"] == "backend_combined_rank_rhat_max"
+    )
+    assert failed_rhat["passed"] is False
+    assert failed_rhat["parameter_id"] == "group_middle"
+
+
+def test_paired_execution_provenance_binds_worker_order_and_attempts(
+    manifest, make_result
+) -> None:
+    """Reject split, reordered, or replayed candidate/control evidence."""
+    plan = expand_plan(manifest, "qualification")
+    scenario_ids = {
+        "qual-pymc-lower-inside",
+        "qual-pymc-lower-inside-control",
+    }
+    entries = [
+        entry
+        for entry in plan
+        if entry["scenario_id"] in scenario_ids and entry["replicate"] < 2
+    ]
+    records = [make_result(entry) for entry in entries]
+    scenarios = {
+        entry["scenario_id"]: {**entry["scenario"], "replicates": 2}
+        for entry in entries
+    }
+
+    checks = qualification._validate_paired_execution_records(records, scenarios)
+
+    assert len(checks) == 2
+    assert [check["replicate"] for check in checks] == [0, 1]
+    assert all(check["passed"] for check in checks)
+
+    split_worker = copy.deepcopy(records)
+    control = next(
+        record
+        for record in split_worker
+        if record["scenario_id"].endswith("-control") and record["replicate"] == 0
+    )
+    control["provenance"]["worker_identity_sha256"] = "f" * 64
+    with pytest.raises(QualificationError, match="different worker identity"):
+        qualification._validate_paired_execution_records(split_worker, scenarios)
+
+    replayed = copy.deepcopy(records)
+    pair_ids = {
+        record["replicate"]: record["provenance"]["pair_execution_id"]
+        for record in replayed
+        if record["scenario_id"] == "qual-pymc-lower-inside"
+    }
+    for record in replayed:
+        if record["replicate"] == 1:
+            record["provenance"]["pair_execution_id"] = pair_ids[0]
+    with pytest.raises(QualificationError, match="reused across pairs"):
+        qualification._validate_paired_execution_records(replayed, scenarios)
 
 
 def test_assessor_does_not_dilute_recovery_or_backend_failures(

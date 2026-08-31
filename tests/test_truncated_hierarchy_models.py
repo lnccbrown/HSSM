@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Literal
 
+import jax
 import numpy as np
 import pytest
 
@@ -41,6 +42,13 @@ BOUND_CASES = (
         id="narrow",
     ),
 )
+
+
+def _jax_gradient_tolerances(floatx: str) -> tuple[float, float]:
+    """Use the precision JAX actually executes in this test process."""
+    if floatx == "float32" or not jax.config.x64_enabled:
+        return 2e-5, 5e-5
+    return 2e-8, 2e-7
 
 
 def _data(
@@ -182,13 +190,6 @@ def test_direct_candidate_layout_and_gradients_cover_all_bound_shapes(
             )
             <= 1
         )
-        assert (
-            metrics.pytensor_jax_normalized_error_max(
-                absolute_tolerance=2e-5,
-                relative_tolerance=5e-5,
-            )
-            <= 1
-        )
     else:
         assert (
             metrics.finite_difference_normalized_error_max(
@@ -197,13 +198,14 @@ def test_direct_candidate_layout_and_gradients_cover_all_bound_shapes(
             )
             <= 1
         )
-        assert (
-            metrics.pytensor_jax_normalized_error_max(
-                absolute_tolerance=2e-8,
-                relative_tolerance=2e-7,
-            )
-            <= 1
+    jax_atol, jax_rtol = _jax_gradient_tolerances(floatx)
+    assert (
+        metrics.pytensor_jax_normalized_error_max(
+            absolute_tolerance=jax_atol,
+            relative_tolerance=jax_rtol,
         )
+        <= 1
+    )
 
 
 def test_linked_control_is_centered_and_maps_the_complete_predictor() -> None:
@@ -234,10 +236,11 @@ def test_linked_control_is_centered_and_maps_the_complete_predictor() -> None:
         )
         <= 1
     )
+    jax_atol, jax_rtol = _jax_gradient_tolerances("float64")
     assert (
         metrics.pytensor_jax_normalized_error_max(
-            absolute_tolerance=2e-8,
-            relative_tolerance=2e-7,
+            absolute_tolerance=jax_atol,
+            relative_tolerance=jax_rtol,
         )
         <= 1
     )

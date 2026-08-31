@@ -2615,6 +2615,16 @@
     "chain_method": "sequential",
     "progressbar": false,
     "compute_convergence_checks": false,
+    "paired_execution": {
+      "scope": "qualification candidate/control pairs with calibration_kind null",
+      "placement": "same physical worker for both members of one replicate pair",
+      "order": "candidate then control for even replicates; control then candidate for odd replicates",
+      "isolation": "each member runs in its own fresh process with unique phase-local PyTensor and JAX caches",
+      "timing": "both members use the identical frozen timing scope",
+      "failure": "attempt both members and publish an independent final cell marker for each",
+      "provenance": "one parent-minted pair_execution_id and worker_identity_sha256 are shared; distinct execution_attempt_id values and parity-ordered pair_position values are embedded in the two final cell records"
+    },
+    "phase_provenance": "sample and finalize accept only a parent-minted checksummed context binding phase, cell, execution identity, and exact fresh phase-local cache paths",
     "sbc_draw_selection": {
       "method": "sha256-score-without-replacement-v1",
       "source_order": "chain-major-retained-draws",
@@ -2650,6 +2660,7 @@
     "chain_variables": [
       "group_location",
       "group_scale",
+      "group_effect",
       "group_first",
       "group_middle",
       "group_last"
@@ -2657,10 +2668,12 @@
     "chain_variable_scales": {
       "group_location": "response",
       "group_scale": "prior-native (response for truncated_normal; linear_predictor for linked_normal)",
+      "group_effect": "response",
       "group_first": "response",
       "group_middle": "response",
       "group_last": "response"
     },
+    "group_effect_dimension": "group coordinate is the zero-based group index in data-artifact order and has exactly scenario.n_groups entries",
     "sample_stats_variables": [
       "diverging",
       "energy",

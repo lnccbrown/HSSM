@@ -81,6 +81,13 @@ assessed against the generating family; linked controls are geometry and efficie
 references and therefore set `recovery=false` rather than making a false
 cross-parameterization recovery claim.
 
+Each non-SBC qualification candidate/control replicate executes as one atomic pair
+on the same physical worker. Even replicates run candidate then control; odd
+replicates reverse that order. Both members are attempted even if the first fails,
+and each receives fresh phase-local compilation caches. Opaque pair, worker, and
+per-cell attempt identities are recorded and cross-checked by the assessor, so
+separately scheduled or order-confounded fits cannot qualify.
+
 The candidate is the exact proposed response-scale hierarchy: a centered native
 `TruncatedNormal` group distribution with a `TruncatedNormal` location hyperprior and
 `Weibull(1.5, 0.3)` scale. The control is a centered Normal hierarchy on predictor
@@ -137,11 +144,27 @@ uv run python scripts/truncated_hierarchy_qualification.py plan \
   --output-dir /tmp/hssm-1282-smoke
 ```
 
-Before primary execution, capture one clean-checkout environment sidecar from each
-locked profile. Results name the semantic digest of the sidecar that produced them;
-evidence cannot be reassigned to a different profile after the fact. Qualification
+Canonical hosted execution is defined by
+`.github/workflows/qualify_truncated_hierarchy.yml`. On a same-repository pull
+request, adding the `run-truncated-hierarchy-qualification` label requests the full
+study; the mandatory smoke assessment must pass before qualification or stress jobs
+can start. Manual dispatch supports four explicit modes: `smoke`; `qualification`
+(smoke then qualification); `stress` (smoke then diagnostic stress only); and `full`
+(smoke then both later tiers). Cell artifacts use `tn-cells-<tier>-*`, profile
+attestations use `tn-env-*`, and reviewed aggregate decisions use
+`tn-summary-<tier>`. All jobs check out the exact requested SHA with read-only
+permissions, and aggregation runs even when a shard fails so missing evidence stays
+visible.
+
+Before primary execution, capture one clean-checkout reference attestation from each
+locked profile. Results name the attestation's semantic digest; evidence cannot be
+reassigned to a different profile after the fact. Qualification
 runs require CPU, one thread for each listed numerical runtime, and JAX x64 exactly
-when `floatx=float64`.
+when `floatx=float64`. Every fresh worker recollects its environment and must match
+the attested source commit, clean-tree state, project and lock hashes, exact packages,
+Python minor version, and interpreter. The attestation job's Python patch version and
+kernel image describe that reference environment but are not cross-job identity keys;
+the effective per-cell PyTensor and JAX precision remains mandatory.
 
 The sampling runner executes each cell in a fresh process with cell-local PyTensor and
 JAX caches. Data and model construction are untimed. The timer covers one exact start
@@ -153,9 +176,10 @@ The runner writes a canonical shared dataset/truth artifact to
 `data/<data_id>-r<replicate>.json`, the exact transformed starts to
 `starts/<cell>.json`,
 the standardized monitored posterior to `chains/<cell>.nc`, and one atomic result
-object to `cells/<cell>.json`. Group locations and selected group coefficients are on
-response scale. `group_scale` remains on its hierarchy's native scale: response scale
-for the candidate and predictor scale for the linked control. The result records
+object to `cells/<cell>.json`. Group locations and the complete group-effect vector
+are on response scale; first/middle/last group coefficients are retained as named
+recovery summaries. `group_scale` remains on its hierarchy's native scale: response
+scale for the candidate and predictor scale for the linked control. The result records
 SHA-256 digests of the exact data, start, and chain bytes. The chain also retains the
 standardized divergence, energy, tree-depth, leapfrog-step, step-size, and acceptance
 statistics needed to recompute every gate. A partial write can therefore never
@@ -185,6 +209,7 @@ uv run python scripts/truncated_hierarchy_qualification.py assess \
   --results /path/to/aggregate/results.jsonl \
   --environment /path/to/current-resolved/environment.json \
   --environment /path/to/bambi-0.19/environment.json \
+  --artifact-root /path/to/run \
   --output /path/to/aggregate/assessment.json
 ```
 
@@ -198,9 +223,12 @@ provenance records sampler, device, planned floatX, the observed PyTensor floatX
 JAX x64 state, execution time, and digests of the actual transformed sampler starts
 and raw chain artifact (not merely
 `model.initial_point()`). The chain artifact exposes the natural-scale
-`group_location`, `group_scale`, and predeclared first/middle/last group coefficients
-with `chain` and `draw` dimensions. Divergence count, retained draw count, and rate
-must agree exactly. SBC selects exactly 100 retained draws by frozen SHA-256 scoring
+`group_location`, `group_scale`, the complete `group_effect` vector, and predeclared
+first/middle/last recovery summaries with `chain` and `draw` dimensions. The assessor
+uses the complete vector for group-wide R-hat and ESS gates, verifies that the named
+summaries are exact slices of it, and recomputes paired-backend rank R-hat from the
+hash-verified chain artifacts. Divergence count, retained draw count, and rate must
+agree exactly. SBC selects exactly 100 retained draws by frozen SHA-256 scoring
 without replacement; selection is independent of file order. Raw posterior traces
 are workflow artifacts and are not committed to the repository.
 

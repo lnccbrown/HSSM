@@ -27,6 +27,10 @@ from pathlib import Path, PurePosixPath
 from statistics import median
 from typing import TYPE_CHECKING, Any, Literal
 
+import arviz as az
+import numpy as np
+import xarray as xr
+
 if TYPE_CHECKING:
     from scripts.truncated_hierarchy_statistics import (
         ParameterSummary,
@@ -205,6 +209,10 @@ PROVENANCE_KEYS = {
     "raw_chain_sha256",
     "git_commit",
     "environment_sha256",
+    "execution_attempt_id",
+    "pair_execution_id",
+    "pair_position",
+    "worker_identity_sha256",
 }
 FAILURE_KEYS = {"stage", "error_type", "message"}
 ENVIRONMENT_KEYS = {
@@ -846,6 +854,38 @@ def _validate_execution_policy(value: Any) -> None:
             "chain_method": "sequential",
             "progressbar": False,
             "compute_convergence_checks": False,
+            "paired_execution": {
+                "scope": (
+                    "qualification candidate/control pairs with calibration_kind null"
+                ),
+                "placement": (
+                    "same physical worker for both members of one replicate pair"
+                ),
+                "order": (
+                    "candidate then control for even replicates; control then "
+                    "candidate for odd replicates"
+                ),
+                "isolation": (
+                    "each member runs in its own fresh process with unique phase-local "
+                    "PyTensor and JAX caches"
+                ),
+                "timing": "both members use the identical frozen timing scope",
+                "failure": (
+                    "attempt both members and publish an independent final cell marker "
+                    "for each"
+                ),
+                "provenance": (
+                    "one parent-minted pair_execution_id and "
+                    "worker_identity_sha256 are shared; distinct "
+                    "execution_attempt_id values and parity-ordered pair_position "
+                    "values are embedded in the two final cell records"
+                ),
+            },
+            "phase_provenance": (
+                "sample and finalize accept only a parent-minted checksummed context "
+                "binding phase, cell, execution identity, and exact fresh phase-local "
+                "cache paths"
+            ),
             "sbc_draw_selection": {
                 "method": "sha256-score-without-replacement-v1",
                 "source_order": "chain-major-retained-draws",
@@ -912,6 +952,7 @@ def _validate_artifact_policy(value: Any) -> None:
             "chain_variables": [
                 "group_location",
                 "group_scale",
+                "group_effect",
                 "group_first",
                 "group_middle",
                 "group_last",
@@ -922,10 +963,15 @@ def _validate_artifact_policy(value: Any) -> None:
                     "prior-native (response for truncated_normal; linear_predictor "
                     "for linked_normal)"
                 ),
+                "group_effect": "response",
                 "group_first": "response",
                 "group_middle": "response",
                 "group_last": "response",
             },
+            "group_effect_dimension": (
+                "group coordinate is the zero-based group index in data-artifact "
+                "order and has exactly scenario.n_groups entries"
+            ),
             "sample_stats_variables": [
                 "diverging",
                 "energy",
@@ -2150,6 +2196,16 @@ def _effective_dependency_profile(plan_entry: Mapping[str, Any]) -> str:
     return plan_entry["scenario"].get("dependency_profile", DEFAULT_DEPENDENCY_PROFILE)
 
 
+def _requires_paired_execution(plan_entry: Mapping[str, Any]) -> bool:
+    """Return whether the frozen execution policy requires a linked pair run."""
+    scenario = plan_entry["scenario"]
+    return bool(
+        scenario["tier"] == "qualification"
+        and scenario["purpose"] in {"candidate", "control"}
+        and scenario.get("calibration_kind") is None
+    )
+
+
 @lru_cache(maxsize=None)
 def derive_numpyro_chain_keys(
     sampler_seed: int, chains: int
@@ -2283,6 +2339,45 @@ def _validate_provenance(
         raise QualificationError(f"{path}.sampler does not match the plan")
     if value["floatx"] != plan_entry["scenario"]["floatx"]:
         raise QualificationError(f"{path}.floatx does not match the plan")
+    execution_attempt_id = value["execution_attempt_id"]
+    pair_execution_id = value["pair_execution_id"]
+    pair_position = value["pair_position"]
+    worker_identity = value["worker_identity_sha256"]
+    if status == "missing":
+        if any(
+            item is not None
+            for item in (
+                execution_attempt_id,
+                pair_execution_id,
+                pair_position,
+                worker_identity,
+            )
+        ):
+            raise QualificationError(
+                f"{path} execution identity must be null for missing cells"
+            )
+    else:
+        if not isinstance(execution_attempt_id, str) or not SHA256.fullmatch(
+            execution_attempt_id
+        ):
+            raise QualificationError(f"{path}.execution_attempt_id must be a SHA-256")
+        if not isinstance(worker_identity, str) or not SHA256.fullmatch(
+            worker_identity
+        ):
+            raise QualificationError(f"{path}.worker_identity_sha256 must be a SHA-256")
+        if _requires_paired_execution(plan_entry):
+            if not isinstance(pair_execution_id, str) or not SHA256.fullmatch(
+                pair_execution_id
+            ):
+                raise QualificationError(
+                    f"{path}.pair_execution_id is required by paired execution"
+                )
+            if isinstance(pair_position, bool) or pair_position not in {0, 1}:
+                raise QualificationError(f"{path}.pair_position must be zero or one")
+        elif pair_execution_id is not None or pair_position is not None:
+            raise QualificationError(
+                f"{path} pair execution fields must be null for unpaired cells"
+            )
     observed_pytensor_floatx = value["pytensor_floatx"]
     observed_jax_x64 = value["jax_enable_x64"]
     if status == "completed" and (
@@ -2754,6 +2849,10 @@ def _missing_result(
             "raw_chain_sha256": None,
             "git_commit": environment["git"]["commit"],
             "environment_sha256": environment_sha256(environment, manifest),
+            "execution_attempt_id": None,
+            "pair_execution_id": None,
+            "pair_position": None,
+            "worker_identity_sha256": None,
         },
     }
 
@@ -3310,11 +3409,128 @@ def _evaluate_recovery_statistics(
     return checks
 
 
+def _load_verified_standardized_posterior(
+    record: Mapping[str, Any],
+    scenario: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+    artifact_root: Path,
+) -> xr.Dataset:
+    """Load one hash-verified chain and enforce the frozen posterior schema."""
+    verify_result_artifacts(record, artifact_root)
+    relative = record["provenance"]["raw_chain_artifact"]
+    if not isinstance(relative, str):
+        raise QualificationError(
+            f"completed cell {record['cell_id']} has no raw chain artifact"
+        )
+    path = artifact_root / PurePosixPath(relative)
+    try:
+        chain = xr.open_datatree(path)
+        try:
+            chain.load()
+            if set(chain.children) != {"posterior", "sample_stats"}:
+                raise QualificationError(f"raw chain {relative} has unexpected groups")
+            posterior = chain["posterior"].to_dataset().copy(deep=True)
+            sample_stats = chain["sample_stats"].to_dataset()
+        finally:
+            chain.close()
+    except QualificationError:
+        raise
+    except (OSError, TypeError, ValueError) as error:
+        raise QualificationError(
+            f"cannot read raw chain {relative}: {error}"
+        ) from error
+
+    expected_variables = set(manifest["artifact_policy"]["chain_variables"])
+    if set(posterior.data_vars) != expected_variables:
+        raise QualificationError(f"raw chain {relative} changes posterior variables")
+    expected_stats = set(manifest["artifact_policy"]["sample_stats_variables"])
+    if set(sample_stats.data_vars) != expected_stats:
+        raise QualificationError(f"raw chain {relative} changes sample statistics")
+    scalar_shape = (int(scenario["chains"]), int(scenario["draws"]))
+    group_shape = (*scalar_shape, int(scenario["n_groups"]))
+    for name, variable in posterior.data_vars.items():
+        expected_dims = (
+            ("chain", "draw", "group") if name == "group_effect" else ("chain", "draw")
+        )
+        expected_shape = group_shape if name == "group_effect" else scalar_shape
+        if variable.dims != expected_dims or variable.shape != expected_shape:
+            raise QualificationError(
+                f"raw chain {relative} changes the shape of {name}"
+            )
+        if not np.isfinite(np.asarray(variable)).all():
+            raise QualificationError(f"raw chain {relative} contains non-finite values")
+    group_effect = np.asarray(posterior["group_effect"])
+    for name, index in zip(
+        ("group_first", "group_middle", "group_last"),
+        scenario["group_indices"],
+        strict=True,
+    ):
+        if not np.array_equal(
+            np.asarray(posterior[name]), group_effect[..., int(index)]
+        ):
+            raise QualificationError(
+                f"raw chain {relative} has {name} inconsistent with group_effect"
+            )
+    for name, variable in sample_stats.data_vars.items():
+        if variable.dims != ("chain", "draw") or variable.shape != scalar_shape:
+            raise QualificationError(
+                f"raw chain {relative} changes the shape of sample statistic {name}"
+            )
+        if not np.isfinite(np.asarray(variable)).all():
+            raise QualificationError(f"raw chain {relative} contains non-finite values")
+    return posterior
+
+
+def _combined_backend_rank_rhats(
+    left_record: Mapping[str, Any],
+    right_record: Mapping[str, Any],
+    left_scenario: Mapping[str, Any],
+    right_scenario: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+    artifact_root: Path,
+) -> dict[str, float]:
+    """Recompute rank R-hat after concatenating paired backend chains."""
+    monitored = tuple(manifest["analysis_policy"]["monitored_parameters"])
+    left = _load_verified_standardized_posterior(
+        left_record, left_scenario, manifest, artifact_root
+    )[list(monitored)]
+    right = _load_verified_standardized_posterior(
+        right_record, right_scenario, manifest, artifact_root
+    )[list(monitored)]
+    if left.sizes["draw"] != right.sizes["draw"]:
+        raise QualificationError("paired backend chains change the retained draw count")
+    left = left.assign_coords(chain=np.arange(left.sizes["chain"]))
+    right = right.assign_coords(
+        chain=np.arange(left.sizes["chain"], left.sizes["chain"] + right.sizes["chain"])
+    )
+    combined = xr.concat(
+        [left, right], dim="chain", coords="minimal", compat="override"
+    )
+    try:
+        diagnostics = az.rhat(combined, method="rank")
+    except (TypeError, ValueError) as error:
+        raise QualificationError(
+            f"cannot compute paired backend R-hat: {error}"
+        ) from error
+    result: dict[str, float] = {}
+    for parameter_id in monitored:
+        value = np.asarray(diagnostics[parameter_id], dtype=np.float64)
+        if value.size != 1 or not np.isfinite(value).all():
+            raise QualificationError(
+                f"paired backend R-hat for {parameter_id} is not a finite scalar"
+            )
+        result[parameter_id] = float(value.item())
+    return result
+
+
 def _evaluate_backend_pairs(
     records: Sequence[Mapping[str, Any]],
     scenarios: Mapping[str, Mapping[str, Any]],
     analysis_policy: Mapping[str, Any],
     pending_evidence: list[dict[str, Any]],
+    *,
+    artifact_root: Path | None,
+    manifest: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
     by_pair: dict[str, list[Mapping[str, Any]]] = {}
     for scenario in scenarios.values():
@@ -3326,17 +3542,29 @@ def _evaluate_backend_pairs(
     }
     checks = []
     for pair_id, pair in sorted(by_pair.items()):
-        pending_evidence.append(
-            {
-                "scope": "backend_pair",
-                "posterior_pair_id": pair_id,
-                "metric": "backend_combined_rank_rhat_max",
-                "comparator": "lt",
-                "threshold": analysis_policy["backend_combined_rank_rhat_max"],
-                "reason": "pending raw-chain runner artifact",
-            }
-        )
+        if len(pair) != 2 or {item["sampler"] for item in pair} != {
+            "pymc",
+            "numpyro",
+        }:
+            raise QualificationError(
+                f"backend pair {pair_id} must contain one PyMC and one NumPyro scenario"
+            )
+        if artifact_root is None:
+            pending_evidence.append(
+                {
+                    "scope": "backend_pair",
+                    "posterior_pair_id": pair_id,
+                    "metric": "backend_combined_rank_rhat_max",
+                    "comparator": "lt",
+                    "threshold": analysis_policy["backend_combined_rank_rhat_max"],
+                    "reason": "raw-chain artifact root was not supplied",
+                }
+            )
         left_scenario, right_scenario = sorted(pair, key=lambda item: item["sampler"])
+        if left_scenario["replicates"] != right_scenario["replicates"]:
+            raise QualificationError(
+                f"backend pair {pair_id} changes the replicate count"
+            )
         for replicate in range(left_scenario["replicates"]):
             left = by_cell[(left_scenario["scenario_id"], replicate)]
             right = by_cell[(right_scenario["scenario_id"], replicate)]
@@ -3345,6 +3573,36 @@ def _evaluate_backend_pairs(
                 or right["execution_status"] != "completed"
             ):
                 continue
+            if artifact_root is not None:
+                parameter_rhats = _combined_backend_rank_rhats(
+                    left,
+                    right,
+                    left_scenario,
+                    right_scenario,
+                    manifest,
+                    artifact_root,
+                )
+                maximum_parameter = max(
+                    parameter_rhats, key=parameter_rhats.__getitem__
+                )
+                maximum_rhat = parameter_rhats[maximum_parameter]
+                limit = analysis_policy["backend_combined_rank_rhat_max"]
+                checks.append(
+                    {
+                        "scope": "backend_pair",
+                        "metric": "backend_combined_rank_rhat_max",
+                        "cell_id": left["cell_id"],
+                        "paired_cell_id": right["cell_id"],
+                        "scenario_id": left["scenario_id"],
+                        "posterior_pair_id": pair_id,
+                        "parameter_id": maximum_parameter,
+                        "actual": maximum_rhat,
+                        "comparator": "lt",
+                        "threshold": limit,
+                        "passed": maximum_rhat < limit,
+                        "parameter_rhats": parameter_rhats,
+                    }
+                )
             left_summaries = {
                 summary.parameter_id: summary
                 for summary in _parameter_summaries_from_record(left)
@@ -3383,12 +3641,105 @@ def _evaluate_backend_pairs(
     return checks
 
 
+def _validate_paired_execution_records(
+    records: Sequence[Mapping[str, Any]],
+    scenarios: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Verify linked records came from one parity-ordered parent attempt."""
+    by_cell = {
+        (record["scenario_id"], record["replicate"]): record for record in records
+    }
+    seen_pair_ids: dict[str, tuple[str, int]] = {}
+    seen_attempt_ids: set[str] = set()
+    checks: list[dict[str, Any]] = []
+    candidates = sorted(
+        (
+            scenario
+            for scenario in scenarios.values()
+            if scenario["tier"] == "qualification"
+            and scenario.get("calibration_kind") is None
+            and scenario["purpose"] == "candidate"
+        ),
+        key=lambda scenario: scenario["scenario_id"],
+    )
+    for candidate in candidates:
+        control_id = candidate.get("control_id")
+        if not isinstance(control_id, str) or control_id not in scenarios:
+            raise QualificationError(
+                f"paired candidate {candidate['scenario_id']} has no control"
+            )
+        for replicate in range(candidate["replicates"]):
+            candidate_record = by_cell[(candidate["scenario_id"], replicate)]
+            control_record = by_cell[(control_id, replicate)]
+            if (
+                candidate_record["execution_status"] == "missing"
+                or control_record["execution_status"] == "missing"
+            ):
+                continue
+            candidate_provenance = candidate_record["provenance"]
+            control_provenance = control_record["provenance"]
+            pair_id = candidate_provenance["pair_execution_id"]
+            if pair_id != control_provenance["pair_execution_id"]:
+                raise QualificationError(
+                    "paired candidate/control records have different pair_execution_id"
+                )
+            if (
+                candidate_provenance["worker_identity_sha256"]
+                != control_provenance["worker_identity_sha256"]
+            ):
+                raise QualificationError(
+                    "paired candidate/control records have different worker identity"
+                )
+            expected_candidate_position = 0 if replicate % 2 == 0 else 1
+            if candidate_provenance["pair_position"] != expected_candidate_position:
+                raise QualificationError(
+                    "paired candidate record violates parity-ordered execution"
+                )
+            if control_provenance["pair_position"] != 1 - expected_candidate_position:
+                raise QualificationError(
+                    "paired control record violates parity-ordered execution"
+                )
+            candidate_attempt = candidate_provenance["execution_attempt_id"]
+            control_attempt = control_provenance["execution_attempt_id"]
+            if candidate_attempt == control_attempt:
+                raise QualificationError(
+                    "paired candidate/control records reuse one cell attempt identity"
+                )
+            pair_owner = (candidate["scenario_id"], replicate)
+            if pair_id in seen_pair_ids and seen_pair_ids[pair_id] != pair_owner:
+                raise QualificationError("pair_execution_id was reused across pairs")
+            seen_pair_ids[pair_id] = pair_owner
+            for attempt_id in (candidate_attempt, control_attempt):
+                if attempt_id in seen_attempt_ids:
+                    raise QualificationError(
+                        "execution_attempt_id was reused across qualification cells"
+                    )
+                seen_attempt_ids.add(attempt_id)
+            checks.append(
+                {
+                    "scope": "paired_execution",
+                    "metric": "same_worker_parity_ordered_pair",
+                    "cell_id": candidate_record["cell_id"],
+                    "paired_cell_id": control_record["cell_id"],
+                    "scenario_id": candidate["scenario_id"],
+                    "replicate": replicate,
+                    "actual": True,
+                    "comparator": "eq",
+                    "threshold": True,
+                    "passed": True,
+                }
+            )
+    return checks
+
+
 def assess_results(
     records: Sequence[Mapping[str, Any]],
     plan: Sequence[Mapping[str, Any]],
     manifest: Mapping[str, Any],
     tier: str,
     environment_catalog: Mapping[str, Mapping[str, Any]],
+    *,
+    artifact_root: Path | None = None,
 ) -> dict[str, Any]:
     """Apply the frozen gate without allowing diagnostics to alter it."""
     validate_plan(plan, manifest, tier)
@@ -3401,6 +3752,8 @@ def assess_results(
     checked_records = []
     for record, entry in zip(records, plan, strict=True):
         validate_result_record(record, entry, catalog, manifest, allow_missing=True)
+        if artifact_root is not None and record["execution_status"] != "missing":
+            verify_result_artifacts(record, artifact_root)
         checked_records.append(record)
 
     missing_cells = [
@@ -3460,6 +3813,7 @@ def assess_results(
             missing_metrics.extend(absent)
     elif tier == "qualification":
         policy = manifest["thresholds"]["qualification"]
+        checks.extend(_validate_paired_execution_records(checked_records, by_scenario))
         fit_pass: dict[str, bool] = {}
         for record in completed:
             scenario = by_scenario[record["scenario_id"]]
@@ -3522,6 +3876,8 @@ def assess_results(
                 by_scenario,
                 analysis_policy,
                 pending_evidence,
+                artifact_root=artifact_root,
+                manifest=manifest,
             )
         )
 
@@ -3667,6 +4023,11 @@ def _parser() -> argparse.ArgumentParser:
     assess.add_argument("--tier", choices=sorted(ALLOWED_TIERS), required=True)
     assess.add_argument("--results", type=Path, required=True)
     assess.add_argument("--environment", type=Path, action="append", required=True)
+    assess.add_argument(
+        "--artifact-root",
+        type=Path,
+        help="artifact root containing hash-verified raw chains",
+    )
     assess.add_argument("--output", type=Path)
     return parser
 
@@ -3717,7 +4078,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         records = load_jsonl(args.results)
         assessment = assess_results(
-            records, plan, manifest, args.tier, environment_catalog
+            records,
+            plan,
+            manifest,
+            args.tier,
+            environment_catalog,
+            artifact_root=args.artifact_root,
         )
         rendered = (
             f"{json.dumps(assessment, allow_nan=False, indent=2, sort_keys=True)}\n"
