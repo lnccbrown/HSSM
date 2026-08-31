@@ -22,6 +22,7 @@ import subprocess
 import tempfile
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from statistics import median
 from typing import TYPE_CHECKING, Any, Literal
@@ -57,13 +58,14 @@ else:  # pragma: no cover - exercised by direct CLI invocation
         validate_parameter_summary,
     )
 
-SCHEMA_VERSION = 1
-RUNNER_VERSION = 1
+SCHEMA_VERSION = 2
+RUNNER_VERSION = 2
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MANIFEST = REPO_ROOT / "benchmarks/specs/truncated_hierarchy_v1.json"
+DEFAULT_MANIFEST = REPO_ROOT / "benchmarks/specs/truncated_hierarchy_v2.json"
 ALLOWED_TIERS = {"smoke", "qualification", "stress"}
 ALLOWED_COMPARATORS = {"eq", "lt", "le", "gt", "ge"}
 SAFE_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SAFE_CELL_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*--replicate-[0-9]{2,}$")
 SAFE_PARAMETER = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SBC_SUMMARY_FIELDS = frozenset(
@@ -96,7 +98,11 @@ MANIFEST_KEYS = {
     "tiers",
     "dependency_profiles",
     "model_contracts",
+    "prior_contracts",
+    "data_generation",
     "analysis_policy",
+    "execution_policy",
+    "artifact_policy",
     "thresholds",
     "scenarios",
 }
@@ -111,11 +117,15 @@ SCENARIO_KEYS = {
     "bound_kind",
     "lower",
     "upper",
-    "anchor",
-    "truth_distance_sd",
-    "group_sigma",
+    "prior_hyper_location",
+    "truth_kind",
+    "truth_regime",
+    "truth_boundary",
+    "truth_group_location",
+    "truth_group_scale",
     "n_groups",
     "n_per_group",
+    "group_indices",
     "floatx",
     "sampler",
     "replicates",
@@ -144,6 +154,13 @@ PLAN_KEYS = {
     "scenario_id",
     "replicate",
     "data_seed",
+    "truth_seed",
+    "group_seed",
+    "observation_seed",
+    "initialization_seed",
+    "start_seeds",
+    "sampler_seed",
+    "sbc_draw_seed",
     "sbc_tie_seed",
     "chain_seeds",
     "scenario",
@@ -156,6 +173,13 @@ RESULT_KEYS = {
     "scenario_id",
     "replicate",
     "data_seed",
+    "truth_seed",
+    "group_seed",
+    "observation_seed",
+    "initialization_seed",
+    "start_seeds",
+    "sampler_seed",
+    "sbc_draw_seed",
     "sbc_tie_seed",
     "chain_seeds",
     "execution_status",
@@ -170,8 +194,15 @@ PROVENANCE_KEYS = {
     "sampler",
     "device",
     "floatx",
+    "pytensor_floatx",
+    "jax_enable_x64",
+    "data_artifact",
+    "data_sha256",
+    "effective_numpyro_chain_keys",
     "actual_start_artifact",
     "actual_start_sha256",
+    "raw_chain_artifact",
+    "raw_chain_sha256",
     "git_commit",
     "environment_sha256",
 }
@@ -190,40 +221,46 @@ ENVIRONMENT_KEYS = {
 CONTROL_MATCH_FIELDS = SCENARIO_ALL_KEYS - {
     "scenario_id",
     "prior",
+    "prior_hyper_location",
     "purpose",
+    "recovery",
     "canonical",
     "control_id",
     "posterior_pair_id",
 }
 DATA_MATCH_FIELDS = {
-    "tier",
-    "gate",
-    "layer",
     "model",
     "bound_kind",
     "lower",
     "upper",
-    "anchor",
-    "truth_distance_sd",
-    "group_sigma",
+    "truth_kind",
+    "truth_regime",
+    "truth_boundary",
+    "truth_group_location",
+    "truth_group_scale",
     "n_groups",
     "n_per_group",
+    "group_indices",
+    "calibration_kind",
+}
+POSTERIOR_PAIR_MATCH_FIELDS = DATA_MATCH_FIELDS | {
+    "tier",
+    "gate",
+    "layer",
+    "prior",
+    "prior_hyper_location",
+    "purpose",
+    "canonical",
+    "recovery",
+    "data_id",
+    "dependency_profile",
     "floatx",
     "replicates",
     "chains",
     "tune",
     "draws",
     "target_accept",
-    "recovery",
     "initialization_policy",
-    "calibration_kind",
-}
-POSTERIOR_PAIR_MATCH_FIELDS = DATA_MATCH_FIELDS | {
-    "prior",
-    "purpose",
-    "canonical",
-    "data_id",
-    "dependency_profile",
 }
 METRIC_DOMAINS = {
     "compile_success": "boolean",
@@ -232,10 +269,19 @@ METRIC_DOMAINS = {
     "gradient_finite": "boolean",
     "finite_difference_gradient_abs_error_max": "nonnegative",
     "finite_difference_gradient_rel_error_max": "nonnegative",
+    "finite_difference_gradient_normalized_error_max": "nonnegative",
     "pytensor_jax_gradient_abs_error_max": "nonnegative",
     "pytensor_jax_gradient_rel_error_max": "nonnegative",
+    "pytensor_jax_gradient_normalized_error_max": "nonnegative",
+    "likelihood_pytensor_jax_value_abs_error_max": "nonnegative",
+    "likelihood_pytensor_jax_value_rel_error_max": "nonnegative",
+    "likelihood_pytensor_jax_value_normalized_error_max": "nonnegative",
+    "likelihood_pytensor_jax_gradient_abs_error_max": "nonnegative",
+    "likelihood_pytensor_jax_gradient_rel_error_max": "nonnegative",
+    "likelihood_pytensor_jax_gradient_normalized_error_max": "nonnegative",
     "bambi_isomorphism_abs_error_max": "nonnegative",
     "bambi_isomorphism_rel_error_max": "nonnegative",
+    "bambi_isomorphism_normalized_error_max": "nonnegative",
     "sampling_success": "boolean",
     "divergence_count": "nonnegative_integer",
     "posterior_draw_count": "positive_integer",
@@ -249,6 +295,10 @@ METRIC_DOMAINS = {
     "group_rhat_max": "positive",
     "group_ess_bulk_fraction_ge_400": "unit_interval",
     "group_ess_tail_fraction_ge_400": "unit_interval",
+    "sampling_elapsed_seconds": "positive",
+    "step_size_median": "positive",
+    "gradient_evaluation_count": "positive_integer",
+    "leapfrog_step_count": "positive_integer",
     "hyper_ess_per_second_median": "positive",
     "hyper_leapfrog_steps_per_effective_sample_median": "positive",
 }
@@ -259,12 +309,27 @@ PRESAMPLING_METRICS = {
     "gradient_finite",
     "finite_difference_gradient_abs_error_max",
     "finite_difference_gradient_rel_error_max",
+    "finite_difference_gradient_normalized_error_max",
     "pytensor_jax_gradient_abs_error_max",
     "pytensor_jax_gradient_rel_error_max",
+    "pytensor_jax_gradient_normalized_error_max",
+    "likelihood_pytensor_jax_value_abs_error_max",
+    "likelihood_pytensor_jax_value_rel_error_max",
+    "likelihood_pytensor_jax_value_normalized_error_max",
+    "likelihood_pytensor_jax_gradient_abs_error_max",
+    "likelihood_pytensor_jax_gradient_rel_error_max",
+    "likelihood_pytensor_jax_gradient_normalized_error_max",
     "bambi_isomorphism_abs_error_max",
     "bambi_isomorphism_rel_error_max",
+    "bambi_isomorphism_normalized_error_max",
 }
 SAMPLER_METRICS = METRIC_DOMAINS.keys() - PRESAMPLING_METRICS
+REQUIRED_SAMPLER_RAW_METRICS = {
+    "sampling_elapsed_seconds",
+    "step_size_median",
+    "gradient_evaluation_count",
+    "leapfrog_step_count",
+}
 PAIRED_EFFICIENCY_METRICS = {
     "ess_per_second_slowdown": (
         "hyper_ess_per_second_median",
@@ -288,6 +353,32 @@ GRADIENT_CONTRACT_METRICS = {
         "absolute_tolerance": "bambi_isomorphism_abs_error_max",
         "relative_tolerance": "bambi_isomorphism_rel_error_max",
     },
+    "likelihood_pytensor_jax": {
+        "value_absolute_tolerance": "likelihood_pytensor_jax_value_abs_error_max",
+        "value_relative_tolerance": "likelihood_pytensor_jax_value_rel_error_max",
+        "gradient_absolute_tolerance": (
+            "likelihood_pytensor_jax_gradient_abs_error_max"
+        ),
+        "gradient_relative_tolerance": (
+            "likelihood_pytensor_jax_gradient_rel_error_max"
+        ),
+    },
+}
+GRADIENT_CONTRACT_GATE_METRICS = {
+    "finite_difference": ("finite_difference_gradient_normalized_error_max",),
+    "pytensor_jax": ("pytensor_jax_gradient_normalized_error_max",),
+    "bambi_isomorphism": ("bambi_isomorphism_normalized_error_max",),
+    "likelihood_pytensor_jax": (
+        "likelihood_pytensor_jax_value_normalized_error_max",
+        "likelihood_pytensor_jax_gradient_normalized_error_max",
+    ),
+}
+GRADIENT_CONTRACT_ALL_METRICS = {
+    metric
+    for mapping in GRADIENT_CONTRACT_METRICS.values()
+    for metric in mapping.values()
+} | {
+    metric for metrics in GRADIENT_CONTRACT_GATE_METRICS.values() for metric in metrics
 }
 SCENARIO_LEVEL_CONTRACT_REASON = "scenario-level contract evaluated on replicate 0"
 
@@ -362,7 +453,11 @@ def _sha256(value: Any) -> str:
 
 def _file_sha256(path: Path) -> str:
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
     except OSError as error:
         raise QualificationError(f"cannot hash {path}: {error}") from error
 
@@ -425,10 +520,16 @@ def _validate_threshold_map(value: Any, path: str) -> None:
 
 def _validate_thresholds(value: Any) -> None:
     thresholds = _require_object(value, "manifest.thresholds")
-    _require_exact_keys(thresholds, {"screening", "qualification"}, "thresholds")
+    _require_exact_keys(
+        thresholds, {"screening", "qualification", "diagnostic"}, "thresholds"
+    )
     screening = _require_object(thresholds["screening"], "thresholds.screening")
     _require_exact_keys(screening, {"per_fit"}, "thresholds.screening")
     _validate_threshold_map(screening["per_fit"], "thresholds.screening.per_fit")
+
+    diagnostic = _require_object(thresholds["diagnostic"], "thresholds.diagnostic")
+    _require_exact_keys(diagnostic, {"per_fit"}, "thresholds.diagnostic")
+    _validate_threshold_map(diagnostic["per_fit"], "thresholds.diagnostic.per_fit")
 
     qualification = _require_object(
         thresholds["qualification"], "thresholds.qualification"
@@ -582,20 +683,289 @@ def _validate_model_contracts(value: Any) -> None:
     _assert_finite_json(contracts, "manifest.model_contracts")
 
 
+def _validate_frozen_contract(
+    value: Any, expected: Mapping[str, Any], path: str
+) -> None:
+    contract = _require_object(value, path)
+    _assert_finite_json(contract, path)
+    if contract != expected:
+        raise QualificationError(f"{path} changes the reviewed v2 contract")
+
+
+def _validate_prior_contracts(value: Any) -> None:
+    _validate_frozen_contract(
+        value,
+        {
+            "truncated_normal": {
+                "parameter_scale": "response",
+                "link": "identity",
+                "location_prior": {
+                    "family": "TruncatedNormal",
+                    "base_rule": "finite-midpoint-otherwise-zero",
+                    "sigma": 0.25,
+                    "bounds": "scenario",
+                },
+                "scale_prior": {
+                    "family": "Weibull",
+                    "alpha": 1.5,
+                    "beta": 0.3,
+                },
+                "group_prior": {
+                    "family": "TruncatedNormal",
+                    "bounds": "scenario",
+                    "noncentered": False,
+                },
+            },
+            "linked_normal": {
+                "parameter_scale": "linear_predictor",
+                "link_rule": {
+                    "lower": "lower-plus-exp",
+                    "upper": "upper-minus-exp",
+                    "two_sided": "generalized-logit",
+                    "narrow": "generalized-logit",
+                },
+                "location_prior": {
+                    "family": "Normal",
+                    "mu": 0.0,
+                    "sigma": 0.25,
+                },
+                "scale_prior": {
+                    "family": "Weibull",
+                    "alpha": 1.5,
+                    "beta": 0.3,
+                },
+                "group_prior": {"family": "Normal", "noncentered": False},
+            },
+        },
+        "manifest.prior_contracts",
+    )
+
+
+def _validate_data_generation(value: Any) -> None:
+    _validate_frozen_contract(
+        value,
+        {
+            "rng": "numpy-pcg64",
+            "stream_derivation": (
+                "data_seed=blake2b-64-v2(master_seed,data_id,replicate,data); "
+                "truth_seed/group_seed/observation_seed=blake2b-64-v2("
+                "data_seed,data_id,replicate,domain)"
+            ),
+            "fixed_group_values": {
+                "distribution": "scipy.stats.truncnorm",
+                "standardized_lower": (
+                    "(lower-truth_group_location)/truth_group_scale; "
+                    "negative-infinity when lower is null"
+                ),
+                "standardized_upper": (
+                    "(upper-truth_group_location)/truth_group_scale; "
+                    "positive-infinity when upper is null"
+                ),
+                "loc": "truth_group_location",
+                "scale": "truth_group_scale",
+                "size": "n_groups",
+                "random_state": "numpy.random.Generator(PCG64(group_seed))",
+            },
+            "candidate_control_data": (
+                "identical-natural-scale-group-values-and-observations"
+            ),
+            "fixed_truth_sequence": [
+                "read scenario truth_group_location and truth_group_scale",
+                "draw group coefficients from fixed_group_values using group_seed",
+                "draw observations using observation_seed",
+            ],
+            "sbc_truth_sequence": [
+                "draw group_location from the candidate TruncatedNormal location "
+                "prior using truth_seed",
+                "draw group_scale as 0.3*numpy_generator.weibull(1.5) using the "
+                "same truth_seed stream after group_location",
+                "draw group coefficients from "
+                "TruncatedNormal(group_location,group_scale,scenario bounds) using "
+                "group_seed",
+                "draw observations using observation_seed",
+            ],
+            "toy_gaussian": (
+                "y[group,trial] ~ Normal(group_value[group], 0.5) using "
+                "observation_seed"
+            ),
+            "lba2_b": ("ssm_simulators-lba2-size-1-with-frozen-fixed-parameters"),
+            "approx_ddm_z": ("ssm_simulators-ddm-size-1-with-frozen-fixed-parameters"),
+            "softmax_beta": (
+                "response=1 iff U<expit(group_value), else -1, with U from "
+                "observation_seed"
+            ),
+            "zero_observation_semantics": (
+                "n_per_group=0 omits the observed likelihood and retains n_groups "
+                "latent group coefficients"
+            ),
+            "sbc_posterior_use": (
+                "all retained draws feed posterior summaries; only rank computation "
+                "uses the frozen selected 100 draws"
+            ),
+        },
+        "manifest.data_generation",
+    )
+
+
+def _validate_execution_policy(value: Any) -> None:
+    _validate_frozen_contract(
+        value,
+        {
+            "process_isolation": "one-cell-per-fresh-process",
+            "cache_policy": "unique-pytensor-and-jax-cache-per-cell",
+            "timing_clock": "time-perf-counter",
+            "phase_order": [
+                "generate-or-verify-data-artifact-untimed",
+                "build-model-untimed",
+                "start-timer",
+                "generate-exact-chain-starts-once",
+                "sample-with-those-exact-starts-including-compile-jit-warmup-and-draws",
+                "stop-timer",
+                "write-start-and-chain-artifacts",
+                "run-gradient-and-parity-diagnostics-in-a-separate-fresh-process-and-cache",
+                "write-cell-artifact-as-final-atomic-completion-marker",
+            ],
+            "timing_scope": (
+                "exact-start-generation-plus-sampler-call-including-compilation-jit-"
+                "warmup-and-draws;excluding-data-generation-model-construction-"
+                "artifact-io-and-postsampling-diagnostics"
+            ),
+            "required_device": "cpu",
+            "precision_contract": {
+                "float32": ("PYTENSOR_FLAGS=floatX=float32 and JAX_ENABLE_X64=false"),
+                "float64": "PYTENSOR_FLAGS=floatX=float64 and JAX_ENABLE_X64=true",
+            },
+            "thread_environment": {
+                "OMP_NUM_THREADS": "1",
+                "OPENBLAS_NUM_THREADS": "1",
+                "MKL_NUM_THREADS": "1",
+                "VECLIB_MAXIMUM_THREADS": "1",
+                "NUMEXPR_NUM_THREADS": "1",
+            },
+            "cores": 1,
+            "chain_method": "sequential",
+            "progressbar": False,
+            "compute_convergence_checks": False,
+            "sbc_draw_selection": {
+                "method": "sha256-score-without-replacement-v1",
+                "source_order": "chain-major-retained-draws",
+                "count": 100,
+            },
+            "initialization_policies": {
+                "backend-default": (
+                    "use the explicit start_seeds; call "
+                    "make_initial_point_fns_per_chain once with every free RV "
+                    "jittered; pass those exact transformed starts with adapt_diag"
+                ),
+                "hssm-default": (
+                    "seed and restore legacy NumPy with initialization_seed while "
+                    "HSSM performs constrained preprocessing and support-aware "
+                    "jitter; transform the resulting _initvals once with no "
+                    "additional jitter; replicate that identical transformed start "
+                    "across chains and pass it with adapt_diag"
+                ),
+            },
+            "seed_execution": {
+                "start_seeds": (
+                    "backend-default only: derive_start_seed(initialization_seed,"
+                    "cell_id,replicate,chain_index) for every chain; hssm-default "
+                    "records an empty list and consumes initialization_seed exactly "
+                    "once while constructing _initvals"
+                ),
+                "pymc": (
+                    "chain_seeds has length chains and is passed verbatim as "
+                    "random_seed; sampler_seed is null; "
+                    "effective_numpyro_chain_keys is null"
+                ),
+                "numpyro": (
+                    "chain_seeds is empty; scalar sampler_seed is passed to "
+                    "sample_numpyro_nuts; effective key is PRNGKey(sampler_seed) for "
+                    "one chain or jax.random.split(PRNGKey(sampler_seed),chains) "
+                    "otherwise; record every resulting two-uint32 key in "
+                    "effective_numpyro_chain_keys"
+                ),
+                "numpyro_split_version": (
+                    "jax-0.11.1-threefry-PRNGKey-and-random-split"
+                ),
+            },
+        },
+        "manifest.execution_policy",
+    )
+
+
+def _validate_artifact_policy(value: Any) -> None:
+    _validate_frozen_contract(
+        value,
+        {
+            "data_path": "data/<data_id>-r<replicate>.json",
+            "cell_path": "cells/<cell_id>.json",
+            "start_path": "starts/<cell_id>.json",
+            "chain_path": "chains/<cell_id>.nc",
+            "hash": "sha256-exact-bytes",
+            "data_artifact": (
+                "canonical strict JSON containing scenario-independent truth, group "
+                "values, observations, and all DGP seeds; shared writers must verify "
+                "identical bytes"
+            ),
+            "write_order": ["start", "chain", "cell"],
+            "chain_dimensions": ["chain", "draw"],
+            "chain_variables": [
+                "group_location",
+                "group_scale",
+                "group_first",
+                "group_middle",
+                "group_last",
+            ],
+            "chain_variable_scales": {
+                "group_location": "response",
+                "group_scale": (
+                    "prior-native (response for truncated_normal; linear_predictor "
+                    "for linked_normal)"
+                ),
+                "group_first": "response",
+                "group_middle": "response",
+                "group_last": "response",
+            },
+            "sample_stats_variables": [
+                "diverging",
+                "energy",
+                "tree_depth",
+                "n_steps",
+                "step_size",
+                "acceptance_rate",
+            ],
+            "failure_semantics": (
+                "data is retained after successful generation; start is retained only "
+                "after successful initialization; chain is retained only after "
+                "successful sampling and validation; cell result is always the final "
+                "atomic completion marker and names absent artifacts as null; discard "
+                "partial temporary files"
+            ),
+            "start_coordinates": "pymc-transformed-value-variables",
+        },
+        "manifest.artifact_policy",
+    )
+
+
 def _validate_analysis_policy(value: Any) -> None:
     policy = _require_object(value, "manifest.analysis_policy")
     expected = {
         "monitored_parameters",
         "fixed_recovery_abs_mean_standardized_error_max",
-        "reproducible_bias_abs_mean_standardized_error_min",
+        "fixed_recovery_replicates",
+        "fixed_recovery_bias_policy",
         "familywise_alpha",
         "sbc_rank_draw_count",
         "sbc_replicates",
+        "sbc_draw_selection",
         "coverage_power_design",
         "coverage_levels",
         "backend_combined_rank_rhat_max",
         "backend_posterior_mean_mcse_z_max",
         "gradient_contract",
+        "posterior_summary",
+        "gradient_evaluation",
+        "sampler_stat_mapping",
     }
     _require_exact_keys(policy, expected, "manifest.analysis_policy")
     parameters = policy["monitored_parameters"]
@@ -615,6 +985,51 @@ def _validate_analysis_policy(value: Any) -> None:
         raise QualificationError(
             "SBC rank draws and replicates must remain 100 and 275"
         )
+    if policy["fixed_recovery_replicates"] != 5:
+        raise QualificationError("fixed recovery must retain five replicates")
+    if policy["fixed_recovery_bias_policy"] != (
+        "absolute-mean-standardized-error-only; five-replicate sign tests are "
+        "descriptive"
+    ):
+        raise QualificationError("fixed recovery bias policy has changed")
+    expected_draw_selection = {
+        "method": "sha256-score-without-replacement-v1",
+        "source_order": "chain-major-retained-draws",
+        "count": 100,
+    }
+    if policy["sbc_draw_selection"] != expected_draw_selection:
+        raise QualificationError("SBC draw-selection policy has changed")
+    exact_algorithms = {
+        "posterior_summary": {
+            "draw_set": "all-retained-post-warmup-draws",
+            "quantile_method": "numpy-linear",
+            "rhat_method": "arviz-rank-normalized-split",
+            "ess_methods": ["arviz-bulk", "arviz-tail"],
+            "mcse_method": "arviz-mean",
+        },
+        "gradient_evaluation": {
+            "coordinate_system": ("pymc-transformed-value-variables-with-jacobian"),
+            "point": "first-chain-exact-sampler-start",
+            "finite_difference_stencil": "five-point-central",
+            "finite_difference_step": (
+                "machine-epsilon-to-the-one-fifth-times-max-one-abs-coordinate"
+            ),
+            "model_gradient_order": (
+                "pymc-continuous-value-vars-raveled-in-model-order"
+            ),
+        },
+        "sampler_stat_mapping": {
+            "diverging": "boolean-per-draw",
+            "energy": "hamiltonian-energy-per-draw",
+            "tree_depth": "tree-depth-per-draw",
+            "n_steps": "leapfrog-steps-per-draw",
+            "step_size": "integrator-step-size-per-draw",
+            "acceptance_rate": "acceptance-probability-per-draw",
+        },
+    }
+    for field, expected_algorithm in exact_algorithms.items():
+        if policy[field] != expected_algorithm:
+            raise QualificationError(f"analysis {field} algorithm has changed")
     power_design = _require_object(
         policy["coverage_power_design"], "analysis_policy.coverage_power_design"
     )
@@ -636,7 +1051,7 @@ def _validate_analysis_policy(value: Any) -> None:
     if (
         power_design["method"] != "two-sided-clopper-pearson-with-bonferroni"
         or power_design["candidate_scenario_ids"]
-        != ["calib-pymc-lower-outside", "calib-pymc-two-sided-near"]
+        != ["calib-pymc-lower-outside", "calib-pymc-two-sided-midpoint"]
         or power_design["candidate_parameter_units"] != 10
         or power_design["coverage_checks_per_unit"] != 2
         or power_design["minimum_replicates"] != policy["sbc_replicates"]
@@ -654,7 +1069,6 @@ def _validate_analysis_policy(value: Any) -> None:
         raise QualificationError("coverage power design minimum_power is too low")
     for field in (
         "fixed_recovery_abs_mean_standardized_error_max",
-        "reproducible_bias_abs_mean_standardized_error_min",
         "backend_combined_rank_rhat_max",
         "backend_posterior_mean_mcse_z_max",
     ):
@@ -668,9 +1082,24 @@ def _validate_analysis_policy(value: Any) -> None:
     )
     _require_exact_keys(
         gradient,
-        {"evaluation", "finite_difference", "pytensor_jax", "bambi_isomorphism"},
+        {
+            "evaluation",
+            "combined_tolerance_rule",
+            "abs_rel_maxima_role",
+            "finite_difference",
+            "pytensor_jax",
+            "bambi_isomorphism",
+            "likelihood_pytensor_jax",
+        },
         "analysis_policy.gradient_contract",
     )
+    if gradient["combined_tolerance_rule"] != (
+        "max(abs(observed-reference)/(absolute_tolerance+relative_tolerance*"
+        "max(abs(reference),abs(observed)))) <= 1"
+    ):
+        raise QualificationError("gradient combined tolerance rule has changed")
+    if gradient["abs_rel_maxima_role"] != "descriptive-only":
+        raise QualificationError("gradient abs/rel maxima role has changed")
     evaluation = _require_object(
         gradient["evaluation"], "analysis_policy.gradient_contract.evaluation"
     )
@@ -695,6 +1124,7 @@ def _validate_analysis_policy(value: Any) -> None:
         "finite_difference": {"float64", "float32", "float32_narrow_stress"},
         "pytensor_jax": {"float64", "float32"},
         "bambi_isomorphism": {"float64", "float32"},
+        "likelihood_pytensor_jax": {"float64", "float32"},
     }
     for contract_name, precisions in expected_precisions.items():
         contract = _require_object(
@@ -709,9 +1139,17 @@ def _validate_analysis_policy(value: Any) -> None:
         for precision, raw_tolerances in contract.items():
             path = f"analysis_policy.gradient_contract.{contract_name}.{precision}"
             tolerances = _require_object(raw_tolerances, path)
-            _require_exact_keys(
-                tolerances, {"absolute_tolerance", "relative_tolerance"}, path
+            tolerance_fields = (
+                {
+                    "value_absolute_tolerance",
+                    "value_relative_tolerance",
+                    "gradient_absolute_tolerance",
+                    "gradient_relative_tolerance",
+                }
+                if contract_name == "likelihood_pytensor_jax"
+                else {"absolute_tolerance", "relative_tolerance"}
             )
+            _require_exact_keys(tolerances, tolerance_fields, path)
             if any(
                 not _is_number(tolerance) or tolerance <= 0
                 for tolerance in tolerances.values()
@@ -743,15 +1181,17 @@ def _validate_scenario(scenario: Any, tiers: Mapping[str, Any]) -> None:
         "layer": {"pymc", "bambi", "hssm"},
         "purpose": {"candidate", "control", "diagnostic"},
         "bound_kind": {"lower", "upper", "two_sided", "narrow"},
-        "anchor": {"outside", "boundary", "inside"},
+        "prior": {"truncated_normal", "linked_normal"},
+        "truth_kind": {"fixed", "prior_predictive"},
+        "truth_regime": {"near_lower", "near_upper", "interior", "prior_predictive"},
         "floatx": {"float32", "float64"},
         "sampler": {"pymc", "numpyro"},
-        "initialization_policy": {"default", "no-jitter-gradient-screen"},
+        "initialization_policy": {"backend-default", "hssm-default"},
     }
     for field, allowed in enums.items():
         if scenario[field] not in allowed:
             raise QualificationError(f"{path}.{field} is unsupported")
-    for field in ("model", "prior"):
+    for field in ("model",):
         if not isinstance(scenario[field], str) or not scenario[field]:
             raise QualificationError(f"{path}.{field} must be a non-empty string")
     for field in ("data_id", "posterior_pair_id"):
@@ -760,6 +1200,8 @@ def _validate_scenario(scenario: Any, tiers: Mapping[str, Any]) -> None:
             not isinstance(value, str) or not SAFE_ID.fullmatch(value)
         ):
             raise QualificationError(f"{path}.{field} must be a canonical slug")
+    if scenario.get("data_id") is None:
+        raise QualificationError(f"{path}.data_id is required in v2")
     dependency_profile = scenario.get("dependency_profile")
     if dependency_profile is not None and (
         not isinstance(dependency_profile, str) or not dependency_profile
@@ -768,11 +1210,14 @@ def _validate_scenario(scenario: Any, tiers: Mapping[str, Any]) -> None:
     calibration_kind = scenario.get("calibration_kind")
     if calibration_kind is not None and calibration_kind != "sbc":
         raise QualificationError(f"{path}.calibration_kind is unsupported")
-    for field in ("truth_distance_sd", "group_sigma", "target_accept"):
-        if not _is_number(scenario[field]) or not math.isfinite(scenario[field]):
-            raise QualificationError(f"{path}.{field} must be finite")
-    if scenario["truth_distance_sd"] < 0 or scenario["group_sigma"] <= 0:
-        raise QualificationError(f"{path} has an invalid scale or distance")
+    if not _is_number(scenario["prior_hyper_location"]) or not math.isfinite(
+        scenario["prior_hyper_location"]
+    ):
+        raise QualificationError(f"{path}.prior_hyper_location must be finite")
+    if not _is_number(scenario["target_accept"]) or not math.isfinite(
+        scenario["target_accept"]
+    ):
+        raise QualificationError(f"{path}.target_accept must be finite")
     if not 0 < scenario["target_accept"] < 1:
         raise QualificationError(f"{path}.target_accept must lie in (0, 1)")
     for field in ("n_groups", "replicates", "chains", "tune", "draws"):
@@ -797,6 +1242,103 @@ def _validate_scenario(scenario: Any, tiers: Mapping[str, Any]) -> None:
         lower is None or upper is None or lower >= upper
     ):
         raise QualificationError(f"{path} has inconsistent two-sided bounds")
+
+    expected_hyper_location = (
+        (lower + upper) / 2
+        if scenario["prior"] == "truncated_normal"
+        and lower is not None
+        and upper is not None
+        else 0.0
+    )
+    if scenario["prior_hyper_location"] != expected_hyper_location:
+        raise QualificationError(
+            f"{path}.prior_hyper_location does not follow its frozen prior rule"
+        )
+
+    truth_kind = scenario["truth_kind"]
+    truth_location = scenario["truth_group_location"]
+    truth_scale = scenario["truth_group_scale"]
+    truth_regime = scenario["truth_regime"]
+    truth_boundary = scenario["truth_boundary"]
+    expected_boundary = {
+        "near_lower": "lower",
+        "near_upper": "upper",
+        "interior": None,
+        "prior_predictive": None,
+    }[truth_regime]
+    if truth_boundary != expected_boundary:
+        raise QualificationError(f"{path}.truth_boundary disagrees with truth_regime")
+    if truth_boundary is not None and truth_boundary not in {"lower", "upper"}:
+        raise QualificationError(f"{path}.truth_boundary is unsupported")
+    if truth_kind == "fixed":
+        if truth_regime == "prior_predictive":
+            raise QualificationError(f"{path} fixed truth cannot be prior_predictive")
+        if not _is_number(truth_location) or not math.isfinite(truth_location):
+            raise QualificationError(f"{path}.truth_group_location must be finite")
+        if (
+            not _is_number(truth_scale)
+            or not math.isfinite(truth_scale)
+            or truth_scale <= 0
+        ):
+            raise QualificationError(
+                f"{path}.truth_group_scale must be finite and positive"
+            )
+        if lower is not None and truth_location <= lower:
+            raise QualificationError(
+                f"{path}.truth_group_location must lie strictly above lower"
+            )
+        if upper is not None and truth_location >= upper:
+            raise QualificationError(
+                f"{path}.truth_group_location must lie strictly below upper"
+            )
+        if calibration_kind is not None:
+            raise QualificationError(f"{path} fixed truth cannot request calibration")
+    else:
+        if (
+            truth_regime != "prior_predictive"
+            or truth_location is not None
+            or truth_scale is not None
+            or calibration_kind != "sbc"
+        ):
+            raise QualificationError(
+                f"{path} prior-predictive truth requires null fixed truths and SBC"
+            )
+
+    expected_group_indices = [0, scenario["n_groups"] // 2, scenario["n_groups"] - 1]
+    if scenario["group_indices"] != expected_group_indices:
+        raise QualificationError(
+            f"{path}.group_indices must remain {expected_group_indices}"
+        )
+    if len(set(expected_group_indices)) != 3:
+        raise QualificationError(
+            f"{path}.n_groups cannot define three monitored groups"
+        )
+
+    expected_initialization = (
+        "hssm-default" if scenario["layer"] == "hssm" else "backend-default"
+    )
+    if scenario["initialization_policy"] != expected_initialization:
+        raise QualificationError(
+            f"{path}.initialization_policy does not match its model layer"
+        )
+    expected_purpose = {
+        "smoke": {"candidate"},
+        "qualification": {"candidate", "control"},
+        "stress": {"diagnostic"},
+    }[tier]
+    if scenario["purpose"] not in expected_purpose:
+        raise QualificationError(f"{path}.purpose disagrees with its tier")
+    if scenario["purpose"] == "control":
+        if scenario["prior"] != "linked_normal" or scenario["recovery"]:
+            raise QualificationError(
+                f"{path} controls must use linked_normal and recovery=false"
+            )
+    elif scenario["prior"] != "truncated_normal":
+        raise QualificationError(
+            f"{path} candidate/diagnostic cells must use truncated_normal"
+        )
+    if tier != "qualification" and scenario["recovery"]:
+        raise QualificationError(f"{path} only primary candidates may recover truth")
     control_id = scenario["control_id"]
     if control_id is not None and (
         not isinstance(control_id, str) or not SAFE_ID.fullmatch(control_id)
@@ -810,13 +1352,14 @@ def _validate_scenario(scenario: Any, tiers: Mapping[str, Any]) -> None:
             "tune": 1000,
             "draws": 1000,
             "target_accept": 0.9,
-            "initialization_policy": "default",
         }
         for field, expected in frozen_values.items():
             if scenario[field] != expected:
                 raise QualificationError(
                     f"{path}.{field} must remain {expected!r} in the primary gate"
                 )
+        if scenario["purpose"] == "candidate" and not scenario["recovery"]:
+            raise QualificationError(f"{path} primary candidates require recovery")
     if calibration_kind == "sbc":
         if tier != "qualification" or scenario["purpose"] != "candidate":
             raise QualificationError(
@@ -830,6 +1373,7 @@ def _validate_scenario(scenario: Any, tiers: Mapping[str, Any]) -> None:
             raise QualificationError(f"{path} calibration cannot reference a control")
     if scenario["canonical"] and (
         tier != "qualification"
+        or scenario["purpose"] != "candidate"
         or scenario["layer"] != "hssm"
         or scenario["model"] not in {"lba2_b", "approx_ddm_z"}
     ):
@@ -841,10 +1385,14 @@ def _validate_scenario(scenario: Any, tiers: Mapping[str, Any]) -> None:
 def validate_manifest(manifest: Any) -> Mapping[str, Any]:
     """Validate and return the frozen study manifest."""
     manifest = _require_object(manifest, "manifest")
-    _require_exact_keys(manifest, MANIFEST_KEYS, "manifest")
-    if manifest["schema_version"] != SCHEMA_VERSION:
+    if manifest.get("schema_version") == 1:
+        raise QualificationError(
+            "truncated_hierarchy_v1 is superseded and cannot be executed"
+        )
+    if manifest.get("schema_version") != SCHEMA_VERSION:
         raise QualificationError("unsupported manifest schema_version")
-    if manifest["study_id"] != "truncated_hierarchy_v1":
+    _require_exact_keys(manifest, MANIFEST_KEYS, "manifest")
+    if manifest["study_id"] != "truncated_hierarchy_v2":
         raise QualificationError("unexpected study_id")
     if manifest["status"] != "frozen-before-primary-runs":
         raise QualificationError("manifest must be frozen before primary runs")
@@ -852,13 +1400,22 @@ def validate_manifest(manifest: Any) -> Mapping[str, Any]:
         raise QualificationError("manifest.description must be non-empty")
     if not _is_int(manifest["master_seed"]) or manifest["master_seed"] < 0:
         raise QualificationError("manifest.master_seed must be a non-negative integer")
-    if manifest["seed_derivation"] != "blake2b-64-v1":
+    if manifest["seed_derivation"] != "blake2b-64-v2":
         raise QualificationError("unsupported seed derivation")
     _validate_tiers(manifest["tiers"])
     _validate_dependency_profiles(manifest["dependency_profiles"])
     _validate_model_contracts(manifest["model_contracts"])
+    _validate_prior_contracts(manifest["prior_contracts"])
+    _validate_data_generation(manifest["data_generation"])
     _validate_analysis_policy(manifest["analysis_policy"])
+    _validate_execution_policy(manifest["execution_policy"])
+    _validate_artifact_policy(manifest["artifact_policy"])
     _validate_thresholds(manifest["thresholds"])
+    if (
+        manifest["analysis_policy"]["sbc_draw_selection"]
+        != manifest["execution_policy"]["sbc_draw_selection"]
+    ):
+        raise QualificationError("analysis and execution SBC draw selection disagree")
     scenarios = manifest["scenarios"]
     if not isinstance(scenarios, list) or not scenarios:
         raise QualificationError("manifest.scenarios must be a non-empty list")
@@ -1057,15 +1614,23 @@ def derive_seed(
     purpose: str,
     chain_index: int | None = None,
 ) -> int:
-    """Derive a stable positive 31-bit seed for a dataset or sampler chain."""
+    """Derive one domain-separated positive 31-bit v2 experiment seed."""
     if not _is_int(master_seed) or master_seed < 0:
         raise QualificationError("master_seed must be a non-negative integer")
     if not isinstance(scenario_id, str) or not SAFE_ID.fullmatch(scenario_id):
         raise QualificationError("scenario_id must be a canonical slug")
     if not _is_int(replicate) or replicate < 0:
         raise QualificationError("replicate must be a non-negative integer")
-    if purpose not in {"data", "chain", "sbc_tie"}:
-        raise QualificationError("purpose must be 'data', 'chain', or 'sbc_tie'")
+    allowed_purposes = {
+        "data",
+        "initialization",
+        "sampler",
+        "sbc_draw",
+        "sbc_tie",
+        "chain",
+    }
+    if purpose not in allowed_purposes:
+        raise QualificationError(f"purpose must be one of {sorted(allowed_purposes)}")
     if purpose != "chain" and chain_index is not None:
         raise QualificationError(f"{purpose} seeds cannot have a chain_index")
     if purpose == "chain":
@@ -1075,7 +1640,7 @@ def derive_seed(
             raise QualificationError("chain seeds require a non-negative chain_index")
     payload = "\0".join(
         [
-            "hssm-truncated-hierarchy-seed-v1",
+            "hssm-truncated-hierarchy-seed-v2",
             str(master_seed),
             scenario_id,
             str(replicate),
@@ -1083,7 +1648,67 @@ def derive_seed(
             "" if chain_index is None else str(chain_index),
         ]
     ).encode()
-    digest = hashlib.blake2b(payload, digest_size=8, person=b"hssm1282").digest()
+    digest = hashlib.blake2b(payload, digest_size=8, person=b"hssm1282v2").digest()
+    return int.from_bytes(digest, "big") % (2**31 - 1) + 1
+
+
+def derive_data_stream_seed(
+    data_seed: int, data_id: str, replicate: int, purpose: str
+) -> int:
+    """Derive one DGP stream seed from its shared per-data-replicate root."""
+    if not _is_int(data_seed) or not 0 < data_seed < 2**31:
+        raise QualificationError("data_seed must be a positive 31-bit integer")
+    if not isinstance(data_id, str) or not SAFE_ID.fullmatch(data_id):
+        raise QualificationError("data_id must be a canonical slug")
+    if not _is_int(replicate) or replicate < 0:
+        raise QualificationError("replicate must be a non-negative integer")
+    allowed_purposes = {"truth", "group", "observation"}
+    if purpose not in allowed_purposes:
+        raise QualificationError(
+            f"data stream purpose must be one of {sorted(allowed_purposes)}"
+        )
+    payload = "\0".join(
+        [
+            "hssm-truncated-hierarchy-seed-v2",
+            str(data_seed),
+            data_id,
+            str(replicate),
+            purpose,
+            "",
+        ]
+    ).encode()
+    digest = hashlib.blake2b(payload, digest_size=8, person=b"hssm1282v2").digest()
+    return int.from_bytes(digest, "big") % (2**31 - 1) + 1
+
+
+def derive_start_seed(
+    initialization_seed: int,
+    cell_id: str,
+    replicate: int,
+    chain_index: int,
+) -> int:
+    """Derive one chain-start seed from the cell initialization root."""
+    if not _is_int(initialization_seed) or not 0 < initialization_seed < 2**31:
+        raise QualificationError(
+            "initialization_seed must be a positive 31-bit integer"
+        )
+    if not isinstance(cell_id, str) or not SAFE_CELL_ID.fullmatch(cell_id):
+        raise QualificationError("cell_id must be canonical")
+    if not _is_int(replicate) or replicate < 0:
+        raise QualificationError("replicate must be a non-negative integer")
+    if not _is_int(chain_index) or chain_index < 0:
+        raise QualificationError("chain_index must be a non-negative integer")
+    payload = "\0".join(
+        [
+            "hssm-truncated-hierarchy-seed-v2",
+            str(initialization_seed),
+            cell_id,
+            str(replicate),
+            f"start-{chain_index}",
+            "",
+        ]
+    ).encode()
+    digest = hashlib.blake2b(payload, digest_size=8, person=b"hssm1282v2").digest()
     return int.from_bytes(digest, "big") % (2**31 - 1) + 1
 
 
@@ -1091,68 +1716,107 @@ def _cell_id(scenario_id: str, replicate: int) -> str:
     return f"{scenario_id}--replicate-{replicate:02d}"
 
 
-def _control_seed_owners(manifest: Mapping[str, Any]) -> dict[str, str]:
+def _planned_seed_fields(
+    manifest: Mapping[str, Any], scenario: Mapping[str, Any], replicate: int
+) -> dict[str, Any]:
+    master_seed = manifest["master_seed"]
+    data_owner = scenario["data_id"]
+    scenario_id = scenario["scenario_id"]
+    calibration = scenario.get("calibration_kind") == "sbc"
+    data_seed = derive_seed(master_seed, data_owner, replicate, "data")
+    initialization_seed = derive_seed(
+        master_seed, scenario_id, replicate, "initialization"
+    )
+    cell_id = _cell_id(scenario_id, replicate)
+    pymc_sampler = scenario["sampler"] == "pymc"
+    explicit_start_seeds = scenario["initialization_policy"] == "backend-default"
     return {
-        scenario["control_id"]: scenario["scenario_id"]
-        for scenario in manifest["scenarios"]
-        if scenario["control_id"] is not None
+        "data_seed": data_seed,
+        "truth_seed": derive_data_stream_seed(
+            data_seed, data_owner, replicate, "truth"
+        ),
+        "group_seed": derive_data_stream_seed(
+            data_seed, data_owner, replicate, "group"
+        ),
+        "observation_seed": derive_data_stream_seed(
+            data_seed, data_owner, replicate, "observation"
+        ),
+        "initialization_seed": initialization_seed,
+        "start_seeds": [
+            derive_start_seed(initialization_seed, cell_id, replicate, chain)
+            for chain in range(scenario["chains"])
+        ]
+        if explicit_start_seeds
+        else [],
+        "sampler_seed": (
+            None
+            if pymc_sampler
+            else derive_seed(master_seed, scenario_id, replicate, "sampler")
+        ),
+        "sbc_draw_seed": (
+            derive_seed(master_seed, scenario_id, replicate, "sbc_draw")
+            if calibration
+            else None
+        ),
+        "sbc_tie_seed": (
+            derive_seed(master_seed, scenario_id, replicate, "sbc_tie")
+            if calibration
+            else None
+        ),
+        "chain_seeds": (
+            [
+                derive_seed(master_seed, scenario_id, replicate, "chain", chain)
+                for chain in range(scenario["chains"])
+            ]
+            if pymc_sampler
+            else []
+        ),
     }
 
 
-def expand_plan(manifest: Mapping[str, Any], tier: str) -> list[dict[str, Any]]:
-    """Expand one manifest tier into its deterministic per-replicate plan."""
-    validate_manifest(manifest)
-    if tier not in ALLOWED_TIERS:
-        raise QualificationError(f"unknown tier: {tier}")
+def _expected_plan_entries(
+    manifest: Mapping[str, Any], tier: str
+) -> list[dict[str, Any]]:
     digest = manifest_sha256(manifest)
-    entries: list[dict[str, Any]] = []
-    control_seed_owners = _control_seed_owners(manifest)
-    data_seed_owners: dict[int, tuple[str, int]] = {}
-    used_chain_seeds: set[int] = set()
+    entries = []
+    seed_owners: dict[int, tuple[Any, ...]] = {}
     for scenario in manifest["scenarios"]:
         if scenario["tier"] != tier:
             continue
         for replicate in range(scenario["replicates"]):
-            data_seed_owner = scenario.get("data_id") or control_seed_owners.get(
-                scenario["scenario_id"], scenario["scenario_id"]
-            )
-            data_seed = derive_seed(
-                manifest["master_seed"], data_seed_owner, replicate, "data"
-            )
-            chain_seeds = [
-                derive_seed(
-                    manifest["master_seed"],
+            seeds = _planned_seed_fields(manifest, scenario, replicate)
+            data_owner = scenario["data_id"]
+            scalar_seed_owners = {
+                "data_seed": ("data", data_owner, replicate),
+                "truth_seed": ("truth", data_owner, replicate),
+                "group_seed": ("group", data_owner, replicate),
+                "observation_seed": ("observation", data_owner, replicate),
+                "initialization_seed": (
+                    "initialization",
                     scenario["scenario_id"],
                     replicate,
-                    "chain",
-                    chain,
-                )
-                for chain in range(scenario["chains"])
-            ]
-            sbc_tie_seed = (
-                derive_seed(
-                    manifest["master_seed"],
-                    scenario["scenario_id"],
-                    replicate,
-                    "sbc_tie",
-                )
-                if scenario.get("calibration_kind") == "sbc"
-                else None
-            )
-            owner = (data_seed_owner, replicate)
-            prior_owner = data_seed_owners.setdefault(data_seed, owner)
-            if prior_owner != owner:
-                raise QualificationError(
-                    "derived data-seed collision in generated plan"
-                )
-            if (
-                data_seed in used_chain_seeds
-                or len(set(chain_seeds)) != len(chain_seeds)
-                or used_chain_seeds.intersection(chain_seeds)
-                or any(seed in data_seed_owners for seed in chain_seeds)
-            ):
-                raise QualificationError("derived seed collision in generated plan")
-            used_chain_seeds.update(chain_seeds)
+                ),
+                "sampler_seed": ("sampler", scenario["scenario_id"], replicate),
+                "sbc_draw_seed": ("sbc_draw", scenario["scenario_id"], replicate),
+                "sbc_tie_seed": ("sbc_tie", scenario["scenario_id"], replicate),
+            }
+            for field, owner in scalar_seed_owners.items():
+                seed = seeds[field]
+                if seed is None:
+                    continue
+                previous = seed_owners.setdefault(seed, owner)
+                if previous != owner:
+                    raise QualificationError("derived seed collision in generated plan")
+            for chain, seed in enumerate(seeds["start_seeds"]):
+                start_owner = ("start", scenario["scenario_id"], replicate, chain)
+                previous = seed_owners.setdefault(seed, start_owner)
+                if previous != start_owner:
+                    raise QualificationError("derived seed collision in generated plan")
+            for chain, seed in enumerate(seeds["chain_seeds"]):
+                chain_owner = ("chain", scenario["scenario_id"], replicate, chain)
+                previous = seed_owners.setdefault(seed, chain_owner)
+                if previous != chain_owner:
+                    raise QualificationError("derived seed collision in generated plan")
             entries.append(
                 {
                     "schema_version": SCHEMA_VERSION,
@@ -1162,12 +1826,19 @@ def expand_plan(manifest: Mapping[str, Any], tier: str) -> list[dict[str, Any]]:
                     "cell_id": _cell_id(scenario["scenario_id"], replicate),
                     "scenario_id": scenario["scenario_id"],
                     "replicate": replicate,
-                    "data_seed": data_seed,
-                    "sbc_tie_seed": sbc_tie_seed,
-                    "chain_seeds": chain_seeds,
+                    **seeds,
                     "scenario": dict(scenario),
                 }
             )
+    return entries
+
+
+def expand_plan(manifest: Mapping[str, Any], tier: str) -> list[dict[str, Any]]:
+    """Expand one manifest tier into its deterministic per-replicate plan."""
+    validate_manifest(manifest)
+    if tier not in ALLOWED_TIERS:
+        raise QualificationError(f"unknown tier: {tier}")
+    entries = _expected_plan_entries(manifest, tier)
     validate_plan(entries, manifest, tier)
     return entries
 
@@ -1181,54 +1852,7 @@ def validate_plan(
         raise QualificationError(f"unknown tier: {tier}")
     if not isinstance(plan, Sequence) or isinstance(plan, str | bytes):
         raise QualificationError("plan must be a sequence")
-    expected: list[dict[str, Any]] = []
-    digest = manifest_sha256(manifest)
-    control_seed_owners = _control_seed_owners(manifest)
-    for scenario in manifest["scenarios"]:
-        if scenario["tier"] != tier:
-            continue
-        for replicate in range(scenario["replicates"]):
-            data_seed_owner = scenario.get("data_id") or control_seed_owners.get(
-                scenario["scenario_id"], scenario["scenario_id"]
-            )
-            expected.append(
-                {
-                    "schema_version": SCHEMA_VERSION,
-                    "study_id": manifest["study_id"],
-                    "manifest_sha256": digest,
-                    "scenario_sha256": _sha256(scenario),
-                    "cell_id": _cell_id(scenario["scenario_id"], replicate),
-                    "scenario_id": scenario["scenario_id"],
-                    "replicate": replicate,
-                    "data_seed": derive_seed(
-                        manifest["master_seed"],
-                        data_seed_owner,
-                        replicate,
-                        "data",
-                    ),
-                    "sbc_tie_seed": (
-                        derive_seed(
-                            manifest["master_seed"],
-                            scenario["scenario_id"],
-                            replicate,
-                            "sbc_tie",
-                        )
-                        if scenario.get("calibration_kind") == "sbc"
-                        else None
-                    ),
-                    "chain_seeds": [
-                        derive_seed(
-                            manifest["master_seed"],
-                            scenario["scenario_id"],
-                            replicate,
-                            "chain",
-                            chain,
-                        )
-                        for chain in range(scenario["chains"])
-                    ],
-                    "scenario": dict(scenario),
-                }
-            )
+    expected = _expected_plan_entries(manifest, tier)
     if len(plan) != len(expected):
         raise QualificationError(
             f"plan for {tier} has {len(plan)} cells; expected {len(expected)}"
@@ -1279,6 +1903,13 @@ def _plan_csv(plan: Sequence[Mapping[str, Any]]) -> str:
         "scenario_id",
         "replicate",
         "data_seed",
+        "truth_seed",
+        "group_seed",
+        "observation_seed",
+        "initialization_seed",
+        "start_seeds",
+        "sampler_seed",
+        "sbc_draw_seed",
         "sbc_tie_seed",
         "chain_seeds",
         "manifest_sha256",
@@ -1294,6 +1925,13 @@ def _plan_csv(plan: Sequence[Mapping[str, Any]]) -> str:
             "scenario_id": entry["scenario_id"],
             "replicate": entry["replicate"],
             "data_seed": entry["data_seed"],
+            "truth_seed": entry["truth_seed"],
+            "group_seed": entry["group_seed"],
+            "observation_seed": entry["observation_seed"],
+            "initialization_seed": entry["initialization_seed"],
+            "start_seeds": ";".join(map(str, entry["start_seeds"])),
+            "sampler_seed": entry["sampler_seed"],
+            "sbc_draw_seed": entry["sbc_draw_seed"],
             "sbc_tie_seed": entry["sbc_tie_seed"],
             "chain_seeds": ";".join(map(str, entry["chain_seeds"])),
             "manifest_sha256": entry["manifest_sha256"],
@@ -1512,6 +2150,31 @@ def _effective_dependency_profile(plan_entry: Mapping[str, Any]) -> str:
     return plan_entry["scenario"].get("dependency_profile", DEFAULT_DEPENDENCY_PROFILE)
 
 
+@lru_cache(maxsize=None)
+def derive_numpyro_chain_keys(
+    sampler_seed: int, chains: int
+) -> tuple[tuple[int, int], ...]:
+    """Mirror PyMC's exact NumPyro PRNGKey/split contract without sampling."""
+    if not _is_int(sampler_seed) or not 0 < sampler_seed < 2**31:
+        raise QualificationError("sampler_seed must be a positive 31-bit integer")
+    if not _is_int(chains) or chains <= 0:
+        raise QualificationError("chains must be a positive integer")
+    try:
+        import jax
+    except ImportError as error:
+        raise QualificationError(
+            "cannot validate NumPyro effective chain keys because JAX is unavailable"
+        ) from error
+    key = jax.random.PRNGKey(sampler_seed)
+    keys = jax.random.split(key, chains) if chains > 1 else key[None, :]
+    raw_keys = jax.device_get(keys).tolist()
+    if any(len(row) != 2 for row in raw_keys):  # pragma: no cover - JAX invariant
+        raise QualificationError(
+            "NumPyro effective chain keys must contain two uint32s"
+        )
+    return tuple((int(row[0]), int(row[1])) for row in raw_keys)
+
+
 def _environment_for_profile(
     catalog: Mapping[str, Mapping[str, Any]],
     dependency_profile: str,
@@ -1566,15 +2229,6 @@ def _environment_for_result(
         raise QualificationError(
             "qualification execution evidence requires a clean git checkout"
         )
-    if (
-        status != "missing"
-        and scenario["sampler"] == "numpyro"
-        and scenario["floatx"] == "float64"
-        and not environment["runtime"]["jax_enable_x64"]
-    ):
-        raise QualificationError(
-            "float64 NumPyro execution evidence requires jax_enable_x64"
-        )
     return environment
 
 
@@ -1617,44 +2271,130 @@ def _validate_provenance(
     _require_exact_keys(value, PROVENANCE_KEYS, path)
     if value["runner_version"] != RUNNER_VERSION:
         raise QualificationError(f"{path}.runner_version mismatch")
-    for key in ("sampler", "device", "floatx", "git_commit"):
+    for key in (
+        "sampler",
+        "device",
+        "floatx",
+        "git_commit",
+    ):
         if not isinstance(value[key], str) or not value[key]:
             raise QualificationError(f"{path}.{key} must be a non-empty string")
     if value["sampler"] != plan_entry["scenario"]["sampler"]:
         raise QualificationError(f"{path}.sampler does not match the plan")
     if value["floatx"] != plan_entry["scenario"]["floatx"]:
         raise QualificationError(f"{path}.floatx does not match the plan")
-    artifact = value["actual_start_artifact"]
-    actual_start = value["actual_start_sha256"]
-    if artifact is not None:
-        if not isinstance(artifact, str) or not artifact:
-            raise QualificationError(
-                f"{path}.actual_start_artifact must be null or a path"
-            )
-        artifact_path = PurePosixPath(artifact)
-        if (
-            artifact_path.is_absolute()
-            or ".." in artifact_path.parts
-            or "\\" in artifact
-            or str(artifact_path) != artifact
-        ):
-            raise QualificationError(
-                f"{path}.actual_start_artifact must be a canonical relative path"
-            )
-    if actual_start is not None and (
-        not isinstance(actual_start, str) or not SHA256.fullmatch(actual_start)
+    observed_pytensor_floatx = value["pytensor_floatx"]
+    observed_jax_x64 = value["jax_enable_x64"]
+    if status == "completed" and (
+        observed_pytensor_floatx is None or observed_jax_x64 is None
     ):
         raise QualificationError(
-            f"{path}.actual_start_sha256 must be null or a SHA-256"
+            f"{path} requires observed precision for completed cells"
         )
-    if (artifact is None) != (actual_start is None):
+    if observed_pytensor_floatx is not None and not isinstance(
+        observed_pytensor_floatx, str
+    ):
+        raise QualificationError(f"{path}.pytensor_floatx must be a string or null")
+    if observed_jax_x64 is not None and not isinstance(observed_jax_x64, bool):
+        raise QualificationError(f"{path}.jax_enable_x64 must be boolean or null")
+    if (
+        observed_pytensor_floatx is not None
+        and observed_pytensor_floatx != plan_entry["scenario"]["floatx"]
+    ):
         raise QualificationError(
-            f"{path} actual-start artifact and digest must be provided together"
+            f"{path}.pytensor_floatx does not match the planned precision"
         )
-    if status == "completed" and artifact is None:
+    expected_jax_x64 = plan_entry["scenario"]["floatx"] == "float64"
+    if observed_jax_x64 is not None and observed_jax_x64 is not expected_jax_x64:
         raise QualificationError(
-            f"{path} actual-start artifact is required for completed cells"
+            f"{path}.jax_enable_x64 does not match the planned precision"
         )
+    if (
+        status != "missing"
+        and value["device"] != manifest["execution_policy"]["required_device"]
+    ):
+        raise QualificationError(f"{path}.device does not match execution_policy")
+    effective_chain_keys = value["effective_numpyro_chain_keys"]
+    if plan_entry["scenario"]["sampler"] == "pymc":
+        if effective_chain_keys is not None:
+            raise QualificationError(
+                f"{path}.effective_numpyro_chain_keys must be null for PyMC"
+            )
+    elif effective_chain_keys is None:
+        if status == "completed":
+            raise QualificationError(
+                f"{path}.effective_numpyro_chain_keys is required for completed "
+                "NumPyro cells"
+            )
+    else:
+        expected_chain_keys = [
+            list(key)
+            for key in derive_numpyro_chain_keys(
+                plan_entry["sampler_seed"], plan_entry["scenario"]["chains"]
+            )
+        ]
+        if effective_chain_keys != expected_chain_keys:
+            raise QualificationError(
+                f"{path}.effective_numpyro_chain_keys does not match sampler_seed"
+            )
+    artifact_contracts = (
+        (
+            "data_artifact",
+            "data_sha256",
+            manifest["artifact_policy"]["data_path"]
+            .replace("<data_id>", plan_entry["scenario"]["data_id"])
+            .replace("<replicate>", str(plan_entry["replicate"])),
+        ),
+        (
+            "actual_start_artifact",
+            "actual_start_sha256",
+            manifest["artifact_policy"]["start_path"].replace(
+                "<cell_id>", plan_entry["cell_id"]
+            ),
+        ),
+        (
+            "raw_chain_artifact",
+            "raw_chain_sha256",
+            manifest["artifact_policy"]["chain_path"].replace(
+                "<cell_id>", plan_entry["cell_id"]
+            ),
+        ),
+    )
+    for artifact_field, digest_field, expected_path in artifact_contracts:
+        artifact = value[artifact_field]
+        artifact_digest = value[digest_field]
+        if artifact is not None:
+            if not isinstance(artifact, str) or not artifact:
+                raise QualificationError(
+                    f"{path}.{artifact_field} must be null or a path"
+                )
+            artifact_path = PurePosixPath(artifact)
+            if (
+                artifact_path.is_absolute()
+                or ".." in artifact_path.parts
+                or "\\" in artifact
+                or str(artifact_path) != artifact
+            ):
+                raise QualificationError(
+                    f"{path}.{artifact_field} must be a canonical relative path"
+                )
+            if artifact != expected_path:
+                raise QualificationError(
+                    f"{path}.{artifact_field} does not match artifact_policy"
+                )
+        if artifact_digest is not None and (
+            not isinstance(artifact_digest, str)
+            or not SHA256.fullmatch(artifact_digest)
+        ):
+            raise QualificationError(f"{path}.{digest_field} must be null or a SHA-256")
+        if (artifact is None) != (artifact_digest is None):
+            raise QualificationError(
+                f"{path} {artifact_field} and {digest_field} must be provided together"
+            )
+        if status == "completed" and artifact is None:
+            raise QualificationError(
+                f"{path}.{artifact_field} is required for completed cells"
+            )
     if value["environment_sha256"] != environment_sha256(environment, manifest):
         raise QualificationError(f"{path}.environment_sha256 does not match sidecar")
     if value["git_commit"] != environment["git"]["commit"]:
@@ -1820,6 +2560,13 @@ def validate_result_record(
         "scenario_id",
         "replicate",
         "data_seed",
+        "truth_seed",
+        "group_seed",
+        "observation_seed",
+        "initialization_seed",
+        "start_seeds",
+        "sampler_seed",
+        "sbc_draw_seed",
         "sbc_tie_seed",
         "chain_seeds",
     )
@@ -1864,6 +2611,12 @@ def validate_result_record(
             raise QualificationError(
                 "completed sampler metrics require posterior_draw_count"
             )
+        missing_raw_metrics = REQUIRED_SAMPLER_RAW_METRICS - metrics.keys()
+        if missing_raw_metrics:
+            raise QualificationError(
+                "completed cells require raw sampler metrics: "
+                f"{sorted(missing_raw_metrics)}"
+            )
         if draws is not None:
             expected_draws = (
                 plan_entry["scenario"]["chains"] * plan_entry["scenario"]["draws"]
@@ -1893,6 +2646,14 @@ def write_cell_result(
 ) -> Path:
     """Validate and atomically publish one per-cell JSON result."""
     validate_result_record(record, plan_entry, environment_catalog, manifest)
+    expected_directory = PurePosixPath(manifest["artifact_policy"]["cell_path"]).parts[
+        0
+    ]
+    if results_dir.name != expected_directory:
+        raise QualificationError(
+            f"results directory must be named {expected_directory!r}"
+        )
+    verify_result_artifacts(record, results_dir.parent)
     path = results_dir / f"{plan_entry['cell_id']}.json"
     _atomic_write_text(
         path,
@@ -1900,6 +2661,36 @@ def write_cell_result(
         overwrite=False,
     )
     return path
+
+
+def verify_result_artifacts(record: Mapping[str, Any], artifact_root: Path) -> None:
+    """Verify every referenced artifact exists and matches its exact byte digest."""
+    provenance = _require_object(record.get("provenance"), "result.provenance")
+    root = artifact_root.resolve()
+    contracts = (
+        ("data_artifact", "data_sha256"),
+        ("actual_start_artifact", "actual_start_sha256"),
+        ("raw_chain_artifact", "raw_chain_sha256"),
+    )
+    for artifact_field, digest_field in contracts:
+        relative = provenance.get(artifact_field)
+        expected_digest = provenance.get(digest_field)
+        if relative is None:
+            continue
+        if not isinstance(relative, str) or not isinstance(expected_digest, str):
+            raise QualificationError(
+                f"result.provenance.{artifact_field} has no valid digest pair"
+            )
+        resolved = (root / PurePosixPath(relative)).resolve()
+        if root not in resolved.parents or not resolved.is_file():
+            raise QualificationError(
+                f"result.provenance.{artifact_field} is unavailable below artifact root"
+            )
+        actual_digest = _file_sha256(resolved)
+        if actual_digest != expected_digest:
+            raise QualificationError(
+                f"result.provenance.{digest_field} does not match artifact bytes"
+            )
 
 
 def load_cell_results(results_dir: Path) -> list[Mapping[str, Any]]:
@@ -1929,6 +2720,13 @@ def _missing_result(
         "scenario_id": entry["scenario_id"],
         "replicate": entry["replicate"],
         "data_seed": entry["data_seed"],
+        "truth_seed": entry["truth_seed"],
+        "group_seed": entry["group_seed"],
+        "observation_seed": entry["observation_seed"],
+        "initialization_seed": entry["initialization_seed"],
+        "start_seeds": entry["start_seeds"],
+        "sampler_seed": entry["sampler_seed"],
+        "sbc_draw_seed": entry["sbc_draw_seed"],
         "sbc_tie_seed": entry["sbc_tie_seed"],
         "chain_seeds": entry["chain_seeds"],
         "execution_status": "missing",
@@ -1945,8 +2743,15 @@ def _missing_result(
             "sampler": entry["scenario"]["sampler"],
             "device": "unknown",
             "floatx": entry["scenario"]["floatx"],
+            "pytensor_floatx": None,
+            "jax_enable_x64": None,
+            "data_artifact": None,
+            "data_sha256": None,
+            "effective_numpyro_chain_keys": None,
             "actual_start_artifact": None,
             "actual_start_sha256": None,
+            "raw_chain_artifact": None,
+            "raw_chain_sha256": None,
             "git_commit": environment["git"]["commit"],
             "environment_sha256": environment_sha256(environment, manifest),
         },
@@ -2010,6 +2815,13 @@ def _result_csv(records: Sequence[Mapping[str, Any]]) -> str:
         "replicate",
         "execution_status",
         "data_seed",
+        "truth_seed",
+        "group_seed",
+        "observation_seed",
+        "initialization_seed",
+        "start_seeds",
+        "sampler_seed",
+        "sbc_draw_seed",
         "sbc_tie_seed",
         "chain_seeds",
         "unavailable_metrics",
@@ -2030,6 +2842,13 @@ def _result_csv(records: Sequence[Mapping[str, Any]]) -> str:
                 "replicate": record["replicate"],
                 "execution_status": record["execution_status"],
                 "data_seed": record["data_seed"],
+                "truth_seed": record["truth_seed"],
+                "group_seed": record["group_seed"],
+                "observation_seed": record["observation_seed"],
+                "initialization_seed": record["initialization_seed"],
+                "start_seeds": ";".join(map(str, record["start_seeds"])),
+                "sampler_seed": record["sampler_seed"],
+                "sbc_draw_seed": record["sbc_draw_seed"],
                 "sbc_tie_seed": record["sbc_tie_seed"],
                 "chain_seeds": ";".join(map(str, record["chain_seeds"])),
                 "unavailable_metrics": _canonical_json(record["unavailable_metrics"]),
@@ -2197,11 +3016,11 @@ def _evaluate_paired_efficiency(
     return checks
 
 
-def _gradient_contract_conditions(
+def _applicable_gradient_contracts(
     record: Mapping[str, Any],
     scenario: Mapping[str, Any],
     analysis_policy: Mapping[str, Any],
-) -> dict[str, Mapping[str, Any]]:
+) -> tuple[str, ...]:
     contract = analysis_policy["gradient_contract"]
     evaluation = contract["evaluation"]
     if (
@@ -2212,27 +3031,43 @@ def _gradient_contract_conditions(
             and scenario["sampler"] != evaluation["posterior_pair_owner_sampler"]
         )
     ):
-        return {}
+        return ()
     contract_names = ["finite_difference", "pytensor_jax"]
     if scenario["layer"] in evaluation["bambi_isomorphism_layers"]:
         contract_names.append("bambi_isomorphism")
+    if scenario["layer"] == "hssm" and scenario["model"] == "lba2_b":
+        contract_names.append("likelihood_pytensor_jax")
+    return tuple(contract_names)
+
+
+def _gradient_contract_conditions(
+    record: Mapping[str, Any],
+    scenario: Mapping[str, Any],
+    analysis_policy: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]]:
+    contract_names = _applicable_gradient_contracts(record, scenario, analysis_policy)
     conditions: dict[str, Mapping[str, Any]] = {}
     for contract_name in contract_names:
-        precision = scenario["floatx"]
-        if (
-            contract_name == "finite_difference"
-            and scenario["tier"] == "stress"
-            and scenario["bound_kind"] == "narrow"
-            and precision == "float32"
-        ):
-            precision = "float32_narrow_stress"
-        tolerances = contract[contract_name][precision]
-        for tolerance_name, metric in GRADIENT_CONTRACT_METRICS[contract_name].items():
+        for metric in GRADIENT_CONTRACT_GATE_METRICS[contract_name]:
             conditions[metric] = {
                 "comparator": "le",
-                "value": tolerances[tolerance_name],
+                "value": 1.0,
             }
     return conditions
+
+
+def _gradient_contract_required_metrics(
+    record: Mapping[str, Any],
+    scenario: Mapping[str, Any],
+    analysis_policy: Mapping[str, Any],
+) -> set[str]:
+    required: set[str] = set()
+    for contract_name in _applicable_gradient_contracts(
+        record, scenario, analysis_policy
+    ):
+        required.update(GRADIENT_CONTRACT_GATE_METRICS[contract_name])
+        required.update(GRADIENT_CONTRACT_METRICS[contract_name].values())
+    return required
 
 
 def _evaluate_gradient_contract(
@@ -2242,8 +3077,25 @@ def _evaluate_gradient_contract(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     conditions = _gradient_contract_conditions(record, scenario, analysis_policy)
     checks, missing = _evaluate_metric_map(record, conditions, "gradient_contract")
+    descriptive_metrics = (
+        _gradient_contract_required_metrics(record, scenario, analysis_policy)
+        - conditions.keys()
+    )
+    missing.extend(
+        f"{record['cell_id']}:{metric}"
+        for metric in sorted(descriptive_metrics)
+        if metric not in record["metrics"]
+        and metric not in record["unavailable_metrics"]
+    )
     for check in checks:
-        check["failure_class"] = "likelihood/backend-contract"
+        metric = check["metric"]
+        if metric.startswith("bambi_isomorphism_"):
+            failure_class = "bambi-isomorphism-contract"
+        elif metric.startswith("likelihood_pytensor_jax_"):
+            failure_class = "likelihood/backend-contract"
+        else:
+            failure_class = "prior-gradient-contract"
+        check["failure_class"] = failure_class
     return checks, missing
 
 
@@ -2268,7 +3120,6 @@ def _bias_checks(
     expected_units: Sequence[tuple[str, str]],
     scope: str,
     analysis_policy: Mapping[str, Any],
-    blockers: list[str],
 ) -> list[dict[str, Any]]:
     results = evaluate_bias_family(
         summaries,
@@ -2276,9 +3127,6 @@ def _bias_checks(
         expected_replicates=expected_replicates,
         expected_units=expected_units,
         bias_limit=analysis_policy["fixed_recovery_abs_mean_standardized_error_max"],
-        reproducible_bias_min=analysis_policy[
-            "reproducible_bias_abs_mean_standardized_error_min"
-        ],
         familywise_alpha=analysis_policy["familywise_alpha"],
     )
     checks = []
@@ -2301,14 +3149,9 @@ def _bias_checks(
             "standardized_rmse": result.standardized_rmse,
             "sign_test_pvalue": result.sign_test_pvalue,
             "holm_rejected": result.holm_rejected,
-            "reproducible_bias": result.reproducible_bias,
+            "sign_test_role": "descriptive-only",
         }
         checks.append(check)
-        if result.reproducible_bias:
-            blockers.append(
-                f"{result.family}:{result.scenario_id}:{result.parameter_id}:"
-                "reproducible-bias"
-            )
     return checks
 
 
@@ -2316,7 +3159,6 @@ def _evaluate_recovery_statistics(
     records: Sequence[Mapping[str, Any]],
     scenarios: Mapping[str, Mapping[str, Any]],
     analysis_policy: Mapping[str, Any],
-    blockers: list[str],
 ) -> list[dict[str, Any]]:
     checks: list[dict[str, Any]] = []
     for family in ("candidate", "control"):
@@ -2361,7 +3203,6 @@ def _evaluate_recovery_statistics(
                     expected_units=expected_units,
                     scope="fixed_recovery_bias",
                     analysis_policy=analysis_policy,
-                    blockers=blockers,
                 )
             )
         except QualificationStatisticsError as error:
@@ -2419,7 +3260,6 @@ def _evaluate_recovery_statistics(
                 expected_units=expected_calibration_units,
                 scope="calibration_bias",
                 analysis_policy=analysis_policy,
-                blockers=blockers,
             )
         )
     except QualificationStatisticsError as error:
@@ -2585,7 +3425,7 @@ def assess_results(
     blocking_unavailable_metrics = []
     for record in checked_records:
         scenario = by_scenario[record["scenario_id"]]
-        required_contract_metrics = _gradient_contract_conditions(
+        required_contract_metrics = _gradient_contract_required_metrics(
             record, scenario, analysis_policy
         )
         for metric, reason in sorted(record["unavailable_metrics"].items()):
@@ -2596,12 +3436,7 @@ def assess_results(
             }
             unavailable_metrics.append(item)
             scenario_level_nonowner = (
-                metric
-                in {
-                    value
-                    for mapping in GRADIENT_CONTRACT_METRICS.values()
-                    for value in mapping.values()
-                }
+                metric in GRADIENT_CONTRACT_ALL_METRICS
                 and metric not in required_contract_metrics
                 and reason == SCENARIO_LEVEL_CONTRACT_REASON
             )
@@ -2679,9 +3514,7 @@ def assess_results(
             )
         )
         checks.extend(
-            _evaluate_recovery_statistics(
-                checked_records, by_scenario, analysis_policy, blockers
-            )
+            _evaluate_recovery_statistics(checked_records, by_scenario, analysis_policy)
         )
         checks.extend(
             _evaluate_backend_pairs(
@@ -2744,6 +3577,15 @@ def assess_results(
                         condition=condition,
                     )
                 )
+
+    else:
+        conditions = manifest["thresholds"]["diagnostic"]["per_fit"]
+        for record in completed:
+            cell_checks, absent = _evaluate_metric_map(
+                record, conditions, "diagnostic_per_fit"
+            )
+            checks.extend(cell_checks)
+            missing_metrics.extend(absent)
 
     failed_checks = [check for check in checks if not check["passed"]]
     incomplete = bool(
@@ -2861,6 +3703,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             aggregate = aggregate_results(
                 plan, records, manifest, args.tier, environment_catalog
             )
+            expected_directory = PurePosixPath(
+                manifest["artifact_policy"]["cell_path"]
+            ).parts[0]
+            if args.results_dir.name != expected_directory:
+                raise QualificationError(
+                    f"results directory must be named {expected_directory!r}"
+                )
+            for record in aggregate:
+                verify_result_artifacts(record, args.results_dir.parent)
             aggregate_paths = write_aggregate(aggregate, args.output_dir)
             print("\n".join(map(str, aggregate_paths)))
             return 0

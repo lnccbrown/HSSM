@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import tomllib
 from typing import TYPE_CHECKING
 
 import pytest
@@ -15,7 +17,10 @@ from scripts.truncated_hierarchy_qualification import (
     assess_results,
     build_environment_catalog,
     compare_threshold,
+    derive_data_stream_seed,
+    derive_numpyro_chain_keys,
     derive_seed,
+    derive_start_seed,
     environment_sha256,
     expand_plan,
     load_jsonl,
@@ -28,6 +33,7 @@ from scripts.truncated_hierarchy_qualification import (
     validate_manifest,
     validate_plan,
     validate_result_record,
+    verify_result_artifacts,
     write_aggregate,
     write_cell_result,
     write_plan,
@@ -65,15 +71,19 @@ def _good_metrics(entry, manifest) -> dict[str, bool | int | float]:
         "group_rhat_max": 1.009,
         "group_ess_bulk_fraction_ge_400": 0.95,
         "group_ess_tail_fraction_ge_400": 0.95,
+        "sampling_elapsed_seconds": 10.0,
+        "step_size_median": 0.1,
+        "gradient_evaluation_count": 10_000,
+        "leapfrog_step_count": 10_000,
         "hyper_ess_per_second_median": 100.0,
         "hyper_leapfrog_steps_per_effective_sample_median": 2.0,
     }
-    conditions = qualification._gradient_contract_conditions(
+    contract_metrics = qualification._gradient_contract_required_metrics(
         {"replicate": entry["replicate"]},
         entry["scenario"],
         manifest["analysis_policy"],
     )
-    metrics.update(dict.fromkeys(conditions, 0.0))
+    metrics.update(dict.fromkeys(contract_metrics, 0.0))
     return metrics
 
 
@@ -163,8 +173,15 @@ def _result(
         "scenario_id": entry["scenario_id"],
         "replicate": entry["replicate"],
         "data_seed": entry["data_seed"],
+        "truth_seed": entry["truth_seed"],
+        "group_seed": entry["group_seed"],
+        "observation_seed": entry["observation_seed"],
+        "initialization_seed": entry["initialization_seed"],
+        "start_seeds": list(entry["start_seeds"]),
+        "sampler_seed": entry["sampler_seed"],
+        "sbc_draw_seed": entry["sbc_draw_seed"],
         "sbc_tie_seed": entry["sbc_tie_seed"],
-        "chain_seeds": entry["chain_seeds"],
+        "chain_seeds": list(entry["chain_seeds"]),
         "execution_status": status,
         "metrics": _good_metrics(entry, manifest) if metrics is None else metrics,
         "unavailable_metrics": unavailable_metrics or {},
@@ -175,14 +192,36 @@ def _result(
         ),
         "failure": failure,
         "provenance": {
-            "runner_version": 1,
+            "runner_version": 2,
             "sampler": entry["scenario"]["sampler"],
-            "device": "test-device",
+            "device": "cpu",
             "floatx": entry["scenario"]["floatx"],
+            "pytensor_floatx": entry["scenario"]["floatx"],
+            "jax_enable_x64": entry["scenario"]["floatx"] == "float64",
+            "data_artifact": (
+                f"data/{entry['scenario']['data_id']}-r{entry['replicate']}.json"
+                if status == "completed"
+                else None
+            ),
+            "data_sha256": "a" * 64 if status == "completed" else None,
+            "effective_numpyro_chain_keys": (
+                [
+                    list(key)
+                    for key in derive_numpyro_chain_keys(
+                        entry["sampler_seed"], entry["scenario"]["chains"]
+                    )
+                ]
+                if status == "completed" and entry["scenario"]["sampler"] == "numpyro"
+                else None
+            ),
             "actual_start_artifact": (
                 f"starts/{entry['cell_id']}.json" if status == "completed" else None
             ),
             "actual_start_sha256": "b" * 64 if status == "completed" else None,
+            "raw_chain_artifact": (
+                f"chains/{entry['cell_id']}.nc" if status == "completed" else None
+            ),
+            "raw_chain_sha256": "c" * 64 if status == "completed" else None,
             "git_commit": environment["git"]["commit"],
             "environment_sha256": environment_sha256(environment, manifest),
         },
@@ -198,10 +237,10 @@ def _environment_record(
 ):
     profile = manifest["dependency_profiles"][dependency_profile]
     record = {
-        "schema_version": 1,
+        "schema_version": 2,
         "study_id": manifest["study_id"],
         "manifest_sha256": manifest_sha256(manifest),
-        "runner_version": 1,
+        "runner_version": 2,
         "dependency_profile": dependency_profile,
         "git": {
             "commit": "test-commit",
@@ -227,6 +266,28 @@ def _environment_record(
     }
     assert validate_environment(record, manifest) == record
     return record
+
+
+def _materialize_result_artifacts(
+    record: dict[str, object], artifact_root: Path
+) -> None:
+    """Write deterministic test artifacts and bind their exact byte digests."""
+    provenance = record["provenance"]
+    assert isinstance(provenance, dict)
+    for artifact_field, digest_field in (
+        ("data_artifact", "data_sha256"),
+        ("actual_start_artifact", "actual_start_sha256"),
+        ("raw_chain_artifact", "raw_chain_sha256"),
+    ):
+        relative = provenance[artifact_field]
+        if relative is None:
+            continue
+        assert isinstance(relative, str)
+        payload = f"{artifact_field}\n".encode()
+        path = artifact_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        provenance[digest_field] = hashlib.sha256(payload).hexdigest()
 
 
 @pytest.fixture(scope="module")
@@ -261,7 +322,7 @@ def test_manifest_is_frozen_and_has_all_predeclared_tiers(manifest) -> None:
     """Lock the reviewed manifest digest and exact tier/cell cardinalities."""
     assert manifest["status"] == "frozen-before-primary-runs"
     assert manifest_sha256(manifest) == (
-        "e1d15e9ac8460c5c8e1a68c5b8055be288475ef28a115c5a86303733a1428cf0"
+        "fb1886c0afcf6ea2bfd3ac4f7f6114f6a1e454883d50250d262f64a3ac7d7767"
     )
     assert {scenario["tier"] for scenario in manifest["scenarios"]} == {
         "smoke",
@@ -271,6 +332,30 @@ def test_manifest_is_frozen_and_has_all_predeclared_tiers(manifest) -> None:
     assert len(expand_plan(manifest, "smoke")) == 10
     assert len(expand_plan(manifest, "qualification")) == 720
     assert len(expand_plan(manifest, "stress")) == 18
+
+
+def test_runtime_floors_provide_native_erfcx_for_numpyro() -> None:
+    """Keep TruncatedNormal JAXification off the incompatible TFP fallback."""
+    pyproject = tomllib.loads(
+        (qualification.REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )
+
+    assert "jax>=0.11.0" in pyproject["project"]["dependencies"]
+    assert "pytensor>=3.2.4" in pyproject["project"]["dependencies"]
+    assert pyproject["project"]["optional-dependencies"]["cuda12"] == [
+        "jax[cuda12]>=0.11.0"
+    ]
+    assert pyproject["project"]["optional-dependencies"]["cuda13"] == [
+        "jax[cuda13]>=0.11.0"
+    ]
+
+
+def test_v1_manifest_is_explicitly_superseded() -> None:
+    """Never execute the ambiguous v1 design through the v2 runner."""
+    v1_path = qualification.REPO_ROOT / "benchmarks/specs/truncated_hierarchy_v1.json"
+
+    with pytest.raises(QualificationError, match="v1 is superseded"):
+        load_manifest(v1_path)
 
 
 def test_strict_json_rejects_nonstandard_numbers() -> None:
@@ -299,20 +384,306 @@ def test_manifest_rejects_unknown_fields_and_primary_gate_drift(manifest) -> Non
     with pytest.raises(QualificationError, match="must remain 0.9"):
         validate_manifest(changed_budget)
 
+    obsolete_anchor = copy.deepcopy(manifest)
+    obsolete_anchor["scenarios"][0]["anchor"] = "outside"
+    with pytest.raises(QualificationError, match="unknown.*anchor"):
+        validate_manifest(obsolete_anchor)
 
-def test_seed_derivation_is_stable_and_separates_data_from_chains() -> None:
-    """Pin cross-process seeds and keep dataset and chain streams independent."""
-    data_seed = derive_seed(1282, "qual-hssm-lba2-near-pymc", 0, "data")
+
+def test_v2_scenarios_freeze_prior_truth_and_group_coordinate_contracts(
+    manifest,
+) -> None:
+    """Make every prior base, truth mode, and monitored group index executable."""
+    for scenario in manifest["scenarios"]:
+        lower, upper = scenario["lower"], scenario["upper"]
+        expected_location = (
+            (lower + upper) / 2
+            if scenario["prior"] == "truncated_normal"
+            and lower is not None
+            and upper is not None
+            else 0.0
+        )
+        assert scenario["prior_hyper_location"] == expected_location
+        assert scenario["group_indices"] == [
+            0,
+            scenario["n_groups"] // 2,
+            scenario["n_groups"] - 1,
+        ]
+        if scenario["truth_kind"] == "fixed":
+            assert scenario["truth_group_location"] is not None
+            assert scenario["truth_group_scale"] > 0
+            assert scenario.get("calibration_kind") is None
+        else:
+            assert scenario["truth_regime"] == "prior_predictive"
+            assert scenario["truth_group_location"] is None
+            assert scenario["truth_group_scale"] is None
+            assert scenario["calibration_kind"] == "sbc"
+
+    wrong_prior_base = copy.deepcopy(manifest)
+    wrong_prior_base["scenarios"][0]["prior_hyper_location"] = 0.2
+    with pytest.raises(QualificationError, match="frozen prior rule"):
+        validate_manifest(wrong_prior_base)
+
+    missing_fixed_truth = copy.deepcopy(manifest)
+    missing_fixed_truth["scenarios"][0]["truth_group_location"] = None
+    with pytest.raises(QualificationError, match="truth_group_location must be finite"):
+        validate_manifest(missing_fixed_truth)
+
+    wrong_group_index = copy.deepcopy(manifest)
+    wrong_group_index["scenarios"][0]["group_indices"][1] = 1
+    with pytest.raises(QualificationError, match="group_indices must remain"):
+        validate_manifest(wrong_group_index)
+
+
+def test_representative_v2_truth_anchors_are_exact(manifest) -> None:
+    """Pin boundary, interior, narrow, and prior-predictive truth semantics."""
+    scenarios = {item["scenario_id"]: item for item in manifest["scenarios"]}
+    fields = (
+        "bound_kind",
+        "lower",
+        "upper",
+        "prior_hyper_location",
+        "truth_kind",
+        "truth_regime",
+        "truth_boundary",
+        "truth_group_location",
+        "truth_group_scale",
+        "group_indices",
+        "data_id",
+    )
+    expected = {
+        "smoke-pymc-lower-outside": (
+            "lower",
+            0.2,
+            None,
+            0.0,
+            "fixed",
+            "near_lower",
+            "lower",
+            0.23,
+            0.3,
+            [0, 2, 3],
+            "smoke-toy-lower-outside",
+        ),
+        "smoke-pymc-lower-inside": (
+            "lower",
+            -0.2,
+            None,
+            0.0,
+            "fixed",
+            "interior",
+            None,
+            0.7,
+            0.3,
+            [0, 10, 19],
+            "toy-lower-inside",
+        ),
+        "smoke-pymc-narrow-midpoint": (
+            "narrow",
+            0.49,
+            0.51,
+            0.5,
+            "fixed",
+            "near_lower",
+            "lower",
+            0.495,
+            0.05,
+            [0, 10, 19],
+            "smoke-toy-narrow-midpoint",
+        ),
+        "calib-pymc-two-sided-midpoint": (
+            "two_sided",
+            0.1,
+            0.9,
+            0.5,
+            "prior_predictive",
+            "prior_predictive",
+            None,
+            None,
+            None,
+            [0, 10, 19],
+            "calib-pymc-two-sided-midpoint",
+        ),
+    }
+    for scenario_id, expected_values in expected.items():
+        assert (
+            tuple(scenarios[scenario_id][field] for field in fields) == expected_values
+        )
+
+
+def test_control_dgp_is_exact_but_prior_and_recovery_are_intentionally_distinct(
+    manifest,
+) -> None:
+    """Allow only the reviewed prior-specific differences inside a control pair."""
+    controls = {
+        scenario["scenario_id"]: scenario
+        for scenario in manifest["scenarios"]
+        if scenario["purpose"] == "control"
+    }
+    candidates = [
+        scenario
+        for scenario in manifest["scenarios"]
+        if scenario["control_id"] is not None
+    ]
+    assert candidates
+    for candidate in candidates:
+        control = controls[candidate["control_id"]]
+        assert candidate["data_id"] == control["data_id"]
+        assert candidate["prior"] == "truncated_normal"
+        assert control["prior"] == "linked_normal"
+        assert candidate["recovery"] is True
+        assert control["recovery"] is False
+
+    softmax_candidate = next(
+        item
+        for item in candidates
+        if item["scenario_id"] == "qual-hssm-softmax-beta-pymc"
+    )
+    softmax_control = controls[softmax_candidate["control_id"]]
+    assert softmax_candidate["posterior_pair_id"] == "hssm-softmax-beta-truncated"
+    assert softmax_control["posterior_pair_id"] == "hssm-softmax-beta-linked"
+    for field in qualification.DATA_MATCH_FIELDS:
+        assert softmax_candidate.get(field) == softmax_control.get(field)
+
+    altered_dgp = copy.deepcopy(manifest)
+    candidate = next(
+        item
+        for item in altered_dgp["scenarios"]
+        if item["control_id"] and item.get("posterior_pair_id") is None
+    )
+    control = next(
+        item
+        for item in altered_dgp["scenarios"]
+        if item["scenario_id"] == candidate["control_id"]
+    )
+    control["n_per_group"] += 1
+    with pytest.raises(QualificationError, match="data-generating fields.*n_per_group"):
+        validate_manifest(altered_dgp)
+
+    recovering_control = copy.deepcopy(manifest)
+    control = next(
+        item for item in recovering_control["scenarios"] if item["purpose"] == "control"
+    )
+    control["recovery"] = True
+    with pytest.raises(QualificationError, match="recovery=false"):
+        validate_manifest(recovering_control)
+
+
+@pytest.mark.parametrize(
+    ("section", "mutate"),
+    [
+        ("prior_contracts", lambda value: value["truncated_normal"].update(link="log")),
+        ("data_generation", lambda value: value.update(rng="numpy-mt19937")),
+        ("execution_policy", lambda value: value.update(cores=2)),
+        (
+            "artifact_policy",
+            lambda value: value["chain_variable_scales"].update(
+                group_location="linear_predictor"
+            ),
+        ),
+    ],
+)
+def test_scientific_and_execution_policies_are_exact(manifest, section, mutate) -> None:
+    """Require a manifest revision for any prior, DGP, runtime, or artifact drift."""
+    changed = copy.deepcopy(manifest)
+    mutate(changed[section])
+
+    with pytest.raises(QualificationError, match="reviewed v2 contract"):
+        validate_manifest(changed)
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("posterior_summary", {"draw_set": "selected-draws"}),
+        ("gradient_evaluation", {"point": "arbitrary"}),
+        ("sampler_stat_mapping", {"diverging": "integer"}),
+    ],
+)
+def test_analysis_algorithms_are_exact(manifest, field, replacement) -> None:
+    """Make summary, gradient, and sample-stat algorithms executable policy."""
+    changed = copy.deepcopy(manifest)
+    changed["analysis_policy"][field] = replacement
+
+    with pytest.raises(QualificationError, match=f"analysis {field} algorithm"):
+        validate_manifest(changed)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("combined_tolerance_rule", "abs <= atol or rel <= rtol", "combined"),
+        ("abs_rel_maxima_role", "independent-gates", "maxima role"),
+    ],
+)
+def test_gradient_combined_tolerance_policy_is_exact(
+    manifest, field, value, message
+) -> None:
+    """Prevent regressions to independently gated absolute/relative maxima."""
+    changed = copy.deepcopy(manifest)
+    changed["analysis_policy"]["gradient_contract"][field] = value
+
+    with pytest.raises(QualificationError, match=message):
+        validate_manifest(changed)
+
+
+def test_seed_derivation_is_stable_and_domain_separated() -> None:
+    """Pin v2 seed streams and keep data, initialization, SBC, and chains apart."""
+    data_seed = derive_seed(1282, "hssm-lba2-near", 0, "data")
+    data_streams = {
+        purpose: derive_data_stream_seed(data_seed, "hssm-lba2-near", 0, purpose)
+        for purpose in ("truth", "group", "observation")
+    }
+    initialization_seed = derive_seed(
+        1282, "qual-hssm-lba2-near-pymc", 0, "initialization"
+    )
+    start_seeds = [
+        derive_start_seed(
+            initialization_seed,
+            "qual-hssm-lba2-near-pymc--replicate-00",
+            0,
+            chain,
+        )
+        for chain in range(4)
+    ]
     chain_seeds = [
         derive_seed(1282, "qual-hssm-lba2-near-pymc", 0, "chain", chain)
         for chain in range(4)
     ]
 
-    assert data_seed == 1453647211
-    assert chain_seeds == [2076627074, 532482532, 1752810389, 1206549751]
-    assert len({data_seed, *chain_seeds}) == 5
-    assert derive_seed(1282, "qual-hssm-lba2-near-pymc", 1, "data") != data_seed
-    assert derive_seed(1282, "calib-pymc-lower-outside", 0, "sbc_tie") == 481314911
+    assert data_seed == 868132154
+    assert data_streams == {
+        "truth": 1157851697,
+        "group": 2141294012,
+        "observation": 426356076,
+    }
+    assert initialization_seed == 1688471175
+    assert start_seeds == [916054994, 1062567866, 1189341988, 724771961]
+    assert chain_seeds == [184918405, 299834293, 1943681082, 222358053]
+    all_seeds = {
+        data_seed,
+        *data_streams.values(),
+        initialization_seed,
+        *start_seeds,
+        *chain_seeds,
+    }
+    assert len(all_seeds) == 13
+    sampler_seed = derive_seed(1282, "qual-hssm-lba2-near-numpyro", 0, "sampler")
+    assert sampler_seed == 1357540899
+    assert derive_numpyro_chain_keys(sampler_seed, 4) == (
+        (1134006557, 687687184),
+        (482232183, 3172376847),
+        (671930531, 3218124145),
+        (2923255406, 1106134060),
+    )
+    assert derive_numpyro_chain_keys(sampler_seed, 1) == ((0, sampler_seed),)
+    assert derive_seed(1282, "hssm-lba2-near", 1, "data") != data_seed
+    assert derive_seed(1282, "calib-pymc-lower-outside", 0, "sbc_draw") == 771382827
+    assert derive_seed(1282, "calib-pymc-lower-outside", 0, "sbc_tie") == 71285581
+    with pytest.raises(QualificationError, match="purpose must be one of"):
+        derive_seed(1282, "hssm-lba2-near", 0, "truth")
+    with pytest.raises(QualificationError, match="data stream purpose"):
+        derive_data_stream_seed(data_seed, "hssm-lba2-near", 0, "chain")
 
 
 def test_plan_rejects_reordering_seed_changes_and_missing_cells(manifest) -> None:
@@ -333,8 +704,35 @@ def test_plan_rejects_reordering_seed_changes_and_missing_cells(manifest) -> Non
         validate_plan(plan[:-1], manifest, "qualification")
 
 
-def test_controls_match_candidates_and_share_only_their_data_seed(manifest) -> None:
-    """Pair controls on scientific dimensions without coupling chain randomness."""
+def test_plan_separates_start_and_backend_sampler_seed_contracts(manifest) -> None:
+    """Give each backend exactly the seed identity its sampler actually consumes."""
+    for tier in ("smoke", "qualification", "stress"):
+        for entry in expand_plan(manifest, tier):
+            scenario = entry["scenario"]
+            if scenario["initialization_policy"] == "backend-default":
+                assert len(entry["start_seeds"]) == scenario["chains"]
+                assert entry["start_seeds"] == [
+                    derive_start_seed(
+                        entry["initialization_seed"],
+                        entry["cell_id"],
+                        entry["replicate"],
+                        chain,
+                    )
+                    for chain in range(scenario["chains"])
+                ]
+            else:
+                assert scenario["layer"] == "hssm"
+                assert entry["start_seeds"] == []
+            if scenario["sampler"] == "pymc":
+                assert entry["sampler_seed"] is None
+                assert len(entry["chain_seeds"]) == scenario["chains"]
+            else:
+                assert isinstance(entry["sampler_seed"], int)
+                assert entry["chain_seeds"] == []
+
+
+def test_controls_share_dgp_streams_but_not_sampler_randomness(manifest) -> None:
+    """Pair exact natural-scale data while separating initialization and chains."""
     scenarios = {item["scenario_id"]: item for item in manifest["scenarios"]}
     plan = expand_plan(manifest, "qualification")
     entries = {(entry["scenario_id"], entry["replicate"]): entry for entry in plan}
@@ -351,13 +749,53 @@ def test_controls_match_candidates_and_share_only_their_data_seed(manifest) -> N
         assert control["floatx"] == candidate["floatx"]
         assert control["layer"] == candidate["layer"]
         assert control["model"] == candidate["model"]
+        assert control["recovery"] is False
+        assert candidate["recovery"] is True
+        assert control["prior"] == "linked_normal"
+        assert candidate["prior"] == "truncated_normal"
         for replicate in range(candidate["replicates"]):
             candidate_entry = entries[(candidate["scenario_id"], replicate)]
             control_entry = entries[(control["scenario_id"], replicate)]
-            assert candidate_entry["data_seed"] == control_entry["data_seed"]
-            assert set(candidate_entry["chain_seeds"]).isdisjoint(
-                control_entry["chain_seeds"]
+            for field in (
+                "data_seed",
+                "truth_seed",
+                "group_seed",
+                "observation_seed",
+            ):
+                assert candidate_entry[field] == control_entry[field]
+            for field, purpose in (
+                ("truth_seed", "truth"),
+                ("group_seed", "group"),
+                ("observation_seed", "observation"),
+            ):
+                assert candidate_entry[field] == derive_data_stream_seed(
+                    candidate_entry["data_seed"],
+                    candidate["data_id"],
+                    replicate,
+                    purpose,
+                )
+            assert (
+                candidate_entry["initialization_seed"]
+                != control_entry["initialization_seed"]
             )
+            if candidate["initialization_policy"] == "backend-default":
+                assert set(candidate_entry["start_seeds"]).isdisjoint(
+                    control_entry["start_seeds"]
+                )
+            else:
+                assert candidate_entry["start_seeds"] == []
+                assert control_entry["start_seeds"] == []
+            if candidate["sampler"] == "pymc":
+                assert candidate_entry["sampler_seed"] is None
+                assert control_entry["sampler_seed"] is None
+                assert len(candidate_entry["chain_seeds"]) == candidate["chains"]
+                assert set(candidate_entry["chain_seeds"]).isdisjoint(
+                    control_entry["chain_seeds"]
+                )
+            else:
+                assert candidate_entry["chain_seeds"] == []
+                assert control_entry["chain_seeds"] == []
+                assert candidate_entry["sampler_seed"] != control_entry["sampler_seed"]
 
 
 def test_calibration_units_are_frozen_and_candidate_only(manifest) -> None:
@@ -393,7 +831,7 @@ def test_calibration_units_are_frozen_and_candidate_only(manifest) -> None:
         if scenario.get("calibration_kind") == "sbc"
     )
     target["purpose"] = "control"
-    with pytest.raises(QualificationError, match="primary candidate"):
+    with pytest.raises(QualificationError, match="controls must use linked_normal"):
         qualification.validate_manifest(wrong_family)
 
 
@@ -578,8 +1016,10 @@ def test_qualification_execution_requires_clean_git(manifest, environment) -> No
         validate_result_record(record, entry, dirty_catalog, manifest)
 
 
-def test_float64_numpyro_requires_jax_x64(manifest, environment) -> None:
-    """Prevent nominal float64 NumPyro evidence from a float32 JAX runtime."""
+def test_cell_precision_is_independent_of_environment_collection(
+    manifest, environment
+) -> None:
+    """Use observed cell precision rather than the sidecar collector's process mode."""
     no_x64_current = _environment_record(
         manifest, "current-resolved", jax_enable_x64=False
     )
@@ -597,8 +1037,7 @@ def test_float64_numpyro_requires_jax_x64(manifest, environment) -> None:
     )
     record = _result(entry, no_x64_catalog, manifest)
 
-    with pytest.raises(QualificationError, match="requires jax_enable_x64"):
-        validate_result_record(record, entry, no_x64_catalog, manifest)
+    validate_result_record(record, entry, no_x64_catalog, manifest)
 
 
 def test_cell_results_are_atomic_and_identity_checked(
@@ -607,18 +1046,82 @@ def test_cell_results_are_atomic_and_identity_checked(
     """Publish a complete cell only after validating its planned identity."""
     entry = expand_plan(manifest, "smoke")[0]
     record = make_result(entry)
+    _materialize_result_artifacts(record, tmp_path)
+    results_dir = tmp_path / "cells"
 
-    path = write_cell_result(record, entry, tmp_path, environment, manifest)
+    path = write_cell_result(record, entry, results_dir, environment, manifest)
 
     assert json.loads(path.read_text()) == record
-    assert list(tmp_path.glob("*.tmp")) == []
+    assert list(results_dir.glob("*.tmp")) == []
     with pytest.raises(QualificationError, match="refusing to overwrite"):
-        write_cell_result(record, entry, tmp_path, environment, manifest)
+        write_cell_result(record, entry, results_dir, environment, manifest)
     assert json.loads(path.read_text()) == record
     changed = copy.deepcopy(record)
     changed["data_seed"] += 1
     with pytest.raises(QualificationError, match="data_seed"):
         validate_result_record(changed, entry, environment, manifest)
+
+    provenance = record["provenance"]
+    assert isinstance(provenance, dict)
+    start_path = tmp_path / provenance["actual_start_artifact"]
+    start_path.write_bytes(b"tampered\n")
+    with pytest.raises(QualificationError, match="does not match artifact bytes"):
+        verify_result_artifacts(record, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "data_seed",
+        "truth_seed",
+        "group_seed",
+        "observation_seed",
+        "initialization_seed",
+        "start_seeds",
+        "sampler_seed",
+        "sbc_draw_seed",
+        "sbc_tie_seed",
+        "chain_seeds",
+    ],
+)
+def test_result_identity_mirrors_every_planned_seed(
+    field, manifest, environment, make_result
+) -> None:
+    """Reject relabelled evidence from every v2 random stream."""
+    entry = next(
+        item
+        for item in expand_plan(manifest, "qualification")
+        if (
+            item["scenario"]["sampler"] == "numpyro"
+            if field == "sampler_seed"
+            else item["scenario"].get("calibration_kind") == "sbc"
+        )
+    )
+    record = make_result(entry)
+    if field in {"start_seeds", "chain_seeds"}:
+        record[field][0] += 1
+    else:
+        record[field] += 1
+
+    with pytest.raises(QualificationError, match=field):
+        validate_result_record(record, entry, environment, manifest)
+
+
+def test_hssm_result_records_initialization_root_without_per_chain_start_seeds(
+    manifest, environment, make_result
+) -> None:
+    """Represent HSSM's one constructed-and-replicated start without fake seeds."""
+    entry = next(
+        item
+        for item in expand_plan(manifest, "smoke")
+        if item["scenario"]["layer"] == "hssm"
+    )
+    assert entry["start_seeds"] == []
+    record = make_result(entry)
+    record["start_seeds"] = [entry["initialization_seed"]]
+
+    with pytest.raises(QualificationError, match="start_seeds"):
+        validate_result_record(record, entry, environment, manifest)
 
 
 def test_result_validation_rejects_nonfinite_and_inconsistent_metrics(
@@ -641,6 +1144,11 @@ def test_result_validation_rejects_nonfinite_and_inconsistent_metrics(
     with pytest.raises(QualificationError, match=r"planned chains \* draws"):
         validate_result_record(wrong_draw_count, entry, environment, manifest)
 
+    missing_raw_cost = make_result(entry)
+    missing_raw_cost["metrics"].pop("sampling_elapsed_seconds")
+    with pytest.raises(QualificationError, match="raw sampler metrics"):
+        validate_result_record(missing_raw_cost, entry, environment, manifest)
+
 
 @pytest.mark.parametrize(
     ("metric", "invalid"),
@@ -652,6 +1160,12 @@ def test_result_validation_rejects_nonfinite_and_inconsistent_metrics(
         ("hyper_rhat_max", 0.0),
         ("hyper_ess_bulk_min", -0.1),
         ("hyper_ess_per_second_median", 0.0),
+        ("sampling_elapsed_seconds", 0.0),
+        ("step_size_median", -0.1),
+        ("gradient_evaluation_count", 1.5),
+        ("leapfrog_step_count", 0),
+        ("likelihood_pytensor_jax_value_abs_error_max", -0.1),
+        ("likelihood_pytensor_jax_value_normalized_error_max", -0.1),
     ],
 )
 def test_result_metrics_enforce_typed_domains(
@@ -828,10 +1342,10 @@ def test_nonrecovery_and_failed_cells_forbid_parameter_summaries(
         validate_result_record(failed, failed_entry, environment, manifest)
 
 
-def test_result_provenance_is_bound_to_environment_and_actual_start(
+def test_result_provenance_is_bound_to_environment_and_raw_artifacts(
     manifest, environment, make_result
 ) -> None:
-    """Reject forged checkout identity and unsafe or unpaired start references."""
+    """Reject forged checkout identity and unsafe or unpaired artifact references."""
     entry = expand_plan(manifest, "smoke")[0]
     forged_commit = make_result(entry)
     forged_commit["provenance"]["git_commit"] = "another-commit"
@@ -852,6 +1366,76 @@ def test_result_provenance_is_bound_to_environment_and_actual_start(
     missing_digest["provenance"]["actual_start_sha256"] = None
     with pytest.raises(QualificationError, match="provided together"):
         validate_result_record(missing_digest, entry, environment, manifest)
+
+    wrong_data_path = make_result(entry)
+    wrong_data_path["provenance"]["data_artifact"] = "data/other-r0.json"
+    with pytest.raises(QualificationError, match="does not match artifact_policy"):
+        validate_result_record(wrong_data_path, entry, environment, manifest)
+
+    missing_data_digest = make_result(entry)
+    missing_data_digest["provenance"]["data_sha256"] = None
+    with pytest.raises(QualificationError, match="provided together"):
+        validate_result_record(missing_data_digest, entry, environment, manifest)
+
+    wrong_device = make_result(entry)
+    wrong_device["provenance"]["device"] = "gpu"
+    with pytest.raises(QualificationError, match="device does not match"):
+        validate_result_record(wrong_device, entry, environment, manifest)
+
+    wrong_pytensor_precision = make_result(entry)
+    wrong_pytensor_precision["provenance"]["pytensor_floatx"] = "float32"
+    with pytest.raises(QualificationError, match="pytensor_floatx does not match"):
+        validate_result_record(wrong_pytensor_precision, entry, environment, manifest)
+
+    wrong_jax_precision = make_result(entry)
+    wrong_jax_precision["provenance"]["jax_enable_x64"] = False
+    with pytest.raises(QualificationError, match="jax_enable_x64 does not match"):
+        validate_result_record(wrong_jax_precision, entry, environment, manifest)
+
+    missing_observed_precision = make_result(entry)
+    missing_observed_precision["provenance"]["pytensor_floatx"] = None
+    missing_observed_precision["provenance"]["jax_enable_x64"] = None
+    with pytest.raises(QualificationError, match="requires observed precision"):
+        validate_result_record(missing_observed_precision, entry, environment, manifest)
+
+    failed_before_precision = make_result(entry, status="failed", metrics={})
+    failed_before_precision["provenance"]["pytensor_floatx"] = None
+    failed_before_precision["provenance"]["jax_enable_x64"] = None
+    validate_result_record(failed_before_precision, entry, environment, manifest)
+
+    pymc_with_jax_keys = make_result(entry)
+    pymc_with_jax_keys["provenance"]["effective_numpyro_chain_keys"] = [[0, 1]]
+    with pytest.raises(QualificationError, match="must be null for PyMC"):
+        validate_result_record(pymc_with_jax_keys, entry, environment, manifest)
+
+    wrong_chain_path = make_result(entry)
+    wrong_chain_path["provenance"]["raw_chain_artifact"] = "chains/other.nc"
+    with pytest.raises(QualificationError, match="does not match artifact_policy"):
+        validate_result_record(wrong_chain_path, entry, environment, manifest)
+
+    missing_chain_digest = make_result(entry)
+    missing_chain_digest["provenance"]["raw_chain_sha256"] = None
+    with pytest.raises(QualificationError, match="provided together"):
+        validate_result_record(missing_chain_digest, entry, environment, manifest)
+
+    numpyro_entry = next(
+        item
+        for item in expand_plan(manifest, "qualification")
+        if item["scenario"]["sampler"] == "numpyro"
+    )
+    missing_effective_keys = make_result(numpyro_entry)
+    missing_effective_keys["provenance"]["effective_numpyro_chain_keys"] = None
+    with pytest.raises(QualificationError, match="required for completed NumPyro"):
+        validate_result_record(
+            missing_effective_keys, numpyro_entry, environment, manifest
+        )
+
+    wrong_effective_keys = make_result(numpyro_entry)
+    wrong_effective_keys["provenance"]["effective_numpyro_chain_keys"][0][0] += 1
+    with pytest.raises(QualificationError, match="does not match sampler_seed"):
+        validate_result_record(
+            wrong_effective_keys, numpyro_entry, environment, manifest
+        )
 
 
 def test_aggregation_preserves_failures_and_materializes_missing_rows(
@@ -877,6 +1461,10 @@ def test_aggregation_preserves_failures_and_materializes_missing_rows(
     assert sum(record["execution_status"] == "missing" for record in aggregate) == 8
     assert aggregate[0]["provenance"]["actual_start_artifact"].startswith("starts/")
     assert len(aggregate[0]["provenance"]["actual_start_sha256"]) == 64
+    assert aggregate[0]["provenance"]["raw_chain_artifact"].startswith("chains/")
+    assert len(aggregate[0]["provenance"]["raw_chain_sha256"]) == 64
+    assert aggregate[0]["provenance"]["data_artifact"].startswith("data/")
+    assert len(aggregate[0]["provenance"]["data_sha256"]) == 64
     assert "actual_start_values" not in aggregate[0]["provenance"]
     paths = write_aggregate(aggregate, tmp_path)
     assert load_jsonl(paths[0]) == aggregate
@@ -1189,18 +1777,16 @@ def test_assessor_does_not_dilute_recovery_or_backend_failures(
         and check["scenario_id"] == "qual-pymc-lower-inside"
         and check["parameter_id"] == "group_location"
     )
-    control_bias = next(
-        check
-        for check in assessment["checks"]
-        if check["scope"] == "fixed_recovery_bias"
-        and check["scenario_id"] == "qual-pymc-lower-inside-control"
-        and check["parameter_id"] == "group_location"
-    )
     assert candidate_bias["family"] == "candidate"
     assert candidate_bias["passed"] is False
     assert candidate_bias["actual"] == pytest.approx(0.6)
-    assert control_bias["family"] == "control"
-    assert control_bias["passed"] is True
+    assert candidate_bias["sign_test_role"] == "descriptive-only"
+    assert not any("reproducible-bias" in blocker for blocker in assessment["blockers"])
+    assert not any(
+        check["scope"] == "fixed_recovery_bias"
+        and check["scenario_id"].endswith("-control")
+        for check in assessment["checks"]
+    )
 
     bad_rank = next(
         check
@@ -1213,7 +1799,7 @@ def test_assessor_does_not_dilute_recovery_or_backend_failures(
         check
         for check in assessment["checks"]
         if check["scope"] == "calibration_sbc_rank"
-        and check["scenario_id"] == "calib-pymc-two-sided-near"
+        and check["scenario_id"] == "calib-pymc-two-sided-midpoint"
         and check["parameter_id"] == "group_scale"
     )
     assert bad_rank["passed"] is False
@@ -1230,7 +1816,7 @@ def test_assessor_does_not_dilute_recovery_or_backend_failures(
         check
         for check in assessment["checks"]
         if check["scope"] == "calibration_coverage"
-        and check["scenario_id"] == "calib-pymc-two-sided-near"
+        and check["scenario_id"] == "calib-pymc-two-sided-midpoint"
         and check["parameter_id"] == "group_middle"
     ]
     assert len(bad_coverage) == len(untouched_coverage) == 2
@@ -1254,32 +1840,83 @@ def test_assessor_does_not_dilute_recovery_or_backend_failures(
     assert backend_check["passed"] is False
 
 
-def test_raw_gradient_contract_is_assessor_derived_and_classified(
+def test_combined_gradient_contract_is_assessor_derived_and_classified(
     manifest, environment, make_result
 ) -> None:
-    """Require raw replicate-zero errors and label their failures correctly."""
+    """Gate normalized combined errors and keep abs/rel maxima descriptive."""
     plan = expand_plan(manifest, "smoke")
     records = [make_result(entry) for entry in plan]
-    metric = "finite_difference_gradient_abs_error_max"
-    condition = qualification._gradient_contract_conditions(
-        records[0], plan[0]["scenario"], manifest["analysis_policy"]
-    )[metric]
-    records[0]["metrics"][metric] = condition["value"] * 2
+    targets = [
+        (
+            records[0],
+            plan[0]["scenario"],
+            "finite_difference_gradient_normalized_error_max",
+            "prior-gradient-contract",
+        ),
+        (
+            next(
+                record
+                for record in records
+                if record["scenario_id"] == "smoke-bambi-lower-outside"
+            ),
+            next(
+                entry["scenario"]
+                for entry in plan
+                if entry["scenario_id"] == "smoke-bambi-lower-outside"
+            ),
+            "bambi_isomorphism_normalized_error_max",
+            "bambi-isomorphism-contract",
+        ),
+        (
+            next(
+                record
+                for record in records
+                if record["scenario_id"] == "smoke-hssm-lba2-near"
+            ),
+            next(
+                entry["scenario"]
+                for entry in plan
+                if entry["scenario_id"] == "smoke-hssm-lba2-near"
+            ),
+            "likelihood_pytensor_jax_value_normalized_error_max",
+            "likelihood/backend-contract",
+        ),
+    ]
+    for record, scenario, metric, _failure_class in targets:
+        condition = qualification._gradient_contract_conditions(
+            record, scenario, manifest["analysis_policy"]
+        )[metric]
+        record["metrics"][metric] = condition["value"] * 2
 
     failed = assess_results(records, plan, manifest, "smoke", environment)
 
-    contract_check = next(
-        check
-        for check in failed["checks"]
-        if check["scope"] == "gradient_contract"
-        and check["cell_id"] == records[0]["cell_id"]
-        and check["metric"] == metric
-    )
     assert failed["outcome"] == "screening-fail"
-    assert contract_check["passed"] is False
-    assert contract_check["failure_class"] == "likelihood/backend-contract"
+    for record, _scenario, metric, failure_class in targets:
+        contract_check = next(
+            check
+            for check in failed["checks"]
+            if check["scope"] == "gradient_contract"
+            and check["cell_id"] == record["cell_id"]
+            and check["metric"] == metric
+        )
+        assert contract_check["passed"] is False
+        assert contract_check["failure_class"] == failure_class
+
+    descriptive_records = [make_result(entry) for entry in plan]
+    descriptive_records[0]["metrics"]["finite_difference_gradient_rel_error_max"] = (
+        1_000.0
+    )
+    descriptive = assess_results(
+        descriptive_records, plan, manifest, "smoke", environment
+    )
+    assert descriptive["outcome"] == "screening-pass"
+    assert not any(
+        check["metric"] == "finite_difference_gradient_rel_error_max"
+        for check in descriptive["checks"]
+    )
 
     missing_records = [make_result(entry) for entry in plan]
+    metric = "finite_difference_gradient_abs_error_max"
     missing_records[0]["metrics"].pop(metric)
     incomplete = assess_results(missing_records, plan, manifest, "smoke", environment)
     assert incomplete["outcome"] == "incomplete"
@@ -1358,6 +1995,38 @@ def test_smoke_pass_never_qualifies_the_default(
     assert assessment["qualifies_default"] is False
 
 
+def test_stress_assessment_evaluates_every_diagnostic_fit(
+    manifest, environment, make_result
+) -> None:
+    """Do not call stress complete when its diagnostic metrics are absent or fail."""
+    plan = expand_plan(manifest, "stress")
+    records = [make_result(entry) for entry in plan]
+
+    complete = assess_results(records, plan, manifest, "stress", environment)
+
+    assert complete["outcome"] == "diagnostic-complete"
+    assert complete["counts"]["checks"] == len(plan) * len(
+        manifest["thresholds"]["diagnostic"]["per_fit"]
+    )
+
+    missing = copy.deepcopy(records)
+    missing[0]["metrics"].pop("gradient_finite")
+    incomplete = assess_results(missing, plan, manifest, "stress", environment)
+    assert incomplete["outcome"] == "incomplete"
+    assert f"{plan[0]['cell_id']}:gradient_finite" in incomplete["missing_metrics"]
+
+    failing = copy.deepcopy(records)
+    failing[0]["metrics"].update(divergence_count=40, divergence_rate=0.01)
+    failed = assess_results(failing, plan, manifest, "stress", environment)
+    assert failed["outcome"] == "diagnostic-failed"
+    assert any(
+        check["scope"] == "diagnostic_per_fit"
+        and check["metric"] == "divergence_rate"
+        and check["passed"] is False
+        for check in failed["checks"]
+    )
+
+
 def test_aggregate_cli_accepts_repeated_environment_sidecars(
     manifest, environment, tmp_path: Path
 ) -> None:
@@ -1367,7 +2036,7 @@ def test_aggregate_cli_accepts_repeated_environment_sidecars(
         path = tmp_path / f"environment-{item['dependency_profile']}.json"
         path.write_text(json.dumps(item))
         environment_paths.append(path)
-    results_dir = tmp_path / "cell-results"
+    results_dir = tmp_path / "cells"
     results_dir.mkdir()
     output_dir = tmp_path / "aggregate"
 

@@ -486,39 +486,30 @@ def test_sbc_rejects_missing_or_extra_analysis_units(
         )
 
 
-def test_bias_gate_and_reproducible_no_go_have_distinct_thresholds() -> None:
-    """Separate the 0.5 magnitude gate from the significant 1.0 no-go."""
-    symmetric_errors = [-0.6, 0.6] * 10
+def test_fixed_recovery_bias_gate_is_magnitude_only_with_five_replicates() -> None:
+    """Gate on magnitude while keeping the unattainable sign test descriptive."""
+    symmetric_errors = [-0.6, 0.6, -0.6, 0.6, 0.0]
     symmetric = evaluate_bias_family(
-        _validated_records(20, errors=symmetric_errors),
+        _validated_records(5, errors=symmetric_errors),
         family="candidate",
-        expected_replicates=20,
+        expected_replicates=5,
         expected_units=DEFAULT_EXPECTED_UNITS,
     )[0]
     systematic = evaluate_bias_family(
-        _validated_records(20, scenario_id="systematic", errors=[0.6] * 20),
+        _validated_records(5, scenario_id="systematic", errors=[0.6] * 5),
         family="candidate",
-        expected_replicates=20,
+        expected_replicates=5,
         expected_units=(("systematic", "mu-group"),),
-    )[0]
-    immediate = evaluate_bias_family(
-        _validated_records(20, scenario_id="immediate", errors=[1.0] * 20),
-        family="candidate",
-        expected_replicates=20,
-        expected_units=(("immediate", "mu-group"),),
     )[0]
 
     assert symmetric.mean_standardized_error == pytest.approx(0.0)
     assert symmetric.magnitude_passed is True
     assert symmetric.holm_rejected is False
-    assert symmetric.reproducible_bias is False
     assert systematic.abs_mean_standardized_error == pytest.approx(0.6)
     assert systematic.magnitude_passed is False
-    assert systematic.holm_rejected is True
-    assert systematic.reproducible_bias is False
-    assert immediate.abs_mean_standardized_error == pytest.approx(1.0)
-    assert immediate.holm_rejected is True
-    assert immediate.reproducible_bias is True
+    assert systematic.sign_test_pvalue == pytest.approx(0.0625)
+    assert systematic.holm_rejected is False
+    assert not hasattr(systematic, "reproducible_bias")
 
 
 @pytest.mark.parametrize(

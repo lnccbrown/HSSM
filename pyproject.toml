@@ -30,10 +30,13 @@ dependencies = [
     "h5py>=3.16.0",
     "hddm-wfpt>=0.1.6",
     "huggingface-hub>=1.17.0",
+    # Native erfcx is required for TruncatedNormal gradients through JAX/NumPyro.
+    "jax>=0.11.0",
     "jaxonnxruntime>=0.3.0",
     "numpy>=2.4.0,<2.5.0",
     "numpyro>=0.20",
     "onnx>=1.16.0",
+    "pytensor>=3.2.4",
     # Direct import in hssm.plotting (gaussian_kde, chi2), not merely transitive via pymc.
     "scipy>=1.10",
     "ssm-simulators>=0.13.1",
@@ -45,8 +48,8 @@ documentation = "https://lnccbrown.github.io/HSSM/"
 repository = "https://github.com/lnccbrown/HSSM"
 
 [project.optional-dependencies]
-cuda12 = ["jax[cuda12]>=0.7.0"]
-cuda13 = ["jax[cuda13]>=0.7.0"]
+cuda12 = ["jax[cuda12]>=0.11.0"]
+cuda13 = ["jax[cuda13]>=0.11.0"]
 
 [dependency-groups]
 dev = [

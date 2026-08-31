@@ -141,7 +141,7 @@ class SbcRankCheck:
 
 @dataclass(frozen=True, slots=True)
 class BiasCheck:
-    """Standardized-error and multiplicity-adjusted sign result for one unit."""
+    """Magnitude-gated bias result with descriptive sign-test diagnostics."""
 
     family: Family
     scenario_id: str
@@ -154,7 +154,6 @@ class BiasCheck:
     sign_test_pvalue: float
     holm_rejected: bool
     magnitude_passed: bool
-    reproducible_bias: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -835,20 +834,18 @@ def evaluate_bias_family(
     expected_replicates: int,
     expected_units: Sequence[AnalysisUnit],
     bias_limit: float = 0.5,
-    reproducible_bias_min: float = 1.0,
     familywise_alpha: float = 0.01,
 ) -> tuple[BiasCheck, ...]:
-    """Evaluate every predeclared unit with Holm-corrected exact sign tests."""
+    """Evaluate fixed-truth bias using a magnitude-only release gate.
+
+    The exact sign-test p-values and Holm decisions are retained as descriptive
+    diagnostics. They do not participate in the release decision: with the frozen
+    five-replicate design, the smallest attainable two-sided sign-test p-value is
+    0.0625 and therefore cannot reject at familywise alpha 0.01.
+    """
     bias_limit = _finite_number(bias_limit, "bias_limit")
     if bias_limit < 0:
         raise QualificationStatisticsError("bias_limit must be non-negative")
-    reproducible_bias_min = _finite_number(
-        reproducible_bias_min, "reproducible_bias_min"
-    )
-    if reproducible_bias_min < bias_limit:
-        raise QualificationStatisticsError(
-            "reproducible_bias_min must be at least bias_limit"
-        )
     groups = _complete_family_groups(
         summaries,
         family=family,
@@ -885,8 +882,6 @@ def evaluate_bias_family(
                 sign_test_pvalue=pvalues[(scenario_id, parameter_id)],
                 holm_rejected=rejected[(scenario_id, parameter_id)],
                 magnitude_passed=magnitude_passed,
-                reproducible_bias=abs_mean >= reproducible_bias_min
-                and rejected[(scenario_id, parameter_id)],
             )
         )
     return tuple(checks)

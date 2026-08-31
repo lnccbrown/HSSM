@@ -13,16 +13,35 @@ The generated default must not ship until the qualification tier passes. A failu
 must lead to a root fix and complete rerun, a narrower supported policy, or removal of
 the automatic hierarchical `TruncatedNormal` default.
 
+Even a numerical pass is conditional on the dependency floor exercised by the
+JAX/NumPyro path. HSSM therefore requires JAX 0.11 or newer, where `erfcx` is native,
+and PyTensor 3.2.4 or newer, where that native operation is used during JAXification.
+Older combinations fall back to TensorFlow Probability; its stable release is not
+compatible with the frozen JAX stack. TensorFlow Probability is deliberately not an
+experiment dependency.
+
 ## Reproducibility contract
 
-`benchmarks/specs/truncated_hierarchy_v1.json` is the immutable, reviewable manifest.
-It uses strict JSON: `NaN`, positive infinity, and negative infinity are invalid (an
-absent bound is `null`). Its semantic SHA-256 is embedded in every plan, environment
-sidecar, and result. Scenario identifiers are never reused for different models.
-Dataset and chain seeds are derived with BLAKE2b from the master seed, scenario
-identifier, replicate number, purpose, and (for sampling) chain index. Each candidate
-and its exact-dimension control deliberately share a dataset seed; their chain seeds
-remain independent. The derivation does not use Python's process-randomized `hash()`.
+`benchmarks/specs/truncated_hierarchy_v2.json` is the executable, immutable,
+reviewable manifest. The earlier v1 manifest is retained as the historical
+pre-execution design, but its overloaded anchor labels are not admissible evidence.
+V2 gives the prior hyper-location, fixed-truth location and scale, group indices,
+data-generating contract, and initialization policy explicitly for every scenario.
+
+The manifest uses strict JSON: `NaN`, positive infinity, and negative infinity are
+invalid (an absent bound is `null`). Its semantic SHA-256 is embedded in every plan,
+environment sidecar, and result. Scenario identifiers are never reused for different
+models. A shared `data_seed` is derived with BLAKE2b from the master seed, `data_id`,
+and replicate; domain-separated truth, group-value, and observation seeds are then
+derived from that parent. Initialization, backend-default per-chain start, SBC-draw,
+SBC-tie, and sampler seeds use their own frozen domains. HSSM-default cells consume
+their initialization seed once, transform HSSM's processed `_initvals` once, and
+replicate that identical start across chains. PyMC receives one explicit chain seed
+per chain. NumPyro receives one explicit JAX master seed; the result records the exact
+`PRNGKey` (one chain) or `jax.random.split` keys (multiple chains) used by the pinned
+backend. Each candidate and its exact control deliberately share the truth and
+observations while retaining independent initialization and sampler seeds. The
+derivation does not use Python's process-randomized `hash()`.
 
 The three tiers have distinct meanings:
 
@@ -55,16 +74,27 @@ likelihood disagreement is reported at that layer and is never relabelled as a
 `TruncatedNormal` failure.
 
 Every fixed-truth primary candidate has a one-to-one control matching its tier, gate,
-layer, model, bound, truth regime, group dimensions, precision, sampler, budget,
-recovery setting, and initialization policy. Only the prior construction differs.
+layer, model, bounds, numeric truth, group dimensions, precision, sampler, budget,
+and initialization policy. Both are fitted to the exact same natural-scale group
+values and observations. Only the prior construction differs. Candidate recovery is
+assessed against the generating family; linked controls are geometry and efficiency
+references and therefore set `recovery=false` rather than making a false
+cross-parameterization recovery claim.
+
+The candidate is the exact proposed response-scale hierarchy: a centered native
+`TruncatedNormal` group distribution with a `TruncatedNormal` location hyperprior and
+`Weibull(1.5, 0.3)` scale. The control is a centered Normal hierarchy on predictor
+scale, mapped to response scale with `lower + exp(eta)`, `upper - exp(eta)`, or the
+finite-interval generalized-logit inverse. These are deliberately different prior
+families applied to the same likelihood and dataset.
+
 The dedicated SBC cells instead draw truths and data from the candidate prior itself,
 so they are candidate-family calibration cells and are not compared to a control
 dataset. `purpose` records candidate/control membership; the orthogonal
 `calibration_kind` field records that these cells run SBC. Primary HSSM cells use
-the real `default` initialization policy, including the
+the real `hssm-default` initialization policy, including the
 support-aware default jitter supplied by the stacked implementation. There are no
-hand-tuned primary starts. A dedicated `no-jitter-gradient-screen` policy is reserved
-for a future deterministic gradient-only screen and is not used by the primary gate.
+hand-tuned primary starts. Direct PyMC and Bambi cells use `backend-default` starts.
 
 Cells with the same `data_id` use exactly the same dataset seed. Candidate/control
 pairs and PyMC/NumPyro pairs therefore target the same data-generating problem while
@@ -73,9 +103,22 @@ one NumPyro scenario with otherwise identical scientific settings; posterior
 agreement is assessed from those paired results rather than inferred from different
 simulated datasets.
 
+For fixed-truth toy cells, the frozen group values are drawn once from
+SciPy's standardized `truncnorm` using `group_seed`, then indexed by the explicit
+`group_indices`; observations use the independent `observation_seed`. HSSM cells use
+the corresponding frozen LBA2, DDM, or softmax data-generating equations. Candidate
+and control never redraw the truth or observations independently. SBC uses
+`truth_seed` first for the candidate location and then its Weibull scale, `group_seed`
+for coefficients, and `observation_seed` for data. Cells with zero trials omit the
+observed likelihood while retaining the declared latent group vector.
+
 Fixed-truth recovery and simulation-based calibration answer different questions and
 are never pooled. Five-replicate fixed-truth cells diagnose boundary bias and
-recovery in each named regime. Two direct-PyMC candidate geometries additionally run
+recovery in each named regime. At five replicates, exact sign tests and Holm decisions
+are descriptive only—the smallest possible two-sided sign-test p-value is 0.0625—so
+the predeclared fixed-truth bias gate is magnitude-based and cannot claim
+"reproducibility" from an unreachable significance threshold. Two direct-PyMC
+candidate geometries additionally run
 275 prior-predictive SBC replicates. That count is prospectively powered: after
 Bonferroni correction across ten parameter units and two interval levels, it is the
 smallest count with at least 90% power to detect ten-percentage-point undercoverage
@@ -96,16 +139,34 @@ uv run python scripts/truncated_hierarchy_qualification.py plan \
 
 Before primary execution, capture one clean-checkout environment sidecar from each
 locked profile. Results name the semantic digest of the sidecar that produced them;
-evidence cannot be reassigned to a different profile after the fact.
+evidence cannot be reassigned to a different profile after the fact. Qualification
+runs require CPU, one thread for each listed numerical runtime, and JAX x64 exactly
+when `floatx=float64`.
 
-The later sampling runner writes one atomic JSON object per planned cell into a
-dedicated `cells/` directory. Aggregate them in canonical plan order; cells without a
-published result become explicit `missing` rows and failed cells retain their stage,
-error type, and message:
+The sampling runner executes each cell in a fresh process with cell-local PyTensor and
+JAX caches. Data and model construction are untimed. The timer covers one exact start
+generation plus the sampler's compile/JIT, warmup, and retained draws; artifact I/O
+and diagnostic probes are excluded. Gradient and backend-parity probes run afterward
+in a separate fresh process/cache, so they cannot warm the timed sampler.
 
-Use `benchmark-runs/` for local raw traces, logs, transformed starts, and cell files;
-that directory is intentionally ignored. Only the frozen specification and later
-reviewed aggregate evidence belong in Git.
+The runner writes a canonical shared dataset/truth artifact to
+`data/<data_id>-r<replicate>.json`, the exact transformed starts to
+`starts/<cell>.json`,
+the standardized monitored posterior to `chains/<cell>.nc`, and one atomic result
+object to `cells/<cell>.json`. Group locations and selected group coefficients are on
+response scale. `group_scale` remains on its hierarchy's native scale: response scale
+for the candidate and predictor scale for the linked control. The result records
+SHA-256 digests of the exact data, start, and chain bytes. The chain also retains the
+standardized divergence, energy, tree-depth, leapfrog-step, step-size, and acceptance
+statistics needed to recompute every gate. A partial write can therefore never
+masquerade as complete evidence. On failure, only artifacts completed before the
+failing stage remain, and the final cell result records absent artifacts as `null`.
+
+Aggregate cell results in canonical plan order; cells without a published result
+become explicit `missing` rows and failed cells retain their stage, error type, and
+message. Use `benchmark-runs/` for local raw traces, logs, starts, chains, and cell
+files; that directory is intentionally ignored. Only the frozen specification and
+later reviewed aggregate evidence belong in Git.
 
 ```bash
 uv run python scripts/truncated_hierarchy_qualification.py aggregate \
@@ -133,10 +194,15 @@ the `pyproject.toml` SHA-256, Python/platform, and exact versions (or explicit
 absence) of HSSM, Bambi, PyMC, PyTensor, JAX, NumPy, and NumPyro. A result repeats the
 planned identity and seeds, references its environment digest, declares `completed`
 or `failed`, and contains only finite Boolean/numeric metrics. Its reserved per-cell
-provenance records sampler, device, floatX, and a digest of the actual transformed
-sampler start (not merely `model.initial_point()`). Divergence count, retained draw
-count, and rate must agree exactly. Raw posterior traces are workflow artifacts and
-are not committed to the repository.
+provenance records sampler, device, planned floatX, the observed PyTensor floatX and
+JAX x64 state, execution time, and digests of the actual transformed sampler starts
+and raw chain artifact (not merely
+`model.initial_point()`). The chain artifact exposes the natural-scale
+`group_location`, `group_scale`, and predeclared first/middle/last group coefficients
+with `chain` and `draw` dimensions. Divergence count, retained draw count, and rate
+must agree exactly. SBC selects exactly 100 retained draws by frozen SHA-256 scoring
+without replacement; selection is independent of file order. Raw posterior traces
+are workflow artifacts and are not committed to the repository.
 
 ## Primary decision thresholds
 
@@ -159,14 +225,22 @@ divergence rate `< 0.001` rejects exactly `0.001`.
 
 Supported-backend compilation failure, non-finite gradients, repeated
 `R-hat > 1.05`, ESS below 100, divergence rate at or above 1%, greater-than-tenfold
-efficiency collapse, or reproducible recovery bias is an immediate no-go. Raising
-`target_accept`, selecting favorable seeds, or hand-tuning starts cannot convert a
-failure into a pass.
+efficiency collapse, or failure of a predeclared recovery or calibration gate is an
+immediate no-go. Raising `target_accept`, selecting favorable seeds, or hand-tuning
+starts cannot convert a failure into a pass.
 
 Gradient evidence is recorded as raw maximum absolute and relative errors in the
-transformed coordinates seen by NUTS. The assessor applies the predeclared float32 or
-float64 finite-difference, PyTensor/JAX, and Bambi-isomorphism tolerances. A worker may
-not replace those measurements with a self-reported pass Boolean.
+transformed coordinates seen by NUTS. Those maxima are descriptive: the gate uses the
+standard combined tolerance, evaluated for every coordinate and then maximized,
+`abs(observed - reference) / (atol + rtol * max(abs(reference), abs(observed))) <= 1`.
+The assessor applies the predeclared float32 or float64 finite-difference,
+PyTensor/JAX, and Bambi-isomorphism tolerances to that normalized error. This avoids
+falsely rejecting a numerically negligible absolute error on a near-zero gradient. A
+worker may not replace those measurements with a self-reported pass Boolean. The
+frozen finite-difference check uses a five-point central stencil at the first chain's
+exact transformed start, including the log-Jacobian. Posterior summaries use every
+retained draw with NumPy's linear quantiles and ArviZ's rank-R-hat, bulk/tail ESS, and
+mean MCSE; only SBC rank computation subsamples the frozen 100 draws.
 
 Missing cells or required metrics produce `incomplete`, never `pass`. An observed
 execution failure or failed scientific check produces `fail`. Smoke can only produce
