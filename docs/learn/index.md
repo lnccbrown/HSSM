@@ -22,7 +22,7 @@ paths assume that you can already fit and inspect a basic model.
   multi-accumulator model.
 - [HMMs with DDM emissions](../tutorials/hmm_ddm_regime_switching.ipynb) model
   regime changes across trials.
-- [Attentional DDMs](../tutorials/attentional_ddm.py) connect fixation
+- [Attentional DDMs](../tutorials/attentional_ddm.ipynb) connect fixation
   covariates to evidence accumulation.
 
 ## Learn reinforcement-learning models
