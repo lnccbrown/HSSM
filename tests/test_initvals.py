@@ -3,6 +3,8 @@ import pytest
 import hssm
 import logging
 
+from hssm.param.utils import _clamp_default_initval_to_bounds
+
 hssm.set_floatX("float32", update_jax=True)
 logger = logging.getLogger("hssm")
 
@@ -309,3 +311,156 @@ def test_process_no_process(caplog):
         model_on.initvals != model_off.initvals
     ), """Initial values should not be the same when
     initval processing is turned off vs. turned on."""
+
+
+def test_default_initval_clamped_into_bounds():
+    """A default initval outside the declared bounds is moved inside them."""
+    # Below the lower bound -> moved inside by 5% of the bound width.
+    clamped_low = _clamp_default_initval_to_bounds(0.025, "t", (0.25, 2.25))
+    assert clamped_low == 0.25 + 0.05 * 2.0
+
+    # Above the upper bound -> moved inside.
+    clamped_high = _clamp_default_initval_to_bounds(5.0, "a", (0.3, 2.5))
+    assert 0.3 < clamped_high < 2.5
+
+    # Inside the bounds -> returned unchanged.
+    assert _clamp_default_initval_to_bounds(0.4, "t", (0.25, 2.25)) == 0.4
+
+    # No bounds declared -> returned unchanged.
+    assert _clamp_default_initval_to_bounds(0.025, "t", None) == 0.025
+
+
+@pytest.mark.parametrize(
+    ("bounds", "value"),
+    [
+        ((0.0, np.inf), -1.0),
+        ((0.3, np.inf), 0.025),
+        ((-np.inf, 1.0), 5.0),
+    ],
+)
+def test_default_initval_clamped_into_one_sided_bounds(bounds, value):
+    """Bounds with an infinite endpoint still yield a finite interior value.
+
+    Shipped configs declare one-sided bounds - a: (0, inf) and t: (0, inf) in
+    the analytical likelihoods, sz/st: (0, inf) in full_ddm - and a user may
+    merge their own. A margin proportional to an infinite width would return
+    +/-inf, which is a worse starting value than the unclamped default.
+    """
+    lower, upper = bounds
+    result = _clamp_default_initval_to_bounds(value, "t", bounds)
+    assert np.isfinite(result)
+    assert lower < result < upper
+
+
+def test_doubly_infinite_bounds_leave_finite_default_untouched():
+    """A doubly-infinite bound already contains every finite default."""
+    assert _clamp_default_initval_to_bounds(0.0, "v", (-np.inf, np.inf)) == 0.0
+
+
+def test_clamp_warns_naming_the_parameter_and_replacement(caplog):
+    """Moving a default is announced, so a surprising start is traceable."""
+    caplog.set_level(logging.WARNING, logger="hssm")
+
+    _clamp_default_initval_to_bounds(0.025, "t", (0.25, 2.25))
+
+    assert len(caplog.records) == 1
+    message = caplog.records[0].getMessage()
+    assert "Default initial value 0.025 for t" in message
+    assert "outside the declared bounds (0.25, 2.25)" in message
+    assert "using 0.35 instead" in message
+    assert "Pass an explicit initval to override." in message
+
+
+@pytest.mark.parametrize(
+    ("model", "name", "bounds"),
+    [
+        # A finite two-sided bound excluding the shared default t = 0.025.
+        ("ddm", "t", (0.25, 2.0)),
+        ("ddm_sdv", "t", (0.25, 2.0)),
+        ("angle", "t", (0.25, 2.0)),
+        # A one-sided bound, whose infinite width still yields a finite start.
+        ("ddm", "t", (0.3, np.inf)),
+        # A bound that already contains the default, which stays untouched.
+        ("ddm", "t", (0.0, 2.0)),
+        # An _Intercept name resolves to its base parameter's bounds.
+        ("ddm", "t_Intercept", (0.25, 2.0)),
+    ],
+)
+def test_declared_bounds_reach_the_initial_value(cavanagh_test, model, name, bounds):
+    """Bounds passed through ``include=`` land on the resulting initial value.
+
+    ``include=[{"name": ..., "bounds": ...}]`` stores bounds on the ``Param``,
+    not on ``model_config``, and it is the only route by which a user of a
+    shipped model can declare a bound that excludes a default initval.
+    """
+    lower, upper = bounds
+    spec: dict = {"name": "t", "bounds": bounds}
+    if name.endswith("_Intercept"):
+        spec["formula"] = "t ~ 1"
+
+    fitted = hssm.HSSM(
+        data=cavanagh_test.iloc[:12],
+        model=model,
+        include=[spec],
+        p_outlier=0.0,
+        prior_settings=None,
+        link_settings=None,
+        process_initvals=True,
+        initval_jitter=0.0,
+    )
+
+    assert fitted.params["t"].bounds == bounds
+    initval = fitted._initvals[name]
+    assert np.isfinite(initval)
+    assert lower < initval < upper
+
+    # A default that is already inside its bounds is passed through as-is.
+    default = hssm.defaults.INITVAL_SETTINGS[None][name]
+    if lower < default < upper:
+        assert initval == np.array(default).astype(initval.dtype)
+
+
+def test_identity_link_override_clamps_into_bounds(caplog, cavanagh_test):
+    """An explicit identity link puts the default on the natural scale.
+
+    ``link_settings="log_logit"`` is model-wide, but a regression may override
+    the link for one parameter. Under identity the default is natural-scale, so
+    the declared bounds apply to it and it is clamped into them.
+    """
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        model="ddm",
+        link_settings="log_logit",
+        initval_jitter=0,
+        include=[
+            {
+                "name": "t",
+                "formula": "t ~ 1 + stim",
+                "link": "identity",
+                "bounds": (0.25, 2.0),
+            }
+        ],
+    )
+    assert getattr(model.params["t"].link, "name", model.params["t"].link) == "identity"
+    initval = float(np.asarray(model._initvals["t_Intercept"]))
+    # the link-space default of -4.0 would be far outside these bounds
+    assert 0.25 < initval < 2.0
+    assert initval == pytest.approx(0.25 + 0.05 * (2.0 - 0.25))
+
+
+def test_user_log_link_gets_link_space_default(cavanagh_test):
+    """A regression's own log link selects the link-space default.
+
+    The model-wide ``link_settings`` is ``None`` here, so the natural-scale
+    table would have applied before; the parameter's effective link decides.
+    """
+    model = hssm.HSSM(
+        data=cavanagh_test,
+        model="ddm",
+        link_settings=None,
+        initval_jitter=0,
+        include=[{"name": "a", "formula": "a ~ 1 + stim", "link": "log"}],
+    )
+    assert getattr(model.params["a"].link, "name", model.params["a"].link) == "log"
+    # the log-space default, i.e. a = exp(0) = 1, not the natural-scale 1.5
+    assert float(np.asarray(model._initvals["a_Intercept"])) == 0.0
