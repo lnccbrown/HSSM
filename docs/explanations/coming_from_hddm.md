@@ -129,9 +129,10 @@ explains the tradeoff and when each is the better choice.
 
 ## Where to start
 
-If you are rebuilding an existing analysis, [the HSSM
-tutorial](../tutorials/main_tutorial.ipynb) is the fastest route to the parts
-you already know, in the new interface. The [Winterbrain 2025 workshop
+If you are rebuilding an existing analysis, [the scenic HSSM
+tutorial](../tutorials/main_tutorial_scenic_route.ipynb) is the comprehensive
+route through the parts you already know, in the new interface. The
+[Winterbrain 2025 workshop
 snapshot](../archive/hssm_tutorial_workshop_2.ipynb) works through an analysis
 first run in HDDM and then rebuilt in HSSM, including the data preparation
 above.

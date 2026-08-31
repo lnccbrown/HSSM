@@ -13,6 +13,8 @@ validation:
 # phase-2 consolidation targets, deliberately unlisted until then
 not_in_nav: |
   tutorials/attentional_ddm.py
+  tutorials/main_tutorial.py
+  tutorials/main_tutorial_scenic_route.py
   tutorials/link_functions.py
   tutorials/poisson_race.py
   tutorials/random_slope_safe_priors.py
@@ -31,6 +33,7 @@ nav:
           - Installation: getting_started/installation.md
           - Quickstart: getting_started/getting_started.ipynb
           - The HSSM tutorial: tutorials/main_tutorial.ipynb
+          - The HSSM tutorial — scenic route: tutorials/main_tutorial_scenic_route.ipynb
           - Hierarchical modeling: getting_started/hierarchical_modeling.ipynb
           - A complete scientific workflow: tutorials/scientific_workflow_hssm.ipynb
       - Model walkthroughs:
@@ -135,6 +138,8 @@ plugins:
   - mkdocs-jupyter:
       ignore:
         - tutorials/attentional_ddm.py
+        - tutorials/main_tutorial.py
+        - tutorials/main_tutorial_scenic_route.py
         - tutorials/link_functions.py
         - tutorials/poisson_race.py
         - tutorials/random_slope_safe_priors.py
@@ -146,6 +151,7 @@ plugins:
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
         - tutorials/attentional_ddm.ipynb
+        - tutorials/main_tutorial_scenic_route.ipynb
         - tutorials/link_functions.ipynb
         - tutorials/random_slope_safe_priors.ipynb
         - tutorials/hsgp_regression.ipynb

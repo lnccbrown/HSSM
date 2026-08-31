@@ -84,12 +84,14 @@ model.sample()
 
     1. [Installation](getting_started/installation.md) — a working environment, GPU extras included.
     2. [Quickstart](getting_started/getting_started.ipynb) — simulate, fit, and check a DDM in about 15 minutes.
-    3. [The HSSM tutorial](tutorials/main_tutorial.ipynb) — the guided introduction: model choice, priors, diagnostics, predictive checks, comparison.
+    3. [The HSSM tutorial](tutorials/main_tutorial.ipynb) — one guided next step: fit a drift-rate regression, diagnose it, check predictions, and interpret the condition effect.
     4. [Hierarchical modeling](getting_started/hierarchical_modeling.ipynb) — `lmer`-style formulas on any model parameter.
     5. [Hierarchical DDM regressions](tutorials/ddm_hierarchical_tutorial.ipynb) — map your actual design onto a formula, and recover it.
     6. [Compare and interpret models](how_to/compare_models.ipynb) — rank candidates, and recognise when the data cannot separate them.
 
     **Capstone:** [A complete scientific workflow](tutorials/scientific_workflow_hssm.ipynb) — one dataset, start to finish.
+
+    *Want every option?* Take the optional [scenic route](tutorials/main_tutorial_scenic_route.ipynb) through model families, priors, regressions, hierarchies, comparison, and low-level extensions.
 
     *Used HDDM before?* [Coming from HDDM](explanations/coming_from_hddm.md) maps what you know onto HSSM.
 

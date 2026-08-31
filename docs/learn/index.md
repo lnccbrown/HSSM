@@ -8,9 +8,14 @@ paths assume that you can already fit and inspect a basic model.
 
 1. [Install HSSM](../getting_started/installation.md).
 2. [Fit and check a first DDM](../getting_started/getting_started.ipynb).
-3. [Work through the main HSSM tutorial](../tutorials/main_tutorial.ipynb).
+3. [Fit and check one useful regression](../tutorials/main_tutorial.ipynb).
 4. [Add hierarchical structure](../getting_started/hierarchical_modeling.ipynb).
 5. [See one analysis from data to interpretation](../tutorials/scientific_workflow_hssm.ipynb).
+
+The [optional scenic route](../tutorials/main_tutorial_scenic_route.ipynb)
+preserves the comprehensive tour of model families, priors, regressions,
+hierarchies, comparison, custom likelihoods, and low-level PyMC. It is a
+reference journey, not a required step in the first-user path.
 
 ## Learn a model family
 

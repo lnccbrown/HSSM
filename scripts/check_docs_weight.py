@@ -24,12 +24,11 @@ import sys
 DOCS = pathlib.Path(__file__).resolve().parent.parent / "docs"
 
 # Known-heavy paths that predate the check. Shrink and remove, do not extend.
-# Sizes at the time of writing (2026-08): scientific_workflow 11.2 MB,
-# plotting 5.4 MB (down from 10.9 before the retina fix), main_tutorial 4.7 MB.
+# Sizes at the time of writing (2026-08): scientific_workflow 11.2 MB and
+# plotting 5.4 MB (down from 10.9 before the retina fix).
 ALLOWLIST = {
     "tutorials/scientific_workflow_hssm.ipynb",
     "tutorials/plotting.ipynb",
-    "tutorials/main_tutorial.ipynb",
     "archive/hssm_tutorial_workshop_1.ipynb",
     "archive/hssm_tutorial_workshop_2.ipynb",
 }

@@ -18,6 +18,7 @@ on:
       - "src/hssm/**"
       - "tests/test_docs_notebook_paths.py"
       - "tests/test_docs_publication.py"
+      - "tests/test_main_tutorial_reader_outputs.py"
   push:
     branches: [main]
     paths:
@@ -36,6 +37,7 @@ on:
       - "src/hssm/**"
       - "tests/test_docs_notebook_paths.py"
       - "tests/test_docs_publication.py"
+      - "tests/test_main_tutorial_reader_outputs.py"
   schedule:
     # Retain the established Monday 05:50 UTC rendered-link check.
     - cron: "50 5 * * 1"
