@@ -752,12 +752,21 @@ def evaluate_hssm_gradients(
     """Evaluate hierarchy-prior accuracy and full-model finiteness at a NUTS start."""
     hssm.set_floatX(build.floatx, update_jax=True)
     pymc_model = build.model.pymc_model
-    expected_names = {value.name for value in pymc_model.value_vars}
+    value_vars = list(pymc_model.value_vars)
+    value_var_names: list[str] = []
+    for value_var in value_vars:
+        if value_var.name is None:
+            raise HSSMQualificationError("model value variable is unnamed")
+        value_var_names.append(value_var.name)
+    expected_names = set(value_var_names)
     if set(transformed_start) != expected_names:
         raise HSSMQualificationError("gradient point must contain every value variable")
     point = {
         name: np.array(value, copy=True) for name, value in transformed_start.items()
     }
+
+    def positional_arguments(state: Mapping[str, np.ndarray]) -> list[np.ndarray]:
+        return [np.asarray(state[name]) for name in value_var_names]
 
     target_rv_names = (
         build.group_location_name,
@@ -810,11 +819,18 @@ def evaluate_hssm_gradients(
     )
     factor_pytensor_fn = pymc_model.compile_fn(
         [factor_logp, factor_gradient],
-        inputs=pymc_model.value_vars,
+        inputs=value_vars,
         mode="FAST_COMPILE",
         on_unused_input="ignore",
+        point_fn=False,
     )
-    factor_logp_pt, factor_gradient_pt = factor_pytensor_fn(point)
+    # Bind the explicit input sequence positionally. Some PyTensor linkers clone
+    # these variables without retaining ``Function`` input names, which makes
+    # PyMC's otherwise convenient ``PointFunc`` fail on a valid point dictionary.
+    # Positional binding remains stable because ``inputs=value_vars`` is explicit.
+    factor_logp_pt, factor_gradient_pt = factor_pytensor_fn(
+        *positional_arguments(point)
+    )
     factor_logp_jax_raw, factor_gradient_jax = _jaxified_value_and_gradient(
         factor_logp,
         target_value_vars,
@@ -824,8 +840,9 @@ def evaluate_hssm_gradients(
     factor_logp_jax = float(np.asarray(factor_logp_jax_raw))
 
     def factor_logp_from_vector(vector: np.ndarray) -> float:
+        updated_point = point_from_target_vector(vector)
         return float(
-            np.asarray(factor_pytensor_fn(point_from_target_vector(vector))[0])
+            np.asarray(factor_pytensor_fn(*positional_arguments(updated_point))[0])
         )
 
     finite_difference = five_point_gradient(
@@ -841,14 +858,31 @@ def evaluate_hssm_gradients(
         else float(finite_difference_step)
     )
 
-    full_logp_pt = float(np.asarray(pymc_model.compile_logp()(point)))
-    full_gradient_pt = np.asarray(pymc_model.compile_dlogp()(point))
-    full_inputs = list(pymc_model.value_vars)
+    full_logp = cast("TensorVariable", pymc_model.logp())
+    full_gradient = cast("TensorVariable", pymc_model.dlogp())
+    full_logp_pytensor_fn = pymc_model.compile_fn(
+        full_logp,
+        inputs=value_vars,
+        on_unused_input="ignore",
+        point_fn=False,
+    )
+    full_gradient_pytensor_fn = pymc_model.compile_fn(
+        full_gradient,
+        inputs=value_vars,
+        on_unused_input="ignore",
+        point_fn=False,
+    )
+    full_logp_pt = float(
+        np.asarray(full_logp_pytensor_fn(*positional_arguments(point)))
+    )
+    full_gradient_pt = np.asarray(
+        full_gradient_pytensor_fn(*positional_arguments(point))
+    )
     full_logp_jax_raw, full_gradient_jax = _jaxified_value_and_gradient(
-        cast("TensorVariable", pymc_model.logp()),
-        full_inputs,
-        [np.asarray(point[value.name]) for value in full_inputs],
-        wrt_indices=tuple(range(len(full_inputs))),
+        full_logp,
+        value_vars,
+        positional_arguments(point),
+        wrt_indices=tuple(range(len(value_vars))),
     )
     full_logp_jax = float(np.asarray(full_logp_jax_raw))
     logp_finite = bool(

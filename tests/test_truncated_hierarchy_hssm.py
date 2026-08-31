@@ -272,6 +272,46 @@ def test_prior_factor_gradients_and_full_models_are_finite(builds, case):
     assert diagnostics.full_gradient_size == 5
 
 
+def test_gradient_diagnostics_do_not_require_named_compiled_inputs(builds, monkeypatch):
+    """Use positional value binding when a linker drops function input names."""
+    build = builds["lba-candidate"]
+    pymc_model = build.model.pymc_model
+    original_compile_fn = pymc_model.compile_fn
+    point_fn_arguments = []
+    unnamed_input_compilations = 0
+
+    def compile_with_unnamed_inputs(outs, *, inputs=None, point_fn=True, **kwargs):
+        nonlocal unnamed_input_compilations
+        assert inputs is not None
+        names = [value_var.name for value_var in inputs]
+        drop_input_names = kwargs.get("mode") is None
+        try:
+            if drop_input_names:
+                for value_var in inputs:
+                    value_var.name = None
+            compiled = original_compile_fn(
+                outs,
+                inputs=inputs,
+                point_fn=point_fn,
+                **kwargs,
+            )
+        finally:
+            for value_var, name in zip(inputs, names, strict=True):
+                value_var.name = name
+        point_fn_arguments.append(point_fn)
+        unnamed_input_compilations += int(drop_input_names)
+        return compiled
+
+    monkeypatch.setattr(pymc_model, "compile_fn", compile_with_unnamed_inputs)
+    artifact = extract_actual_sampler_starts(build, sampler="pymc", chains=1)
+    diagnostics = evaluate_hssm_gradients(build, artifact.transformed_points[0])
+
+    assert point_fn_arguments == [False, False, False]
+    assert unnamed_input_compilations == 2
+    assert diagnostics.logp_finite is True
+    assert diagnostics.gradient_finite is True
+
+
 def test_lba_likelihood_parity_is_an_independent_diagnostic(builds):
     """Report likelihood-backend errors independently of the prior contract."""
     build = builds["lba-candidate"]
