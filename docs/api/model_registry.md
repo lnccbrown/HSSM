@@ -1,5 +1,9 @@
 # Model discovery and registration
 
+Custom registry entries use the same configuration contract as direct model
+construction. Read [Model configuration and response domains](model_config.md)
+before registering a model; this page documents the registry functions.
+
 ## `hssm.list_models`
 
 ::: hssm.list_models
