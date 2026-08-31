@@ -14,7 +14,7 @@ from hssm.distribution_utils import make_distribution, make_hssm_rv
 
 
 def _synthetic_simulator(obs_dim: int, *, scalar_output: bool = False) -> Callable:
-    """Return a deterministic-contract simulator with seeded random values."""
+    """Return a seeded simulator with domain-valid, axis-coded values."""
 
     def simulator(theta, random_state, n_replicas, **kwargs):
         del kwargs
@@ -22,7 +22,20 @@ def _synthetic_simulator(obs_dim: int, *, scalar_output: bool = False) -> Callab
         n_rows = (
             n_replicas if theta_array.ndim == 1 else theta_array.shape[0] * n_replicas
         )
-        values = np.random.default_rng(random_state).normal(size=(n_rows, obs_dim))
+        rng = np.random.default_rng(random_state)
+        if obs_dim == 1:
+            values = rng.integers(0, 2, size=(n_rows, 1)).astype(float)
+        else:
+            locations = {
+                2: (0.30, -0.50),
+                3: (0.30, 0.80, -2.40),
+                4: (0.30, 0.20, 0.80, -2.40),
+            }[obs_dim]
+            values = np.asarray(locations) + rng.uniform(
+                0.0,
+                0.05,
+                size=(n_rows, obs_dim),
+            )
         return values[:, 0] if scalar_output else values
 
     simulator.model_name = f"synthetic_{obs_dim}d"  # type: ignore[attr-defined]
@@ -35,7 +48,11 @@ def _synthetic_logp(data, v):
     """Return one finite log-likelihood value per observation."""
     if data.ndim == 1:
         return -pt.square(data - v)
-    return -pt.sum(pt.square(data - pt.shape_padright(v)), axis=-1)
+    weights = pt.arange(1, data.shape[-1] + 1, dtype=data.dtype)
+    return -pt.sum(
+        pt.square(data - pt.shape_padright(v)) * weights,
+        axis=-1,
+    )
 
 
 def _synthetic_model(
@@ -43,26 +60,53 @@ def _synthetic_model(
     *,
     simulator_obs_dim: int | None = None,
 ) -> hssm.HSSM:
-    """Build a small custom model with scalar physical response columns."""
+    """Build a small custom model with ordered physical response columns."""
     simulator_obs_dim = simulator_obs_dim or configured_obs_dim
     if configured_obs_dim == 1:
         response = ("response",)
         data = pd.DataFrame({"response": [0, 1, 0, 1, 0]})
         response_domains = {"response": {"kind": "categorical", "values": (0, 1)}}
-    else:
-        response = ("rt",) + tuple(
-            f"response_{index}" for index in range(1, configured_obs_dim)
+    elif configured_obs_dim == 2:
+        response = ("rt", "response_1")
+        data = pd.DataFrame(
+            {
+                "rt": np.linspace(0.3, 0.7, 5),
+                "response_1": np.linspace(-0.5, 0.5, 5),
+            }
+        )
+        response_domains = {"response_1": {"kind": "continuous", "bounds": (-1.0, 1.0)}}
+    elif configured_obs_dim in (3, 4):
+        has_confidence = configured_obs_dim == 4
+        response = (
+            ("rt", "confidence", "polar", "azimuth")
+            if has_confidence
+            else ("rt", "polar", "azimuth")
         )
         data = pd.DataFrame(
             {
                 "rt": np.linspace(0.3, 0.7, 5),
-                **{column: np.linspace(-0.5, 0.5, 5) for column in response[1:]},
+                **({"confidence": np.linspace(0.0, 1.0, 5)} if has_confidence else {}),
+                "polar": np.linspace(0.0, np.pi, 5),
+                "azimuth": np.linspace(
+                    -np.pi,
+                    np.nextafter(np.pi, -np.inf),
+                    5,
+                ),
             }
         )
         response_domains = {
-            column: {"kind": "continuous", "bounds": (-1.0, 1.0)}
-            for column in response[1:]
+            **(
+                {"confidence": {"kind": "continuous", "bounds": (0.0, 1.0)}}
+                if has_confidence
+                else {}
+            ),
+            "polar": {"kind": "continuous", "bounds": (0.0, np.pi)},
+            "azimuth": {"kind": "circular", "bounds": (-np.pi, np.pi)},
         }
+    else:
+        raise ValueError(
+            f"Unsupported synthetic observation width: {configured_obs_dim}"
+        )
 
     return hssm.HSSM(
         data=data,
@@ -144,6 +188,44 @@ def test_model_rejects_callable_width_mismatch_before_building_distribution():
         _synthetic_model(3, simulator_obs_dim=2)
 
 
+@pytest.mark.parametrize(
+    ("expected_response", "expected_domain_kinds"),
+    [
+        (("rt", "polar", "azimuth"), ("continuous", "circular")),
+        (
+            ("rt", "confidence", "polar", "azimuth"),
+            ("continuous", "continuous", "circular"),
+        ),
+    ],
+)
+def test_mixed_response_model_compiles_ordered_logp(
+    expected_response,
+    expected_domain_kinds,
+):
+    """Mixed physical domains retain order through likelihood construction."""
+    obs_dim = len(expected_response)
+    model = _synthetic_model(obs_dim)
+
+    assert model._obs_dim == obs_dim
+    assert tuple(model.response) == expected_response
+    assert tuple(model.response_domains) == expected_response[1:]
+    assert tuple(domain["kind"] for domain in model.response_domains.values()) == (
+        expected_domain_kinds
+    )
+    point = model.initial_point(transformed=True)
+    logp = model.compile_logp(
+        keep_transformed=True,
+        vars=model.pymc_model.observed_RVs,
+        sum=False,
+    )
+    actual = logp(point)[0]
+    observed = model.data.loc[:, expected_response].to_numpy()
+    weights = np.arange(1, obs_dim + 1)
+    expected = -np.sum(np.square(observed - point["v"]) * weights, axis=1)
+    np.testing.assert_allclose(actual, expected)
+    assert np.isfinite(actual).all()
+
+
 @pytest.mark.parametrize("obs_dim", [1, 2, 3, 4])
 def test_predictive_shapes_follow_configured_response_width(obs_dim):
     """Prior and posterior predictions follow the physical response width."""
@@ -169,15 +251,26 @@ def test_predictive_shapes_follow_configured_response_width(obs_dim):
         assert not hasattr(model.family, "create_extra_pps_coord")
         assert prior_values.dims == ("chain", "draw", "__obs__")
         assert posterior_values.dims == ("chain", "draw", "__obs__")
+        assert prior_values.shape == (1, 3, len(model.data))
+        assert posterior_values.shape == (1, 2, len(model.data))
     else:
         np.testing.assert_array_equal(
             model.family.create_extra_pps_coord(), np.arange(obs_dim)
         )
-        assert prior_values.dims[-1] == response_dim
-        assert posterior_values.dims[-1] == response_dim
+        assert prior_values.dims == ("chain", "draw", "__obs__", response_dim)
+        assert posterior_values.dims == (
+            "chain",
+            "draw",
+            "__obs__",
+            response_dim,
+        )
+        assert prior_values.shape == (1, 3, len(model.data), obs_dim)
+        assert posterior_values.shape == (1, 2, len(model.data), obs_dim)
         np.testing.assert_array_equal(
             posterior_values.coords[response_dim], np.arange(obs_dim)
         )
+    assert np.isfinite(prior_values).all()
+    assert np.isfinite(posterior_values).all()
 
 
 def test_safe_mode_preserves_width_four_draw_and_response_coordinates():
@@ -235,6 +328,10 @@ def test_choice_only_string_keeps_scalar_legacy_width():
 def test_sample_do_dataframe_uses_physical_response_order(obs_dim):
     """Intervention samples expose each configured physical response column."""
     model = _synthetic_model(obs_dim)
+    expected_response = {
+        1: ("response",),
+        4: ("rt", "confidence", "polar", "azimuth"),
+    }[obs_dim]
     predictive = model.sample_do(params={"v": 0.5}, draws=3)
     frame = hssm.utils.predictive_dt_to_dataframe(
         predictive,
@@ -243,8 +340,35 @@ def test_sample_do_dataframe_uses_physical_response_order(obs_dim):
         response_dim=f"{model.response_str}_dim",
     )
 
-    assert list(frame.columns) == ["chain", "draw", "__obs__", *model.response]
+    assert tuple(model.response) == expected_response
+    assert list(frame.columns) == ["chain", "draw", "__obs__", *expected_response]
     assert len(frame) == 3 * len(model.data)
+    values = predictive["prior_predictive"][model.response_str]
+    expected_dims = ("chain", "draw", "__obs__")
+    if obs_dim > 1:
+        expected_dims += (f"{model.response_str}_dim",)
+    assert values.dims == expected_dims
+    assert values.shape == (
+        1,
+        3,
+        len(model.data),
+        *(() if obs_dim == 1 else (obs_dim,)),
+    )
+    np.testing.assert_array_equal(
+        frame[list(expected_response)].to_numpy(),
+        values.to_numpy().reshape(-1, obs_dim),
+    )
+    if obs_dim == 1:
+        assert set(frame["response"]) <= {0, 1}
+    else:
+        expected_intervals = {
+            "rt": (0.30, 0.35),
+            "confidence": (0.20, 0.25),
+            "polar": (0.80, 0.85),
+            "azimuth": (-2.40, -2.35),
+        }
+        for column, (lower, upper) in expected_intervals.items():
+            assert frame[column].between(lower, upper, inclusive="left").all()
 
 
 def test_scalar_dataframe_ignores_deadline_technical_suffix():
