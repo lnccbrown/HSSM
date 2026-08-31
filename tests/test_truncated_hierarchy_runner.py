@@ -17,9 +17,9 @@ import xarray as xr
 import scripts.truncated_hierarchy_runner as runner
 from scripts.truncated_hierarchy_qualification import (
     build_environment_catalog,
-    collect_environment,
     expand_plan,
     load_manifest,
+    manifest_sha256,
     validate_result_record,
 )
 
@@ -32,6 +32,24 @@ if TYPE_CHECKING:
 def manifest() -> Mapping[str, Any]:
     """Load the frozen executable manifest."""
     return load_manifest()
+
+
+@pytest.fixture
+def activate_planned_precision():
+    """Isolate direct helper tests from process-global precision mutations."""
+    previous_floatx = str(runner.pytensor.config.floatX)
+    previous_jax_x64 = bool(runner.jax.config.x64_enabled)
+
+    def activate(entry: Mapping[str, Any]) -> None:
+        floatx = str(entry["scenario"]["floatx"])
+        runner.pytensor.config.floatX = floatx
+        runner.jax.config.update("jax_enable_x64", floatx == "float64")
+
+    try:
+        yield activate
+    finally:
+        runner.pytensor.config.floatX = previous_floatx
+        runner.jax.config.update("jax_enable_x64", previous_jax_x64)
 
 
 def _entry(manifest, tier: str, scenario_id: str, replicate: int = 0):
@@ -90,8 +108,51 @@ def _fake_trace(built: runner.BuiltCell, *, seed: int = 91) -> xr.DataTree:
     return xr.DataTree.from_dict({"posterior": posterior, "sample_stats": stats})
 
 
-def _environment_catalog(manifest):
-    return build_environment_catalog([collect_environment(manifest)], manifest)
+def _frozen_environment_record(manifest):
+    """Build a valid 3.12 sidecar without attesting the test host as canonical."""
+    profile_name = "current-resolved"
+    profile = manifest["dependency_profiles"][profile_name]
+    return {
+        "schema_version": manifest["schema_version"],
+        "study_id": manifest["study_id"],
+        "manifest_sha256": manifest_sha256(manifest),
+        "runner_version": runner.RUNNER_VERSION,
+        "dependency_profile": profile_name,
+        "git": {
+            "commit": "test-commit",
+            "branch": "test-branch",
+            "dirty": False,
+        },
+        "project": {
+            field: profile[field]
+            for field in (
+                "project_path",
+                "project_sha256",
+                "lock_path",
+                "lock_sha256",
+            )
+        },
+        "runtime": {
+            "python": f"{profile['python']}.0",
+            "implementation": "CPython",
+            "platform": "test-runner-image",
+            "jax_enable_x64": True,
+        },
+        "packages": {
+            "hssm": "test-version",
+            **profile["required_versions"],
+        },
+    }
+
+
+def _environment_catalog(manifest, monkeypatch):
+    supplied = _frozen_environment_record(manifest)
+    monkeypatch.setattr(
+        runner,
+        "collect_environment",
+        lambda *_args: copy.deepcopy(supplied),
+    )
+    return build_environment_catalog([supplied], manifest)
 
 
 def _unpaired_identity(entry) -> runner.ExecutionIdentity:
@@ -481,7 +542,7 @@ def test_worker_environment_allows_host_image_and_python_patch_drift(
 ) -> None:
     """Fresh hosted VMs may differ descriptively while honoring one locked profile."""
     entry = _entry(manifest, "smoke", "smoke-pymc-lower-outside")
-    supplied = collect_environment(manifest)
+    supplied = _frozen_environment_record(manifest)
     observed = copy.deepcopy(supplied)
     python_parts = observed["runtime"]["python"].split(".")
     observed["runtime"]["python"] = ".".join([*python_parts[:2], "999"])
@@ -496,9 +557,22 @@ def test_worker_environment_allows_host_image_and_python_patch_drift(
 def test_worker_environment_rejects_stable_profile_drift(manifest, monkeypatch) -> None:
     """A changed package or source contract cannot reuse another worker's sidecar."""
     entry = _entry(manifest, "smoke", "smoke-pymc-lower-outside")
-    supplied = collect_environment(manifest)
+    supplied = _frozen_environment_record(manifest)
     observed = copy.deepcopy(supplied)
     observed["packages"]["pymc"] = "0.0.0"
+    catalog = build_environment_catalog([supplied], manifest)
+    monkeypatch.setattr(runner, "collect_environment", lambda *_args: observed)
+
+    with pytest.raises(runner.RunnerError, match="stable profile contract"):
+        runner._environment_for_cell(entry, catalog, manifest)
+
+
+def test_worker_environment_rejects_python_minor_drift(manifest, monkeypatch) -> None:
+    """The host-independent test fixture must not relax the frozen Python minor."""
+    entry = _entry(manifest, "smoke", "smoke-pymc-lower-outside")
+    supplied = _frozen_environment_record(manifest)
+    observed = copy.deepcopy(supplied)
+    observed["runtime"]["python"] = "3.13.0"
     catalog = build_environment_catalog([supplied], manifest)
     monkeypatch.setattr(runner, "collect_environment", lambda *_args: observed)
 
@@ -633,9 +707,12 @@ def test_hssm_data_generators_follow_model_contracts(
     assert len(payload["truth"]["group_effect"]) == entry["scenario"]["n_groups"]
 
 
-def test_backend_default_starts_are_exact_and_finite(manifest) -> None:
+def test_backend_default_starts_are_exact_and_finite(
+    manifest, activate_planned_precision
+) -> None:
     """Direct PyMC starts consume every planned per-chain start seed once."""
     entry = _entry(manifest, "smoke", "smoke-pymc-lower-outside")
+    activate_planned_precision(entry)
     payload = runner.generate_data_payload(entry)
     built = runner.build_cell_model(entry, payload)
 
@@ -651,10 +728,11 @@ def test_backend_default_starts_are_exact_and_finite(manifest) -> None:
 
 
 def test_pymc_sampler_receives_frozen_budget_seeds_and_adapt_diag(
-    manifest, monkeypatch
+    manifest, monkeypatch, activate_planned_precision
 ) -> None:
     """The PyMC path cannot add initializer jitter or substitute sampler seeds."""
     entry = _entry(manifest, "smoke", "smoke-pymc-lower-outside")
+    activate_planned_precision(entry)
     built = runner.build_cell_model(entry, runner.generate_data_payload(entry))
     starts, _ = runner.materialize_exact_starts(built)
     sentinel = xr.DataTree()
@@ -677,10 +755,11 @@ def test_pymc_sampler_receives_frozen_budget_seeds_and_adapt_diag(
 
 
 def test_numpyro_sampler_receives_scalar_seed_no_jitter_and_sequential_chains(
-    manifest, monkeypatch
+    manifest, monkeypatch, activate_planned_precision
 ) -> None:
     """NumPyro uses its single frozen root key and the exact transformed starts."""
     entry = _entry(manifest, "qualification", "qual-pymc-lower-outside-numpyro")
+    activate_planned_precision(entry)
     built = runner.build_cell_model(entry, runner.generate_data_payload(entry))
     starts, _ = runner.materialize_exact_starts(built)
     sentinel = xr.DataTree()
@@ -787,11 +866,12 @@ def test_chain_netcdf_is_reopened_and_hashed(manifest, tmp_path: Path) -> None:
 
 
 def test_failed_sampling_publishes_data_start_and_final_marker_only(
-    manifest, tmp_path: Path, monkeypatch
+    manifest, tmp_path: Path, monkeypatch, activate_planned_precision
 ) -> None:
     """A sampler failure retains completed evidence without inventing a chain."""
     entry = _entry(manifest, "smoke", "smoke-pymc-lower-outside")
-    catalog = _environment_catalog(manifest)
+    activate_planned_precision(entry)
+    catalog = _environment_catalog(manifest, monkeypatch)
     monkeypatch.setattr(
         runner,
         "validate_runtime_contract",
@@ -832,11 +912,12 @@ def test_failed_sampling_publishes_data_start_and_final_marker_only(
 
 
 def test_complete_mocked_cell_publishes_cell_after_all_artifacts(
-    manifest, tmp_path: Path, monkeypatch
+    manifest, tmp_path: Path, monkeypatch, activate_planned_precision
 ) -> None:
     """The final marker binds byte-verified data, starts, chains, and raw metrics."""
     entry = _entry(manifest, "smoke", "smoke-pymc-lower-outside")
-    catalog = _environment_catalog(manifest)
+    activate_planned_precision(entry)
+    catalog = _environment_catalog(manifest, monkeypatch)
     monkeypatch.setattr(
         runner,
         "validate_runtime_contract",
@@ -893,10 +974,13 @@ def test_complete_mocked_cell_publishes_cell_after_all_artifacts(
     validate_result_record(record, entry, catalog, manifest)
 
 
-def test_tiny_real_pymc_sampling_path_returns_datatree(manifest) -> None:
+def test_tiny_real_pymc_sampling_path_returns_datatree(
+    manifest, activate_planned_precision
+) -> None:
     """Exercise PyMC's real explicit-transformed-start API with a two-draw fit."""
     canonical = _entry(manifest, "smoke", "smoke-pymc-lower-outside")
     entry = copy.deepcopy(canonical)
+    activate_planned_precision(entry)
     entry["scenario"]["chains"] = 1
     entry["scenario"]["tune"] = 2
     entry["scenario"]["draws"] = 2
