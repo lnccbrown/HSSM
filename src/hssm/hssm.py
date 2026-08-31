@@ -57,8 +57,9 @@ class HSSM(HSSMBase):
     Parameters
     ----------
     data
-        A pandas DataFrame with the minimum requirements of containing the data with the
-        columns "rt" and "response".
+        A pandas DataFrame containing the physical response columns declared in
+        `hssm.ModelConfig.response`, plus any configured extra fields. Built-in RT
+        models typically use the columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
         "full_ddm", "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4",
@@ -66,12 +67,10 @@ class HSSM(HSSMBase):
         will be considered custom, in which case all `model_config`, `loglik`, and
         `loglik_kind` have to be provided by the user.
     choices : optional
-        When an `int`, the number of choices that the participants can make. If `2`, the
-        choices are [-1, 1] by default. If anything greater than `2`, the choices are
-        [0, 1, ..., n_choices - 1] by default. If a `list` is provided, it should be the
-        list of choices that the participants can make. Defaults to `2`. If any value
-        other than the choices provided is found in the "response" column of the data,
-        an error will be raised.
+        Legacy shorthand for the allowed integer labels when a model has exactly one
+        categorical non-RT response. Canonical custom configurations declare domains
+        through `hssm.ModelConfig.response_domains` and leave `choices` unset; do not
+        provide both.
     include : optional
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
@@ -223,8 +222,8 @@ class HSSM(HSSMBase):
     Attributes
     ----------
     data
-        A pandas DataFrame with at least two columns of "rt" and "response" indicating
-        the response time and responses.
+        The pandas DataFrame containing the physical response columns declared by the
+        model configuration.
     list_params
         The list of strs of parameter names.
     model_name

@@ -92,7 +92,7 @@ nav:
           - hssm.HSSM: api/hssm.md
           - hssm.aDDM and hssm.aDDMConfig: api/addm.md
           - hssm.Param: api/param.md
-          - hssm.ModelConfig: api/model_config.md
+          - Model configuration and response domains: api/model_config.md
           - hssm.Prior: api/prior.md
           - hssm.Link: api/link.md
           - hssm.rl: api/rl.md
