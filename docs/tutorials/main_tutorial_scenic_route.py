@@ -28,10 +28,10 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # The HSSM tutorial: scenic route
+    # The HSSM tutorial — scenic route
 
     <div style="text-align: center;">
-      <img src="images/HSSM_logo.png" alt="HSSM logo" style="height: 120px; width: auto; max-width: 80%;">
+      <img src="https://lnccbrown.github.io/HSSM/tutorials/images/HSSM_logo.png" alt="HSSM logo" style="height: 120px; width: auto; max-width: 80%;">
     </div>
     """)
     return
@@ -362,7 +362,7 @@ def _(mo):
     - `t`: non-decision time, such as encoding and motor time.
 
     <div style="text-align: center;">
-      <img src="images/DDM_with_params_pic.png" alt="Drift diffusion model diagram with parameters v, a, t, and z" style="width: 360px; max-width: 90%; height: auto;">
+      <img src="https://lnccbrown.github.io/HSSM/tutorials/images/DDM_with_params_pic.png" alt="Drift diffusion model diagram with parameters v, a, t, and z" style="width: 360px; max-width: 90%; height: auto;">
     </div>
 
     We simulate data with known values first. This makes the later posterior checks concrete: the red reference lines will show the values used to generate the data.
@@ -628,7 +628,7 @@ def _(mo):
     #### ArviZ for diagnostics and visualization
 
     <div style="text-align: center;">
-      <img src="images/arviz.png" alt="ArviZ logo" style="height: 120px; width: auto; max-width: 80%;">
+      <img src="https://lnccbrown.github.io/HSSM/tutorials/images/arviz.png" alt="ArviZ logo" style="height: 120px; width: auto; max-width: 80%;">
     </div>
 
     HSSM returns `xarray`-based inference results that work directly with [ArviZ](https://python.arviz.org/en/stable/index.html). We will use ArviZ to summarize posterior uncertainty, inspect MCMC traces, check posterior predictions, and compare models. The examples below focus on the few summaries and plots that are most useful when starting out.
@@ -918,7 +918,7 @@ def _(mo):
     The `angle` model extends the DDM with `theta`, which controls the rate at which decision boundaries collapse over time.
 
     <div style="text-align: center;">
-      <img src="images/ANGLE_with_params_pic.png" alt="Angle model diagram with collapsing decision boundaries and theta parameter" style="width: 360px; max-width: 90%; height: auto;">
+      <img src="https://lnccbrown.github.io/HSSM/tutorials/images/ANGLE_with_params_pic.png" alt="Angle model diagram with collapsing decision boundaries and theta parameter" style="width: 360px; max-width: 90%; height: auto;">
     </div>
 
     Collapsing boundaries are useful when urgency or time pressure may change a participant’s decision criterion. HSSM makes inference for these models practical through packaged `approx_differentiable` likelihoods.
@@ -1064,7 +1064,7 @@ def _(mo):
     Sometimes a parameter is fixed by design or is outside the present research question. Here we estimate only the drift rate `v` while holding the other DDM parameters fixed.
 
     <div style="text-align: center;">
-      <img src="images/DDM_only_v_pic.png" alt="Drift diffusion model diagram with only the drift-rate parameter v estimated" style="width: 360px; max-width: 90%; height: auto;">
+      <img src="https://lnccbrown.github.io/HSSM/tutorials/images/DDM_only_v_pic.png" alt="Drift diffusion model diagram with only the drift-rate parameter v estimated" style="width: 360px; max-width: 90%; height: auto;">
     </div>
 
     Fixing parameters reduces model flexibility, so it should be justified by theory, design, or a deliberate comparison.
@@ -1239,7 +1239,7 @@ def _(mo):
     ### Regressions on cognitive parameters
 
     <div style="text-align: center;">
-      <img src="images/bambi.png" alt="Bambi logo" style="height: 120px; width: auto; max-width: 80%;">
+      <img src="https://lnccbrown.github.io/HSSM/tutorials/images/bambi.png" alt="Bambi logo" style="height: 120px; width: auto; max-width: 80%;">
     </div>
 
     HSSM can link individual SSM parameters to trial-level covariates with Bambi-style formulas. This lets you ask questions such as whether a neural signal, condition, or behavioral measure predicts drift rate, boundary separation, or bias.
@@ -2355,7 +2355,7 @@ def _(mo):
     The remaining sections show how HSSM connects to the broader computational ecosystem. They are optional for a first analysis, but useful when you need custom simulators, likelihoods, or a lower-level PyMC model. If you are new to HSSM, it is reasonable to stop after model comparison and return here once you need more control.
 
     <div style="text-align: center;">
-      <img src="images/pytensor_jax.png" alt="PyTensor and JAX logos" style="height: 120px; width: auto; max-width: 80%;">
+      <img src="https://lnccbrown.github.io/HSSM/tutorials/images/pytensor_jax.png" alt="PyTensor and JAX logos" style="height: 120px; width: auto; max-width: 80%;">
     </div>
     """)
     return
@@ -2497,7 +2497,7 @@ def _(mo):
     ### Black-box likelihoods
 
     <div style="text-align: center;">
-      <img src="images/blackbox.png" alt="Black-box likelihood concept illustration" style="width: 360px; max-width: 90%; height: auto;">
+      <img src="https://lnccbrown.github.io/HSSM/tutorials/images/blackbox.png" alt="Black-box likelihood concept illustration" style="width: 360px; max-width: 90%; height: auto;">
     </div>
     """)
     return

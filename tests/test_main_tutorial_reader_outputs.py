@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import posixpath
 import re
 from pathlib import Path
 
@@ -24,6 +25,8 @@ MAX_TEXT_OUTPUT_CHARS = 8_000
 MAX_AGGREGATE_TEXT_OUTPUT_CHARS = 45_000
 MAX_TEXT_OUTPUT_COUNT = 120
 IMAGE_DATA_URI = re.compile(r"data:image/[^;]+;base64,[A-Za-z0-9+/=]+")
+HTML_IMAGE_SOURCE = re.compile(r'<img\b[^>]*\bsrc=["\']([^"\']+)["\']', re.I)
+CANONICAL_DOCS_ROOT = "https://lnccbrown.github.io/HSSM/"
 PLOT_OBJECT_REPR = re.compile(
     r"<(?:arviz_plots|matplotlib)\.[^>\n]* at 0x[0-9a-fA-F]+>"
     r"|(?:array\(\[.*)?<Axes(?:Subplot)?[^>]*>",
@@ -172,6 +175,33 @@ def test_plot_object_guard_inspects_text_that_accompanies_images(
     }
 
     assert len(_plot_object_reprs(notebook)) == expected_count
+
+
+@pytest.mark.parametrize("path", TUTORIALS, ids=lambda path: path.stem)
+def test_local_html_images_resolve_from_rendered_tutorial_route(path: Path) -> None:
+    """Resolve local image links from the nested MkDocs notebook route."""
+    notebook = _load_notebook(path)
+    rendered_dir = f"tutorials/{path.stem}"
+    broken: list[tuple[int, str, str]] = []
+
+    for cell_index, cell in enumerate(notebook["cells"]):
+        source = _as_text(cell.get("source"))
+        for image_source in HTML_IMAGE_SOURCE.findall(source):
+            if image_source.startswith(CANONICAL_DOCS_ROOT):
+                rendered_path = image_source.removeprefix(CANONICAL_DOCS_ROOT)
+            elif image_source.startswith(("http://", "https://", "data:", "/", "#")):
+                continue
+            else:
+                rendered_path = posixpath.normpath(
+                    posixpath.join(rendered_dir, image_source)
+                )
+            if (
+                rendered_path.startswith("../")
+                or not (REPO_ROOT / "docs" / rendered_path).is_file()
+            ):
+                broken.append((cell_index, image_source, rendered_path))
+
+    assert broken == [], f"broken rendered-route image links: {broken}"
 
 
 @pytest.mark.parametrize("path", TUTORIALS, ids=lambda path: path.stem)
