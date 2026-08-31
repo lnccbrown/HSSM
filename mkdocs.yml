@@ -100,6 +100,7 @@ nav:
       - Useful functions:
           - Model discovery and registration: api/model_registry.md
           - hssm.load_data: api/load_data.md
+          - hssm.list_data: api/list_data.md
           - hssm.simulate_data: api/simulate_data.md
           - hssm.set_floatX: api/set_floatx.md
           - hssm.show_defaults: api/show_defaults.md

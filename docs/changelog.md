@@ -16,6 +16,8 @@
 
 7. **Invalid model-level prior and link presets now fail fast** (#1233). `prior_settings` accepts only `"safe"` or `None`, and `link_settings` accepts only `"log_logit"` or `None`; wrong-case strings, booleans, mappings, and other unsupported values now raise a clear `ValueError` instead of silently changing prior, link, initial-value, or display behavior. The API documentation now clarifies that both presets act on regression parameters: `prior_settings=None` delegates missing regression-term priors to Bambi but leaves HSSM's simple-parameter defaults unchanged. The Poisson-race tutorial has also been migrated to marimo and no longer presents `prior_settings` as a prior dictionary.
 
+8. **`hssm.load_data` now returns a `pd.DataFrame` unconditionally** (#1146). Its `dataset` argument is required, and the return type is no longer `pd.DataFrame | str`, which forced type-checkers (and users) to narrow away a `str` branch that existed only to print the dataset listing. Use the new **`hssm.list_data()`** to get the names of the built-in datasets as a `tuple[str, ...]` (mirroring `hssm.list_models()`). Breaking: `hssm.load_data()` with no argument now raises `TypeError` instead of returning a listing string.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
