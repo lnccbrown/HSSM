@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import posixpath
 import re
 from pathlib import Path
 
@@ -24,6 +25,8 @@ MAX_TEXT_OUTPUT_CHARS = 8_000
 MAX_AGGREGATE_TEXT_OUTPUT_CHARS = 45_000
 MAX_TEXT_OUTPUT_COUNT = 120
 IMAGE_DATA_URI = re.compile(r"data:image/[^;]+;base64,[A-Za-z0-9+/=]+")
+HTML_IMAGE_SOURCE = re.compile(r'<img\b[^>]*\bsrc=["\']([^"\']+)["\']', re.I)
+CANONICAL_DOCS_ROOT = "https://lnccbrown.github.io/HSSM/"
 PLOT_OBJECT_REPR = re.compile(
     r"<(?:arviz_plots|matplotlib)\.[^>\n]* at 0x[0-9a-fA-F]+>"
     r"|(?:array\(\[.*)?<Axes(?:Subplot)?[^>]*>",
@@ -80,6 +83,27 @@ def _plot_object_reprs(notebook: dict) -> list[tuple[int, int, str]]:
             if PLOT_OBJECT_REPR.search(text):
                 retained.append((cell_index, output_index, text[:120]))
     return retained
+
+
+def _rendered_docs_image_path(image_source: str, rendered_dir: str) -> str | None:
+    """Return a safe docs-relative image path, or ``None`` for remote content."""
+    if image_source.startswith(CANONICAL_DOCS_ROOT):
+        candidate = image_source.removeprefix(CANONICAL_DOCS_ROOT)
+    elif image_source.startswith(("http://", "https://", "data:", "/", "#")):
+        return None
+    else:
+        candidate = posixpath.join(rendered_dir, image_source)
+
+    if posixpath.isabs(candidate) or ".." in candidate.split("/"):
+        raise ValueError(f"unsafe image path: {candidate}")
+    rendered_path = posixpath.normpath(candidate)
+    if (
+        rendered_path in {"", "."}
+        or posixpath.isabs(rendered_path)
+        or ".." in rendered_path.split("/")
+    ):
+        raise ValueError(f"unsafe image path: {rendered_path}")
+    return rendered_path
 
 
 def _is_sampling_call(expression: ast.Expr) -> bool:
@@ -172,6 +196,42 @@ def test_plot_object_guard_inspects_text_that_accompanies_images(
     }
 
     assert len(_plot_object_reprs(notebook)) == expected_count
+
+
+@pytest.mark.parametrize("path", TUTORIALS, ids=lambda path: path.stem)
+def test_local_html_images_resolve_from_rendered_tutorial_route(path: Path) -> None:
+    """Resolve local image links from the nested MkDocs notebook route."""
+    notebook = _load_notebook(path)
+    rendered_dir = f"tutorials/{path.stem}"
+    broken: list[tuple[int, str, str]] = []
+
+    for cell_index, cell in enumerate(notebook["cells"]):
+        source = _as_text(cell.get("source"))
+        for image_source in HTML_IMAGE_SOURCE.findall(source):
+            try:
+                rendered_path = _rendered_docs_image_path(image_source, rendered_dir)
+            except ValueError:
+                broken.append((cell_index, image_source, "unsafe path"))
+                continue
+            if rendered_path is None:
+                continue
+            if not (REPO_ROOT / "docs" / rendered_path).is_file():
+                broken.append((cell_index, image_source, rendered_path))
+
+    assert broken == [], f"broken rendered-route image links: {broken}"
+
+
+@pytest.mark.parametrize(
+    "image_source",
+    [
+        f"{CANONICAL_DOCS_ROOT}tutorials/main_tutorial/../../../pyproject.toml",
+        "../images/HSSM_logo.png",
+    ],
+)
+def test_rendered_image_paths_reject_traversal(image_source: str) -> None:
+    """Never allow image checks to escape the tracked docs tree."""
+    with pytest.raises(ValueError, match="unsafe image path"):
+        _rendered_docs_image_path(image_source, "tutorials/main_tutorial")
 
 
 @pytest.mark.parametrize("path", TUTORIALS, ids=lambda path: path.stem)
