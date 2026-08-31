@@ -103,8 +103,16 @@ explains the tradeoff and when each is the better choice.
 - **Priors.** For `ddm`, `ddm_sdv`, and `full_ddm`, HSSM's default priors on
   regression terms are derived from HDDM's — the settings are carried in
   `hssm.prior` under names like `HDDM_MU` and `HDDM_SIGMA` — so a regression
-  model on these families starts from familiar ground. The rule is the
-  likelihood: those defaults apply unless you are using the neural
+  model on these families starts from familiar ground. For safe common-intercept
+  priors, an omitted link, `"identity"`, `bambi.Link("identity")`, and
+  `hssm.Link("identity")` are equivalent: each keeps the intercept on the
+  response scale and uses the HDDM-derived prior. A transformed link instead
+  uses a coefficient-scale `Normal(mu=0, sigma=0.25)`. [Link functions and safe
+  priors](../tutorials/link_functions.ipynb) explains that scale change from
+  first principles. An explicit prior always wins. Unmatched group-only terms
+  retain their existing behavior, tracked in
+  [#1225](https://github.com/lnccbrown/HSSM/issues/1225). The broader rule is
+  the likelihood: these defaults apply unless you use the neural
   (`approx_differentiable`) likelihood, which has its own priors derived from
   the network's training bounds. Specifying your own is a different interface
   — see [Specify priors and fix parameters](../how_to/specify_priors.ipynb).

@@ -194,6 +194,215 @@ def test_validate():
     assert v.link.bounds == (0.0, 1.0)
 
 
+def test_prepare_formula_terms_caches_structural_names(cavanagh_test):
+    """Cache normalized Formulae names for varied common and group terms."""
+    param = RegressionParam(
+        name="v",
+        formula=(
+            "v ~ 1 + theta * dbs + C(stim) + np.exp(theta) + "
+            "(1 + theta * dbs + C(stim) + np.exp(theta) | participant_id) + "
+            "(0 + theta | conf)"
+        ),
+    )
+
+    design = param._prepare_formula_terms(cavanagh_test, {"np": np})
+
+    assert design.common is not None
+    assert design.group is not None
+    assert param._common_term_names == {
+        "Intercept",
+        "theta",
+        "dbs",
+        "theta:dbs",
+        "C(stim)",
+        "np.exp(theta)",
+    }
+    assert param._group_term_names == {
+        "1|participant_id": "Intercept",
+        "theta|participant_id": "theta",
+        "dbs|participant_id": "dbs",
+        "theta:dbs|participant_id": "theta:dbs",
+        "C(stim)|participant_id": "C(stim)",
+        "np.exp(theta)|participant_id": "np.exp(theta)",
+        "theta|conf": "theta",
+    }
+    assert param._group_terms_with_common == set(param._group_term_names)
+
+
+@pytest.mark.parametrize(
+    ("formula", "expected_matches"),
+    [
+        ("v ~ 1 + (0 + theta | participant_id)", set()),
+        ("v ~ 0 + theta + (0 + theta | participant_id)", {"theta|participant_id"}),
+        ("v ~ 1 + theta + (0 + dbs | participant_id)", set()),
+        ("v ~ 0 + theta:dbs + (0 + dbs:theta | participant_id)", set()),
+    ],
+)
+def test_prepare_formula_terms_matches_exact_expressions(
+    cavanagh_test, formula, expected_matches
+):
+    """Match group expressions to common terms by exact Formulae names."""
+    param = RegressionParam(name="v", formula=formula)
+
+    param._prepare_formula_terms(cavanagh_test, {})
+
+    assert param._group_terms_with_common == expected_matches
+
+
+@pytest.mark.parametrize(
+    ("formula", "matched_group_terms"),
+    [
+        (
+            "v ~ 1 + theta + (1 + theta | participant_id)",
+            {"1|participant_id", "theta|participant_id"},
+        ),
+        (
+            "v ~ 0 + theta * dbs + (0 + theta * dbs | participant_id)",
+            {
+                "theta|participant_id",
+                "dbs|participant_id",
+                "theta:dbs|participant_id",
+            },
+        ),
+        (
+            "v ~ 0 + C(stim) + (0 + C(stim) | participant_id)",
+            {"C(stim)|participant_id"},
+        ),
+        (
+            "v ~ 0 + np.exp(theta) + (0 + np.exp(theta) | participant_id)",
+            {"np.exp(theta)|participant_id"},
+        ),
+        (
+            "v ~ 1 + theta + (1 + theta | participant_id) + (0 + theta | conf)",
+            {"1|participant_id", "theta|participant_id", "theta|conf"},
+        ),
+    ],
+)
+def test_safe_priors_zero_center_structurally_matched_groups(
+    cavanagh_test, formula, matched_group_terms
+):
+    """Give every exact common/group match a fixed zero group location."""
+    param = RegressionParam(name="v", formula=formula, bounds=(-3.0, 3.0))
+
+    param.make_safe_priors(cavanagh_test, {"np": np}, is_ddm=False)
+
+    assert param._group_terms_with_common == matched_group_terms
+    for group_term in matched_group_terms:
+        prior = param.prior[group_term]
+        assert isinstance(prior, bmb.Prior)
+        assert prior.args["mu"] == 0.0
+
+
+def test_safe_priors_preserve_explicit_matched_group_prior(cavanagh_test):
+    """Never replace a user prior even when its group term matches a common term."""
+    user_prior = bmb.Prior(
+        "Normal",
+        mu=bmb.Prior("Normal", mu=1.0, sigma=0.5),
+        sigma=bmb.Prior("HalfNormal", sigma=0.5),
+    )
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + theta + (0 + theta | participant_id)",
+        prior={"theta|participant_id": user_prior},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert "theta|participant_id" in param._group_terms_with_common
+    assert param.prior["theta|participant_id"] is user_prior
+
+
+def test_safe_priors_preserve_common_wildcard(cavanagh_test):
+    """A user common wildcard prevents shadowing exact safe defaults."""
+    wildcard = bmb.Prior("Laplace", mu=3.0, b=4.0)
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + theta + (1 + theta | participant_id)",
+        prior={"common": wildcard},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param.prior["common"] is wildcard
+    assert "Intercept" not in param.prior
+    assert "theta" not in param.prior
+    _check_group_prior_with_common(param.prior["1|participant_id"])
+    _check_group_prior_with_common(param.prior["theta|participant_id"])
+
+
+def test_safe_priors_preserve_group_specific_wildcard(cavanagh_test):
+    """A user group wildcard prevents shadowing exact safe defaults."""
+    wildcard = bmb.Prior(
+        "Normal",
+        mu=0.0,
+        sigma=bmb.Prior("HalfNormal", sigma=0.75),
+    )
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + theta + (1 + theta | participant_id)",
+        prior={"group_specific": wildcard},
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param.prior["group_specific"] is wildcard
+    assert "1|participant_id" not in param.prior
+    assert "theta|participant_id" not in param.prior
+    assert isinstance(param.prior["Intercept"], Prior)
+    assert isinstance(param.prior["theta"], bmb.Prior)
+
+
+def test_safe_priors_exact_terms_take_precedence_over_wildcards(cavanagh_test):
+    """Retain exact user terms alongside category-wide Bambi wildcards."""
+    common_wildcard = bmb.Prior("Laplace", mu=3.0, b=4.0)
+    group_wildcard = bmb.Prior(
+        "Normal",
+        mu=0.0,
+        sigma=bmb.Prior("HalfNormal", sigma=0.75),
+    )
+    exact_common = bmb.Prior("Normal", mu=8.0, sigma=2.0)
+    exact_group = bmb.Prior(
+        "Normal",
+        mu=0.0,
+        sigma=bmb.Prior("HalfNormal", sigma=1.25),
+    )
+    specified = {
+        "common": common_wildcard,
+        "group_specific": group_wildcard,
+        "theta": exact_common,
+        "theta|participant_id": exact_group,
+    }
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + theta + (1 + theta | participant_id)",
+        prior=specified,
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param.prior == specified
+    assert param.prior["theta"] is exact_common
+    assert param.prior["theta|participant_id"] is exact_group
+
+
+def test_safe_priors_preserve_unmatched_group_location(cavanagh_test):
+    """Retain the existing free-mean policy for a genuinely group-only slope."""
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 1 + (0 + theta | participant_id)",
+        bounds=(-3.0, 3.0),
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False)
+
+    assert param._group_terms_with_common == set()
+    _check_group_prior(param.prior["theta|participant_id"])
+
+
 angle_config = get_default_model_config("angle")
 angle_params = angle_config["list_params"]
 angle_bounds = angle_config["likelihoods"]["approx_differentiable"]["bounds"].values()
@@ -205,6 +414,168 @@ ddm_config = get_default_model_config("full_ddm")
 ddm_params = ddm_config["list_params"]
 ddm_bounds = ddm_config["likelihoods"]["blackbox"]["bounds"].values()
 param_and_bounds_ddm = list(zip(ddm_params, ddm_bounds, [True] * len(ddm_params)))
+
+
+HDDM_LOCATION_PRIOR_CASES = [
+    pytest.param(
+        "v",
+        (-np.inf, np.inf),
+        "Normal",
+        {"mu": 2.0, "sigma": 3.0},
+        False,
+        id="v",
+    ),
+    pytest.param(
+        "a",
+        (0.0, np.inf),
+        "Gamma",
+        {"mu": 1.5, "sigma": 0.75},
+        True,
+        id="a",
+    ),
+    pytest.param(
+        "z",
+        (0.0, 1.0),
+        "Beta",
+        {"alpha": 10.0, "beta": 10.0},
+        True,
+        id="z",
+    ),
+    pytest.param(
+        "t",
+        (0.0, np.inf),
+        "Gamma",
+        {"mu": 0.2, "sigma": 0.2},
+        True,
+        id="t",
+    ),
+    pytest.param(
+        "sv",
+        (0.0, np.inf),
+        "HalfNormal",
+        {"sigma": 2.0},
+        True,
+        id="sv",
+    ),
+    pytest.param(
+        "sz",
+        (0.0, np.inf),
+        "HalfNormal",
+        {"sigma": 0.5},
+        True,
+        id="sz",
+    ),
+    pytest.param(
+        "st",
+        (0.0, np.inf),
+        "HalfNormal",
+        {"sigma": 0.3},
+        True,
+        id="st",
+    ),
+    pytest.param(
+        "p_outlier",
+        None,
+        "Beta",
+        {"alpha": 5.0, "beta": 100.0},
+        False,
+        id="p-outlier",
+    ),
+]
+
+IDENTITY_LINK_CASES = [
+    pytest.param(None, id="omitted"),
+    pytest.param("identity", id="string"),
+    pytest.param(bmb.Link("identity"), id="bambi-object"),
+    pytest.param(hssm.Link("identity"), id="hssm-object"),
+]
+
+
+def _assert_scalar_prior_contract(
+    prior,
+    *,
+    name,
+    args,
+    bounds,
+    is_truncated,
+):
+    """Assert the complete scalar prior contract, including hidden bound args."""
+    assert isinstance(prior, Prior)
+    assert prior.name == name
+    assert prior.bounds == bounds
+    assert prior.is_truncated is is_truncated
+    assert (prior.dist is not None) is is_truncated
+
+    effective_args = prior._args if prior.is_truncated else prior.args
+    assert set(effective_args) == set(args)
+    for key, expected in args.items():
+        np.testing.assert_allclose(effective_args[key], expected)
+
+
+@pytest.mark.parametrize("link", IDENTITY_LINK_CASES)
+@pytest.mark.parametrize(
+    ("param_name", "bounds", "prior_name", "prior_args", "is_truncated"),
+    HDDM_LOCATION_PRIOR_CASES,
+)
+def test_hddm_safe_common_intercept_uses_response_scale_prior_for_identity_links(
+    cavanagh_test,
+    param_name,
+    bounds,
+    prior_name,
+    prior_args,
+    is_truncated,
+    link,
+):
+    """Route every identity spelling through RegressionParam before validation."""
+    param = RegressionParam(
+        name=param_name,
+        formula=f"{param_name} ~ 1 + theta",
+        bounds=bounds,
+        link=link,
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=True)
+    param.process_prior()
+
+    _assert_scalar_prior_contract(
+        param.prior["Intercept"],
+        name=prior_name,
+        args=prior_args,
+        bounds=bounds,
+        is_truncated=is_truncated,
+    )
+    _assert_scalar_prior_contract(
+        param.prior["theta"],
+        name="Normal",
+        args={"mu": 0.0, "sigma": 0.25},
+        bounds=None,
+        is_truncated=False,
+    )
+    assert getattr(param.link, "name", param.link) == "identity"
+
+
+@pytest.mark.parametrize(
+    "link",
+    [*IDENTITY_LINK_CASES, pytest.param("log", id="log-control")],
+)
+def test_safe_priors_preserve_explicit_common_priors_across_links(cavanagh_test, link):
+    """Never replace exact user intercept or slope priors based on link semantics."""
+    intercept_prior = bmb.Prior("StudentT", nu=4.0, mu=1.0, sigma=0.5)
+    slope_prior = bmb.Prior("Laplace", mu=-0.2, b=0.3)
+    param = RegressionParam(
+        name="a",
+        formula="a ~ 1 + theta",
+        prior={"Intercept": intercept_prior, "theta": slope_prior},
+        bounds=(0.0, np.inf),
+        link=link,
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=True)
+    param.process_prior()
+
+    assert set(param.prior) == {"Intercept", "theta"}
+    assert param.prior["Intercept"] is intercept_prior
+    assert param.prior["theta"] is slope_prior
 
 
 @pytest.mark.parametrize(
@@ -264,7 +635,7 @@ def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
     # The regression case, with group-specific terms
     param_group = RegressionParam(
         name=param_name,
-        formula=f"{param_name} ~ 1 + (1 + theta | participant_id)",
+        formula=f"{param_name} ~ 1 + theta + (1 + theta | participant_id)",
         bounds=bounds,
     )
 
@@ -272,7 +643,12 @@ def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
 
     assert all(
         param in param_group.prior
-        for param in ["Intercept", "1|participant_id", "theta|participant_id"]
+        for param in [
+            "Intercept",
+            "theta",
+            "1|participant_id",
+            "theta|participant_id",
+        ]
     )
 
     assert param_group.prior["Intercept"].is_truncated
@@ -281,7 +657,7 @@ def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
     group_slope_prior = param_group.prior["theta|participant_id"]
 
     _check_group_prior_with_common(group_intercept_prior)
-    _check_group_prior(group_slope_prior)
+    _check_group_prior_with_common(group_slope_prior)
 
     param_no_common_intercept = RegressionParam(
         name=param_name,
@@ -426,7 +802,7 @@ def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
     # The regression case, with group-specific terms
     param_group = RegressionParam(
         name=param_name,
-        formula=f"{param_name} ~ 1 + (1 + theta | participant_id)",
+        formula=f"{param_name} ~ 1 + theta + (1 + theta | participant_id)",
         bounds=bounds,
     )
 
@@ -434,7 +810,12 @@ def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
 
     assert all(
         param in param_group.prior
-        for param in ["Intercept", "1|participant_id", "theta|participant_id"]
+        for param in [
+            "Intercept",
+            "theta",
+            "1|participant_id",
+            "theta|participant_id",
+        ]
     )
 
     assert param_group.prior["Intercept"].is_truncated
@@ -455,7 +836,7 @@ def test_make_safe_priors_ddm(cavanagh_test, caplog, param_name, mu, prior):
                 assert hyperprior.args[key2] == val2
 
     _check_group_prior_with_common(group_intercept_prior)
-    _check_group_prior(group_slope_prior)
+    _check_group_prior_with_common(group_slope_prior)
 
     param_no_common_intercept = RegressionParam(
         name=param_name,

@@ -1,0 +1,10 @@
+cache = true
+max_cache_age = "1d"
+max_retries = 3
+timeout = 30
+
+# These publisher pages are valid in a browser but reject automated clients.
+exclude = [
+  '^https://www\.jneurosci\.org/content/44/46/e0550242024\.long$',
+  '^https://psycnet\.apa\.org/record/2009-11068-003$',
+]

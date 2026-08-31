@@ -13,8 +13,9 @@
 ![GitHub Repo stars](https://img.shields.io/github/stars/lnccbrown/HSSM)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-**HSSM** (Hierarchical Sequential Sampling Modeling) is a modern open-source
-Python toolbox for computational modeling in cognitive neuroscience. It supports
+**HSSM** (Hierarchical Sequential Sampling Modeling) is a modern,
+source-available Python toolbox for computational modeling in cognitive
+neuroscience. It supports
 a broad range of sequential sampling models used to study decision-making,
 learning, and other cognitive processes — from basic research to the analysis of
 clinical effects. HSSM provides state-of-the-art likelihood approximation
@@ -98,26 +99,28 @@ model.sample()
 
     For models HSSM does not ship, or likelihoods you trained yourself:
 
-    1. [Understanding likelihoods in HSSM](tutorials/likelihoods.ipynb) — analytical, `approx_differentiable`, and blackbox, and when each applies.
-    2. [The ONNX likelihood contract](how_to/custom_onnx_likelihoods.ipynb) — the rules an ONNX file must satisfy, demonstrated live.
+    1. [Likelihood kinds in HSSM](explanations/likelihoods.md) — analytical, `approx_differentiable`, and blackbox, and when each applies.
+    2. [The ONNX likelihood contract](how_to/custom_onnx_likelihoods.md) — the exact rules an approximate differentiable ONNX file must satisfy.
     3. [Bring your own likelihood](how_to/external_trainers.md) — the route table for networks trained in sbi or BayesFlow.
-    4. Then the walkthrough for your route — [sbi NRE](tutorials/sbi_nre_integration.ipynb), [BayesFlow NLE](tutorials/bayesflow_nle_onnx_integration.ipynb), [BayesFlow LRE](tutorials/bayesflow_lre_integration.ipynb), or [JAX callables](tutorials/jax_callable_contribution_onnx_example.ipynb).
+    4. Then the walkthrough for your route — [sbi NRE](tutorials/sbi_nre_integration.ipynb), [BayesFlow NRE](tutorials/bayesflow_nre_onnx_integration.ipynb), [BayesFlow LRE](tutorials/bayesflow_lre_integration.ipynb), or [JAX callables](tutorials/jax_callable_contribution_onnx_example.ipynb).
     5. [Use the low-level API with PyMC](tutorials/pymc.ipynb) — when the formula interface is the constraint.
 
 </div>
 
-Beyond the paths, the docs are organised by what you are doing: **Learn** for
-guided material, **How-to guides** for a specific task, **Explanations** for
-the reasoning behind a choice, and **Reference** for the API.
+Beyond the paths, the docs are organised by what you are doing:
+[Learn](learn/index.md) for guided material,
+[How-to guides](how_to/index.md) for a specific task, **Explanations** for the
+reasoning behind a choice, and [Reference](reference/index.md) for exact APIs
+and project metadata.
 
 ## Part of a larger toolchain
 
-HSSM is the inference layer of a four-package ecosystem: `ssm-simulators`
-supplies the models and simulated data, LANfactory trains the likelihood
-networks that make otherwise-intractable models estimable, and HSSM consumes
-them. Most users never need the other three. See
-[The HSSM ecosystem](ecosystem/index.md) for the map, including which package
-answers which question and how versions fit together.
+HSSM is the inference layer of a larger ecosystem: `ssm-simulators` supplies
+the models and simulated data, LANfactory trains the likelihood networks that
+make otherwise-intractable models estimable, and HSSM consumes them. Most users
+never need the other repositories. See the canonical
+[HSSM ecosystem map](ecosystem/index.md) for
+ownership boundaries, contributor routes, and the complete site directory.
 
 ## What HSSM gives you
 
@@ -134,9 +137,12 @@ answers which question and how versions fit together.
 
 ## Citation
 
-Fengler, A., Xu, Y., Bera, K., Omar, A., Frank, M.J. (in preparation). HSSM: A
-generalized toolbox for hierarchical bayesian estimation of computational
-models in cognitive neuroscience.
+Fengler, A., Xu, Y., Bera, K., Paniagua, C., Omar, A., and Frank, M. J. HSSM: A
+Widely Applicable Toolbox for Hierarchical Bayesian Neurocognitive Modeling.
+bioRxiv 2026.06.05.730398.
+
+- DOI: [https://doi.org/10.64898/2026.06.05.730398](https://doi.org/10.64898/2026.06.05.730398)
+- bioRxiv: [https://www.biorxiv.org/content/10.64898/2026.06.05.730398v1](https://www.biorxiv.org/content/10.64898/2026.06.05.730398v1)
 
 ## Community
 

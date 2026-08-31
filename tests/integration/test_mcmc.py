@@ -189,6 +189,77 @@ def test_default_sampler_resolution(
     assert captured["inference_method"] == expected_sampler
 
 
+@pytest.mark.parametrize(
+    ("sample_kwargs", "expected_compile_kwargs"),
+    [
+        ({}, {"mode": "cvm"}),
+        (
+            {"compile_kwargs": {"trust_input": True}},
+            {"mode": "cvm", "trust_input": True},
+        ),
+        (
+            {"compile_kwargs": {"mode": "numba", "trust_input": True}},
+            {"mode": "numba", "trust_input": True},
+        ),
+    ],
+)
+def test_default_blackbox_slice_uses_compiler_settings(
+    data_ddm, monkeypatch, sample_kwargs, expected_compile_kwargs
+):
+    """Black-box Slice compilation defaults to CVM but honors explicit settings."""
+    model = hssm.HSSM(data_ddm, loglik_kind="blackbox")
+    captured = {}
+    sentinel_step = object()
+
+    def fake_slice(*, model, compile_kwargs):
+        captured["slice_model"] = model
+        captured["compile_kwargs"] = compile_kwargs
+        return sentinel_step
+
+    def fake_fit(**kwargs):
+        captured["step"] = kwargs["step"]
+        captured["fit_kwargs"] = kwargs
+        raise _FitCalled
+
+    monkeypatch.setattr(pm, "Slice", fake_slice)
+    monkeypatch.setattr(model.model, "fit", fake_fit)
+
+    with pytest.raises(_FitCalled):
+        model.sample(**sample_kwargs)
+
+    assert captured["slice_model"] is model.pymc_model
+    assert captured["compile_kwargs"] == expected_compile_kwargs
+    assert captured["step"] is sentinel_step
+    for key, value in sample_kwargs.items():
+        assert captured["fit_kwargs"][key] == value
+
+
+def test_default_blackbox_slice_resolves_backend(data_ddm, monkeypatch):
+    """The PyMC backend shortcut is resolved before constructing Slice."""
+    model = hssm.HSSM(data_ddm, loglik_kind="blackbox")
+    captured = {}
+
+    def fake_slice(*, model, compile_kwargs):
+        captured["slice_model"] = model
+        captured["compile_kwargs"] = compile_kwargs
+        return object()
+
+    def fake_fit(**kwargs):
+        captured["fit_kwargs"] = kwargs
+        raise _FitCalled
+
+    monkeypatch.setattr(pm, "Slice", fake_slice)
+    monkeypatch.setattr(model.model, "fit", fake_fit)
+
+    with pytest.raises(_FitCalled):
+        model.sample(backend="numba")
+
+    resolved = captured["compile_kwargs"]
+    assert captured["slice_model"] is model.pymc_model
+    assert type(resolved["mode"].linker).__name__ == "NumbaLinker"
+    assert captured["fit_kwargs"]["backend"] == "numba"
+
+
 @pytest.mark.slow
 def test_default_sampler_end_to_end(data_ddm):
     """The default sampling path works end to end, not just in resolution."""
