@@ -125,6 +125,10 @@
     "sbc_replicates": 275,
     "coverage_power_design": {
       "method": "two-sided-clopper-pearson-with-bonferroni",
+      "candidate_scenario_ids": [
+        "calib-pymc-lower-outside",
+        "calib-pymc-two-sided-near"
+      ],
       "candidate_parameter_units": 10,
       "coverage_checks_per_unit": 2,
       "alternative_undercoverage": 0.1,
@@ -1652,7 +1656,7 @@
       "layer": "pymc",
       "model": "toy_gaussian",
       "prior": "truncated_normal",
-      "purpose": "calibration",
+      "purpose": "candidate",
       "calibration_kind": "sbc",
       "data_id": "calib-pymc-lower-outside",
       "bound_kind": "lower",
@@ -1682,7 +1686,7 @@
       "layer": "pymc",
       "model": "toy_gaussian",
       "prior": "truncated_normal",
-      "purpose": "calibration",
+      "purpose": "candidate",
       "calibration_kind": "sbc",
       "data_id": "calib-pymc-two-sided-near",
       "bound_kind": "two_sided",

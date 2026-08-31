@@ -58,8 +58,10 @@ Every fixed-truth primary candidate has a one-to-one control matching its tier, 
 layer, model, bound, truth regime, group dimensions, precision, sampler, budget,
 recovery setting, and initialization policy. Only the prior construction differs.
 The dedicated SBC cells instead draw truths and data from the candidate prior itself,
-so they are not compared to a control dataset. Primary HSSM cells use the real
-`default` initialization policy, including the
+so they are candidate-family calibration cells and are not compared to a control
+dataset. `purpose` records candidate/control membership; the orthogonal
+`calibration_kind` field records that these cells run SBC. Primary HSSM cells use
+the real `default` initialization policy, including the
 support-aware default jitter supplied by the stacked implementation. There are no
 hand-tuned primary starts. A dedicated `no-jitter-gradient-screen` policy is reserved
 for a future deterministic gradient-only screen and is not used by the primary gate.
