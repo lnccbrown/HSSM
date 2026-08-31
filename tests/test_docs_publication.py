@@ -195,6 +195,29 @@ def test_rejects_duplicate_image_outputs_in_one_cell(tmp_path):
     ]
 
 
+def test_accepts_one_image_represented_by_multiple_mime_types(tmp_path):
+    """One rich output may expose the same image through MIME and an HTML URL."""
+    payload = "c2FtZS1pbWFnZQ=="
+    _write_repo(
+        tmp_path,
+        nav_target="tutorials/demo.ipynb",
+        outputs=[
+            {
+                "data": {
+                    "image/png": payload,
+                    "text/html": (
+                        f'<img src="data:image/png;base64,{payload}" alt="demo">'
+                    ),
+                },
+                "metadata": {},
+                "output_type": "display_data",
+            }
+        ],
+    )
+
+    assert find_publication_issues(tmp_path) == []
+
+
 def test_repository_marimo_publications_are_valid():
     """Keep the repository's checked-in publication artifacts healthy."""
     repo_root = pathlib.Path(__file__).resolve().parent.parent

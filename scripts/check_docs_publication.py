@@ -205,7 +205,7 @@ def _artifact_issues(
             hashlib.sha256(payload.encode()).hexdigest()
             for output in cell.get("outputs", [])
             if isinstance(output, dict)
-            for payload in _image_payloads(output)
+            for payload in set(_image_payloads(output))
         ]
         if len(image_hashes) != len(set(image_hashes)):
             issues.append(

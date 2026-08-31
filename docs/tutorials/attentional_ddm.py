@@ -506,8 +506,9 @@ def _(mo):
 
     - **Recovery** (below): compare each blue posterior interval with the matching
       ground-truth value listed in the figure title.
-    - **Trace**: the two chains should overlap and look like white noise (good mixing);
-      also check `r_hat ~ 1.0` and `ess_bulk` in the summary above.
+    - **Trace**: when multiple chains run, they should overlap and look like white
+      noise (good mixing); also check `r_hat ~ 1.0` and `ess_bulk` in the summary
+      above.
     - **Pair**: look for funnels / tight ridges (hard geometry).
     - **Posterior predictive** (§6): predicted RTs should track the observed ones.
     """)
