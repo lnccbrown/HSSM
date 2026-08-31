@@ -33,7 +33,8 @@ environment and use the repository environment instead::
     uv run --group notebook --group docs marimo export html --no-sandbox \
         docs/tutorials/random_slope_safe_priors.py \
         --output /tmp/random-slope-safe-priors.html --force
-    uv run --group notebook --group docs marimo export ipynb --no-sandbox \
+    HSSM_DOCS_STATIC=1 \
+      uv run --group notebook --group docs marimo export ipynb --no-sandbox \
         docs/tutorials/random_slope_safe_priors.py \
         --output docs/tutorials/random_slope_safe_priors.ipynb \
         --include-outputs --force
@@ -80,10 +81,24 @@ def _():
     hssm.set_floatX("float64")
     pd.set_option("display.max_rows", 20)
     assert jax.default_backend() == "cpu"
-    return bmb, design_matrices, find_disconnected_free_rvs, hssm, jax, mo, np, pd, pm
+    static_docs = (
+        os.environ.get("HSSM_DOCS_STATIC") == "1" or not mo.running_in_notebook()
+    )
+    return (
+        bmb,
+        design_matrices,
+        find_disconnected_free_rvs,
+        hssm,
+        jax,
+        mo,
+        np,
+        pd,
+        pm,
+        static_docs,
+    )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(bmb, hssm, jax, mo):
     mo.md(f"""
     # Random-slope safe priors and parameterization diagnostics
@@ -137,7 +152,7 @@ def _(pd):
     return data, formula
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 1. Tiny balanced 2x2 dataset
@@ -192,7 +207,7 @@ def _(data, design_matrices, formula, np, pd):
     return design_rank_table, matrices
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 2. The component designs have their expected ranks
@@ -235,7 +250,7 @@ def _(matrices, pd):
     return (matcher_table,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 3. The exact matching error
@@ -408,7 +423,7 @@ def _(
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 4. Prove the corrected defaults and recreate the old priors
@@ -429,34 +444,48 @@ def _(mo):
     return
 
 
-@app.cell
-def _(mo):
-    prior_view = mo.ui.dropdown(
-        options={
-            "Corrected HSSM safe defaults": "safe",
-            "Manually recreated legacy priors": "legacy",
-            "Explicit zero-mean reference": "workaround",
-        },
-        value="Corrected HSSM safe defaults",
-        label="Prior specification",
-    )
-    prior_view
-    return (prior_view,)
+@app.cell(hide_code=True)
+def _(mo, static_docs):
+    if static_docs:
+        prior_selection = "safe"
+        _selector = mo.md(
+            "**Static selection:** corrected HSSM safe defaults. The complete "
+            "three-specification comparison is shown below."
+        )
+    else:
+        _prior_view = mo.ui.dropdown(
+            options={
+                "Corrected HSSM safe defaults": "safe",
+                "Manually recreated legacy priors": "legacy",
+                "Explicit zero-mean reference": "workaround",
+            },
+            value="Corrected HSSM safe defaults",
+            label="Prior specification",
+        )
+        prior_selection = _prior_view.value
+        _selector = _prior_view
+    _selector
+    return (prior_selection,)
 
 
 @app.cell
-def _(legacy_prior_table, prior_view, safe_prior_table, workaround_prior_table):
+def _(
+    legacy_prior_table,
+    prior_selection,
+    safe_prior_table,
+    workaround_prior_table,
+):
     _prior_tables = {
         "safe": safe_prior_table,
         "legacy": legacy_prior_table,
         "workaround": workaround_prior_table,
     }
-    selected_prior_table = _prior_tables[prior_view.value]
+    selected_prior_table = _prior_tables[prior_selection]
     selected_prior_table
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ### Static prior comparison
@@ -582,7 +611,7 @@ def _(
     return disconnected_by_graph, graph_table
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 5. What happens to the generated means
@@ -606,20 +635,19 @@ def _(graph_table):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo, safe_means_match_workaround):
     assert safe_means_match_workaround
-    matcher_status = mo.callout(
-        "Validated: corrected safe defaults are structurally matched, use scalar "
-        "zero means, agree with the explicit reference, and create no disconnected "
-        "means under either parameterization.",
-        kind="success",
+    matcher_status = mo.md(
+        "**Validated:** corrected safe defaults are structurally matched, use "
+        "scalar zero means, agree with the explicit reference, and create no "
+        "disconnected means under either parameterization."
     )
     matcher_status
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 6. Inspect the actual PyMC model graphs
@@ -644,21 +672,30 @@ def _(mo):
     return
 
 
-@app.cell
-def _(mo):
-    graph_view = mo.ui.dropdown(
-        options={
-            "Corrected safe defaults, non-centered": "safe_noncentered",
-            "Corrected safe defaults, centered": "safe_centered",
-            "Manual legacy priors, non-centered": "legacy_noncentered",
-            "Manual legacy priors, centered": "legacy_centered",
-            "Explicit zero-mean reference": "workaround",
-        },
-        value="Corrected safe defaults, non-centered",
-        label="Model graph",
-    )
-    graph_view
-    return (graph_view,)
+@app.cell(hide_code=True)
+def _(mo, static_docs):
+    if static_docs:
+        graph_selection = "safe_noncentered"
+        _selector = mo.md(
+            "**Static selection:** corrected safe defaults, non-centered. "
+            "The two legacy diagnostic graphs follow below."
+        )
+    else:
+        _graph_view = mo.ui.dropdown(
+            options={
+                "Corrected safe defaults, non-centered": "safe_noncentered",
+                "Corrected safe defaults, centered": "safe_centered",
+                "Manual legacy priors, non-centered": "legacy_noncentered",
+                "Manual legacy priors, centered": "legacy_centered",
+                "Explicit zero-mean reference": "workaround",
+            },
+            value="Corrected safe defaults, non-centered",
+            label="Model graph",
+        )
+        graph_selection = _graph_view.value
+        _selector = _graph_view
+    _selector
+    return (graph_selection,)
 
 
 @app.cell
@@ -743,13 +780,13 @@ def _(
 
 
 @app.cell
-def _(graph_view, make_model_graph):
-    selected_model_graph = make_model_graph(graph_view.value)
+def _(graph_selection, make_model_graph):
+    selected_model_graph = make_model_graph(graph_selection)
     selected_model_graph
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ### Legacy free means, non-centered
@@ -767,7 +804,7 @@ def _(make_model_graph):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ### Legacy free means, centered
@@ -786,7 +823,7 @@ def _(make_model_graph):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 7. Why centering the manually recreated legacy model is not a fix
@@ -821,7 +858,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## 8. Compatibility workaround for affected releases
@@ -864,7 +901,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## Takeaway

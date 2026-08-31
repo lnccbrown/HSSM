@@ -81,7 +81,7 @@ def _():
     return BytesIO, StringIO, bmb, hssm, mo, np, pd, plt, pt, redirect_stdout
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(bmb, hssm, mo):
     mo.md(f"""
     # Understanding link functions in HSSM

@@ -12,6 +12,7 @@ validation:
 
 # phase-2 consolidation targets, deliberately unlisted until then
 not_in_nav: |
+  tutorials/attentional_ddm.py
   tutorials/link_functions.py
   tutorials/poisson_race.py
   tutorials/random_slope_safe_priors.py
@@ -37,7 +38,7 @@ nav:
           - Choice-only models: tutorials/choice_only_models.ipynb
           - Poisson race models: tutorials/poisson_race.ipynb
           - HMM with DDM emissions: tutorials/hmm_ddm_regime_switching.ipynb
-          - Attentional DDM (aDDM): tutorials/attentional_ddm.py
+          - Attentional DDM (aDDM): tutorials/attentional_ddm.ipynb
       - Reinforcement learning models:
           - RLSSM basics: tutorials/rlssm_basic.ipynb
           - Choice-only RLSSM: tutorials/choice_only_rlssm.ipynb
@@ -132,6 +133,7 @@ plugins:
         tutorials/bayesflow_nle_onnx_integration.md: https://lnccbrown.github.io/HSSM/tutorials/bayesflow_nre_onnx_integration/
   - mkdocs-jupyter:
       ignore:
+        - tutorials/attentional_ddm.py
         - tutorials/link_functions.py
         - tutorials/poisson_race.py
         - tutorials/random_slope_safe_priors.py
@@ -142,7 +144,7 @@ plugins:
         - how_to/compare_models.ipynb
         - getting_started/hierarchical_modeling.ipynb
         - tutorials/main_tutorial.ipynb
-        - tutorials/attentional_ddm.py
+        - tutorials/attentional_ddm.ipynb
         - tutorials/link_functions.ipynb
         - tutorials/random_slope_safe_priors.ipynb
         - tutorials/hsgp_regression.ipynb
@@ -183,6 +185,10 @@ plugins:
         - tutorials/poisson_race.ipynb
         - .ipynb_checkpoints/*.ipynb
       allow_errors: false
+      no_prompt: true
+      remove_tag_config:
+        remove_input_tags:
+          - remove-input
   - mkdocstrings:
       default_handler: python
       handlers:
