@@ -1,0 +1,603 @@
+name: Qualify hierarchical TruncatedNormal priors
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Study tier(s) to execute after mandatory smoke"
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - qualification
+          - stress
+          - full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: truncated-hierarchy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+env:
+  QUALIFICATION_MANIFEST: benchmarks/specs/truncated_hierarchy_v2.json
+  QUALIFICATION_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+  UV_VERSION: "0.11.21"
+
+jobs:
+  prepare:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'labeled' &&
+       github.event.label.name == 'run-truncated-hierarchy-qualification' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      smoke_matrix: ${{ steps.plan.outputs.smoke_matrix }}
+      qualification_matrix: ${{ steps.plan.outputs.qualification_matrix }}
+      stress_matrix: ${{ steps.plan.outputs.stress_matrix }}
+      run_qualification: ${{ steps.plan.outputs.run_qualification }}
+      run_stress: ${{ steps.plan.outputs.run_stress }}
+    steps:
+      - name: Check out the exact qualification commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.QUALIFICATION_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Build deterministic matrices
+        id: plan
+        shell: bash
+        env:
+          REQUESTED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'full' }}
+        run: |
+          set -euo pipefail
+          profile_project="benchmarks/environments/truncated_hierarchy/current-resolved"
+          uv sync --project "$profile_project" --frozen
+
+          for tier in smoke qualification stress; do
+            matrix=$(uv run --project "$profile_project" --frozen python \
+              scripts/truncated_hierarchy_shards.py \
+              --manifest "$QUALIFICATION_MANIFEST" matrix --tier "$tier")
+            printf '%s_matrix=%s\n' "$tier" "$matrix" >> "$GITHUB_OUTPUT"
+          done
+
+          case "$REQUESTED_MODE" in
+            smoke)
+              run_qualification=false
+              run_stress=false
+              ;;
+            qualification)
+              run_qualification=true
+              run_stress=false
+              ;;
+            stress)
+              run_qualification=false
+              run_stress=true
+              ;;
+            full)
+              run_qualification=true
+              run_stress=true
+              ;;
+            *)
+              printf 'Unsupported qualification mode: %s\n' "$REQUESTED_MODE" >&2
+              exit 2
+              ;;
+          esac
+          printf 'run_qualification=%s\n' "$run_qualification" >> "$GITHUB_OUTPUT"
+          printf 'run_stress=%s\n' "$run_stress" >> "$GITHUB_OUTPUT"
+
+  environments:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        dependency_profile: [current-resolved, bambi-0.19]
+    steps:
+      - name: Check out the exact qualification commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.QUALIFICATION_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Freeze dependency-profile provenance
+        shell: bash
+        env:
+          DEPENDENCY_PROFILE: ${{ matrix.dependency_profile }}
+        run: |
+          set -euo pipefail
+          profile_project="benchmarks/environments/truncated_hierarchy/$DEPENDENCY_PROFILE"
+          output="$RUNNER_TEMP/environment/$DEPENDENCY_PROFILE.json"
+          mkdir -p -- "$(dirname "$output")"
+          uv sync --project "$profile_project" --frozen
+          uv run --project "$profile_project" --frozen python \
+            scripts/truncated_hierarchy_shards.py \
+            --manifest "$QUALIFICATION_MANIFEST" environment \
+            --dependency-profile "$DEPENDENCY_PROFILE" \
+            --output "$output"
+
+      - name: Upload dependency-profile provenance
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-env-${{ matrix.dependency_profile }}
+          path: ${{ runner.temp }}/environment/${{ matrix.dependency_profile }}.json
+          if-no-files-found: error
+          retention-days: 90
+
+  smoke:
+    needs: [prepare, environments]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.prepare.outputs.smoke_matrix) }}
+    steps:
+      - name: Check out the exact qualification commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.QUALIFICATION_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Download matching environment provenance
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tn-env-${{ matrix.dependency_profile }}
+          path: ${{ runner.temp }}/environment
+
+      - name: Run canonical smoke shard
+        shell: bash
+        env:
+          DEPENDENCY_PROFILE: ${{ matrix.dependency_profile }}
+          SHARD_ID: ${{ matrix.shard_id }}
+        run: |
+          set -euo pipefail
+          profile_project="benchmarks/environments/truncated_hierarchy/$DEPENDENCY_PROFILE"
+          artifact_root="$RUNNER_TEMP/evidence"
+          environment="$RUNNER_TEMP/environment/$DEPENDENCY_PROFILE.json"
+          mkdir -p -- "$artifact_root/logs"
+          uv sync --project "$profile_project" --frozen
+          uv run --project "$profile_project" --frozen python \
+            scripts/truncated_hierarchy_shards.py \
+            --manifest "$QUALIFICATION_MANIFEST" run \
+            --tier smoke --shard-id "$SHARD_ID" \
+            --artifact-root "$artifact_root" --environment "$environment" \
+            2>&1 | tee "$artifact_root/logs/$SHARD_ID.log"
+
+      - name: Upload smoke cell evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-cells-smoke-${{ matrix.shard_id }}
+          path: |
+            ${{ runner.temp }}/evidence/data/
+            ${{ runner.temp }}/evidence/starts/
+            ${{ runner.temp }}/evidence/chains/
+            ${{ runner.temp }}/evidence/cells/
+            ${{ runner.temp }}/evidence/logs/
+            ${{ runner.temp }}/evidence/shards/
+          if-no-files-found: warn
+          retention-days: ${{ matrix.retention_days }}
+
+  smoke_aggregate:
+    if: ${{ always() && needs.prepare.result == 'success' && needs.environments.result == 'success' }}
+    needs: [prepare, environments, smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out the exact qualification commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.QUALIFICATION_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Download smoke cells
+        continue-on-error: true
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: tn-cells-smoke-*
+          path: ${{ runner.temp }}/evidence
+          merge-multiple: true
+
+      - name: Download dependency provenance
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: tn-env-*
+          path: ${{ runner.temp }}/environment
+          merge-multiple: true
+
+      - name: Aggregate and assess smoke evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          profile_project="benchmarks/environments/truncated_hierarchy/current-resolved"
+          artifact_root="$RUNNER_TEMP/evidence"
+          aggregate="$artifact_root/aggregate/smoke"
+          mkdir -p -- "$artifact_root/cells" "$artifact_root/logs" "$aggregate"
+          uv sync --project "$profile_project" --frozen
+          environment_args=(
+            --environment "$RUNNER_TEMP/environment/current-resolved.json"
+            --environment "$RUNNER_TEMP/environment/bambi-0.19.json"
+          )
+          uv run --project "$profile_project" --frozen python \
+            scripts/truncated_hierarchy_qualification.py \
+            --manifest "$QUALIFICATION_MANIFEST" aggregate --tier smoke \
+            --results-dir "$artifact_root/cells" --output-dir "$aggregate" \
+            "${environment_args[@]}" \
+            2>&1 | tee "$artifact_root/logs/smoke-aggregate.log"
+          uv run --project "$profile_project" --frozen python \
+            scripts/truncated_hierarchy_qualification.py \
+            --manifest "$QUALIFICATION_MANIFEST" assess --tier smoke \
+            --results "$aggregate/results.jsonl" \
+            --artifact-root "$artifact_root" --output "$aggregate/assessment.json" \
+            "${environment_args[@]}" \
+            2>&1 | tee "$artifact_root/logs/smoke-assess.log"
+
+      - name: Upload smoke aggregate
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-summary-smoke
+          path: |
+            ${{ runner.temp }}/evidence/aggregate/
+            ${{ runner.temp }}/evidence/cells/
+            ${{ runner.temp }}/evidence/logs/
+            ${{ runner.temp }}/evidence/shards/
+          if-no-files-found: warn
+          retention-days: 14
+
+  qualification:
+    if: >-
+      needs.prepare.outputs.run_qualification == 'true' &&
+      needs.smoke_aggregate.result == 'success'
+    needs: [prepare, environments, smoke_aggregate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.prepare.outputs.qualification_matrix) }}
+    steps:
+      - name: Check out the exact qualification commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.QUALIFICATION_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Download matching environment provenance
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tn-env-${{ matrix.dependency_profile }}
+          path: ${{ runner.temp }}/environment
+
+      - name: Run canonical qualification shard
+        shell: bash
+        env:
+          DEPENDENCY_PROFILE: ${{ matrix.dependency_profile }}
+          SHARD_ID: ${{ matrix.shard_id }}
+        run: |
+          set -euo pipefail
+          profile_project="benchmarks/environments/truncated_hierarchy/$DEPENDENCY_PROFILE"
+          artifact_root="$RUNNER_TEMP/evidence"
+          environment="$RUNNER_TEMP/environment/$DEPENDENCY_PROFILE.json"
+          mkdir -p -- "$artifact_root/logs"
+          uv sync --project "$profile_project" --frozen
+          uv run --project "$profile_project" --frozen python \
+            scripts/truncated_hierarchy_shards.py \
+            --manifest "$QUALIFICATION_MANIFEST" run \
+            --tier qualification --shard-id "$SHARD_ID" \
+            --artifact-root "$artifact_root" --environment "$environment" \
+            2>&1 | tee "$artifact_root/logs/$SHARD_ID.log"
+
+      - name: Upload qualification cell evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-cells-qualification-${{ matrix.shard_id }}
+          path: |
+            ${{ runner.temp }}/evidence/data/
+            ${{ runner.temp }}/evidence/starts/
+            ${{ runner.temp }}/evidence/chains/
+            ${{ runner.temp }}/evidence/cells/
+            ${{ runner.temp }}/evidence/logs/
+            ${{ runner.temp }}/evidence/shards/
+          if-no-files-found: warn
+          retention-days: ${{ matrix.retention_days }}
+
+  qualification_aggregate:
+    if: >-
+      always() &&
+      needs.prepare.outputs.run_qualification == 'true' &&
+      needs.smoke_aggregate.result == 'success' &&
+      needs.environments.result == 'success'
+    needs: [prepare, environments, smoke_aggregate, qualification]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out the exact qualification commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.QUALIFICATION_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Download qualification cells
+        continue-on-error: true
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: tn-cells-qualification-*
+          path: ${{ runner.temp }}/evidence
+          merge-multiple: true
+
+      - name: Download dependency provenance
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: tn-env-*
+          path: ${{ runner.temp }}/environment
+          merge-multiple: true
+
+      - name: Aggregate and assess qualification evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          profile_project="benchmarks/environments/truncated_hierarchy/current-resolved"
+          artifact_root="$RUNNER_TEMP/evidence"
+          aggregate="$artifact_root/aggregate/qualification"
+          mkdir -p -- "$artifact_root/cells" "$artifact_root/logs" "$aggregate"
+          uv sync --project "$profile_project" --frozen
+          environment_args=(
+            --environment "$RUNNER_TEMP/environment/current-resolved.json"
+            --environment "$RUNNER_TEMP/environment/bambi-0.19.json"
+          )
+          uv run --project "$profile_project" --frozen python \
+            scripts/truncated_hierarchy_qualification.py \
+            --manifest "$QUALIFICATION_MANIFEST" aggregate --tier qualification \
+            --results-dir "$artifact_root/cells" --output-dir "$aggregate" \
+            "${environment_args[@]}" \
+            2>&1 | tee "$artifact_root/logs/qualification-aggregate.log"
+          uv run --project "$profile_project" --frozen python \
+            scripts/truncated_hierarchy_qualification.py \
+            --manifest "$QUALIFICATION_MANIFEST" assess --tier qualification \
+            --results "$aggregate/results.jsonl" \
+            --artifact-root "$artifact_root" --output "$aggregate/assessment.json" \
+            "${environment_args[@]}" \
+            2>&1 | tee "$artifact_root/logs/qualification-assess.log"
+
+      - name: Upload qualification aggregate
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-summary-qualification
+          path: |
+            ${{ runner.temp }}/evidence/aggregate/
+            ${{ runner.temp }}/evidence/cells/
+            ${{ runner.temp }}/evidence/logs/
+            ${{ runner.temp }}/evidence/shards/
+          if-no-files-found: warn
+          retention-days: 90
+
+  stress:
+    if: >-
+      needs.prepare.outputs.run_stress == 'true' &&
+      needs.smoke_aggregate.result == 'success'
+    needs: [prepare, environments, smoke_aggregate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.prepare.outputs.stress_matrix) }}
+    steps:
+      - name: Check out the exact qualification commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.QUALIFICATION_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Download matching environment provenance
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tn-env-${{ matrix.dependency_profile }}
+          path: ${{ runner.temp }}/environment
+
+      - name: Run canonical stress shard
+        continue-on-error: true
+        shell: bash
+        env:
+          DEPENDENCY_PROFILE: ${{ matrix.dependency_profile }}
+          SHARD_ID: ${{ matrix.shard_id }}
+        run: |
+          set -euo pipefail
+          profile_project="benchmarks/environments/truncated_hierarchy/$DEPENDENCY_PROFILE"
+          artifact_root="$RUNNER_TEMP/evidence"
+          environment="$RUNNER_TEMP/environment/$DEPENDENCY_PROFILE.json"
+          mkdir -p -- "$artifact_root/logs"
+          uv sync --project "$profile_project" --frozen
+          uv run --project "$profile_project" --frozen python \
+            scripts/truncated_hierarchy_shards.py \
+            --manifest "$QUALIFICATION_MANIFEST" run \
+            --tier stress --shard-id "$SHARD_ID" \
+            --artifact-root "$artifact_root" --environment "$environment" \
+            2>&1 | tee "$artifact_root/logs/$SHARD_ID.log"
+
+      - name: Upload stress cell evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-cells-stress-${{ matrix.shard_id }}
+          path: |
+            ${{ runner.temp }}/evidence/data/
+            ${{ runner.temp }}/evidence/starts/
+            ${{ runner.temp }}/evidence/chains/
+            ${{ runner.temp }}/evidence/cells/
+            ${{ runner.temp }}/evidence/logs/
+            ${{ runner.temp }}/evidence/shards/
+          if-no-files-found: warn
+          retention-days: ${{ matrix.retention_days }}
+
+  stress_aggregate:
+    if: >-
+      always() &&
+      needs.prepare.outputs.run_stress == 'true' &&
+      needs.smoke_aggregate.result == 'success' &&
+      needs.environments.result == 'success'
+    needs: [prepare, environments, smoke_aggregate, stress]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out the exact qualification commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.QUALIFICATION_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Download stress cells
+        continue-on-error: true
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: tn-cells-stress-*
+          path: ${{ runner.temp }}/evidence
+          merge-multiple: true
+
+      - name: Download dependency provenance
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: tn-env-*
+          path: ${{ runner.temp }}/environment
+          merge-multiple: true
+
+      - name: Aggregate and assess stress evidence
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          profile_project="benchmarks/environments/truncated_hierarchy/current-resolved"
+          artifact_root="$RUNNER_TEMP/evidence"
+          aggregate="$artifact_root/aggregate/stress"
+          mkdir -p -- "$artifact_root/cells" "$artifact_root/logs" "$aggregate"
+          uv sync --project "$profile_project" --frozen
+          environment_args=(
+            --environment "$RUNNER_TEMP/environment/current-resolved.json"
+            --environment "$RUNNER_TEMP/environment/bambi-0.19.json"
+          )
+          uv run --project "$profile_project" --frozen python \
+            scripts/truncated_hierarchy_qualification.py \
+            --manifest "$QUALIFICATION_MANIFEST" aggregate --tier stress \
+            --results-dir "$artifact_root/cells" --output-dir "$aggregate" \
+            "${environment_args[@]}" \
+            2>&1 | tee "$artifact_root/logs/stress-aggregate.log"
+          uv run --project "$profile_project" --frozen python \
+            scripts/truncated_hierarchy_qualification.py \
+            --manifest "$QUALIFICATION_MANIFEST" assess --tier stress \
+            --results "$aggregate/results.jsonl" \
+            --artifact-root "$artifact_root" --output "$aggregate/assessment.json" \
+            "${environment_args[@]}" \
+            2>&1 | tee "$artifact_root/logs/stress-assess.log"
+
+      - name: Upload stress aggregate
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-summary-stress
+          path: |
+            ${{ runner.temp }}/evidence/aggregate/
+            ${{ runner.temp }}/evidence/cells/
+            ${{ runner.temp }}/evidence/logs/
+            ${{ runner.temp }}/evidence/shards/
+          if-no-files-found: warn
+          retention-days: 30
