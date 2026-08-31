@@ -96,6 +96,8 @@ pypi-token
 pre-commit
 .github/copilot-instructions.md
 uv.lock
+!benchmarks/environments/truncated_hierarchy/*/uv.lock
+/benchmark-runs/
 
 .claude/CLAUDE.local.md
 
