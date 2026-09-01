@@ -9,10 +9,11 @@ mathematical hierarchical TruncatedNormal posterior.
 
 The canonical coordinate order is always location, log scale, then group
 effects.  The centered variant uses bounded coordinates for location and group
-effects.  Group inverse-CDF non-centering replaces the group coordinates with
-standard-Normal offsets; full inverse-CDF non-centering replaces the location
-coordinate as well.  Every actual constrained free-variable transform includes
-its log absolute Jacobian in the returned posterior.
+effects.  Location inverse-CDF non-centering replaces only the location
+coordinate with a standard-Normal offset; group inverse-CDF non-centering
+replaces only the group coordinates; full inverse-CDF non-centering replaces
+both.  Every actual constrained free-variable transform includes its log
+absolute Jacobian in the returned posterior.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ LOG_SQRT_2PI = 0.5 * LOG_2PI
 
 type CausalParameterization = Literal[
     "centered",
+    "location_icdf_noncentered",
     "group_icdf_noncentered",
     "full_icdf_noncentered",
 ]
@@ -653,6 +655,7 @@ def hierarchical_natural_values(
         )
     if parameterization not in {
         "centered",
+        "location_icdf_noncentered",
         "group_icdf_noncentered",
         "full_icdf_noncentered",
     }:
@@ -662,7 +665,16 @@ def hierarchical_natural_values(
     scale_transform = positive_transform(coordinates[1])
     free_rv_log_jacobian = scale_transform.log_abs_det_jacobian
 
-    if parameterization == "full_icdf_noncentered":
+    location_noncentered = parameterization in {
+        "location_icdf_noncentered",
+        "full_icdf_noncentered",
+    }
+    group_noncentered = parameterization in {
+        "group_icdf_noncentered",
+        "full_icdf_noncentered",
+    }
+
+    if location_noncentered:
         location = truncated_normal_from_standard_normal(
             coordinates[0],
             spec.location_base_mean,
@@ -674,7 +686,7 @@ def hierarchical_natural_values(
         location = location_transform.natural
         free_rv_log_jacobian += location_transform.log_abs_det_jacobian
 
-    if parameterization == "centered":
+    if not group_noncentered:
         group_transforms = tuple(
             support_transform(coordinate, spec.bounds) for coordinate in coordinates[2:]
         )
@@ -709,17 +721,27 @@ def hierarchical_posterior_components(
     """Evaluate one same-model hierarchy in sampler-visible coordinates.
 
     Coordinate order is always location, log scale, then one coordinate per
-    group.  Centered coordinates use the bounded support transform.  Group-NC
-    replaces group coordinates with standard-Normal offsets; full-NC also
-    replaces the location coordinate.  The return value keeps probability terms
-    separate so a mismatch can be localized before inspecting the total.
+    group.  Centered coordinates use the bounded support transform.  Location-NC
+    replaces the location coordinate with a standard-Normal offset; group-NC
+    replaces the group coordinates; full-NC replaces both.  The return value
+    keeps probability terms separate so a mismatch can be localized before
+    inspecting the total.
     """
     point = np.asarray(transformed_point, dtype=np.float64)
     natural = hierarchical_natural_values(point, spec, parameterization)
     expected_dimension = point.size
     coordinates = seed_jets(point)
 
-    if parameterization == "full_icdf_noncentered":
+    location_noncentered = parameterization in {
+        "location_icdf_noncentered",
+        "full_icdf_noncentered",
+    }
+    group_noncentered = parameterization in {
+        "group_icdf_noncentered",
+        "full_icdf_noncentered",
+    }
+
+    if location_noncentered:
         location_prior = normal_logpdf(coordinates[0], 0.0, 1.0)
     else:
         location_prior = truncated_normal_logpdf(
@@ -734,7 +756,7 @@ def hierarchical_posterior_components(
         spec.scale_prior_scale,
     )
     group_prior = Jet2.constant(0.0, expected_dimension)
-    if parameterization == "centered":
+    if not group_noncentered:
         for group_effect in natural.group_effect:
             group_prior += truncated_normal_logpdf(
                 group_effect,

@@ -180,7 +180,15 @@ def _natural_reference(
     """Map causal coordinates to natural values using only SciPy and math."""
     scale = math.exp(point[1])
     transform_log_jacobian = point[1]
-    if parameterization == "full_icdf_noncentered":
+    location_noncentered = parameterization in {
+        "location_icdf_noncentered",
+        "full_icdf_noncentered",
+    }
+    group_noncentered = parameterization in {
+        "group_icdf_noncentered",
+        "full_icdf_noncentered",
+    }
+    if location_noncentered:
         location = _scipy_truncated_from_offset(
             point[0],
             spec.location_base_mean,
@@ -191,7 +199,7 @@ def _natural_reference(
         location, location_jacobian = _natural_and_log_jacobian(point[0], spec.bounds)
         transform_log_jacobian += location_jacobian
 
-    if parameterization == "centered":
+    if not group_noncentered:
         groups_and_jacobians = tuple(
             _natural_and_log_jacobian(value, spec.bounds) for value in point[2:]
         )
@@ -215,7 +223,15 @@ def _point_for_parameterization(
     parameterization: CausalParameterization,
 ) -> np.ndarray:
     """Construct causal coordinates for one fixed natural hierarchy."""
-    if parameterization == "full_icdf_noncentered":
+    location_noncentered = parameterization in {
+        "location_icdf_noncentered",
+        "full_icdf_noncentered",
+    }
+    group_noncentered = parameterization in {
+        "group_icdf_noncentered",
+        "full_icdf_noncentered",
+    }
+    if location_noncentered:
         location_coordinate = _scipy_offset_from_truncated(
             location,
             spec.location_base_mean,
@@ -224,7 +240,7 @@ def _point_for_parameterization(
         )
     else:
         location_coordinate = support_inverse(location, spec.bounds)
-    if parameterization == "centered":
+    if not group_noncentered:
         group_coordinates = [support_inverse(group, spec.bounds) for group in groups]
     else:
         group_coordinates = [
@@ -243,7 +259,15 @@ def _posterior_reference(
     location, scale, groups, transform_log_jacobian = _natural_reference(
         point, spec, parameterization
     )
-    if parameterization == "full_icdf_noncentered":
+    location_noncentered = parameterization in {
+        "location_icdf_noncentered",
+        "full_icdf_noncentered",
+    }
+    group_noncentered = parameterization in {
+        "group_icdf_noncentered",
+        "full_icdf_noncentered",
+    }
+    if location_noncentered:
         location_prior = float(norm.logpdf(point[0]))
     else:
         location_prior = _scipy_truncated_logpdf(
@@ -259,7 +283,7 @@ def _posterior_reference(
             scale=spec.scale_prior_scale,
         )
     )
-    if parameterization == "centered":
+    if not group_noncentered:
         group_prior = sum(
             _scipy_truncated_logpdf(group, location, scale, spec.bounds)
             for group in groups
@@ -733,7 +757,11 @@ def test_hierarchical_posterior_matches_scipy_and_finite_differences(
 
 @pytest.mark.parametrize(
     "parameterization",
-    ["group_icdf_noncentered", "full_icdf_noncentered"],
+    [
+        "location_icdf_noncentered",
+        "group_icdf_noncentered",
+        "full_icdf_noncentered",
+    ],
 )
 @pytest.mark.parametrize(
     ("bounds", "location", "scale", "groups", "base_mean"), POSTERIOR_CASES
@@ -746,7 +774,7 @@ def test_noncentered_posterior_matches_scipy_and_finite_differences(
     groups: list[float],
     base_mean: float,
 ) -> None:
-    """Validate both exact ICDF parameterizations through second order."""
+    """Validate every exact ICDF parameterization through second order."""
     spec = _posterior_spec(bounds, groups, base_mean)
     point = _point_for_parameterization(location, scale, groups, spec, parameterization)
     components = hierarchical_posterior_components(point, spec, parameterization)
@@ -779,7 +807,11 @@ def test_noncentered_posterior_matches_scipy_and_finite_differences(
 
 @pytest.mark.parametrize(
     "parameterization",
-    ["group_icdf_noncentered", "full_icdf_noncentered"],
+    [
+        "location_icdf_noncentered",
+        "group_icdf_noncentered",
+        "full_icdf_noncentered",
+    ],
 )
 @pytest.mark.parametrize(
     ("bounds", "location", "scale", "groups", "base_mean"),
@@ -820,7 +852,10 @@ def test_parameterizations_encode_the_same_natural_model_and_measure(
     )
 
     log_coordinate_jacobian = 0.0
-    if parameterization == "full_icdf_noncentered":
+    if parameterization in {
+        "location_icdf_noncentered",
+        "full_icdf_noncentered",
+    }:
         _, centered_location_jacobian = _natural_and_log_jacobian(
             centered_point[0], bounds
         )
@@ -835,16 +870,20 @@ def test_parameterizations_encode_the_same_natural_model_and_measure(
             - location_tn_logpdf
             - centered_location_jacobian
         )
-    for index, group in enumerate(groups):
-        _, centered_group_jacobian = _natural_and_log_jacobian(
-            centered_point[index + 2], bounds
-        )
-        group_tn_logpdf = _scipy_truncated_logpdf(group, location, scale, bounds)
-        log_coordinate_jacobian += (
-            norm.logpdf(noncentered_point[index + 2])
-            - group_tn_logpdf
-            - centered_group_jacobian
-        )
+    if parameterization in {
+        "group_icdf_noncentered",
+        "full_icdf_noncentered",
+    }:
+        for index, group in enumerate(groups):
+            _, centered_group_jacobian = _natural_and_log_jacobian(
+                centered_point[index + 2], bounds
+            )
+            group_tn_logpdf = _scipy_truncated_logpdf(group, location, scale, bounds)
+            log_coordinate_jacobian += (
+                norm.logpdf(noncentered_point[index + 2])
+                - group_tn_logpdf
+                - centered_group_jacobian
+            )
 
     centered_logp = hierarchical_posterior_components(
         centered_point, spec, "centered"

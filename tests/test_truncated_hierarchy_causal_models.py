@@ -22,6 +22,7 @@ from scripts.truncated_hierarchy_causal_models import (
     bounded_log_jacobian,
     build_full_icdf_noncentered,
     build_group_icdf_noncentered,
+    build_location_icdf_noncentered,
     build_manual_centered,
     build_native_centered,
     manual_truncated_normal_logp,
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
 BUILDERS: tuple[tuple[str, Callable], ...] = (
     ("native", build_native_centered),
     ("manual", build_manual_centered),
+    ("location-icdf", build_location_icdf_noncentered),
     ("group-icdf", build_group_icdf_noncentered),
     ("full-icdf", build_full_icdf_noncentered),
 )
@@ -73,6 +75,17 @@ ORACLE_VARIANTS = (
             "group_effect_coordinate",
         ),
         id="manual",
+    ),
+    pytest.param(
+        "location-icdf",
+        build_location_icdf_noncentered,
+        "location_icdf_noncentered",
+        (
+            "group_location_offset",
+            "group_scale_rv_log__",
+            "group_effect_rv_interval__",
+        ),
+        id="location-icdf",
     ),
     pytest.param(
         "group-icdf",
@@ -185,6 +198,15 @@ def test_all_parameterizations_build_the_same_natural_surface(
             "group_scale_rv",
             "group_effect_coordinate",
         }
+    elif name == "location-icdf":
+        assert free_names == {
+            "group_location_offset",
+            "group_scale_rv",
+            "group_effect_rv",
+        }
+        assert type(model.named_vars["group_location_offset"].owner.op).__name__ == (
+            "NormalRV"
+        )
     elif name == "group-icdf":
         assert free_names == {
             "group_location_rv",

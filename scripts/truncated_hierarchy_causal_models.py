@@ -12,7 +12,7 @@ lets the #1282 experiment distinguish a density implementation problem from a
 centered-coordinate geometry problem without changing the statistical model.
 
 ``manual_centered`` codes the truncated density and bounded-coordinate Jacobian
-explicitly.  The two inverse-CDF parameterizations map standard-Normal offsets
+explicitly.  The three inverse-CDF parameterizations map standard-Normal offsets
 through ``Phi`` to Uniform quantiles, then use an independent Acklam
 normal-quantile implementation composed only of PyTensor primitives that lower
 to JAX.  No builder samples.
@@ -40,6 +40,7 @@ from scripts.truncated_hierarchy_models import (
 Parameterization = Literal[
     "native_centered",
     "manual_centered",
+    "location_icdf_noncentered",
     "group_icdf_noncentered",
     "full_icdf_noncentered",
 ]
@@ -83,7 +84,7 @@ _ACKLAM_LOW = 0.02425
 
 
 class CausalModelContractError(GeometryContractError):
-    """Raised when an input would make the four models non-isomorphic."""
+    """Raised when an input would make the five models non-isomorphic."""
 
 
 def _constant(value: float) -> Any:
@@ -500,6 +501,40 @@ def build_group_icdf_noncentered(
     return model
 
 
+def build_location_icdf_noncentered(
+    prior: NativeTruncatedPrior, data: SyntheticHierarchyData
+) -> pm.Model:
+    """Inverse-CDF non-center the location and keep group effects centered."""
+    _validate_inputs(prior, data)
+    lower, upper = prior.bounds.pymc_limits()
+    with pytensor.config.change_flags(floatX=data.spec.floatx):
+        with pm.Model(coords=_model_coords(data)) as model:
+            location_offset = pm.Normal("group_location_offset", mu=0.0, sigma=1.0)
+            location = pm.Deterministic(
+                "group_location",
+                _truncated_normal_from_standard_normal(
+                    location_offset,
+                    mu=np.asarray(prior.location_base_mean, dtype=data.spec.floatx),
+                    sigma=np.asarray(
+                        prior.location_prior_sigma, dtype=data.spec.floatx
+                    ),
+                    bounds=prior.bounds,
+                ),
+            )
+            scale = _add_group_scale(data.spec.floatx)
+            effect_rv = pm.TruncatedNormal(
+                "group_effect_rv",
+                mu=location,
+                sigma=scale,
+                lower=lower,
+                upper=upper,
+                dims="group",
+            )
+            effect = pm.Deterministic("group_effect", effect_rv, dims="group")
+            _add_likelihood(effect, data)
+    return model
+
+
 def build_full_icdf_noncentered(
     prior: NativeTruncatedPrior, data: SyntheticHierarchyData
 ) -> pm.Model:
@@ -542,10 +577,11 @@ def build_causal_model(
     prior: NativeTruncatedPrior,
     data: SyntheticHierarchyData,
 ) -> pm.Model:
-    """Dispatch to one of the four frozen same-natural-model builders."""
+    """Dispatch to one of the five same-natural-model builders."""
     builders = {
         "native_centered": build_native_centered,
         "manual_centered": build_manual_centered,
+        "location_icdf_noncentered": build_location_icdf_noncentered,
         "group_icdf_noncentered": build_group_icdf_noncentered,
         "full_icdf_noncentered": build_full_icdf_noncentered,
     }
