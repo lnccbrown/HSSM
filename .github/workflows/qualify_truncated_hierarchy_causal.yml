@@ -1,0 +1,491 @@
+name: Classify hierarchical TruncatedNormal causal failures
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Causal tier(s) to execute after mandatory smoke"
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - confirmation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: truncated-hierarchy-causal-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+env:
+  CAUSAL_MANIFEST: benchmarks/specs/truncated_hierarchy_causal_v3.json
+  CAUSAL_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+  PROFILE_PROJECT: benchmarks/environments/truncated_hierarchy/current-resolved
+  UV_VERSION: "0.11.21"
+
+jobs:
+  prepare:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'labeled' &&
+       (github.event.label.name == 'run-truncated-hierarchy-causal-smoke' ||
+        github.event.label.name == 'run-truncated-hierarchy-causal-confirmation') &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      smoke_matrix: ${{ steps.plan.outputs.smoke_matrix }}
+      confirmation_matrix: ${{ steps.plan.outputs.confirmation_matrix }}
+      run_confirmation: ${{ steps.plan.outputs.run_confirmation }}
+    steps:
+      - name: Check out the exact causal-study commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.CAUSAL_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Validate contract and build exact backend-pair matrices
+        id: plan
+        shell: bash
+        env:
+          REQUESTED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event.label.name == 'run-truncated-hierarchy-causal-confirmation' && 'confirmation' || 'smoke') }}
+        run: |
+          set -euo pipefail
+          uv sync --project "$PROFILE_PROJECT" --frozen
+          contract=(
+            uv run --project "$PROFILE_PROJECT" --frozen python
+            -m scripts.truncated_hierarchy_causal_contract
+            --manifest "$CAUSAL_MANIFEST"
+          )
+          "${contract[@]}" validate
+          smoke_matrix=$("${contract[@]}" matrix --tier smoke)
+          confirmation_matrix=$("${contract[@]}" matrix --tier confirmation)
+          python -c 'import json, sys; values = tuple(len(json.loads(value)["include"]) for value in sys.argv[1:]); sys.exit(0 if values == (2, 16) else f"unexpected causal matrices: {values}")' "$smoke_matrix" "$confirmation_matrix"
+          printf 'smoke_matrix=%s\n' "$smoke_matrix" >> "$GITHUB_OUTPUT"
+          printf 'confirmation_matrix=%s\n' "$confirmation_matrix" >> "$GITHUB_OUTPUT"
+          case "$REQUESTED_MODE" in
+            smoke) run_confirmation=false ;;
+            confirmation) run_confirmation=true ;;
+            *)
+              printf 'Unsupported causal mode: %s\n' "$REQUESTED_MODE" >&2
+              exit 2
+              ;;
+          esac
+          printf 'run_confirmation=%s\n' "$run_confirmation" >> "$GITHUB_OUTPUT"
+
+  materialize:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out the exact causal-study commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.CAUSAL_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Freeze environment and materialize shared inputs once
+        shell: bash
+        env:
+          RUN_CONFIRMATION: ${{ needs.prepare.outputs.run_confirmation }}
+        run: |
+          set -euo pipefail
+          run_root="$RUNNER_TEMP/causal-shared"
+          mkdir -p -- "$run_root/environment" "$run_root/logs"
+          uv sync --project "$PROFILE_PROJECT" --frozen
+          contract=(
+            uv run --project "$PROFILE_PROJECT" --frozen python
+            -m scripts.truncated_hierarchy_causal_contract
+            --manifest "$CAUSAL_MANIFEST"
+          )
+          runner=(
+            uv run --project "$PROFILE_PROJECT" --frozen python
+            -m scripts.truncated_hierarchy_causal_runner
+            --manifest "$CAUSAL_MANIFEST"
+          )
+          "${contract[@]}" environment \
+            --output "$run_root/environment/environment.json"
+          "${runner[@]}" materialize-inputs --tier smoke --run-dir "$run_root" \
+            2>&1 | tee "$run_root/logs/materialize-smoke.log"
+          if [[ "$RUN_CONFIRMATION" == "true" ]]; then
+            "${runner[@]}" materialize-inputs \
+              --tier confirmation --run-dir "$run_root" \
+              2>&1 | tee "$run_root/logs/materialize-confirmation.log"
+          fi
+
+      - name: Upload immutable shared inputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-causal-shared-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/causal-shared/environment/
+            ${{ runner.temp }}/causal-shared/data/
+            ${{ runner.temp }}/causal-shared/starts/natural/
+            ${{ runner.temp }}/causal-shared/logs/
+          if-no-files-found: error
+          retention-days: 90
+
+  smoke:
+    needs: [prepare, materialize]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.prepare.outputs.smoke_matrix) }}
+    steps:
+      - name: Check out the exact causal-study commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.CAUSAL_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Download immutable shared inputs
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tn-causal-shared-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/causal-evidence
+
+      - name: Run one co-located ten-cell smoke backend pair
+        shell: bash
+        env:
+          PAIR_ID: ${{ matrix.pair_id }}
+          WORKER_IDENTITY: ${{ github.run_id }}:${{ github.run_attempt }}:${{ github.job }}:${{ matrix.pair_id }}
+        run: |
+          set -euo pipefail
+          run_root="$RUNNER_TEMP/causal-evidence"
+          mkdir -p -- "$run_root/logs"
+          uv sync --project "$PROFILE_PROJECT" --frozen
+          set +e
+          uv run --project "$PROFILE_PROJECT" --frozen python \
+            -m scripts.truncated_hierarchy_causal_runner \
+            --manifest "$CAUSAL_MANIFEST" run-unit \
+            --tier smoke --pair-id "$PAIR_ID" --run-dir "$run_root" \
+            --worker-identity "$WORKER_IDENTITY" \
+            --expected-git-commit "$CAUSAL_SHA" \
+            2>&1 | tee "$run_root/logs/$PAIR_ID.log"
+          runner_status=${PIPESTATUS[0]}
+          set -e
+          case "$runner_status" in
+            0|1)
+              printf 'Backend pair finished with evidence status %s.\n' "$runner_status"
+              ;;
+            *) exit "$runner_status" ;;
+          esac
+
+      - name: Upload smoke backend-pair evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-causal-smoke-${{ matrix.pair_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/causal-evidence/contexts/${{ matrix.pair_id }}.json
+            ${{ runner.temp }}/causal-evidence/starts/coordinates/
+            ${{ runner.temp }}/causal-evidence/chains/
+            ${{ runner.temp }}/causal-evidence/diagnostics/
+            ${{ runner.temp }}/causal-evidence/cells/
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Upload smoke backend-pair log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-causal-log-smoke-${{ matrix.pair_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/causal-evidence/logs/${{ matrix.pair_id }}.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  smoke_aggregate:
+    if: ${{ always() && needs.prepare.result == 'success' && needs.materialize.result == 'success' }}
+    needs: [prepare, materialize, smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out the exact causal-study commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.CAUSAL_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Download immutable shared inputs
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tn-causal-shared-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/causal-run
+
+      - name: Download isolated smoke backend-pair artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: tn-causal-smoke-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/causal-pairs
+          merge-multiple: false
+
+      - name: Merge exact evidence and assess smoke completeness
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_root="$RUNNER_TEMP/causal-run"
+          pair_root="$RUNNER_TEMP/causal-pairs"
+          if [[ ! -d "$pair_root" ]]; then
+            printf 'No smoke backend-pair artifacts were downloaded.\n' >&2
+            exit 2
+          fi
+          aggregate="$run_root/aggregate/smoke"
+          mkdir -p -- "$aggregate" "$run_root/logs"
+          uv sync --project "$PROFILE_PROJECT" --frozen
+          runner=(
+            uv run --project "$PROFILE_PROJECT" --frozen python
+            -m scripts.truncated_hierarchy_causal_runner
+            --manifest "$CAUSAL_MANIFEST"
+          )
+          contract=(
+            uv run --project "$PROFILE_PROJECT" --frozen python
+            -m scripts.truncated_hierarchy_causal_contract
+            --manifest "$CAUSAL_MANIFEST"
+          )
+          "${runner[@]}" merge-runs --source-dir "$pair_root" \
+            --run-dir "$run_root" \
+            2>&1 | tee "$run_root/logs/smoke-merge.log"
+          "${contract[@]}" aggregate --tier smoke --run-dir "$run_root" \
+            --output "$aggregate/results.jsonl" \
+            2>&1 | tee "$run_root/logs/smoke-aggregate.log"
+          "${contract[@]}" assess --tier smoke \
+            --results "$aggregate/results.jsonl" \
+            --output "$aggregate/assessment.json" \
+            2>&1 | tee "$run_root/logs/smoke-assess.log"
+          python -c 'import json, sys; value = json.load(open(sys.argv[1], encoding="utf-8")); sys.exit(0 if value.get("contract_valid") is True and value.get("evidence_complete") is True and value.get("proceed_to_confirmation") is True else "smoke evidence is not complete enough for confirmation")' "$aggregate/assessment.json"
+
+      - name: Upload smoke aggregate and assessment
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-causal-summary-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/causal-run/aggregate/smoke/
+            ${{ runner.temp }}/causal-run/logs/smoke-merge.log
+            ${{ runner.temp }}/causal-run/logs/smoke-aggregate.log
+            ${{ runner.temp }}/causal-run/logs/smoke-assess.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  confirmation:
+    if: >-
+      needs.prepare.outputs.run_confirmation == 'true' &&
+      needs.smoke_aggregate.result == 'success'
+    needs: [prepare, materialize, smoke_aggregate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.prepare.outputs.confirmation_matrix) }}
+    steps:
+      - name: Check out the exact causal-study commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.CAUSAL_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Download immutable shared inputs
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tn-causal-shared-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/causal-evidence
+
+      - name: Run one co-located ten-cell confirmation backend pair
+        shell: bash
+        env:
+          PAIR_ID: ${{ matrix.pair_id }}
+          WORKER_IDENTITY: ${{ github.run_id }}:${{ github.run_attempt }}:${{ github.job }}:${{ matrix.pair_id }}
+        run: |
+          set -euo pipefail
+          run_root="$RUNNER_TEMP/causal-evidence"
+          mkdir -p -- "$run_root/logs"
+          uv sync --project "$PROFILE_PROJECT" --frozen
+          set +e
+          uv run --project "$PROFILE_PROJECT" --frozen python \
+            -m scripts.truncated_hierarchy_causal_runner \
+            --manifest "$CAUSAL_MANIFEST" run-unit \
+            --tier confirmation --pair-id "$PAIR_ID" --run-dir "$run_root" \
+            --worker-identity "$WORKER_IDENTITY" \
+            --expected-git-commit "$CAUSAL_SHA" \
+            2>&1 | tee "$run_root/logs/$PAIR_ID.log"
+          runner_status=${PIPESTATUS[0]}
+          set -e
+          case "$runner_status" in
+            0|1)
+              printf 'Backend pair finished with evidence status %s.\n' "$runner_status"
+              ;;
+            *) exit "$runner_status" ;;
+          esac
+
+      - name: Upload confirmation backend-pair evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-causal-confirmation-${{ matrix.pair_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/causal-evidence/contexts/${{ matrix.pair_id }}.json
+            ${{ runner.temp }}/causal-evidence/starts/coordinates/
+            ${{ runner.temp }}/causal-evidence/chains/
+            ${{ runner.temp }}/causal-evidence/diagnostics/
+            ${{ runner.temp }}/causal-evidence/cells/
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Upload confirmation backend-pair log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-causal-log-confirmation-${{ matrix.pair_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/causal-evidence/logs/${{ matrix.pair_id }}.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  confirmation_aggregate:
+    if: >-
+      always() &&
+      needs.prepare.outputs.run_confirmation == 'true' &&
+      needs.smoke_aggregate.result == 'success'
+    needs: [prepare, materialize, smoke_aggregate, confirmation]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out the exact causal-study commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.CAUSAL_SHA }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Download immutable shared inputs
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: tn-causal-shared-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/causal-run
+
+      - name: Download isolated confirmation backend-pair artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: tn-causal-confirmation-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/causal-pairs
+          merge-multiple: false
+
+      - name: Merge exact evidence and assess confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_root="$RUNNER_TEMP/causal-run"
+          pair_root="$RUNNER_TEMP/causal-pairs"
+          if [[ ! -d "$pair_root" ]]; then
+            printf 'No confirmation backend-pair artifacts were downloaded.\n' >&2
+            exit 2
+          fi
+          aggregate="$run_root/aggregate/confirmation"
+          mkdir -p -- "$aggregate" "$run_root/logs"
+          uv sync --project "$PROFILE_PROJECT" --frozen
+          runner=(
+            uv run --project "$PROFILE_PROJECT" --frozen python
+            -m scripts.truncated_hierarchy_causal_runner
+            --manifest "$CAUSAL_MANIFEST"
+          )
+          contract=(
+            uv run --project "$PROFILE_PROJECT" --frozen python
+            -m scripts.truncated_hierarchy_causal_contract
+            --manifest "$CAUSAL_MANIFEST"
+          )
+          "${runner[@]}" merge-runs --source-dir "$pair_root" \
+            --run-dir "$run_root" \
+            2>&1 | tee "$run_root/logs/confirmation-merge.log"
+          "${contract[@]}" aggregate --tier confirmation --run-dir "$run_root" \
+            --output "$aggregate/results.jsonl" \
+            2>&1 | tee "$run_root/logs/confirmation-aggregate.log"
+          "${contract[@]}" assess --tier confirmation \
+            --results "$aggregate/results.jsonl" \
+            --output "$aggregate/assessment.json" \
+            2>&1 | tee "$run_root/logs/confirmation-assess.log"
+
+      - name: Upload confirmation aggregate and assessment
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tn-causal-summary-confirmation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/causal-run/aggregate/confirmation/
+            ${{ runner.temp }}/causal-run/logs/confirmation-merge.log
+            ${{ runner.temp }}/causal-run/logs/confirmation-aggregate.log
+            ${{ runner.temp }}/causal-run/logs/confirmation-assess.log
+          if-no-files-found: warn
+          retention-days: 90

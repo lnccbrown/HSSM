@@ -123,7 +123,12 @@ def _standard_normal_lower_icdf(
     else:
         log_p = pt.as_tensor_variable(log_probability)
         p = pt.exp(log_p)
-    log_p = pt.minimum(log_p, _constant(math.log(0.5)))
+    log_half = _constant(math.log(0.5))
+    # The lower-tail approximation is defined only through probability 0.5.
+    # Use an explicit branch that selects ``log_p`` at equality: JAX assigns a
+    # 1/2 subgradient to ``minimum(x, c)`` at x == c, which would halve the
+    # central inverse-CDF derivative used by NumPyro.
+    log_p = pt.switch(pt.le(log_p, log_half), log_p, log_half)
 
     tail_argument = pt.sqrt(-_constant(2.0) * log_p)
     tail = _polyval(_ACKLAM_C, tail_argument) / (

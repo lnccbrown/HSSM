@@ -1,0 +1,394 @@
+{
+  "schema_version": 3,
+  "study_id": "truncated_hierarchy_causal_v3",
+  "status": "frozen-before-sampling",
+  "description": "Prospective same-model causal experiment for the two hierarchical TruncatedNormal regimes that failed the frozen v2 smoke screen.",
+  "master_seed": 1282,
+  "seed_derivation": {
+    "algorithm": "blake2b-64-causal-v3",
+    "person": "hssm1282cv3",
+    "domain": "hssm-truncated-hierarchy-causal-v3",
+    "positive_integer_range": [
+      1,
+      2147483647
+    ],
+    "replicate_zero_data": "exact-frozen-v2-streams",
+    "later_data": "causal-v3-domain-separated-streams"
+  },
+  "frozen_v2": {
+    "path": "benchmarks/specs/truncated_hierarchy_v2.json",
+    "file_sha256": "a0e5ef9415ce580b226a15621fbb50635547abbbdebcc11c16ab4e52e75a4ab7",
+    "study_id": "truncated_hierarchy_v2",
+    "schema_version": 2,
+    "status": "frozen-before-primary-runs"
+  },
+  "dependency_profile": {
+    "name": "current-resolved",
+    "python": "3.12",
+    "project_path": "benchmarks/environments/truncated_hierarchy/current-resolved/pyproject.toml",
+    "project_sha256": "1c50a87e93048e6187b29fe8d104565438dacd91e4c07a02973bbf4cca37b373",
+    "lock_path": "benchmarks/environments/truncated_hierarchy/current-resolved/uv.lock",
+    "lock_sha256": "6567c87ae8f9d0d24d6c482204b3bafccc73a0a13be4eab2d38aee0aae12f1f3",
+    "required_versions": {
+      "arviz": "1.3.0",
+      "bambi": "0.20.0",
+      "jax": "0.11.1",
+      "jaxlib": "0.11.1",
+      "numpy": "2.4.6",
+      "numpyro": "0.21.0",
+      "pymc": "6.3.1",
+      "pytensor": "3.3.0",
+      "scipy": "1.18.1"
+    }
+  },
+  "natural_model": {
+    "likelihood": "y[i] ~ Normal(group_effect[group_index[i]], 0.5)",
+    "location_prior": "TruncatedNormal(prior_hyper_location, 0.25, bounds)",
+    "scale_prior": "Weibull(alpha=1.5, beta=0.3)",
+    "group_prior": "TruncatedNormal(group_location, group_scale, bounds)",
+    "location_prior_sigma": 0.25,
+    "scale_prior_alpha": 1.5,
+    "scale_prior_beta": 0.3,
+    "observation_sigma": 0.5
+  },
+  "representations": [
+    {
+      "representation_id": "native-centered",
+      "builder": "native_centered",
+      "location_coordinates": "centered",
+      "group_coordinates": "centered",
+      "density_implementation": "pymc-native",
+      "factorial_cell": "C-C",
+      "role": "native-reference"
+    },
+    {
+      "representation_id": "manual-centered",
+      "builder": "manual_centered",
+      "location_coordinates": "centered",
+      "group_coordinates": "centered",
+      "density_implementation": "independent-manual",
+      "factorial_cell": "C-C",
+      "role": "implementation-control"
+    },
+    {
+      "representation_id": "group-icdf-noncentered",
+      "builder": "group_icdf_noncentered",
+      "location_coordinates": "centered",
+      "group_coordinates": "icdf-noncentered",
+      "density_implementation": "pymc-native-location-independent-icdf-groups",
+      "factorial_cell": "C-NC",
+      "role": "factorial"
+    },
+    {
+      "representation_id": "location-icdf-noncentered",
+      "builder": "location_icdf_noncentered",
+      "location_coordinates": "icdf-noncentered",
+      "group_coordinates": "centered",
+      "density_implementation": "independent-icdf-location-pymc-native-groups",
+      "factorial_cell": "NC-C",
+      "role": "factorial"
+    },
+    {
+      "representation_id": "full-icdf-noncentered",
+      "builder": "full_icdf_noncentered",
+      "location_coordinates": "icdf-noncentered",
+      "group_coordinates": "icdf-noncentered",
+      "density_implementation": "independent-icdf",
+      "factorial_cell": "NC-NC",
+      "role": "factorial"
+    }
+  ],
+  "backends": [
+    {
+      "backend_id": "pymc",
+      "sampler": "pymc-nuts",
+      "compiler_path": "pytensor",
+      "device": "cpu"
+    },
+    {
+      "backend_id": "numpyro",
+      "sampler": "numpyro-nuts-via-pymc",
+      "compiler_path": "pytensor-to-jax",
+      "device": "cpu"
+    }
+  ],
+  "tiers": {
+    "smoke": {
+      "role": "execution-and-frozen-failing-dataset-regime-replay-only",
+      "qualifies_causal_conclusion": false,
+      "replicates": 1,
+      "chains": 2,
+      "tune": 250,
+      "draws": 250,
+      "target_accept": 0.9,
+      "max_treedepth": 10,
+      "expected_fit_count": 20
+    },
+    "confirmation": {
+      "role": "primary-causal-classification",
+      "qualifies_causal_conclusion": true,
+      "replicates": 8,
+      "chains": 4,
+      "tune": 1000,
+      "draws": 1000,
+      "target_accept": 0.9,
+      "max_treedepth": 10,
+      "expected_fit_count": 160
+    }
+  },
+  "regimes": [
+    {
+      "regime_id": "lower-outside-weak",
+      "source_v2_scenario_id": "smoke-pymc-lower-outside",
+      "source_v2_data_id": "smoke-toy-lower-outside",
+      "bound_kind": "lower",
+      "lower": 0.2,
+      "upper": null,
+      "prior_hyper_location": 0.0,
+      "truth_group_location": 0.23,
+      "truth_group_scale": 0.3,
+      "n_groups": 4,
+      "n_per_group": 2,
+      "group_indices": [
+        0,
+        2,
+        3
+      ],
+      "floatx": "float64",
+      "replicate_zero_v2_seeds": {
+        "data_seed": 1818466647,
+        "truth_seed": 746768835,
+        "group_seed": 2035821882,
+        "observation_seed": 259518566
+      }
+    },
+    {
+      "regime_id": "two-sided-near",
+      "source_v2_scenario_id": "smoke-pymc-two-sided-near",
+      "source_v2_data_id": "smoke-pymc-two-sided-near",
+      "bound_kind": "two_sided",
+      "lower": 0.1,
+      "upper": 0.9,
+      "prior_hyper_location": 0.5,
+      "truth_group_location": 0.13,
+      "truth_group_scale": 0.3,
+      "n_groups": 4,
+      "n_per_group": 25,
+      "group_indices": [
+        0,
+        2,
+        3
+      ],
+      "floatx": "float32",
+      "replicate_zero_v2_seeds": {
+        "data_seed": 401637509,
+        "truth_seed": 564408077,
+        "group_seed": 1871618804,
+        "observation_seed": 902570113
+      }
+    }
+  ],
+  "execution_policy": {
+    "scheduling_unit": "backend-paired-ten-cell-worker",
+    "pair_identity": "tier-regime-replicate",
+    "block_identity": "tier-regime-backend-replicate",
+    "pair_members": "both-five-representation-backend-blocks-exactly-once",
+    "block_members": "all-five-representations-exactly-once",
+    "placement": "one-physical-worker-per-backend-pair",
+    "failure": "attempt-all-ten-members-and-publish-an-independent-final-record-for-each",
+    "backend_order": "left-rotation-of-manifest-backend-order-by-(replicate+regime_index)-modulo-2",
+    "order": "within-each-backend-left-rotation-of-manifest-representation-order-by-(4*replicate+2*regime_index+backend_index)-modulo-5",
+    "process_isolation": "one-cell-per-fresh-process",
+    "cache_policy": "unique-pytensor-and-jax-cache-per-cell-and-phase",
+    "data_sharing": "one-byte-identical-immutable-data-artifact-per-tier-regime-replicate-shared-across-backends-and-representations",
+    "natural_start_sharing": "one-byte-identical-immutable-natural-start-artifact-per-tier-regime-replicate-shared-across-backends-and-representations",
+    "natural_start_generation": {
+      "source_model": "native-centered",
+      "support_points": "pymc-initial-point",
+      "function": "pymc.initial_point.make_initial_point_fns_per_chain",
+      "jitter_rvs": "all-free-rvs",
+      "jitter_distribution": "uniform-minus-one-to-one-in-transformed-coordinates",
+      "seed": "natural_start_chain_seeds-derived-from-natural_start_seed",
+      "materialization": "map-each-jittered-native-coordinate-point-to-natural-scale-once",
+      "sampling_init": "adapt_diag-with-exact-mapped-start-and-no-second-jitter"
+    },
+    "coordinate_start_mapping": "bijection-from-shared-natural-start-to-each-representation-with-recorded-round-trip",
+    "backend_start_policy": "reuse-the-same-natural-chain-starts-across-pymc-and-numpyro",
+    "sampler_seed_policy": {
+      "pymc_plan": "chain_seeds-are-seedsequence-entropy-words",
+      "pymc_execution": "pymc-6.3.1-spawns-one-pcg64-generator-per-chain-draws-one-init-step-integer-below-2^30-then-samples-with-the-advanced-generators",
+      "pymc_provenance": "record-entropy-spawn-key-init-step-integer-and-post-draw-generator-state-hash",
+      "numpyro_plan": "one-scalar-sampler-seed",
+      "numpyro_provenance": "record-exact-uint32-jax-prngkey-or-split-keys"
+    },
+    "timing_scope": "sampler-call-including-compilation-warmup-and-retained-draws-only",
+    "threads": 1,
+    "jax_enable_x64": "true-iff-regime-floatx-is-float64"
+  },
+  "artifact_policy": {
+    "hash": "sha256-exact-bytes",
+    "serialization": "strict-canonical-json-or-netcdf",
+    "publish": "atomic-no-overwrite",
+    "final_marker": "cell-result-json-written-last",
+    "context_path": "contexts/<pair_id>.json",
+    "data_path": "data/<data_id>.json",
+    "natural_start_path": "starts/natural/<start_id>.json",
+    "coordinate_start_path": "starts/coordinates/<cell_id>.json",
+    "chain_path": "chains/<cell_id>.nc",
+    "diagnostic_path": "diagnostics/<cell_id>.json",
+    "cell_path": "cells/<cell_id>.json",
+    "aggregate_path": "aggregate/<tier>/results.jsonl",
+    "assessment_path": "aggregate/<tier>/assessment.json"
+  },
+  "failure_policy": {
+    "scientific_stages": [
+      "data",
+      "build",
+      "initialize",
+      "compile",
+      "sample",
+      "summarize",
+      "diagnose"
+    ],
+    "contract_environment_artifact_and_programming_errors": "infrastructure-errors-never-published-as-scientific-cell-failures",
+    "interrupts": "propagate-without-a-scientific-cell-record",
+    "block_failure": "one-member-failure-does-not-suppress-the-other-nine-attempts",
+    "missing_result": "incomplete-never-pass"
+  },
+  "analysis_policy": {
+    "scope": "classify-each-regime-separately-never-pool-regimes",
+    "monitored_parameters": [
+      "group_location",
+      "group_scale",
+      "group_first",
+      "group_middle",
+      "group_last"
+    ],
+    "oracle_gate": {
+      "evaluation_points": [
+        "fixed-grid",
+        "every-shared-natural-start",
+        "hash-selected-posterior-trajectory-points"
+      ],
+      "point_counts": {
+        "fixed_grid_on_replicate_zero": 1,
+        "shared_start_points_per_chain": 1,
+        "icdf_points_per_noncentered_layer": 5,
+        "posterior_trajectory_points_per_chain": 1,
+        "failed_sample_phase": "pre-sampling-only",
+        "completed_phase": "pre-sampling-plus-posterior-trajectory"
+      },
+      "required_checks": [
+        "transformed-logp",
+        "transformed-gradient",
+        "transformed-hessian",
+        "natural-coordinate-roundtrip",
+        "icdf-tail-finiteness",
+        "icdf-branch-continuity"
+      ],
+      "combined_scaled_error": "abs(observed-reference)/(absolute_tolerance+relative_tolerance*max(abs(reference),abs(observed)))",
+      "component_tolerances": {
+        "float64": {
+          "logp": {
+            "absolute_tolerance": 5e-8,
+            "relative_tolerance": 2e-8
+          },
+          "gradient": {
+            "absolute_tolerance": 3e-7,
+            "relative_tolerance": 3e-7
+          },
+          "hessian": {
+            "absolute_tolerance": 3e-6,
+            "relative_tolerance": 3e-6
+          }
+        },
+        "float32": {
+          "logp": {
+            "absolute_tolerance": 0.0002,
+            "relative_tolerance": 0.0002
+          },
+          "gradient": {
+            "absolute_tolerance": 0.0005,
+            "relative_tolerance": 0.0007
+          },
+          "hessian": {
+            "absolute_tolerance": 0.003,
+            "relative_tolerance": 0.003
+          }
+        }
+      },
+      "scaled_error_max": 1.0,
+      "roundtrip_absolute_error_max": {
+        "float64": 1e-10,
+        "float32": 2e-5
+      }
+    },
+    "per_fit_health": {
+      "compile_success": true,
+      "initialization_success": true,
+      "logp_finite": true,
+      "gradient_finite": true,
+      "sampling_success": true,
+      "divergence_rate_lt": 0.01,
+      "hyper_rhat_max_lt": 1.01,
+      "hyper_ess_bulk_min_ge": 400,
+      "hyper_ess_tail_min_ge": 400,
+      "bfmi_min_ge": 0.3,
+      "treedepth_saturation_rate_lt": 0.001,
+      "hyper_mcse_over_sd_max_le": 0.05,
+      "group_rhat_max_lt": 1.01,
+      "group_ess_bulk_fraction_ge_400_ge": 0.95,
+      "group_ess_tail_fraction_ge_400_ge": 0.95
+    },
+    "family_health": {
+      "aggregate_divergence_rate_lt": 0.001,
+      "per_fit_pass_fraction_ge": 0.95,
+      "maximum_failed_replicates": 0,
+      "compile_initialize_nonfinite_or_sampling_failure": "unhealthy"
+    },
+    "paired_inference": {
+      "replicates": 8,
+      "familywise_alpha": 0.05,
+      "bonferroni_comparisons": 6,
+      "per_comparison_alpha": 0.008333333333333333,
+      "test": "two-sided-exact-sign-test-on-discordant-paired-health-outcomes",
+      "minimum_all-directional_p_value": 0.0078125,
+      "comparison_family": [
+        "native-vs-manual-IUT-across-both-backends",
+        "group-effect-at-location-centered-IUT-across-both-backends",
+        "group-effect-at-location-noncentered-IUT-across-both-backends",
+        "location-effect-at-groups-centered-IUT-across-both-backends",
+        "location-effect-at-groups-noncentered-IUT-across-both-backends",
+        "backend-five-form-health-count-omnibus"
+      ],
+      "backend_omnibus_statistic": "per-replicate-pymc-healthy-form-count-minus-numpyro-healthy-form-count",
+      "backend_omnibus_direction": "same-nonzero-sign-in-all-eight-paired-replicates",
+      "representation_backend_contrasts": "descriptive-only-never-classifying",
+      "interpretation": "minimum-inferentially-defensible-grid-not-a-high-power-small-effect-design"
+    },
+    "classifier_precedence": [
+      "native-pymc-correctness-defect",
+      "native-graph-or-adaptation",
+      "group-conditional-centering",
+      "location-centering",
+      "joint-centering-interaction",
+      "backend-path-specific",
+      "residual-tn-or-scale-geometry",
+      "initialization-or-budget-sensitive",
+      "all-representations-healthy",
+      "mixed-inconclusive"
+    ],
+    "classifier_rules": {
+      "native-pymc-correctness-defect": "native transformed value-gradient-or-hessian disagrees with the independent oracle on at least two distinct dataset replicates while corresponding manual C-C replicate-backend evidence agrees; sampling is not required for this classification",
+      "native-graph-or-adaptation": "native C-C is unhealthy and manual C-C is healthy on paired datasets while both pass the oracle gate",
+      "group-conditional-centering": "both group-centered factorial cells are unhealthy and both group-noncentered cells are healthy",
+      "location-centering": "both location-centered factorial cells are unhealthy and both location-noncentered cells are healthy",
+      "joint-centering-interaction": "only NC-NC is healthy; this does not establish two independent main effects",
+      "backend-path-specific": "the five-form healthy-count difference between PyMC and NumPyro has the same nonzero direction on all eight paired blocks; per-representation backend contrasts are descriptive only",
+      "residual-tn-or-scale-geometry": "all exact same-model representations are unhealthy after every oracle and ICDF gate passes",
+      "initialization-or-budget-sensitive": "reserved for a separately predeclared diagnostic replay; primary evidence alone cannot assign it",
+      "all-representations-healthy": "all five representations are healthy on both backends",
+      "mixed-inconclusive": "complete evidence matches no stronger predeclared rule"
+    }
+  }
+}
