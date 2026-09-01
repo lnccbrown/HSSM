@@ -921,6 +921,220 @@ def test_initial_evidence_uses_positional_binding_with_unnamed_inputs(
     assert evidence["all_finite"] is True
 
 
+def test_pymc_graph_evaluator_splits_default_first_order_from_bounded_hessian(
+    manifest, monkeypatch
+) -> None:
+    """Keep sampler-relevant derivatives optimized without optimizing the Hessian."""
+    unit = next(
+        item
+        for item in build_plan(manifest, "smoke")
+        if item.floatx == "float64"
+        and item.backend_id == "pymc"
+        and item.representation_id == "group-icdf-noncentered"
+    )
+    data = generate_synthetic_data(
+        runner._toy_spec(unit),
+        group_seed=unit.group_seed,
+        observation_seed=unit.observation_seed,
+    )
+    prior = runner._prior(unit)
+    model = build_causal_model(unit.builder, prior, data)
+    starts = runner._natural_start_payload(unit, data, prior)
+    _, initvals = runner._coordinate_start_payload(
+        unit, model, starts, prior, runner._oracle_spec(unit, prior, data)
+    )
+    vector = runner._pack_model_point(model, initvals[0])
+
+    bounded_mode = object()
+    mode_requests: list[tuple[str, str]] = []
+    compile_requests: list[dict[str, object]] = []
+    evaluated_arguments: list[tuple[np.ndarray, ...]] = []
+    expected_value = 1.25
+    expected_gradient = np.arange(vector.size, dtype=np.float64)
+    expected_hessian = np.arange(vector.size**2, dtype=np.float64).reshape(
+        vector.size, vector.size
+    )
+
+    def bounded_mode_factory(*, linker, optimizer):
+        mode_requests.append((linker, optimizer))
+        return bounded_mode
+
+    def compile_spy(
+        outputs,
+        *,
+        inputs=None,
+        on_unused_input=None,
+        point_fn=True,
+        **kwargs,
+    ):
+        compile_requests.append(
+            {
+                "outputs": outputs,
+                "inputs": inputs,
+                "on_unused_input": on_unused_input,
+                "point_fn": point_fn,
+                "mode_present": "mode" in kwargs,
+                "mode": kwargs.get("mode"),
+            }
+        )
+        if isinstance(outputs, list):
+            assert len(outputs) == 2
+
+            def evaluate_first_order(*arguments):
+                evaluated_arguments.append(tuple(arguments))
+                return expected_value, expected_gradient
+
+            return evaluate_first_order
+
+        def evaluate_hessian(*arguments):
+            evaluated_arguments.append(tuple(arguments))
+            return expected_hessian
+
+        return evaluate_hessian
+
+    monkeypatch.setattr(runner, "Mode", bounded_mode_factory)
+    monkeypatch.setattr(model, "compile_fn", compile_spy)
+
+    evaluator = runner._make_graph_evaluator(model, "pymc")
+    value, gradient, hessian = evaluator(vector)
+
+    assert mode_requests == [("py", "None")]
+    assert len(compile_requests) == 2
+    first_order, second_order = compile_requests
+    assert first_order["mode_present"] is False
+    assert first_order["mode"] is None
+    assert second_order["mode_present"] is True
+    assert second_order["mode"] is bounded_mode
+    for request in compile_requests:
+        assert request["inputs"] == model.value_vars
+        assert request["on_unused_input"] == "ignore"
+        assert request["point_fn"] is False
+    assert len(evaluated_arguments) == 2
+    for arguments in evaluated_arguments:
+        reconstructed = np.concatenate(
+            [np.asarray(argument).reshape(-1) for argument in arguments]
+        )
+        np.testing.assert_array_equal(reconstructed, vector)
+    assert value == expected_value
+    np.testing.assert_array_equal(gradient, expected_gradient)
+    np.testing.assert_array_equal(hessian, expected_hessian)
+
+
+@pytest.mark.slow
+def test_group_icdf_pymc_oracle_evaluator_completes_without_sampling(
+    tmp_path: Path,
+) -> None:
+    """Compile the exact group-ICDF oracle path in a bounded fresh process."""
+    cache = tmp_path / "graph-evaluator-cache"
+    for name in ("pytensor", "jax", "matplotlib", "xdg"):
+        (cache / name).mkdir(parents=True, exist_ok=True)
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment.update(
+        {
+            "PYTENSOR_FLAGS": (f"base_compiledir={cache / 'pytensor'},floatX=float64"),
+            "JAX_COMPILATION_CACHE_DIR": str(cache / "jax"),
+            "JAX_ENABLE_X64": "true",
+            "JAX_PLATFORMS": "cpu",
+            "MPLCONFIGDIR": str(cache / "matplotlib"),
+            "XDG_CACHE_HOME": str(cache / "xdg"),
+            "OMP_NUM_THREADS": "1",
+            "OPENBLAS_NUM_THREADS": "1",
+            "MKL_NUM_THREADS": "1",
+            "NUMEXPR_NUM_THREADS": "1",
+        }
+    )
+    program = textwrap.dedent(
+        """
+        import resource
+        import sys
+        import time
+
+        import numpy as np
+
+        from scripts import truncated_hierarchy_causal_runner as runner
+        from scripts.truncated_hierarchy_causal_contract import (
+            DEFAULT_MANIFEST,
+            build_plan,
+            load_manifest,
+        )
+
+        manifest = load_manifest(DEFAULT_MANIFEST)
+        unit = next(
+            item for item in build_plan(manifest, "smoke")
+            if item.floatx == "float64"
+            and item.backend_id == "pymc"
+            and item.representation_id == "group-icdf-noncentered"
+        )
+        data = runner.generate_synthetic_data(
+            runner._toy_spec(unit),
+            group_seed=unit.group_seed,
+            observation_seed=unit.observation_seed,
+        )
+        prior = runner._prior(unit)
+        model = runner.build_causal_model(unit.builder, prior, data)
+        starts = runner._natural_start_payload(unit, data, prior)
+        spec = runner._oracle_spec(unit, prior, data)
+        _, initvals = runner._coordinate_start_payload(
+            unit, model, starts, prior, spec
+        )
+        vector = runner._pack_model_point(model, initvals[0])
+        started = time.perf_counter()
+        observed = runner._make_graph_evaluator(model, "pymc")(vector)
+        elapsed = time.perf_counter() - started
+        parameterization = runner.REPRESENTATION_TO_PARAMETERIZATION[
+            unit.representation_id
+        ]
+        expected = runner.hierarchical_posterior_components(
+            vector, spec, parameterization
+        ).total
+        tolerances = manifest["analysis_policy"]["oracle_gate"][
+            "component_tolerances"
+        ][unit.floatx]
+        for actual, reference, component in zip(
+            observed,
+            (expected.value, expected.gradient, expected.hessian),
+            ("logp", "gradient", "hessian"),
+            strict=True,
+        ):
+            tolerance = tolerances[component]
+            np.testing.assert_allclose(
+                actual,
+                reference,
+                rtol=tolerance["relative_tolerance"],
+                atol=tolerance["absolute_tolerance"],
+            )
+        maximum_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        maximum_rss_bytes = int(
+            maximum_rss if sys.platform == "darwin" else maximum_rss * 1024
+        )
+        print(
+            runner.canonical_json_bytes(
+                {
+                    "elapsed_seconds": elapsed,
+                    "maximum_rss_bytes": maximum_rss_bytes,
+                }
+            ).decode(),
+            end="",
+        )
+        """
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", program],
+        cwd=DEFAULT_MANIFEST.parents[2],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=240,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = decode_canonical_json((completed.stdout.splitlines()[-1] + "\n").encode())
+    assert 0.0 < result["elapsed_seconds"] < 240.0
+    assert 0 < result["maximum_rss_bytes"] < 5 * 1024**3
+
+
 def _mock_execute_cell_prefix(monkeypatch, *, roundtrip_error: float = 0.0) -> None:
     """Replace the build/start prefix while retaining execute_cell state logic."""
     sentinel = object()

@@ -44,6 +44,7 @@ import xarray as xr
 from pymc.initial_point import make_initial_point_fns_per_chain
 from pymc.sampling.jax import get_jaxified_graph, sample_numpyro_nuts
 from pymc.util import get_random_generator
+from pytensor.compile.mode import Mode
 from pytensor.link.c.exceptions import CompileError
 from scipy.special import log_ndtr, ndtri_exp
 
@@ -1348,14 +1349,26 @@ def _make_graph_evaluator(
     """Compile the exact scalar value/gradient/Hessian path used by a backend."""
     model_logp = model.logp(jacobian=True)
     if backend_id == "pymc":
-        outputs: list[Any] = [
+        value_and_gradient_outputs: list[Any] = [
             model_logp,
             model.dlogp(jacobian=True),
-            model.d2logp(jacobian=True, negate_output=False),
         ]
-        function = model.compile_fn(
-            outputs,
+        value_and_gradient_function = model.compile_fn(
+            value_and_gradient_outputs,
             inputs=model.value_vars,
+            on_unused_input="ignore",
+            point_fn=False,
+        )
+        # The ICDF parameterizations create a large symbolic second-order graph.
+        # PyTensor's default FAST_RUN/C compilation can spend unbounded time and
+        # memory optimizing that diagnostic-only graph.  Keep the sampler's exact
+        # default optimized value/gradient path, but evaluate the same symbolic
+        # Hessian with the bounded Python/no-optimizer mode already used by the B1
+        # independent-oracle tests.
+        hessian_function = model.compile_fn(
+            model.d2logp(jacobian=True, negate_output=False),
+            inputs=model.value_vars,
+            mode=Mode(linker="py", optimizer="None"),
             on_unused_input="ignore",
             point_fn=False,
         )
@@ -1363,7 +1376,9 @@ def _make_graph_evaluator(
         def evaluate_pymc(
             vector: np.ndarray,
         ) -> tuple[float, np.ndarray, np.ndarray]:
-            value, gradient, hessian = function(*_model_arguments(model, vector))
+            arguments = _model_arguments(model, vector)
+            value, gradient = value_and_gradient_function(*arguments)
+            hessian = hessian_function(*arguments)
             return (
                 float(value),
                 np.asarray(gradient, dtype=np.float64),
