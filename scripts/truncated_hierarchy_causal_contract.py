@@ -2636,7 +2636,20 @@ def _audit_oracle_point_bindings(
         if not isinstance(summary, Mapping):
             raise CausalContractError(f"{source}.roundtrip is malformed")
         retained_natural = natural_vector(summary, f"{source}.roundtrip")
-        if not np.array_equal(retained_natural, restored):
+        comparison_scale = max(
+            1.0,
+            float(np.max(np.abs(retained_natural))),
+            float(np.max(np.abs(restored))),
+        )
+        recomputation_tolerance = (
+            64.0 * float(np.finfo(np.float64).eps) * comparison_scale
+        )
+        if not np.allclose(
+            retained_natural,
+            restored,
+            rtol=0.0,
+            atol=recomputation_tolerance,
+        ):
             raise CausalContractError(
                 f"{source} retained roundtrip differs from recomputed natural values"
             )

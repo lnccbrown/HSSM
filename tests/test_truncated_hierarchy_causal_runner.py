@@ -1504,6 +1504,25 @@ def test_oracle_points_are_bound_to_exact_source_artifacts(
             path.write_bytes(original)
             record["artifacts"][name] = reference
 
+    one_ulp_roundtrip = copy.deepcopy(execution.diagnostics)
+    retained = one_ulp_roundtrip["oracle"]["records"][0]["roundtrip"]
+    retained["group_location"] = float(np.nextafter(retained["group_location"], np.inf))
+    diagnostics_reference = copy.deepcopy(record["artifacts"]["diagnostics"])
+    diagnostics_path = store.root / diagnostics_reference["path"]
+    original_diagnostics = diagnostics_path.read_bytes()
+    try:
+        one_ulp_bytes = canonical_json_bytes(one_ulp_roundtrip)
+        diagnostics_path.write_bytes(one_ulp_bytes)
+        record["artifacts"]["diagnostics"] = {
+            "path": diagnostics_reference["path"],
+            "sha256": sha256_bytes(one_ulp_bytes),
+            "size_bytes": len(one_ulp_bytes),
+        }
+        verify_result_artifacts(record, store.root, unit, manifest)
+    finally:
+        diagnostics_path.write_bytes(original_diagnostics)
+        record["artifacts"]["diagnostics"] = diagnostics_reference
+
     diagnostics = copy.deepcopy(execution.diagnostics)
     trajectory = next(
         item

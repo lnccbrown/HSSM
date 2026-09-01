@@ -57,6 +57,14 @@ def _run_for(job: Mapping[str, Any], step_name: str) -> str:
     raise AssertionError(f"missing workflow step {step_name!r}")
 
 
+def test_contract_cli_uses_package_aware_module_mode() -> None:
+    """Late oracle imports must resolve on clean hosted runners."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert text.count("-m scripts.truncated_hierarchy_causal_contract") == 4
+    file_mode = "python\n            scripts/truncated_hierarchy_causal_contract.py"
+    assert file_mode not in text
+
+
 @pytest.mark.parametrize("tier", TIERS)
 def test_contract_pairs_are_complete_counterbalanced_ten_cell_units(
     manifest: Mapping[str, Any], plans: Mapping[str, Sequence[Any]], tier: str
@@ -102,14 +110,15 @@ def test_contract_pairs_are_complete_counterbalanced_ten_cell_units(
 
 
 @pytest.mark.parametrize(("tier", "expected"), EXPECTED_PAIRS.items())
-def test_direct_matrix_cli_matches_workflow_cardinality(
+def test_module_matrix_cli_matches_workflow_cardinality(
     tier: str, expected: int
 ) -> None:
     """The direct command embedded in Actions emits the frozen pair matrix."""
     completed = subprocess.run(
         [
             sys.executable,
-            "scripts/truncated_hierarchy_causal_contract.py",
+            "-m",
+            "scripts.truncated_hierarchy_causal_contract",
             "--manifest",
             str(DEFAULT_MANIFEST),
             "matrix",

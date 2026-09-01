@@ -69,7 +69,7 @@ jobs:
           uv sync --project "$PROFILE_PROJECT" --frozen
           contract=(
             uv run --project "$PROFILE_PROJECT" --frozen python
-            scripts/truncated_hierarchy_causal_contract.py
+            -m scripts.truncated_hierarchy_causal_contract
             --manifest "$CAUSAL_MANIFEST"
           )
           "${contract[@]}" validate
@@ -121,7 +121,7 @@ jobs:
           uv sync --project "$PROFILE_PROJECT" --frozen
           contract=(
             uv run --project "$PROFILE_PROJECT" --frozen python
-            scripts/truncated_hierarchy_causal_contract.py
+            -m scripts.truncated_hierarchy_causal_contract
             --manifest "$CAUSAL_MANIFEST"
           )
           runner=(
@@ -290,7 +290,7 @@ jobs:
           )
           contract=(
             uv run --project "$PROFILE_PROJECT" --frozen python
-            scripts/truncated_hierarchy_causal_contract.py
+            -m scripts.truncated_hierarchy_causal_contract
             --manifest "$CAUSAL_MANIFEST"
           )
           "${runner[@]}" merge-runs --source-dir "$pair_root" \
@@ -463,7 +463,7 @@ jobs:
           )
           contract=(
             uv run --project "$PROFILE_PROJECT" --frozen python
-            scripts/truncated_hierarchy_causal_contract.py
+            -m scripts.truncated_hierarchy_causal_contract
             --manifest "$CAUSAL_MANIFEST"
           )
           "${runner[@]}" merge-runs --source-dir "$pair_root" \
