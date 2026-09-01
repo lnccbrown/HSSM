@@ -5,17 +5,15 @@ from __future__ import annotations
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 import scripts.truncated_hierarchy_causal_runner as runner
 from scripts.truncated_hierarchy_causal_contract import build_plan, load_manifest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 @pytest.fixture(scope="module")
@@ -52,10 +50,53 @@ def _wait_for_pid_exit(pid: int, timeout: float = 5.0) -> bool:
 
 
 def _pid_file_ready(path: Path) -> bool:
+    return _read_pid_file(path) is not None
+
+
+def _read_pid_file(path: Path) -> int | None:
     try:
-        return int(path.read_text()) > 0
+        pid = int(path.read_text())
     except (OSError, ValueError):
-        return False
+        return None
+    return pid if pid > 0 else None
+
+
+def _cleanup_recorded_processes(
+    child_pid_path: Path, grandchild_pid_path: Path
+) -> None:
+    """Best-effort cleanup even when readiness failed after one PID appeared."""
+    child_pid = _read_pid_file(child_pid_path)
+    grandchild_pid = _read_pid_file(grandchild_pid_path)
+    recorded_pids = [pid for pid in (child_pid, grandchild_pid) if pid is not None]
+    if child_pid is not None and any(_pid_exists(pid) for pid in recorded_pids):
+        try:
+            os.killpg(child_pid, signal.SIGKILL)
+        except OSError:
+            pass
+    for pid in recorded_pids:
+        if _pid_exists(pid):
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+
+
+def _pipe_holding_tree_program(child_pid_path: Path, grandchild_pid_path: Path) -> str:
+    grandchild_program = (
+        "import os,time; "
+        "from pathlib import Path; "
+        f"Path({str(grandchild_pid_path)!r}).write_text(str(os.getpid())); "
+        "print('grandchild-ready', flush=True); "
+        "time.sleep(60)"
+    )
+    return (
+        "import os,subprocess,sys,time; "
+        "from pathlib import Path; "
+        f"Path({str(child_pid_path)!r}).write_text(str(os.getpid())); "
+        f"subprocess.Popen([sys.executable, '-c', {grandchild_program!r}]); "
+        "print('child-ready', flush=True); "
+        "time.sleep(60)"
+    )
 
 
 def test_observed_process_emits_live_heartbeat_and_preserves_capture(
@@ -71,13 +112,21 @@ def test_observed_process_emits_live_heartbeat_and_preserves_capture(
         "print('stderr-after', file=sys.stderr)"
     )
 
-    completed = runner._run_observed_cell_process(
-        unit,
-        [sys.executable, "-c", program],
-        cwd=tmp_path,
-        environment=os.environ.copy(),
-        heartbeat_seconds=0.02,
-    )
+    def prior_sigterm_handler(_signum: int, _frame: object) -> None:
+        return
+
+    original_sigterm_handler = signal.signal(signal.SIGTERM, prior_sigterm_handler)
+    try:
+        completed = runner._run_observed_cell_process(
+            unit,
+            [sys.executable, "-c", program],
+            cwd=tmp_path,
+            environment=os.environ.copy(),
+            heartbeat_seconds=0.02,
+        )
+        assert signal.getsignal(signal.SIGTERM) is prior_sigterm_handler
+    finally:
+        signal.signal(signal.SIGTERM, original_sigterm_handler)
 
     captured = capsys.readouterr()
     observations = _observations(captured.err)
@@ -171,21 +220,7 @@ def test_interrupt_kills_child_and_pipe_holding_grandchild_before_propagating(
     """An inherited pipe cannot strand cleanup or leave either process alive."""
     child_pid_path = tmp_path / "child.pid"
     grandchild_pid_path = tmp_path / "grandchild.pid"
-    grandchild_program = (
-        "import os,time; "
-        "from pathlib import Path; "
-        f"Path({str(grandchild_pid_path)!r}).write_text(str(os.getpid())); "
-        "print('grandchild-ready', flush=True); "
-        "time.sleep(15)"
-    )
-    child_program = (
-        "import os,subprocess,sys,time; "
-        "from pathlib import Path; "
-        f"Path({str(child_pid_path)!r}).write_text(str(os.getpid())); "
-        f"subprocess.Popen([sys.executable, '-c', {grandchild_program!r}]); "
-        "print('child-ready', flush=True); "
-        "time.sleep(15)"
-    )
+    child_program = _pipe_holding_tree_program(child_pid_path, grandchild_pid_path)
 
     def interrupt_after_tree_starts(_child_pid: int) -> dict[str, object]:
         deadline = time.monotonic() + 3.0
@@ -199,31 +234,26 @@ def test_interrupt_kills_child_and_pipe_holding_grandchild_before_propagating(
         runner, "_process_resource_snapshot", interrupt_after_tree_starts
     )
     started = time.monotonic()
-    with pytest.raises(KeyboardInterrupt):
-        runner._run_observed_cell_process(
-            unit,
-            [sys.executable, "-c", child_program],
-            cwd=tmp_path,
-            environment=os.environ.copy(),
-            heartbeat_seconds=0.02,
-        )
-    elapsed = time.monotonic() - started
-
-    assert child_pid_path.is_file()
-    assert grandchild_pid_path.is_file()
-    child_pid = int(child_pid_path.read_text())
-    grandchild_pid = int(grandchild_pid_path.read_text())
     try:
+        with pytest.raises(KeyboardInterrupt):
+            runner._run_observed_cell_process(
+                unit,
+                [sys.executable, "-c", child_program],
+                cwd=tmp_path,
+                environment=os.environ.copy(),
+                heartbeat_seconds=0.02,
+            )
+        elapsed = time.monotonic() - started
+
+        child_pid = _read_pid_file(child_pid_path)
+        grandchild_pid = _read_pid_file(grandchild_pid_path)
+        assert child_pid is not None
+        assert grandchild_pid is not None
         assert elapsed < runner.CELL_CLEANUP_SECONDS + 2.0
         assert _wait_for_pid_exit(child_pid)
         assert _wait_for_pid_exit(grandchild_pid)
     finally:
-        for pid in (child_pid, grandchild_pid):
-            if _pid_exists(pid):
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+        _cleanup_recorded_processes(child_pid_path, grandchild_pid_path)
 
     observations = _observations(capsys.readouterr().err)
     assert [record["event"] for record in observations] == [
@@ -232,3 +262,75 @@ def test_interrupt_kills_child_and_pipe_holding_grandchild_before_propagating(
     ]
     assert observations[-1]["returncode"] == -signal.SIGKILL
     assert observations[-1]["termination"] == "observer-interrupted"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX signal-session regression")
+def test_sigterm_observer_exits_143_and_reaps_pipe_holding_process_tree(
+    tmp_path: Path,
+) -> None:
+    """External SIGTERM reaches bounded group cleanup before observer exit."""
+    child_pid_path = tmp_path / "child.pid"
+    grandchild_pid_path = tmp_path / "grandchild.pid"
+    child_program = _pipe_holding_tree_program(child_pid_path, grandchild_pid_path)
+    repository = Path(runner.__file__).resolve().parents[1]
+    observer_program = (
+        "import os,sys; "
+        "from pathlib import Path; "
+        "from scripts.truncated_hierarchy_causal_contract import "
+        "build_plan,load_manifest; "
+        "from scripts.truncated_hierarchy_causal_runner import "
+        "_run_observed_cell_process; "
+        "unit=build_plan(load_manifest(), 'smoke')[0]; "
+        f"_run_observed_cell_process(unit, [sys.executable, '-c', {child_program!r}], "
+        f"cwd=Path({str(tmp_path)!r}), environment=os.environ.copy(), "
+        "heartbeat_seconds=30.0)"
+    )
+    observer = subprocess.Popen(
+        [sys.executable, "-c", observer_program],
+        cwd=repository,
+        env=os.environ.copy(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 15.0
+        while time.monotonic() < deadline:
+            if _pid_file_ready(child_pid_path) and _pid_file_ready(grandchild_pid_path):
+                break
+            if observer.poll() is not None:
+                break
+            time.sleep(0.01)
+        child_pid = _read_pid_file(child_pid_path)
+        grandchild_pid = _read_pid_file(grandchild_pid_path)
+        assert child_pid is not None
+        assert grandchild_pid is not None
+        assert observer.poll() is None
+
+        started = time.monotonic()
+        os.kill(observer.pid, signal.SIGTERM)
+        _stdout, stderr = observer.communicate(
+            timeout=runner.CELL_CLEANUP_SECONDS + 5.0
+        )
+        elapsed = time.monotonic() - started
+
+        assert observer.returncode == 128 + signal.SIGTERM
+        assert elapsed < runner.CELL_CLEANUP_SECONDS + 4.0
+        assert _wait_for_pid_exit(child_pid)
+        assert _wait_for_pid_exit(grandchild_pid)
+        observations = _observations(stderr)
+        assert [record["event"] for record in observations] == [
+            "cell-start",
+            "cell-end",
+        ]
+        assert observations[-1]["returncode"] == -signal.SIGKILL
+        assert observations[-1]["termination"] == "observer-interrupted"
+    finally:
+        if observer.poll() is None:
+            observer.terminate()
+            try:
+                observer.communicate(timeout=runner.CELL_CLEANUP_SECONDS + 1.0)
+            except subprocess.TimeoutExpired:
+                observer.kill()
+                observer.communicate(timeout=runner.CELL_CLEANUP_SECONDS + 1.0)
+        _cleanup_recorded_processes(child_pid_path, grandchild_pid_path)

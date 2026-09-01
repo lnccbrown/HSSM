@@ -21,6 +21,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -2797,19 +2798,42 @@ def _run_observed_cell_process(
     if not math.isfinite(heartbeat_seconds) or heartbeat_seconds <= 0.0:
         raise ValueError("heartbeat_seconds must be finite and positive")
     started = time.monotonic()
-    process = subprocess.Popen(
-        command,
-        cwd=cwd,
-        env=environment,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=os.name == "posix",
-        creationflags=(
-            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
-        ),
+    process: subprocess.Popen[str] | None = None
+    pending_sigterm: int | None = None
+    cleanup_started = False
+    primary_exception = False
+    install_sigterm_handler = threading.current_thread() is threading.main_thread()
+    previous_sigterm_handler: Any = (
+        signal.getsignal(signal.SIGTERM) if install_sigterm_handler else None
     )
+
+    def handle_parent_sigterm(signum: int, _frame: Any) -> None:
+        nonlocal pending_sigterm
+        if cleanup_started:
+            return
+        pending_sigterm = signum
+        if process is not None:
+            raise SystemExit(128 + signum)
+
     try:
+        if install_sigterm_handler:
+            signal.signal(signal.SIGTERM, handle_parent_sigterm)
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=os.name == "posix",
+            creationflags=(
+                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                if os.name == "nt"
+                else 0
+            ),
+        )
+        if pending_sigterm is not None:
+            raise SystemExit(128 + pending_sigterm)
         _emit_cell_observation(
             unit,
             "cell-start",
@@ -2835,31 +2859,41 @@ def _run_observed_cell_process(
                     elapsed_seconds=round(time.monotonic() - started, 3),
                     **resources,
                 )
+        returncode = cast("int", process.returncode)
+        _emit_cell_observation(
+            unit,
+            "cell-end",
+            child_pid=process.pid,
+            elapsed_seconds=round(time.monotonic() - started, 3),
+            returncode=returncode,
+            termination="child-exited",
+        )
+        return subprocess.CompletedProcess(command, returncode, stdout, stderr)
     except BaseException:
-        _cleanup_interrupted_cell_process(process)
+        primary_exception = True
+        cleanup_started = True
+        if process is not None:
+            _cleanup_interrupted_cell_process(process)
         try:
-            _emit_cell_observation(
-                unit,
-                "cell-end",
-                child_pid=process.pid,
-                elapsed_seconds=round(time.monotonic() - started, 3),
-                returncode=process.returncode,
-                termination="observer-interrupted",
-            )
+            if process is not None:
+                _emit_cell_observation(
+                    unit,
+                    "cell-end",
+                    child_pid=process.pid,
+                    elapsed_seconds=round(time.monotonic() - started, 3),
+                    returncode=process.returncode,
+                    termination="observer-interrupted",
+                )
         except BaseException:
             pass
         raise
-
-    returncode = cast("int", process.returncode)
-    _emit_cell_observation(
-        unit,
-        "cell-end",
-        child_pid=process.pid,
-        elapsed_seconds=round(time.monotonic() - started, 3),
-        returncode=returncode,
-        termination="child-exited",
-    )
-    return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+    finally:
+        if install_sigterm_handler:
+            try:
+                signal.signal(signal.SIGTERM, previous_sigterm_handler)
+            except BaseException:
+                if not primary_exception:
+                    raise
 
 
 def _subprocess_cell_executor(
