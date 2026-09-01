@@ -17,6 +17,7 @@ import hashlib
 import json
 import math
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -120,6 +121,9 @@ BUILDER_TO_PARAMETERIZATION: dict[str, Parameterization] = {
     "full_icdf_noncentered": "full_icdf_noncentered",
 }
 TRAJECTORY_POINTS_PER_CHAIN = 1
+CELL_HEARTBEAT_SECONDS = 30.0
+CELL_CLEANUP_SECONDS = 2.0
+CELL_OBSERVATION_PREFIX = "hssm-causal-observation "
 
 
 class CausalRunnerError(RuntimeError):
@@ -2614,6 +2618,250 @@ def _private_materialize_unit(
     return 0
 
 
+def _process_resource_snapshot(child_pid: int) -> dict[str, Any]:
+    """Return best-effort process and host telemetry for one active child."""
+    try:
+        import psutil
+    except ImportError:
+        return {
+            "resource_status": "unavailable",
+            "resource_error_types": ["ImportError"],
+        }
+
+    error_types: set[str] = set()
+    snapshot: dict[str, Any] = {}
+    try:
+        snapshot["parent_rss_bytes"] = psutil.Process(os.getpid()).memory_info().rss
+    except (psutil.Error, OSError) as error:
+        error_types.add(type(error).__name__)
+
+    processes: list[Any] = []
+    try:
+        child = psutil.Process(child_pid)
+        processes.append(child)
+        try:
+            processes.extend(child.children(recursive=True))
+        except (psutil.Error, OSError) as error:
+            error_types.add(type(error).__name__)
+    except (psutil.Error, OSError) as error:
+        error_types.add(type(error).__name__)
+
+    process_count = 0
+    rss_bytes = 0
+    vms_bytes = 0
+    thread_count = 0
+    cpu_user_seconds = 0.0
+    cpu_system_seconds = 0.0
+    for process in processes:
+        try:
+            with process.oneshot():
+                memory = process.memory_info()
+                cpu = process.cpu_times()
+                threads = process.num_threads()
+        except (psutil.Error, OSError) as error:
+            error_types.add(type(error).__name__)
+            continue
+        process_count += 1
+        rss_bytes += int(memory.rss)
+        vms_bytes += int(memory.vms)
+        thread_count += int(threads)
+        cpu_user_seconds += float(cpu.user)
+        cpu_system_seconds += float(cpu.system)
+    snapshot.update(
+        {
+            "child_process_count": process_count,
+            "child_tree_rss_bytes": rss_bytes,
+            "child_tree_vms_bytes": vms_bytes,
+            "child_tree_thread_count": thread_count,
+            "child_tree_cpu_user_seconds": cpu_user_seconds,
+            "child_tree_cpu_system_seconds": cpu_system_seconds,
+        }
+    )
+
+    try:
+        host_memory = psutil.virtual_memory()
+        host_swap = psutil.swap_memory()
+        snapshot.update(
+            {
+                "host_available_memory_bytes": int(host_memory.available),
+                "host_memory_percent": float(host_memory.percent),
+                "host_swap_used_bytes": int(host_swap.used),
+            }
+        )
+    except (psutil.Error, OSError) as error:
+        error_types.add(type(error).__name__)
+
+    snapshot["resource_status"] = "partial" if error_types else "available"
+    snapshot["resource_error_types"] = sorted(error_types)
+    return snapshot
+
+
+def _emit_cell_observation(unit: UnitSpec, event: str, **values: Any) -> None:
+    """Write one fail-soft operational record outside the evidence contract."""
+    payload = {
+        "event": event,
+        "cell_id": unit.cell_id,
+        "pair_id": unit.pair_id,
+        "pair_position": unit.pair_position,
+        "tier": unit.tier,
+        "regime_id": unit.regime_id,
+        "replicate": unit.replicate,
+        "backend_id": unit.backend_id,
+        "representation_id": unit.representation_id,
+        **values,
+    }
+    try:
+        encoded = json.dumps(
+            payload,
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        print(CELL_OBSERVATION_PREFIX + encoded, file=sys.stderr, flush=True)
+    except Exception:
+        # Broken log pipes and telemetry serialization must never alter a cell.
+        return
+
+
+def _kill_cell_process_tree(process: subprocess.Popen[str]) -> None:
+    """Best-effort kill of the isolated child session or non-POSIX tree."""
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+            return
+        except OSError:
+            pass
+    else:
+        try:
+            import psutil
+
+            root = psutil.Process(process.pid)
+            descendants = root.children(recursive=True)
+            for descendant in reversed(descendants):
+                try:
+                    descendant.kill()
+                except (psutil.Error, OSError):
+                    pass
+        except (ImportError, OSError):
+            pass
+        except Exception:
+            # psutil is optional; direct-child cleanup remains the fallback.
+            pass
+    try:
+        process.kill()
+    except OSError:
+        pass
+
+
+def _cleanup_interrupted_cell_process(process: subprocess.Popen[str]) -> None:
+    """Bound cleanup so inherited pipes cannot mask the original interrupt."""
+    try:
+        _kill_cell_process_tree(process)
+    except BaseException:
+        pass
+    try:
+        process.communicate(timeout=CELL_CLEANUP_SECONDS)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    except BaseException:
+        pass
+
+    for pipe in (process.stdout, process.stderr):
+        if pipe is None:
+            continue
+        try:
+            pipe.close()
+        except BaseException:
+            pass
+    try:
+        process.kill()
+    except BaseException:
+        pass
+    try:
+        process.wait(timeout=CELL_CLEANUP_SECONDS)
+    except BaseException:
+        pass
+
+
+def _run_observed_cell_process(
+    unit: UnitSpec,
+    command: Sequence[str],
+    *,
+    cwd: Path,
+    environment: Mapping[str, str],
+    heartbeat_seconds: float = CELL_HEARTBEAT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
+    """Run one captured child while emitting fail-soft operational heartbeats."""
+    if not math.isfinite(heartbeat_seconds) or heartbeat_seconds <= 0.0:
+        raise ValueError("heartbeat_seconds must be finite and positive")
+    started = time.monotonic()
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=os.name == "posix",
+        creationflags=(
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
+        ),
+    )
+    try:
+        _emit_cell_observation(
+            unit,
+            "cell-start",
+            child_pid=process.pid,
+            elapsed_seconds=0.0,
+        )
+        while True:
+            try:
+                stdout, stderr = process.communicate(timeout=heartbeat_seconds)
+                break
+            except subprocess.TimeoutExpired:
+                try:
+                    resources = _process_resource_snapshot(process.pid)
+                except Exception as error:
+                    resources = {
+                        "resource_status": "unavailable",
+                        "resource_error_types": [type(error).__name__],
+                    }
+                _emit_cell_observation(
+                    unit,
+                    "cell-heartbeat",
+                    child_pid=process.pid,
+                    elapsed_seconds=round(time.monotonic() - started, 3),
+                    **resources,
+                )
+    except BaseException:
+        _cleanup_interrupted_cell_process(process)
+        try:
+            _emit_cell_observation(
+                unit,
+                "cell-end",
+                child_pid=process.pid,
+                elapsed_seconds=round(time.monotonic() - started, 3),
+                returncode=process.returncode,
+                termination="observer-interrupted",
+            )
+        except BaseException:
+            pass
+        raise
+
+    returncode = cast("int", process.returncode)
+    _emit_cell_observation(
+        unit,
+        "cell-end",
+        child_pid=process.pid,
+        elapsed_seconds=round(time.monotonic() - started, 3),
+        returncode=returncode,
+        termination="child-exited",
+    )
+    return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+
+
 def _subprocess_cell_executor(
     unit: UnitSpec,
     *,
@@ -2676,13 +2924,11 @@ def _subprocess_cell_executor(
             "--output-dir",
             str(output_directory),
         ]
-        completed = subprocess.run(
+        completed = _run_observed_cell_process(
+            unit,
             command,
             cwd=Path(__file__).resolve().parents[1],
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
+            environment=environment,
         )
         if completed.returncode not in {0, 10}:
             stderr = completed.stderr[-4000:]

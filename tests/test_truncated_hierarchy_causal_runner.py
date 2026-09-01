@@ -54,6 +54,20 @@ def manifest():
     return load_manifest(DEFAULT_MANIFEST)
 
 
+@pytest.fixture(autouse=True)
+def _pin_float64_precision():
+    """Isolate this module's direct graphs from global precision mutations."""
+    previous_floatx = str(runner.pytensor.config.floatX)
+    previous_jax_x64 = bool(runner.jax.config.x64_enabled)
+    runner.pytensor.config.floatX = "float64"
+    runner.jax.config.update("jax_enable_x64", True)
+    try:
+        yield
+    finally:
+        runner.pytensor.config.floatX = previous_floatx
+        runner.jax.config.update("jax_enable_x64", previous_jax_x64)
+
+
 def _context(units, manifest) -> RunContext:
     profile = manifest["dependency_profile"]
     environment = {
@@ -133,8 +147,8 @@ def _natural_dataset(unit) -> xr.Dataset:
     )
 
 
-@pytest.fixture(scope="module")
-def native_oracle_artifacts(manifest):
+@pytest.fixture
+def native_oracle_artifacts(manifest, _pin_float64_precision):
     """Build one exact, no-sampling artifact set for provenance audits."""
     unit = next(
         item
