@@ -522,6 +522,58 @@ def test_extreme_tail_icdf_and_density_match_scipy_in_pytensor_and_jax(
     assert jax_derivative > 0.0
 
 
+@pytest.mark.parametrize("floatx", ["float32", "float64"])
+def test_symmetric_finite_icdf_central_jax_derivatives_match_oracle(floatx) -> None:
+    """The exact half-probability branch must retain its one-sided derivative."""
+    bounds = Bounds(0.1, 0.9)
+    base_mean = 0.5
+    scale = 0.3
+    with (
+        pytensor.config.change_flags(floatX=floatx),
+        jax.enable_x64(floatx == "float64"),
+    ):
+        offset = pt.scalar("offset", dtype=floatx)
+        natural = _truncated_normal_from_standard_normal(
+            offset,
+            mu=base_mean,
+            sigma=scale,
+            bounds=bounds,
+        )
+        jaxified = get_jaxified_graph(inputs=[offset], outputs=[natural])
+        jax_offset = jnp.asarray(0.0, dtype=floatx)
+
+        def scalar_jax_offset(value):
+            return jaxified(value)[0]
+
+        observed_value, observed_gradient = jax.value_and_grad(scalar_jax_offset)(
+            jax_offset
+        )
+        observed_hessian = jax.hessian(scalar_jax_offset)(jax_offset)
+
+    expected = truncated_normal_from_standard_normal(
+        Jet2.variable(0.0, index=0, dimension=1),
+        base_mean,
+        scale,
+        TruncationBounds(bounds.lower, bounds.upper),
+    )
+    tolerance = 2e-5 if floatx == "float32" else 2e-10
+    np.testing.assert_allclose(
+        observed_value, expected.value, rtol=tolerance, atol=tolerance
+    )
+    np.testing.assert_allclose(
+        observed_gradient,
+        expected.gradient[0],
+        rtol=tolerance,
+        atol=tolerance,
+    )
+    np.testing.assert_allclose(
+        observed_hessian,
+        expected.hessian[0, 0],
+        rtol=tolerance,
+        atol=tolerance,
+    )
+
+
 @pytest.mark.parametrize(("bounds", "base_mean", "_location"), BOUND_CASES)
 def test_standard_normal_offset_induces_the_target_natural_density(
     bounds, base_mean, _location
