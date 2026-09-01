@@ -123,6 +123,20 @@ EXTREME_TAIL_CASES = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _pin_float64_precision():
+    """Isolate this module's declared float64 numerical contract per test."""
+    previous_floatx = pytensor.config.floatX
+    previous_jax_x64 = bool(jax.config.jax_enable_x64)
+    pytensor.config.floatX = "float64"
+    jax.config.update("jax_enable_x64", True)
+    try:
+        yield
+    finally:
+        pytensor.config.floatX = previous_floatx
+        jax.config.update("jax_enable_x64", previous_jax_x64)
+
+
 def _inputs(bounds: Bounds, base_mean: float, location: float):
     spec = ToyDataSpec(
         bounds=bounds,
@@ -325,7 +339,7 @@ def test_transformed_posterior_matches_independent_second_order_oracle(
         ordered = [vector[start:stop].reshape(shape) for start, stop, shape in layouts]
         return jaxified_logp(*ordered)[0]
 
-    jax_point = jnp.asarray(point)
+    jax_point = jnp.asarray(point, dtype=jnp.float64)
     jax_value, jax_gradient = jax.value_and_grad(scalar_jax_logp)(jax_point)
     jax_hessian = jax.hessian(scalar_jax_logp)(jax_point)
     np.testing.assert_allclose(jax_value, expected.value, rtol=2e-8, atol=5e-8)
