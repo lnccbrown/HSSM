@@ -62,11 +62,12 @@ from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
 from .param.parameterization_check import (
-    check_user_priors_against_parameterization,
+    check_user_group_prior_compatibility,
     check_user_priors_for_location_overparameterization,
     emit_disconnected_node_warnings,
     emit_parameterization_warnings,
     find_disconnected_free_rvs,
+    raise_prior_compatibility_errors,
 )
 
 _logger = logging.getLogger("hssm")
@@ -208,8 +209,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         The jitter value for the initial values. Defaults to `0.01`.
     noncentered : optional
         Controls the centered vs. non-centered parameterization of
-        group-specific (hierarchical) terms. ``True`` (bambi's default) uses the
-        non-centered parameterization everywhere, ``False`` uses centered. A
+        group-specific (hierarchical) terms. ``True`` (bambi's default) requests
+        the non-centered parameterization and ``False`` requests centered. Safe
+        generated group-only terms that own a population location may be centered
+        term by term, with a warning, when current bambi cannot preserve that
+        location under non-centering. A
         ``dict`` keyed by HSSM parameter name (e.g. ``{"v": False, "a": True}``)
         sets it per parameter; an unknown key raises at construction. A per-prior
         ``noncentered`` field (inside a prior ``dict`` or on an ``hssm.Prior``)
@@ -363,12 +367,25 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # endregion
 
         # Process all parameters
+        model_noncentered = kwargs.get("noncentered", True)
         self.params = Params.from_user_specs(
             model=self,  # type: ignore[arg-type]
             include=[] if include is None else include,
             kwargs=kwargs,
             p_outlier=p_outlier,
+            noncentered=model_noncentered,
         )
+
+        # Explicit group priors are authoritative, so reject any specification
+        # that bambi cannot build or would silently alter under the effective
+        # parameterization. Report all incompatible terms in one pre-build error.
+        raise_prior_compatibility_errors(
+            check_user_group_prior_compatibility(
+                self.params,
+                model_noncentered,
+            )
+        )
+
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
@@ -398,18 +415,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self._parent,
         )
 
-        # Targeted checks against the user's prior dict:
-        #  * priors that the chosen parameterization will silently drop
-        #    (e.g. nested `mu` hyperprior on a group-specific Normal under
-        #    non-centered);
-        #  * priors whose group-specific `mu` is statistically redundant
-        #    with an exact matching common effect (location non-identifiability).
+        # Targeted statistical-identifiability warnings for common/group or
+        # repeated group-only population-location collisions.
         emit_parameterization_warnings(
-            check_user_priors_against_parameterization(
-                self.params, kwargs.get("noncentered", True)
-            )
-            + check_user_priors_for_location_overparameterization(
-                self.params, kwargs.get("noncentered", True)
+            check_user_priors_for_location_overparameterization(
+                self.params, model_noncentered
             )
         )
 

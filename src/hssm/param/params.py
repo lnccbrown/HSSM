@@ -20,6 +20,7 @@ from .user_param import UserParam
 
 if TYPE_CHECKING:
     from ..hssm import HSSM
+    from .parameterization import NoncenteredSetting
 
 
 class Params(UserDict[str, Param]):
@@ -74,6 +75,7 @@ class Params(UserDict[str, Param]):
         include: list[dict[str, Any] | UserParam],
         kwargs: dict[str, Any],
         p_outlier: float | dict | bmb.Prior | None,
+        noncentered: NoncenteredSetting = True,
     ) -> "Params":
         """Create Params from user specifications.
 
@@ -87,6 +89,8 @@ class Params(UserDict[str, Param]):
             Keyword arguments specifying the parameters.
         p_outlier
             The prior specification for the outlier probability.
+        noncentered
+            The model-level group-specific parameterization setting.
 
         Returns
         -------
@@ -94,7 +98,7 @@ class Params(UserDict[str, Param]):
             The Params object with the specified parameters.
         """
         user_params = collect_user_params(model, include, kwargs, p_outlier)
-        params = make_params(model, user_params)
+        params = make_params(model, user_params, noncentered)
         return cls(params)
 
     def parse_bambi(
@@ -253,7 +257,11 @@ def collect_user_params(
     return user_params
 
 
-def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Param]:
+def make_params(
+    model: HSSM,
+    user_params: dict[str, UserParam],
+    noncentered: NoncenteredSetting = True,
+) -> dict[str, Param]:
     """Make parameters from a dict of UserParams.
 
     Parameters
@@ -262,6 +270,8 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
         The HSSM model.
     user_params
         A dictionary with the parameter names as keys and UserParam objects as values.
+    noncentered
+        The model-level group-specific parameterization setting.
 
     Returns
     -------
@@ -286,7 +296,7 @@ def make_params(model: HSSM, user_params: dict[str, UserParam]) -> dict[str, Par
                 model.data, model.additional_namespace
             )
             if model.prior_settings == "safe":
-                param._make_safe_priors(design_matrices, is_ddm)
+                param._make_safe_priors(design_matrices, is_ddm, noncentered)
 
         param.process_prior()
         params[name] = param

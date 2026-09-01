@@ -52,6 +52,7 @@ nav:
       - Overview: how_to/index.md
       - Building models:
           - Specify priors and fix parameters: how_to/specify_priors.ipynb
+          - Specify hierarchical group priors: how_to/specify_group_priors.md
           - Model outliers with lapse probabilities: tutorials/lapse_prob_and_dist.ipynb
           - Regress on p_outlier: tutorials/tutorial_p_outlier_regression.ipynb
           - Use stimulus coding: tutorials/tutorial_stim_coding.ipynb
