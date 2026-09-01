@@ -96,7 +96,7 @@ def _(bmb, hssm, mo):
     The examples use **HSSM {hssm.__version__}** and **Bambi {bmb.__version__}**.
     They only construct models and inspect their structure; no MCMC is needed.
 
-    By the end, you should be able to answer three questions:
+    By the end, you should be able to answer four questions:
 
     1. What does a link do to a linear predictor?
     2. When should an HSSM parameter use identity, log, or generalized logit?
