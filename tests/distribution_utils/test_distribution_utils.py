@@ -12,6 +12,7 @@ import hssm
 from hssm import distribution_utils
 from hssm.distribution_utils import dist as dist_module
 from hssm.distribution_utils.dist import (
+    LOGP_LB,
     _apply_lapse_model,
     _create_arg_arrays,
     _extract_size,
@@ -308,21 +309,31 @@ def test_extra_fields(data_ddm):
 
 
 @pytest.mark.slow
-def test_ensure_positive_ndt():
-    """Check that non-decision times above RT receive the sentinel logp."""
-    data = np.zeros((1000, 2))
-    data[:, 0] = np.random.uniform(size=1000)
+@pytest.mark.parametrize(
+    ("list_params", "dist_params", "expected_edge"),
+    [
+        (["v", "a", "z", "t"], [0.5, 0.5, 0.5, 0.5], 0.5),
+        (["v", "a", "z", "t", "st"], [0.5, 0.5, 0.5, 0.5, 0.2], 0.3),
+        (["v", "a", "z", "t", "sz", "sv"], [0.5, 0.5, 0.5, 0.5, 0.1, 0.3], 0.5),
+    ],
+    ids=["fixed_t", "st_moves_the_edge", "sz_sv_leave_the_edge"],
+)
+def test_ensure_positive_ndt(list_params, dist_params, expected_edge):
+    """Response times below the model's support edge receive the sentinel logp.
 
-    logp = np.random.uniform(size=1000)
+    The edge is t, or t - st for a model carrying st; sz and sv leave it alone.
+    The response times straddle both candidate edges, so 0.31/0.4/0.49 cover the
+    [t - st, t] band that must survive untouched in the st case.
+    """
+    rt = np.array([0.1, 0.25, 0.29, 0.31, 0.4, 0.49, 0.51, 0.6, 1.0])
+    data = np.column_stack([rt, np.ones(rt.size)])
+    logp = np.arange(1.0, rt.size + 1.0)
 
-    list_params = ["v", "a", "z", "t"]
-    dist_params = [0.5] * 4
+    after = ensure_positive_ndt(data, logp, list_params, dist_params).eval()
+    mask = rt - expected_edge <= 1e-15
 
-    after_replacement = ensure_positive_ndt(data, logp, list_params, dist_params).eval()
-    mask = data[:, 0] - 0.5 <= 1e-15
-
-    assert np.all(after_replacement[mask] == np.array(-66.1))
-    assert np.all(after_replacement[~mask] == logp[~mask])
+    assert np.all(after[mask] == LOGP_LB)
+    assert np.all(after[~mask] == logp[~mask])
 
 
 def test_make_likelihood_callable():
