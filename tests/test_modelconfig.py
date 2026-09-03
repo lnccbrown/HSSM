@@ -122,6 +122,62 @@ def test_get_lba4_config():
     assert likelihood["extra_fields"] is None
 
 
+def test_get_gamma_drift_angle_config():
+    config = get_default_model_config("gamma_drift_angle")
+    assert config["response"] == ["rt", "response"]
+    assert config["choices"] == [-1, 1]
+    # `theta` sits at index 4, not appended after `c`. This is the ONNX input
+    # column order; getting it wrong evaluates the wrong likelihood silently.
+    assert config["list_params"] == [
+        "v",
+        "a",
+        "z",
+        "t",
+        "theta",
+        "shape",
+        "scale",
+        "c",
+    ]
+
+    likelihood = config["likelihoods"]["approx_differentiable"]
+    assert likelihood["loglik"] == "gamma_drift_angle.onnx"
+    assert likelihood["backend"] == "jax"
+    assert likelihood["bounds"] == {
+        "v": (-3.0, 3.0),
+        "a": (0.3, 3.0),
+        "z": (0.1, 0.9),
+        "t": (0.001, 2.0),
+        "theta": (-0.1, 1.3),
+        "shape": (2.0, 10.0),
+        "scale": (0.01, 1.0),
+        "c": (-3.0, 3.0),
+    }
+
+
+@pytest.mark.parametrize("model", ["gamma_drift", "gamma_drift_angle"])
+def test_config_matches_ssms_registry(model):
+    """The declared box must be the box the network was trained on.
+
+    HSSM feeds parameters to the ONNX in `list_params` order, so a wrong order
+    or a wrong bound does not raise -- it silently evaluates a different
+    likelihood. ssm-simulators is the authority for both, since the training
+    data was drawn from its registry.
+    """
+    import ssms
+
+    config = get_default_model_config(model)
+    ssms_config = ssms.config.model_config[model]
+
+    assert config["list_params"] == list(ssms_config["params"])
+    assert config["choices"] == list(ssms_config["choices"])
+
+    lower, upper = ssms_config["param_bounds"]
+    assert config["likelihoods"]["approx_differentiable"]["bounds"] == {
+        param: (low, high)
+        for param, low, high in zip(ssms_config["params"], lower, upper)
+    }
+
+
 @pytest.mark.parametrize("model", hssm.list_models())
 def test_load_all_supported_model_configs(model):
     assert isinstance(get_default_model_config(model), dict)
