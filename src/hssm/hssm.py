@@ -204,6 +204,9 @@ class HSSM(HSSMBase):
         either `missing_data` or `deadline` is not `False`. Defaults to `None`.
     process_initvals : optional
         If `True`, the model will process the initial values. Defaults to `True`.
+        Processing also clamps a default initial value that falls outside its
+        parameter's declared `bounds` to a point just inside them; initial values
+        you supply yourself are used as given.
     initval_jitter : optional
         The jitter value for the initial values. Defaults to `0.01`.
     **kwargs
