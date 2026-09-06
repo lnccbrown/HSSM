@@ -16,6 +16,7 @@ SupportedModels = Literal[
     "ddm_sdv",
     "full_ddm",
     "angle",
+    "angle_extended",
     "levy",
     "ornstein",
     "weibull",

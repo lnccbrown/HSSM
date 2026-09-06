@@ -154,7 +154,9 @@ def test_get_gamma_drift_angle_config():
     }
 
 
-@pytest.mark.parametrize("model", ["gamma_drift", "gamma_drift_angle"])
+@pytest.mark.parametrize(
+    "model", ["gamma_drift", "gamma_drift_angle", "angle_extended"]
+)
 def test_config_matches_ssms_registry(model):
     """The declared box must be the box the network was trained on.
 
