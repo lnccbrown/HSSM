@@ -18,6 +18,8 @@
 
 8. **`hssm.load_data` now returns a `pd.DataFrame` unconditionally** (#1146). Its `dataset` argument is required, and the return type is no longer `pd.DataFrame | str`, which forced type-checkers (and users) to narrow away a `str` branch that existed only to print the dataset listing. Use the new **`hssm.list_data()`** to get the names of the built-in datasets as a `tuple[str, ...]` (mirroring `hssm.list_models()`). Breaking: `hssm.load_data()` with no argument now raises `TypeError` instead of returning a listing string.
 
+9. **New built-in model: `angle_extended`** (#1298) -- the angle model with drift bounds widened to (-6, 6) for designs producing strong evidence. Bounds and parameter order asserted against the `ssm-simulators` registry; the LAN passed a 240-fit parameter-recovery sweep with zero coverage or bias failures (report published beside the artifact). Raises the `ssm-simulators` floor to `>=0.14.0`, the first release containing the model.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
