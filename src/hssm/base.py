@@ -125,7 +125,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
-        "full_ddm", "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4",
+        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "race_no_bias_angle_4",
         "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
         is passed, the model will be considered custom, in which case all
         `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
