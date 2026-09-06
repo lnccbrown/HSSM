@@ -18,6 +18,8 @@
 
 8. **`hssm.load_data` now returns a `pd.DataFrame` unconditionally** (#1146). Its `dataset` argument is required, and the return type is no longer `pd.DataFrame | str`, which forced type-checkers (and users) to narrow away a `str` branch that existed only to print the dataset listing. Use the new **`hssm.list_data()`** to get the names of the built-in datasets as a `tuple[str, ...]` (mirroring `hssm.list_models()`). Breaking: `hssm.load_data()` with no argument now raises `TypeError` instead of returning a listing string.
 
+9. **New built-in model: `gamma_drift_angle`** (#1296) -- `gamma_drift` with a linearly collapsing (angle) decision bound. Parameters `v, a, z, t, theta, shape, scale, c` in ssms registry order (`theta` at index 4 -- the order is the ONNX input contract), bounds set to the network training box, and a registry cross-check test asserting both against `ssm-simulators`. The LAN artifact ships at the root of `franklab/HSSM`; its parameter-recovery report (published alongside) documents identifiability limits of `shape`/`scale` when the collapsing bound truncates the drift bump -- see the model card on the Hub.
+
 ### 0.4.0
 
 This version contains major breaking updates for HSSM. Please read the release notes below to migrate to HSSM 0.4.0.
