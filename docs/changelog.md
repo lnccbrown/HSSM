@@ -1,6 +1,8 @@
 # Changelog
 
-### Unreleased
+### 0.5.0
+
+This version includes the following changes:
 
 1. **`plot_model_cartoon` displays posterior uncertainty as graded bands by default** (#1124), adopting the same `uncertainty="band" | "samples" | "both" | None` vocabulary as `plot_predictive` (#1122): pointwise quantile bands on the RT histograms, fan-chart ribbons on the decision bounds, a graded drift-quantile fan, graded non-decision-time spans (replacing the per-draw vertical-line smear), and a starting-point whisker. `uncertainty=None` reproduces the previous mean-only look; the default call now runs per-draw simulations (seconds). New parameters: `hdi`, `alpha_mean`, `alpha_uncertainty`, `hist_height`, `legend`; `plot_predictive_mean`/`plot_predictive_samples` are deprecated with a `FutureWarning`. The previously documented-but-ignored `bins`, `step`, `colors`, `linestyles`, and `linewidths` parameters now work. With uncertainty display on, the drawn mean is the pointwise predictive mean across draws (it cannot exit its own bands) rather than the plug-in simulation at the posterior-mean parameters. The figure uses a three-way color encoding — model geometry stays neutral black (`color_model`), predictions and data use the predictive palette. Note for regression/hierarchical models: the drawn geometry of each posterior draw derives from that draw's trial-mean parameter vector (see the correctness entry below). See the new "Model cartoon plot gallery" tutorial.
 
@@ -17,6 +19,10 @@
 7. **Invalid model-level prior and link presets now fail fast** (#1233). `prior_settings` accepts only `"safe"` or `None`, and `link_settings` accepts only `"log_logit"` or `None`; wrong-case strings, booleans, mappings, and other unsupported values now raise a clear `ValueError` instead of silently changing prior, link, initial-value, or display behavior. The API documentation now clarifies that both presets act on regression parameters: `prior_settings=None` delegates missing regression-term priors to Bambi but leaves HSSM's simple-parameter defaults unchanged. The Poisson-race tutorial has also been migrated to marimo and no longer presents `prior_settings` as a prior dictionary.
 
 8. **`hssm.load_data` now returns a `pd.DataFrame` unconditionally** (#1146). Its `dataset` argument is required, and the return type is no longer `pd.DataFrame | str`, which forced type-checkers (and users) to narrow away a `str` branch that existed only to print the dataset listing. Use the new **`hssm.list_data()`** to get the names of the built-in datasets as a `tuple[str, ...]` (mirroring `hssm.list_models()`). Breaking: `hssm.load_data()` with no argument now raises `TypeError` instead of returning a listing string.
+
+9. **New built-in model: `gamma_drift_angle`** (#1296) -- `gamma_drift` with a linearly collapsing (angle) decision bound. Parameters `v, a, z, t, theta, shape, scale, c` in ssms registry order (`theta` at index 4 -- the order is the ONNX input contract), bounds set to the network training box, and a registry cross-check test asserting both against `ssm-simulators`. The LAN artifact ships at the root of `franklab/HSSM`; its parameter-recovery report (published alongside) documents identifiability limits of `shape`/`scale` when the collapsing bound truncates the drift bump -- see the model card on the Hub.
+
+10. **New built-in model: `angle_extended`** (#1298) -- the angle model with drift bounds widened to (-6, 6) for designs producing strong evidence. Bounds and parameter order asserted against the `ssm-simulators` registry; the LAN passed a 240-fit parameter-recovery sweep with zero coverage or bias failures (report published beside the artifact). Raises the `ssm-simulators` floor to `>=0.14.0`, the first release containing the model.
 
 ### 0.4.0
 
