@@ -301,25 +301,7 @@ class RegressionParam(Param):
                             )
                         else:
                             # treat the term as any other group-specific term
-                            if (
-                                _is_identity_link(self.link)
-                                and self.bounds is not None
-                                and any(np.isfinite(bound) for bound in self.bounds)
-                            ):
-                                _logger.warning(
-                                    "The generated group-only intercept for parameter "
-                                    "%s is on the response/parameter scale under the "
-                                    "identity link, but its coefficient prior does not "
-                                    "apply finite HSSM bounds %s due to a current "
-                                    "Bambi limitation. Likelihood-level parameter "
-                                    "bounds still apply. A support-respecting "
-                                    "transformed link instead uses an unconstrained "
-                                    "predictor scale; bound-aware identity group "
-                                    "priors are "
-                                    "tracked in HSSM #1269.",
-                                    self.name,
-                                    self.bounds,
-                                )
+                            self._reject_unqualified_bounded_group_default(name, is_ddm)
                             prior = get_prior(
                                 "group_intercept",
                                 self.name,
@@ -383,6 +365,50 @@ class RegressionParam(Param):
             self.prior = cast("dict[str, Any]", self.prior)
             safe_priors.update(self.prior)
         self.prior = safe_priors
+
+    def _reject_unqualified_bounded_group_default(
+        self, term_name: str, is_ddm: bool
+    ) -> None:
+        """Require an explicit decision for unsupported bounded group locations.
+
+        HSSM's generic safe group-intercept hierarchy is unbounded. Applying it
+        to a bounded parameter through an identity link would therefore invent a
+        response-scale default that has not passed the bounded-hierarchy
+        qualification. Exact/black-box HDDM likelihoods keep their separately
+        calibrated natural-support hierarchies; explicit user priors never reach
+        this generated-default path.
+        """
+        has_finite_bound = self.bounds is not None and any(
+            np.isfinite(bound) for bound in self.bounds
+        )
+        if not _is_identity_link(self.link) or not has_finite_bound:
+            return
+
+        if is_ddm:
+            _logger.warning(
+                "The generated group-only intercept for parameter %s retains "
+                "the calibrated HDDM natural-support hierarchy under the "
+                "identity link. Its coefficient prior does not apply the exact "
+                "finite HSSM bounds %s due to a current Bambi limitation; "
+                "likelihood-level parameter bounds still apply.",
+                self.name,
+                self.bounds,
+            )
+            return
+
+        raise ValueError(
+            "Safe priors cannot generate a qualified default for group-only "
+            f"intercept {term_name!r} on bounded parameter {self.name!r}. The "
+            f"identity link places this coefficient on the response scale with "
+            f"HSSM bounds {self.bounds}, while the generic group hierarchy is "
+            "unbounded. Choose a support-respecting transformed link (for "
+            "example `log` for positive parameters or `gen_logit` for a finite "
+            "interval), or supply an explicit centered hierarchical group "
+            "prior and accept responsibility for its support. Set "
+            "`prior_settings=None` only when specifying the complete prior "
+            "policy explicitly. HSSM does not apply coefficient bounds to a "
+            "complete additive predictor."
+        )
 
     def _validate_generated_group_locations(self) -> None:
         """Reject ambiguous safe defaults for repeated group-only expressions.

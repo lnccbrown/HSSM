@@ -108,9 +108,12 @@ Use a support-respecting transformed link when it matches the model:
   should not receive response-scale bounds.
 
 If an identity link is scientifically required, choose a centered hierarchical
-family with appropriate natural support when possible, and remember that this
-constrains that coefficient rather than the entire predictor. HSSM's likelihood
-bounds still apply to the assembled parameter value.
+family with appropriate natural support explicitly, and remember that this
+constrains that coefficient rather than the entire predictor. HSSM now fails
+closed instead of generating its generic unbounded safe hierarchy for a unique
+group-only intercept on a finitely bounded identity scale. Exact and black-box
+HDDM likelihoods retain their separately calibrated natural-support hierarchies.
+HSSM's likelihood bounds still apply to the assembled parameter value.
 
 For the underlying scale and location logic, continue with [Link functions and
 safe priors](../tutorials/link_functions.ipynb). For the general prior interface,
