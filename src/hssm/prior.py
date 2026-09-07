@@ -268,8 +268,10 @@ def get_default_prior(
 
     * common_intercept: Bounded Normal prior (N(mean(bounds), 0.25)).
     * common: Normal prior (N(0, 0.25)).
-    * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3). It's supposed to
-    be bounded but Bambi does not fully support it yet.
+    * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3)). Under a
+      transformed link this correctly lives on an unbounded predictor scale. Finite
+      coefficient bounds for identity-linked group-only intercepts are not yet
+      supported; see HSSM #1269.
     * group_specific: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3).
 
     This function is taken from bambi.priors.prior.py and modified to handle hssm-
@@ -336,7 +338,7 @@ def get_hddm_default_prior(
         else:
             prior = generate_prior(HDDM_MU[param], bounds=bounds)
     elif term_type == "group_intercept":
-        if link is not None:
+        if not _is_identity_link(link):
             prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
         else:
             prior = generate_prior(HDDM_SETTINGS_GROUP[param], bounds=None)

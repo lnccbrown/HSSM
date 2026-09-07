@@ -6,6 +6,7 @@ focuses on a concrete modeling, inference, analysis, or extension task.
 ## Build and parameterize a model
 
 - [Specify priors and fix parameters](specify_priors.ipynb).
+- [Specify hierarchical group priors](specify_group_priors.md).
 - [Use stimulus coding](../tutorials/tutorial_stim_coding.ipynb).
 - [Add smooth effects with `hsgp()`](../tutorials/hsgp_regression.ipynb).
 - [Model outliers with lapse probabilities](../tutorials/lapse_prob_and_dist.ipynb)
