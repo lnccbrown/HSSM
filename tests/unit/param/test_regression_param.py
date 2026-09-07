@@ -908,7 +908,7 @@ def test_hddm_safe_group_only_intercept_uses_preset_identity(cavanagh_test):
 
 
 @pytest.mark.parametrize(
-    ("link", "expect_bounds_warning"),
+    ("link", "expect_error"),
     [
         pytest.param(None, True, id="omitted-identity"),
         pytest.param("identity", True, id="string-identity"),
@@ -932,10 +932,10 @@ def test_hddm_safe_group_only_intercept_uses_preset_identity(cavanagh_test):
         ),
     ],
 )
-def test_group_only_bounds_warning_is_identity_specific(
-    cavanagh_test, caplog, link, expect_bounds_warning
+def test_bounded_group_only_default_requires_explicit_identity_decision(
+    cavanagh_test, link, expect_error
 ):
-    """Do not warn about response bounds on a transformed predictor scale."""
+    """Fail closed only when a generated group location lives on bounded scale."""
     param = RegressionParam(
         name="v",
         formula="v ~ 0 + (1 | participant_id)",
@@ -943,24 +943,26 @@ def test_group_only_bounds_warning_is_identity_specific(
         link=link,
     )
 
-    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
-
-    messages = [
-        record.message for record in caplog.records if "HSSM #1269" in record.message
-    ]
-    assert bool(messages) is expect_bounds_warning
-    if expect_bounds_warning:
-        assert len(messages) == 1
-        assert "Likelihood-level parameter bounds still apply" in messages[0]
+    if expect_error:
+        with pytest.raises(ValueError) as error:
+            param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
+        message = str(error.value)
+        assert "cannot generate a qualified default" in message
+        assert "'1|participant_id'" in message
+        assert "bounded parameter 'v'" in message
+        assert "(0.0, 1.0)" in message
+        assert "support-respecting transformed link" in message
+        assert "explicit centered hierarchical group prior" in message
+    else:
+        param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
+        assert "1|participant_id" in param.prior
 
 
 @pytest.mark.parametrize(
     "bounds", [None, (-np.inf, np.inf)], ids=["no-bounds", "unbounded"]
 )
-def test_group_only_bounds_warning_requires_finite_bounds(
-    cavanagh_test, caplog, bounds
-):
-    """Do not claim omitted bounds when no finite response bound exists."""
+def test_group_only_default_guard_requires_finite_bounds(cavanagh_test, bounds):
+    """Keep the generic group default when response support is unbounded."""
     param = RegressionParam(
         name="v",
         formula="v ~ 0 + (1 | participant_id)",
@@ -968,9 +970,36 @@ def test_group_only_bounds_warning_requires_finite_bounds(
         link="identity",
     )
 
-    param.make_safe_priors(cavanagh_test, {}, is_ddm=True, noncentered=False)
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=False)
 
-    assert not any("HSSM #1269" in record.message for record in caplog.records)
+    assert "1|participant_id" in param.prior
+
+
+@pytest.mark.parametrize(
+    "prior_key", ["1|participant_id", "group_specific"], ids=["exact", "wildcard"]
+)
+def test_bounded_group_only_default_guard_preserves_explicit_prior(
+    cavanagh_test, prior_key
+):
+    """Leave exact and wildcard centered hierarchies authoritative."""
+    explicit = bmb.Prior(
+        "Normal",
+        mu=bmb.Prior("Normal", mu=0.5, sigma=0.2),
+        sigma=bmb.Prior("HalfNormal", sigma=0.1),
+        noncentered=False,
+    )
+    param = RegressionParam(
+        name="v",
+        formula="v ~ 0 + (1 | participant_id)",
+        prior={prior_key: explicit},
+        bounds=(0.0, 1.0),
+        link="identity",
+    )
+
+    param.make_safe_priors(cavanagh_test, {}, is_ddm=False, noncentered=True)
+
+    assert param.prior == {prior_key: explicit}
+    assert param.prior[prior_key] is explicit
 
 
 @pytest.mark.parametrize(
@@ -1084,15 +1113,8 @@ def test_make_safe_priors(cavanagh_test, caplog, param_name, bounds, is_ddm):
         bounds=bounds,
     )
 
-    param_no_common_intercept.make_safe_priors(cavanagh_test, {}, is_ddm=False)
-
-    assert any("limitation" in record.msg for record in caplog.records)
-    assert "Intercept" not in param_no_common_intercept.prior
-    group_intercept_prior = param_no_common_intercept.prior["1|participant_id"]
-    group_slope_prior = param_no_common_intercept.prior["theta|participant_id"]
-
-    _check_group_prior(group_intercept_prior)
-    _check_group_prior(group_slope_prior)
+    with pytest.raises(ValueError, match="cannot generate a qualified default"):
+        param_no_common_intercept.make_safe_priors(cavanagh_test, {}, is_ddm=False)
 
     # Change back after testing
     hssm.set_floatX("float32")

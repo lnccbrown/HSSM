@@ -269,9 +269,9 @@ def get_default_prior(
     * common_intercept: Bounded Normal prior (N(mean(bounds), 0.25)).
     * common: Normal prior (N(0, 0.25)).
     * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3)). Under a
-      transformed link this correctly lives on an unbounded predictor scale. Finite
-      coefficient bounds for identity-linked group-only intercepts are not yet
-      supported; see HSSM #1269.
+      transformed link this correctly lives on an unbounded predictor scale. Safe
+      generation fails closed for a finitely bounded, identity-linked group-only
+      intercept because this generic hierarchy does not respect response support.
     * group_specific: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3).
 
     This function is taken from bambi.priors.prior.py and modified to handle hssm-

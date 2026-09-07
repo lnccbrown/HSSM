@@ -28,6 +28,16 @@ def _group_only_data() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _choice_only_data() -> pd.DataFrame:
+    """Return deterministic choice data for the generic bounded-prior path."""
+    return pd.DataFrame(
+        {
+            "response": [-1, 1, 1, -1, 1, -1, -1, 1],
+            "participant_id": ["p0"] * 4 + ["p1"] * 4,
+        }
+    )
+
+
 def _build_ddm(parameter: str, formula: str, noncentered=True) -> hssm.HSSM:
     """Build a small analytical DDM without sampling or init-value processing."""
     fixed = {"v": 1.0, "a": 1.5, "z": 0.5, "t": 0.2}
@@ -101,6 +111,74 @@ def _build_group_only_intercept(
         **fixed,
         **kwargs,
     )
+
+
+def _build_bounded_generic_group_only(
+    *, link=None, prior=None, prior_settings="safe"
+) -> hssm.HSSM:
+    """Build the generic positive softmax hierarchy used by the release guard."""
+    specification: dict[str, object] = {
+        "name": "beta",
+        "formula": "beta ~ 0 + (1 | participant_id)",
+    }
+    if link is not None:
+        specification["link"] = link
+    if prior is not None:
+        specification["prior"] = {"1|participant_id": prior}
+
+    return hssm.HSSM(
+        data=_choice_only_data(),
+        model="softmax_inv_temperature_2",
+        include=[specification],
+        logit1=1.0,
+        p_outlier=0.0,
+        prior_settings=prior_settings,
+        noncentered=True,
+        process_initvals=False,
+        initval_jitter=0.0,
+    )
+
+
+def test_generic_bounded_identity_group_default_fails_before_bambi():
+    """Reject the unqualified generated hierarchy at HSSM construction time."""
+    with pytest.raises(ValueError) as error:
+        _build_bounded_generic_group_only()
+
+    message = str(error.value)
+    assert "cannot generate a qualified default" in message
+    assert "bounded parameter 'beta'" in message
+    assert "(0.0, inf)" in message
+
+
+def test_generic_bounded_transformed_group_default_builds_with_finite_start():
+    """Keep safe predictor-scale priors and usable initialization under a log link."""
+    model = _build_bounded_generic_group_only(link="log")
+    point = model.pymc_model.initial_point()
+
+    assert model.params["beta"].prior["1|participant_id"].name == "Normal"
+    assert np.isfinite(model.pymc_model.compile_logp()(point))
+    assert find_disconnected_free_rvs(model.pymc_model) == []
+
+
+@pytest.mark.parametrize("prior_settings", ["safe", None])
+def test_generic_bounded_identity_accepts_explicit_natural_support_hierarchy(
+    prior_settings,
+):
+    """Keep an explicit positive centered hierarchy under either prior policy."""
+    prior = bmb.Prior(
+        "Gamma",
+        mu=bmb.Prior("Gamma", mu=1.0, sigma=0.5),
+        sigma=bmb.Prior("HalfNormal", sigma=0.25),
+        noncentered=False,
+    )
+    model = _build_bounded_generic_group_only(
+        prior=prior, prior_settings=prior_settings
+    )
+    point = model.pymc_model.initial_point()
+
+    assert model.params["beta"].prior["1|participant_id"] is prior
+    assert np.isfinite(model.pymc_model.compile_logp()(point))
+    assert find_disconnected_free_rvs(model.pymc_model) == []
 
 
 @pytest.mark.parametrize("noncentered", [True, False])
