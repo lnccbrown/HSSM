@@ -10,21 +10,66 @@ This version includes the following changes:
 
 3. **`plot_model_cartoon` accepts `hist_height="auto"`** (#1127): fits the tallest RT-histogram curve to 90% of the vertical headroom between the histogram baseline (ribbon-aware — expanding bounds are cleared too) and the upper y-limit, so histograms can never overrun the axes; resolves per facet. Its mirror image, `ylims="auto"`, keeps the raw density scale and grows the frame around the content instead (never below the default limits; the two spellings are mutually exclusive). The defaults remain unchanged. The >2-choice renderer now also draws per-choice drift-uncertainty cones in band mode (graded fills in each accumulator's color; previously slope uncertainty appeared only as per-draw spaghetti in the samples display).
 
-4. **Safe priors now zero-center matching group-specific effects** (#1224). HSSM matches each Formulae group expression to an exact common-term counterpart and assigns the generated group deviation `mu=0`. This removes disconnected group-mean variables under non-centering and the redundant common/group location under centering. Explicit priors are not rewritten, including Bambi's `common` and `group_specific` wildcards; parameterization diagnostics now describe the graph Bambi actually builds. Item 11 below adds compatibility validation and defines population-location ownership for unmatched group-only effects.
+4. **Safe priors now zero-center matching group-specific effects** (#1224). HSSM matches each Formulae group expression to an exact common-term counterpart and assigns the generated group deviation `mu=0`. This removes disconnected group-mean variables under non-centering and the redundant common/group location under centering. Explicit priors are not rewritten, including Bambi's `common` and `group_specific` wildcards; parameterization diagnostics now describe the graph Bambi actually builds. Item 12 below adds compatibility validation and defines population-location ownership for unmatched group-only effects.
 
 5. **`hssm.Link` now constructs Bambi built-in and custom links** (#1231). Standard links delegate correctly to Bambi, while HSSM's bounded `gen_logit` behavior remains unchanged.
 
-6. **Safe common-intercept priors now recognize every identity-link spelling consistently** (#1232). An omitted link, `"identity"`, `bambi.Link("identity")`, and `hssm.Link("identity")` all retain response-scale priors, including HDDM-derived priors; transformed links use a coefficient-scale `Normal(mu=0, sigma=0.25)`. Item 11 below extends semantic identity handling to generated unmatched group-only intercepts and defines their transformed-link predictor-scale behavior. See [Link functions and safe priors](tutorials/link_functions.ipynb) for the underlying model-design logic.
+6. **Safe common-intercept priors now recognize every identity-link spelling consistently** (#1232). An omitted link, `"identity"`, `bambi.Link("identity")`, and `hssm.Link("identity")` all retain response-scale priors, including HDDM-derived priors; transformed links use a coefficient-scale `Normal(mu=0, sigma=0.25)`. Item 12 below extends semantic identity handling to generated unmatched group-only intercepts and defines their transformed-link predictor-scale behavior. See [Link functions and safe priors](tutorials/link_functions.ipynb) for the underlying model-design logic.
 
 7. **Invalid model-level prior and link presets now fail fast** (#1233). `prior_settings` accepts only `"safe"` or `None`, and `link_settings` accepts only `"log_logit"` or `None`; wrong-case strings, booleans, mappings, and other unsupported values now raise a clear `ValueError` instead of silently changing prior, link, initial-value, or display behavior. The API documentation now clarifies that both presets act on regression parameters: `prior_settings=None` delegates missing regression-term priors to Bambi but leaves HSSM's simple-parameter defaults unchanged. The Poisson-race tutorial has also been migrated to marimo and no longer presents `prior_settings` as a prior dictionary.
 
 8. **`hssm.load_data` now returns a `pd.DataFrame` unconditionally** (#1146). Its `dataset` argument is required, and the return type is no longer `pd.DataFrame | str`, which forced type-checkers (and users) to narrow away a `str` branch that existed only to print the dataset listing. Use the new **`hssm.list_data()`** to get the names of the built-in datasets as a `tuple[str, ...]` (mirroring `hssm.list_models()`). Breaking: `hssm.load_data()` with no argument now raises `TypeError` instead of returning a listing string.
 
-9. **New built-in model: `gamma_drift_angle`** (#1296) -- `gamma_drift` with a linearly collapsing (angle) decision bound. Parameters `v, a, z, t, theta, shape, scale, c` in ssms registry order (`theta` at index 4 -- the order is the ONNX input contract), bounds set to the network training box, and a registry cross-check test asserting both against `ssm-simulators`. The LAN artifact ships at the root of `franklab/HSSM`; its parameter-recovery report (published alongside) documents identifiability limits of `shape`/`scale` when the collapsing bound truncates the drift bump -- see the model card on the Hub.
+9. **New built-in model: `gamma_drift`** (#1248) -- a drift-diffusion model whose drift is a constant `v` plus a gamma-shaped bump with signed peak amplitude `c`, its time course set by `shape` and `scale`. This is the conflict-task (DMC-style) family: a negative `c` pulls evidence toward the wrong boundary early in the trial, then decays back to baseline. Parameters `v, a, z, t, shape, scale, c`.
 
-10. **New built-in model: `angle_extended`** (#1298) -- the angle model with drift bounds widened to (-6, 6) for designs producing strong evidence. Bounds and parameter order asserted against the `ssm-simulators` registry; the LAN passed a 240-fit parameter-recovery sweep with zero coverage or bias failures (report published beside the artifact). Raises the `ssm-simulators` floor to `>=0.14.0`, the first release containing the model.
+10. **New built-in model: `gamma_drift_angle`** (#1296) -- `gamma_drift` with a linearly collapsing (angle) decision bound. Parameters `v, a, z, t, theta, shape, scale, c` in ssms registry order (`theta` at index 4 -- the order is the ONNX input contract), bounds set to the network training box, and a registry cross-check test asserting both against `ssm-simulators`. The LAN artifact ships at the root of `franklab/HSSM`; its parameter-recovery report (published alongside) documents identifiability limits of `shape`/`scale` when the collapsing bound truncates the drift bump -- see the model card on the Hub.
 
-11. **Safe priors now preserve a unique unmatched group-only population location and reject ambiguous or unrepresentable specifications** ([#1225](https://github.com/lnccbrown/HSSM/issues/1225)). When HSSM generates a prior for a group term with no exact common Formulae counterpart, the group distribution owns the population location. HSSM therefore preserves its location-bearing hierarchy and centers that generated term even when the model or component requested non-centering, because Bambi's current non-centered construction omits `mu`. For previously generated unmatched Normal terms under default non-centering, this intentionally changes the likelihood by reconnecting the location that Bambi had discarded. Exact common/group matches remain zero-mean deviations and honor the requested parameterization ([#1224](https://github.com/lnccbrown/HSSM/issues/1224)). Repeated unmatched expressions now fail when safe generation has no unique owner. Explicit priors are never rewritten, but HSSM raises before Bambi when a group prior cannot be represented faithfully and warns about buildable centered specifications with multiple free owners of one location. Identity-linked group-only intercepts retain their response-scale hierarchy for every identity spelling ([#1232](https://github.com/lnccbrown/HSSM/issues/1232)); transformed links use a hierarchy on the linear-predictor scale. For generic models, safe generation now fails closed when such an identity-linked intercept has finite response bounds, rather than inventing an unqualified unbounded hierarchy ([#1269](https://github.com/lnccbrown/HSSM/issues/1269)). Explicit priors remain authoritative, and exact/black-box HDDM likelihoods retain their calibrated natural-support hierarchies. Follow-ups cover upstream location-aware non-centering ([#1268](https://github.com/lnccbrown/HSSM/issues/1268), [Bambi #1003](https://github.com/bambinos/bambi/issues/1003)) and broader numeric regression-term semantics ([#1271](https://github.com/lnccbrown/HSSM/issues/1271)).
+11. **New built-in model: `angle_extended`** (#1298) -- the angle model with drift bounds widened to (-6, 6) for designs producing strong evidence. Bounds and parameter order asserted against the `ssm-simulators` registry; the LAN passed a 240-fit parameter-recovery sweep with zero coverage or bias failures (report published beside the artifact). Raises the `ssm-simulators` floor to `>=0.14.0`, the first release containing the model.
+
+12. **Safe priors now preserve a unique unmatched group-only population location and reject ambiguous or unrepresentable specifications** ([#1225](https://github.com/lnccbrown/HSSM/issues/1225)). When HSSM generates a prior for a group term with no exact common Formulae counterpart, the group distribution owns the population location. HSSM therefore preserves its location-bearing hierarchy and centers that generated term even when the model or component requested non-centering, because Bambi's current non-centered construction omits `mu`. For previously generated unmatched Normal terms under default non-centering, this intentionally changes the likelihood by reconnecting the location that Bambi had discarded. Exact common/group matches remain zero-mean deviations and honor the requested parameterization ([#1224](https://github.com/lnccbrown/HSSM/issues/1224)). Repeated unmatched expressions now fail when safe generation has no unique owner. Explicit priors are never rewritten, but HSSM raises before Bambi when a group prior cannot be represented faithfully and warns about buildable centered specifications with multiple free owners of one location. Identity-linked group-only intercepts retain their response-scale hierarchy for every identity spelling ([#1232](https://github.com/lnccbrown/HSSM/issues/1232)); transformed links use a hierarchy on the linear-predictor scale. For generic models, safe generation now fails closed when such an identity-linked intercept has finite response bounds, rather than inventing an unqualified unbounded hierarchy ([#1269](https://github.com/lnccbrown/HSSM/issues/1269)). Explicit priors remain authoritative, and exact/black-box HDDM likelihoods retain their calibrated natural-support hierarchies. Follow-ups cover upstream location-aware non-centering ([#1268](https://github.com/lnccbrown/HSSM/issues/1268), [Bambi #1003](https://github.com/bambinos/bambi/issues/1003)) and broader numeric regression-term semantics ([#1271](https://github.com/lnccbrown/HSSM/issues/1271)).
+
+#### Breaking changes that require migration:
+
+1. **Safe priors now refuse to invent a hierarchy for a bounded parameter** (#1269). With the
+   default `prior_settings="safe"`, a **group-only intercept** — a formula with no matching common
+   intercept, such as `v ~ 0 + (1|subject)` or `v ~ -1 + (1|subject)` — on an identity-linked
+   parameter that carries any finite bound now raises `ValueError` instead of silently generating an
+   unbounded hierarchy. HSSM's generic group hierarchy is unbounded, so applying it to a bounded
+   parameter through an identity link would place a response-scale default outside the parameter's
+   support.
+
+   **This affects every `approx_differentiable` (LAN) model, including existing ones** such as
+   `angle`, `weibull`, `levy` and `ornstein` — not only models new in this release. Exact and
+   blackbox `ddm`, `ddm_sdv` and `full_ddm` keep the previous warning. The ordinary hierarchical
+   form `v ~ 1 + (1|subject)` is unaffected.
+
+   To migrate, pick one:
+   - keep a common intercept: `v ~ 1 + (1|subject)`;
+   - use a support-respecting link, e.g. `link_settings="log_logit"`;
+   - supply an explicit group prior for the term (or a `group_specific` wildcard) — note this
+     currently also requires `noncentered=False` for that parameter;
+   - set `prior_settings=None` and specify the complete prior policy yourself.
+
+2. **Explicit group-specific priors that bambi cannot represent faithfully now raise** (#1225).
+   Previously a logged warning, these are now an aggregated `ValueError` raised before sampling.
+   Under the default non-centered parameterization, an explicit group prior supplying a `mu`
+   hyperprior cannot be represented, because bambi builds `offset * sigma` and drops `mu`. Pass
+   `noncentered=False` for that parameter to keep the prior as written.
+
+3. **`ddm_sdv`'s `approx_differentiable` `sv` bound widened from `(0.0, 1.0)` to `(0.0, 2.5)`**
+   (#1230), matching the range the shipped network was actually trained on. The bound feeds
+   default priors and initial values, so fits of existing `ddm_sdv` models may differ from
+   0.4.0.
+
+4. **`hssm.load_data()` now requires its `dataset` argument** (#1146) and always returns a
+   `pd.DataFrame`. Use the new `hssm.list_data()` to list the built-in datasets.
+
+#### Dependency changes:
+
+1. **`ssm-simulators` floor raised to `>=0.14.0`** — the first release containing `angle_extended`.
+   0.14.0 also fixes `omission_p` / `choice_p_no_omission`, which were computed against the wrong
+   column and read as identically zero on deadline models.
+
 
 ### 0.4.0
 
