@@ -10,6 +10,8 @@ pulls in the ``hssm`` package, so run in the repo's uv venv::
 Patterned after tests/test_rlssm_config.py.
 """
 
+from dataclasses import replace
+
 import pytest
 
 from hssm.addm.config import aDDMConfig
@@ -48,6 +50,28 @@ def test_instantiable_and_subclass():
 
 def test_validate_ok():
     aDDMConfig().validate()  # must not raise
+
+
+def test_response_domain_compatibility_view_must_match():
+    domains = {"response": {"kind": "categorical", "values": (-1, 1)}}
+    with pytest.raises(ValueError, match="either `response_domains` or legacy"):
+        aDDMConfig.from_addm_dict({"response_domains": domains, "choices": (-1, 1)})
+
+    config = aDDMConfig(response_domains=domains)
+    config.validate()
+    assert replace(config).choices == (-1, 1)
+
+    mismatched = aDDMConfig(
+        response_domains={"response": {"kind": "categorical", "values": (0, 1)}}
+    )
+    with pytest.raises(ValueError, match="either `response_domains` or legacy"):
+        mismatched.validate()
+
+    noncategorical = aDDMConfig(
+        response_domains={"response": {"kind": "continuous"}}, choices=None
+    )
+    with pytest.raises(ValueError, match="requires one categorical"):
+        noncategorical.validate()
 
 
 def test_validate_rejects_unknown_attention_process():
@@ -92,6 +116,18 @@ def test_from_addm_dict_roundtrip():
     assert rebuilt.params_default == src.params_default
     assert rebuilt.attention_process == src.attention_process
     assert rebuilt.model_name == src.model_name
+
+
+def test_from_addm_dict_detaches_nested_response_domains():
+    """The dict adapter owns its canonical metadata before validation."""
+    domains = {"response": {"kind": "categorical", "values": [-1, 1]}}
+    config = aDDMConfig.from_addm_dict({"response_domains": domains, "choices": None})
+
+    domains["response"]["values"][0] = 0
+
+    assert config.response_domains == {
+        "response": {"kind": "categorical", "values": [-1, 1]}
+    }
 
 
 if __name__ == "__main__":

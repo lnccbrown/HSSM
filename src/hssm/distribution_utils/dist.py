@@ -7,6 +7,7 @@ generation ops.
 
 import logging
 from collections.abc import Callable
+from functools import partial
 from os import PathLike
 from typing import Any, Literal, Protocol, cast, get_args
 
@@ -195,6 +196,7 @@ def make_hssm_rv(
     list_params: list[str],
     lapse: bmb.Prior | float | None = None,
     is_choice_only: bool = False,
+    expected_obs_dim: int | None = None,
 ) -> type[RandomVariable]:
     """Build a RandomVariable Op according to the list of parameters.
 
@@ -208,6 +210,9 @@ def make_hssm_rv(
         A bmb.Prior object representing the lapse distribution.
     is_choice_only : bool
         Whether the model is a choice-only model.
+    expected_obs_dim : int, optional
+        Configured number of physical response columns. When supplied, it must
+        agree with the simulator's effective observation width.
 
     Returns
     -------
@@ -215,7 +220,18 @@ def make_hssm_rv(
         A class of RandomVariable that are to be used in a `pm.Distribution`.
     """
     simulator_fun_internal = get_simulator_fun_internal(simulator_fun)
-    model_name, choices, obs_dim_int = validate_simulator_fun(simulator_fun_internal)
+    model_name, choices, declared_obs_dim = validate_simulator_fun(
+        simulator_fun_internal
+    )
+    effective_obs_dim = 1 if is_choice_only else declared_obs_dim
+    comparison_obs_dim = (
+        declared_obs_dim if callable(simulator_fun) else effective_obs_dim
+    )
+    if expected_obs_dim is not None and comparison_obs_dim != expected_obs_dim:
+        raise ValueError(
+            f"The simulator observation width {comparison_obs_dim} does not match "
+            f"the configured response width {expected_obs_dim}."
+        )
 
     if lapse is not None and list_params[-1] != "p_outlier":
         list_params.append("p_outlier")
@@ -249,7 +265,7 @@ def make_hssm_rv(
 
         # Override the output from ssm_simulator based on whether the model is
         # choice-only.
-        output = "()" if is_choice_only else f"({obs_dim_int})"
+        output = "()" if is_choice_only else f"({effective_obs_dim})"
         signature = f"{','.join(['()'] * len(list_params))}->{output}"
 
         dtype = "floatX"
@@ -319,7 +335,7 @@ def make_hssm_rv(
                 size,
                 rng,
                 simulator_fun_internal,
-                obs_dim_int,
+                effective_obs_dim,
                 *args,
                 **kwargs,
             )
@@ -440,6 +456,7 @@ def make_distribution(
     fixed_vector_params: dict[str, np.ndarray] | None = None,
     params_is_trialwise: list[bool] | None = None,
     is_choice_only: bool = False,
+    expected_obs_dim: int | None = None,
 ) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -486,6 +503,9 @@ def make_distribution(
         When ``None``, no graph-level broadcasting is applied.
     is_choice_only : optional
         Whether the model is a choice-only model.
+    expected_obs_dim : int, optional
+        Configured number of physical response columns. This is checked against
+        generated RandomVariable metadata.
 
     Returns
     -------
@@ -502,6 +522,7 @@ def make_distribution(
             list_params=list_params,
             lapse=lapse,
             is_choice_only=is_choice_only,
+            expected_obs_dim=expected_obs_dim,
         )
         rv_instance = random_variable()
     elif isinstance(rv, str):
@@ -510,6 +531,7 @@ def make_distribution(
             list_params=list_params,
             lapse=lapse,
             is_choice_only=is_choice_only,
+            expected_obs_dim=expected_obs_dim,
         )
         rv_instance = random_variable()
     else:
@@ -718,6 +740,7 @@ def make_family(
     parent: str = "v",
     likelihood_name: str = "SSM Likelihood",
     family_name="SSM Family",
+    obs_dim: int = 2,
 ) -> bmb.Family:
     """Build a family in bambi.
 
@@ -735,6 +758,8 @@ def make_family(
         the name of the likelihood function. Defaults to "SSM Likelihood".
     family_name
         the name of the family. Defaults to "SSM Family".
+    obs_dim
+        Number of physical response columns in posterior-predictive draws.
 
     Returns
     -------
@@ -745,7 +770,12 @@ def make_family(
         likelihood_name, parent=parent, params=list_params, dist=dist
     )
 
-    family = SSMFamily(family_name, likelihood=likelihood, link=link)
+    family = SSMFamily(
+        family_name,
+        likelihood=likelihood,
+        link=link,
+        obs_dim=obs_dim,
+    )
 
     return family
 
@@ -753,9 +783,10 @@ def make_family(
 class SSMFamily(bmb.Family):
     """Extends bmb.Family to get around the dimensionality mismatch."""
 
-    def create_extra_pps_coord(self):
-        """Create an extra dimension."""
-        return np.arange(2)
+    def __init__(self, name, likelihood, link, obs_dim: int = 2):
+        super().__init__(name, likelihood, link)
+        if obs_dim > 1:
+            self.create_extra_pps_coord = partial(np.arange, obs_dim)
 
 
 def make_likelihood_callable(

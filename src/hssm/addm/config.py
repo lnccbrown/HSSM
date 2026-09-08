@@ -13,11 +13,12 @@ inherited as ``None`` and injected by ``aDDM.__init__`` via
 """
 
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from typing import Any
 
 from .._types import LoglikKind
-from ..config import BaseModelConfig
+from ..config import BaseModelConfig, _resolve_response_domains
 from .attention_process import resolve_attention_process
 
 
@@ -60,7 +61,7 @@ class aDDMConfig(BaseModelConfig):
     model_name: str = "addm"
     description: str | None = "Attentional Drift Diffusion Model"
     response: list[str] = field(default_factory=lambda: ["rt", "response"])
-    choices: tuple[int, ...] = (-1, 1)
+    choices: tuple[int, ...] | None = (-1, 1)
     list_params: list[str] = field(
         default_factory=lambda: ["eta", "kappa", "a", "b", "x0", "t"]
     )
@@ -90,10 +91,17 @@ class aDDMConfig(BaseModelConfig):
     continuation_mode: str = "prolong_last_fixation"
     continuation_params: dict | None = None
     # ``loglik`` and ``backend`` are inherited (default ``None``) and injected by
-    # ``aDDM.__init__`` via ``dataclasses.replace`` in Commit 4 — not redeclared here.
+    # ``aDDM.__init__`` via ``dataclasses.replace`` — not redeclared here.
 
     def validate(self) -> None:
         """Validate the configuration (mirrors ``RLSSMConfig.validate``)."""
+        response_domains, choices = _resolve_response_domains(
+            self.response, self.response_domains, self.choices
+        )
+        if choices is None:
+            raise ValueError("aDDM requires one categorical response domain.")
+        self.response_domains = response_domains
+        self.choices = choices
         if not self.list_params:
             raise ValueError("Please provide `list_params` in the configuration.")
         # Raises ValueError (unknown name) / TypeError (bad type) on failure.
@@ -128,5 +136,15 @@ class aDDMConfig(BaseModelConfig):
     @classmethod
     def from_addm_dict(cls, config_dict: dict[str, Any]) -> "aDDMConfig":
         """Build an ``aDDMConfig`` from a dict, ignoring unknown keys."""
+        if (
+            config_dict.get("response_domains") is not None
+            and config_dict.get("choices") is not None
+        ):
+            raise ValueError(
+                "Provide either `response_domains` or legacy `choices`, not both."
+            )
         field_names = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in config_dict.items() if k in field_names})
+        init_kwargs = {k: v for k, v in config_dict.items() if k in field_names}
+        if init_kwargs.get("response_domains") is not None:
+            init_kwargs["response_domains"] = deepcopy(init_kwargs["response_domains"])
+        return cls(**init_kwargs)
