@@ -674,6 +674,12 @@ def _(mo):
     likelihood, and there is no competing `v_Intercept`. HSSM's generated safe
     priors use this centered fallback automatically when one unmatched group
     term is the unique population-location owner.
+
+    This applies to exact and blackbox HDDM likelihoods. For `approx_differentiable`
+    (LAN) models, whose parameters carry finite bounds, safe generation instead
+    **fails closed** on an identity-linked group-only intercept and asks for an
+    explicit modelling decision — see the Breaking changes section of the 0.5.0
+    changelog.
     """)
     return
 
