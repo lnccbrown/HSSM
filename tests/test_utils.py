@@ -415,3 +415,41 @@ def test_predictive_idata_to_dataframe(data_ddm):
     assert df is not None
     assert df.shape == (10 * data_ddm.shape[0], 5)
     assert set(df.columns) == {"chain", "draw", "rt", "response", "__obs__"}
+
+
+def test_response_evaluate_new_data():
+    """Evaluate the response term on unseen data.
+
+    Regression test for the bambi 0.20 upgrade: `bambi.utils` no longer exports
+    `response_evaluate_new_data`, so HSSM carries its own equivalent.
+    """
+    import bambi as bmb
+
+    from hssm.utils import _response_evaluate_new_data
+
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"y": rng.normal(size=50), "x": rng.normal(size=50)})
+    model = bmb.Model("y ~ x", df)
+
+    new_data = pd.DataFrame({"y": rng.normal(size=7), "x": rng.normal(size=7)})
+    evaluated = _response_evaluate_new_data(model, new_data)
+
+    assert np.allclose(np.squeeze(evaluated), new_data["y"].to_numpy())
+
+
+def test_response_term_label_tracks_alias():
+    """The response term's `label` is the alias when set, the name otherwise.
+
+    Regression test for the bambi 0.20 upgrade: this replaces the removed
+    `bambi.utils.get_aliased_name` helper.
+    """
+    import bambi as bmb
+
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({"y": rng.normal(size=50), "x": rng.normal(size=50)})
+    model = bmb.Model("y ~ x", df)
+
+    assert model.response_term.label == "y"
+
+    model.set_alias({"y": "aliased_y"})
+    assert model.response_term.label == "aliased_y"

@@ -15,7 +15,7 @@ import numpy as np
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
-from bambi.backend.utils import get_distribution_from_prior
+from bambi.backend.pymc.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
 from ssms.hssm_support import (
     get_simulator_fun_internal,
