@@ -259,7 +259,7 @@ publish-url = "https://test.pypi.org/legacy/"
 
 [tool.uv.sources]
 hssm = { workspace = true }
-bambi = { git = "https://github.com/bambinos/bambi.git" }
+bambi = { git = "https://github.com/bambinos/bambi.git", branch = "dev" }
 
 [tool.pyrefly]
 preset = "legacy"
