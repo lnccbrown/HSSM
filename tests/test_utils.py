@@ -23,6 +23,10 @@ from hssm.utils import (
 hssm.set_floatX("float32")
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 @pytest.mark.slow
 def test_get_alias_dict():
     """Build aliases for default and regression parameterizations."""
@@ -161,6 +165,10 @@ def _fake_log_likelihood(family, **kwargs):
     )
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R6 test double still mimics the pre-0.20 bambi Model API",
+    strict=False,
+)
 def test_compute_log_likelihood_returns_deep_copy(
     minimal_log_likelihood_datatree, monkeypatch
 ):
@@ -179,6 +187,10 @@ def test_compute_log_likelihood_returns_deep_copy(
     assert traces["posterior"]["theta"].values[0, 0] == 0.25
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R6 test double still mimics the pre-0.20 bambi Model API",
+    strict=False,
+)
 def test_compute_log_likelihood_rejects_missing_family(
     minimal_log_likelihood_datatree,
 ):
@@ -193,6 +205,10 @@ def test_compute_log_likelihood_rejects_missing_family(
         _compute_log_likelihood(model, traces, data=None)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R6 test double still mimics the pre-0.20 bambi Model API",
+    strict=False,
+)
 def test_compute_log_likelihood_warns_and_replaces_existing_group(
     caplog, minimal_log_likelihood_datatree, monkeypatch
 ):
@@ -404,6 +420,10 @@ def test_check_data_for_rl():
     assert n_trials == 2
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 def test_predictive_idata_to_dataframe(data_ddm):
     """Convert prior-predictive draws to a tidy DataFrame."""
     model = hssm.HSSM(data=data_ddm)

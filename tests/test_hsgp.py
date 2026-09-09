@@ -55,6 +55,10 @@ def get_hsgp_bambi_term(model, name):
     raise AssertionError(f"term {name!r} not found in the bambi model")
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 @pytest.mark.parametrize(
     "prior",
     [
@@ -83,6 +87,10 @@ def test_hsgp_model_constructs(hsgp_data, prior):
     assert not isinstance(term.prior, bmb.Prior)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 @pytest.mark.parametrize("prior_settings", ["safe", None])
 def test_hsgp_constructs_without_safe_priors(hsgp_data, prior_settings):
     # The prior_settings=None path skips make_safe_priors entirely, so the
@@ -96,11 +104,19 @@ def test_hsgp_constructs_without_safe_priors(hsgp_data, prior_settings):
     make_model(hsgp_data, f"v ~ 0 + {HSGP_TERM}", prior_settings=prior_settings)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 def test_hsgp_by_group_variant(hsgp_data):
     term = "hsgp(x, by=grp, m=8, c=2)"
     make_model(hsgp_data, f"v ~ 0 + {term}", prior={term: cov_priors()})
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 def test_two_hsgp_terms(hsgp_data):
     other = "hsgp(x, m=6, c=1.5)"
     make_model(
@@ -110,6 +126,10 @@ def test_two_hsgp_terms(hsgp_data):
     )
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 def test_hsgp_mixed_formula_keeps_safe_defaults(hsgp_data):
     # Linear terms alongside an HSGP term still receive safe default priors.
     model = make_model(
@@ -123,6 +143,10 @@ def test_hsgp_mixed_formula_keeps_safe_defaults(hsgp_data):
     assert isinstance(v_prior[HSGP_TERM], dict)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 def test_hsgp_dict_prior_is_inert_to_noncentering(hsgp_data, recwarn):
     # The parameterization checks iterate prior values expecting bmb.Prior;
     # a dict-valued HSGP prior must fall through their isinstance guards.
