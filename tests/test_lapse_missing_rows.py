@@ -18,12 +18,14 @@ These tests are fast: no sampling, only graph construction and evaluation.
 from pathlib import Path
 
 import bambi as bmb
+import jax
 import numpy as np
 import pytensor
 import pytensor.tensor as pt
 import pytest
 from scipy import stats
 
+import hssm
 from hssm.distribution_utils import (
     assemble_callables,
     make_distribution,
@@ -62,6 +64,23 @@ DATA_MISSING = np.array(
 @pytest.fixture(scope="module")
 def fixture_path() -> Path:
     return Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _float64():
+    """Pin float64 for this module.
+
+    Other test modules call ``hssm.set_floatX("float32")`` at import time, which
+    pytest runs at collection, so the setting leaks across modules. The closed
+    forms below are compared at double precision, which needs float64 in both
+    PyTensor and JAX. The previous setting is restored afterwards.
+    """
+    prev_floatx = pytensor.config.floatX
+    prev_x64 = jax.config.jax_enable_x64
+    hssm.set_floatX("float64", update_jax=True)
+    yield
+    pytensor.config.floatX = prev_floatx
+    jax.config.update("jax_enable_x64", prev_x64)
 
 
 def _uniform_lapse() -> bmb.Prior:
