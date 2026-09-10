@@ -153,7 +153,11 @@ class HSSM(HSSMBase):
         be included in estimation.
     lapse : optional
         The lapse distribution. This argument is required only if `p_outlier` is not
-        `None`. Defaults to Uniform(0.0, 10.0).
+        `None`. Defaults to Uniform(0.0, 20.0). The lapse process is mixed into the
+        likelihood with weight `p_outlier`, marginalised per row type: observed
+        rows use the lapse density at the observed `rt`; missing-RT rows (choice
+        observed, no deadline) use `1 / n_choices`; omission rows (deadline) use
+        the lapse survival probability at the deadline.
     global_formula : optional
         A string that specifies a regressions formula which will be used for all model
         parameters. If you specify parameter-wise regressions in addition, these will
@@ -472,4 +476,6 @@ class HSSM(HSSMBase):
             params_is_trialwise=params_is_trialwise_base,
             # TODO: add to HSSMBase
             is_choice_only=self.is_choice_only,
+            n_choices=self.n_choices,
+            has_deadline=bool(self.deadline),
         )

@@ -430,6 +430,127 @@ def _apply_lapse_model(
     return sims_out
 
 
+MISSING_RT = -999.0
+
+
+def _to_numpy(data: Any) -> np.ndarray:
+    """Evaluate a (constant) data tensor to a numpy array."""
+    if isinstance(data, pt.TensorVariable):
+        return np.asarray(data.eval())
+    return np.asarray(data)
+
+
+def _make_lapse_func(
+    lapse: float | bmb.Prior,
+    is_choice_only: bool,
+    has_deadline: bool,
+    n_choices: int | None,
+) -> Callable[[np.ndarray], np.ndarray]:
+    """Build the function that evaluates the per-row lapse term of the mixture.
+
+    The observation model is the mixture
+    ``f(rt, c) = (1 - p) * s(rt, c) + p * l(rt) * q(c)``, with ``s`` the SSM
+    likelihood, ``l`` the lapse RT distribution and ``q(c) = 1 / n_choices``.
+    Rows with ``rt == -999.0`` are not observed at their RT, so the lapse term
+    has to be marginalised in the same way as the SSM term
+    (see :func:`assemble_callables`):
+
+    - observed rows: ``log l(rt)`` (unchanged; see issue #1323 for ``q(c)``),
+    - missing-RT rows without a deadline (choice observed): ``-log(n_choices)``,
+    - omission rows with a deadline ``d`` in the last column:
+      ``log(1 - CDF_l(d))``.
+
+    Parameters
+    ----------
+    lapse
+        A float (log-probability of a lapse response, choice-only models) or a
+        ``bmb.Prior`` describing the lapse RT distribution.
+    is_choice_only
+        Whether the model is a choice-only model. Choice-only models keep the
+        historical behaviour: the lapse term is evaluated on the whole data.
+    has_deadline
+        Whether the last column of the data is the trial deadline.
+    n_choices
+        The number of response options, needed for missing-RT rows without a
+        deadline.
+
+    Returns
+    -------
+    Callable[[np.ndarray], np.ndarray]
+        A function mapping the full ``(n_obs, k)`` data matrix to an
+        ``(n_obs,)`` vector of per-row lapse log-terms.
+    """
+    if isinstance(lapse, float):
+        lapse_logp_func: Callable[[np.ndarray], np.ndarray] | None = None
+        lapse_logsf_func: Callable[[np.ndarray], np.ndarray] | None = None
+    else:
+        lapse_dist = get_distribution_from_prior(lapse).dist(**lapse.args)
+        data_vector = pt.dvector("lapse_rt")
+        lapse_logp_func = pytensor.function(
+            [data_vector], pm.logp(lapse_dist, data_vector)
+        )
+        lapse_logsf_func = None
+        if has_deadline and not is_choice_only:
+            deadline_vector = pt.dvector("lapse_deadline")
+            try:
+                lapse_logcdf = pm.logcdf(lapse_dist, deadline_vector)
+            except NotImplementedError as e:
+                raise ValueError(
+                    f"The lapse distribution `{lapse.name}` does not implement a "
+                    "log-CDF, which is required to marginalise the lapse "
+                    "process on omission (deadline) rows. Please choose a lapse "
+                    "distribution with a `logcdf` implementation in PyMC."
+                ) from e
+            # log(1 - CDF(d)), numerically safe for CDF close to 1.
+            lapse_logsf_func = pytensor.function(
+                [deadline_vector], pt.log1mexp(lapse_logcdf)
+            )
+
+    if is_choice_only:
+        if lapse_logp_func is None:
+            return lambda data: np.full_like(data, lapse)
+        return lapse_logp_func
+
+    def lapse_func(data: np.ndarray) -> np.ndarray:
+        data = np.asarray(data)
+        rt = np.asarray(data[:, 0], dtype=np.float64)
+        is_missing = rt == MISSING_RT
+        out = np.empty(rt.shape[0], dtype=np.float64)
+
+        if lapse_logp_func is None:
+            # Float lapse: a fixed log-probability per observed row.
+            if is_missing.any():
+                raise ValueError(
+                    "A float `lapse` cannot be combined with missing-RT or "
+                    "deadline rows (rt == -999.0): there is no lapse RT "
+                    "distribution to marginalise. Please provide the lapse as a "
+                    "`bmb.Prior`."
+                )
+            out[:] = lapse
+            return out
+
+        out[~is_missing] = lapse_logp_func(rt[~is_missing])
+
+        if is_missing.any():
+            if has_deadline:
+                assert lapse_logsf_func is not None
+                deadline = np.asarray(data[is_missing, -1], dtype=np.float64)
+                out[is_missing] = lapse_logsf_func(deadline)
+            else:
+                if n_choices is None:
+                    raise ValueError(
+                        "The data contains missing-RT rows (rt == -999.0) "
+                        "without a deadline, so the lapse process contributes "
+                        "1 / n_choices to those rows, but `n_choices` was not "
+                        "provided to `make_distribution`."
+                    )
+                out[is_missing] = -np.log(n_choices)
+
+        return out
+
+    return lapse_func
+
+
 def make_distribution(
     rv: str | type[RandomVariable] | RandomVariable | Callable[..., Any],
     loglik: LogLikeFunc | pytensor.graph.Op,
@@ -440,6 +561,8 @@ def make_distribution(
     fixed_vector_params: dict[str, np.ndarray] | None = None,
     params_is_trialwise: list[bool] | None = None,
     is_choice_only: bool = False,
+    n_choices: int | None = None,
+    has_deadline: bool = False,
 ) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -486,6 +609,16 @@ def make_distribution(
         When ``None``, no graph-level broadcasting is applied.
     is_choice_only : optional
         Whether the model is a choice-only model.
+    n_choices : optional
+        The number of response options. Required when ``lapse`` is a
+        ``bmb.Prior`` and the data contains missing-RT rows (``rt == -999.0``)
+        without a deadline: the lapse process then contributes ``1 / n_choices``
+        (a uniform choice) to such rows. Defaults to ``None``.
+    has_deadline : optional
+        Whether the last column of the data holds a per-trial deadline. When
+        ``True``, rows with ``rt == -999.0`` are omissions and the lapse process
+        contributes its survival probability at the deadline,
+        ``1 - CDF_lapse(deadline)``. Defaults to ``False``.
 
     Returns
     -------
@@ -534,18 +667,12 @@ def make_distribution(
         if list_params[-1] != "p_outlier":
             list_params.append("p_outlier")
 
-        if isinstance(lapse, float):
-            lapse_func = lambda data: np.full_like(data, lapse)
-        else:
-            data_vector = pt.dvector()
-            lapse_logp = pm.logp(
-                get_distribution_from_prior(lapse).dist(**lapse.args),
-                data_vector,
-            )
-            lapse_func = pytensor.function(
-                [data_vector],
-                lapse_logp,
-            )
+        lapse_func = _make_lapse_func(
+            lapse,
+            is_choice_only=is_choice_only,
+            has_deadline=has_deadline,
+            n_choices=n_choices,
+        )
     else:
         lapse_func = None
 
@@ -618,8 +745,10 @@ def make_distribution(
                         "lapse_func is not defined. "
                         "Make sure lapse is properly initialized."
                     )
-                data_for_lapse = data if is_choice_only else data[:, 0]
-                lapse_logp = lapse_func(data_for_lapse.eval())
+                # The lapse term is a graph constant: it is evaluated once on
+                # the (constant) observed data, and p_outlier's gradient flows
+                # through the mixture weights only.
+                lapse_logp = lapse_func(_to_numpy(data))
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
