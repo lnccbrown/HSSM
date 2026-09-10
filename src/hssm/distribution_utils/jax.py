@@ -138,9 +138,12 @@ class LANLogpOp(Op):  # pylint: disable=W0223
         Parameters
         ----------
         data
-            A two-column numpy array with response time and response. Can be `None`
-            for which case the log-likelihood is computed only from the parameters,
-            which is required for choice-probability networks with binary choices.
+            A two-column numpy array with response time and response, or, for a
+            missing-data network, the single data column it takes as its last
+            input (the response for a CPN, the deadline for an OPN). Can be
+            `None` for user-supplied params-only likelihoods (`params_only=True`),
+            in which case the log-likelihood is computed from the parameters
+            alone.
         dist_params
             A list of parameters used in the likelihood computation. The parameters
             can be a mix of scalars and arrays.
@@ -323,7 +326,8 @@ def make_jax_logp_funcs_from_callable(
         this signature: `logp(data, *params, [*extra_fields]) -> jnp.ndarray` where
         extra_fields are optional additional fields that can be used in the
         likelihood computation. The `data` argument is a two-column numpy array
-        with response time and response.
+        with response time and response; for a missing-data callable it is a
+        single column (the response for a CPN, the deadline for an OPN).
     vmap:
         If `True`, the function will be vectorized using JAX's vmap. If `False`, the
         function is assumed to be already vectorized.
@@ -338,8 +342,10 @@ def make_jax_logp_funcs_from_callable(
         standard case for LANs and other likelihoods that condition on
         observed data.
         If True, the callable signature is ``f(*params)`` with no data
-        argument.  This is used for Choice Probability Networks (CPNs)
-        and Outcome Probability Networks (OPNs).
+        argument, for callables that take only the parameters. CPN and
+        OPN artifacts do **not** use this: they take the observed choice
+        (CPN) or the deadline (OPN) as their last input, so ``data`` is
+        that single column and the input vector is ``[*params, column]``.
     return_jit
         If `True`, the function will return a JIT-compiled version of the vectorized
         logp function, its VJP, and the non-jitted version of the logp function.
@@ -465,7 +471,7 @@ def make_jax_single_trial_logp_from_network_forward(
         input_vector = jnp.concatenate((param_vector, data))
         return jax_forward_fn(input_vector).squeeze()
 
-    def jax_single_trial_logp_from_opn_cpn_forward(*inputs) -> np.ndarray:
+    def jax_single_trial_logp_from_params_only_forward(*inputs) -> np.ndarray:
         """Compute the log-likelihood.
 
         A function that computes the element-wise log-likelihoods given one data point
@@ -486,6 +492,6 @@ def make_jax_single_trial_logp_from_network_forward(
         return jax_forward_fn(input_vector).squeeze()
 
     if params_only:
-        return jax_single_trial_logp_from_opn_cpn_forward
+        return jax_single_trial_logp_from_params_only_forward
     else:
         return jax_single_trial_logp_from_lan_forward

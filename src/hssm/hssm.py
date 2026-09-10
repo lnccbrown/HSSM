@@ -52,7 +52,7 @@ _MISSING_DATA_NETWORK_LAST_INPUT: dict[MissingDataNetwork, tuple[str, str]] = {
 
 
 def _check_missing_data_network_input_width(
-    loglik_missing_data: Any,
+    loglik_missing_data: "Op | Callable[..., Any] | PathLike | str",
     network: MissingDataNetwork,
     n_params: int,
 ) -> None:
@@ -63,6 +63,8 @@ def _check_missing_data_network_input_width(
     fields; see lnccbrown/HSSM#1324. Only ONNX artifacts (a path or Hub file
     name) are checked; callables and Ops are the user's responsibility, and
     networks with symbolic input dimensions are left to the loader's own check.
+    The artifact is loaded once more by `make_missing_data_callable` afterwards
+    (a Hub download is cached, so this costs one extra ``onnx.load``).
     """
     if network not in _MISSING_DATA_NETWORK_LAST_INPUT:
         return
