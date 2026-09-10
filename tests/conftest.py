@@ -13,6 +13,7 @@ import arviz as az
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
+import onnxruntime
 import pandas as pd
 import pytest
 import xarray as xr
@@ -186,6 +187,27 @@ def fixture_path():
     test file between ``tests/`` subdirectories does not break it.
     """
     return FIXTURES
+
+
+@pytest.fixture(scope="session")
+def cpn_onnxruntime():
+    """Return an onnxruntime oracle for the ``ddm_cpn.onnx`` fixture.
+
+    The returned function evaluates the choice-probability network directly on
+    ``(n, 5)`` rows ``[v, a, z, t, choice]`` (its contract since #1324) and
+    returns the ``n`` log-probabilities, independently of HSSM's JAX/PyTensor
+    wrappers, so tests can pin the input layout those wrappers build.
+    """
+    session = onnxruntime.InferenceSession(str(FIXTURES / "ddm_cpn.onnx"))
+    name = session.get_inputs()[0].name
+
+    def evaluate(rows: np.ndarray) -> np.ndarray:
+        rows = np.asarray(rows, dtype=np.float32)
+        return np.array(
+            [session.run(None, {name: row[None, :]})[0].item() for row in rows]
+        )
+
+    return evaluate
 
 
 @pytest.fixture

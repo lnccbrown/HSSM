@@ -257,7 +257,7 @@ def test_missing_rows_are_selected_by_rt_mask_not_position():
 
 
 @pytest.mark.parametrize("p", [0.05, 0.5])
-def test_missing_rt_rows_use_uniform_choice(fixture_path, p):
+def test_missing_rt_rows_use_uniform_choice(fixture_path, cpn_onnxruntime, p):
     data = DATA_MISSING
     n_obs = data.shape[0]
     assembled, _, cpn = _build_assembled(fixture_path, "pytensor", False)
@@ -268,6 +268,12 @@ def test_missing_rt_rows_use_uniform_choice(fixture_path, p):
     # The CPN takes the missing rows' observed choice as its last input.
     cpn_logp = cpn(pt.as_tensor_variable(data[:2, 1:2]), params[0][:2], *params[1:])
     cpn_logp = cpn_logp.eval()
+
+    # Absolute oracle for the PyTensor wrapper's input layout: it must have
+    # built [theta..., choice] with the choice last (#1324).
+    theta = np.array([THETA[k] for k in LIST_PARAMS])
+    rows = np.c_[np.tile(theta, (2, 1)), data[:2, 1]]
+    np.testing.assert_allclose(cpn_logp, cpn_onnxruntime(rows), rtol=1e-5)
 
     expected_missing = np.log((1.0 - p) * np.exp(cpn_logp) + p / 2.0 + FLOOR)
     np.testing.assert_allclose(logp[:2], expected_missing, rtol=1e-10)

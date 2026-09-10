@@ -3,7 +3,6 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 import onnx
-import onnxruntime
 
 from hssm.distribution_utils.jax import make_jax_single_trial_logp_from_network_forward
 from hssm.distribution_utils.onnx import make_jax_logp_funcs_from_onnx
@@ -104,15 +103,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 THETA = (0.5, 1.5, 0.5, 0.3)  # v, a, z, t
 
 
-def _cpn_onnxruntime(rows: np.ndarray) -> np.ndarray:
-    """Evaluate the CPN fixture directly with onnxruntime on (n, 5) rows."""
-    session = onnxruntime.InferenceSession(str(FIXTURES / "ddm_cpn.onnx"))
-    name = session.get_inputs()[0].name
-    rows = np.asarray(rows, dtype=np.float32)
-    return np.array([session.run(None, {name: row[None, :]})[0].item() for row in rows])
-
-
-def test_cpn_single_trial_logp_receives_choice_last():
+def test_cpn_single_trial_logp_receives_choice_last(cpn_onnxruntime):
     """The single-trial CPN logp is evaluated on ``[v, a, z, t, choice]``.
 
     Two inputs that differ only in the choice give different outputs, and each
@@ -127,11 +118,11 @@ def test_cpn_single_trial_logp_receives_choice_last():
     assert out[-1.0] != out[1.0]
     assert out[-1.0] <= 0.0 and out[1.0] <= 0.0  # log-probabilities
 
-    expected = _cpn_onnxruntime([[*THETA, -1.0], [*THETA, 1.0]])
+    expected = cpn_onnxruntime([[*THETA, -1.0], [*THETA, 1.0]])
     np.testing.assert_allclose([out[-1.0], out[1.0]], expected, rtol=1e-5)
 
 
-def test_cpn_vmapped_logp_maps_over_the_response_column():
+def test_cpn_vmapped_logp_maps_over_the_response_column(cpn_onnxruntime):
     """``make_jax_logp_funcs_from_onnx(params_only=False)`` feeds each row's choice.
 
     The data argument is the ``(n, 1)`` response column; each row is
@@ -149,5 +140,5 @@ def test_cpn_vmapped_logp_maps_over_the_response_column():
     assert out.shape == (3,)
     assert out[0] != out[1]
     assert out[0] == out[2]
-    expected = _cpn_onnxruntime([[*THETA, 1.0], [*THETA, -1.0], [*THETA, 1.0]])
+    expected = cpn_onnxruntime([[*THETA, 1.0], [*THETA, -1.0], [*THETA, 1.0]])
     np.testing.assert_allclose(out, expected, rtol=1e-5)
