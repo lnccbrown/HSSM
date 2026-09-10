@@ -422,8 +422,11 @@ def make_jax_single_trial_logp_from_network_forward(
         [rt, choice].  This is the standard case for LANs and other
         likelihoods that condition on observed data.
         If True, the returned function expects ``(*params)`` with no
-        data argument.  This is used for Choice Probability Networks
-        (CPNs) and Outcome Probability Networks (OPNs).
+        data argument, for networks that take only the parameters. CPN
+        and OPN artifacts do **not** use this: they take the observed
+        choice (CPN) or the deadline (OPN) as their last input, so
+        ``data`` is that single column and the input vector is
+        ``[*params, column]``.
 
     Returns
     -------
