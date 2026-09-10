@@ -26,16 +26,16 @@ def fixture_path():
 def data():
     arr = np.ones((100, 3), dtype=np.float32)
     arr[:, 0] = np.random.rand(100)
+    arr[:, 1] = np.random.choice([-1.0, 1.0], 100)
     arr[:, 2] = np.random.rand(100)
     missing_indices = arr[:, 0] > arr[:, 2]
     arr[missing_indices, 0] = -999.0
     return _rearrange_data(arr)
 
 
-# AF-TODO: Reactivate CPN case
 # AF-TODO: Something is broken about the is_vector == False case
 # cases = product(["opn", "cpn"], [True, False])
-cases = product(["opn"], [True])
+cases = product(["opn", "cpn"], [True])
 
 
 @pytest.mark.slow
@@ -44,6 +44,9 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
     is_cpn = cpn == "cpn"
     is_deadline = not is_cpn
 
+    # Both networks take one data column as their last input: the deadline
+    # (OPN) or the observed choice (CPN, #1324). Dropping the deadline column
+    # for the CPN makes the response the last column in both cases.
     if is_cpn:
         data = data[:, :-1]
 
@@ -60,7 +63,7 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
         missing_onnx_path,
         backend="jax",
         params_is_reg=[is_vector] + [False] * 3,
-        params_only=is_cpn,
+        params_only=False,
     )
 
     missing_callable_pytensor = make_missing_data_callable(
@@ -68,11 +71,9 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
         backend="pytensor",
     )
 
-    missing_result_jax = missing_callable_jax(
-        None if is_cpn else data[:, -1:], *dist_params
-    ).eval()
+    missing_result_jax = missing_callable_jax(data[:, -1:], *dist_params).eval()
     missing_result_pytensor = missing_callable_pytensor(
-        None if is_cpn else data[:, -1:], *dist_params
+        data[:, -1:], *dist_params
     ).eval()
 
     np.testing.assert_array_almost_equal(
@@ -83,10 +84,10 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
 
     # Second, test if the gradient of the callables in jax and pytensor give the same result
     v_grad_jax = pytensor.grad(
-        missing_callable_jax(None if is_cpn else data[:, -1:], *dist_params).sum(), v
+        missing_callable_jax(data[:, -1:], *dist_params).sum(), v
     ).eval()
     v_grad_pytensor = pytensor.grad(
-        missing_callable_pytensor(None if is_cpn else data[:, -1:], *dist_params).sum(),
+        missing_callable_pytensor(data[:, -1:], *dist_params).sum(),
         v,
     ).eval()
 
@@ -116,7 +117,7 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
         *dist_params[1:],
     ).eval()
     missing_data_jax = missing_callable_jax(
-        None if is_cpn else data[:n_missing, -1:],
+        data[:n_missing, -1:],
         v[:n_missing] if is_vector else v,
         *dist_params[1:],
     ).eval()
@@ -124,7 +125,7 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
     assembled_loglik_jax = assemble_callables(
         logp_callable_jax,
         missing_callable_jax,
-        params_only=is_cpn,
+        params_only=False,
         has_deadline=is_deadline,
     )
 
@@ -150,7 +151,7 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
     assembled_loglik_pytensor = assemble_callables(
         logp_callable_pytensor,
         missing_callable_pytensor,
-        params_only=is_cpn,
+        params_only=False,
         has_deadline=is_deadline,
     )
 
@@ -160,7 +161,7 @@ def test_make_missing_data_callable(data, fixture_path, cpn, is_vector):
         *dist_params[1:],
     ).eval()
     missing_data_pytensor = missing_callable_pytensor(
-        None if is_cpn else data[:n_missing, -1:],
+        data[:n_missing, -1:],
         v[:n_missing] if is_vector else v,
         *dist_params[1:],
     ).eval()

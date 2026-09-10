@@ -102,8 +102,11 @@ def _theta_tensors(v_vector_len: int | None = None) -> list:
 def _build_assembled(fixture_path: Path, backend: str, has_deadline: bool):
     """Assemble the DDM LAN with the OPN (deadline) or CPN (no deadline) fixture.
 
-    Cached per ``(backend, has_deadline)``: the ONNX builds dominate the module's
-    run time and the resulting Ops are reusable across graphs.
+    Both networks take one data column as their last input -- the deadline for
+    the OPN, the observed choice for the CPN (#1324) -- so ``params_only`` is
+    ``False`` for both. Cached per ``(backend, has_deadline)``: the ONNX builds
+    dominate the module's run time and the resulting Ops are reusable across
+    graphs.
     """
     params_is_reg = [True] + [False] * 3
     suffix = "opn" if has_deadline else "cpn"
@@ -118,7 +121,7 @@ def _build_assembled(fixture_path: Path, backend: str, has_deadline: bool):
             fixture_path / f"ddm_{suffix}.onnx",
             backend="jax",
             params_is_reg=params_is_reg,
-            params_only=not has_deadline,
+            params_only=False,
         )
     else:
         likelihood = make_likelihood_callable(
@@ -132,7 +135,7 @@ def _build_assembled(fixture_path: Path, backend: str, has_deadline: bool):
     assembled = assemble_callables(
         likelihood,
         missing,
-        params_only=not has_deadline,
+        params_only=False,
         has_deadline=has_deadline,
     )
     return assembled, likelihood, missing
@@ -262,7 +265,9 @@ def test_missing_rt_rows_use_uniform_choice(fixture_path, p):
     params = _theta_tensors(n_obs)
 
     logp = dist.logp(pt.as_tensor_variable(data), *params, np.float64(p)).eval()
-    cpn_logp = cpn(None, params[0][:2], *params[1:]).eval()
+    # The CPN takes the missing rows' observed choice as its last input.
+    cpn_logp = cpn(pt.as_tensor_variable(data[:2, 1:2]), params[0][:2], *params[1:])
+    cpn_logp = cpn_logp.eval()
 
     expected_missing = np.log((1.0 - p) * np.exp(cpn_logp) + p / 2.0 + FLOOR)
     np.testing.assert_allclose(logp[:2], expected_missing, rtol=1e-10)
@@ -606,7 +611,11 @@ def test_hssm_passes_n_choices_to_the_lapse_term(fixture_path):
 
     _, _, cpn = _build_assembled(fixture_path, "pytensor", False)
     v_missing = pt.as_tensor_variable(np.full(2, THETA["v"]))
-    cpn_logp = cpn(None, v_missing, *_theta_tensors()[1:]).eval()
+    cpn_logp = cpn(
+        pt.as_tensor_variable(data[is_missing][:, 1:2]),
+        v_missing,
+        *_theta_tensors()[1:],
+    ).eval()
     expected = np.log((1.0 - p) * np.exp(cpn_logp) + p / model.n_choices + FLOOR)
     np.testing.assert_allclose(logp[is_missing], expected, rtol=1e-6)
     assert np.all(np.isfinite(logp))
