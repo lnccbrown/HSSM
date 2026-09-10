@@ -10,10 +10,6 @@ from pytensor.tensor.variable import TensorVariable
 from hssm import HSSM, Link
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R3 bambi 0.20 `Link.__init__` dropped `linkinv`/`linkinv_backend`",
-    strict=False,
-)
 @pytest.mark.parametrize(
     ("name", "response_values", "predictor_values"),
     [
@@ -32,15 +28,11 @@ def test_builtin_link_matches_bambi(name, response_values, predictor_values):
         link.link(response_values), expected.link(response_values)
     )
     np.testing.assert_allclose(
-        link.linkinv(predictor_values), expected.linkinv(predictor_values)
+        link.inverse_link(predictor_values), expected.inverse_link(predictor_values)
     )
     assert link.bounds is None
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R3 bambi 0.20 `Link.__init__` dropped `linkinv`/`linkinv_backend`",
-    strict=False,
-)
 def test_builtin_link_retains_bounds_metadata():
     """Retain optional HSSM bounds after delegating construction to Bambi."""
     link = Link("identity", bounds=(-2.0, 3.0))
@@ -48,45 +40,41 @@ def test_builtin_link_retains_bounds_metadata():
     assert link.bounds == (-2.0, 3.0)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R3 bambi 0.20 `Link.__init__` dropped `linkinv`/`linkinv_backend`",
-    strict=False,
-)
 def test_custom_link_matches_bambi_semantics():
-    """Retain all three functions supplied for a valid custom link."""
+    """Retain the forward and inverse functions supplied for a custom link."""
     link = Link(
         "log1p",
         link=np.log1p,
-        linkinv=np.expm1,
-        linkinv_backend=pt.expm1,
+        inverse_link=np.expm1,
         bounds=(-1.0, np.inf),
     )
 
     assert link.name == "log1p"
     assert link.link is np.log1p
-    assert link.linkinv is np.expm1
-    assert link.linkinv_backend is pt.expm1
+    assert link.inverse_link is np.expm1
     assert link.bounds == (-1.0, np.inf)
     response_values = np.array([0.0, 0.5, 2.0])
     np.testing.assert_allclose(
-        link.linkinv(link.link(response_values)), response_values
+        link.inverse_link(link.link(response_values)), response_values
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R3 bambi 0.20 `Link.__init__` dropped `linkinv`/`linkinv_backend`",
-    strict=False,
-)
+def test_custom_link_forward_function_is_optional():
+    """Accept a custom link that supplies only the inverse, as Bambi now does."""
+    link = Link("log1p", inverse_link=np.expm1)
+
+    assert link.name == "log1p"
+    assert link.link is None
+    assert link.inverse_link is np.expm1
+
+
 def test_incomplete_custom_link_uses_bambi_validation():
-    """Raise Bambi's validation error when a custom function is missing."""
+    """Raise Bambi's validation error when the inverse link is missing."""
     with pytest.raises(
         ValueError,
-        match=(
-            "Link name 'log1p' is not supported and at least one of 'link', "
-            "'linkinv' or 'linkinv_backend' are unspecified"
-        ),
+        match=("Link name 'log1p' is not supported and 'inverse_link' is unspecified"),
     ):
-        Link("log1p", link=np.log1p, linkinv=np.expm1)
+        Link("log1p", link=np.log1p)
 
 
 def test_generalized_logit_requires_bounds():
@@ -107,17 +95,34 @@ def test_generalized_logit_round_trip():
     transformed = link.link(response_values)
 
     assert link.bounds == bounds
-    np.testing.assert_allclose(link.linkinv(transformed), response_values)
-    np.testing.assert_allclose(link.linkinv_backend(transformed), response_values)
+    np.testing.assert_allclose(link.inverse_link(transformed), response_values)
     assert str(link) == "Generalized logit link function with bounds (-2.0, 3.0)"
 
 
+def test_generalized_logit_inverse_is_pytensor_compatible():
+    """Use the single generalized-logit inverse to build a symbolic graph."""
+    link = Link("gen_logit", bounds=(-2.0, 3.0))
+    symbolic_eta = pt.vector("eta")
+
+    symbolic_parameter = link.inverse_link(symbolic_eta)
+
+    assert isinstance(symbolic_parameter, TensorVariable)
+    # `hssm.set_floatX` mutates `pytensor.config.floatX` process-wide, so match
+    # the ambient dtype rather than assuming float64.
+    predictor_values = np.array([-1.0, 0.0, 1.0], dtype=symbolic_eta.dtype)
+    np.testing.assert_allclose(
+        symbolic_parameter.eval({symbolic_eta: predictor_values}),
+        link.inverse_link(predictor_values),
+        rtol=1e-6,
+    )
+
+
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R3 bambi 0.20 `Link.__init__` dropped `linkinv`/`linkinv_backend`",
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
     strict=False,
 )
 def test_custom_link_builds_symbolic_hssm_regression():
-    """Use the custom backend inverse with a symbolic HSSM predictor."""
+    """Use the custom inverse link with a symbolic HSSM predictor."""
     data = pd.DataFrame(
         {
             "rt": [0.4, 0.5, 0.6, 0.7],
@@ -127,16 +132,11 @@ def test_custom_link_builds_symbolic_hssm_regression():
     )
     backend_inputs = []
 
-    def inverse_backend(value):
+    def inverse_link(value):
         backend_inputs.append(value)
         return pt.exp(value)
 
-    link = Link(
-        "custom_log",
-        link=np.log,
-        linkinv=np.exp,
-        linkinv_backend=inverse_backend,
-    )
+    link = Link("custom_log", link=np.log, inverse_link=inverse_link)
 
     model = HSSM(
         data=data,

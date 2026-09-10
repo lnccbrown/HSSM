@@ -23,22 +23,18 @@ class Link(bmb.Link):
     name
         The name of the link function. If it is a known name, it's not necessary to pass
         any other arguments because functions are already defined internally. If not
-        known, all of `link``, ``linkinv`` and ``linkinv_backend`` must be specified.
+        known, ``inverse_link`` must be specified.
     link : optional
-        A numerical function that maps the response to the linear predictor. Known as
-        the :math:`g` function in GLM jargon. This function operates outside the PyMC
-        graph and does not need to support PyTensor tensors. It does not need to be
-        specified when ``name`` is a known name.
-    linkinv : optional
-        A numerical function that maps the linear predictor to the response. Known as
-        the :math:`g^{-1}` function in GLM jargon, it is used for operations such as
-        posterior prediction outside the PyMC graph. It does not need to be specified
-        when ``name`` is a known name.
-    linkinv_backend : optional
-        The symbolic inverse link used to build the PyMC graph. It must accept PyTensor
-        tensors and return a symbolic PyTensor expression. It does not need to be
-        specified when ``name`` is a known name because Bambi supplies the backend
-        implementation for built-in links.
+        A function that maps the response to the linear predictor. Known as the
+        :math:`g` function in GLM jargon. It is optional for custom links because Bambi
+        does not currently use it. It does not need to be specified when ``name`` is a
+        known name.
+    inverse_link : optional
+        A function that maps the linear predictor to the response. Known as the
+        :math:`g^{-1}` function in GLM jargon. For custom links it must be compatible
+        with the active backend, which is currently PyMC. NumPy ufuncs such as
+        ``np.exp`` qualify because they dispatch to symbolic operations on PyTensor
+        tensors. It does not need to be specified when ``name`` is a known name.
     bounds : optional
         Bounds of the response scale. Only needed when ``name`` is ``gen_logit``.
 
@@ -49,16 +45,14 @@ class Link(bmb.Link):
     >>> import hssm
     >>> identity_link = hssm.Link("identity")
 
-    A custom link requires forward, inverse, and PyTensor-compatible inverse
-    functions:
+    A custom link requires a backend-compatible inverse; the forward function is
+    optional:
 
     >>> import numpy as np
-    >>> import pytensor.tensor as pt
     >>> custom_log = hssm.Link(
     ...     "custom_log",
-    ...     link=np.log,  # Numerical: response -> linear predictor
-    ...     linkinv=np.exp,  # Numerical: predictions outside the PyMC graph
-    ...     linkinv_backend=pt.exp,  # Symbolic: used inside the PyMC graph
+    ...     link=np.log,  # Optional: response -> linear predictor
+    ...     inverse_link=np.exp,  # Required: linear predictor -> response
     ... )
 
     HSSM also provides a generalized logit for bounded response scales:
@@ -70,8 +64,7 @@ class Link(bmb.Link):
         self,
         name,
         link=None,
-        linkinv=None,
-        linkinv_backend=None,
+        inverse_link=None,
         bounds: tuple[float, float] | None = None,
     ):
         if name in HSSM_LINKS:
@@ -82,20 +75,22 @@ class Link(bmb.Link):
                         "Bounds must be specified for generalized log link function."
                     )
                 self.link = self._make_generalized_logit_simple(*bounds)
-                self.linkinv = self._make_generalized_sigmoid_simple(*bounds)
-                self.linkinv_backend = self._make_generalized_sigmoid_simple(*bounds)
+                self.inverse_link = self._make_generalized_sigmoid_simple(*bounds)
         else:
             super().__init__(
                 name=name,
                 link=link,
-                linkinv=linkinv,
-                linkinv_backend=linkinv_backend,
+                inverse_link=inverse_link,
             )
 
         self.bounds = bounds
 
     def _make_generalized_sigmoid_simple(self, a, b):
-        """Make a generalized sigmoid link function with bounds a and b."""
+        """Make a generalized sigmoid inverse link with bounds a and b.
+
+        ``np.exp`` dispatches to a symbolic operation on PyTensor tensors, so the
+        returned function serves both numerical and backend use.
+        """
 
         def invlink_(x):
             return a + ((b - a) / (1 + np.exp(-x)))
