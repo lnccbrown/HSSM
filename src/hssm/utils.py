@@ -131,6 +131,7 @@ def _compute_log_likelihood(
     dt: xr.DataTree,
     data: pd.DataFrame | None,
     inplace: bool = True,
+    compile_mode: str | None = None,
 ) -> xr.DataTree | None:
     """Compute the model's log-likelihood.
 
@@ -147,6 +148,10 @@ def _compute_log_likelihood(
     inplace : bool
         If True` it will modify `dt` in-place. Otherwise, it will return a copy of
         `dt` with the `log_likelihood` group added.
+    compile_mode : str, optional
+        PyTensor compilation mode for the response log-probability graph. JAX-backed
+        HSSM models pass ``"JAX"`` so their custom likelihood Ops use their
+        ``jax_funcify`` registrations instead of PyMC's default Numba linker.
 
     Returns
     -------
@@ -171,7 +176,12 @@ def _compute_log_likelihood(
         dt, data, include_group_specific, sample_new_groups
     )
 
-    required_kwargs = {"model": model, "posterior": dt["posterior"], "data": data}
+    required_kwargs = {
+        "model": model,
+        "posterior": dt["posterior"],
+        "data": data,
+        "compile_mode": compile_mode,
+    }
 
     if not model.family:
         raise ValueError("Model family is not defined. Cannot compute log-likelihood.")
@@ -198,6 +208,7 @@ def log_likelihood(
     model: bmb.Model,
     posterior: xr.DataArray,
     data: pd.DataFrame | None = None,
+    compile_mode: str | None = None,
     **kwargs,
 ) -> xr.DataArray:
     """Evaluate the model log-likelihood.
@@ -216,6 +227,8 @@ def log_likelihood(
         It must contain the parameters that are needed
         in the distribution of the response, or
         the parameters that allow to derive them.
+    compile_mode : str, optional
+        PyTensor compilation mode for the response log-probability graph.
     kwargs :
         Parameters that are used to get draws but do
         not appear in the posterior object or
@@ -266,6 +279,7 @@ def log_likelihood(
         logp_compiled = pm.compile(
             [val for key_, val in pt_dict.items()],
             rv_logp,
+            mode=compile_mode,
             allow_input_downcast=True,
             on_unused_input="ignore",
         )
@@ -285,6 +299,7 @@ def log_likelihood(
         logp_compiled = pm.compile(
             [val for key_, val in pt_dict.items()],
             rv_logp,
+            mode=compile_mode,
             allow_input_downcast=True,
             on_unused_input="ignore",
         )

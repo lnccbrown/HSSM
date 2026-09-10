@@ -9,10 +9,12 @@ import numpy as np
 import pandas as pd
 from bambi.utils import is_hsgp_term
 from formulae import design_matrices
+from formulae.matrices import DesignMatrices
 
 from ..link import Link
-from ..prior import get_default_prior, get_hddm_default_prior
+from ..prior import _is_identity_link, get_default_prior, get_hddm_default_prior
 from .param import Param
+from .parameterization import NoncenteredSetting, _resolve_noncentered
 from .user_param import UserParam
 
 _logger = logging.getLogger("hssm")
@@ -74,6 +76,9 @@ class RegressionParam(Param):
     """
 
     terms: list[str]
+    _common_term_names: set[str]
+    _group_term_names: dict[str, str]
+    _group_terms_with_common: set[str]
     _user_specified_prior_keys: set[str]
 
     def __init__(
@@ -89,6 +94,9 @@ class RegressionParam(Param):
             name, prior, formula, link, bounds=bounds, user_param=user_param
         )
         self.terms = []
+        self._common_term_names = set()
+        self._group_term_names = {}
+        self._group_terms_with_common = set()
         # Snapshot of the prior keys the user explicitly supplied, taken
         # before make_safe_priors merges defaults in. Used by the
         # parameterization-mismatch check to scope warnings to user intent.
@@ -205,7 +213,11 @@ class RegressionParam(Param):
             )
 
     def make_safe_priors(
-        self, data: pd.DataFrame, eval_env: dict[str, Any], is_ddm: bool
+        self,
+        data: pd.DataFrame,
+        eval_env: dict[str, Any],
+        is_ddm: bool,
+        noncentered: NoncenteredSetting = True,
     ):
         """Override the default priors.
 
@@ -218,22 +230,44 @@ class RegressionParam(Param):
             The data used to fit the model.
         eval_env
             The environment used to evaluate the formula.
-        use_hddm
+        is_ddm
             Whether to use HDDM default priors.
+        noncentered
+            The model-level group-specific parameterization setting.
+        """
+        dm = self._prepare_formula_terms(data, eval_env)
+        self._make_safe_priors(dm, is_ddm, noncentered)
+
+    def _make_safe_priors(
+        self,
+        dm: DesignMatrices,
+        is_ddm: bool,
+        noncentered: NoncenteredSetting = True,
+    ) -> None:
+        """Populate safe priors from already-prepared Formulae matrices.
+
+        Generated unmatched group terms own a population location. They are
+        therefore centered term by term so Bambi retains that location instead
+        of dropping it or rejecting a non-Normal prior. Matched group terms are
+        zero-mean deviations and continue to follow the requested model-level
+        parameterization.
         """
         safe_priors = {}
-        dm = self._get_design_matrices(data, eval_env)
+        generated_unmatched_terms: list[tuple[str, str]] = []
 
         get_prior = get_hddm_default_prior if is_ddm else get_default_prior
         specified_priors = (
             set(self.prior.keys()) if isinstance(self.prior, dict) else set()
         )
+        has_common_wildcard = "common" in specified_priors
+        has_group_wildcard = "group_specific" in specified_priors
+
+        self._validate_generated_group_locations()
 
         # For each term in the design matrix, if the prior is not already specified,
         # add the default prior for that term.
         # We do this separately for common and group terms.
         # We also handle intercept and non-intercept terms separately.
-        has_common_intercept = False
         if dm.common is not None:
             for name, term in dm.common.terms.items():
                 self.terms.append(name)
@@ -243,9 +277,8 @@ class RegressionParam(Param):
                     # rejected at model build. Leaving it out defers to bambi's
                     # automatic HSGP priors.
                     continue
-                if name not in specified_priors:
+                if name not in specified_priors and not has_common_wildcard:
                     if term.kind == "intercept":
-                        has_common_intercept = True
                         safe_priors[name] = get_prior(
                             "common_intercept", self.name, self.bounds, self.link
                         )
@@ -253,16 +286,13 @@ class RegressionParam(Param):
                         safe_priors[name] = get_prior(
                             "common", self.name, bounds=None, link=self.link
                         )
-                else:
-                    if term.kind == "intercept":
-                        has_common_intercept = True
 
         if dm.group is not None:
             for name, term in dm.group.terms.items():
-                if name not in specified_priors:
+                if name not in specified_priors and not has_group_wildcard:
                     if term.kind == "intercept":
                         self.terms.append(name)
-                        if has_common_intercept:
+                        if name in self._group_terms_with_common:
                             safe_priors[name] = get_prior(
                                 "group_intercept_with_common",
                                 self.name,
@@ -271,21 +301,20 @@ class RegressionParam(Param):
                             )
                         else:
                             # treat the term as any other group-specific term
-                            _logger.warning(
-                                "No common intercept. Bounds for parameter %s"
-                                " is not applied due to a current limitation of Bambi."
-                                " This will change in the future.",
-                                self.name,
-                            )
-                            safe_priors[name] = get_prior(
+                            self._reject_unqualified_bounded_group_default(name, is_ddm)
+                            prior = get_prior(
                                 "group_intercept",
                                 self.name,
                                 bounds=None,
                                 link=self.link,
                             )
+                            prior.noncentered = False
+                            safe_priors[name] = prior
+                            generated_unmatched_terms.append(
+                                (name, self._group_term_names[name])
+                            )
                     else:
-                        has_common = dm.common is not None and name in dm.common.terms
-                        if has_common:
+                        if name in self._group_terms_with_common:
                             safe_priors[name] = get_prior(
                                 "group_specific_with_common",
                                 self.name,
@@ -293,13 +322,175 @@ class RegressionParam(Param):
                                 link=self.link,
                             )
                         else:
-                            safe_priors[name] = get_prior(
+                            prior = get_prior(
                                 "group_specific", self.name, bounds=None, link=self.link
                             )
+                            prior.noncentered = False
+                            safe_priors[name] = prior
+                            generated_unmatched_terms.append(
+                                (name, self._group_term_names[name])
+                            )
+
+        if generated_unmatched_terms and _resolve_noncentered(noncentered, self.name):
+            generated_unmatched_terms.sort(key=lambda item: (item[1], item[0]))
+            term_details = [
+                f"{term_name!r} (expression {expression_name!r})"
+                for term_name, expression_name in generated_unmatched_terms
+            ]
+            common_terms = [
+                "1" if expression_name == "Intercept" else expression_name
+                for _, expression_name in generated_unmatched_terms
+            ]
+            scale = (
+                "the response/parameter scale"
+                if _is_identity_link(self.link)
+                else "the linear-predictor scale before the inverse link"
+            )
+            _logger.warning(
+                "Safe priors for parameter %r generated location-bearing "
+                "group-only term(s) %s. The effective model/component setting "
+                "requested noncentered=True, but Bambi's current non-centered "
+                "construction cannot retain these group locations. HSSM set "
+                "noncentered=False on these generated priors, preserving their "
+                "locations on %s. Explicit priors were not changed. To use "
+                "non-centering, add the exact common formula term(s) %r so the "
+                "group effects become zero-mean deviations.",
+                self.name,
+                term_details,
+                scale,
+                common_terms,
+            )
+
         if self.prior is not None:
             self.prior = cast("dict[str, Any]", self.prior)
             safe_priors.update(self.prior)
         self.prior = safe_priors
+
+    def _reject_unqualified_bounded_group_default(
+        self, term_name: str, is_ddm: bool
+    ) -> None:
+        """Require an explicit decision for unsupported bounded group locations.
+
+        HSSM's generic safe group-intercept hierarchy is unbounded. Applying it
+        to a bounded parameter through an identity link would therefore invent a
+        response-scale default that has not passed the bounded-hierarchy
+        qualification. Exact/black-box HDDM likelihoods keep their separately
+        calibrated natural-support hierarchies; explicit user priors never reach
+        this generated-default path.
+        """
+        has_finite_bound = self.bounds is not None and any(
+            np.isfinite(bound) for bound in self.bounds
+        )
+        if not _is_identity_link(self.link) or not has_finite_bound:
+            return
+
+        if is_ddm:
+            _logger.warning(
+                "The generated group-only intercept for parameter %s retains "
+                "the calibrated HDDM natural-support hierarchy under the "
+                "identity link. Its coefficient prior does not apply the exact "
+                "finite HSSM bounds %s due to a current Bambi limitation; "
+                "likelihood-level parameter bounds still apply.",
+                self.name,
+                self.bounds,
+            )
+            return
+
+        raise ValueError(
+            "Safe priors cannot generate a qualified default for group-only "
+            f"intercept {term_name!r} on bounded parameter {self.name!r}. The "
+            f"identity link places this coefficient on the response scale with "
+            f"HSSM bounds {self.bounds}, while the generic group hierarchy is "
+            "unbounded. Choose a support-respecting transformed link (for "
+            "example `log` for positive parameters or `gen_logit` for a finite "
+            "interval), or supply an explicit centered hierarchical group "
+            "prior and accept responsibility for its support. Set "
+            "`prior_settings=None` only when specifying the complete prior "
+            "policy explicitly. HSSM does not apply coefficient bounds to a "
+            "complete additive predictor."
+        )
+
+    def _validate_generated_group_locations(self) -> None:
+        """Reject ambiguous safe defaults for repeated group-only expressions.
+
+        When the same Formulae expression occurs under multiple grouping factors
+        without a matching common term, each generated hierarchical prior would
+        introduce a competing population location. HSSM cannot choose one owner
+        without changing the model, so every competing term must instead have an
+        explicit, non-``None`` user specification.
+        """
+        unmatched_by_expression: dict[str, list[str]] = {}
+        for term_name, expression_name in self._group_term_names.items():
+            if term_name in self._group_terms_with_common:
+                continue
+            unmatched_by_expression.setdefault(expression_name, []).append(term_name)
+
+        prior = self.prior if isinstance(self.prior, dict) else {}
+        group_wildcard = prior.get("group_specific")
+        ambiguous: dict[str, list[str]] = {}
+        for expression_name, term_names in unmatched_by_expression.items():
+            if len(term_names) < 2:
+                continue
+
+            has_explicit_owner = True
+            for term_name in term_names:
+                term_prior = prior.get(term_name, group_wildcard)
+                if term_prior is None:
+                    has_explicit_owner = False
+                    break
+            if not has_explicit_owner:
+                ambiguous[expression_name] = sorted(term_names)
+
+        if not ambiguous:
+            return
+
+        details = "; ".join(
+            f"expression {expression_name!r}: {term_names!r}"
+            for expression_name, term_names in sorted(ambiguous.items())
+        )
+        common_terms = [
+            "1" if expression_name == "Intercept" else expression_name
+            for expression_name in sorted(ambiguous)
+        ]
+        raise ValueError(
+            f"Cannot generate unambiguous safe group priors for parameter "
+            f"{self.name!r}. Multiple unmatched group-specific terms compete for "
+            f"the same population location ({details}). Add the exact common "
+            f"formula term(s) {common_terms!r} so these group terms become "
+            "zero-mean deviations, or provide a non-None hierarchical explicit "
+            "prior for every competing group term and choose location ownership "
+            "intentionally. bambi does not support numeric fixed coefficients "
+            "through regression-term prior mappings."
+        )
+
+    def _prepare_formula_terms(
+        self, data: pd.DataFrame, extra_namespace: dict[str, Any]
+    ) -> DesignMatrices:
+        """Build design matrices and cache their structural term names.
+
+        The returned Formulae matrices are intended for immediate use by safe-prior
+        generation. Only normalized strings are retained on the parameter so later
+        diagnostics do not keep Formulae matrices or term objects alive.
+        """
+        # HSSM accepts both full formulas and RHS-only shorthand. Structural
+        # preparation now happens before ``process_prior()``, so normalize here
+        # before extracting the response-free Formulae design.
+        self.reformat_formula()
+        dm = self._get_design_matrices(data, extra_namespace)
+        self._common_term_names = (
+            set(dm.common.terms) if dm.common is not None else set()
+        )
+        self._group_term_names = (
+            {name: term.expr.name for name, term in dm.group.terms.items()}
+            if dm.group is not None
+            else {}
+        )
+        self._group_terms_with_common = {
+            name
+            for name, expression_name in self._group_term_names.items()
+            if expression_name in self._common_term_names
+        }
+        return dm
 
     def _get_design_matrices(self, data: pd.DataFrame, extra_namespace: dict[str, Any]):
         """Get the design matrices for the regression.

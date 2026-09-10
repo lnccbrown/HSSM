@@ -61,10 +61,11 @@ class HSSM(HSSMBase):
         columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
-        "full_ddm", "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4",
-        "ddm_seq2_no_bias". If any other string is passed, the model will be considered
-        custom, in which case all `model_config`, `loglik`, and `loglik_kind` have to be
-        provided by the user.
+        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "race_no_bias_angle_4",
+        "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
+        is passed, the model will be considered custom, in which case all
+        `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
     choices : optional
         When an `int`, the number of choices that the participants can make. If `2`, the
         choices are [-1, 1] by default. If anything greater than `2`, the choices are
@@ -158,25 +159,30 @@ class HSSM(HSSMBase):
         parameters. If you specify parameter-wise regressions in addition, these will
         override the global regression for the respective parameter.
     link_settings : optional
-        An optional string literal that indicates the link functions to use for each
-        parameter. Helpful for hierarchical models where sampling might get stuck/
-        very slow. Can be one of the following:
+        A preset for regression parameters whose link is not specified explicitly.
+        Helpful for hierarchical models where sampling might get stuck or become very
+        slow. Can be one of the following:
 
-        - `"log_logit"`: applies log link functions to positive parameters and
-        generalized logit link functions to parameters that have explicit bounds.
-        - `None`: unless otherwise specified, the `"identity"` link functions will be
-        used.
-        The default value is `None`.
+        - `"log_logit"`: uses identity for bounds `(-inf, inf)`, log for
+        `(0, inf)`, and generalized logit when both bounds are finite.
+        - `None`: uses the `"identity"` link unless a regression parameter specifies
+        another link.
+
+        Explicit per-parameter links take precedence. Parameters without a regression
+        formula have no linear predictor and are unaffected. Defaults to `None`.
     prior_settings : optional
-        An optional string literal that indicates the prior distributions to use for
-        each parameter. Helpful for hierarchical models where sampling might get stuck/
-        very slow. Can be one of the following:
+        A preset for generated regression-term priors. Helpful for hierarchical models
+        where sampling might get stuck or become very slow. Can be one of the
+        following:
 
-        - `"safe"`: HSSM will scan all parameters in the model and apply safe priors to
-        all parameters that do not have explicit bounds.
-        - None: HSSM will use bambi to provide default priors for all parameters. Not
-        recommended when you are using hierarchical models.
-        The default value is `"safe"`.
+        - `"safe"`: fills eligible missing common and group-specific regression-term
+        priors with HSSM's weakly informative defaults.
+        - `None`: leaves missing regression-term priors to Bambi. This is not
+        recommended for hierarchical models.
+
+        Explicit regression-term priors take precedence. This setting does not alter
+        explicit, model-configuration, or bounds-derived priors for parameters without
+        a regression formula. Defaults to `"safe"`.
     extra_namespace : optional
         Additional user supplied variables with transformations or data to include in
         the environment where the formula is evaluated. Defaults to `None`.
@@ -205,8 +211,10 @@ class HSSM(HSSMBase):
         Additional arguments passed to the `bmb.Model` object. Most notably
         ``noncentered``, which controls the centered vs. non-centered
         parameterization of group-specific (hierarchical) terms: ``True``
-        (bambi's default) uses the non-centered parameterization everywhere,
-        ``False`` uses centered. A ``dict`` keyed by HSSM parameter name
+        (bambi's default) requests non-centering and ``False`` requests centered.
+        Safe generated group-only terms that own a population location may be
+        centered term by term, with a warning, when current bambi cannot preserve
+        that location under non-centering. A ``dict`` keyed by HSSM parameter name
         (e.g. ``{"v": False, "a": True}``) sets it per parameter; an unknown
         key raises at construction. A per-prior ``noncentered`` field (inside
         a prior ``dict`` or on an ``hssm.Prior``) overrides the model-level

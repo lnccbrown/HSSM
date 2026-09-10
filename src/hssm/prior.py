@@ -9,9 +9,10 @@ bmb.Prior but adds the following:
 3. The ability to shorten the output of bmb.Prior.
 """
 
+from collections.abc import Callable
 from copy import deepcopy
 from statistics import mean
-from typing import Any, Callable
+from typing import Any
 
 import bambi as bmb
 import numpy as np
@@ -47,6 +48,12 @@ class Prior(bmb.Prior):  # noqa: PLW1641
         ``noncentered`` setting; ``True``/``False`` overrides it for this term.
     """
 
+    is_truncated: bool
+    bounds: tuple[float, float] | None
+    args: dict[str, Any]
+    _args: dict[str, Any]
+    dist: Callable | None
+
     def __init__(
         self,
         name: str,
@@ -65,10 +72,11 @@ class Prior(bmb.Prior):  # noqa: PLW1641
         self.bounds = bounds
 
         if self.bounds is not None:
-            assert self.dist is None, (
-                "We cannot bound a prior defined with the `dist` argument. The "
-                + "`dist` and `bounds` arguments cannot both be supplied."
-            )
+            if dist is not None:
+                raise ValueError(
+                    "We cannot bound a prior defined with the `dist` argument. The "
+                    "`dist` and `bounds` arguments cannot both be supplied."
+                )
             lower, upper = self.bounds
             if np.isinf(lower) and np.isinf(upper):
                 return
@@ -76,7 +84,7 @@ class Prior(bmb.Prior):  # noqa: PLW1641
             self.is_truncated = True
             self.dist = _make_truncated_dist(self.name, lower, upper, **self.args)
             self._args = self.args.copy()
-            self.args: dict = {}
+            self.args: dict[str, Any] = {}
 
     def __str__(self) -> str:
         """Create the printout of the object."""
@@ -234,6 +242,19 @@ def generate_prior(
     return prior
 
 
+def _is_identity_link(link: str | bmb.Link | None) -> bool:
+    """Return whether a link leaves coefficients on the response scale.
+
+    A missing link is semantically identity because ``RegressionParam.validate``
+    normalizes it to ``"identity"`` after safe-prior generation.
+    """
+    if link is None:
+        return True
+    if isinstance(link, str):
+        return link == "identity"
+    return link.name == "identity"
+
+
 # AF-TODO: Docstring could benefit from some more details here.
 def get_default_prior(
     term_type: str,
@@ -247,8 +268,10 @@ def get_default_prior(
 
     * common_intercept: Bounded Normal prior (N(mean(bounds), 0.25)).
     * common: Normal prior (N(0, 0.25)).
-    * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3). It's supposed to
-    be bounded but Bambi does not fully support it yet.
+    * group_intercept: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3)). Under a
+      transformed link this correctly lives on an unbounded predictor scale. Safe
+      generation fails closed for a finitely bounded, identity-linked group-only
+      intercept because this generic hierarchy does not respect response support.
     * group_specific: Normal prior N(N(0, 0.25), Weibull(1.5, 0.3).
 
     This function is taken from bambi.priors.prior.py and modified to handle hssm-
@@ -274,10 +297,10 @@ def get_default_prior(
     if term_type == "common":
         prior = generate_prior("Normal", bounds=None)
     elif term_type == "common_intercept":
-        # We ignore bounds if link is used, since boundaries loose their meaning.
+        # Bounds are response-scale constraints, so they only apply under identity.
         # TODO: This is a temporary solution, this can prob benefit form a bit of a
         # refactoring, to define settings in a more general way.
-        if (link is not None) or (bounds is None):
+        if not _is_identity_link(link) or bounds is None:
             prior = generate_prior("Normal")
         elif bounds is not None:
             if any(np.isinf(b) for b in bounds):
@@ -310,12 +333,12 @@ def get_hddm_default_prior(
     elif term_type == "common_intercept":
         # TODO: This is a temporary solution, this can prob benefit form a bit of a
         # refactoring, to define settings in a more general way.
-        if link is not None:
+        if not _is_identity_link(link):
             prior = generate_prior("Normal")
         else:
             prior = generate_prior(HDDM_MU[param], bounds=bounds)
     elif term_type == "group_intercept":
-        if link is not None:
+        if not _is_identity_link(link):
             prior = generate_prior("Normal", mu="Normal", sigma="Weibull", bounds=None)
         else:
             prior = generate_prior(HDDM_SETTINGS_GROUP[param], bounds=None)

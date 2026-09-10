@@ -27,6 +27,8 @@ get_weibull_config() -> DefaultConfig
 
 get_race_no_bias_angle_4_config() -> DefaultConfig
 
+get_gamma_drift_config() -> DefaultConfig
+
 get_default_model_config(model_name: SupportedModels) -> DefaultConfig
 """
 

@@ -28,6 +28,7 @@ import xarray as xr
 from bambi.model_components import DistributionalComponent
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
+from pymc.pytensorf import resolve_backend_compile_kwargs
 from pymc.variational import Approximation
 from xarray import DataTree
 
@@ -61,11 +62,12 @@ from .modelconfig import list_models
 from .param import Params
 from .param import UserParam as Param
 from .param.parameterization_check import (
-    check_user_priors_against_parameterization,
+    check_user_group_prior_compatibility,
     check_user_priors_for_location_overparameterization,
     emit_disconnected_node_warnings,
     emit_parameterization_warnings,
     find_disconnected_free_rvs,
+    raise_prior_compatibility_errors,
 )
 
 _logger = logging.getLogger("hssm")
@@ -76,6 +78,14 @@ _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
     "nuts_numpyro": "numpyro",
     "nuts_blackjax": "blackjax",
 }
+
+
+def _validate_setting_preset(name: str, value: object, preset: str) -> None:
+    """Validate a model-level preset selector at the public boundary."""
+    if value is not None and (not isinstance(value, str) or value != preset):
+        raise ValueError(
+            f"`{name}` must be either {preset!r} or None, but got {value!r}."
+        )
 
 
 class classproperty:
@@ -116,10 +126,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         columns "rt" and "response".
     model
         The name of the model to use. Currently supported models are "ddm", "ddm_sdv",
-        "full_ddm", "angle", "levy", "ornstein", "weibull", "race_no_bias_angle_4",
-        "ddm_seq2_no_bias". If any other string is passed, the model will be considered
-        custom, in which case all `model_config`, `loglik`, and `loglik_kind` have to be
-        provided by the user.
+        "full_ddm", "angle", "angle_extended", "levy", "ornstein", "weibull",
+        "race_no_bias_angle_4",
+        "ddm_seq2_no_bias", "gamma_drift", "gamma_drift_angle". If any other string
+        is passed, the model will be considered custom, in which case all
+        `model_config`, `loglik`, and `loglik_kind` have to be provided by the user.
     choices : optional
         When an `int`, the number of choices that the participants can make. If `2`, the
         choices are [-1, 1] by default. If anything greater than `2`, the choices are
@@ -149,25 +160,30 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         parameters. If you specify parameter-wise regressions in addition, these will
         override the global regression for the respective parameter.
     link_settings : optional
-        An optional string literal that indicates the link functions to use for each
-        parameter. Helpful for hierarchical models where sampling might get stuck/
-        very slow. Can be one of the following:
+        A preset for regression parameters whose link is not specified explicitly.
+        Helpful for hierarchical models where sampling might get stuck or become very
+        slow. Can be one of the following:
 
-        - `"log_logit"`: applies log link functions to positive parameters and
-        generalized logit link functions to parameters that have explicit bounds.
-        - `None`: unless otherwise specified, the `"identity"` link functions will be
-        used.
-        The default value is `None`.
+        - `"log_logit"`: uses identity for bounds `(-inf, inf)`, log for
+        `(0, inf)`, and generalized logit when both bounds are finite.
+        - `None`: uses the `"identity"` link unless a regression parameter specifies
+        another link.
+
+        Explicit per-parameter links take precedence. Parameters without a regression
+        formula have no linear predictor and are unaffected. Defaults to `None`.
     prior_settings : optional
-        An optional string literal that indicates the prior distributions to use for
-        each parameter. Helpful for hierarchical models where sampling might get stuck/
-        very slow. Can be one of the following:
+        A preset for generated regression-term priors. Helpful for hierarchical models
+        where sampling might get stuck or become very slow. Can be one of the
+        following:
 
-        - `"safe"`: HSSM will scan all parameters in the model and apply safe priors to
-        all parameters that do not have explicit bounds.
-        - None: HSSM will use bambi to provide default priors for all parameters. Not
-        recommended when you are using hierarchical models.
-        The default value is `"safe"`.
+        - `"safe"`: fills eligible missing common and group-specific regression-term
+        priors with HSSM's weakly informative defaults.
+        - `None`: leaves missing regression-term priors to Bambi. This is not
+        recommended for hierarchical models.
+
+        Explicit regression-term priors take precedence. This setting does not alter
+        explicit, model-configuration, or bounds-derived priors for parameters without
+        a regression formula. Defaults to `"safe"`.
     extra_namespace : optional
         Additional user supplied variables with transformations or data to include in
         the environment where the formula is evaluated. Defaults to `None`.
@@ -194,8 +210,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         The jitter value for the initial values. Defaults to `0.01`.
     noncentered : optional
         Controls the centered vs. non-centered parameterization of
-        group-specific (hierarchical) terms. ``True`` (bambi's default) uses the
-        non-centered parameterization everywhere, ``False`` uses centered. A
+        group-specific (hierarchical) terms. ``True`` (bambi's default) requests
+        the non-centered parameterization and ``False`` requests centered. Safe
+        generated group-only terms that own a population location may be centered
+        term by term, with a warning, when current bambi cannot preserve that
+        location under non-centering. A
         ``dict`` keyed by HSSM parameter name (e.g. ``{"v": False, "a": True}``)
         sets it per parameter; an unknown key raises at construction. A per-prior
         ``noncentered`` field (inside a prior ``dict`` or on an ``hssm.Prior``)
@@ -257,6 +276,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         initval_jitter: float = INITVAL_JITTER_SETTINGS["jitter_epsilon"],
         **kwargs,
     ):
+        _validate_setting_preset("link_settings", link_settings, "log_logit")
+        _validate_setting_preset("prior_settings", prior_settings, "safe")
+
         # ===== Input Data & Configuration =====
         self.data = data.copy()
         self.global_formula = global_formula
@@ -346,12 +368,25 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # endregion
 
         # Process all parameters
+        model_noncentered = kwargs.get("noncentered", True)
         self.params = Params.from_user_specs(
             model=self,  # type: ignore[arg-type]
             include=[] if include is None else include,
             kwargs=kwargs,
             p_outlier=p_outlier,
+            noncentered=model_noncentered,
         )
+
+        # Explicit group priors are authoritative, so reject any specification
+        # that bambi cannot build or would silently alter under the effective
+        # parameterization. Report all incompatible terms in one pre-build error.
+        raise_prior_compatibility_errors(
+            check_user_group_prior_compatibility(
+                self.params,
+                model_noncentered,
+            )
+        )
+
         self._parent = self.params.parent
         self._parent_param = self.params.parent_param
 
@@ -381,17 +416,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self._parent,
         )
 
-        # Targeted checks against the user's prior dict:
-        #  * priors that the chosen parameterization will silently drop
-        #    (e.g. nested `mu` hyperprior on a group-specific Normal under
-        #    non-centered);
-        #  * priors whose group-specific `mu` is statistically redundant
-        #    with the common `Intercept` (location non-identifiability).
+        # Targeted statistical-identifiability warnings for common/group or
+        # repeated group-only population-location collisions.
         emit_parameterization_warnings(
-            check_user_priors_against_parameterization(
-                self.params, kwargs.get("noncentered", True)
+            check_user_priors_for_location_overparameterization(
+                self.params, model_noncentered
             )
-            + check_user_priors_for_location_overparameterization(self.params)
         )
 
         self.model = bmb.Model(
@@ -668,7 +698,23 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 )
 
             if "step" not in kwargs:
-                kwargs |= {"step": pm.Slice(model=self.pymc_model)}
+                # Black-box likelihoods execute arbitrary Python callbacks in
+                # ``Op.perform``. PyMC 6's default Numba linker object-mode
+                # lifts those callbacks and cloudpickles their closures; valid
+                # callbacks can hold native resources such as an ONNX Runtime
+                # session, which cannot be pickled. Compile the Slice logp with
+                # PyTensor's CVM linker instead, matching the pre-PyMC-6 path
+                # without reducing the caller's requested cores.
+                slice_compile_kwargs = resolve_backend_compile_kwargs(
+                    kwargs.get("backend"), kwargs.get("compile_kwargs")
+                )
+                slice_compile_kwargs.setdefault("mode", "cvm")
+                kwargs |= {
+                    "step": pm.Slice(
+                        model=self.pymc_model,
+                        compile_kwargs=slice_compile_kwargs,
+                    )
+                }
 
         if (
             self.loglik_kind == "approx_differentiable"
@@ -932,8 +978,26 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 dt = self._inference_obj
 
+        # Preserve the likelihood implementation's supported compilation path
+        # when attaching post-sampling log likelihoods. JAX-backed Ops use their
+        # ``jax_funcify`` registrations. Black-box Ops execute arbitrary Python
+        # callbacks, so compile them with CVM instead of PyMC 6's default Numba
+        # linker, which object-mode-lifts and cloudpickles callback closures.
+        if self.loglik_kind == "blackbox":
+            compile_mode = "cvm"
+        elif self.model_config.backend == "jax":
+            compile_mode = "JAX"
+        else:
+            compile_mode = None
+
         # Actual likelihood computation
-        dt = _compute_log_likelihood(self.model, dt, data, inplace)
+        dt = _compute_log_likelihood(
+            self.model,
+            dt,
+            data,
+            inplace,
+            compile_mode=compile_mode,
+        )
 
         # clean up posterior:
         if not keep_likelihood_params:
@@ -1353,9 +1417,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
     def graph(self, formatting="plain", name=None, figsize=None, dpi=300, fmt="png"):
         """Produce a graphviz Digraph from a built HSSM model.
 
-        Requires the Graphviz binaries to be installed with your operating system's
-        package manager and the Python bindings to be installed with
-        `uv add graphviz` or `pip install graphviz`.
+        Requires graphviz, which may be installed most easily with `conda install -c
+        conda-forge python-graphviz`. Alternatively, you may install the `graphviz`
+        binaries yourself, and then `pip install graphviz` to get the python bindings.
         See http://graphviz.readthedocs.io/en/stable/manual.html for more information.
 
         Parameters

@@ -238,7 +238,8 @@ class TestSaveModelHook:
             )
         client = mlflow.tracking.MlflowClient()
         assert client.list_artifacts(t.run_id) == []
-        assert "r_hat_max" in client.get_run(t.run_id).data.metrics
+        # one chain -> r_hat is NaN and dropped; ESS is finite and must be present
+        assert "ess_bulk_min" in client.get_run(t.run_id).data.metrics
 
 
 def test_untracked_sample_is_unaffected(data_ddm):

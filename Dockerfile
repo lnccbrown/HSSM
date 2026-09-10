@@ -25,8 +25,8 @@ WORKDIR /home/hssm/build
 
 # Install HSSM from this checkout (not PyPI): the image matches the built ref
 # exactly and there is no release-timing race. Dependencies still arrive as wheels.
-# Deliberately resolves latest-compatible deps (not uv.lock) — this is the runnable
-# demo image; the reproducible/locked path is the dev container (`uv sync`).
+# Deliberately resolves latest-compatible dependencies. HSSM does not commit
+# uv.lock; scheduled drift CI detects incompatible upstream changes.
 # ponytail: core + a minimal notebook UI + light zeus-mcmc — enough for 30 of the
 # 34 tutorials. The 4 needing the heavy PyTorch/TensorFlow stack (bayesflow/keras,
 # sbi, lanfactory) are left out to keep the image slim; see README_DOCKER.md below.
@@ -42,7 +42,7 @@ RUN printf '%s\n' \
       '30 of the 34 tutorials run as-is. Four advanced ones need heavy extras that are' \
       'left out to keep the image small:' \
       '' \
-      '  - bayesflow_lre_integration, bayesflow_nle_onnx_integration  -> bayesflow, keras' \
+      '  - bayesflow_lre_integration, bayesflow_nre_onnx_integration  -> bayesflow, keras' \
       '  - sbi_nre_integration                                        -> sbi, torch' \
       '  - jax_callable_contribution_onnx_example                     -> lanfactory' \
       '' \
