@@ -26,6 +26,9 @@ classifiers = [
 dependencies = [
     "absl-py>=2.5.0",
     "bambi",
+    # Direct import in hssm.utils (design_matrices) to rebuild the response term
+    # on new data, replacing bambi's removed response_evaluate_new_data.
+    "formulae>=0.7.0",
     "h5netcdf>=1.8.1",
     "h5py>=3.16.0",
     "hddm-wfpt>=0.1.6",

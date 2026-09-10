@@ -17,6 +17,7 @@ import os
 from typing import Any, Callable, Literal
 
 import bambi as bmb
+import formulae as fm
 import jax
 import numpy as np
 import pandas as pd
@@ -25,11 +26,40 @@ import pytensor
 import pytensor.tensor as pt
 import xarray as xr
 from bambi.terms import CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm
-from bambi.utils import get_aliased_name, response_evaluate_new_data
 
 from .param.param import Param
 
 _logger = logging.getLogger("hssm")
+
+
+def _response_evaluate_new_data(model: bmb.Model, data: pd.DataFrame) -> np.ndarray:
+    """Evaluate a model's response term against a new dataframe.
+
+    Replaces ``bambi.utils.response_evaluate_new_data``, which was removed after major bambi rewrite. The logic is unchanged: rebuild the response side of the formula against
+    ``data`` using the environment the model was created in.
+
+    Parameters
+    ----------
+    model
+        The bambi model whose response term is to be evaluated.
+    data
+        The dataframe to evaluate the response term against.
+
+    Returns
+    -------
+    np.ndarray
+        The evaluated response.
+    """
+    # `full_name` is the response term as formulae wrote it, which is what has to go
+    # back into a formula. `name` is bambi's friendlier, transformation-stripped name.
+    name = model.response_term.full_name
+    # The parent parameter holds the model's full design matrices; going through it
+    # avoids the deprecated `response_component` adapter.
+    env = model.parameters[model.family.likelihood.parent].design.response.env
+
+    # We add an intercept to have a valid formula, but it's not used
+    design = fm.design_matrices(name + " ~ 1", data, env=env)
+    return np.asarray(design.response)
 
 
 def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
@@ -165,7 +195,7 @@ def _compute_log_likelihood(
     sample_new_groups = False
 
     # Get the aliased response name
-    response_aliased_name = get_aliased_name(model.response_component.term)
+    response_aliased_name = model.response_term.label
 
     if not inplace:
         dt = dt.copy(deep=True)
@@ -249,7 +279,7 @@ def log_likelihood(
         if data is None:
             y_values = np.squeeze(model.response_component.term.data)
         else:
-            y_values = response_evaluate_new_data(model, data)
+            y_values = _response_evaluate_new_data(model, data)
 
     response_dist = get_response_dist(model.family)
     response_term = model.response_component.term

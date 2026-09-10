@@ -25,7 +25,7 @@ import pymc as pm
 import pytensor
 import seaborn as sns
 import xarray as xr
-from bambi.model_components import DistributionalComponent
+from bambi.parameters import ConditionalParameter
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
 from pymc.pytensorf import resolve_backend_compile_kwargs
@@ -1813,7 +1813,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
             # Regression case:
             if param.is_regression:
-                assert isinstance(component, DistributionalComponent)
+                assert isinstance(component, ConditionalParameter)
                 output.append(f"    Formula: {param.formula}")
                 output.append("    Priors:")
                 intercept_term = component.intercept_term
