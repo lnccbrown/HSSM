@@ -25,7 +25,7 @@ classifiers = [
 
 dependencies = [
     "absl-py>=2.5.0",
-    "bambi>=0.19.0",
+    "bambi",
     "h5netcdf>=1.8.1",
     "h5py>=3.16.0",
     "hddm-wfpt>=0.1.6",
@@ -259,6 +259,7 @@ publish-url = "https://test.pypi.org/legacy/"
 
 [tool.uv.sources]
 hssm = { workspace = true }
+bambi = { git = "https://github.com/bambinos/bambi.git", branch = "dev" }
 
 [tool.pyrefly]
 preset = "legacy"

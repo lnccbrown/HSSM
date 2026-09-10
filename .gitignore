@@ -103,3 +103,6 @@ uv.lock
 # (scripts/sync_agent_config.py materializes these from .claude/).
 .cursor/
 .agents/
+
+# local zed configs
+.zed
