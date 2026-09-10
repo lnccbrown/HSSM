@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.5.1
+
+This version includes the following changes:
+
+1. **Fixed: lapse probability mass on missing-RT and omission rows was silently dropped** (#1322). The lapse mixture evaluated the lapse RT density at the `-999.0` placeholder of every missing-RT and deadline row, so the default `Uniform(0, 20)` lapse contributed `-inf` (no lapse mass at all) and other lapse priors contributed a meaningless finite value, biasing `p_outlier` and the SSM parameters whenever such rows were present. The lapse term is now marginalised like the SSM term: observed rows keep the lapse density at `rt`, missing-RT rows (choice observed, no deadline) use `1 / n_choices`, and omission rows use the lapse survival probability at the deadline, `1 - CDF_lapse(deadline)`. Lapse priors without a PyMC `logcdf` now raise a clear error on deadline data. The missing `1 / n_choices` factor on observed rows is tracked separately in #1323.
+
 ### 0.5.0
 
 This version includes the following changes:
