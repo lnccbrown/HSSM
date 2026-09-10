@@ -252,6 +252,23 @@ class HSSM(HSSMBase):
         how to specify the likelihood function this parameter. If nothing is provided,
         a default likelihood function will be used. This parameter is required only if
         either `missing_data` or `deadline` is not `False`. Defaults to `None`.
+
+        The network follows the same single-trial input convention as the main
+        likelihood, with the model parameters (in `list_params` order, without
+        `p_outlier`) followed by any `extra_fields` and then one data column
+        **last**:
+
+        - without a deadline (choice-probability network, CPN):
+          `[θ..., choice] -> log P(choice | θ)`; HSSM passes each missing-RT
+          row's `response`, coded exactly as in `choices` (no remapping), so
+          such rows must carry a valid response;
+        - with a deadline (omission-probability network, OPN):
+          `[θ..., deadline] -> log P(rt > deadline | θ)`.
+
+        Either way the input width is `n_params + 1`; an ONNX network of a
+        different width is rejected at construction. A user-supplied callable
+        that takes only the parameters is still supported at the
+        `hssm.distribution_utils` level via `params_only=True`.
     process_initvals : optional
         If `True`, the model will process the initial values. Defaults to `True`.
     initval_jitter : optional

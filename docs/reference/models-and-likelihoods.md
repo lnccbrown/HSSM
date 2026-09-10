@@ -30,6 +30,28 @@ model.
 | `softmax_inv_temperature_2` | `analytical` | `analytical` | `beta`, `logit1` | `-1`, `1` |
 | `softmax_inv_temperature_3` | `analytical` | `analytical` | `beta`, `logit1`, `logit2` | `0`, `1`, `2` |
 
+## Missing-data network input contracts
+
+`hssm.HSSM(missing_data=True, ...)` and `deadline=True` splice a second
+network into the likelihood for the rows whose RT is `-999.0`. Both networks
+follow the single-trial input convention of the main likelihood — the model
+parameters in `list_params` order (without `p_outlier`), then any
+`extra_fields`, then one data column **last** — so their input width is
+`n_params + 1`:
+
+| Network | Rows | Input vector | Output |
+| --- | --- | --- | --- |
+| Choice-probability network (CPN), `loglik_missing_data` without a deadline | missing RT, choice observed | `[θ…, choice]` | `log P(choice \| θ)` |
+| Omission-probability network (OPN), `loglik_missing_data` with `deadline=True` | omissions | `[θ…, deadline]` | `log P(rt > deadline \| θ)` |
+
+HSSM passes each missing-RT row's `response` to the CPN exactly as coded in the
+model's `choices` (no remapping), so missing rows must carry a valid response.
+An ONNX network whose input width is not `n_params + 1` is rejected when the
+model is built (HSSM 0.6.0,
+[#1324](https://github.com/lnccbrown/HSSM/issues/1324)). LANfactory's
+`derive-aux` produces training corpora with exactly this layout from a trained
+LAN.
+
 ## Specialized model families
 
 The table covers the `hssm.HSSM(model=...)` registry. Two specialized public
