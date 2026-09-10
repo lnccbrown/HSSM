@@ -12,14 +12,17 @@ RT, so the lapse term must be marginalised the same way the SSM term is:
 - missing-RT rows (choice observed): ``(1 - p) * P_s(c) + p / n_choices``.
 
 These tests are fast: no sampling, only graph construction and evaluation.
-``scipy`` is used purely as an oracle for the Normal-lapse survival function.
+``scipy`` is used purely as an oracle for the lapse density / survival function.
 """
 
+import functools
 from pathlib import Path
 
 import bambi as bmb
 import jax
 import numpy as np
+import pandas as pd
+import pymc as pm
 import pytensor
 import pytensor.tensor as pt
 import pytest
@@ -95,13 +98,13 @@ def _theta_tensors(v_vector_len: int | None = None) -> list:
     ]
 
 
-def _build_assembled(
-    fixture_path: Path,
-    backend: str,
-    has_deadline: bool,
-    n_obs: int,
-):
-    """Assemble the DDM LAN with the OPN (deadline) or CPN (no deadline) fixture."""
+@functools.cache
+def _build_assembled(fixture_path: Path, backend: str, has_deadline: bool):
+    """Assemble the DDM LAN with the OPN (deadline) or CPN (no deadline) fixture.
+
+    Cached per ``(backend, has_deadline)``: the ONNX builds dominate the module's
+    run time and the resulting Ops are reusable across graphs.
+    """
     params_is_reg = [True] + [False] * 3
     suffix = "opn" if has_deadline else "cpn"
     if backend == "jax":
@@ -158,11 +161,11 @@ def _old_formula(ssm_logp: np.ndarray, rt: np.ndarray, p: float) -> np.ndarray:
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("p", [0.0, 0.05])
+@pytest.mark.parametrize("p", [0.05, 0.5])
 def test_omission_rows_use_lapse_survival_at_deadline(fixture_path, p):
     data = DATA_DEADLINE
     n_obs = data.shape[0]
-    assembled, _, opn = _build_assembled(fixture_path, "jax", True, n_obs)
+    assembled, _, opn = _build_assembled(fixture_path, "jax", True)
     dist = _make_dist(assembled, has_deadline=True)
     params = _theta_tensors(n_obs)
 
@@ -187,21 +190,28 @@ def test_omission_rows_use_lapse_survival_at_deadline(fixture_path, p):
 
 
 def test_omission_row_deadline_limits(fixture_path):
-    """d = upper reproduces the p = 0 value; d -> 0 gives log((1-p) S_s + p)."""
+    """Boundary deadlines on an omission row.
+
+    ``d = 20`` (the edge of the lapse support) pins that a zero lapse survival,
+    ``log1mexp(0) = -inf``, stays finite in the mixture and equals the ``p = 0``
+    value up to the ``(1 - p)`` weight; it catches a CDF-for-survival mix-up
+    but also holds pre-fix (where the lapse term was ``-inf`` on every missing
+    row). ``d -> 0`` (survival one) is the assertion that fails pre-fix.
+    """
     p = 0.05
     n_obs = DATA_DEADLINE.shape[0]
-    assembled, _, _ = _build_assembled(fixture_path, "jax", True, n_obs)
+    assembled, _, _ = _build_assembled(fixture_path, "jax", True)
     dist = _make_dist(assembled, has_deadline=True)
     params = _theta_tensors(n_obs)
 
-    # d = 20: the lapse survival is zero, so the row equals its p = 0 value up
-    # to the (1 - p) weight.
+    # d = 20: the lapse survival is zero.
     data_upper = DATA_DEADLINE.copy()
     data_upper[0, -1] = LAPSE_UPPER
     logp_p = dist.logp(pt.as_tensor_variable(data_upper), *params, np.float64(p)).eval()
     logp_0 = dist.logp(
         pt.as_tensor_variable(data_upper), *params, np.float64(0.0)
     ).eval()
+    assert np.all(np.isfinite(logp_p))
     np.testing.assert_allclose(logp_p[0], np.log(1.0 - p) + logp_0[0], rtol=1e-10)
 
     # d -> 0: the lapse survival is one.
@@ -216,16 +226,38 @@ def test_omission_row_deadline_limits(fixture_path):
     )
 
 
+def test_missing_rows_are_selected_by_rt_mask_not_position():
+    """Interleaved rows: the lapse term follows ``rt == -999.0``, not row order.
+
+    ``assemble_callables`` requires missing rows on top; the lapse term must
+    not rely on that, so a stub likelihood (no splice) with the omission row
+    in the middle pins mask-based selection.
+    """
+    p, m_s = 0.05, 0.4
+
+    def stub_loglik(data, v, a, z, t):
+        return pt.full((data.shape[0],), np.log(m_s))
+
+    data = np.array([[0.9, 1.0, 3.0], [-999.0, 1.0, 1.5], [1.2, -1.0, 3.0]])
+    dist = _make_dist(stub_loglik, has_deadline=True)
+    logp = dist.logp(pt.as_tensor_variable(data), *_theta_tensors(), np.float64(p))
+    logp = logp.eval()
+
+    density = np.log((1.0 - p) * m_s + p / LAPSE_UPPER + FLOOR)
+    survival = np.log((1.0 - p) * m_s + p * (1.0 - 1.5 / LAPSE_UPPER) + FLOOR)
+    np.testing.assert_allclose(logp, [density, survival, density], rtol=1e-12)
+
+
 # --------------------------------------------------------------------------
 # 2. Missing-RT rows (no deadline, CPN)
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("p", [0.0, 0.05])
+@pytest.mark.parametrize("p", [0.05, 0.5])
 def test_missing_rt_rows_use_uniform_choice(fixture_path, p):
     data = DATA_MISSING
     n_obs = data.shape[0]
-    assembled, _, cpn = _build_assembled(fixture_path, "pytensor", False, n_obs)
+    assembled, _, cpn = _build_assembled(fixture_path, "pytensor", False)
     dist = _make_dist(assembled, has_deadline=False, n_choices=2)
     params = _theta_tensors(n_obs)
 
@@ -262,7 +294,7 @@ def test_p_zero_matches_pre_fix_values(fixture_path, has_deadline):
     data = DATA_DEADLINE if has_deadline else DATA_MISSING
     n_obs = data.shape[0]
     backend = "jax" if has_deadline else "pytensor"
-    assembled, _, _ = _build_assembled(fixture_path, backend, has_deadline, n_obs)
+    assembled, _, _ = _build_assembled(fixture_path, backend, has_deadline)
     dist = _make_dist(assembled, has_deadline=has_deadline)
     params = _theta_tensors(n_obs)
 
@@ -309,7 +341,7 @@ def test_normal_lapse_uses_survival_function_on_omission_rows():
 def test_gradients_on_omission_row(fixture_path, p):
     data = DATA_DEADLINE[:3]  # two omissions + one observed row
     n_obs = data.shape[0]
-    assembled, _, opn = _build_assembled(fixture_path, "jax", True, n_obs)
+    assembled, _, opn = _build_assembled(fixture_path, "jax", True)
     dist = _make_dist(assembled, has_deadline=True)
 
     p_outlier = pt.dscalar("p_outlier")
@@ -332,6 +364,8 @@ def test_gradients_on_omission_row(fixture_path, p):
     grad_p = pytensor.grad(row, p_outlier).eval({v: v_val, p_outlier: p})
     np.testing.assert_allclose(grad_p, (m_l - m_s) / mix, rtol=1e-6)
     assert np.isfinite(grad_p)
+    # Pre-fix (no lapse mass on the row) the score was exactly -1 / (1 - p).
+    assert not np.isclose(grad_p, -1.0 / (1.0 - p))
 
     # d logp / d v == r * d opn / d v, r the SSM responsibility.
     r = (1.0 - p) * m_s / mix
@@ -341,20 +375,6 @@ def test_gradients_on_omission_row(fixture_path, p):
     np.testing.assert_allclose(grad_v, r * grad_opn_v, rtol=1e-6, atol=1e-12)
     # The responsibility is strictly below one whenever p > 0.
     assert abs(grad_v[0]) < abs(grad_opn_v[0])
-
-
-def test_pre_fix_gradient_shape_is_gone(fixture_path):
-    """Pre-fix, d logp / d p on a missing row was -1/(1-p) (no lapse mass)."""
-    p = 0.05
-    data = DATA_DEADLINE[:3]
-    n_obs = data.shape[0]
-    assembled, _, _ = _build_assembled(fixture_path, "jax", True, n_obs)
-    dist = _make_dist(assembled, has_deadline=True)
-    p_outlier = pt.dscalar("p_outlier")
-    params = _theta_tensors(n_obs)
-    logp = dist.logp(pt.as_tensor_variable(data), *params, p_outlier)
-    grad_p = pytensor.grad(logp[0], p_outlier).eval({p_outlier: p})
-    assert not np.isclose(grad_p, -1.0 / (1.0 - p))
 
 
 # --------------------------------------------------------------------------
@@ -368,7 +388,7 @@ def test_jax_and_pytensor_backends_agree_with_missing_rows(fixture_path):
     n_obs = data.shape[0]
     values, grads = {}, {}
     for backend in ("jax", "pytensor"):
-        assembled, _, _ = _build_assembled(fixture_path, backend, True, n_obs)
+        assembled, _, _ = _build_assembled(fixture_path, backend, True)
         dist = _make_dist(assembled, has_deadline=True)
         v = pt.dvector("v")
         params = [v] + _theta_tensors()[1:]
@@ -393,23 +413,41 @@ def _stub_loglik(data, v, a, z, t):
 
 
 def test_lapse_without_logcdf_raises_on_deadline_data():
+    # Precondition: the oracle distribution has no log-CDF in the installed
+    # PyMC. If PyMC adds one, this fails here with an obvious cause rather
+    # than as "DID NOT RAISE" below.
+    with pytest.raises(NotImplementedError):
+        pm.logcdf(pm.SkewNormal.dist(mu=0.0, sigma=1.0, alpha=1.0), 1.0)
+
     lapse = bmb.Prior("SkewNormal", mu=0.0, sigma=1.0, alpha=1.0)
-    with pytest.raises(ValueError, match="SkewNormal"):
+    with pytest.raises(ValueError, match=r"`SkewNormal` does not implement a log-CDF"):
         _make_dist(_stub_loglik, has_deadline=True, lapse=lapse)
 
 
 def test_lapse_without_logcdf_is_fine_without_deadline():
+    """Without a deadline no log-CDF is needed; the per-row terms are exact."""
+    p = 0.05
     lapse = bmb.Prior("SkewNormal", mu=0.0, sigma=1.0, alpha=1.0)
     dist = _make_dist(_stub_loglik, has_deadline=False, lapse=lapse, n_choices=2)
     logp = dist.logp(
-        pt.as_tensor_variable(DATA_MISSING), *_theta_tensors(), np.float64(0.05)
+        pt.as_tensor_variable(DATA_MISSING), *_theta_tensors(), np.float64(p)
     ).eval()
-    assert np.all(np.isfinite(logp))
+
+    # The stub SSM term is log(1) on every row.
+    expected_missing = np.log((1.0 - p) + p / 2.0 + FLOOR)
+    rt_obs = DATA_MISSING[2:, 0]
+    expected_obs = np.log(
+        (1.0 - p) + p * stats.skewnorm.pdf(rt_obs, a=1.0, loc=0.0, scale=1.0) + FLOOR
+    )
+    # rtol 1e-7: PyMC and scipy use different erfc implementations.
+    np.testing.assert_allclose(
+        logp, np.r_[expected_missing, expected_missing, expected_obs], rtol=1e-7
+    )
 
 
 def test_missing_rows_without_n_choices_raise():
     dist = _make_dist(_stub_loglik, has_deadline=False, n_choices=None)
-    with pytest.raises(ValueError, match="n_choices"):
+    with pytest.raises(ValueError, match=r"`n_choices` was not provided"):
         dist.logp(
             pt.as_tensor_variable(DATA_MISSING), *_theta_tensors(), np.float64(0.05)
         )
@@ -432,3 +470,143 @@ def test_no_missing_rows_keeps_working_without_n_choices():
     ).eval()
     expected = np.log(0.95 + 0.05 / LAPSE_UPPER + FLOOR)
     np.testing.assert_allclose(logp, expected, rtol=1e-12)
+
+
+# --------------------------------------------------------------------------
+# 8. Choice-only float lapse (historical path, untouched by #1322)
+# --------------------------------------------------------------------------
+
+
+def _choice_only_stub(data, v, a, z, t):
+    return pt.full((data.shape[0],), np.log(0.3))
+
+
+def _choice_only_logp(lapse: float, p: float) -> np.ndarray:
+    # Choice-only RVs are scalar per trial, so the data is a 1-D choice vector.
+    data = np.array([1.0, -1.0, 1.0])
+    dist = make_distribution(
+        rv="ddm",
+        loglik=_choice_only_stub,
+        list_params=list(LIST_PARAMS),
+        lapse=lapse,
+        is_choice_only=True,
+    )
+    return dist.logp(
+        pt.as_tensor_variable(data), *_theta_tensors(), np.float64(p)
+    ).eval()
+
+
+def test_choice_only_float_lapse_keeps_historical_behaviour():
+    """The choice-only branch is bit-for-bit what it was before #1322.
+
+    ``HSSMBase._check_lapse`` passes ``lapse = 1 / n_choices`` (a probability),
+    and the mixture exponentiates it as if it were a log-probability. That
+    value bug is tracked in #1323; this test only guards the refactor.
+    """
+    lapse, p = 0.5, 0.05
+    logp = _choice_only_logp(lapse, p)
+    assert logp.shape == (3,)
+    np.testing.assert_allclose(
+        np.exp(logp), (1.0 - p) * 0.3 + p * np.exp(lapse) + FLOOR, rtol=1e-12
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="#1323: the choice-only lapse term should be p / n_choices, but "
+    "HSSMBase passes 1 / n_choices where the mixture expects a log-probability.",
+)
+def test_choice_only_float_lapse_intended_closed_form():
+    lapse, p = 0.5, 0.05  # lapse = 1 / n_choices for two choices
+    logp = _choice_only_logp(lapse, p)
+    assert logp.shape == (3,)
+    np.testing.assert_allclose(np.exp(logp), (1.0 - p) * 0.3 + p * lapse, rtol=1e-12)
+
+
+# --------------------------------------------------------------------------
+# 9. HSSM-level wiring: n_choices / has_deadline reach make_distribution
+# --------------------------------------------------------------------------
+
+
+def _hssm_data_matrix(model: hssm.HSSM) -> np.ndarray:
+    """The observed data matrix in the (missing-rows-first) order HSSM uses."""
+    return model.data[model.response].to_numpy(dtype=np.float64)
+
+
+def test_hssm_passes_has_deadline_to_the_lapse_term(fixture_path):
+    """Omission rows in an ``HSSM(deadline=True)`` model use the lapse survival.
+
+    A wiring mutant passing ``has_deadline=False`` would silently use
+    ``1 / n_choices`` on these rows instead of ``1 - d / 20``.
+    """
+    p = 0.05
+    df = pd.DataFrame(
+        {
+            "rt": [-999.0, -999.0, 0.9, 1.2, 0.6],
+            "response": [1.0, -1.0, 1.0, -1.0, 1.0],
+            "deadline": [1.5, 0.8, 3.0, 3.0, 3.0],
+        }
+    )
+    model = hssm.HSSM(
+        data=df,
+        deadline=True,
+        missing_data=True,
+        loglik=fixture_path / "ddm.onnx",
+        loglik_missing_data=fixture_path / "ddm_opn.onnx",
+        loglik_kind="approx_differentiable",
+        p_outlier=p,
+        process_initvals=False,
+    )
+    data = _hssm_data_matrix(model)
+    is_missing = data[:, 0] == -999.0
+    assert is_missing.sum() == 2
+
+    logp = pm.logp(model.model_distribution.dist(**THETA, p_outlier=p), data).eval()
+
+    # The fixture OPN evaluated directly on the omission rows' deadlines.
+    _, _, opn = _build_assembled(fixture_path, "jax", True)
+    v_missing = pt.as_tensor_variable(np.full(2, THETA["v"]))
+    opn_logp = opn(
+        pt.as_tensor_variable(data[is_missing][:, -1:]),
+        v_missing,
+        *_theta_tensors()[1:],
+    ).eval()
+    deadline = data[is_missing, -1]
+    expected = np.log(
+        (1.0 - p) * np.exp(opn_logp) + p * (1.0 - deadline / LAPSE_UPPER) + FLOOR
+    )
+    np.testing.assert_allclose(logp[is_missing], expected, rtol=1e-6)
+    assert np.all(np.isfinite(logp))
+
+
+def test_hssm_passes_n_choices_to_the_lapse_term(fixture_path):
+    """Missing-RT rows in an ``HSSM(missing_data=True)`` model use 1 / n_choices."""
+    p = 0.05
+    df = pd.DataFrame(
+        {
+            "rt": [-999.0, -999.0, 0.9, 1.2, 0.6],
+            "response": [1.0, -1.0, 1.0, -1.0, 1.0],
+        }
+    )
+    model = hssm.HSSM(
+        data=df,
+        missing_data=True,
+        loglik=fixture_path / "ddm.onnx",
+        loglik_missing_data=fixture_path / "ddm_cpn.onnx",
+        loglik_kind="approx_differentiable",
+        p_outlier=p,
+        process_initvals=False,
+    )
+    data = _hssm_data_matrix(model)
+    is_missing = data[:, 0] == -999.0
+    assert is_missing.sum() == 2
+    assert model.n_choices == 2
+
+    logp = pm.logp(model.model_distribution.dist(**THETA, p_outlier=p), data).eval()
+
+    _, _, cpn = _build_assembled(fixture_path, "pytensor", False)
+    v_missing = pt.as_tensor_variable(np.full(2, THETA["v"]))
+    cpn_logp = cpn(None, v_missing, *_theta_tensors()[1:]).eval()
+    expected = np.log((1.0 - p) * np.exp(cpn_logp) + p / model.n_choices + FLOOR)
+    np.testing.assert_allclose(logp[is_missing], expected, rtol=1e-6)
+    assert np.all(np.isfinite(logp))
