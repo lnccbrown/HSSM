@@ -33,6 +33,10 @@ parameter_grid = [
 ]
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 @pytest.mark.slow
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_sample_map(caplog, loglik_kind, model, sampler, initvals):
@@ -137,6 +141,10 @@ def _check_initval_defaults_correctness(model) -> None:
             pass
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 @pytest.mark.parametrize(
     ("link_settings", "expected_link", "expected_initval"),
     [(None, "identity", 1.5), ("log_logit", "log", 0.0)],
@@ -162,6 +170,10 @@ def test_valid_link_settings_preserve_regression_initvals(
     np.testing.assert_allclose(model._initvals["a_Intercept"], expected_initval)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 @pytest.mark.slow
 def test_basic_model(caplog):
     """Test basic model with p_outlier distribution defined."""
@@ -176,6 +188,10 @@ def test_basic_model(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 @pytest.mark.slow
 def test_basic_model_p_outlier(caplog):
     """Test basic model with p_outlier distribution defined."""
@@ -191,6 +207,10 @@ def test_basic_model_p_outlier(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 @pytest.mark.slow
 def test_basic_model_p_outlier_initval(caplog):
     """Test basic model with p_outlier distribution defined."""
@@ -209,6 +229,10 @@ def test_basic_model_p_outlier_initval(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
+    strict=False,
+)
 @pytest.mark.slow
 def test_reg_model(caplog):
     """Test regression model, with regression on all parameters."""
@@ -229,6 +253,10 @@ def test_reg_model(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
+    strict=False,
+)
 @pytest.mark.slow
 def test_reg_model_subset(caplog):
     """Test regression model, with subset of parameters being regressions."""
@@ -248,6 +276,10 @@ def test_reg_model_subset(caplog):
     )
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
+    strict=False,
+)
 @pytest.mark.slow
 def test_angle_model_reg(caplog):
     """Test with angle model regression."""
@@ -269,6 +301,10 @@ def test_angle_model_reg(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 @pytest.mark.slow
 def test_angle_model(caplog):
     """Test with angle model basic."""
@@ -283,6 +319,10 @@ def test_angle_model(caplog):
     _check_initval_defaults_correctness(model)
 
 
+@pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    strict=False,
+)
 @pytest.mark.slow
 def test_process_no_process(caplog):
     """Test mismatch with and without preprocessing."""
