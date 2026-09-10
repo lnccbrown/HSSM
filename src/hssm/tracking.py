@@ -27,6 +27,7 @@ import contextlib
 import hashlib
 import json
 import logging
+import math
 import os
 import tempfile
 import time
@@ -350,6 +351,8 @@ class Tracker:
                 metrics["ess_bulk_min"] = float(summary["ess_bulk"].min())
             if "ess_tail" in summary:
                 metrics["ess_tail_min"] = float(summary["ess_tail"].min())
+        # Single-chain fits yield NaN r_hat/ESS; a NaN metric is noise in the UI.
+        metrics = {k: v for k, v in metrics.items() if math.isfinite(v)}
         if metrics:
             mlflow.log_metrics(metrics)
 

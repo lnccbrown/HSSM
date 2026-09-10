@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import math
 import shutil
 from pathlib import Path
 
@@ -182,8 +183,10 @@ class TestTrackedFit:
         assert t["lineage_id"] == "lin-explicit" and t["lineage_source"] == "user"
         assert len(t["data_sha256"]) == 64
         assert m["sampling_seconds"] > 0
-        assert "r_hat_max" in m and "ess_bulk_min" in m
         assert "divergences" in m
+        # one chain -> r_hat is NaN and must be dropped rather than logged as NaN
+        assert "r_hat_max" not in m
+        assert all(math.isfinite(v) for v in m.values())  # no NaNs at all
         assert run.info.status == "FINISHED"
 
     def test_artifacts(self, fitted):
