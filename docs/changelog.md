@@ -70,6 +70,7 @@ This version includes the following changes:
    0.14.0 also fixes `omission_p` / `choice_p_no_omission`, which were computed against the wrong
    column and read as identically zero on deadline models.
 
+13. **Opt-in MLflow tracking of fits: `hssm.track()`** (new module `hssm.tracking`, optional extra `hssm[tracking]`). Wrapping a workflow in `with hssm.track(experiment=..., run_name=...):` records `HSSM(...)`, `sample()` and `save_model()` as one MLflow run following the HSSM-ecosystem run schema (`phase=infer`): model, likelihood kind, network file and its HuggingFace commit, sampler settings, `n_trials`/`n_subjects`, a `spec_sha256` of the model specification and a `data_sha256` of the data; metrics `sampling_seconds`, `divergences`, `r_hat_max`, `ess_bulk_min`, `ess_tail_min`; artifacts `model_spec.json`, `summary.csv`, `traces.nc` (and `model.pkl` with `log_artifacts="all"`). The `lineage_id` that ssm-simulators and LANfactory attach to training data and published networks is read from the repository's `manifest.json`, so one query lists every fit built on a dataset. Off by default; nothing changes for users who do not call `track()`. Tracking failures are logged, never raised. See the "Track fits with MLflow" how-to.
 
 ### 0.4.0
 
