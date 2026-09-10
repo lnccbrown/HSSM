@@ -48,9 +48,10 @@ HSSM passes each missing-RT row's `response` to the CPN exactly as coded in the
 model's `choices` (no remapping), so missing rows must carry a valid response.
 An ONNX network whose input width is not `n_params + 1` is rejected when the
 model is built (HSSM 0.6.0,
-[#1324](https://github.com/lnccbrown/HSSM/issues/1324)). LANfactory's
-`derive-aux` produces training corpora with exactly this layout from a trained
-LAN.
+[#1324](https://github.com/lnccbrown/HSSM/issues/1324)). Train such networks
+on a corpus whose rows have exactly this layout — the parameters followed by
+the choice (or deadline) as the last column — and export them with a concrete
+single-trial input shape, as LANfactory's trainers do.
 
 ## Specialized model families
 

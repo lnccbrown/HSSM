@@ -4,7 +4,7 @@
 
 This version includes the following changes:
 
-1. **Choice-probability networks (CPNs) receive the observed choice as their last input** (#1324). Missing-RT rows (`rt == -999.0`, no deadline) are now scored by the CPN on `[θ…, extra_fields…, choice] -> log P(choice | θ)`, the same layout the omission network already uses with the deadline (`[θ…, deadline]`), so both networks have input width `n_params + 1`. HSSM passes each missing row's `response` exactly as coded in `choices`, and missing rows whose response is not a valid choice now raise a clear `ValueError`. The lapse term on these rows is unchanged from 0.5.1 (`1 / n_choices`). The test fixture `tests/fixtures/ddm_cpn.onnx` was regenerated with LANfactory's `derive-aux` from the DDM LAN fixture; its provenance is recorded in `tests/fixtures/ddm_cpn.provenance.json`.
+1. **Choice-probability networks (CPNs) receive the observed choice as their last input** (#1324). Missing-RT rows (`rt == -999.0`, no deadline) are now scored by the CPN on `[θ…, extra_fields…, choice] -> log P(choice | θ)`, the same layout the omission network already uses with the deadline (`[θ…, deadline]`), so both networks have input width `n_params + 1`. HSSM passes each missing row's `response` exactly as coded in `choices`, and missing rows whose response is not a valid choice now raise a clear `ValueError`. The lapse term on these rows is unchanged from 0.5.1 (`1 / n_choices`). The test fixture `tests/fixtures/ddm_cpn.onnx` was regenerated from the DDM LAN fixture with the choice as its last input column; its provenance (source LAN, derivation settings, training summary) is recorded in `tests/fixtures/ddm_cpn.provenance.json`.
 
 #### Breaking changes that require migration:
 
@@ -21,10 +21,13 @@ This version includes the following changes:
 
    The new contract works for any choice coding and any number of choices, and removes the
    hidden category: the network returns the probability of the choice it is handed. To migrate,
-   retrain the CPN with the choice as its last input column (LANfactory's `derive-aux --network-type cpn`
-   writes such a corpus from a trained LAN, and its trainers export the matching ONNX), or wrap a
-   params-only network in a callable that takes `(data, *params)` at the
-   `hssm.distribution_utils` level with `params_only=True`. No CPN artifact was ever published on
+   retrain the CPN on a corpus whose last input column is the choice (the `[θ…, choice]` rows,
+   labelled with `P(choice | θ)`); LANfactory's trainers export the matching single-trial ONNX,
+   and tooling that derives such a corpus from a trained LAN is being added there (tracked in
+   [#1324](https://github.com/lnccbrown/HSSM/issues/1324)). The `hssm.HSSM(...)` API always passes
+   the choice; when assembling likelihoods yourself with
+   `hssm.distribution_utils.assemble_callables(..., params_only=True)`, a params-only callable is
+   still accepted and is then invoked as `f(None, *params)`. No CPN artifact was ever published on
    the `franklab/HSSM` Hub repository, so only user-trained networks are affected.
 
 ### 0.5.1
