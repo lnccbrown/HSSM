@@ -68,20 +68,18 @@ class Link(bmb.Link):
         bounds: tuple[float, float] | None = None,
     ):
         if name in HSSM_LINKS:
-            self.name = name
-            if name == "gen_logit":
-                if bounds is None:
-                    raise ValueError(
-                        "Bounds must be specified for generalized log link function."
-                    )
-                self.link = self._make_generalized_logit_simple(*bounds)
-                self.inverse_link = self._make_generalized_sigmoid_simple(*bounds)
-        else:
-            super().__init__(
-                name=name,
-                link=link,
-                inverse_link=inverse_link,
-            )
+            if bounds is None:
+                raise ValueError(
+                    "Bounds must be specified for generalized log link function."
+                )
+            link = self._make_generalized_logit_simple(*bounds)
+            inverse_link = self._make_generalized_sigmoid_simple(*bounds)
+
+        super().__init__(
+            name=name,
+            link=link,
+            inverse_link=inverse_link,
+        )
 
         self.bounds = bounds
 
