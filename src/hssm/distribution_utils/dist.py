@@ -34,6 +34,9 @@ from .onnx_utils.model import load_onnx_model
 
 _logger = logging.getLogger("hssm")
 
+# The placeholder `rt` value that marks missing-RT and omission (deadline) rows.
+MISSING_RT = -999.0
+
 LOGP_LB = pm.pytensorf.floatX(-66.1)
 
 
@@ -120,7 +123,7 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
     t = dist_params[list_params.index("t")]
 
     # Skip the check for missing data (encoded as -999.0)
-    missing_mask = pt.eq(rt, -999.0)
+    missing_mask = pt.eq(rt, MISSING_RT)
 
     return pt.where(
         # consistent with the epsilon in the analytical likelihood
@@ -430,9 +433,6 @@ def _apply_lapse_model(
     return sims_out
 
 
-MISSING_RT = -999.0
-
-
 def _to_numpy(data: Any) -> np.ndarray:
     """Evaluate a (constant) data tensor to a numpy array."""
     if isinstance(data, pt.TensorVariable):
@@ -463,8 +463,10 @@ def _make_lapse_func(
     Parameters
     ----------
     lapse
-        A float (log-probability of a lapse response, choice-only models) or a
-        ``bmb.Prior`` describing the lapse RT distribution.
+        A ``bmb.Prior`` describing the lapse RT distribution, or a float for
+        choice-only models. The float enters the mixture as ``exp(lapse)``
+        without transformation; ``HSSMBase`` passes ``1 / n_choices`` (a
+        probability, not a log-probability), which is tracked in issue #1323.
     is_choice_only
         Whether the model is a choice-only model. Choice-only models keep the
         historical behaviour: the lapse term is evaluated on the whole data.
@@ -1091,7 +1093,7 @@ def assemble_callables(
 
         # AF-TODO: This part actually overrides what
         #          is treated as missing to always be -999.0
-        n_missing = pt.sum(pt.eq(data[:, 0], -999.0)).astype(int)
+        n_missing = pt.sum(pt.eq(data[:, 0], MISSING_RT)).astype(int)
         if n_missing == 0:
             raise ValueError("No missing data in the data.")
 
