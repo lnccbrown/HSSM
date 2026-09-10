@@ -63,6 +63,7 @@ nav:
           - Run Bayesian t-tests on the posterior: tutorials/tutorial_bayesian_t_test.ipynb
           - Simulate data with the do-operator: tutorials/do_operator.ipynb
           - Save and load models: tutorials/save_load_tutorial.ipynb
+          - Track fits with MLflow: how_to/track_with_mlflow.md
       - Custom likelihoods and models:
           - The ONNX likelihood contract: how_to/custom_onnx_likelihoods.ipynb
           - Bring your own likelihood (external trainers): how_to/external_trainers.md
@@ -92,6 +93,7 @@ nav:
           - hssm.set_floatX: api/set_floatx.md
           - hssm.show_defaults: api/show_defaults.md
           - hssm.check_data_for_rl: api/check_data_for_rl.md
+          - hssm.track: api/tracking.md
       - Likelihoods:
           - hssm.likelihoods: api/likelihoods.md
       - Working with distributions:

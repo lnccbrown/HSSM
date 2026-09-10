@@ -23,6 +23,7 @@ from .prior import Prior
 from .register import register_model
 from .rl import RLSSM, register_rlssm_model
 from .simulator import simulate_data
+from .tracking import track
 from .utils import check_data_for_rl, set_floatX
 
 _logger = logging.getLogger("hssm")
@@ -47,6 +48,7 @@ __all__ = [
     "register_model",
     "register_rlssm_model",
     "simulate_data",
+    "track",
     "set_floatX",
     "show_defaults",
 ]

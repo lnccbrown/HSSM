@@ -47,6 +47,7 @@ repository = "https://github.com/lnccbrown/HSSM"
 [project.optional-dependencies]
 cuda12 = ["jax[cuda12]>=0.7.0"]
 cuda13 = ["jax[cuda13]>=0.7.0"]
+tracking = ["mlflow>=3.14.0"]
 
 [dependency-groups]
 dev = [
@@ -64,6 +65,7 @@ dev = [
     "onnxruntime>=1.27.0",
     "ruff>=0.16.1",
     "pytest>=9.1.1",
+    "mlflow>=3.14.0",
 ]
 
 notebook = [
