@@ -49,20 +49,12 @@ def _build(cavanagh_test, include, **kwargs):
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_default_is_noncentered(cavanagh_test):
     """Bambi's default (`noncentered=True`) non-centers the group term."""
     model = _build(cavanagh_test, _hierarchical_v())
     assert "v" in _offset_params(model)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_scalar_noncentered_both_directions(cavanagh_test):
     """The plain `bool` form centers/non-centers the whole model."""
     assert (
@@ -74,10 +66,6 @@ def test_scalar_noncentered_both_directions(cavanagh_test):
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_model_level_dict_per_parameter(cavanagh_test):
     """`noncentered={"v": ...}` centers/non-centers just that parameter."""
     centered = _build(cavanagh_test, _hierarchical_v(), noncentered={"v": False})
@@ -97,10 +85,6 @@ def test_unknown_dict_key_raises_at_construction(cavanagh_test):
         _build(cavanagh_test, _hierarchical_v(), noncentered={"nonexistent": True})
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.parametrize("flag, expect_offset", [(True, True), (False, False)])
 def test_per_prior_dict_overrides_model_dict(cavanagh_test, flag, expect_offset):
     """A `noncentered` field in a prior dict beats the model-level dict."""
@@ -117,10 +101,6 @@ def test_per_prior_dict_overrides_model_dict(cavanagh_test, flag, expect_offset)
     assert ("v" in _offset_params(model)) is expect_offset
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.parametrize("flag, expect_offset", [(True, True), (False, False)])
 def test_per_prior_object_overrides_model_dict(cavanagh_test, flag, expect_offset):
     """An `hssm.Prior(noncentered=...)` object beats the model-level dict."""

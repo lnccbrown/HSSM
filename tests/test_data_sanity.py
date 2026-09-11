@@ -61,10 +61,6 @@ def test_invalid_responses(data_ddm):
         hssm.HSSM(data=data_ddm_miscoded, model="ddm", choices=[1, 2, 3])
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow  # as model needs to be built
 def test_missing_responses(data_ddm, caplog):
     data_ddm_miscoded = data_ddm.copy()

@@ -154,20 +154,12 @@ class TestRLSSMInit:
 
         make_params.assert_not_called()
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_init(self, rldm_data, rlssm_config) -> None:
         """Basic RLSSM initialisation should succeed and return an RLSSM instance."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
         assert isinstance(model, RLSSM)
         assert model.model_config.model_name == "rldm_test"
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_panel_attrs(self, rldm_data, rlssm_config) -> None:
         """n_participants and n_trials should match the fixture data structure."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
@@ -178,10 +170,6 @@ class TestRLSSMInit:
         assert model.n_participants == n_participants
         assert model.n_trials == n_trials
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_params_keys(self, rldm_data, rlssm_config) -> None:
         """model.params should contain exactly list_params + p_outlier."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
@@ -272,10 +260,6 @@ class TestRLSSMInit:
 class TestRLSSMModelStructure:
     """Internal model anatomy after construction."""
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_params_is_trialwise_aligned(self, rldm_data, rlssm_config) -> None:
         """params_is_trialwise must align with list_params."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
@@ -290,10 +274,6 @@ class TestRLSSMModelStructure:
             else:
                 assert is_tw, f"{name} must be trialwise"
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_get_prefix(self, rldm_data, rlssm_config) -> None:
         """_get_prefix must use token-based matching, not substring search.
 
@@ -309,20 +289,12 @@ class TestRLSSMModelStructure:
         # Fallback: not in params
         assert model._get_prefix("unknown_param") == "unknown_param"
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_no_lapse(self, rldm_data, rlssm_config) -> None:
         """Setting p_outlier=None should remove p_outlier from params."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config, p_outlier=None)
         assert "p_outlier" not in model.params
         assert model.lapse is None
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_default_rt_choice_active_lapse_prior(
         self, rldm_data, rlssm_config
     ) -> None:
@@ -334,10 +306,6 @@ class TestRLSSMModelStructure:
         assert model.lapse.name == "Uniform"
         assert model.lapse.args == {"lower": 0.0, "upper": 20.0}
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_model_built(self, rldm_data, rlssm_config) -> None:
         """The bambi model should be built without computed param 'v'."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
@@ -347,10 +315,6 @@ class TestRLSSMModelStructure:
         # v is computed inside the Op; it must NOT appear as a free parameter
         assert "v" not in model.params
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_extra_fields_are_copies(self, rldm_data, rlssm_config) -> None:
         """extra_fields passed to make_distribution must be independent numpy copies.
 
@@ -377,19 +341,11 @@ class TestRLSSMModelStructure:
                 "it is a view, not a copy"
             )
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_pymc_model(self, rldm_data, rlssm_config) -> None:
         """pymc_model should be accessible after model construction."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
         assert model.pymc_model is not None
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_no_extra_fields_none_passed_to_make_distribution(
         self, rldm_data, rlssm_config
     ) -> None:
@@ -469,10 +425,6 @@ class TestRLSSMModelStructure:
 class TestRLSSMSerialization:
     """Cloudpickle serialisation and deserialisation."""
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_pickle_round_trip(
         self, rldm_data: pd.DataFrame, rlssm_config: RLSSMConfig
     ) -> None:
@@ -502,7 +454,7 @@ class TestRLSSMSampling:
     """Slow sampling smoke tests."""
 
     @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+        reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
         strict=False,
     )
     @pytest.mark.slow
@@ -522,10 +474,6 @@ class TestRLSSMSimplifiedInterface:
         """RLSSM must be a subclass of _RLSSM."""
         assert issubclass(RLSSM, _RLSSM)
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_model_arg_delegates_to_registry(
         self,
         rldm_data,
@@ -553,10 +501,6 @@ class TestRLSSMSimplifiedInterface:
         assert "rl_alpha" in model.params
         assert "scaler" in model.params
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_default_model_is_canonical_ssms_ddm(
         self,
         rldm_data,
@@ -581,10 +525,6 @@ class TestRLSSMSimplifiedInterface:
         assert isinstance(model, RLSSM)
         assert called_with["model"] == registry.DEFAULT_RLSSM_MODEL
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_model_config_provided(self, rldm_data, rlssm_config) -> None:
         """Passing model_config= directly should bypass the registry."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
@@ -597,30 +537,18 @@ class TestRLSSMSimplifiedInterface:
         ):
             RLSSM(data=rldm_data, model="model_not_in_registry")
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_missing_data_property_raises(self, rldm_data, rlssm_config) -> None:
         """Accessing .missing_data on a built RLSSM must raise."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
         with pytest.raises(NotImplementedError, match="missing_data"):
             _ = model.missing_data
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_deadline_property_raises(self, rldm_data, rlssm_config) -> None:
         """Accessing .deadline on a built RLSSM must raise."""
         model = RLSSM(data=rldm_data, model_config=rlssm_config)
         with pytest.raises(NotImplementedError, match="deadline"):
             _ = model.deadline
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_loglik_missing_data_property_raises(
         self, rldm_data, rlssm_config
     ) -> None:
@@ -629,10 +557,6 @@ class TestRLSSMSimplifiedInterface:
         with pytest.raises(NotImplementedError, match="loglik_missing_data"):
             _ = model.loglik_missing_data
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_register_rlssm_model(self, rldm_data) -> None:
         """A user-registered model should instantiate via the simplified API."""
         _register_custom_rldm()
@@ -641,10 +565,6 @@ class TestRLSSMSimplifiedInterface:
         assert "rl_alpha" in model.params
         assert "v" not in model.params
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_init_args_uses_simplified_interface(
         self,
         rldm_data,
@@ -667,10 +587,6 @@ class TestRLSSMSimplifiedInterface:
         assert "model_config" in model._init_args
         assert model._init_args["model_config"] is None
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_model_config_with_overrides_warns(
         self, rldm_data, rlssm_config, caplog
     ) -> None:
@@ -684,10 +600,6 @@ class TestRLSSMSimplifiedInterface:
 
         assert any("ignoring" in r.message for r in caplog.records)
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_model_config_without_overrides_does_not_warn(
         self, rldm_data, rlssm_config, caplog
     ) -> None:
@@ -697,10 +609,6 @@ class TestRLSSMSimplifiedInterface:
 
         assert not any("ignoring" in r.message for r in caplog.records)
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_learning_process_override_keeps_matching_metadata(
         self, rldm_data
     ) -> None:
@@ -724,10 +632,6 @@ class TestRLSSMSimplifiedInterface:
         assert "rl_alpha" in model.params
         assert "scaler" in model.params
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_decision_process_override_updates_sampled_params(
         self, rldm_data
     ) -> None:
@@ -743,10 +647,6 @@ class TestRLSSMSimplifiedInterface:
         assert model.model_config.decision_process == "angle"
         assert "theta" in model.params
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_rlssm_custom_model_re_resolves_registered_ssm(self, rldm_data) -> None:
         """Custom HSSM RLSSM models should pick up later register_ssm() overrides."""
         _register_custom_rldm("rldm_custom_ddm", decision_process="ddm")
