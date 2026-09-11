@@ -29,9 +29,12 @@ from hssm.rl.likelihoods.builder import (
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.utils import annotate_function
 
+# Use a local fixture to keep CI deterministic and avoid Hugging Face rate limits.
+ANGLE_ONNX = Path(__file__).parent.parent / "fixtures" / "angle.onnx"
+
 # Obtain the angle log-likelihood function from an ONNX model.
 angle_logp_jax_func = make_jax_matrix_logp_funcs_from_onnx(
-    model="angle.onnx",
+    model=ANGLE_ONNX,
 )
 
 hssm.set_floatX("float32")
