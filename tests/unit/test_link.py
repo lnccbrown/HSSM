@@ -117,10 +117,6 @@ def test_generalized_logit_inverse_is_pytensor_compatible():
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_custom_link_builds_symbolic_hssm_regression():
     """Use the custom inverse link with a symbolic HSSM predictor."""
     data = pd.DataFrame(

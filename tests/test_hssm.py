@@ -42,10 +42,6 @@ class _EqualitySpoof:
         pytest.param(
             [param_v],
             None,
-            marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-                strict=False,
-            ),
         ),
         pytest.param(
             [
@@ -53,10 +49,6 @@ class _EqualitySpoof:
                 param_a,
             ],
             None,
-            marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-                strict=False,
-            ),
         ),
         (
             [{"name": "invalid_param", "prior": "invalid_param"}],
@@ -107,10 +99,6 @@ def test_transform_params_general(data_ddm_reg, include, expected_exception):
         assert len(model.params) == 5
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 def test_custom_model(data_ddm):
     """Validate custom-model configuration requirements."""
@@ -160,7 +148,7 @@ def test_custom_model(data_ddm):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
     strict=False,
 )
 @pytest.mark.slow
@@ -185,7 +173,7 @@ def test_model_definition_outside_include(data_ddm):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
     strict=False,
 )
 @pytest.mark.slow
@@ -238,10 +226,6 @@ def test_sample_prior_predictive(data_ddm_reg):
     model_regression_random_effect.sample_prior_predictive(draws=10)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 def test_override_default_link(caplog, data_ddm_reg):
     """Honor custom links while warning about unusual bounds."""
@@ -275,7 +259,7 @@ def test_override_default_link(caplog, data_ddm_reg):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
     strict=False,
 )
 @pytest.mark.slow
@@ -292,7 +276,7 @@ def test_resampling(data_ddm):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
     strict=False,
 )
 @pytest.mark.slow
@@ -330,10 +314,6 @@ def test_add_likelihood_parameters_to_data(data_ddm):
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.parametrize(
     ("loglik_kind", "backend", "expected_compile_mode"),
     [
@@ -386,10 +366,6 @@ def test_log_likelihood_uses_likelihood_compile_mode(
     assert "log_likelihood" not in traces
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_add_likelihood_parameters_requires_traces(data_ddm):
     """Likelihood parameters need supplied or previously attached traces."""
     model = HSSM(data=data_ddm)
@@ -402,7 +378,7 @@ def test_add_likelihood_parameters_requires_traces(data_ddm):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
     strict=False,
 )
 def test_add_likelihood_parameters_accepts_explicit_datatree(data_ddm, monkeypatch):
@@ -437,10 +413,6 @@ def test_add_likelihood_parameters_accepts_explicit_datatree(data_ddm, monkeypat
 
 
 # Setting any parameter to a fixed value should work:
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 def test_model_creation_constant_parameter(data_ddm):
     """Allow any non-parent parameter to be fixed."""
@@ -520,10 +492,6 @@ def test_invalid_setting_presets_fail_before_model_preparation(
     make_params.assert_not_called()
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_valid_prior_settings_preserve_regression_and_simple_prior_scope(
     cavanagh_test,
 ):
@@ -551,10 +519,6 @@ def test_valid_prior_settings_preserve_regression_and_simple_prior_scope(
         assert delegated_prior == safe_prior
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_valid_link_settings_preserve_links_precedence_and_repr(cavanagh_test):
     """Valid link presets retain assignment, explicit precedence, and repr behavior."""
     model_kwargs = {
@@ -591,7 +555,7 @@ def test_valid_link_settings_preserve_links_precedence_and_repr(cavanagh_test):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
     strict=False,
 )
 @pytest.mark.slow
@@ -618,10 +582,6 @@ def test_prior_settings_basic(cavanagh_test):
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 def test_compile_logp(cavanagh_test):
     """Compile log probability at the model's initial point."""
@@ -639,10 +599,6 @@ def test_compile_logp(cavanagh_test):
 class TestFixedVectorParams:
     """Tests for passing np.ndarray as a fixed vector parameter."""
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_fixed_vector_non_parent(self, data_ddm):
         """A fixed vector for v (non-parent) should build successfully."""
         n_obs = len(data_ddm)
@@ -681,7 +637,7 @@ class TestFixedVectorParams:
             )
 
     @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+        reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
         strict=False,
     )
     def test_fixed_vector_sampling(self, data_ddm):
@@ -702,7 +658,7 @@ class TestFixedVectorParams:
             assert param in idata.posterior.data_vars
 
     @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+        reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
         strict=False,
     )
     def test_fixed_vector_multiple_params(self, data_ddm):
@@ -728,10 +684,6 @@ class TestFixedVectorParams:
         assert "z" in idata.posterior.data_vars
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 def test_sample_do(data_ddm):
     """Return intervention samples and the intervened PyMC model."""
@@ -757,10 +709,6 @@ def test_sample_do(data_ddm):
     assert np.unique(sample_do.prior["v_mean"].values) == [1.0]
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.parametrize(
     ("method_name", "expected_message"),
     [
@@ -789,10 +737,6 @@ def test_deprecated_inference_helpers_raise_documented_error(
     assert str(error.value) == expected_message
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.parametrize(
     "config_backend, backend_arg, expected_backend",
     [
@@ -843,10 +787,6 @@ def test_vi_passes_backend_to_pm_fit(
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_vi_idata_rejects_attached_approximation(data_ddm):
     """VI approximations must be sampled before they can be exposed as DataTrees."""
     model = HSSM(data=data_ddm)
@@ -856,10 +796,6 @@ def test_vi_idata_rejects_attached_approximation(data_ddm):
         _ = model.vi_idata
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_drop_parent_str_requires_datatree(data_ddm):
     """Posterior cleanup rejects a missing trace object."""
     model = HSSM(data=data_ddm)
@@ -871,10 +807,6 @@ def test_drop_parent_str_requires_datatree(data_ddm):
         model._drop_parent_str_from_datatree(None)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_drop_parent_str_renames_response_mean(data_ddm):
     """Posterior cleanup restores the model's response-parameter name."""
     model = HSSM(data=data_ddm)
@@ -902,10 +834,6 @@ def test_drop_parent_str_renames_response_mean(data_ddm):
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_is_choice_only_and_deadline(data_ddm):
     """Expose choice-only and deadline response metadata."""
     config_choice_only = {"response": ["response"]}
