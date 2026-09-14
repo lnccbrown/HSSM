@@ -141,10 +141,6 @@ DEFAULT_SAMPLER_GRID = [
 ]
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(MATRIX_NAMES, COVERING_ARRAY)
 def test_mcmc_matrix(request, loglik_kind, backend, sampler, step, shape):
@@ -264,10 +260,6 @@ def test_default_blackbox_slice_resolves_backend(data_ddm, monkeypatch):
     assert captured["fit_kwargs"]["backend"] == "numba"
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 def test_default_sampler_end_to_end(data_ddm):
     """The default sampling path works end to end, not just in resolution."""
@@ -288,7 +280,7 @@ def fitted_analytical(request):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
+    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior`",
     strict=False,
 )
 @pytest.mark.slow
@@ -312,7 +304,7 @@ def test_post_processing_simple(fitted_analytical):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
+    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior`",
     strict=False,
 )
 @pytest.mark.slow
@@ -332,7 +324,7 @@ def test_post_processing_reg(fitted_analytical):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
+    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior`",
     strict=False,
 )
 @pytest.mark.slow
@@ -374,10 +366,6 @@ def test_post_processing_reg_v_a(fitted_analytical):
 
 
 # Basic tests for LBA likelihood
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 def test_lba_sampling():
     """Test if sampling works for available lba models."""

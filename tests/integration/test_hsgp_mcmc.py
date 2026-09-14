@@ -11,10 +11,6 @@ hssm.set_floatX("float32", update_jax=True)
 HSGP_TERM = "hsgp(x, m=8, c=2)"
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 def test_hsgp_regression_samples():
     rng = np.random.default_rng(42)

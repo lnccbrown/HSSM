@@ -61,13 +61,19 @@ MODEL_SHAPES = {
 # 8 rows cover every (B, S) pair and every (B, M) pair. All three samplers run
 # against the jax-wrapped analytical logp, which is the path unique to this file.
 PARAMETER_NAMES = "backend,sampler,step,shape"
+# The numba-compiled logp raises `SystemError` under the pymc slice sampler
+# (bambi 0.20 migration (#1305): R8, tracked in #1318).
+_SLICE_XFAIL = pytest.mark.xfail(
+    reason="bambi 0.20 migration (#1305): R8 numba-compiled logp raises `SystemError` under the pymc slice sampler (#1318)",
+    strict=False,
+)
 COVERING_ARRAY = [
     ("jax", "pymc", None, "default"),
-    ("jax", "pymc", "slice", "beta_reg"),
+    pytest.param("jax", "pymc", "slice", "beta_reg", marks=_SLICE_XFAIL),
     ("jax", "numpyro", None, "logit_reg"),
     ("jax", "pymc", None, "multiple_reg"),
     ("pytensor", "pymc", None, "default"),
-    ("pytensor", "pymc", "slice", "beta_reg"),
+    pytest.param("pytensor", "pymc", "slice", "beta_reg", marks=_SLICE_XFAIL),
     ("pytensor", "numpyro", None, "logit_reg"),
     ("pytensor", "pymc", None, "multiple_reg"),
 ]
@@ -108,10 +114,6 @@ def sample(model, sampler, step):
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, COVERING_ARRAY)
 def test_choice_only(synthetic_data, backend, sampler, step, shape):
