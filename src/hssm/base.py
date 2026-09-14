@@ -2058,7 +2058,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             # `<param>_Intercept` becomes a Deterministic. The centered RV is
             # the one old bambi fit under the uncentered name, so it takes the
             # `<param>_Intercept` default.
-            settings_key = name_tmp.removesuffix("_centered")
+            settings_key = (
+                name_tmp.removesuffix("_centered")
+                if name_tmp.endswith("_Intercept_centered")
+                else name_tmp
+            )
 
             # We need to check if the parameter is actually backed by
             # a regression.

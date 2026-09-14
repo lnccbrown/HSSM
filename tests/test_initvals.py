@@ -97,7 +97,11 @@ def _check_initval_defaults_correctness(model) -> None:
         # bambi >= 0.20 names the free intercept RV `*_Intercept_centered` when
         # the formula has common predictors; the defaults are keyed by the
         # uncentered name.
-        settings_key = name_.removesuffix("_centered")
+        settings_key = (
+            name_.removesuffix("_centered")
+            if name_.endswith("_Intercept_centered")
+            else name_
+        )
 
         # Go through parameters that are specified in the initial value defaults
         # If not specified in there, we won't touch the parameter during post-processing
