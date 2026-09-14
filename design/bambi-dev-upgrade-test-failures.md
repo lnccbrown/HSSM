@@ -423,7 +423,7 @@ R5 was masking:
 | Code | Ids | Files | Cause | Item |
 |------|----:|------:|-------|------|
 | R8 | 2 | 1 | numba slice-sampler `SystemError` (now on its own mark) | F9 (#1318) |
-| R13 | 5 | 2 | constant parameters and `*_Intercept_centered` RVs kept in `posterior` (new) | F12 |
+| R13 | 5 | 2 | constant parameters and `*_Intercept_centered` RVs kept in `posterior` (new) | F12 (#1330) |
 
 ### R13 — bambi keeps constant parameters and centered intercepts in `posterior` *(5 ids, 2 files)*
 

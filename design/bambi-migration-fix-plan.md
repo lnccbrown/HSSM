@@ -40,9 +40,9 @@ All nine are tracked as sub-issues of #1306.
 | F7 | #1316 | Adapt to new-group prediction semantics | latent #5 | 0 (masked) | High (behavioral) |
 | F8 | #1317 | Reconcile two drifted assertions | R7, R9 | 2 ids | Low |
 | F9 | #1318 | Investigate numba slice-sampler `SystemError` | R8 | 2 ids | Unknown (likely upstream) |
-| F10 | *(needs issue)* | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 7 ids | Medium |
-| F11 | *(needs issue)* | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 3 ids | Medium |
-| F12 | *(needs issue)* | Drop bambi's constant-parameter and `*_Intercept_centered` posterior variables | R13 | 5 ids | Low |
+| F10 | #1328 | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 7 ids | Medium |
+| F11 | #1329 | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 3 ids | Medium |
+| F12 | #1330 | Drop bambi's constant-parameter and `*_Intercept_centered` posterior variables | R13 | 5 ids | Low |
 
 F6 (#1315) is no longer latent: R10 (20 ids) is the `predictions` group
 surfacing in every plotting path that calls `sample_posterior_predictive(data=...)`.
@@ -247,7 +247,7 @@ extra. Upstream is aware this path is fragile.
 - [ ] These 2 ids sit under `test_choice_only`, which is marked R5 — after F4
       lands they will need their own mark or a fix
 
-### F12 — Drop the extra posterior variables bambi 0.20 records
+### F12 (#1330) — Drop the extra posterior variables bambi 0.20 records
 
 **Root cause:** R13 (5 ids), unmasked by F4
 

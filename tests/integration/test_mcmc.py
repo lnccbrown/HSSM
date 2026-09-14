@@ -280,7 +280,7 @@ def fitted_analytical(request):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior`",
+    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior` (#1330)",
     strict=False,
 )
 @pytest.mark.slow
@@ -304,7 +304,7 @@ def test_post_processing_simple(fitted_analytical):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior`",
+    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior` (#1330)",
     strict=False,
 )
 @pytest.mark.slow
@@ -324,7 +324,7 @@ def test_post_processing_reg(fitted_analytical):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior`",
+    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior` (#1330)",
     strict=False,
 )
 @pytest.mark.slow
