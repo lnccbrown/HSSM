@@ -46,6 +46,8 @@ def _asarray(proto):
 
 
 # pylint: disable=E1101
+# The protobuf enum wrapper has `items()` at runtime; the stubs do not declare it.
+# pyrefly: ignore[missing-attribute]
 attr_types = dict(onnx.AttributeProto.AttributeType.items())
 attribute_handlers = {
     attr_types["FLOAT"]: lambda a: a.f,

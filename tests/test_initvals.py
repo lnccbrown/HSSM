@@ -33,10 +33,6 @@ parameter_grid = [
 ]
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(parameter_names, parameter_grid)
 def test_sample_map(caplog, loglik_kind, model, sampler, initvals):

@@ -149,10 +149,6 @@ ERROR_GRID = [
 ]
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, COVERING_ARRAY)
 def test_missing_data_matrix(request, loglik_kind, backend, sampler, step, shape, mode):
@@ -193,10 +189,6 @@ def test_deadline_requires_missing_data(request):
         )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 def test_default_sampler_end_to_end(request):
     """The default sampling path works end to end for a missing-data model.

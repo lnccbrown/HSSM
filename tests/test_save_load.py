@@ -36,10 +36,6 @@ def test_save_load_model_only(basic_hssm_model, tmp_path):
     compare_hssm_class_attributes(basic_hssm_model, loaded_model)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 def test_save_load_vi_mcmc(basic_hssm_model, tmp_path):
     """Round-trip model and trace directories across MCMC and VI states."""

@@ -27,6 +27,17 @@ This work is in progress; entries are added as each sub-issue lands.
    `AttributeError`; read `link.inverse_link` instead. HSSM's bounded `gen_logit` is
    unaffected for callers — it exposes the same transformation through the new attribute.
 
+#### Other changes:
+
+1. **`log_likelihood(data=...)` no longer rewrites the `posterior` group with out-of-sample
+   parameters** ([#1313](https://github.com/lnccbrown/HSSM/issues/1313)). Bambi removed
+   `Model._compute_likelihood_params` and `Family._make_dist_kwargs_and_coords`; HSSM now
+   evaluates the trial-wise likelihood parameters through `Model.predict(kind="response_params")`.
+   In sample this still adds them to `posterior` (and `keep_likelihood_params` /
+   `add_likelihood_parameters_to_datatree` behave as before). Out of sample, bambi writes them to
+   a `predictions` group, which `log_likelihood` folds into its computation and removes again, so
+   the trace comes back with only the new `log_likelihood` group changed.
+
 #### Dependency changes:
 
 1. **`bambi` now tracks the `dev` branch** pending the 0.20 release, which reorganizes its

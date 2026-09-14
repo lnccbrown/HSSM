@@ -24,10 +24,6 @@ from test_addm_subclass import make_addm_dataframe  # noqa: E402
 import hssm  # noqa: E402
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 def test_addm_log_likelihood_enables_waic_loo():
     """Pointwise log-likelihood is emitted, correctly shaped, and drives ``az.loo``."""
