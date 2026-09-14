@@ -14,7 +14,7 @@ import functools
 import itertools
 import logging
 import os
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Hashable, Literal
 
 import bambi as bmb
 import formulae as fm
@@ -35,8 +35,9 @@ _logger = logging.getLogger("hssm")
 def _response_evaluate_new_data(model: bmb.Model, data: pd.DataFrame) -> np.ndarray:
     """Evaluate a model's response term against a new dataframe.
 
-    Replaces ``bambi.utils.response_evaluate_new_data``, which was removed after major bambi rewrite. The logic is unchanged: rebuild the response side of the formula against
-    ``data`` using the environment the model was created in.
+    Replaces ``bambi.utils.response_evaluate_new_data``, which was removed in the
+    bambi 0.20 rewrite. The logic is unchanged: rebuild the response side of the
+    formula against ``data`` using the environment the model was created in.
 
     Parameters
     ----------
@@ -187,28 +188,23 @@ def _compute_log_likelihood(
     -------
     xr.DataTree | None
     """
-    # These are not formal parameters because it does not make sense to...
-    #   1. compute the log-likelihood omitting
-    #      the group-specific components of the model.
-    #   2. compute the log-likelihood on unseen groups.
-    include_group_specific = True
-    sample_new_groups = False
-
     # Get the aliased response name
     response_aliased_name = model.response_term.label
 
     if not inplace:
         dt = dt.copy(deep=True)
 
-    # # Populate the posterior in the DataTree object
-    # with the likelihood parameters
-    dt = model._compute_likelihood_params(  # pylint: disable=protected-access
-        dt, data, include_group_specific, sample_new_groups
+    # Populate `dt` with the likelihood parameters and collect them into one
+    # posterior-like dataset. It does not make sense to compute the
+    # log-likelihood omitting the group-specific components of the model, so
+    # they are always included.
+    posterior = _compute_likelihood_params(
+        model, dt, data=data, include_group_specific=True
     )
 
     required_kwargs = {
         "model": model,
-        "posterior": dt["posterior"],
+        "posterior": posterior,
         "data": data,
         "compile_mode": compile_mode,
     }
@@ -233,10 +229,142 @@ def _compute_log_likelihood(
     return dt
 
 
+def _compute_likelihood_params(
+    model: bmb.Model,
+    dt: xr.DataTree,
+    data: pd.DataFrame | None = None,
+    include_group_specific: bool = True,
+) -> xr.Dataset:
+    """Evaluate the likelihood parameters and gather them into one dataset.
+
+    bambi no longer stores the (trial-wise) likelihood parameters while sampling;
+    they are evaluated on demand with ``Model.predict(kind="response_params")``.
+    In sample, bambi adds them to the ``posterior`` group of ``dt``. Out of sample
+    (``data`` given), bambi writes them to a ``predictions`` group instead, while
+    the marginal parameters stay in ``posterior``; that group is only an
+    intermediate here, so it is removed from ``dt`` again.
+
+    Parameters
+    ----------
+    model : bmb.Model
+        The fitted bambi model.
+    dt : xr.DataTree
+        The trace returned by ``.fit()``. Modified in place.
+    data : pandas.DataFrame or None
+        Optional data frame on which to evaluate the likelihood parameters. If
+        omitted, the original dataset is used.
+    include_group_specific : bool
+        Whether the group-specific effects contribute to the parameters.
+
+    Returns
+    -------
+    xr.Dataset
+        A dataset with every posterior variable, where the trial-wise likelihood
+        parameters have been evaluated on ``data`` (or on the original dataset).
+    """
+    model.predict(
+        dt,
+        kind="response_params",
+        data=data,
+        inplace=True,
+        include_group_specific=include_group_specific,
+    )
+    posterior = dt["posterior"].to_dataset()
+
+    if data is None:
+        return posterior
+
+    predictions = dt["predictions"].to_dataset()
+    for group in ("predictions", "predictions_constant_data"):
+        if group in dt:
+            del dt[group]
+
+    # The posterior may still carry in-sample versions of the trial-wise
+    # parameters (from a previous `predict`); those have the wrong `__obs__`
+    # length, so they are replaced by the out-of-sample ones.
+    posterior = posterior.drop_dims("__obs__", errors="ignore")
+    return posterior.merge(predictions, compat="override")
+
+
+def _expand_array(x: np.ndarray, ndim: int) -> np.ndarray:
+    """Append trailing axes to ``x`` until it has ``ndim`` dimensions.
+
+    Draws of a trial-wise parameter have shape ``(chain, draw, n_obs)`` while
+    draws of a scalar parameter have shape ``(chain, draw)``. Appending a trailing
+    axis to the latter makes both broadcast inside ``pm.logp``.
+    """
+    if x.ndim >= ndim:
+        return x
+    return np.expand_dims(x, tuple(range(x.ndim, ndim)))
+
+
+def _make_dist_kwargs_and_coords(
+    family: bmb.Family,
+    model: bmb.Model,
+    posterior: xr.Dataset,
+    **kwargs,
+) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
+    """Map the likelihood parameters to posterior draws, plus the response coords.
+
+    A port of the ``Family._make_dist_kwargs_and_coords`` helper that bambi
+    removed in 0.20; HSSM still evaluates the log-likelihood draw by draw and
+    needs the parameters as plain arrays.
+
+    Parameters
+    ----------
+    family : bmb.Family
+        The model family; its likelihood lists the parameters to collect.
+    model : bmb.Model
+        The bambi model, used to resolve parameter aliases and fixed values.
+    posterior : xr.Dataset
+        Posterior draws, including the evaluated trial-wise parameters (see
+        ``_compute_likelihood_params``).
+    kwargs :
+        Extra distribution arguments that do not appear in the posterior.
+
+    Returns
+    -------
+    tuple[dict[str, np.ndarray], dict[str, Any]]
+        The keyword arguments for the response distribution, each broadcast to
+        ``(chain, draw, ...)``, and the ``chain``, ``draw`` and ``__obs__``
+        coordinates of the response.
+    """
+    kwargs.pop("data", None)
+    dont_reshape = kwargs.pop("dont_reshape", [])
+
+    params_coords: dict[Hashable, Any] = {}
+
+    for param in family.likelihood.params:
+        # The posterior uses aliases, but the PyMC distribution wants the
+        # parameter names.
+        parameter = model.parameters[param]
+        var_name = parameter.label
+
+        if var_name in posterior:
+            kwargs[param] = posterior[var_name].to_numpy()
+            params_coords.update(posterior[var_name].coords)
+        elif isinstance(getattr(parameter, "prior", None), (int, float)):
+            kwargs[param] = np.asarray(parameter.prior)
+        else:
+            raise ValueError(
+                f"Likelihood parameter '{param}' ('{var_name}') was not found in the "
+                "posterior. This error shouldn't have happened!"
+            )
+
+    ndims_max = max(x.ndim for x in kwargs.values())
+    for key, values in kwargs.items():
+        if key not in dont_reshape:
+            kwargs[key] = _expand_array(values, ndims_max)
+
+    coords = {name: params_coords[name] for name in ("chain", "draw", "__obs__")}
+
+    return kwargs, coords
+
+
 def log_likelihood(
     family: bmb.Family,
     model: bmb.Model,
-    posterior: xr.DataArray,
+    posterior: xr.Dataset,
     data: pd.DataFrame | None = None,
     compile_mode: str | None = None,
     **kwargs,
@@ -283,7 +411,7 @@ def log_likelihood(
 
     response_dist = get_response_dist(model.family)
     response_term = model.response_component.term
-    kwargs, coords = family._make_dist_kwargs_and_coords(model, posterior, **kwargs)
+    kwargs, coords = _make_dist_kwargs_and_coords(family, model, posterior, **kwargs)
 
     # If it's multivariate, it's going to have a fourth coord,
     # but we actually don't need it. We just need "chain", "draw", "__obs__"

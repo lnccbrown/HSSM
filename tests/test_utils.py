@@ -13,8 +13,10 @@ from ssms.basic_simulators.simulator import simulator
 
 import hssm
 from hssm.utils import (
+    _compute_likelihood_params,
     _compute_log_likelihood,
     _generate_random_indices,
+    _make_dist_kwargs_and_coords,
     _random_sample,
     log_likelihood,
     set_floatX,
@@ -128,23 +130,16 @@ def minimal_log_likelihood_datatree(minimal_posterior_datatree):
 
 
 def _log_likelihood_model(family):
-    def compute_likelihood_params(
-        dt,
-        data,
-        include_group_specific,
-        sample_new_groups,
-    ):
+    def predict(dt, kind, data, inplace, include_group_specific):
+        assert kind == "response_params"
         assert data is None
+        assert inplace is True
         assert include_group_specific is True
-        assert sample_new_groups is False
-        return dt
 
     return SimpleNamespace(
-        response_component=SimpleNamespace(
-            term=SimpleNamespace(alias="rt,response", name="c(rt, response)")
-        ),
+        response_term=SimpleNamespace(label="rt,response", name="c(rt, response)"),
         family=family,
-        _compute_likelihood_params=compute_likelihood_params,
+        predict=predict,
     )
 
 
@@ -152,7 +147,8 @@ def _fake_log_likelihood(family, **kwargs):
     """Return deterministic likelihood values for DataTree plumbing tests."""
     assert family is kwargs["model"].family
     assert kwargs["data"] is None
-    assert kwargs["posterior"].name == "posterior"
+    assert isinstance(kwargs["posterior"], xr.Dataset)
+    assert "theta" in kwargs["posterior"]
     assert kwargs["compile_mode"] is None
     return xr.DataArray(
         np.array([[[-1.0], [-2.0]]]),
@@ -161,10 +157,6 @@ def _fake_log_likelihood(family, **kwargs):
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R6 test double still mimics the pre-0.20 bambi Model API",
-    strict=False,
-)
 def test_compute_log_likelihood_returns_deep_copy(
     minimal_log_likelihood_datatree, monkeypatch
 ):
@@ -183,10 +175,6 @@ def test_compute_log_likelihood_returns_deep_copy(
     assert traces["posterior"]["theta"].values[0, 0] == 0.25
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R6 test double still mimics the pre-0.20 bambi Model API",
-    strict=False,
-)
 def test_compute_log_likelihood_rejects_missing_family(
     minimal_log_likelihood_datatree,
 ):
@@ -201,10 +189,6 @@ def test_compute_log_likelihood_rejects_missing_family(
         _compute_log_likelihood(model, traces, data=None)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R6 test double still mimics the pre-0.20 bambi Model API",
-    strict=False,
-)
 def test_compute_log_likelihood_warns_and_replaces_existing_group(
     caplog, minimal_log_likelihood_datatree, monkeypatch
 ):
@@ -223,6 +207,102 @@ def test_compute_log_likelihood_warns_and_replaces_existing_group(
     assert "Replacing existing log_likelihood group in dt." in caplog.text
 
 
+def test_compute_likelihood_params_in_sample_uses_posterior(
+    minimal_log_likelihood_datatree,
+):
+    """In sample, the evaluated parameters land in the posterior group."""
+    traces = minimal_log_likelihood_datatree()
+
+    def predict(dt, kind, data, inplace, include_group_specific):
+        assert kind == "response_params"
+        assert data is None
+        assert inplace is True
+        dt["posterior"] = dt["posterior"].ds.assign(
+            v=(("chain", "draw", "__obs__"), np.full((1, 2, 3), 0.5)),
+        )
+
+    posterior = _compute_likelihood_params(SimpleNamespace(predict=predict), traces)
+
+    assert isinstance(posterior, xr.Dataset)
+    assert posterior["theta"].dims == ("chain", "draw")
+    assert posterior["v"].dims == ("chain", "draw", "__obs__")
+    assert "v" in traces["posterior"]
+
+
+def test_compute_likelihood_params_out_of_sample_merges_predictions(
+    minimal_log_likelihood_datatree,
+):
+    """Out of sample, bambi's `predictions` group is folded into the posterior."""
+    traces = minimal_log_likelihood_datatree()
+    # A stale in-sample evaluation (3 trials) must not survive alongside the
+    # out-of-sample one (2 trials).
+    traces["posterior"] = traces["posterior"].ds.assign(
+        v=(("chain", "draw", "__obs__"), np.full((1, 2, 3), 0.5)),
+    )
+    new_data = pd.DataFrame({"x": [1.0, 2.0]})
+
+    def predict(dt, kind, data, inplace, include_group_specific):
+        assert kind == "response_params"
+        assert data is new_data
+        assert inplace is True
+        dt["predictions"] = xr.Dataset(
+            {"v": (("chain", "draw", "__obs__"), np.full((1, 2, 2), -1.0))},
+            coords={"chain": [0], "draw": [0, 1], "__obs__": [0, 1]},
+        )
+        dt["predictions_constant_data"] = xr.Dataset({"x": ("__obs__", [1.0, 2.0])})
+
+    posterior = _compute_likelihood_params(
+        SimpleNamespace(predict=predict), traces, data=new_data
+    )
+
+    assert posterior["theta"].dims == ("chain", "draw")
+    assert posterior["v"].shape == (1, 2, 2)
+    np.testing.assert_array_equal(posterior["v"].values, -1.0)
+    # The intermediate groups do not leak into the returned trace.
+    assert "predictions" not in traces
+    assert "predictions_constant_data" not in traces
+
+
+def test_make_dist_kwargs_and_coords_resolves_aliases_and_constants():
+    """Likelihood parameters come from the posterior (by alias) or a fixed prior."""
+    posterior = xr.Dataset(
+        {
+            "v_mean": (("chain", "draw", "__obs__"), np.zeros((1, 2, 3))),
+            "a": (("chain", "draw"), np.ones((1, 2))),
+        },
+        coords={"chain": [0], "draw": [0, 1], "__obs__": [0, 1, 2]},
+    )
+    model = SimpleNamespace(
+        parameters={
+            "v": SimpleNamespace(label="v_mean"),
+            "a": SimpleNamespace(label="a"),
+            "z": SimpleNamespace(label="z", prior=0.5),
+        }
+    )
+    family = SimpleNamespace(likelihood=SimpleNamespace(params=["v", "a", "z"]))
+
+    kwargs, coords = _make_dist_kwargs_and_coords(family, model, posterior)
+
+    assert set(kwargs) == {"v", "a", "z"}
+    assert kwargs["v"].shape == (1, 2, 3)
+    # Scalar draws and constants are broadcast to the trial-wise rank.
+    assert kwargs["a"].shape == (1, 2, 1)
+    assert kwargs["z"].shape == (1, 1, 1)
+    assert kwargs["z"].item() == 0.5
+    assert list(coords) == ["chain", "draw", "__obs__"]
+    assert len(coords["__obs__"]) == 3
+
+
+def test_make_dist_kwargs_and_coords_rejects_missing_parameter():
+    """A parameter that is neither sampled nor fixed is an internal error."""
+    posterior = xr.Dataset(coords={"chain": [0], "draw": [0]})
+    model = SimpleNamespace(parameters={"v": SimpleNamespace(label="v")})
+    family = SimpleNamespace(likelihood=SimpleNamespace(params=["v"]))
+
+    with pytest.raises(ValueError, match="'v' \\('v'\\) was not found"):
+        _make_dist_kwargs_and_coords(family, model, posterior)
+
+
 def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
     """Post-sampling likelihoods honor the requested JAX compiler."""
     compile_calls = []
@@ -234,7 +314,10 @@ def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
 
     family = SimpleNamespace(
         likelihood=SimpleNamespace(dist=pm.Normal, name="Normal"),
-        _make_dist_kwargs_and_coords=lambda model, posterior, **kwargs: (
+    )
+    monkeypatch.setattr(
+        "hssm.utils._make_dist_kwargs_and_coords",
+        lambda family, model, posterior, **kwargs: (
             {
                 "mu": np.zeros((1, 1, 2)),
                 "sigma": np.ones((1, 1, 2)),

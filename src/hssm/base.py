@@ -1040,16 +1040,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         if dt is None:
             if self._inference_obj is None:
                 raise ValueError("No datatree provided and model not yet sampled!")
-            else:
-                dt = self.model._compute_likelihood_params(  # pylint: disable=protected-access
-                    deepcopy(self._inference_obj)
-                    if not inplace
-                    else self._inference_obj
-                )
-        else:
-            dt = self.model._compute_likelihood_params(  # pylint: disable=protected-access
-                deepcopy(dt) if not inplace else dt
-            )
+            dt = self._inference_obj
+
+        if not inplace:
+            dt = deepcopy(dt)
+
+        # bambi evaluates the (trial-wise) likelihood parameters on demand and
+        # adds them to the posterior group.
+        self.model.predict(dt, kind="response_params", inplace=True)
         return dt
 
     def sample_posterior_predictive(

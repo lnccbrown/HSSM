@@ -258,10 +258,6 @@ def test_override_default_link(caplog, data_ddm_reg):
     assert "strange" in caplog.records[0].message
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 def test_resampling(data_ddm):
     """Replace attached traces when a model is sampled again."""
@@ -275,10 +271,6 @@ def test_resampling(data_ddm):
     assert sample_1 is not sample_2
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 @pytest.mark.slow
 def test_add_likelihood_parameters_to_data(data_ddm):
     """Test if the likelihood parameters are added to the DataTree object."""
@@ -377,10 +369,6 @@ def test_add_likelihood_parameters_requires_traces(data_ddm):
         model.add_likelihood_parameters_to_datatree()
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
-    strict=False,
-)
 def test_add_likelihood_parameters_accepts_explicit_datatree(data_ddm, monkeypatch):
     """An explicit DataTree is copied before likelihood parameters are added."""
     model = HSSM(data=data_ddm)
@@ -389,18 +377,15 @@ def test_add_likelihood_parameters_accepts_explicit_datatree(data_ddm, monkeypat
     )
     received = []
 
-    def fake_compute_likelihood_params(dt):
+    def fake_predict(dt, kind, inplace):
+        assert kind == "response_params"
+        assert inplace is True
         received.append(dt)
         dt["posterior"] = dt["posterior"].ds.assign(
             v_mean=(("chain", "draw"), np.array([[0.5]]))
         )
-        return dt
 
-    monkeypatch.setattr(
-        model.model,
-        "_compute_likelihood_params",
-        fake_compute_likelihood_params,
-    )
+    monkeypatch.setattr(model.model, "predict", fake_predict)
 
     result = model.add_likelihood_parameters_to_datatree(dt=traces, inplace=False)
 
@@ -637,7 +622,7 @@ class TestFixedVectorParams:
             )
 
     @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
+        reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior`",
         strict=False,
     )
     def test_fixed_vector_sampling(self, data_ddm):
@@ -658,7 +643,7 @@ class TestFixedVectorParams:
             assert param in idata.posterior.data_vars
 
     @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
+        reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior`",
         strict=False,
     )
     def test_fixed_vector_multiple_params(self, data_ddm):
