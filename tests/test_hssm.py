@@ -621,10 +621,6 @@ class TestFixedVectorParams:
                 include=[{"name": "z", "prior": out_of_bounds}],
             )
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior` (#1330)",
-        strict=False,
-    )
     def test_fixed_vector_sampling(self, data_ddm):
         """Sampling with a fixed vector should succeed and exclude it from posterior."""
         n_obs = len(data_ddm)
@@ -642,10 +638,6 @@ class TestFixedVectorParams:
         for param in ["a", "z", "t"]:
             assert param in idata.posterior.data_vars
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior` (#1330)",
-        strict=False,
-    )
     def test_fixed_vector_multiple_params(self, data_ddm):
         """Fixing multiple parameters to vectors should work."""
         n_obs = len(data_ddm)
