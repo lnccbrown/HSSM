@@ -75,14 +75,16 @@ def test_model_level_dict_per_parameter(cavanagh_test):
     assert "v" in _offset_params(noncentered)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R9 error-message wording drift in noncentered validation",
-    strict=False,
-)
 def test_unknown_dict_key_raises_at_construction(cavanagh_test):
-    """A typo'd component name fails loudly with the valid names listed."""
-    with pytest.raises(ValueError, match="[Uu]nknown component"):
+    """A typo'd parameter name fails loudly with the valid names listed.
+
+    The check itself lives in bambi, so assert on the behaviour (the bad key
+    and the valid names are both reported) rather than on bambi's wording.
+    """
+    with pytest.raises(ValueError, match=r"(?i)unknown.*nonexistent") as excinfo:
         _build(cavanagh_test, _hierarchical_v(), noncentered={"nonexistent": True})
+    for name in ("a", "t", "v", "z"):
+        assert repr(name) in str(excinfo.value)
 
 
 @pytest.mark.parametrize("flag, expect_offset", [(True, True), (False, False)])

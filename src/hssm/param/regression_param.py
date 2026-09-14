@@ -504,8 +504,19 @@ class RegressionParam(Param):
         """
         formula = cast("str", self.formula)
         rhs = formula.split("~")[1]
-        formula = f"response ~ {rhs}"
-        dm = design_matrices(formula, data=data, extra_namespace=extra_namespace)
+        # formulae resolves each bare name against ``data`` (and pandas raises a
+        # bare lookup error whose type has drifted across releases), so turn a
+        # missing column into a ValueError that names the parameter and formula.
+        try:
+            dm = design_matrices(
+                f"response ~ {rhs}", data=data, extra_namespace=extra_namespace
+            )
+        except LookupError as e:
+            raise ValueError(
+                f"Could not build the design matrix for parameter {self.name!r} "
+                f"from formula {formula!r}: {e}. Every variable in the formula "
+                "must be a column of `data`."
+            ) from e
         return dm
 
     def reformat_formula(self):

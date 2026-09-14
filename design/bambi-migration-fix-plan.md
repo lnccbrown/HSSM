@@ -218,8 +218,14 @@ semantics of HSSM's hierarchical prediction simply changed.
   **Nothing in PR #1002 touches this** — it is a stale assertion against HSSM's
   own code and is probably independent of #1305.
 
-- [ ] Decide intended behaviour for each, then update assertion or code
-- [ ] Remove the R7/R9 xfail marks
+- [x] Decide intended behaviour for each, then update assertion or code
+  - R7: HSSM now wraps formulae/pandas lookup errors from `design_matrices`
+    in its own `ValueError` naming the parameter and formula
+    (`RegressionParam._get_design_matrices`), so the type no longer
+    depends on the upstream stack.
+  - R9: the check lives in bambi; the assertion now tests behaviour (bad
+    key + valid names reported) instead of bambi's wording.
+- [x] Remove the R7/R9 xfail marks
 
 ### F9 (#1318) — Investigate the numba slice-sampler `SystemError`
 

@@ -77,11 +77,7 @@ class _EqualitySpoof:
                     "formula": "invalid_formula",
                 }
             ],
-            IndexError,
-            marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R7 bambi/formulae 0.20 raises KeyError, not IndexError, for an invalid formula",
-                strict=False,
-            ),
+            ValueError,
         ),
     ],
 )
@@ -841,3 +837,14 @@ def test_is_choice_only_and_deadline(data_ddm):
     assert len(model_with_deadline.response) == 2
     assert model_with_deadline.response_c == "c(response, deadline)"
     assert model_with_deadline.response_str == "response,deadline"
+
+
+def test_unknown_formula_variable_raises_value_error(data_ddm_reg):
+    """A formula naming a column absent from ``data`` raises a clear ValueError.
+
+    formulae/pandas raise a bare lookup error here (its type has drifted across
+    releases), so HSSM normalises it and names the parameter and formula.
+    """
+    include = [{"name": "v", "formula": "v ~ 1 + not_a_column"}]
+    with pytest.raises(ValueError, match=r"'v'.*'v ~ 1 \+ not_a_column'.*not_a_column"):
+        HSSM(data=data_ddm_reg, include=include)
