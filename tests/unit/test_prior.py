@@ -1292,3 +1292,38 @@ def _fake_repeated_group_params(
     }
     param._group_terms_with_common = set()
     return {"v": param}
+
+
+@pytest.mark.parametrize("bounds", [(0.0, 1.0), (0.0, np.inf), (-np.inf, 1.0)])
+def test_truncated_dist_callable_accepts_dims_and_shape(bounds):
+    """bambi >= 0.20 instantiates callable priors as ``dist(name, dims=...)``.
+
+    Regression test for #1312: the ``TruncatedDist`` closure must accept and
+    forward ``dims``/``shape`` like a regular PyMC distribution class.
+    """
+    prior = Prior("Normal", mu=0.0, sigma=1.0, bounds=bounds)
+    assert prior.is_truncated
+    assert prior.dist is not None
+
+    with pm.Model(coords={"response": ["a", "b"]}) as model:
+        rv_dims = prior.dist("x_dims", dims=("response",))
+        rv_shape = prior.dist("x_shape", shape=(3,))
+        rv_scalar = prior.dist("x_scalar", dims=())
+
+    assert model.named_vars_to_dims["x_dims"] == ("response",)
+    assert rv_dims.eval().shape == (2,)
+    assert rv_shape.eval().shape == (3,)
+    assert rv_scalar.eval().shape == ()
+
+
+def test_truncated_dist_callable_keeps_bounds_with_dims():
+    """Draws from a bounded prior instantiated with ``dims`` respect the bounds."""
+    prior = Prior("Normal", mu=0.0, sigma=10.0, bounds=(0.0, 1.0))
+
+    with pm.Model(coords={"response": list(range(200))}):
+        rv = prior.dist("x", dims=("response",))
+
+    draws = rv.eval()
+    assert draws.shape == (200,)
+    assert np.all(draws >= 0.0)
+    assert np.all(draws <= 1.0)
