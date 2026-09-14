@@ -5,7 +5,6 @@ import logging
 import bambi as bmb
 import numpy as np
 import pymc as pm
-import pytensor.tensor as pt
 import pytest
 
 import hssm
@@ -45,8 +44,7 @@ TRANSFORMED_LINKS = [
         hssm.Link(
             "custom_log",
             link=np.log,
-            linkinv=np.exp,
-            linkinv_backend=pt.exp,
+            inverse_link=np.exp,
         ),
         id="hssm-custom-log",
     ),

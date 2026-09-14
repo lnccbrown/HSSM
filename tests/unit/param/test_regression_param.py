@@ -924,8 +924,7 @@ def test_hddm_safe_group_only_intercept_uses_preset_identity(cavanagh_test):
             hssm.Link(
                 "custom_log",
                 link=np.log,
-                linkinv=np.exp,
-                linkinv_backend=pt.exp,
+                inverse_link=np.exp,
             ),
             False,
             id="custom",

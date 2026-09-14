@@ -15,7 +15,7 @@ import numpy as np
 import pymc as pm
 import pytensor
 import pytensor.tensor as pt
-from bambi.backend.utils import get_distribution_from_prior
+from bambi.backend.pymc.utils import get_distribution_from_prior
 from pytensor.tensor.random.op import RandomVariable
 from ssms.hssm_support import (
     get_simulator_fun_internal,
@@ -753,9 +753,11 @@ def make_family(
 class SSMFamily(bmb.Family):
     """Extends bmb.Family to get around the dimensionality mismatch."""
 
-    def create_extra_pps_coord(self):
-        """Create an extra dimension."""
-        return np.arange(2)
+    # The SSM response is the 2-D `[rt, response]` matrix. Bambi uses
+    # `RESPONSE_NDIM` to decide both whether to append the response coord to the
+    # response term's dims and whether to create that coord at all -- the latter
+    # only happens when `RESPONSE_NDIM > 1`, so this must be 2, not 1.
+    RESPONSE_NDIM = 2
 
 
 def make_likelihood_callable(

@@ -3,7 +3,6 @@
 import bambi as bmb
 import numpy as np
 import pandas as pd
-import pytensor.tensor as pt
 import pytest
 from pytensor.graph.traversal import ancestors
 
@@ -322,8 +321,7 @@ def test_all_hddm_group_only_intercepts_build_with_connected_hyperpriors(
             hssm.Link(
                 "custom_log",
                 link=np.log,
-                linkinv=np.exp,
-                linkinv_backend=pt.exp,
+                inverse_link=np.exp,
             ),
             id="custom-log",
         ),

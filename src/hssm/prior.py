@@ -17,7 +17,7 @@ from typing import Any
 import bambi as bmb
 import numpy as np
 import pymc as pm
-from bambi.backend.utils import get_distribution
+from bambi.backend.pymc.utils import get_distribution
 from bambi.priors.prior import format_arg
 
 pymc_dist_args = ["rng", "initval", "dims", "observed", "total_size", "transform"]

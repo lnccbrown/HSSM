@@ -1,5 +1,38 @@
 # Changelog
 
+### 0.6.0 (unreleased)
+
+Migration to the Bambi 0.20 rewrite ([bambinos/bambi#1002](https://github.com/bambinos/bambi/pull/1002)),
+tracked as [#1305](https://github.com/lnccbrown/HSSM/issues/1305) / [#1306](https://github.com/lnccbrown/HSSM/issues/1306).
+This work is in progress; entries are added as each sub-issue lands.
+
+#### Breaking changes that require migration:
+
+1. **`hssm.Link` takes a single `inverse_link` instead of `linkinv` and `linkinv_backend`**
+   ([#1311](https://github.com/lnccbrown/HSSM/issues/1311)). Bambi dropped the split between a
+   NumPy inverse for computations outside the graph and a PyTensor inverse for building it; one
+   backend-compatible inverse now serves both, and the forward `link` function is optional.
+   Custom links must be updated:
+
+   ```python
+   # before
+   hssm.Link("custom_log", link=np.log, linkinv=np.exp, linkinv_backend=pt.exp)
+   # after
+   hssm.Link("custom_log", link=np.log, inverse_link=np.exp)
+   ```
+
+   `inverse_link` must be compatible with the active backend (currently PyMC). NumPy ufuncs
+   such as `np.exp` qualify, because they dispatch to symbolic operations when handed a
+   PyTensor tensor. Reading `link.linkinv` or `link.linkinv_backend` now raises
+   `AttributeError`; read `link.inverse_link` instead. HSSM's bounded `gen_logit` is
+   unaffected for callers — it exposes the same transformation through the new attribute.
+
+#### Dependency changes:
+
+1. **`bambi` now tracks the `dev` branch** pending the 0.20 release, which reorganizes its
+   module layout and splits the frontend from the backend. The floor will be pinned to the
+   published `>=0.20` release before 0.6.0 ships.
+
 ### 0.5.0
 
 This version includes the following changes:

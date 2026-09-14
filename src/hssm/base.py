@@ -25,7 +25,7 @@ import pymc as pm
 import pytensor
 import seaborn as sns
 import xarray as xr
-from bambi.model_components import DistributionalComponent
+from bambi.parameters import ConditionalParameter
 from bambi.transformations import transformations_namespace
 from pymc.model.transform.conditioning import do
 from pymc.pytensorf import resolve_backend_compile_kwargs
@@ -78,6 +78,22 @@ _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
     "nuts_numpyro": "numpyro",
     "nuts_blackjax": "blackjax",
 }
+
+
+# Bambi names the response's extra dimension after the first argument of the
+# response call -- `c(rt, response)` becomes `rt_dim`. HSSM exposes it under a
+# name that matches the response variable itself.
+_BAMBI_RESPONSE_DIM = "rt_dim"
+_HSSM_RESPONSE_DIM = "rt,response_dim"
+
+
+def _rename_response_dim(dataset: xr.Dataset) -> xr.Dataset:
+    """Rename bambi's response dim/coord to HSSM's `rt,response_dim`."""
+    if _BAMBI_RESPONSE_DIM in dataset.dims:
+        dataset = dataset.rename_dims({_BAMBI_RESPONSE_DIM: _HSSM_RESPONSE_DIM})
+    if _BAMBI_RESPONSE_DIM in dataset.coords:
+        dataset = dataset.rename_vars({_BAMBI_RESPONSE_DIM: _HSSM_RESPONSE_DIM})
+    return dataset
 
 
 def _validate_setting_preset(name: str, value: object, preset: str) -> None:
@@ -1280,14 +1296,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         do_dt = self._drop_parent_str_from_datatree(dt=do_dt)
 
         # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].dims:
-            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_dims(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
-        if "rt,response_extra_dim_0" in do_dt["prior_predictive"].coords:
-            do_dt["prior_predictive"] = do_dt["prior_predictive"].ds.rename_vars(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
+        do_dt["prior_predictive"] = _rename_response_dim(do_dt["prior_predictive"].ds)
 
         if return_model:
             return do_dt, do_model
@@ -1349,14 +1358,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         dt = self._drop_parent_str_from_datatree(dt=self._inference_obj)
 
         # rename otherwise inconsistent dims and coords
-        if "rt,response_extra_dim_0" in dt["prior_predictive"].dims:
-            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_dims(
-                {"rt,response_extra_dim_0": "rt,response_dim"}
-            )
-        if "rt,response_extra_dim_0" in dt["prior_predictive"].coords:
-            dt["prior_predictive"] = dt["prior_predictive"].ds.rename_vars(
-                name_dict={"rt,response_extra_dim_0": "rt,response_dim"}
-            )
+        dt["prior_predictive"] = _rename_response_dim(dt["prior_predictive"].ds)
 
         # Update self._inference_obj to match the cleaned datatree
         self._inference_obj = dt
@@ -1813,7 +1815,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
             # Regression case:
             if param.is_regression:
-                assert isinstance(component, DistributionalComponent)
+                assert isinstance(component, ConditionalParameter)
                 output.append(f"    Formula: {param.formula}")
                 output.append("    Priors:")
                 intercept_term = component.intercept_term

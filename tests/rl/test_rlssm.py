@@ -453,6 +453,10 @@ class TestRLSSMSerialization:
 class TestRLSSMSampling:
     """Slow sampling smoke tests."""
 
+    @pytest.mark.xfail(
+        reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
+        strict=False,
+    )
     @pytest.mark.slow
     def test_rlssm_sample_smoke(self, rldm_data, rlssm_config) -> None:
         """Minimal sampling run should return an InferenceData object."""

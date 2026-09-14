@@ -342,7 +342,7 @@ def _(bmb, identity_model, np, pd, transformed_model):
     def inverse_link_value(link, eta):
         """Map one predictor value back to its parameter scale."""
         _link = bmb.Link(link) if isinstance(link, str) else link
-        return float(np.asarray(_link.linkinv(eta)))
+        return float(np.asarray(_link.inverse_link(eta)))
 
     model_link_table = pd.DataFrame(
         [
@@ -966,16 +966,17 @@ def _(mo):
     ## 5. Built-in links versus custom links
 
     For built-in names such as `"identity"`, `"log"`, and `"logit"`, Bambi
-    already knows all required numerical and symbolic functions. A custom link
-    needs three related callables:
+    already knows both required functions. A custom link needs only one
+    callable, with a second that is optional:
 
-    1. `link`: numerical parameter-to-predictor mapping;
-    2. `linkinv`: numerical predictor-to-parameter mapping, used outside the
-       PyMC graph for operations such as prediction; and
-    3. `linkinv_backend`: the symbolic inverse used to build the PyTensor graph.
+    1. `inverse_link`: the predictor-to-parameter mapping, used both for
+       numerical work and to build the PyTensor graph. It must be compatible
+       with the active backend, currently PyMC.
+    2. `link`: the numerical parameter-to-predictor mapping. Optional, because
+       Bambi does not currently use it.
 
-    This is why NumPy functions are appropriate for the first two roles, while
-    the backend inverse should be written with PyTensor operations.
+    A single inverse serves both roles because NumPy ufuncs such as `np.exp`
+    dispatch to symbolic operations when handed a PyTensor tensor.
     """)
     return
 
@@ -985,14 +986,15 @@ def _(build_silent_model, hssm, model_kwargs, np, pd, pt):
     custom_log_link = hssm.Link(
         "custom_log",
         link=np.log,
-        linkinv=np.exp,
-        linkinv_backend=pt.exp,
+        inverse_link=np.exp,
     )
     _response_values = np.array([0.5, 1.0, 2.0])
     _predictor_values = custom_log_link.link(_response_values)
-    assert np.allclose(custom_log_link.linkinv(_predictor_values), _response_values)
+    assert np.allclose(
+        custom_log_link.inverse_link(_predictor_values), _response_values
+    )
     _symbolic_eta = pt.scalar("tutorial_eta")
-    _symbolic_parameter = custom_log_link.linkinv_backend(_symbolic_eta)
+    _symbolic_parameter = custom_log_link.inverse_link(_symbolic_eta)
     assert _symbolic_parameter.owner is not None
 
     _custom_base_kwargs = {
@@ -1014,19 +1016,14 @@ def _(build_silent_model, hssm, model_kwargs, np, pd, pt):
     custom_link_roles = pd.DataFrame(
         [
             {
+                "argument": "inverse_link=np.exp",
+                "direction": "predictor -> parameter",
+                "execution": "numerical and symbolic; required",
+            },
+            {
                 "argument": "link=np.log",
                 "direction": "parameter -> predictor",
-                "execution": "numerical, outside the PyMC graph",
-            },
-            {
-                "argument": "linkinv=np.exp",
-                "direction": "predictor -> parameter",
-                "execution": "numerical prediction and utilities",
-            },
-            {
-                "argument": "linkinv_backend=pt.exp",
-                "direction": "predictor -> parameter",
-                "execution": "symbolic, inside the PyMC graph",
+                "execution": "numerical; optional, unused by Bambi",
             },
         ]
     )
