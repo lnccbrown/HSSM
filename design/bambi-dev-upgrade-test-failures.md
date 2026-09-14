@@ -415,6 +415,31 @@ input.
 Affected: `tests/addm/test_addm_ppc.py`, `tests/addm/test_addm_continuation.py`,
 `tests/addm/test_addm_cartoon.py` (1 each).
 
+## Re-triage after F4 (#1313)
+
+All 19 R5 marks removed. Of the 51 ids, 44 pass outright; 7 fail for reasons
+R5 was masking:
+
+| Code | Ids | Files | Cause | Item |
+|------|----:|------:|-------|------|
+| R8 | 2 | 1 | numba slice-sampler `SystemError` (now on its own mark) | F9 (#1318) |
+| R13 | 5 | 2 | constant parameters and `*_Intercept_centered` RVs kept in `posterior` (new) | F12 |
+
+### R13 — bambi keeps constant parameters and centered intercepts in `posterior` *(5 ids, 2 files)*
+
+```
+assert "v" not in idata.posterior.data_vars      # fixed-vector v recorded as 0.0
+assert summary.shape[0] == 4                     # 5: p_outlier is a row now
+assert summary.shape[0] == 6                     # 8: + p_outlier, v_Intercept_centered
+```
+
+bambi 0.20 builds every constant marginal parameter as a `pm.Deterministic`
+and records it, and keeps the `*_Intercept_centered` RV next to the uncentered
+`*_Intercept` deterministic. Old bambi stored neither.
+
+Affected: `tests/test_hssm.py::TestFixedVectorParams` (2),
+`tests/integration/test_mcmc.py::test_post_processing_*` (3).
+
 ## Suggested order of attack
 
 1. **R1** — `SSMFamily.RESPONSE_NDIM = 2`, drop the dead `create_extra_pps_coord`,

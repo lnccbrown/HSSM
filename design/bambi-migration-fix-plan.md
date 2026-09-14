@@ -42,6 +42,7 @@ All nine are tracked as sub-issues of #1306.
 | F9 | #1318 | Investigate numba slice-sampler `SystemError` | R8 | 2 ids | Unknown (likely upstream) |
 | F10 | *(needs issue)* | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 7 ids | Medium |
 | F11 | *(needs issue)* | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 3 ids | Medium |
+| F12 | *(needs issue)* | Drop bambi's constant-parameter and `*_Intercept_centered` posterior variables | R13 | 5 ids | Low |
 
 F6 (#1315) is no longer latent: R10 (20 ids) is the `predictions` group
 surfacing in every plotting path that calls `sample_posterior_predictive(data=...)`.
@@ -130,13 +131,15 @@ The PR names the replacement under *Graph evaluation and interventions*:
 "Conditional parameters are represented as deterministic variables in the PyMC
 model. The backend can evaluate them with `pymc.compute_deterministics`."
 
-- [ ] `src/hssm/base.py:1028`, `src/hssm/base.py:1034` —
-      `_compute_likelihood_params`
-- [ ] `src/hssm/utils.py:205` — `_compute_likelihood_params`
-- [ ] `src/hssm/utils.py:286` — `_make_dist_kwargs_and_coords` (already flagged
-      by `pyrefly`)
-- [ ] Remove the R5 xfail mark on `test_choice_only` — note it also covers the
-      2 R8 ids, which will still fail (see F9)
+- [x] `src/hssm/base.py:1028`, `src/hssm/base.py:1034` —
+      `_compute_likelihood_params` → `Model.predict(kind="response_params")`
+- [x] `src/hssm/utils.py:205` — `_compute_likelihood_params` → HSSM-owned
+      `_compute_likelihood_params` wrapping `predict`, folding the out-of-sample
+      `predictions` group back into one dataset
+- [x] `src/hssm/utils.py:286` — `_make_dist_kwargs_and_coords` ported into
+      `hssm.utils` on top of `Model.parameters`
+- [x] Remove the R5 xfail marks (all 19). The 2 R8 ids under `test_choice_only`
+      now carry their own mark (see F9); 5 ids re-surfaced as R13 (F12)
 
 ### F5 (#1314) — Migrate deprecated accessors and refresh test doubles
 
@@ -243,6 +246,20 @@ extra. Upstream is aware this path is fragile.
       working around it in HSSM
 - [ ] These 2 ids sit under `test_choice_only`, which is marked R5 — after F4
       lands they will need their own mark or a fix
+
+### F12 — Drop the extra posterior variables bambi 0.20 records
+
+**Root cause:** R13 (5 ids), unmasked by F4
+
+bambi 0.20 writes constant marginal parameters (`p_outlier=0.05`, a fixed
+`z=0.5`, the `0.0` placeholder of a fixed-vector parameter) to `posterior` as
+deterministics, and keeps the `*_Intercept_centered` RV alongside the
+uncentered intercept. Old bambi stored neither, so `az.summary` gains rows and
+fixed-vector parameters show up in the trace.
+
+- [ ] Decide whether `_clean_posterior_group` should drop constant
+      deterministics and `*_centered` RVs
+- [ ] Remove the R13 xfail marks
 
 ---
 
