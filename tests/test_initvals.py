@@ -94,17 +94,22 @@ def _check_initval_defaults_correctness(model) -> None:
         else:
             param_link_setting = None
 
+        # bambi >= 0.20 names the free intercept RV `*_Intercept_centered` when
+        # the formula has common predictors; the defaults are keyed by the
+        # uncentered name.
+        settings_key = name_.removesuffix("_centered")
+
         # Go through parameters that are specified in the initial value defaults
         # If not specified in there, we won't touch the parameter during post-processing
         # anyways
-        if name_ in hssm.defaults.INITVAL_SETTINGS[param_link_setting]:
+        if settings_key in hssm.defaults.INITVAL_SETTINGS[param_link_setting]:
             # Figure out if user specified a custom initial value for the parameter
 
             # If yes, we need to check it this custom value successfully overrode our
             # global defaults
             # If not, we want to check if our defaults where successfully applied
             user_initval = model._check_if_initval_user_supplied(
-                name_, return_value=True
+                settings_key, return_value=True
             )
 
             if user_initval is not None:
@@ -124,7 +129,7 @@ def _check_initval_defaults_correctness(model) -> None:
                 model_initial_point = model._initvals[name_]
                 default_initial_point = hssm.defaults.INITVAL_SETTINGS[
                     param_link_setting
-                ][name_]
+                ][settings_key]
 
                 assert np.allclose(
                     model_initial_point,
@@ -137,10 +142,6 @@ def _check_initval_defaults_correctness(model) -> None:
             pass
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.parametrize(
     ("link_settings", "expected_link", "expected_initval"),
     [(None, "identity", 1.5), ("log_logit", "log", 0.0)],
@@ -163,7 +164,13 @@ def test_valid_link_settings_preserve_regression_initvals(
     )
 
     assert model.params["a"].link == expected_link
-    np.testing.assert_allclose(model._initvals["a_Intercept"], expected_initval)
+    # `a ~ 1 + theta` has a common predictor, so bambi >= 0.20 centers it and
+    # the free intercept RV is `a_Intercept_centered` (`a_Intercept` is a
+    # Deterministic). It carries the default that used to land on `a_Intercept`.
+    assert "a_Intercept" not in model._initvals
+    np.testing.assert_allclose(
+        model._initvals["a_Intercept_centered"], expected_initval
+    )
 
 
 @pytest.mark.slow
@@ -213,10 +220,6 @@ def test_basic_model_p_outlier_initval(caplog):
     _check_initval_defaults_correctness(model)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 def test_reg_model(caplog):
     """Test regression model, with regression on all parameters."""
@@ -237,10 +240,6 @@ def test_reg_model(caplog):
     _check_initval_defaults_correctness(model)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 def test_reg_model_subset(caplog):
     """Test regression model, with subset of parameters being regressions."""
@@ -260,10 +259,6 @@ def test_reg_model_subset(caplog):
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 def test_angle_model_reg(caplog):
     """Test with angle model regression."""
@@ -325,3 +320,35 @@ def test_process_no_process(caplog):
         model_on.initvals != model_off.initvals
     ), """Initial values should not be the same when
     initval processing is turned off vs. turned on."""
+
+
+def test_user_initval_on_centered_regression_intercept(cavanagh_test):
+    """A user `initval` on a centered intercept prior survives postprocessing."""
+    model = hssm.HSSM(
+        data=cavanagh_test.iloc[:12],
+        include=[
+            {
+                "name": "a",
+                "formula": "a ~ 1 + theta",
+                "prior": {
+                    "Intercept": {
+                        "name": "Normal",
+                        "mu": 1.0,
+                        "sigma": 0.5,
+                        "initval": 0.8,
+                    },
+                    "theta": {"name": "Normal", "mu": 0.0, "sigma": 0.5},
+                },
+            }
+        ],
+        v=0.0,
+        z=0.5,
+        t=0.2,
+        p_outlier=0.0,
+        process_initvals=True,
+        initval_jitter=0.0,
+    )
+
+    assert "a_Intercept" not in model._initvals
+    np.testing.assert_allclose(model._initvals["a_Intercept_centered"], 0.8)
+    _check_initval_defaults_correctness(model)
