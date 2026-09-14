@@ -909,11 +909,24 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # Logic behind which variables to keep:
         # We essentially want to get rid of all the trial-wise variables.
 
-        # We drop all distributional components, IF they are deterministics
+        # We drop all conditional parameters, IF they are deterministics
         # (in which case they will be trial wise systematically)
-        # and we keep distributional components, IF they are
+        # and we keep conditional parameters, IF they are
         # basic random-variables (in which case they should never
         # appear trial-wise).
+
+        # bambi 0.20 also builds every constant marginal parameter (a fixed
+        # `p_outlier`, a fixed `z`, the `0.0` placeholder of a fixed-vector
+        # parameter) as a `pm.Deterministic` and traces it. Older bambi never
+        # stored these, so we drop them too: a constant in the trace only adds
+        # noise rows to `az.summary` and `plot_trace`. Any parameter bambi built
+        # as a deterministic is therefore dropped, regardless of its kind.
+
+        # The `*_Intercept_centered` RVs that bambi 0.20 keeps alongside the
+        # uncentered `*_Intercept` deterministic are deliberately kept: they are
+        # the model's actual free RVs, and bambi's `predict` and
+        # `compute_log_likelihood` (via `pm.compute_deterministics`) raise a
+        # `KeyError` if they are missing from `posterior`.
         if dt is None:
             raise ValueError(
                 "The DataTree object is None. Cannot clean up the posterior group."
@@ -925,12 +938,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 "Cannot clean up the posterior group."
             )
 
+        deterministic_names = {var_.name for var_ in self.pymc_model.deterministics}
         vars_to_keep = set(dt["posterior"].data_vars.keys()).difference(
-            set(
-                key_
-                for key_ in self.model.distributional_components.keys()
-                if key_ in [var_.name for var_ in self.pymc_model.deterministics]
-            )
+            key_ for key_ in self.model.parameters if key_ in deterministic_names
         )
         vars_to_keep_clean = [
             var_
@@ -1809,7 +1819,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 continue
             output.append(f"{param.name}:")
 
-            component = self.model.components[param.name]
+            component = self.model.parameters[param.name]
 
             # Regression case:
             if param.is_regression:

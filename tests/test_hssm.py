@@ -278,7 +278,7 @@ def test_add_likelihood_parameters_to_data(data_ddm):
     # Get distributional components (make sure to take the right aliases)
     distributional_component_names = [
         key_ if key_ not in model._aliases else model._aliases[key_]
-        for key_ in model.model.distributional_components.keys()
+        for key_ in model.model.conditional_parameters.keys()
     ]
 
     # Check that after computing the likelihood parameters
@@ -489,7 +489,7 @@ def test_valid_prior_settings_preserve_regression_and_simple_prior_scope(
     safe_model = HSSM(**model_kwargs, prior_settings="safe")
 
     assert delegated_model.params["v"].prior is None
-    assert delegated_model.model.components["v"].intercept_term.prior is not None
+    assert delegated_model.model.parameters["v"].intercept_term.prior is not None
     assert isinstance(safe_model.params["v"].prior, dict)
 
     for name in ("a", "z", "t"):
@@ -617,10 +617,6 @@ class TestFixedVectorParams:
                 include=[{"name": "z", "prior": out_of_bounds}],
             )
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior` (#1330)",
-        strict=False,
-    )
     def test_fixed_vector_sampling(self, data_ddm):
         """Sampling with a fixed vector should succeed and exclude it from posterior."""
         n_obs = len(data_ddm)
@@ -638,10 +634,6 @@ class TestFixedVectorParams:
         for param in ["a", "z", "t"]:
             assert param in idata.posterior.data_vars
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior` (#1330)",
-        strict=False,
-    )
     def test_fixed_vector_multiple_params(self, data_ddm):
         """Fixing multiple parameters to vectors should work."""
         n_obs = len(data_ddm)

@@ -158,14 +158,16 @@ be removed:
 `src/hssm/utils.py` is currently inconsistent: line 55 uses the new
 `response_term`, lines 280 and 285 still use `response_component.term`.
 
-- [ ] `src/hssm/utils.py:134`, `src/hssm/base.py:1812` — `components`
-- [ ] `src/hssm/utils.py:127`, `:142`, `src/hssm/base.py:915` —
+- [x] `src/hssm/utils.py:134`, `src/hssm/base.py:1812` — `components`
+- [x] `src/hssm/utils.py:127`, `:142`, `src/hssm/base.py:915` —
       `distributional_components`
-- [ ] `src/hssm/utils.py:280`, `:285` — `response_component`
-- [ ] `tests/test_utils.py` — the `SimpleNamespace` doubles still mimic the
+- [x] `src/hssm/utils.py:280`, `:285` — `response_component`
+- [x] `tests/test_utils.py` — the `SimpleNamespace` doubles still mimic the
       pre-rewrite API
-- [ ] Consider failing CI on bambi `FutureWarning`s to catch the rest
-- [ ] Remove the R6 xfail marks
+- [x] Fail the test suite on bambi's deprecation `FutureWarning`s
+      (`filterwarnings` in `pyproject.toml`, matched on the message — the
+      shims warn with `stacklevel=2`, so a module filter on `bambi` never fires)
+- [x] Remove the R6 xfail marks (none were left by the time F5 landed)
 
 ### F6 (#1315) — Handle the new `predictions` DataTree group
 
@@ -263,9 +265,16 @@ deterministics, and keeps the `*_Intercept_centered` RV alongside the
 uncentered intercept. Old bambi stored neither, so `az.summary` gains rows and
 fixed-vector parameters show up in the trace.
 
-- [ ] Decide whether `_clean_posterior_group` should drop constant
-      deterministics and `*_centered` RVs
-- [ ] Remove the R13 xfail marks
+- [x] Decide whether `_clean_posterior_group` should drop constant
+      deterministics and `*_centered` RVs. **Decision:** drop every parameter
+      bambi built as a `pm.Deterministic` (the constants), unconditionally —
+      it restores the pre-rewrite trace. **Keep** `*_Intercept_centered`: it is
+      the actual free RV, and bambi's `predict` / `compute_log_likelihood`
+      (`pm.compute_deterministics`) raise `KeyError` without it. Reconstructing
+      it on demand the way bambi does for `_offset` would have to wrap every
+      `model.predict` entry point, so the extra summary row is accepted.
+- [x] Remove the R13 xfail marks; regression-model row counts in
+      `test_post_processing_reg*` now include the centered intercept(s)
 
 ---
 

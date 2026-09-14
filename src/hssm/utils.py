@@ -125,14 +125,14 @@ def _get_alias_dict(
     parent_name = parent.name
     alias_dict: dict[str, Any] = {response_c: response_str}
 
-    if len(model.distributional_components) == 1:
+    if len(model.conditional_parameters) == 1:
         if not parent.is_regression or (
             parent.is_regression and parent.formula is None
         ):
             alias_dict[parent_name] = f"{parent_name}_mean"
             alias_dict["Intercept"] = parent_name
         else:
-            for name, term in model.components[parent_name].terms.items():
+            for name, term in model.parameters[parent_name].terms.items():
                 if isinstance(
                     term, (CommonTerm, GroupSpecificTerm, HSGPTerm, OffsetTerm)
                 ):
@@ -140,7 +140,7 @@ def _get_alias_dict(
 
         return alias_dict
 
-    for component_name, component in model.distributional_components.items():
+    for component_name, component in model.conditional_parameters.items():
         if component_name == parent_name:
             alias_dict[component_name] = {}
             if not parent.is_regression:
@@ -405,12 +405,12 @@ def log_likelihood(
     # Get the values of the outcome variable
     if y_values is None:  # when it's not handled by the specific family
         if data is None:
-            y_values = np.squeeze(model.response_component.term.data)
+            y_values = np.squeeze(model.response_term.data)
         else:
             y_values = _response_evaluate_new_data(model, data)
 
     response_dist = get_response_dist(model.family)
-    response_term = model.response_component.term
+    response_term = model.response_term
     kwargs, coords = _make_dist_kwargs_and_coords(family, model, posterior, **kwargs)
 
     # If it's multivariate, it's going to have a fourth coord,
