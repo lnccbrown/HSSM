@@ -580,12 +580,13 @@ def _use_traces_or_sample(
     # First, determine whether posterior predictive samples are available
     # If not, we need to sample from the posterior
     if dt is None:
-        if model.traces is None:
+        traces: xr.DataTree | None = model.traces
+        if traces is None:
             raise ValueError(
                 "No DataTree object provided. Please provide a DataTree "
                 + "object or sample the model first using model.sample()."
             )
-        dt = model.traces
+        dt = traces
 
     sampled = False
 
