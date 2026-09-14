@@ -54,10 +54,6 @@ def test_make_hssm_rv_addm_builds_real_rv(recwarn):
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @needs_addm_sim
 def test_addm_rv_extra_fields_populated():
     """Building an aDDM stashes the observed fixations on the RV class."""
@@ -74,10 +70,6 @@ def test_addm_rv_extra_fields_populated():
     assert np.array_equal(np.asarray(ef["r1"]), df["r1"].to_numpy())
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_backward_compat_non_addm_rv_has_no_extra_fields():
     """A non-covariate model's RV keeps ``_extra_fields`` None (path unchanged)."""
     data = hssm.simulate_data(model="ddm", theta=[0.5, 1.5, 0.5, 0.5], size=50)
@@ -190,7 +182,7 @@ def test_addm_sim_likelihood_recovery():
 # PPC conditions on observed fixations (slow; short sample)
 # --------------------------------------------------------------------------- #
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R12 pymc's forward sampler rejects the aDDM `p_outlier` TensorConstant in the param list",
     strict=False,
 )
 @needs_addm_sim

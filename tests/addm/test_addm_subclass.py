@@ -74,10 +74,6 @@ def make_addm_dataframe(n_trials, seed=0, n_participants=1):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_construct_default_config():
     """aDDM constructs from a dataframe with the default config."""
     df = make_addm_dataframe(20)
@@ -85,10 +81,6 @@ def test_construct_default_config():
     assert isinstance(model, aDDM)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_construct_explicit_config():
     """aDDM accepts an explicit ``aDDMConfig()``."""
     df = make_addm_dataframe(20)
@@ -119,10 +111,6 @@ def test_addm_rejects_invalid_setting_presets(setting_name, invalid_value, prese
     make_params.assert_not_called()
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_is_hssmbase_subclass():
     """``aDDM`` is an ``HSSMBase`` subclass."""
     assert issubclass(hssm.aDDM, HSSMBase)
@@ -131,10 +119,6 @@ def test_is_hssmbase_subclass():
         assert hasattr(model, attr), f"missing HSSMBase API: {attr}"
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_loglik_op_injected():
     """The JAX log-likelihood ``Op`` is injected into the config at construction."""
     cfg = aDDMConfig()
@@ -166,10 +150,6 @@ def test_bad_columns_raise():
         hssm.aDDM(data=missing_col)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_smoke_sample():
     """aDDM samples end-to-end without error (smoke test)."""
     df = make_addm_dataframe(200, seed=1)

@@ -10,14 +10,20 @@ about it* list: nine work items, each sized to one PR.
 
 ## Current state
 
+After F1 (#1310) and F2 (#1311):
+
 ```
-673 passed, 5 skipped, 286 xfailed, 0 failed, 0 xpassed
-+ 3 collection errors that cannot be xfail-marked
+1291 passed, 4 skipped, 124 xfailed, 1 xpassed, 0 failed
 ```
 
-286 failing test ids across 143 functions in 33 files are marked
+The 102 ids that still fail are marked
 `@pytest.mark.xfail(reason="bambi 0.20 migration (#1305): R<n> …", strict=False)`.
-Marks are applied per *function*, so the 145 marks cover 286 ids.
+Every R1 mark is gone; the ids R1 was masking were re-triaged into R2, R5 and
+three new root causes (R10-R12) — see *Re-triage after F1* in the inventory.
+Marks are per function except where a parametrized test is only partly
+affected (`test_vi_matrix`, `test_missing_data_vi_matrix`, the two
+`test_plot_model_cartoon_*_choice` grids), which carry per-row
+`pytest.param(..., marks=...)`.
 
 ## Fix items
 
@@ -25,7 +31,7 @@ All nine are tracked as sub-issues of #1306.
 
 | # | Issue | Fix | Root causes | Unblocks | Risk |
 |---|-------|-----|-------------|---------:|------|
-| F1 | #1310 | Declare `SSMFamily.RESPONSE_NDIM = 2`, drop dead hook, fix coord name | R1 | 253 ids | Low |
+| F1 | #1310 | ~~Declare `SSMFamily.RESPONSE_NDIM = 2`, drop dead hook, fix coord name~~ **done** | R1 | 253 ids | Low |
 | F2 | #1311 | Collapse `hssm.Link` onto `inverse_link` | R3, R4 | 11 ids + 3 collection errors | Medium (user-facing) |
 | F3 | #1312 | Let truncated-prior callables accept `dims` | R2 | 9 ids | Low |
 | F4 | #1313 | Replace removed likelihood-parameter APIs | R5 + latent #1 | 6 ids | Medium |
@@ -34,6 +40,13 @@ All nine are tracked as sub-issues of #1306.
 | F7 | #1316 | Adapt to new-group prediction semantics | latent #5 | 0 (masked) | High (behavioral) |
 | F8 | #1317 | Reconcile two drifted assertions | R7, R9 | 2 ids | Low |
 | F9 | #1318 | Investigate numba slice-sampler `SystemError` | R8 | 2 ids | Unknown (likely upstream) |
+| F10 | *(needs issue)* | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 7 ids | Medium |
+| F11 | *(needs issue)* | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 3 ids | Medium |
+
+F6 (#1315) is no longer latent: R10 (20 ids) is the `predictions` group
+surfacing in every plotting path that calls `sample_posterior_predictive(data=...)`.
+F4 (#1313) grew from 6 ids to 51 — R5 sits on every `sample()` and `find_MAP`
+path, so it was masked almost as completely as R1.
 
 Ordering matters: **F1 first**. It aborts model construction, so it masks
 almost everything else. F6 and F7 are latent behavioral changes that F1 will
@@ -56,12 +69,13 @@ The threshold is subtle: `build_response_term` appends the response coord when
 Verified by monkeypatch (no source change): a plain DDM builds successfully and
 the model coords become `['__obs__', 'rt_dim']`.
 
-- [ ] `src/hssm/distribution_utils/dist.py:753` — set `RESPONSE_NDIM = 2`
-- [ ] `src/hssm/distribution_utils/dist.py:756` — remove `create_extra_pps_coord`
-- [ ] `src/hssm/base.py:1287`, `src/hssm/base.py:1356` — the hardcoded
-      `"rt,response_extra_dim_0"` coord is now `rt_dim`; these checks currently
-      never match
-- [ ] Re-run the suite and re-triage; remove the R1 xfail marks that now pass
+- [x] `src/hssm/distribution_utils/dist.py:753` — set `RESPONSE_NDIM = 2`
+- [x] `src/hssm/distribution_utils/dist.py:756` — remove `create_extra_pps_coord`
+- [x] `src/hssm/base.py:1287`, `src/hssm/base.py:1356` — the hardcoded
+      `"rt,response_extra_dim_0"` coord is now `rt_dim`; both checks folded
+      into `_rename_response_dim`
+- [x] Re-run the suite and re-triage; remove the R1 xfail marks that now pass
+      (all 142 R1 marks removed; 102 ids re-marked as R2/R5/R10/R11/R12)
 
 ### F2 (#1311) — Collapse `hssm.Link` onto a single `inverse_link`
 

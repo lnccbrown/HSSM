@@ -9,10 +9,6 @@ import hssm
 hssm.set_floatX("float32")
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(
     [
@@ -24,19 +20,96 @@ hssm.set_floatX("float32")
         "col",
     ],
     [
-        (2, None, "both", "posterior_predictive", "participant_id", "stim"),
+        pytest.param(
+            2,
+            None,
+            "both",
+            "posterior_predictive",
+            "participant_id",
+            "stim",
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (2, None, "both", "prior_predictive", "participant_id", "stim"),
-        (2, None, "samples", "posterior_predictive", "participant_id", "stim"),
+        pytest.param(
+            2,
+            None,
+            "samples",
+            "posterior_predictive",
+            "participant_id",
+            "stim",
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (2, None, "samples", "prior_predictive", "participant_id", "stim"),
-        (0, None, "band", "posterior_predictive", "participant_id", "stim"),
+        pytest.param(
+            0,
+            None,
+            "band",
+            "posterior_predictive",
+            "participant_id",
+            "stim",
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (0, None, "band", "prior_predictive", "participant_id", "stim"),
-        (0, None, None, "posterior_predictive", "participant_id", "stim"),
+        pytest.param(
+            0,
+            None,
+            None,
+            "posterior_predictive",
+            "participant_id",
+            "stim",
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (0, None, None, "prior_predictive", "participant_id", "stim"),
-        (2, ["dbs"], "band", "posterior_predictive", "participant_id", "stim"),
+        pytest.param(
+            2,
+            ["dbs"],
+            "band",
+            "posterior_predictive",
+            "participant_id",
+            "stim",
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (2, ["dbs"], "band", "prior_predictive", "participant_id", "stim"),
-        (2, None, None, "posterior_predictive", "participant_id", None),
+        pytest.param(
+            2,
+            None,
+            None,
+            "posterior_predictive",
+            "participant_id",
+            None,
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (2, None, None, "prior_predictive", "participant_id", None),
-        (2, None, "band", "posterior_predictive", None, None),
+        pytest.param(
+            2,
+            None,
+            "band",
+            "posterior_predictive",
+            None,
+            None,
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (2, None, "band", "prior_predictive", None, None),
     ],
 )
@@ -83,7 +156,7 @@ def test_plot_model_cartoon_2_choice(
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
     strict=False,
 )
 @pytest.mark.slow
@@ -107,10 +180,6 @@ def test_plot_model_cartoon_legacy_booleans(cav_model_cartoon):
         )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 def test_plot_model_cartoon_intercept_only(intercept_only_ddm_cartoon):
     """Test plot_model_cartoon with intercept-only DDM (no regression).
@@ -130,7 +199,7 @@ def test_plot_model_cartoon_intercept_only(intercept_only_ddm_cartoon):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
     strict=False,
 )
 @pytest.mark.slow
@@ -166,7 +235,7 @@ def test_plot_model_cartoon_random_state_end_to_end(cav_model_cartoon):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
     strict=False,
 )
 @pytest.mark.slow
@@ -187,10 +256,6 @@ def test_plot_model_cartoon_obs_conditioning(cav_model_cartoon):
         )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(
     [
@@ -202,17 +267,83 @@ def test_plot_model_cartoon_obs_conditioning(cav_model_cartoon):
         "col",
     ],
     [
-        (2, None, "both", "posterior_predictive", "participant_id", "stim"),
+        pytest.param(
+            2,
+            None,
+            "both",
+            "posterior_predictive",
+            "participant_id",
+            "stim",
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (2, None, "both", "prior_predictive", "participant_id", "stim"),
-        (2, None, "samples", "posterior_predictive", "participant_id", "stim"),
+        pytest.param(
+            2,
+            None,
+            "samples",
+            "posterior_predictive",
+            "participant_id",
+            "stim",
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (2, None, "samples", "prior_predictive", "participant_id", "stim"),
-        (0, None, "band", "posterior_predictive", "participant_id", "stim"),
+        pytest.param(
+            0,
+            None,
+            "band",
+            "posterior_predictive",
+            "participant_id",
+            "stim",
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (0, None, "band", "prior_predictive", "participant_id", "stim"),
-        (0, None, None, "posterior_predictive", "participant_id", "stim"),
+        pytest.param(
+            0,
+            None,
+            None,
+            "posterior_predictive",
+            "participant_id",
+            "stim",
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (0, None, None, "prior_predictive", "participant_id", "stim"),
-        (2, None, None, "posterior_predictive", "participant_id", None),
+        pytest.param(
+            2,
+            None,
+            None,
+            "posterior_predictive",
+            "participant_id",
+            None,
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (2, None, None, "prior_predictive", "participant_id", None),
-        (2, None, "band", "posterior_predictive", None, None),
+        pytest.param(
+            2,
+            None,
+            "band",
+            "posterior_predictive",
+            None,
+            None,
+            marks=pytest.mark.xfail(
+                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                strict=False,
+            ),
+        ),
         (2, None, "band", "prior_predictive", None, None),
     ],
 )

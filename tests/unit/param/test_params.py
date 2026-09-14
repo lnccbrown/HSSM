@@ -452,10 +452,6 @@ def test_make_params_prepares_formula_without_safe_priors(data_ddm_reg):
     assert regression._group_terms_with_common == set()
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_make_params_prepares_rhs_only_formula(cavanagh_test):
     """Preserve RHS-only shorthand in a complete HSSM model build."""
     model = HSSM(

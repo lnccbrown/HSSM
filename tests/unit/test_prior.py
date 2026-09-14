@@ -367,10 +367,6 @@ class TestPriorIntegration:
                 process_initvals=False,
             )
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_supported_explicit_noncentered_prior_builds_clean_graph(
         self, cavanagh_test
     ):
@@ -392,10 +388,6 @@ class TestPriorIntegration:
         assert "v_1|participant_id_mu" not in names
         assert find_disconnected_free_rvs(model.pymc_model) == []
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_centered_warns_only_about_matched_location_ridge(
         self, cavanagh_test, caplog
     ):
@@ -416,10 +408,6 @@ class TestPriorIntegration:
         assert "Intercept" in messages
         assert find_disconnected_free_rvs(model.pymc_model) == []
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_check_user_priors_skips_default_hyperpriors(self, cavanagh_test, caplog):
         """Defaults that already use a `mu` hyperprior do not trigger the warning.
 
@@ -442,10 +430,6 @@ class TestPriorIntegration:
         ]
         assert targeted_messages == []
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_prior_settings_none_preserves_prior_and_structural_warning(
         self, cavanagh_test, caplog
     ):
@@ -493,10 +477,6 @@ class TestPriorIntegration:
             "theta|participant_id",
         }
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_centered_group_wildcard_drives_ridge_warning(self, cavanagh_test, caplog):
         """Expand a centered user group wildcard over Formulae terms."""
         group_wildcard = {
@@ -562,10 +542,6 @@ class TestPriorIntegration:
         assert "theta|participant_id" in message
         assert "disconnected node" in message
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_group_only_slope_not_flagged_by_unrelated_intercept(
         self, cavanagh_test, caplog
     ):
@@ -591,10 +567,6 @@ class TestPriorIntegration:
         ]
         assert overparam_messages == []
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-        strict=False,
-    )
     def test_centered_repeated_group_locations_warn_once(self, cavanagh_test, caplog):
         """Surface the crossed-group location ridge without blocking build."""
         with caplog.at_level(logging.WARNING, logger="hssm"):

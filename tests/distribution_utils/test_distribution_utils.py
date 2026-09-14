@@ -239,10 +239,6 @@ def test_make_distribution_for_supported_model():
         make_distribution_for_supported_model("unsupported_model")
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 def test_extra_fields(data_ddm):
     """Check extra likelihood fields are forwarded through generated distributions."""

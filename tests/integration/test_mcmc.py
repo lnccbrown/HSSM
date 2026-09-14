@@ -142,7 +142,7 @@ DEFAULT_SAMPLER_GRID = [
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
     strict=False,
 )
 @pytest.mark.slow
@@ -156,10 +156,6 @@ def test_mcmc_matrix(request, loglik_kind, backend, sampler, step, shape):
     sample_and_verify(model, sampler, step)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.parametrize(ERROR_NAMES, ERROR_GRID)
 def test_rejected_sampler_combinations(data_ddm, loglik_kind, backend, sampler, step):
     """Unsupported sampler/step combinations are rejected before sampling."""
@@ -174,10 +170,6 @@ class _FitCalled(Exception):
     """Sentinel raised in place of an actual `bambi.Model.fit` call."""
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.parametrize(DEFAULT_SAMPLER_NAMES, DEFAULT_SAMPLER_GRID)
 def test_default_sampler_resolution(
     data_ddm, monkeypatch, loglik_kind, backend, expected_sampler
@@ -201,10 +193,6 @@ def test_default_sampler_resolution(
     assert captured["inference_method"] == expected_sampler
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.parametrize(
     ("sample_kwargs", "expected_compile_kwargs"),
     [
@@ -250,10 +238,6 @@ def test_default_blackbox_slice_uses_compiler_settings(
         assert captured["fit_kwargs"][key] == value
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 def test_default_blackbox_slice_resolves_backend(data_ddm, monkeypatch):
     """The PyMC backend shortcut is resolved before constructing Slice."""
     model = hssm.HSSM(data_ddm, loglik_kind="blackbox")
@@ -281,7 +265,7 @@ def test_default_blackbox_slice_resolves_backend(data_ddm, monkeypatch):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
     strict=False,
 )
 @pytest.mark.slow
@@ -304,7 +288,7 @@ def fitted_analytical(request):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
     strict=False,
 )
 @pytest.mark.slow
@@ -328,7 +312,7 @@ def test_post_processing_simple(fitted_analytical):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
     strict=False,
 )
 @pytest.mark.slow
@@ -348,7 +332,7 @@ def test_post_processing_reg(fitted_analytical):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
     strict=False,
 )
 @pytest.mark.slow
@@ -391,7 +375,7 @@ def test_post_processing_reg_v_a(fitted_analytical):
 
 # Basic tests for LBA likelihood
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R5 bambi 0.20 removed `Model._compute_likelihood_params`",
     strict=False,
 )
 @pytest.mark.slow

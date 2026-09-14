@@ -50,7 +50,15 @@ COVERING_ARRAY = [
     ("pytensor", "advi", "simple"),
     ("pytensor", "fullrank_advi", "reg_v"),
     ("pytensor", "advi", "reg_va"),
-    ("jax", "fullrank_advi", "simple"),
+    pytest.param(
+        "jax",
+        "fullrank_advi",
+        "simple",
+        marks=pytest.mark.xfail(
+            reason="bambi 0.20 migration (#1305): R11 VI on the JAX compile backend cannot trace bambi 0.20's symbolic `__obs__`-sized alloc",
+            strict=False,
+        ),
+    ),
     ("jax", "advi", "reg_v"),
     ("jax", "fullrank_advi", "reg_va"),
 ]
@@ -77,10 +85,6 @@ def run_vi(model, method):
     assert isinstance(model.vi_approx, pm.variational.Approximation)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, COVERING_ARRAY)
 def test_vi_matrix(request, backend, method, shape):
@@ -89,10 +93,6 @@ def test_vi_matrix(request, backend, method, shape):
     run_vi(model, method)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.parametrize("method", VI_METHODS)
 def test_vi_rejects_blackbox(data_ddm, method):
     """VI is rejected for blackbox likelihoods, which have no gradients.
@@ -108,7 +108,7 @@ def test_vi_rejects_blackbox(data_ddm, method):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
+    reason="bambi 0.20 migration (#1305): R11 VI on the JAX compile backend cannot trace bambi 0.20's symbolic `__obs__`-sized alloc",
     strict=False,
 )
 @pytest.mark.slow
@@ -130,10 +130,6 @@ def test_vi_jax_compile_backend(data_ddm, method, backend_arg):
     assert isinstance(model.vi_approx, pm.variational.Approximation)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R1 bambi 0.20 gives the 2-D `c(rt, response)` response only a 1-D `__obs__` dim",
-    strict=False,
-)
 @pytest.mark.slow
 def test_vi_c_compile_backend(data_ddm):
     """VI with the explicit C compile backend (the documented #1056 workaround).

@@ -346,6 +346,75 @@ the failure count to rise, not fall, on the first re-run after R1 is fixed.**
 
 - No files under `src/` were modified.
 
+## Re-triage after F1 (#1310)
+
+With `SSMFamily.RESPONSE_NDIM = 2` in place the suite is:
+
+```
+1291 passed, 4 skipped, 124 xfailed, 1 xpassed, 0 failed   (all 142 R1 marks removed)
+```
+
+Of the 253 ids R1 masked, 151 pass outright. The other 102 fail for reasons
+that were previously unreachable and have been re-marked. As predicted, the
+count of *distinct* problems went up:
+
+| Code | Ids | Files | Cause | Item |
+|------|----:|------:|-------|------|
+| R5 | 51 | 8 | `Model._compute_likelihood_params` removed — every `sample()`/`find_MAP` path calls `log_likelihood` | F4 (#1313) |
+| R2 | 21 | 3 | `TruncatedDist(dims=...)` rejected, and intercept RVs are now `*_Intercept_centered` (tests index `_initvals["a_Intercept"]`) | F3 (#1312) |
+| R10 | 20 | 3 | `Model.predict(data=...)` writes `predictions`, not `posterior_predictive` (was latent #2) | F6 (#1315) |
+| R11 | 7 | 2 | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc (new) | F10 |
+| R12 | 3 | 3 | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` (new) | F11 |
+
+### R10 — `Model.predict(data=...)` writes to `predictions` *(20 ids, 3 files)*
+
+```
+KeyError: 'Could not find node at posterior_predictive'
+  src/hssm/base.py:1177  posterior_predictive_list.append(dt_copy["posterior_predictive"])
+```
+
+Latent #2 made concrete. Every plotting helper goes through
+`plotting/utils.py:_use_traces_or_sample`, which calls
+`sample_posterior_predictive(dt=dt, data=data, inplace=True)` with the
+original data frame, so bambi routes the result to the `predictions` group.
+Only the `posterior_predictive` rows of the cartoon grids fail; the
+`prior_predictive` rows pass.
+
+Affected: `tests/test_plotting_cartoon.py` (16), `tests/integration/plotting/test_quantile_probability.py` (3),
+`tests/unit/plotting/test_predictive.py` (1).
+
+### R11 — JAX-compiled VI cannot trace the `__obs__` alloc *(7 ids, 2 files)*
+
+```
+TypeError: Shapes must be 1D sequences of concrete values of integer type, got (JitTracer(int32[]),).
+  pytensor/link/jax/dispatch/tensor_basic.py:46: in alloc
+  ... This concrete value was not available in Python because it depends on the value of the argument _obs_.
+```
+
+Only `HSSM.vi(...)` with `compile_kwargs={"mode": "JAX"}` (the `jax` rows of
+the VI covering arrays and all of `test_vi_jax_compile_backend`). The pytensor
+rows pass, and so does `("jax", "advi", "reg_v")` — the failure is shape- and
+method-dependent. Not in the PR notes; bambi 0.20's response term now allocates
+against a symbolic observation count, which the JAX linker cannot make static.
+
+Affected: `tests/integration/test_vi.py` (5), `tests/integration/test_missing_data_vi.py` (2).
+
+### R12 — pymc rejects the aDDM `p_outlier` constant when compiling the forward sampler *(3 ids, 3 files)*
+
+```
+TypeError: ('Constants not allowed in param list', TensorConstant(TensorType(float64, shape=()), data=array(0.05)))
+  bambi/backend/pymc/model.py:477: in _predict_in_sample
+  pymc/sampling/forward.py:387: in compile_forward_sampling_function
+```
+
+aDDM only; the SSM predictive path is fine. bambi's new in-sample predict
+compiles the forward sampler over the model's inputs, and the aDDM graph
+carries a `p_outlier` `TensorConstant` where pymc expects a shared variable or
+input.
+
+Affected: `tests/addm/test_addm_ppc.py`, `tests/addm/test_addm_continuation.py`,
+`tests/addm/test_addm_cartoon.py` (1 each).
+
 ## Suggested order of attack
 
 1. **R1** — `SSMFamily.RESPONSE_NDIM = 2`, drop the dead `create_extra_pps_coord`,
