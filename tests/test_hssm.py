@@ -147,10 +147,6 @@ def test_custom_model(data_ddm):
     assert model.model_config.list_params == ["v", "a", "z", "t", "p_outlier"]
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 def test_model_definition_outside_include(data_ddm):
     """Accept parameter definitions outside include and reject duplicates."""
@@ -172,10 +168,6 @@ def test_model_definition_outside_include(data_ddm):
         HSSM(data_ddm, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 def test_sample_prior_predictive(data_ddm_reg):
     """Generate prior-predictive DataTrees across regression structures."""
@@ -408,10 +400,6 @@ def test_model_creation_constant_parameter(data_ddm):
 
 
 # Setting any single parameter to a regression should respect the default bounds:
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "param_name, dist_name",
@@ -539,10 +527,6 @@ def test_valid_link_settings_preserve_links_precedence_and_repr(cavanagh_test):
     assert "(ignored due to link function)" in repr(transformed_model)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 def test_prior_settings_basic(cavanagh_test):
     """Apply requested prior-setting modes."""
