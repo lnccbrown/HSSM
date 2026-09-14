@@ -928,7 +928,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         vars_to_keep = set(dt["posterior"].data_vars.keys()).difference(
             set(
                 key_
-                for key_ in self.model.distributional_components.keys()
+                for key_ in self.model.conditional_parameters.keys()
                 if key_ in [var_.name for var_ in self.pymc_model.deterministics]
             )
         )
@@ -1809,7 +1809,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 continue
             output.append(f"{param.name}:")
 
-            component = self.model.components[param.name]
+            component = self.model.parameters[param.name]
 
             # Regression case:
             if param.is_regression:

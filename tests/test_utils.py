@@ -330,9 +330,7 @@ def test_log_likelihood_passes_jax_mode_to_pymc_compile(monkeypatch):
         ),
     )
     model = SimpleNamespace(
-        response_component=SimpleNamespace(
-            term=SimpleNamespace(data=np.array([0.0, 1.0]), is_constrained=False)
-        ),
+        response_term=SimpleNamespace(data=np.array([0.0, 1.0]), is_constrained=False),
         family=family,
     )
     monkeypatch.setattr("hssm.utils.pm.compile", fake_compile)

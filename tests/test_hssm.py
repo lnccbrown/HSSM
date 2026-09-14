@@ -282,7 +282,7 @@ def test_add_likelihood_parameters_to_data(data_ddm):
     # Get distributional components (make sure to take the right aliases)
     distributional_component_names = [
         key_ if key_ not in model._aliases else model._aliases[key_]
-        for key_ in model.model.distributional_components.keys()
+        for key_ in model.model.conditional_parameters.keys()
     ]
 
     # Check that after computing the likelihood parameters
@@ -493,7 +493,7 @@ def test_valid_prior_settings_preserve_regression_and_simple_prior_scope(
     safe_model = HSSM(**model_kwargs, prior_settings="safe")
 
     assert delegated_model.params["v"].prior is None
-    assert delegated_model.model.components["v"].intercept_term.prior is not None
+    assert delegated_model.model.parameters["v"].intercept_term.prior is not None
     assert isinstance(safe_model.params["v"].prior, dict)
 
     for name in ("a", "z", "t"):
