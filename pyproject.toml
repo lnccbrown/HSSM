@@ -246,6 +246,11 @@ addopts = [
 markers = [
     "slow: marks tests as slow (deselect with -m 'not slow')",
 ]
+filterwarnings = [
+    # bambi 0.20 renamed its model vocabulary behind FutureWarning shims that will
+    # be removed; fail loudly so any remaining deprecated accessor surfaces (#1314).
+    "error:.* is deprecated\\. Use .* instead\\.:FutureWarning",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.21,<0.12"]
