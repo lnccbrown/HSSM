@@ -136,3 +136,10 @@ def test_choice_only(synthetic_data, backend, sampler, step, shape):
     idata = sample(model, sampler, step)
 
     assert isinstance(idata, xr.DataTree)
+    # The regression slopes must actually move: the slice rows used to sit on
+    # a degenerate slice at `beta_x = 0` (#1318), and a trace pinned there
+    # would still be a valid DataTree.
+    for param in params:
+        slope = np.asarray(idata["posterior"][f"{param}_x"])
+        assert np.all(np.isfinite(slope))
+        assert np.ptp(slope) > 0
