@@ -40,7 +40,7 @@ All nine are tracked as sub-issues of #1306.
 | F7 | #1316 | Adapt to new-group prediction semantics | latent #5 | 0 (masked) | High (behavioral) |
 | F8 | #1317 | Reconcile two drifted assertions | R7, R9 | 2 ids | Low |
 | F9 | #1318 | Investigate numba slice-sampler `SystemError` | R8 | 2 ids | Unknown (likely upstream) |
-| F10 | #1328 | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 7 ids | Medium |
+| F10 | #1328 | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 0 left | Done |
 | F11 | #1329 | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 0 left (fixed by F12) | Done |
 | F12 | #1330 | Drop bambi's constant-parameter and `*_Intercept_centered` posterior variables | R13 | 5 ids | Low |
 
@@ -304,6 +304,24 @@ extra. Upstream is aware this path is fragile.
       working around it in HSSM
 - [ ] These 2 ids sit under `test_choice_only`, which is marked R5 — after F4
       lands they will need their own mark or a fix
+
+### F10 (#1328) — VI on the JAX compile backend cannot trace `__obs__`
+
+**Root cause:** R11 (7 ids) — **resolved**.
+
+bambi 0.20 keeps the data and the `__obs__` dim length as shared variables;
+the JAX linker traces shared variables, so every shape derived from them
+(bambi's response-parameter broadcast, HSSM's missing-data `n_missing`
+slice) is dynamic. `HSSM.vi(backend="jax")` now freezes them to constants
+via `pm.fit(more_replacements=...)` (`_vi_compat.freeze_shared_data`), the
+same step pymc's JAX samplers take in `get_jaxified_graph`.
+
+- [x] Pin down the nodes (bambi `build.py:93` broadcast; HSSM `dist.py`
+      `n_missing`) — both shape-from-shared-variable, no `pm.Data` static
+      shape available
+- [x] Fix in HSSM; upstream gap is pytensor's `JAXLinker` static-argument
+      scan (unfiled)
+- [x] Remove the R11 marks
 
 ### F11 (#1329) — aDDM forward sampler rejects the `p_outlier` constant
 

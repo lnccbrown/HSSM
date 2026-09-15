@@ -408,6 +408,18 @@ against a symbolic observation count, which the JAX linker cannot make static.
 
 Affected: `tests/integration/test_vi.py` (5), `tests/integration/test_missing_data_vi.py` (2).
 
+**Resolved by F10 (#1328)** — 2026-09-15. Two sources, both shared variables
+that bambi 0.20 introduced and pytensor's JAX linker traces as jit arguments:
+bambi's `pt.broadcast_to(value, (model.dim_lengths["__obs__"],))` in
+`backend/pymc/parameters/conditional/build.py`, and — once that is handled —
+HSSM's own `n_missing = pt.sum(pt.eq(data[:, 0], -999))` in
+`distribution_utils/dist.py`, which no longer constant-folds because the
+response is now a `pm.Data` rather than a constant. pymc's JAX samplers
+freeze every shared variable before jaxifying; `pm.fit` does not, so
+`HSSM.vi` now passes `more_replacements` from `_vi_compat.freeze_shared_data`.
+The JAX linker's static-argument scan (only `JAXShapeTuple` inputs, not
+`Alloc` shape slots) is the upstream gap; nothing filed yet.
+
 ### R12 — pymc rejects the aDDM `p_outlier` constant when compiling the forward sampler *(3 ids, 3 files)*
 
 ```

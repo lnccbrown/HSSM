@@ -54,10 +54,6 @@ COVERING_ARRAY = [
         "jax",
         "fullrank_advi",
         "simple",
-        marks=pytest.mark.xfail(
-            reason="bambi 0.20 migration (#1305): R11 VI on the JAX compile backend cannot trace bambi 0.20's symbolic `__obs__`-sized alloc",
-            strict=False,
-        ),
     ),
     ("jax", "advi", "reg_v"),
     ("jax", "fullrank_advi", "reg_va"),
@@ -107,10 +103,6 @@ def test_vi_rejects_blackbox(data_ddm, method):
         run_vi(model, method)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R11 VI on the JAX compile backend cannot trace bambi 0.20's symbolic `__obs__`-sized alloc",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize("method", VI_METHODS)
 @pytest.mark.parametrize("backend_arg", ["jax", None])

@@ -59,6 +59,16 @@ This work is in progress; entries are added as each sub-issue lands.
    `sample_posterior_predictive(data=...)` and `log_likelihood(data=...)`; see the new how-to
    guide [Predict for new or unidentified participants](how_to/predict_new_groups.md).
 
+4. **`vi(backend="jax")` freezes the model's data and dim lengths for the fit**
+   ([#1328](https://github.com/lnccbrown/HSSM/issues/1328)). Bambi 0.20 keeps the response
+   and the `__obs__` observation count as shared variables and derives shapes from them (the
+   response-parameter broadcast; HSSM's missing-data slice on the number of `-999` trials), which
+   the JAX linker traces as dynamic and rejects. HSSM now passes `pm.fit` a `more_replacements`
+   that pins those shared variables to constants — the same treatment PyMC's own JAX samplers
+   apply — so JAX-compiled VI works again on every model, missing-data models included. A
+   user-supplied `more_replacements` still takes precedence entry by entry; the other backends
+   are unchanged.
+
 #### Dependency changes:
 
 1. **`bambi` now tracks the `dev` branch** pending the 0.20 release, which reorganizes its

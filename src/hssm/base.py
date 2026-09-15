@@ -879,6 +879,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 # includes the upstream fixes (see hssm._vi_compat, #1056).
                 # Gate on the *resolved* backend: it is a named parameter,
                 # so it never appears in vi_kwargs.
+                #
+                # bambi 0.20 keeps the data and the `__obs__` dim length as
+                # shared variables and derives shapes from them, which the
+                # JAX linker cannot trace. Freeze them to constants for the
+                # fit, as pymc's JAX samplers do (#1328). A user-supplied
+                # `more_replacements` takes precedence entry by entry (pymc
+                # also accepts an explicit `None`, meaning no replacements).
+                vi_kwargs["more_replacements"] = {
+                    **_vi_compat.freeze_shared_data(self.pymc_model),
+                    **(vi_kwargs.get("more_replacements") or {}),
+                }
                 with _vi_compat.static_shape_vi_params():
                     self._vi_approx = pm.fit(
                         n=niter, method=method, backend=backend, **vi_kwargs
