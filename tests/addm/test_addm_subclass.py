@@ -190,10 +190,6 @@ def test_smoke_sample():
     assert "posterior" in idata
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 def test_hierarchical_regression_builds():
     """aDDM builds with a hierarchical regression on its parameters."""
     df = make_addm_dataframe(60, seed=2, n_participants=3)
@@ -207,10 +203,6 @@ def test_hierarchical_regression_builds():
     assert model.params["eta"].is_trialwise
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 def test_hierarchical_regression_samples():
     """A hierarchical regression on eta samples cleanly (CC — the headline).
 

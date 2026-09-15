@@ -163,18 +163,21 @@ def _make_truncated_dist(
     Returns
     -------
     Callable
-        A distribution (TensorVariable) created with pm.Truncated().
+        A distribution (TensorVariable) created with pm.Truncated(). Like a PyMC
+        distribution class, it accepts ``name`` plus keyword arguments such as
+        ``dims`` and ``shape``, which bambi (>= 0.20) passes when it builds the
+        RV inside the model graph.
     """
     truncated_kwargs = {k: kwargs.pop(k) for k in pymc_dist_args if k in kwargs}
 
-    def TruncatedDist(name):
+    def TruncatedDist(name, **call_kwargs):
         dist = get_distribution(dist_name).dist(**kwargs)
         return pm.Truncated(
             name=name,
             dist=dist,
             lower=lower_bound if np.isfinite(lower_bound) else None,
             upper=upper_bound if np.isfinite(upper_bound) else None,
-            **truncated_kwargs,
+            **{**truncated_kwargs, **call_kwargs},
         )
 
     return TruncatedDist

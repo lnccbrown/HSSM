@@ -86,6 +86,11 @@ _new_sampler_mapping: dict[str, Literal["pymc", "numpyro", "blackjax"]] = {
 _BAMBI_RESPONSE_DIM = "rt_dim"
 _HSSM_RESPONSE_DIM = "rt,response_dim"
 
+# bambi >= 0.20 writes out-of-sample predictions (`Model.predict(data=...)`) to
+# these groups instead of `posterior_predictive`. HSSM folds the response draws
+# back into `posterior_predictive` so in- and out-of-sample results look alike.
+_BAMBI_PREDICTIONS_GROUPS = ("predictions", "predictions_constant_data")
+
 
 def _rename_response_dim(dataset: xr.Dataset) -> xr.Dataset:
     """Rename bambi's response dim/coord to HSSM's `rt,response_dim`."""
@@ -1070,6 +1075,24 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self.model.predict(dt, kind="response_params", inplace=True)
         return dt
 
+    def _pop_response_draws(self, dt: DataTree) -> xr.Dataset:
+        """Remove and return the response draws bambi's ``predict`` wrote to ``dt``.
+
+        In sample, bambi stores them in ``posterior_predictive``. Out of sample
+        (``data`` given), bambi >= 0.20 stores them, together with the trial-wise
+        likelihood parameters, in ``predictions`` (plus ``predictions_constant_data``).
+        Only the response variable is kept, so both cases yield the same layout.
+        """
+        if "predictions" in dt:
+            draws = dt["predictions"].to_dataset()[[self.response_str]]
+            for group in _BAMBI_PREDICTIONS_GROUPS:
+                if group in dt:
+                    del dt[group]
+            return draws
+        draws = dt["posterior_predictive"].to_dataset()
+        del dt["posterior_predictive"]
+        return draws
+
     def sample_posterior_predictive(
         self,
         dt: DataTree | None = None,
@@ -1090,6 +1113,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         data : optional
             An optional data frame with values for the predictors that are used to
             obtain out-of-sample predictions. If omitted, the original dataset is used.
+            With `kind="response"`, the draws land in `posterior_predictive` either way
+            (bambi's out-of-sample `predictions` groups are folded into it), with one
+            `__obs__` per row of `data`.
         inplace : optional
             If `True` will modify datatree in-place and append a `posterior_predictive`
             group to `datatree`. Otherwise, it will return a copy of datatree with the
@@ -1101,10 +1127,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         kind: optional
             Indicates the type of prediction required. Can be `"response_params"` or
             `"response"`. The first returns draws from the posterior distribution of the
-            likelihood parameters, while the latter returns the draws from the posterior
-            predictive distribution (i.e. the posterior probability distribution for a
-            new observation) in addition to the posterior distribution. Defaults to
-            "response_params".
+            likelihood parameters (added to `posterior` in sample, or to a `predictions`
+            group when `data` is given, as bambi returns them), while the latter returns
+            the draws from the posterior predictive distribution (i.e. the posterior
+            probability distribution for a new observation) in addition to the posterior
+            distribution. Defaults to "response".
         draws: optional
             The number of samples to draw from the posterior predictive distribution
             from each chain.
@@ -1179,7 +1206,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             dt_copy["posterior"] = dt["posterior"].isel(draw=draws)
 
         if kind == "response":
-            # If we run kind == 'response' we actually run the observation RV
+            # If we run kind == 'response' we actually run the observation RV.
+            # `.predict()` is always called in place on `dt_copy`, whose posterior
+            # holds the (sub-sampled) draws; the response draws are then collected
+            # from wherever bambi wrote them and attached as `posterior_predictive`.
+            # Clear any output groups left over from earlier `predict` calls (e.g.
+            # a `predictions` group of likelihood parameters from an out-of-sample
+            # `kind="response_params"` call) so `_pop_response_draws` only sees
+            # what this call writes.
+            for group in ("posterior_predictive", *_BAMBI_PREDICTIONS_GROUPS):
+                if group in dt_copy:
+                    del dt_copy[group]
             if safe_mode:
                 # safe mode splits the draws into chunks of 10 to avoid
                 # memory issues (TODO: Figure out the source of memory issues)
@@ -1187,55 +1224,27 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
                 posterior_predictive_list = []
                 for samples_tmp in split_draws:
-                    tmp_posterior = dt["posterior"].sel(draw=samples_tmp)
-                    dt_copy["posterior"] = tmp_posterior
+                    dt_copy["posterior"] = dt["posterior"].sel(draw=samples_tmp)
                     self.model.predict(
                         dt_copy, kind, data, True, include_group_specific
                     )
-                    posterior_predictive_list.append(dt_copy["posterior_predictive"])
-
-                if inplace:
-                    dt["posterior_predictive"] = xr.concat(  # pyrefly: ignore[no-matching-overload]
-                        posterior_predictive_list,  # type: ignore[arg-type]
-                        dim="draw",
-                    )
-                    # for inplace, we don't return anything
-                    return None
-                else:
-                    # Reassign original posterior to dt_copy
-                    dt_copy["posterior"] = dt["posterior"]
-                    # Add new posterior predictive group to dt_copy
-                    if "posterior_predictive" in dt_copy:
-                        del dt_copy["posterior_predictive"]
-                    dt_copy["posterior_predictive"] = xr.concat(  # pyrefly: ignore[no-matching-overload]
-                        posterior_predictive_list,  # type: ignore[arg-type]
-                        dim="draw",
-                    )
-                    return dt_copy
+                    posterior_predictive_list.append(self._pop_response_draws(dt_copy))
+                posterior_predictive = xr.concat(posterior_predictive_list, dim="draw")
             else:
-                if inplace:
-                    # If not safe-mode
-                    # We call .predict() directly without any
-                    # chunking of data.
+                self.model.predict(dt_copy, kind, data, True, include_group_specific)
+                posterior_predictive = self._pop_response_draws(dt_copy)
 
-                    # .predict() is called on the copy of dt
-                    # since we still subsampled (or assigned) the draws
-                    self.model.predict(
-                        dt_copy, kind, data, True, include_group_specific
-                    )
-
-                    # posterior predictive group added to dt
-                    dt["posterior_predictive"] = dt_copy["posterior_predictive"]
-                    # don't return anything if inplace
-                    return None
-                else:
-                    # Not safe mode and not inplace
-                    # Function acts as very thin wrapper around
-                    # .predict(). It just operates on the
-                    # dt_copy object
-                    return self.model.predict(
-                        dt_copy, kind, data, False, include_group_specific
-                    )
+            if inplace:
+                target = dt
+            else:
+                # Reassign original posterior to dt_copy
+                dt_copy["posterior"] = dt["posterior"]
+                target = dt_copy
+            for group in ("posterior_predictive", *_BAMBI_PREDICTIONS_GROUPS):
+                if group in target:
+                    del target[group]
+            target["posterior_predictive"] = posterior_predictive
+            return None if inplace else target
         elif kind == "response_params":
             # If kind == 'response_params', we don't need to run the RV directly,
             # there shouldn't really be any significant memory issues here,
@@ -2073,6 +2082,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             # strip name of `_log__` and `_interval__` suffixes
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
 
+            # When a formula has common predictors, bambi (>= 0.20) centers them
+            # and names the free intercept RV `<param>_Intercept_centered`;
+            # `<param>_Intercept` becomes a Deterministic. The centered RV is
+            # the one old bambi fit under the uncentered name, so it takes the
+            # `<param>_Intercept` default.
+            settings_key = (
+                name_tmp.removesuffix("_centered")
+                if name_tmp.endswith("_Intercept_centered")
+                else name_tmp
+            )
+
             # We need to check if the parameter is actually backed by
             # a regression.
 
@@ -2087,8 +2107,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 param_link_setting = self.link_settings
             else:
                 param_link_setting = None
-            if name_tmp in initval_settings[param_link_setting].keys():
-                if self._check_if_initval_user_supplied(name_tmp):
+            if settings_key in initval_settings[param_link_setting].keys():
+                if self._check_if_initval_user_supplied(settings_key):
                     _logger.info(
                         "User supplied initial value detected for %s, \n"
                         " skipping overwrite with default value.",
@@ -2099,7 +2119,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 # Apply specific settings from initval_settings dictionary
                 dtype = self._initvals[name_tmp].dtype
                 self._initvals[name_tmp] = np.array(
-                    initval_settings[param_link_setting][name_tmp]
+                    initval_settings[param_link_setting][settings_key]
                 ).astype(dtype)
 
     def _get_prefix(self, name_str: str) -> str:

@@ -114,10 +114,20 @@ the intercept*; `Model._re_center_intercept` is gone), so bambi now builds a
 `_centered` RV and passes `dims=` when instantiating a prior's distribution.
 HSSM's `TruncatedDist(name)` closure takes name only.
 
-- [ ] `src/hssm/prior.py:168-180` — accept and forward `dims` (and `shape`)
-- [ ] Confirm behaviour for both bounded and unbounded priors, and for
-      regression intercepts specifically
-- [ ] Remove the R2 xfail marks
+- [x] `src/hssm/prior.py:168-180` — accept and forward `dims` (and `shape`):
+      `TruncatedDist(name, **call_kwargs)` merges the call-time kwargs over the
+      closure-time `pymc_dist_args` before calling `pm.Truncated`
+- [x] Confirm behaviour for both bounded and unbounded priors, and for
+      regression intercepts specifically (unit tests in `tests/unit/test_prior.py`;
+      `test_identity_safe_prior_graph.py` now compares the free
+      `a_Intercept_centered` RV, since `a_Intercept` is a Deterministic)
+- [x] `src/hssm/base.py` `_postprocess_initvals_deterministic` — look the
+      `INITVAL_SETTINGS` default and the user-supplied `initval` up by the
+      name with `_centered` stripped, so `a_Intercept_centered` (the RV old
+      bambi fit as `a_Intercept`) still receives the `a_Intercept` default
+- [x] Remove the R2 xfail marks (the one on
+      `tests/test_sample_posterior_predictive.py` was re-marked as R13 — its
+      pre-sampled fixture lacks `v_Intercept_centered`, which is #1330)
 
 ### F4 (#1313) — Replace the removed likelihood-parameter APIs
 
@@ -183,10 +193,31 @@ which will `KeyError` on out-of-sample prediction. Nearby lines in
 This needs **new test coverage**, not just a rename — there is currently no
 failing test to tell you when it is fixed.
 
-- [ ] Audit `src/hssm/base.py:1039-1214` for the group assumption
-- [ ] Decide whether HSSM surfaces `predictions` or normalises it back into
-      `posterior_predictive` for API stability
-- [ ] Add out-of-sample prediction tests
+- [x] Audit `src/hssm/base.py:1039-1214` for the group assumption — four
+      reads of `dt_copy["posterior_predictive"]` (safe-mode chunking, the
+      non-safe in-place copy, and the two non-in-place returns). Collapsed
+      into one `_pop_response_draws` helper and a single assembly path; the
+      non-safe, non-in-place branch now also restores the full posterior on
+      the returned copy, like the safe-mode branch always did.
+- [x] Decide whether HSSM surfaces `predictions` or normalises it back into
+      `posterior_predictive` for API stability. **Decision:** normalise.
+      Only the response variable is moved into `posterior_predictive`;
+      `predictions` / `predictions_constant_data` are removed. The trial-wise
+      parameters bambi bundles into `predictions` are dropped (they were never
+      part of HSSM's contract, and keeping them would give `posterior_predictive`
+      a different variable set in and out of sample). `kind="response_params"`
+      stays a thin pass-through to bambi, as #1313 already relies on.
+- [x] Add out-of-sample prediction tests — `tests/test_sample_posterior_predictive.py`
+      fits a small regression DDM (the `cavanagh_idata.nc` fixture predates
+      bambi 0.20 and lacks `v_Intercept_centered`, so in-sample `predict` on it
+      raises `KeyError`) and checks group layout, `__obs__` size, stale-group
+      cleanup, and in-/out-of-sample parity across `safe_mode` × `inplace`.
+- [x] Remove the R10 xfail marks. 4 of the 20 pass (`test_quantile_probability`,
+      `test_predictive`). The 16 in `tests/test_plotting_cartoon.py` now fail
+      one step later: `idata_cavanagh_cartoon.nc` also predates bambi 0.20, so
+      `pm.compute_deterministics` cannot find `v_Intercept_centered`. They stay
+      xfail with that reason — **regenerating the `.nc` fixtures is tracked in
+      #1336.** The cartoon path was verified end-to-end on a fresh trace.
 
 ### F7 (#1316) — Adapt to the new new-group prediction semantics
 

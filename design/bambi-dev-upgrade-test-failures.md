@@ -383,6 +383,15 @@ Only the `posterior_predictive` rows of the cartoon grids fail; the
 Affected: `tests/test_plotting_cartoon.py` (16), `tests/integration/plotting/test_quantile_probability.py` (3),
 `tests/unit/plotting/test_predictive.py` (1).
 
+**Status (F6, #1315):** fixed in `sample_posterior_predictive`. The 4 ids in
+`test_quantile_probability` / `test_predictive` pass. The 16 cartoon ids
+were masking a second problem: `tests/fixtures/idata_cavanagh_cartoon.nc`
+predates bambi 0.20 and has no `v_Intercept_centered`, which
+`pm.compute_deterministics` now needs, so they are re-marked xfail with
+that reason. `cavanagh_idata.nc` has the same gap (it is why the R2-marked
+`test_sample_posterior_predictive` grid still fails). Regenerating both
+fixtures is tracked in #1336.
+
 ### R11 — JAX-compiled VI cannot trace the `__obs__` alloc *(7 ids, 2 files)*
 
 ```

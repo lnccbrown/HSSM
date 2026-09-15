@@ -28,7 +28,7 @@ hssm.set_floatX("float32")
             "participant_id",
             "stim",
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -41,7 +41,7 @@ hssm.set_floatX("float32")
             "participant_id",
             "stim",
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -54,7 +54,7 @@ hssm.set_floatX("float32")
             "participant_id",
             "stim",
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -67,7 +67,7 @@ hssm.set_floatX("float32")
             "participant_id",
             "stim",
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -80,7 +80,7 @@ hssm.set_floatX("float32")
             "participant_id",
             "stim",
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -93,7 +93,7 @@ hssm.set_floatX("float32")
             "participant_id",
             None,
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -106,7 +106,7 @@ hssm.set_floatX("float32")
             None,
             None,
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -156,7 +156,7 @@ def test_plot_model_cartoon_2_choice(
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+    reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
     strict=False,
 )
 @pytest.mark.slow
@@ -199,7 +199,7 @@ def test_plot_model_cartoon_intercept_only(intercept_only_ddm_cartoon):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+    reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
     strict=False,
 )
 @pytest.mark.slow
@@ -235,7 +235,7 @@ def test_plot_model_cartoon_random_state_end_to_end(cav_model_cartoon):
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+    reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
     strict=False,
 )
 @pytest.mark.slow
@@ -275,7 +275,7 @@ def test_plot_model_cartoon_obs_conditioning(cav_model_cartoon):
             "participant_id",
             "stim",
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -288,7 +288,7 @@ def test_plot_model_cartoon_obs_conditioning(cav_model_cartoon):
             "participant_id",
             "stim",
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -301,7 +301,7 @@ def test_plot_model_cartoon_obs_conditioning(cav_model_cartoon):
             "participant_id",
             "stim",
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -314,7 +314,7 @@ def test_plot_model_cartoon_obs_conditioning(cav_model_cartoon):
             "participant_id",
             "stim",
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -327,7 +327,7 @@ def test_plot_model_cartoon_obs_conditioning(cav_model_cartoon):
             "participant_id",
             None,
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
@@ -340,7 +340,7 @@ def test_plot_model_cartoon_obs_conditioning(cav_model_cartoon):
             None,
             None,
             marks=pytest.mark.xfail(
-                reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
+                reason="bambi 0.20 migration (#1305): the `idata_cavanagh_cartoon.nc` fixture predates bambi 0.20 and lacks the `*_Intercept_centered` RVs that `pm.compute_deterministics` needs (#1336; R10 itself is fixed by #1315)",
                 strict=False,
             ),
         ),
