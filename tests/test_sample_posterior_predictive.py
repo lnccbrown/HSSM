@@ -249,3 +249,31 @@ def test_in_sample_prediction_matches_out_of_sample_layout(
     assert list(a.data_vars) == list(b.data_vars)
     assert a["rt,response"].dims == b["rt,response"].dims
     assert a.sizes == b.sizes
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("safe_mode", [True, False])
+def test_in_sample_prediction_ignores_stale_predictions_group(
+    fitted_ddm_reg, ddm_reg_dt, safe_mode
+):
+    """A stale bambi ``predictions`` group without the response is not mistaken for draws.
+
+    A prior out-of-sample ``kind="response_params"`` call leaves a ``predictions``
+    group holding only likelihood parameters. A following in-sample
+    ``kind="response"`` call writes to ``posterior_predictive`` and must not try to
+    read the response from the stale group.
+    """
+    model, _ = fitted_ddm_reg
+    stale = xr.Dataset({"v": (("chain", "draw", "__obs__"), np.zeros((1, 1, 3)))})
+    ddm_reg_dt["predictions"] = stale
+    ddm_reg_dt["predictions_constant_data"] = stale
+
+    out = model.sample_posterior_predictive(
+        dt=ddm_reg_dt, draws=2, safe_mode=safe_mode, inplace=False
+    )
+
+    assert "predictions" not in out
+    assert "predictions_constant_data" not in out
+    pps = out["posterior_predictive"].to_dataset()
+    assert list(pps.data_vars) == ["rt,response"]
+    assert pps.sizes["draw"] == 2

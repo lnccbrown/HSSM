@@ -1200,6 +1200,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             # `.predict()` is always called in place on `dt_copy`, whose posterior
             # holds the (sub-sampled) draws; the response draws are then collected
             # from wherever bambi wrote them and attached as `posterior_predictive`.
+            # Clear any output groups left over from earlier `predict` calls (e.g.
+            # a `predictions` group of likelihood parameters from an out-of-sample
+            # `kind="response_params"` call) so `_pop_response_draws` only sees
+            # what this call writes.
+            for group in ("posterior_predictive", *_BAMBI_PREDICTIONS_GROUPS):
+                if group in dt_copy:
+                    del dt_copy[group]
             if safe_mode:
                 # safe mode splits the draws into chunks of 10 to avoid
                 # memory issues (TODO: Figure out the source of memory issues)
