@@ -113,8 +113,15 @@ def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv)
     """Generated RVs must keep the choice-only support-shape contract."""
     captured = {}
 
-    def fake_make_hssm_rv(simulator_fun, list_params, lapse=None, is_choice_only=False):
+    def fake_make_hssm_rv(
+        simulator_fun,
+        list_params,
+        lapse=None,
+        is_choice_only=False,
+        expected_obs_dim=None,
+    ):
         captured["is_choice_only"] = is_choice_only
+        captured["expected_obs_dim"] = expected_obs_dim
 
         class FakeRV:
             def __call__(self):
@@ -132,6 +139,7 @@ def test_make_distribution_forwards_choice_only_to_generated_rv(monkeypatch, rv)
     )
 
     assert captured["is_choice_only"] is True
+    assert captured["expected_obs_dim"] is None
 
 
 @pytest.mark.slow
