@@ -48,7 +48,18 @@ This work is in progress; entries are added as each sub-issue lands.
    result unchanged (in sample: parameters added to `posterior`; out of sample: a `predictions`
    group).
 
-3. **`vi(backend="jax")` freezes the model's data and dim lengths for the fit**
+3. **Out-of-sample predictions for hierarchical models pick the strategy from the grouping
+   value** ([#1316](https://github.com/lnccbrown/HSSM/issues/1316)). Bambi retired
+   `sample_new_groups` (HSSM always passed `False`) and now decides per observation: a missing
+   grouping value (`None`, `np.nan`, `pd.NA`) is an observation of *unknown identity* and borrows
+   the coefficients of a randomly chosen fitted group, which is the previous behavior; a
+   non-missing value that was not seen during fitting is a *new group* whose coefficients are
+   drawn from the population-level model with the fitted hyperparameters and shared by all of its
+   observations. Previously an unseen level was treated like a missing one. This affects
+   `sample_posterior_predictive(data=...)` and `log_likelihood(data=...)`; see the new how-to
+   guide [Predict for new or unidentified participants](how_to/predict_new_groups.md).
+
+4. **`vi(backend="jax")` freezes the model's data and dim lengths for the fit**
    ([#1328](https://github.com/lnccbrown/HSSM/issues/1328)). Bambi 0.20 keeps the response
    and the `__obs__` observation count as shared variables and derives shapes from them (the
    response-parameter broadcast; HSSM's missing-data slice on the number of `-999` trials), which

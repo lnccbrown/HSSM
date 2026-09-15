@@ -436,6 +436,14 @@ input.
 Affected: `tests/addm/test_addm_ppc.py`, `tests/addm/test_addm_continuation.py`,
 `tests/addm/test_addm_cartoon.py` (1 each).
 
+**Resolved by F12 (#1330)** — verified 2026-09-15 (#1329). The constant was
+not baked into the aDDM distribution: bambi 0.20 traced the fixed `p_outlier`
+as a `pm.Deterministic` in `posterior`, and pymc's forward sampler then took
+that trace variable as a param and rejected it. Once `_clean_posterior_group`
+drops constant deterministics, `p_outlier` is recomputed from the graph and
+the sampler compiles. The two predictive ids pass; the cartoon id fails for
+R10 and is re-marked accordingly.
+
 ## Re-triage after F4 (#1313)
 
 All 19 R5 marks removed. Of the 51 ids, 44 pass outright; 7 fail for reasons

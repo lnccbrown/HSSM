@@ -979,7 +979,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             The trace object returned by `HSSM.sample()`. If not provided,
         data : optional
             A pandas DataFrame with values for the predictors that are used to obtain
-            out-of-sample predictions. If omitted, the original dataset is used.
+            out-of-sample predictions. If omitted, the original dataset is used. For
+            hierarchical models, a missing grouping value (`None`, `np.nan`, `pd.NA`)
+            marks an observation of unknown identity, which borrows the coefficients
+            of a randomly chosen fitted group; a non-missing grouping value that was
+            not seen during fitting marks a new group, whose coefficients are drawn
+            from the population-level model. See the how-to guide "Predict for new
+            or unidentified participants".
         inplace : optional
             If `True` will modify dt in-place and append a `log_likelihood` group to
             `dt`. Otherwise, it will return a copy of dt with the predictions
@@ -1116,6 +1122,15 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             With `kind="response"`, the draws land in `posterior_predictive` either way
             (bambi's out-of-sample `predictions` groups are folded into it), with one
             `__obs__` per row of `data`.
+            For hierarchical models with `include_group_specific=True`, a missing
+            grouping value (`None`, `np.nan`, `pd.NA`) marks an observation of
+            unknown identity, which borrows the coefficients of a randomly chosen
+            fitted group; a non-missing grouping value that was not seen during
+            fitting marks a new group, whose coefficients are drawn from the
+            population-level model. With `include_group_specific=False` the
+            grouping value is irrelevant, since all group-specific effects are set
+            to zero. See the how-to guide "Predict for new or unidentified
+            participants".
         inplace : optional
             If `True` will modify datatree in-place and append a `posterior_predictive`
             group to `datatree`. Otherwise, it will return a copy of datatree with the

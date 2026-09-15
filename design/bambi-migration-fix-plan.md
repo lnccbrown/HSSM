@@ -41,7 +41,7 @@ All nine are tracked as sub-issues of #1306.
 | F8 | #1317 | Reconcile two drifted assertions | R7, R9 | 2 ids | Low |
 | F9 | #1318 | Investigate numba slice-sampler `SystemError` | R8 | 2 ids | Unknown (likely upstream) |
 | F10 | #1328 | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 0 left | Done |
-| F11 | #1329 | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 3 ids | Medium |
+| F11 | #1329 | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 0 left (fixed by F12) | Done |
 | F12 | #1330 | Drop bambi's constant-parameter and `*_Intercept_centered` posterior variables | R13 | 5 ids | Low |
 
 F6 (#1315) is no longer latent: R10 (20 ids) is the `predictions` group
@@ -232,9 +232,28 @@ from the population-level model.
 `src/hssm/utils.py:195` sets the flag and `:206` passes it. Nothing raises — the
 semantics of HSSM's hierarchical prediction simply changed.
 
-- [ ] Remove the dead `sample_new_groups` plumbing
-- [ ] Document the new semantics for HSSM users
-- [ ] Add tests covering both the unknown-identity and new-group paths
+- [x] Remove the dead `sample_new_groups` plumbing — already gone with F4, which
+      replaced the `_compute_likelihood_params` call that carried it; the
+      `filterwarnings` rule from F5 turns any reintroduction into a test error
+- [x] Document the new semantics for HSSM users — `docs/how_to/predict_new_groups.md`,
+      the `data` docstrings of `log_likelihood` / `sample_posterior_predictive`,
+      and a changelog entry
+- [x] Add tests covering both the unknown-identity and new-group paths —
+      `tests/test_new_group_predictions.py` pins them through
+      `_compute_likelihood_params` and `log_likelihood(data=...)`
+
+**Outcome.** Verified against bambi `0.20.1.dev7`: a missing grouping value draws
+a donor group per observation and per posterior draw (the trial-wise `v` always
+equals one fitted group's `v_Intercept + v_1|participant_id` at that draw); an
+unseen non-missing value gets one population draw shared by its observations and
+matching none of the fitted groups; distinct unseen values get independent
+draws. `np.nan` (float or object column), `None` and `pd.NA` (`Int64`) all count
+as missing. The `sample_posterior_predictive(data=...)` path shows the same
+classification in `predictions_constant_data.participant_id__idx` (`-1` for
+missing, `G..` for new); its group layout is F6's concern, so the tests here go
+through the log-likelihood path only. formulae emits a `Pandas4Warning` from
+`pd.Categorical(value, categories=...)` when a new level is present — upstream,
+not actionable here.
 
 ### F8 (#1317) — Reconcile two drifted assertions
 
@@ -303,6 +322,19 @@ same step pymc's JAX samplers take in `get_jaxified_graph`.
 - [x] Fix in HSSM; upstream gap is pytensor's `JAXLinker` static-argument
       scan (unfiled)
 - [x] Remove the R11 marks
+
+### F11 (#1329) — aDDM forward sampler rejects the `p_outlier` constant
+
+**Root cause:** R12 (3 ids) — **resolved by F12**, no aDDM change needed.
+
+pymc's `compile_forward_sampling_function` treats every `posterior` variable
+as a param; bambi 0.20 stored the fixed `p_outlier` there as a constant
+deterministic, so the sampler saw a `TensorConstant`. Dropping constant
+deterministics in `_clean_posterior_group` (F12) removes it from the trace and
+pymc recomputes it from the graph.
+
+- [x] Attribute the failure (trace hygiene, not the aDDM distribution)
+- [x] Remove the R12 marks; the cartoon id re-marked as R10 (F6, #1315)
 
 ### F12 (#1330) — Drop the extra posterior variables bambi 0.20 records
 
