@@ -729,13 +729,15 @@ def test_vi_passes_backend_to_pm_fit(
         captured["shim_active"] = hasattr(
             approximations.MeanFieldGroup.create_shared_params, "__wrapped__"
         )
-        captured["frozen"] = set(kwargs.get("more_replacements", {}))
+        captured["frozen"] = set(kwargs.get("more_replacements") or {})
 
     monkeypatch.setattr("hssm.base.pm.fit", fake_fit)
     # Skip post-processing since fake_fit returns no approximation object.
     monkeypatch.setattr(model, "_clean_posterior_group", lambda dt=None: None)
 
-    model.vi(niter=1, draws=1, backend=backend_arg)
+    # An explicit `more_replacements=None` is valid for pymc and must merge
+    # cleanly with the jax freeze.
+    model.vi(niter=1, draws=1, backend=backend_arg, more_replacements=None)
 
     assert captured["backend"] == expected_backend
     assert captured["shim_active"] == (expected_backend == "jax")
