@@ -69,6 +69,7 @@ nav:
           - Model cartoon plot gallery: tutorials/cartoon_gallery.ipynb
           - Compare and interpret models: how_to/compare_models.ipynb
           - Get trial-wise parameters: tutorials/tutorial_trial_wise_parameters.ipynb
+          - Predict for new or unidentified participants: how_to/predict_new_groups.md
           - Run Bayesian t-tests on the posterior: tutorials/tutorial_bayesian_t_test.ipynb
           - Simulate data with the do-operator: tutorials/do_operator.ipynb
           - Save and load models: tutorials/save_load_tutorial.ipynb

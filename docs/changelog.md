@@ -38,6 +38,37 @@ This work is in progress; entries are added as each sub-issue lands.
    a `predictions` group, which `log_likelihood` folds into its computation and removes again, so
    the trace comes back with only the new `log_likelihood` group changed.
 
+2. **`sample_posterior_predictive(data=...)` keeps writing to `posterior_predictive`**
+   ([#1315](https://github.com/lnccbrown/HSSM/issues/1315)). Bambi now stores out-of-sample
+   predictions in a `predictions` group (plus `predictions_constant_data`) instead of
+   `posterior_predictive`. HSSM folds the response draws back into `posterior_predictive`, so in-
+   and out-of-sample results share one layout and the plotting helpers, which always predict on
+   the data frame they are given, keep working. The trial-wise likelihood parameters bambi
+   bundles into `predictions` are not kept; `kind="response_params"` still returns bambi's
+   result unchanged (in sample: parameters added to `posterior`; out of sample: a `predictions`
+   group).
+
+3. **Out-of-sample predictions for hierarchical models pick the strategy from the grouping
+   value** ([#1316](https://github.com/lnccbrown/HSSM/issues/1316)). Bambi retired
+   `sample_new_groups` (HSSM always passed `False`) and now decides per observation: a missing
+   grouping value (`None`, `np.nan`, `pd.NA`) is an observation of *unknown identity* and borrows
+   the coefficients of a randomly chosen fitted group, which is the previous behavior; a
+   non-missing value that was not seen during fitting is a *new group* whose coefficients are
+   drawn from the population-level model with the fitted hyperparameters and shared by all of its
+   observations. Previously an unseen level was treated like a missing one. This affects
+   `sample_posterior_predictive(data=...)` and `log_likelihood(data=...)`; see the new how-to
+   guide [Predict for new or unidentified participants](how_to/predict_new_groups.md).
+
+4. **`vi(backend="jax")` freezes the model's data and dim lengths for the fit**
+   ([#1328](https://github.com/lnccbrown/HSSM/issues/1328)). Bambi 0.20 keeps the response
+   and the `__obs__` observation count as shared variables and derives shapes from them (the
+   response-parameter broadcast; HSSM's missing-data slice on the number of `-999` trials), which
+   the JAX linker traces as dynamic and rejects. HSSM now passes `pm.fit` a `more_replacements`
+   that pins those shared variables to constants — the same treatment PyMC's own JAX samplers
+   apply — so JAX-compiled VI works again on every model, missing-data models included. A
+   user-supplied `more_replacements` still takes precedence entry by entry; the other backends
+   are unchanged.
+
 #### Dependency changes:
 
 1. **`bambi` now tracks the `dev` branch** pending the 0.20 release, which reorganizes its

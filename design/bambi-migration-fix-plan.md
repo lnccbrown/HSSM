@@ -40,8 +40,8 @@ All nine are tracked as sub-issues of #1306.
 | F7 | #1316 | Adapt to new-group prediction semantics | latent #5 | 0 (masked) | High (behavioral) |
 | F8 | #1317 | Reconcile two drifted assertions | R7, R9 | 2 ids | Low |
 | F9 | #1318 | Investigate numba slice-sampler `SystemError` | R8 | 0 left | Done (test spec) |
-| F10 | #1328 | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 7 ids | Medium |
-| F11 | #1329 | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 3 ids | Medium |
+| F10 | #1328 | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 0 left | Done |
+| F11 | #1329 | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 0 left (fixed by F12) | Done |
 | F12 | #1330 | Drop bambi's constant-parameter and `*_Intercept_centered` posterior variables | R13 | 5 ids | Low |
 
 F6 (#1315) is no longer latent: R10 (20 ids) is the `predictions` group
@@ -114,10 +114,20 @@ the intercept*; `Model._re_center_intercept` is gone), so bambi now builds a
 `_centered` RV and passes `dims=` when instantiating a prior's distribution.
 HSSM's `TruncatedDist(name)` closure takes name only.
 
-- [ ] `src/hssm/prior.py:168-180` — accept and forward `dims` (and `shape`)
-- [ ] Confirm behaviour for both bounded and unbounded priors, and for
-      regression intercepts specifically
-- [ ] Remove the R2 xfail marks
+- [x] `src/hssm/prior.py:168-180` — accept and forward `dims` (and `shape`):
+      `TruncatedDist(name, **call_kwargs)` merges the call-time kwargs over the
+      closure-time `pymc_dist_args` before calling `pm.Truncated`
+- [x] Confirm behaviour for both bounded and unbounded priors, and for
+      regression intercepts specifically (unit tests in `tests/unit/test_prior.py`;
+      `test_identity_safe_prior_graph.py` now compares the free
+      `a_Intercept_centered` RV, since `a_Intercept` is a Deterministic)
+- [x] `src/hssm/base.py` `_postprocess_initvals_deterministic` — look the
+      `INITVAL_SETTINGS` default and the user-supplied `initval` up by the
+      name with `_centered` stripped, so `a_Intercept_centered` (the RV old
+      bambi fit as `a_Intercept`) still receives the `a_Intercept` default
+- [x] Remove the R2 xfail marks (the one on
+      `tests/test_sample_posterior_predictive.py` was re-marked as R13 — its
+      pre-sampled fixture lacks `v_Intercept_centered`, which is #1330)
 
 ### F4 (#1313) — Replace the removed likelihood-parameter APIs
 
@@ -183,10 +193,31 @@ which will `KeyError` on out-of-sample prediction. Nearby lines in
 This needs **new test coverage**, not just a rename — there is currently no
 failing test to tell you when it is fixed.
 
-- [ ] Audit `src/hssm/base.py:1039-1214` for the group assumption
-- [ ] Decide whether HSSM surfaces `predictions` or normalises it back into
-      `posterior_predictive` for API stability
-- [ ] Add out-of-sample prediction tests
+- [x] Audit `src/hssm/base.py:1039-1214` for the group assumption — four
+      reads of `dt_copy["posterior_predictive"]` (safe-mode chunking, the
+      non-safe in-place copy, and the two non-in-place returns). Collapsed
+      into one `_pop_response_draws` helper and a single assembly path; the
+      non-safe, non-in-place branch now also restores the full posterior on
+      the returned copy, like the safe-mode branch always did.
+- [x] Decide whether HSSM surfaces `predictions` or normalises it back into
+      `posterior_predictive` for API stability. **Decision:** normalise.
+      Only the response variable is moved into `posterior_predictive`;
+      `predictions` / `predictions_constant_data` are removed. The trial-wise
+      parameters bambi bundles into `predictions` are dropped (they were never
+      part of HSSM's contract, and keeping them would give `posterior_predictive`
+      a different variable set in and out of sample). `kind="response_params"`
+      stays a thin pass-through to bambi, as #1313 already relies on.
+- [x] Add out-of-sample prediction tests — `tests/test_sample_posterior_predictive.py`
+      fits a small regression DDM (the `cavanagh_idata.nc` fixture predates
+      bambi 0.20 and lacks `v_Intercept_centered`, so in-sample `predict` on it
+      raises `KeyError`) and checks group layout, `__obs__` size, stale-group
+      cleanup, and in-/out-of-sample parity across `safe_mode` × `inplace`.
+- [x] Remove the R10 xfail marks. 4 of the 20 pass (`test_quantile_probability`,
+      `test_predictive`). The 16 in `tests/test_plotting_cartoon.py` now fail
+      one step later: `idata_cavanagh_cartoon.nc` also predates bambi 0.20, so
+      `pm.compute_deterministics` cannot find `v_Intercept_centered`. They stay
+      xfail with that reason — **regenerating the `.nc` fixtures is tracked in
+      #1336.** The cartoon path was verified end-to-end on a fresh trace.
 
 ### F7 (#1316) — Adapt to the new new-group prediction semantics
 
@@ -201,9 +232,28 @@ from the population-level model.
 `src/hssm/utils.py:195` sets the flag and `:206` passes it. Nothing raises — the
 semantics of HSSM's hierarchical prediction simply changed.
 
-- [ ] Remove the dead `sample_new_groups` plumbing
-- [ ] Document the new semantics for HSSM users
-- [ ] Add tests covering both the unknown-identity and new-group paths
+- [x] Remove the dead `sample_new_groups` plumbing — already gone with F4, which
+      replaced the `_compute_likelihood_params` call that carried it; the
+      `filterwarnings` rule from F5 turns any reintroduction into a test error
+- [x] Document the new semantics for HSSM users — `docs/how_to/predict_new_groups.md`,
+      the `data` docstrings of `log_likelihood` / `sample_posterior_predictive`,
+      and a changelog entry
+- [x] Add tests covering both the unknown-identity and new-group paths —
+      `tests/test_new_group_predictions.py` pins them through
+      `_compute_likelihood_params` and `log_likelihood(data=...)`
+
+**Outcome.** Verified against bambi `0.20.1.dev7`: a missing grouping value draws
+a donor group per observation and per posterior draw (the trial-wise `v` always
+equals one fitted group's `v_Intercept + v_1|participant_id` at that draw); an
+unseen non-missing value gets one population draw shared by its observations and
+matching none of the fitted groups; distinct unseen values get independent
+draws. `np.nan` (float or object column), `None` and `pd.NA` (`Int64`) all count
+as missing. The `sample_posterior_predictive(data=...)` path shows the same
+classification in `predictions_constant_data.participant_id__idx` (`-1` for
+missing, `G..` for new); its group layout is F6's concern, so the tests here go
+through the log-likelihood path only. formulae emits a `Pandas4Warning` from
+`pd.Categorical(value, categories=...)` when a new level is present — upstream,
+not actionable here.
 
 ### F8 (#1317) — Reconcile two drifted assertions
 
@@ -261,6 +311,37 @@ linkers. See R8 in the inventory for the full trace.
       pymc/pytensor/numba)
 - [x] Fix the test's intercept prior (`Uniform(0.5, 3)` for `beta`) and
       remove the R8 marks
+
+### F10 (#1328) — VI on the JAX compile backend cannot trace `__obs__`
+
+**Root cause:** R11 (7 ids) — **resolved**.
+
+bambi 0.20 keeps the data and the `__obs__` dim length as shared variables;
+the JAX linker traces shared variables, so every shape derived from them
+(bambi's response-parameter broadcast, HSSM's missing-data `n_missing`
+slice) is dynamic. `HSSM.vi(backend="jax")` now freezes them to constants
+via `pm.fit(more_replacements=...)` (`_vi_compat.freeze_shared_data`), the
+same step pymc's JAX samplers take in `get_jaxified_graph`.
+
+- [x] Pin down the nodes (bambi `build.py:93` broadcast; HSSM `dist.py`
+      `n_missing`) — both shape-from-shared-variable, no `pm.Data` static
+      shape available
+- [x] Fix in HSSM; upstream gap is pytensor's `JAXLinker` static-argument
+      scan (unfiled)
+- [x] Remove the R11 marks
+
+### F11 (#1329) — aDDM forward sampler rejects the `p_outlier` constant
+
+**Root cause:** R12 (3 ids) — **resolved by F12**, no aDDM change needed.
+
+pymc's `compile_forward_sampling_function` treats every `posterior` variable
+as a param; bambi 0.20 stored the fixed `p_outlier` there as a constant
+deterministic, so the sampler saw a `TensorConstant`. Dropping constant
+deterministics in `_clean_posterior_group` (F12) removes it from the trace and
+pymc recomputes it from the graph.
+
+- [x] Attribute the failure (trace hygiene, not the aDDM distribution)
+- [x] Remove the R12 marks; the cartoon id re-marked as R10 (F6, #1315)
 
 ### F12 (#1330) — Drop the extra posterior variables bambi 0.20 records
 

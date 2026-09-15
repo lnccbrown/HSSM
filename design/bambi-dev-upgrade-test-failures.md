@@ -401,6 +401,15 @@ Only the `posterior_predictive` rows of the cartoon grids fail; the
 Affected: `tests/test_plotting_cartoon.py` (16), `tests/integration/plotting/test_quantile_probability.py` (3),
 `tests/unit/plotting/test_predictive.py` (1).
 
+**Status (F6, #1315):** fixed in `sample_posterior_predictive`. The 4 ids in
+`test_quantile_probability` / `test_predictive` pass. The 16 cartoon ids
+were masking a second problem: `tests/fixtures/idata_cavanagh_cartoon.nc`
+predates bambi 0.20 and has no `v_Intercept_centered`, which
+`pm.compute_deterministics` now needs, so they are re-marked xfail with
+that reason. `cavanagh_idata.nc` has the same gap (it is why the R2-marked
+`test_sample_posterior_predictive` grid still fails). Regenerating both
+fixtures is tracked in #1336.
+
 ### R11 — JAX-compiled VI cannot trace the `__obs__` alloc *(7 ids, 2 files)*
 
 ```
@@ -417,6 +426,18 @@ against a symbolic observation count, which the JAX linker cannot make static.
 
 Affected: `tests/integration/test_vi.py` (5), `tests/integration/test_missing_data_vi.py` (2).
 
+**Resolved by F10 (#1328)** — 2026-09-15. Two sources, both shared variables
+that bambi 0.20 introduced and pytensor's JAX linker traces as jit arguments:
+bambi's `pt.broadcast_to(value, (model.dim_lengths["__obs__"],))` in
+`backend/pymc/parameters/conditional/build.py`, and — once that is handled —
+HSSM's own `n_missing = pt.sum(pt.eq(data[:, 0], -999))` in
+`distribution_utils/dist.py`, which no longer constant-folds because the
+response is now a `pm.Data` rather than a constant. pymc's JAX samplers
+freeze every shared variable before jaxifying; `pm.fit` does not, so
+`HSSM.vi` now passes `more_replacements` from `_vi_compat.freeze_shared_data`.
+The JAX linker's static-argument scan (only `JAXShapeTuple` inputs, not
+`Alloc` shape slots) is the upstream gap; nothing filed yet.
+
 ### R12 — pymc rejects the aDDM `p_outlier` constant when compiling the forward sampler *(3 ids, 3 files)*
 
 ```
@@ -432,6 +453,14 @@ input.
 
 Affected: `tests/addm/test_addm_ppc.py`, `tests/addm/test_addm_continuation.py`,
 `tests/addm/test_addm_cartoon.py` (1 each).
+
+**Resolved by F12 (#1330)** — verified 2026-09-15 (#1329). The constant was
+not baked into the aDDM distribution: bambi 0.20 traced the fixed `p_outlier`
+as a `pm.Deterministic` in `posterior`, and pymc's forward sampler then took
+that trace variable as a param and rejected it. Once `_clean_posterior_group`
+drops constant deterministics, `p_outlier` is recomputed from the graph and
+the sampler compiles. The two predictive ids pass; the cartoon id fails for
+R10 and is re-marked accordingly.
 
 ## Re-triage after F4 (#1313)
 

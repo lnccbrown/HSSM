@@ -94,20 +94,12 @@ COVERING_ARRAY = [
         "advi",
         "simple",
         "opn",
-        marks=pytest.mark.xfail(
-            reason="bambi 0.20 migration (#1305): R11 VI on the JAX compile backend cannot trace bambi 0.20's symbolic `__obs__`-sized alloc",
-            strict=False,
-        ),
     ),
     pytest.param(
         "jax",
         "fullrank_advi",
         "reg",
         "cpn",
-        marks=pytest.mark.xfail(
-            reason="bambi 0.20 migration (#1305): R11 VI on the JAX compile backend cannot trace bambi 0.20's symbolic `__obs__`-sized alloc",
-            strict=False,
-        ),
     ),
 ]
 

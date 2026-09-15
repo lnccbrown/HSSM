@@ -143,10 +143,6 @@ def test_custom_model(data_ddm):
     assert model.model_config.list_params == ["v", "a", "z", "t", "p_outlier"]
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 def test_model_definition_outside_include(data_ddm):
     """Accept parameter definitions outside include and reject duplicates."""
@@ -168,10 +164,6 @@ def test_model_definition_outside_include(data_ddm):
         HSSM(data_ddm, include=[{"name": "a", "prior": 0.5}], a=0.5)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 def test_sample_prior_predictive(data_ddm_reg):
     """Generate prior-predictive DataTrees across regression structures."""
@@ -404,10 +396,6 @@ def test_model_creation_constant_parameter(data_ddm):
 
 
 # Setting any single parameter to a regression should respect the default bounds:
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "param_name, dist_name",
@@ -535,10 +523,6 @@ def test_valid_link_settings_preserve_links_precedence_and_repr(cavanagh_test):
     assert "(ignored due to link function)" in repr(transformed_model)
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 @pytest.mark.slow
 def test_prior_settings_basic(cavanagh_test):
     """Apply requested prior-setting modes."""
@@ -745,12 +729,15 @@ def test_vi_passes_backend_to_pm_fit(
         captured["shim_active"] = hasattr(
             approximations.MeanFieldGroup.create_shared_params, "__wrapped__"
         )
+        captured["frozen"] = set(kwargs.get("more_replacements") or {})
 
     monkeypatch.setattr("hssm.base.pm.fit", fake_fit)
     # Skip post-processing since fake_fit returns no approximation object.
     monkeypatch.setattr(model, "_clean_posterior_group", lambda dt=None: None)
 
-    model.vi(niter=1, draws=1, backend=backend_arg)
+    # An explicit `more_replacements=None` is valid for pymc and must merge
+    # cleanly with the jax freeze.
+    model.vi(niter=1, draws=1, backend=backend_arg, more_replacements=None)
 
     assert captured["backend"] == expected_backend
     assert captured["shim_active"] == (expected_backend == "jax")
@@ -758,6 +745,12 @@ def test_vi_passes_backend_to_pm_fit(
     assert not hasattr(
         approximations.MeanFieldGroup.create_shared_params, "__wrapped__"
     )
+    # The jax backend also freezes the model's shared data and dim lengths
+    # (#1328); the other backends trace them live.
+    if expected_backend == "jax":
+        assert model.pymc_model.dim_lengths["__obs__"] in captured["frozen"]
+    else:
+        assert captured["frozen"] == set()
 
 
 def test_vi_idata_rejects_attached_approximation(data_ddm):

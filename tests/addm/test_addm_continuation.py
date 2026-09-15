@@ -62,10 +62,6 @@ def test_addm_config_validates_continuation():
             aDDMConfig(**bad).validate()
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R12 pymc's forward sampler rejects the aDDM `p_outlier` TensorConstant in the param list",
-    strict=False,
-)
 @needs_addm_continuation
 @pytest.mark.slow
 def test_addm_ppc_per_call_continuation_override():

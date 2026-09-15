@@ -29,17 +29,16 @@ def _build_a_regression(data, link=...):
     )
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
-    strict=False,
-)
 def test_identity_link_spellings_build_equivalent_common_intercept_prior_graphs(
     cavanagh_test,
 ):
     """Explicit identity links retain the omitted-link truncated Gamma graph."""
+    # bambi >= 0.20 centers the common predictors and uncenters the intercept
+    # inside the graph: the prior is drawn for the free `*_Intercept_centered`
+    # RV, and `*_Intercept` is a Deterministic derived from it.
     reference = _build_a_regression(cavanagh_test)
     reference_prior = reference.params["a"].prior["Intercept"]
-    reference_rv = reference.pymc_model.named_vars["a_Intercept"]
+    reference_rv = reference.pymc_model.named_vars["a_Intercept_centered"]
 
     assert reference_prior.name == "Gamma"
     assert reference_prior.is_truncated
@@ -53,7 +52,7 @@ def test_identity_link_spellings_build_equivalent_common_intercept_prior_graphs(
 
     for model in explicit_models:
         candidate_prior = model.params["a"].prior["Intercept"]
-        candidate_rv = model.pymc_model.named_vars["a_Intercept"]
+        candidate_rv = model.pymc_model.named_vars["a_Intercept_centered"]
         reference_value = pt.scalar("reference_value", dtype=reference_rv.dtype)
         candidate_value = pt.scalar("candidate_value", dtype=candidate_rv.dtype)
 
