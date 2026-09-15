@@ -41,7 +41,7 @@ All nine are tracked as sub-issues of #1306.
 | F8 | #1317 | Reconcile two drifted assertions | R7, R9 | 2 ids | Low |
 | F9 | #1318 | Investigate numba slice-sampler `SystemError` | R8 | 2 ids | Unknown (likely upstream) |
 | F10 | #1328 | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 7 ids | Medium |
-| F11 | #1329 | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 3 ids | Medium |
+| F11 | #1329 | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 0 left (fixed by F12) | Done |
 | F12 | #1330 | Drop bambi's constant-parameter and `*_Intercept_centered` posterior variables | R13 | 5 ids | Low |
 
 F6 (#1315) is no longer latent: R10 (20 ids) is the `predictions` group
@@ -304,6 +304,19 @@ extra. Upstream is aware this path is fragile.
       working around it in HSSM
 - [ ] These 2 ids sit under `test_choice_only`, which is marked R5 — after F4
       lands they will need their own mark or a fix
+
+### F11 (#1329) — aDDM forward sampler rejects the `p_outlier` constant
+
+**Root cause:** R12 (3 ids) — **resolved by F12**, no aDDM change needed.
+
+pymc's `compile_forward_sampling_function` treats every `posterior` variable
+as a param; bambi 0.20 stored the fixed `p_outlier` there as a constant
+deterministic, so the sampler saw a `TensorConstant`. Dropping constant
+deterministics in `_clean_posterior_group` (F12) removes it from the trace and
+pymc recomputes it from the graph.
+
+- [x] Attribute the failure (trace hygiene, not the aDDM distribution)
+- [x] Remove the R12 marks; the cartoon id re-marked as R10 (F6, #1315)
 
 ### F12 (#1330) — Drop the extra posterior variables bambi 0.20 records
 
