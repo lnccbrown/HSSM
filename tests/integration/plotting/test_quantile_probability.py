@@ -72,10 +72,6 @@ class TestQuantileProbabilityPlotting:
         )
         assert len(g.figure.axes) == 5 * 4
 
-    @pytest.mark.xfail(
-        reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
-        strict=False,
-    )
     @pytest.mark.parametrize("predictive_style", ["points", "ellipse", "both"])
     def test_plot_quantile_probability(self, cav_dt, cavanagh_test, predictive_style):
         """Check public quantile-probability plotting API behavior."""
