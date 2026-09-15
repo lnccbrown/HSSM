@@ -25,6 +25,7 @@ focuses on a concrete modeling, inference, analysis, or extension task.
   [model-cartoon](../tutorials/cartoon_gallery.ipynb) gallery.
 - [Compare and interpret models](compare_models.ipynb).
 - [Extract trial-wise parameters](../tutorials/tutorial_trial_wise_parameters.ipynb).
+- [Predict for new or unidentified participants](predict_new_groups.md).
 - [Run a Bayesian t-test on posterior draws](../tutorials/tutorial_bayesian_t_test.ipynb).
 - [Simulate interventions with the do-operator](../tutorials/do_operator.ipynb).
 - [Save and load fitted models](../tutorials/save_load_tutorial.ipynb).

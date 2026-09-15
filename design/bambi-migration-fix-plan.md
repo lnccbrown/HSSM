@@ -232,9 +232,28 @@ from the population-level model.
 `src/hssm/utils.py:195` sets the flag and `:206` passes it. Nothing raises — the
 semantics of HSSM's hierarchical prediction simply changed.
 
-- [ ] Remove the dead `sample_new_groups` plumbing
-- [ ] Document the new semantics for HSSM users
-- [ ] Add tests covering both the unknown-identity and new-group paths
+- [x] Remove the dead `sample_new_groups` plumbing — already gone with F4, which
+      replaced the `_compute_likelihood_params` call that carried it; the
+      `filterwarnings` rule from F5 turns any reintroduction into a test error
+- [x] Document the new semantics for HSSM users — `docs/how_to/predict_new_groups.md`,
+      the `data` docstrings of `log_likelihood` / `sample_posterior_predictive`,
+      and a changelog entry
+- [x] Add tests covering both the unknown-identity and new-group paths —
+      `tests/test_new_group_predictions.py` pins them through
+      `_compute_likelihood_params` and `log_likelihood(data=...)`
+
+**Outcome.** Verified against bambi `0.20.1.dev7`: a missing grouping value draws
+a donor group per observation and per posterior draw (the trial-wise `v` always
+equals one fitted group's `v_Intercept + v_1|participant_id` at that draw); an
+unseen non-missing value gets one population draw shared by its observations and
+matching none of the fitted groups; distinct unseen values get independent
+draws. `np.nan` (float or object column), `None` and `pd.NA` (`Int64`) all count
+as missing. The `sample_posterior_predictive(data=...)` path shows the same
+classification in `predictions_constant_data.participant_id__idx` (`-1` for
+missing, `G..` for new); its group layout is F6's concern, so the tests here go
+through the log-likelihood path only. formulae emits a `Pandas4Warning` from
+`pd.Categorical(value, categories=...)` when a new level is present — upstream,
+not actionable here.
 
 ### F8 (#1317) — Reconcile two drifted assertions
 
