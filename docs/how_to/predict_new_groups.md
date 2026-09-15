@@ -28,6 +28,7 @@ population distribution (for a term like `1|participant_id` with a
 coefficients, and distinct unseen levels receive independent draws.
 
 ```python
+import hssm
 import numpy as np
 import pandas as pd
 
@@ -51,8 +52,9 @@ model.sample_posterior_predictive(data=new_data)
 model.log_likelihood(data=new_data)
 ```
 
-Mixing the three kinds of observation in one frame is fine; each row is handled
-on its own.
+Mixing the three kinds of observation in one frame is fine. Each row picks its
+strategy from its own grouping value, but rows that share the same unseen level
+still share one generated coefficient, as described above.
 
 ## Practical notes
 
