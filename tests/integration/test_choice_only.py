@@ -31,12 +31,23 @@ import hssm
 hssm.set_floatX("float32", update_jax=True)
 
 
+# `beta` (inverse temperature) is bounded to (0, inf); the logits are unbounded.
+# The intercept prior must keep every trial's `beta` inside that bound at the
+# initial point: with an intercept at 0 the conditional posterior of `beta_x`
+# collapses to the single point 0 (any other slope pushes half the trials out
+# of bounds), and bambi 0.20's RV order samples the slope before the
+# intercept, so the slice sampler hits that degenerate slice first and never
+# leaves it (#1318).
+_INTERCEPT_BOUNDS = {"beta": (0.5, 3.0)}
+
+
 def _reg(param):
     """Return a regression spec for `param` on the synthetic `x` column."""
+    lower, upper = _INTERCEPT_BOUNDS.get(param, (-3.0, 3.0))
     return dict(
         formula=f"{param} ~ x",
         prior={
-            "Intercept": {"name": "Uniform", "lower": -3.0, "upper": 3.0},
+            "Intercept": {"name": "Uniform", "lower": lower, "upper": upper},
             "x": {"name": "Normal", "mu": 0, "sigma": 1},
         },
     )
@@ -61,19 +72,13 @@ MODEL_SHAPES = {
 # 8 rows cover every (B, S) pair and every (B, M) pair. All three samplers run
 # against the jax-wrapped analytical logp, which is the path unique to this file.
 PARAMETER_NAMES = "backend,sampler,step,shape"
-# The numba-compiled logp raises `SystemError` under the pymc slice sampler
-# (bambi 0.20 migration (#1305): R8, tracked in #1318).
-_SLICE_XFAIL = pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R8 numba-compiled logp raises `SystemError` under the pymc slice sampler (#1318)",
-    strict=False,
-)
 COVERING_ARRAY = [
     ("jax", "pymc", None, "default"),
-    pytest.param("jax", "pymc", "slice", "beta_reg", marks=_SLICE_XFAIL),
+    ("jax", "pymc", "slice", "beta_reg"),
     ("jax", "numpyro", None, "logit_reg"),
     ("jax", "pymc", None, "multiple_reg"),
     ("pytensor", "pymc", None, "default"),
-    pytest.param("pytensor", "pymc", "slice", "beta_reg", marks=_SLICE_XFAIL),
+    ("pytensor", "pymc", "slice", "beta_reg"),
     ("pytensor", "numpyro", None, "logit_reg"),
     ("pytensor", "pymc", None, "multiple_reg"),
 ]
