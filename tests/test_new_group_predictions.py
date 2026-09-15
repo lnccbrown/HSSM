@@ -13,6 +13,8 @@ grouping value in the new data instead:
 These tests pin both paths as they surface through HSSM.
 """
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -177,6 +179,7 @@ def test_sample_new_groups_is_not_forwarded(hierarchical_ddm):
             data=_new_data(participant_id=[0]),
             sample_new_groups=False,
         )
-    # ... whereas HSSM's own out-of-sample path raises no deprecation warning
-    # (the test suite turns bambi FutureWarnings into errors).
-    _trialwise_v(hierarchical_ddm, _new_data(participant_id=[0]))
+    # ... whereas HSSM's own out-of-sample path raises no FutureWarning at all.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        _trialwise_v(hierarchical_ddm, _new_data(participant_id=[0]))
