@@ -34,7 +34,7 @@ PARAMETER_GRID = [
 
 
 @pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R2 bambi 0.20 calls callable priors with `dims=`, which HSSM's TruncatedDist rejects",
+    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior` (#1330)",
     strict=False,
 )
 @pytest.mark.slow

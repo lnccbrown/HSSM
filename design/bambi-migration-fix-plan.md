@@ -114,10 +114,20 @@ the intercept*; `Model._re_center_intercept` is gone), so bambi now builds a
 `_centered` RV and passes `dims=` when instantiating a prior's distribution.
 HSSM's `TruncatedDist(name)` closure takes name only.
 
-- [ ] `src/hssm/prior.py:168-180` — accept and forward `dims` (and `shape`)
-- [ ] Confirm behaviour for both bounded and unbounded priors, and for
-      regression intercepts specifically
-- [ ] Remove the R2 xfail marks
+- [x] `src/hssm/prior.py:168-180` — accept and forward `dims` (and `shape`):
+      `TruncatedDist(name, **call_kwargs)` merges the call-time kwargs over the
+      closure-time `pymc_dist_args` before calling `pm.Truncated`
+- [x] Confirm behaviour for both bounded and unbounded priors, and for
+      regression intercepts specifically (unit tests in `tests/unit/test_prior.py`;
+      `test_identity_safe_prior_graph.py` now compares the free
+      `a_Intercept_centered` RV, since `a_Intercept` is a Deterministic)
+- [x] `src/hssm/base.py` `_postprocess_initvals_deterministic` — look the
+      `INITVAL_SETTINGS` default and the user-supplied `initval` up by the
+      name with `_centered` stripped, so `a_Intercept_centered` (the RV old
+      bambi fit as `a_Intercept`) still receives the `a_Intercept` default
+- [x] Remove the R2 xfail marks (the one on
+      `tests/test_sample_posterior_predictive.py` was re-marked as R13 — its
+      pre-sampled fixture lacks `v_Intercept_centered`, which is #1330)
 
 ### F4 (#1313) — Replace the removed likelihood-parameter APIs
 

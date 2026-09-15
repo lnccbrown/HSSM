@@ -2063,6 +2063,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             # strip name of `_log__` and `_interval__` suffixes
             name_tmp = name_.replace("_log__", "").replace("_interval__", "")
 
+            # When a formula has common predictors, bambi (>= 0.20) centers them
+            # and names the free intercept RV `<param>_Intercept_centered`;
+            # `<param>_Intercept` becomes a Deterministic. The centered RV is
+            # the one old bambi fit under the uncentered name, so it takes the
+            # `<param>_Intercept` default.
+            settings_key = (
+                name_tmp.removesuffix("_centered")
+                if name_tmp.endswith("_Intercept_centered")
+                else name_tmp
+            )
+
             # We need to check if the parameter is actually backed by
             # a regression.
 
@@ -2077,8 +2088,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 param_link_setting = self.link_settings
             else:
                 param_link_setting = None
-            if name_tmp in initval_settings[param_link_setting].keys():
-                if self._check_if_initval_user_supplied(name_tmp):
+            if settings_key in initval_settings[param_link_setting].keys():
+                if self._check_if_initval_user_supplied(settings_key):
                     _logger.info(
                         "User supplied initial value detected for %s, \n"
                         " skipping overwrite with default value.",
@@ -2089,7 +2100,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 # Apply specific settings from initval_settings dictionary
                 dtype = self._initvals[name_tmp].dtype
                 self._initvals[name_tmp] = np.array(
-                    initval_settings[param_link_setting][name_tmp]
+                    initval_settings[param_link_setting][settings_key]
                 ).astype(dtype)
 
     def _get_prefix(self, name_str: str) -> str:
