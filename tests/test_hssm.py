@@ -745,6 +745,7 @@ def test_vi_passes_backend_to_pm_fit(
         captured["shim_active"] = hasattr(
             approximations.MeanFieldGroup.create_shared_params, "__wrapped__"
         )
+        captured["frozen"] = set(kwargs.get("more_replacements", {}))
 
     monkeypatch.setattr("hssm.base.pm.fit", fake_fit)
     # Skip post-processing since fake_fit returns no approximation object.
@@ -758,6 +759,12 @@ def test_vi_passes_backend_to_pm_fit(
     assert not hasattr(
         approximations.MeanFieldGroup.create_shared_params, "__wrapped__"
     )
+    # The jax backend also freezes the model's shared data and dim lengths
+    # (#1328); the other backends trace them live.
+    if expected_backend == "jax":
+        assert model.pymc_model.dim_lengths["__obs__"] in captured["frozen"]
+    else:
+        assert captured["frozen"] == set()
 
 
 def test_vi_idata_rejects_attached_approximation(data_ddm):
