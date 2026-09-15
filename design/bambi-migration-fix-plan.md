@@ -39,7 +39,7 @@ All nine are tracked as sub-issues of #1306.
 | F6 | #1315 | Handle the new `predictions` DataTree group | latent #2 | 0 (masked) | High (behavioral) |
 | F7 | #1316 | Adapt to new-group prediction semantics | latent #5 | 0 (masked) | High (behavioral) |
 | F8 | #1317 | Reconcile two drifted assertions | R7, R9 | 2 ids | Low |
-| F9 | #1318 | Investigate numba slice-sampler `SystemError` | R8 | 2 ids | Unknown (likely upstream) |
+| F9 | #1318 | Investigate numba slice-sampler `SystemError` | R8 | 0 left | Done (test spec) |
 | F10 | #1328 | VI on the JAX compile backend cannot trace the symbolic `__obs__` alloc | R11 | 7 ids | Medium |
 | F11 | #1329 | aDDM posterior predictive: pymc forward sampler rejects a `TensorConstant` | R12 | 3 ids | Medium |
 | F12 | #1330 | Drop bambi's constant-parameter and `*_Intercept_centered` posterior variables | R13 | 5 ids | Low |
@@ -249,11 +249,18 @@ Corroborating: the PR adds `pytest-forked` to bambi's own test dependencies
 exhausting the available RAM", and drops the `numba` pin from the `nutpie`
 extra. Upstream is aware this path is fragile.
 
-- [ ] Reproduce against the pre-upgrade dependency set to confirm attribution
-- [ ] If it reproduces on stock pymc/pytensor, report upstream rather than
-      working around it in HSSM
-- [ ] These 2 ids sit under `test_choice_only`, which is marked R5 — after F4
-      lands they will need their own mark or a fix
+**Resolved (2026-09-15):** not numba and not upstream. The test regressed
+the `(0, inf)`-bounded `beta` with a `Uniform(-3, 3)` intercept, which makes
+the conditional posterior of the slope a single point at the initial point;
+bambi 0.20's RV order samples the slope before the intercept, so `pm.Slice`
+(`iter_limit=inf`) spins on that degenerate slice until CI's timeout signal
+lands inside the numba call. The logp agrees across the Python, numba and JAX
+linkers. See R8 in the inventory for the full trace.
+
+- [x] Attribute the failure (test model spec + bambi 0.20 RV order, not
+      pymc/pytensor/numba)
+- [x] Fix the test's intercept prior (`Uniform(0.5, 3)` for `beta`) and
+      remove the R8 marks
 
 ### F12 (#1330) — Drop the extra posterior variables bambi 0.20 records
 

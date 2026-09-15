@@ -262,6 +262,24 @@ exhausting the available RAM", and drops the `numba` pin from the `nutpie`
 extra. Upstream is clearly aware the numba path is fragile in this dependency
 set. Treat R8 as upgrade-related but **not** an HSSM/bambi API issue.
 
+**Resolved by F9 (#1318)** — 2026-09-15. The attribution above was wrong:
+numba is only where the process happens to be when the CI timeout signal
+lands, which is what "returned a result with an exception set" means. The
+logp is identical under the Python, numba and JAX linkers, and it is a step
+function in `beta_x`: the test's `beta ~ x` regression puts a
+`Uniform(-3, 3)` intercept on a parameter bounded to `(0, inf)`, so at the
+initial point (intercept 0, slope 0) every trial's `beta` sits on the lower
+bound and any nonzero slope drops ~half the trials to the `-66.1`
+out-of-bounds penalty — the conditional slice for `beta_x` is a single point.
+bambi 0.20's free-RV order is `logit1, beta_x, beta_Intercept_centered`,
+so `pm.Slice` (default `iter_limit=inf`) samples the slope while the
+intercept still sits at 0 and enters its stepping-out / shrink loops on the
+degenerate slice without returning. (The rows passed before the upgrade,
+presumably because the earlier RV order let the intercept move first; not
+re-verified against old bambi.)
+Fix: the test's intercept prior for `beta` is now `Uniform(0.5, 3)`; both
+rows sample in <0.5 s on either backend. Nothing to report upstream.
+
 ### R9 — error-message wording drift *(1 id)*
 
 `tests/test_noncentered.py::test_unknown_dict_key_raises_at_construction`
