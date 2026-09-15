@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pymc as pm
+import pytensor
 import pytest
 import xarray as xr
 from pymc.variational import Approximation
@@ -816,3 +817,70 @@ def test_is_choice_only_and_deadline(data_ddm):
     assert len(model_with_deadline.response) == 2
     assert model_with_deadline.response_c == "c(response, deadline)"
     assert model_with_deadline.response_str == "response,deadline"
+
+
+@pytest.mark.parametrize("mode", [None, "JAX"], ids=["default", "jax_linker"])
+def test_jax_callable_non_trialwise_params_logp(data_ddm, mode):
+    """A custom JAX likelihood must see non-trialwise params as scalars (#1092).
+
+    ``v`` is the parent (trialwise); ``a``, ``z`` and ``t`` are fixed, so PyMC
+    hands them to the Op as ``(1,)``-shaped tensors. Before #1092 those reached
+    the single-trial callable un-squeezed, so each trial produced a ``(1,)``
+    value and the vmapped result was ``(n_obs, 1)`` instead of ``(n_obs,)``.
+    Nothing caught it: the default backend read the oversized buffer back as
+    uninitialised memory, and the JAX linker broadcast it to ``(n_obs, n_obs)``
+    -- both silently wrong. This pins the values against a NumPy reference on
+    both linkers.
+    """
+    import jax.numpy as jnp
+
+    a_fixed, z_fixed, t_fixed = 1.3, 0.5, 0.2
+
+    def single_trial_logp(data, v, a, z, t):
+        rt = data[0]
+        mu = jnp.log(a) - jnp.log(v**2 + 0.25) + t + z
+        log_rt = jnp.log(jnp.maximum(rt, 1e-6))
+        return -log_rt - 0.5 * ((log_rt - mu) / 0.45) ** 2 - 0.8
+
+    model = HSSM(
+        data=data_ddm,
+        model="ddm",
+        loglik=single_trial_logp,
+        loglik_kind="approx_differentiable",
+        model_config={"backend": "jax"},
+        p_outlier=0,
+        a=a_fixed,
+        z=z_fixed,
+        t=t_fixed,
+    )
+
+    pymc_model = model.pymc_model
+    value_vars = list(pymc_model.value_vars)
+    assert [v.name for v in value_vars] == ["v_interval__"], (
+        "only the parent should be free; the rest are fixed constants"
+    )
+
+    # Evaluate at an arbitrary point in the unconstrained space, then map it
+    # back through the model's own transform to build the reference.
+    unconstrained_v = np.array(0.3, dtype=pytensor.config.floatX)
+    rv = pymc_model.values_to_rvs[value_vars[0]]
+    transform = pymc_model.rvs_to_transforms[rv]
+    v = float(np.asarray(transform.backward(unconstrained_v, *rv.owner.inputs).eval()))
+
+    rt = data_ddm["rt"].to_numpy()
+    mu = np.log(a_fixed) - np.log(v**2 + 0.25) + t_fixed + z_fixed
+    log_rt = np.log(np.maximum(rt, 1e-6))
+    expected = -log_rt - 0.5 * ((log_rt - mu) / 0.45) ** 2 - 0.8
+    # HSSM replaces the log-likelihood with LOGP_LB where rt <= t.
+    expected = np.where(rt - t_fixed <= 1e-15, -66.1, expected)
+
+    observed_logp = pymc_model.logp(sum=False)[-1]
+    fn = pytensor.function(
+        value_vars, observed_logp, mode=mode, on_unused_input="ignore"
+    )
+    actual = np.asarray(fn(unconstrained_v))
+
+    assert actual.shape == (len(data_ddm),)
+    # Loose rtol so the test is valid under either floatX; the pre-fix failures
+    # it guards against are off by ~300 orders of magnitude or a whole axis.
+    np.testing.assert_allclose(actual, expected, rtol=1e-4)
