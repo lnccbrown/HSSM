@@ -1,5 +1,9 @@
 # Changelog
 
+### Unreleased
+
+6. **HSSM warns when a bounded parameter enters a regression without a link function** (#1343). Under the default `link_settings=None` a regression on a parameter with finite bounds uses the identity link, so the regression is composed in the parameter's own space and the interval transform reaches only the `Intercept`: nothing constrains the composed per-observation value to the declared bounds, and the two terms have mismatched sensitivities (the derivative with respect to the `Intercept` vanishes near a bound while the derivative with respect to a group offset stays flat at `sigma`). On a hierarchical plain `ddm` benchmark (exact Navarro-Fuss likelihood, 12 subjects x 300 trials, 4 chains x 500/500, three seeds, matched priors) the default produced 77.6-82.4% divergences and a minimum ESS of 42-83, while `link_settings="log_logit"` produced 0.00% divergences and a minimum ESS of 475-553. The warning names the parameter and its bounds and points at the `link_settings` documentation. This release only warns; no sampling behaviour changes, and `link_settings=None` remains the default. The `link_settings` docstring now records the same caveat.
+
 ### 0.5.0
 
 This version includes the following changes:

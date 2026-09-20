@@ -167,7 +167,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         - `"log_logit"`: uses identity for bounds `(-inf, inf)`, log for
         `(0, inf)`, and generalized logit when both bounds are finite.
         - `None`: uses the `"identity"` link unless a regression parameter specifies
-        another link.
+        another link. Under the identity link a regression on a parameter with finite
+        bounds is composed in the parameter's own space, which does not constrain the
+        composed per-observation value to those bounds.
 
         Explicit per-parameter links take precedence. Parameters without a regression
         formula have no linear predictor and are unaffected. Defaults to `None`.

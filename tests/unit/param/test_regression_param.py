@@ -171,7 +171,8 @@ def test_fill_defaults():
     assert v.link.bounds == (0.0, 1.0)
 
 
-def test_validate():
+def test_validate(caplog):
+    """Validate raises without a formula and warns for unlinked bounded regressions."""
     with pytest.raises(
         ValueError,
         match="Formula not specified for parameter v.",
@@ -184,6 +185,15 @@ def test_validate():
     assert v.formula == "v ~ 1 + x + y"
     assert v.link == "identity"
 
+    assert caplog.records[-1].levelname == "WARNING"
+    assert caplog.records[-1].message == (
+        "Parameter v has explicit bounds (0, 1) but is used in a regression "
+        + "with the identity link, so the bounds constrain only the Intercept "
+        + 'and not the composed value. Consider link_settings="log_logit", '
+        + "documented at https://lnccbrown.github.io/HSSM/how_to/specify_priors/"
+    )
+
+    n_records = len(caplog.records)
     v = RegressionParam(
         name="v", formula="1 + x + y", bounds=(0.0, 1.0), link="log_logit"
     )
@@ -192,6 +202,7 @@ def test_validate():
     assert isinstance(v.link, Link)
     assert v.link.name == "gen_logit"
     assert v.link.bounds == (0.0, 1.0)
+    assert len(caplog.records) == n_records
 
 
 def test_prepare_formula_terms_caches_structural_names(cavanagh_test):
