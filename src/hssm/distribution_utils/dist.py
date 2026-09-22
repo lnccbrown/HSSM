@@ -6,7 +6,7 @@ generation ops.
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from os import PathLike
 from typing import Any, Literal, Protocol, cast, get_args
 
@@ -87,11 +87,31 @@ def apply_param_bounds_to_loglik(
 # AF-TODO: define clip params
 
 
-def ensure_positive_ndt(data, logp, list_params, dist_params):
-    """Ensure that the non-decision time is always positive.
+def ensure_positive_ndt(
+    data: Any,
+    logp: Any,
+    list_params: list[str],
+    dist_params: Sequence[Any],
+) -> pt.TensorVariable:
+    """Ensure that response times fall inside the model's support.
 
-    Replaces the log probability of the model with a lower bound if the non-decision
-    time is not positive.
+    Replaces the log probability with a lower bound for response times below the
+    fastest response time the model admits.
+
+    With a fixed non-decision time that edge is ``t``. A model that also carries
+    ``st`` gets the edge shifted to ``t - st``. That shift is correct under the
+    half-width convention of ``ssms``/``cssm``, which every LAN ``*_st`` model
+    follows: trial non-decision time is ``Uniform(t - st, t + st)``, so the band
+    ``[t - st, t]`` carries real density and flooring it would discard
+    likelihood the model genuinely assigns.
+
+    ``full_ddm`` is the one bundled model on the other convention and still needs
+    no separate factor. Its only likelihood is the blackbox wrapper around
+    ``hddm_wfpt``, which reads ``st`` as the full width and puts its own edge at
+    ``t - st / 2``. The ``t - st`` shift is therefore wider than that likelihood's
+    support, but changes nothing: ``hddm_wfpt`` returns zero density across
+    ``[t - st, t - st / 2)``, which the wrapper maps to the same lower bound
+    applied here.
 
     Parameters
     ----------
@@ -109,7 +129,7 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
 
     Returns
     -------
-    float
+    tensor
         The log-likelihood of the model.
     """
     rt = data[:, 0]
@@ -117,14 +137,20 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
     if "t" not in list_params:
         return logp
 
-    t = dist_params[list_params.index("t")]
+    min_rt = dist_params[list_params.index("t")]
+
+    # Only st moves this edge. sz (starting point) and sv (drift) are variability
+    # in parameters that leave the response-time support alone, so they are
+    # deliberately not consulted.
+    if "st" in list_params:
+        min_rt = min_rt - dist_params[list_params.index("st")]
 
     # Skip the check for missing data (encoded as -999.0)
     missing_mask = pt.eq(rt, -999.0)
 
     return pt.where(
         # consistent with the epsilon in the analytical likelihood
-        pt.bitwise_and(rt - t <= 1e-15, pt.bitwise_not(missing_mask)),
+        pt.bitwise_and(rt - min_rt <= 1e-15, pt.bitwise_not(missing_mask)),
         LOGP_LB,
         logp,
     )
@@ -623,8 +649,6 @@ def make_distribution(
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
-                # Ensure that non-decision time is always smaller than rt.
-                # Assuming that the non-decision time parameter is always named "t".
                 if not is_choice_only:
                     logp = ensure_positive_ndt(data, logp, list_params, dist_params)
                 logp = pt.log(
@@ -634,7 +658,6 @@ def make_distribution(
                 )
             else:
                 logp = loglik(data, *dist_params, *extra_fields)
-                # Ensure that non-decision time is always smaller than rt.
                 if not is_choice_only:
                     logp = ensure_positive_ndt(data, logp, list_params, dist_params)
 
