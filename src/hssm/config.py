@@ -14,6 +14,7 @@ from ._types import LogLik, LoglikKind, SupportedModels
 from .defaults import (
     default_model_config,
 )
+from .distribution_utils.dist import _validate_ndt_edge_width
 from .modelconfig import get_default_model_config
 from .register import register_model
 
@@ -54,6 +55,10 @@ class BaseModelConfig(ABC):
     loglik: LogLik | None = None
     loglik_kind: LoglikKind | None = None
     backend: Literal["jax", "pytensor"] | None = None
+    # Admissibility-floor width for models with trial-to-trial ndt variability,
+    # in units of st below t (floor at t - ndt_edge_width * st). None -> 1.0,
+    # exact for a compact uniform kernel; unbounded kernels (Normal-t) use 3.0.
+    ndt_edge_width: float | None = None
 
     # Additional data requirements
     extra_fields: list[str] | None = None
@@ -239,6 +244,9 @@ class Config(BaseModelConfig):
         ):
             self.backend = user_config.backend
 
+        if user_config.ndt_edge_width is not None:
+            self.ndt_edge_width = user_config.ndt_edge_width
+
         self.default_priors |= user_config.default_priors
         self.bounds |= user_config.bounds
         self.extra_fields = user_config.extra_fields
@@ -255,6 +263,7 @@ class Config(BaseModelConfig):
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
             raise ValueError("Please provide `backend` via `model_config`.")
+        _validate_ndt_edge_width(self.ndt_edge_width)
 
     def get_defaults(
         self, param: str
@@ -331,6 +340,12 @@ class ModelConfig:
     backend: Literal["jax", "pytensor"] | None = None
     rv: RandomVariable | None = None
     extra_fields: list[str] | None = None
+    # Admissibility-floor width for models with trial-to-trial ndt variability,
+    # in units of st below t: logp is floored for rt <= t - ndt_edge_width * st.
+    # None -> 1.0, exact for a compact uniform kernel of half-width st. Unbounded
+    # kernels (e.g. Normal(t, st)) should set 3.0 (the practical 3-sigma edge).
+    # Must be finite and non-negative; 0.0 degenerates to the fixed-t edge.
+    ndt_edge_width: float | None = None
 
 
 def _normalize_model_config_with_choices(

@@ -1,7 +1,7 @@
 """Type definitions for the HSSM package."""
 
 from os import PathLike
-from typing import Any, Callable, Literal, Optional, TypedDict, Union
+from typing import Any, Callable, Literal, NotRequired, Optional, TypedDict, Union
 
 import bambi as bmb
 import numpy as np
@@ -45,6 +45,10 @@ class LoglikConfig(TypedDict):
     default_priors: dict[str, ParamSpec]
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]
+    # Optional: admissibility-floor width in units of st below t (see
+    # ModelConfig.ndt_edge_width). Likelihoods whose ndt kernel is UNBOUNDED set
+    # 3.0; absent means 1.0 (compact uniform kernel of half-width st).
+    ndt_edge_width: NotRequired[float]
 
 
 LoglikConfigs = dict[LoglikKind, LoglikConfig]

@@ -1,5 +1,11 @@
 # Changelog
 
+### Unreleased
+
+1. **The non-decision-time support guard now accounts for trial-to-trial variability in `t`** (#1292). `ensure_positive_ndt` replaced the log-likelihood with `LOGP_LB` wherever `rt <= t`, which is the correct support edge only for a fixed non-decision time. For the LAN `*_st` models, whose `st` is the half-width of the ssms simulator convention, the trial non-decision time is `Uniform(t - st, t + st)`, so the fastest admissible response time is `t - st` and the whole band `[t - st, t]` carries real density that the guard was discarding — silently, because the `p_outlier` lapse mixture re-emitted the floored trials at `log(p_outlier / 20)` instead of at `LOGP_LB`. Measured on a `ddm_st` model whose likelihood is the exact quadrature, the guard accounted for discrepancies of -5.3 to -12586.8 nats against that quadrature called directly; with the edge corrected the two agree exactly. The shift applies only to `st`: `sz` and `sv` are variability in parameters that do not move the response-time support, and are deliberately not consulted. `full_ddm` also carries `st` and receives the same `t - st` floor, but is unaffected in value — its `hddm_wfpt` likelihood parameterizes `st` as the full width, with its own zero-density edge at `t - st / 2`, and already returns the same lower bound across the wider band.
+
+2. **New `model_config` field `ndt_edge_width` sets where the response-time admissibility floor sits for models with trial-to-trial non-decision-time variability** (#1344; stacked on #1292). The guard that floors the log-likelihood below the model's fastest admissible response time places that edge at `t - st`, which is exact only for a non-decision-time kernel with compact support of half-width `st` (the convention every LAN `*_st` network follows). Kernels with unbounded support — e.g. `Normal(t, st)`, where `st` is a standard deviation — carry real density below `t - st`, and flooring there discards likelihood the model genuinely assigns. `ndt_edge_width` moves the floor to `t - ndt_edge_width * st`. A likelihood entry in a registered model's config may also declare it, so a supported model ships the correct edge as its own default; because it is declared per likelihood, a blackbox exact likelihood and its LAN approximation for the same model can carry different edges. `None` (the default) means 1.0, byte-identical to the previous behaviour; the field has no effect on models without `st`, nor on `full_ddm`, whose blackbox likelihood reads `st` as a full width and already returns zero density below `t - st/2`, above this floor. Unbounded kernels should set 3.0, the kernel's practical 3-sigma edge. The value is validated when the config is built and must be a finite, non-negative number; anything else raises `ValueError`, from `Config.validate()` and from `make_distribution()` alike, so the direct path is guarded too. Without that check a negative width would raise the floor above `t`, and `NaN` or `inf` would either disable the floor or apply it to every response time, each changing the likelihood support with no error. `0.0` is allowed and degenerates to the fixed-`t` edge.
+
 ### 0.5.0
 
 This version includes the following changes:
@@ -69,6 +75,7 @@ This version includes the following changes:
 1. **`ssm-simulators` floor raised to `>=0.14.0`** — the first release containing `angle_extended`.
    0.14.0 also fixes `omission_p` / `choice_p_no_omission`, which were computed against the wrong
    column and read as identically zero on deadline models.
+
 
 
 ### 0.4.0
