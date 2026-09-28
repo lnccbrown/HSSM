@@ -3,8 +3,6 @@
 import contextlib
 import json
 import math
-import shutil
-from pathlib import Path
 
 import pytest
 
@@ -20,6 +18,10 @@ def _isolated_mlflow(tmp_path, monkeypatch):
     original_uri = mlflow.get_tracking_uri()
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     monkeypatch.delenv("MLFLOW_EXPERIMENT_NAME", raising=False)
+    # Even with a sqlite backend, MLflow puts *artifacts* under a relative
+    # ./mlruns. Run from tmp_path so that lands with the rest of the test's
+    # scratch instead of in the developer's working directory.
+    monkeypatch.chdir(tmp_path)
     tracking._LAST_NETWORK.clear()
     uri = f"sqlite:///{(tmp_path / 'tracking.db').absolute()}"
     mlflow.set_tracking_uri(uri)
@@ -30,8 +32,6 @@ def _isolated_mlflow(tmp_path, monkeypatch):
     if mlflow.active_run() is not None:
         mlflow.end_run()
     tracking._LAST_NETWORK.clear()
-    if (Path.cwd() / "mlruns").exists():
-        shutil.rmtree(Path.cwd() / "mlruns")
     with contextlib.suppress(Exception):
         mlflow.set_tracking_uri(original_uri)
 
@@ -41,16 +41,20 @@ def _run(run_id):
 
 
 class TestNetworkProvenance:
-    """Tests for network provenance."""
+    """Which ONNX network a fit used, and where it came from."""
 
-    def test_hf_revision_parsed_from_cache_path(self, tmp_path):
-        """Hf revision parsed from cache path."""
+    def test_hf_revision_read_from_cache_path_without_a_network_call(self, tmp_path):
+        """The commit sha is the directory name under `snapshots/`.
+
+        Reading it off the path keeps provenance free: no request to the Hub.
+        A path outside the cache layout has no revision to report.
+        """
         p = tmp_path / "models--franklab--HSSM" / "snapshots" / "abc123" / "ddm.onnx"
         assert tracking.hf_revision_from_path(p) == "abc123"
         assert tracking.hf_revision_from_path(tmp_path / "ddm.onnx") is None
 
-    def test_record_and_last_network(self, tmp_path):
-        """Record and last network."""
+    def test_recorded_network_is_readable_with_its_revision(self, tmp_path):
+        """What the loader records is what a tracker started later reads back."""
         p = tmp_path / "snapshots" / "deadbeef" / "angle.onnx"
         tracking.record_network("angle.onnx", p)
         assert tracking.last_network() == {
@@ -58,8 +62,10 @@ class TestNetworkProvenance:
             "hf_revision": "deadbeef",
         }
 
-    def test_loader_records_hf_downloads(self, tmp_path, monkeypatch):
-        """download_hf / load_onnx_model must leave a record for the tracker."""
+    def test_downloading_a_network_leaves_a_record_for_the_tracker(
+        self, tmp_path, monkeypatch
+    ):
+        """The loader runs during `HSSM(...)`, before any tracker may exist."""
         from hssm.distribution_utils.onnx_utils import model as onnx_model
 
         local = tmp_path / "snapshots" / "c0ffee" / "ddm.onnx"
@@ -74,8 +80,14 @@ class TestNetworkProvenance:
             "hf_revision": "c0ffee",
         }
 
-    def test_manifest_lookup_by_root_or_folder_file(self, tmp_path, monkeypatch):
-        """Manifest lookup by root or folder file."""
+    def test_manifest_entry_found_by_either_root_or_member_filename(
+        self, tmp_path, monkeypatch
+    ):
+        """A network is identified by its published root name or any of its files.
+
+        `upload-hf` publishes one canonical root network plus the full artifact
+        set, so a fit may name either; an unpublished network matches nothing.
+        """
         manifest = tmp_path / "manifest.json"
         manifest.write_text(
             json.dumps(
@@ -106,37 +118,45 @@ class TestNetworkProvenance:
 
 
 class TestHelpers:
-    """Tests for helpers."""
+    """Run identity, the reserved-key guards, and block lifecycle."""
 
-    def test_common_tags(self):
-        """Common tags."""
+    def test_every_run_carries_schema_version_lineage_and_origin(self):
+        """The tags shared with ssm-simulators and LANfactory are always set."""
         tags = tracking.common_run_tags("lin")
         assert tags["schema_version"] == "2"
         assert tags["lineage_id"] == "lin"
         assert tags["hostname"] and tags["hssm_version"]
 
-    def test_spec_hash_stable_and_repr_excluded(self):
-        """Spec hash stable and repr excluded."""
+    def test_spec_hash_ignores_key_order_and_repr_but_not_the_model(self):
+        """Two fits share `spec_sha256` exactly when the specification matches.
+
+        Key order and the human-readable `repr` are presentation, not
+        specification, so they must not change the digest; the model must.
+        """
         a = {"model": "ddm", "include": [{"name": "v"}], "repr": "A"}
         b = {"include": [{"name": "v"}], "model": "ddm", "repr": "B"}
         assert tracking.spec_sha256(a) == tracking.spec_sha256(b)
         assert tracking.spec_sha256({"model": "angle"}) != tracking.spec_sha256(a)
 
-    def test_reserved_tags_rejected(self):
-        """Reserved tags rejected."""
+    def test_tags_cannot_overwrite_the_schema_tags(self):
+        """Overwriting `phase` would make the run unfindable by its own schema."""
         with pytest.raises(ValueError, match="reserved"):
             with hssm.track(tags={"phase": "x"}):
                 pass
 
-    def test_nested_track_rejected(self):
-        """Nested track rejected."""
+    def test_nested_track_blocks_are_refused(self):
+        """One active run per process: a nested block would silently split a fit."""
         with hssm.track():
             with pytest.raises(RuntimeError, match="nested"):
                 with hssm.track():
                     pass
 
-    def test_empty_block_still_gets_lineage_and_finishes(self):
-        """Empty block still gets lineage and finishes."""
+    def test_block_that_fits_nothing_still_closes_a_complete_run(self):
+        """A run with no model must still finish with a real lineage id.
+
+        The id is normally resolved when a model is logged; without one it is
+        minted at exit rather than left as the internal placeholder.
+        """
         with hssm.track(experiment="infer/empty", run_name="noop") as t:
             run_id = t.run_id
         run = _run(run_id)
@@ -144,8 +164,11 @@ class TestHelpers:
         assert run.data.tags["phase"] == "infer"
         assert len(run.data.tags["lineage_id"]) == 32
 
-    def test_exception_marks_run_failed_and_clears_active(self):
-        """Exception marks run failed and clears active."""
+    def test_failure_inside_the_block_is_recorded_and_does_not_leak(self):
+        """A raised error marks the run FAILED and leaves no tracker active.
+
+        A leaked tracker would attach the next fit in the process to a dead run.
+        """
         with pytest.raises(RuntimeError):
             with hssm.track() as t:
                 run_id = t.run_id
@@ -159,7 +182,7 @@ class TestTrackedFit:
 
     @pytest.fixture
     def fitted(self, data_ddm):
-        """Fitted."""
+        """Run a tiny analytical ddm fit inside a track block."""
         with hssm.track(
             experiment="infer/ddm", run_name="t", lineage_id="lin-explicit"
         ) as t:
@@ -168,8 +191,8 @@ class TestTrackedFit:
             run_id = t.run_id
         return _run(run_id), model
 
-    def test_params_tags_metrics(self, fitted):
-        """Params tags metrics."""
+    def test_fit_records_model_sampler_and_convergence(self, fitted):
+        """One fit produces the model, sampler and diagnostic record in full."""
         run, _ = fitted
         p, t, m = run.data.params, run.data.tags, run.data.metrics
         assert p["model"] == "ddm"
@@ -189,8 +212,8 @@ class TestTrackedFit:
         assert all(math.isfinite(v) for v in m.values())  # no NaNs at all
         assert run.info.status == "FINISHED"
 
-    def test_artifacts(self, fitted):
-        """Artifacts."""
+    def test_fit_attaches_spec_summary_and_traces(self, fitted):
+        """The three artifacts a fit is expected to leave behind."""
         run, _ = fitted
         names = {
             a.path
@@ -198,8 +221,8 @@ class TestTrackedFit:
         }
         assert {"model_spec.json", "summary.csv", "traces.nc"} <= names
 
-    def test_spec_hash_differs_by_model_choices(self, data_ddm):
-        """Spec hash differs by model choices."""
+    def test_changing_the_specification_changes_the_spec_hash(self, data_ddm):
+        """Adding `p_outlier` is a different model, so a different digest."""
         with hssm.track() as t1:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
@@ -215,11 +238,16 @@ class TestTrackedFit:
 
 
 class TestSaveModelHook:
-    """Tests for save model hook."""
+    """What `log_artifacts` includes, and what it deliberately leaves out."""
 
-    def test_model_pkl_attached_only_with_all(self, data_ddm, tmp_path, monkeypatch):
-        """Model pkl attached only with all."""
-        monkeypatch.chdir(tmp_path)
+    def test_pickled_model_attached_only_when_log_artifacts_is_all(self, data_ddm):
+        """`log_artifacts="all"` adds `model.pkl`; plain `True` does not.
+
+        The pickle is the largest artifact and the one most often unwanted, so
+        it sits behind the widest setting rather than the default.
+        """
+        # `save_model` writes relative to the cwd, which `_isolated_mlflow`
+        # already points at this test's tmp_path.
         for mode, expect in (("all", True), (True, False)):
             with hssm.track(log_artifacts=mode) as t:
                 model = hssm.HSSM(data_ddm, model="ddm")
@@ -230,8 +258,8 @@ class TestSaveModelHook:
             }
             assert ("model.pkl" in names) is expect, mode
 
-    def test_metrics_only_when_artifacts_off(self, data_ddm):
-        """Metrics only when artifacts off."""
+    def test_log_artifacts_false_keeps_metrics_but_writes_no_files(self, data_ddm):
+        """Turning artifacts off must not cost the run its metrics too."""
         with hssm.track(log_artifacts=False) as t:
             hssm.HSSM(data_ddm, model="ddm").sample(
                 draws=5, chains=1, tune=5, progressbar=False
@@ -249,3 +277,135 @@ def test_untracked_sample_is_unaffected(data_ddm):
         draws=5, chains=1, tune=5, progressbar=False
     )
     assert mlflow.active_run() is None
+
+
+class TestUserParams:
+    """`params=` and `log_param`: the dimensions a user varies themselves."""
+
+    def test_params_argument_reaches_the_run(self):
+        """Params passed to track() land on the run."""
+        with hssm.track(experiment="study", params={"prior_v_sd": 2.0}) as t:
+            run_id = t.run_id
+        assert _run(run_id).data.params["prior_v_sd"] == "2.0"
+
+    def test_params_can_be_added_after_the_block_opens(self):
+        """Not everything worth recording is known when the run starts."""
+        with hssm.track(experiment="study") as t:
+            t.log_param("note", "pilot only")
+            t.log_params({"cohort": "A", "excluded": "3"})
+            run_id = t.run_id
+        p = _run(run_id).data.params
+        assert p["note"] == "pilot only"
+        assert p["cohort"] == "A" and p["excluded"] == "3"
+
+    def test_reserved_params_rejected_by_track(self):
+        """A key HSSM logs itself is refused up front, not silently dropped."""
+        with pytest.raises(ValueError, match="model"):
+            with hssm.track(params={"model": "mine"}):
+                pass
+
+    def test_reserved_params_rejected_by_log_param(self):
+        """The guard applies to the handle too, not just to `track()`."""
+        with hssm.track() as t:
+            with pytest.raises(ValueError, match="draws"):
+                t.log_param("draws", 5)
+
+    def test_user_params_survive_a_fit(self, data_ddm):
+        """User params coexist with the ones the fit logs."""
+        with hssm.track(experiment="study", params={"dataset": "v2"}) as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+            run_id = t.run_id
+        p = _run(run_id).data.params
+        assert p["dataset"] == "v2"  # ours
+        assert p["model"] == "ddm" and p["sampler"] == "pymc"  # HSSM's
+
+
+class TestDataHash:
+    """`data_sha256` identifies the data, schema included."""
+
+    def test_same_frame_hashes_the_same_every_time(self, data_ddm):
+        """The digest groups a study's fits, so it must not drift between calls."""
+        assert tracking.data_sha256(data_ddm) == tracking.data_sha256(data_ddm)
+
+    def test_renamed_column_changes_digest(self, data_ddm):
+        """Same numbers under a different name are not the same dataset."""
+        renamed = data_ddm.rename(columns={data_ddm.columns[0]: "renamed"})
+        assert tracking.data_sha256(renamed) != tracking.data_sha256(data_ddm)
+
+    def test_changed_dtype_changes_digest(self, data_ddm):
+        """Reading the same values back as another dtype is a different frame."""
+        col = data_ddm.columns[0]
+        retyped = data_ddm.astype({col: "float32"})
+        assert tracking.data_sha256(retyped) != tracking.data_sha256(data_ddm)
+
+
+class TestNetworkAttribution:
+    """Network provenance belongs to the model, not to the process."""
+
+    def test_second_model_does_not_steal_the_first_models_network(self, data_ddm):
+        """Constructing model B must not change what model A reports.
+
+        `_LAST_NETWORK` is process-wide, so a model logged after a second one
+        was built would otherwise report the second one's network — the common
+        case in a notebook that fits several models.
+        """
+        tracking.record_network("net_a.onnx", "/tmp/snapshots/aaa/net_a.onnx")
+        model_a = hssm.HSSM(data_ddm, model="ddm")
+        tracking.record_network("net_b.onnx", "/tmp/snapshots/bbb/net_b.onnx")
+
+        # An explicit lineage id keeps the manifest lookup (a network call) out
+        # of the test; it is not what is under test here.
+        with hssm.track(experiment="study", lineage_id="lin") as t:
+            t.log_model(model_a)
+            run_id = t.run_id
+        assert _run(run_id).data.params["network_file"] == "net_a.onnx"
+
+
+class TestTrackedVI:
+    """`vi()` records the variational settings, its loss, and the idata."""
+
+    @pytest.fixture
+    def fitted_vi(self, data_ddm):
+        """Run a tiny ADVI fit inside a track block."""
+        with hssm.track(experiment="study", run_name="advi", lineage_id="lin") as t:
+            model = hssm.HSSM(data_ddm, model="ddm")
+            model.vi(method="advi", niter=100, draws=10, progressbar=False)
+            run_id = t.run_id
+        return _run(run_id), model
+
+    def test_vi_records_its_settings_and_where_the_elbo_landed(self, fitted_vi):
+        """Variational settings, duration and ELBO reach the run.
+
+        r_hat is excluded deliberately: VI produces a single draw set, so the
+        statistic is NaN and would be noise in the UI rather than information.
+        """
+        run, _ = fitted_vi
+        p, m = run.data.params, run.data.metrics
+        assert p["method"] == "advi"
+        assert p["niter"] == "100" and p["draws"] == "10"
+        assert p["model"] == "ddm"  # the model block still runs
+        assert m["vi_seconds"] > 0
+        assert "elbo_final" in m and "elbo_min" in m
+        # VI yields a single draw set: r_hat is NaN and must not be logged.
+        assert "r_hat_max" not in m
+        assert all(math.isfinite(v) for v in m.values())
+        assert run.info.status == "FINISHED"
+
+    def test_artifacts_include_the_vi_idata(self, fitted_vi):
+        """The approximate posterior is attached under its own name."""
+        run, _ = fitted_vi
+        names = {
+            a.path
+            for a in mlflow.tracking.MlflowClient().list_artifacts(run.info.run_id)
+        }
+        assert {"model_spec.json", "summary.csv", "vi_traces.nc"} <= names
+
+    def test_untracked_vi_is_unaffected(self, data_ddm):
+        """No track() block: vi() must not touch MLflow."""
+        assert tracking.active() is None
+        hssm.HSSM(data_ddm, model="ddm").vi(
+            method="advi", niter=50, draws=10, progressbar=False
+        )
+        assert mlflow.active_run() is None
