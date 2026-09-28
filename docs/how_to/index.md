@@ -28,6 +28,7 @@ focuses on a concrete modeling, inference, analysis, or extension task.
 - [Run a Bayesian t-test on posterior draws](../tutorials/tutorial_bayesian_t_test.ipynb).
 - [Simulate interventions with the do-operator](../tutorials/do_operator.ipynb).
 - [Save and load fitted models](../tutorials/save_load_tutorial.ipynb).
+- [Track fits with MLflow](track_with_mlflow.md).
 
 ## Extend HSSM
 
