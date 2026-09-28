@@ -96,6 +96,7 @@ pypi-token
 pre-commit
 .github/copilot-instructions.md
 uv.lock
+mlruns/
 
 .claude/CLAUDE.local.md
 
