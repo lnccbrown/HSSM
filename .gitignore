@@ -104,3 +104,4 @@ mlruns/
 # (scripts/sync_agent_config.py materializes these from .claude/).
 .cursor/
 .agents/
+mlflow.db
