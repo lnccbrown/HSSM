@@ -45,7 +45,8 @@ To keep a record of each fit — the model, the sampler settings, the diagnostic
 and the traces — install the `tracking` extra, which adds MLflow:
 
 ```bash
-pip install hssm[tracking]
+uv add "hssm[tracking]"       # or: uv pip install "hssm[tracking]"
+pip install "hssm[tracking]"  # with pip
 ```
 
 See [Track fits with MLflow](../how_to/track_with_mlflow.md).
