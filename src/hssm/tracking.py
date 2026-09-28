@@ -1,24 +1,27 @@
 """Opt-in MLflow tracking for HSSM inference runs.
 
-Wrap a fitting workflow in :func:`track` and HSSM records the run to MLflow
-following the ecosystem schema (HSSMSpine ``_docs/mlflow-schema.md``,
-``phase=infer``): which model and network were fitted, the sampler settings,
-convergence metrics, and, optionally, the traces as an artifact. The same
-``lineage_id`` that ssm-simulators stamps on training data and LANfactory
-carries into the published network is read back from the HuggingFace
-``manifest.json`` so one query shows data -> network -> fits.
+Wrap a fitting workflow in :func:`track` and each fit is recorded as one MLflow
+run: the model and its priors, the sampler settings, convergence diagnostics,
+the traces, and anything you add yourself. Fits of the same data, or of the same
+model specification, are tagged alike, so a study of several models stays
+legible afterwards.
 
-Nothing here runs unless :func:`track` is active. MLflow is an optional
-dependency (``pip install hssm[tracking]``). Every hook is best-effort: a
+Nothing here runs unless :func:`track` is active, MLflow is an optional
+dependency (``uv add "hssm[tracking]"``), and every hook is best-effort: a
 tracking failure is logged and never interrupts inference.
+
+Where the likelihood is a network published by the LAN pipeline, the run also
+carries that network's provenance, which links a fit back to the data the
+network was trained on. The schema shared across the ecosystem is documented in
+HSSMSpine ``_docs/mlflow-schema.md``.
 
 Example
 -------
 >>> import hssm
->>> with hssm.track(experiment="infer/ddm", run_name="pilot-01"):
+>>> data = hssm.load_data("cavanagh_theta")
+>>> with hssm.track(experiment="my-study", run_name="ddm-basic"):
 ...     model = hssm.HSSM(data, model="ddm")
 ...     model.sample(draws=1000, chains=4)
-...     model.save_model()
 """
 
 from __future__ import annotations
@@ -288,11 +291,13 @@ class Tracker:
         *,
         log_artifacts: bool | Literal["all"],
         lineage_id: str | None,
+        dataset_name: str | None = None,
     ) -> None:
         self._mlflow = mlflow
         self.run_id = run_id
         self.log_artifacts = log_artifacts
         self._explicit_lineage_id = lineage_id
+        self._dataset_name = dataset_name
         self.lineage_id: str | None = None
         self._model_logged = False
         self._sample_started: float | None = None
@@ -371,6 +376,20 @@ class Tracker:
         mlflow.set_tags(tags)
         if self.log_artifacts:
             mlflow.log_dict(spec, "model_spec.json")
+        if data is not None and self._dataset_name:
+            self._guard("log dataset", self._log_dataset, data)
+
+    def _log_dataset(self, data: Any) -> None:
+        """Register the observed data as an MLflow dataset.
+
+        This fills the run's "Datasets" panel with the column schema and row
+        count, and makes the UI's dataset filter work. It needs a name, which a
+        DataFrame does not carry, so it happens only when the caller supplies
+        one — an unnamed dataset would show up identically for every study.
+        """
+        import mlflow.data
+
+        self._mlflow.log_input(mlflow.data.from_pandas(data, name=self._dataset_name))
 
     def sample_started(self) -> None:
         """Mark the start of ``sample()`` for the ``sampling_seconds`` metric."""
@@ -525,6 +544,7 @@ def track(
     lineage_id: str | None = None,
     tags: dict[str, str] | None = None,
     params: dict[str, Any] | None = None,
+    dataset_name: str | None = None,
 ) -> Iterator[Tracker]:
     """Record the enclosed HSSM workflow as one MLflow run (``phase=infer``).
 
@@ -554,11 +574,17 @@ def track(
         the MLflow UI. Keys HSSM records itself are rejected; see
         :data:`RESERVED_PARAMS`. More can be added later with
         :meth:`Tracker.log_param`.
+    dataset_name
+        Name to register the observed data under, which fills the run's
+        "Datasets" panel with the column schema and row count and lets the UI
+        filter by dataset. Omitted, no dataset is recorded: a DataFrame carries
+        no name of its own, and an invented one would look the same for every
+        study. The data is identified either way by the ``data_sha256`` tag.
 
     Raises
     ------
     ImportError
-        If MLflow is not installed (``pip install hssm[tracking]``).
+        If MLflow is not installed (``uv add "hssm[tracking]"``).
     ValueError
         If ``tags`` or ``params`` collide with what HSSM records itself.
     """
@@ -569,7 +595,7 @@ def track(
     except ImportError as exc:
         raise ImportError(
             "MLflow is required for hssm.track(). Install it with "
-            "`pip install hssm[tracking]` (or `uv sync --extra tracking`)."
+            '`uv add "hssm[tracking]"` (or `pip install "hssm[tracking]"`).'
         ) from exc
 
     reserved = {"schema_version", "phase", "lineage_id"} & set(tags or {})
@@ -588,7 +614,11 @@ def track(
 
     run = mlflow.start_run(run_name=run_name)
     tracker = Tracker(
-        mlflow, run.info.run_id, log_artifacts=log_artifacts, lineage_id=lineage_id
+        mlflow,
+        run.info.run_id,
+        log_artifacts=log_artifacts,
+        lineage_id=lineage_id,
+        dataset_name=dataset_name,
     )
     # The common block goes on immediately with a placeholder lineage; it is
     # overwritten with the resolved id once a model is logged.
@@ -617,19 +647,11 @@ def track(
             mlflow.end_run()
 
 
+# The public surface. Everything else in this module is machinery the ONNX
+# loader, `HSSMBase` and the ecosystem CLIs call by name; it stays importable
+# but is not part of what a user is offered.
 __all__ = [
-    "MLFLOW_SCHEMA_VERSION",
-    "RESERVED_PARAMS",
     "Tracker",
     "active",
-    "check_params",
-    "common_run_tags",
-    "data_sha256",
-    "hf_revision_from_path",
-    "last_network",
-    "model_spec",
-    "record_network",
-    "reset_network_record",
-    "spec_sha256",
     "track",
 ]

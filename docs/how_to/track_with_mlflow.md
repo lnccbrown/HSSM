@@ -19,7 +19,11 @@ import hssm
 
 data = hssm.load_data("cavanagh_theta")
 
-with hssm.track(experiment="my-study", run_name="ddm-basic"):
+with hssm.track(
+    experiment="my-study",
+    run_name="ddm-basic",
+    dataset_name="cavanagh_theta", # optional but recommended for dataset tracking
+):
     model = hssm.HSSM(data, model="ddm")
     model.sample(draws=1000, chains=4)
 ```
@@ -31,6 +35,8 @@ Browse them with:
 ```bash
 mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
+
+`dataset_name=` is optional but worth setting: it fills the run's **Datasets** panel with your data's column schema and row count, and lets the UI filter by dataset. Left out, that panel stays empty — a DataFrame carries no name of its own, and an invented one would look identical for every study. Either way the data is identified by the `data_sha256` tag.
 
 To keep several projects apart, or to use a tracking server, set `MLFLOW_TRACKING_URI` in your environment or pass `tracking_uri=` to `track()`.
 
@@ -62,21 +68,6 @@ with hssm.track(experiment="my-study") as run:
     trace_plot = az.plot_trace_dist(model.traces, var_names=["v"])
     run.log_figure(trace_plot.viz["figure"].item(), "plots/trace.png")
 ```
-
-## Name your data
-
-Pass `dataset_name=` and the run's **Datasets** panel in the MLflow UI fills in
-with the column schema and row count, and the UI can filter by dataset:
-
-```python
-with hssm.track(experiment="my-study", dataset_name="cavanagh_theta"):
-    model = hssm.HSSM(data, model="ddm")
-    model.sample()
-```
-
-Without it that panel stays empty: a DataFrame carries no name of its own, and
-an invented one would look identical for every study. Your data is identified
-either way by the `data_sha256` tag.
 
 ## Reserved keys
 

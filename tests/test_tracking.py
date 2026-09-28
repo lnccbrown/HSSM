@@ -427,3 +427,40 @@ class TestTrackedVI:
             method="advi", niter=50, draws=10, progressbar=False
         )
         assert mlflow.active_run() is None
+
+
+class TestDatasetRegistration:
+    """`dataset_name` fills MLflow's own Datasets panel."""
+
+    def test_named_dataset_is_registered_with_schema_and_row_count(self, data_ddm):
+        """A name turns the observed data into an MLflow dataset input.
+
+        MLflow's Datasets panel is fed by `log_input`, not by params or tags,
+        so without this the panel reads "None" however much else is recorded.
+        """
+        with hssm.track(experiment="study", lineage_id="lin", dataset_name="ddm") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+            run_id = t.run_id
+        inputs = mlflow.tracking.MlflowClient().get_run(run_id).inputs.dataset_inputs
+        assert len(inputs) == 1
+        dataset = inputs[0].dataset
+        assert dataset.name == "ddm"
+        assert '"num_rows": 100' in dataset.profile
+        assert "rt" in dataset.schema
+
+    def test_no_dataset_recorded_without_a_name(self, data_ddm):
+        """Unnamed data stays out of the panel rather than inventing a label.
+
+        Every study would otherwise show the same generic dataset name, which
+        is worse than an empty panel. `data_sha256` still identifies the data.
+        """
+        with hssm.track(experiment="study", lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+            run_id = t.run_id
+        run = mlflow.tracking.MlflowClient().get_run(run_id)
+        assert run.inputs.dataset_inputs == []
+        assert len(run.data.tags["data_sha256"]) == 64
