@@ -19,14 +19,20 @@ Wrap the work in `hssm.track`:
 ```python
 import hssm
 
+data = hssm.load_data("cavanagh_theta")
+
 with hssm.track(experiment="my-study", run_name="ddm-basic"):
     model = hssm.HSSM(data, model="ddm")
     model.sample(draws=1000, chains=4)
 ```
 
 Everything inside the block becomes one MLflow run. With nothing else
-configured, runs go to an `mlflow.db` file in your working directory; open them
-with:
+configured, two things appear in your working directory: `mlflow.db` holds the
+record of each run, and `mlruns/` holds the files attached to it — the traces,
+the summary table, the model specification. Keep both; the database refers to
+the artifacts by path rather than storing them.
+
+Browse them with:
 
 ```bash
 mlflow ui --backend-store-uri sqlite:///mlflow.db
@@ -44,7 +50,11 @@ study stays readable:
 ```python
 for sd in [0.5, 1.0, 2.0]:
     with hssm.track(experiment="my-study", params={"prior_v_sd": sd}):
-        model = hssm.HSSM(data, model="ddm", include=[...])
+        model = hssm.HSSM(
+            data,
+            model="ddm",
+            v={"prior": {"name": "Normal", "mu": 0.0, "sigma": sd}},
+        )
         model.sample()
 ```
 
@@ -58,8 +68,9 @@ with hssm.track(experiment="my-study") as run:
     model = hssm.HSSM(data, model="ddm")
     model.sample()
     run.log_param("note", "pilot subjects only")
-    run.log_metric("loo_elpd", float(az.loo(model.traces).elpd_loo))
-    run.log_figure(model.plot_trace()[0, 0].figure, "plots/trace.png")
+    run.log_metric("loo_elpd", float(az.loo(model.traces).elpd))
+    trace_plot = az.plot_trace_dist(model.traces, var_names=["v"])
+    run.log_figure(trace_plot.viz["figure"].item(), "plots/trace.png")
 ```
 
 Keys HSSM records itself are refused rather than silently dropped — MLflow
