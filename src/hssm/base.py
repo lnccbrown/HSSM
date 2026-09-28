@@ -408,6 +408,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         self._post_check_data_sanity()
 
         self.model_distribution = self._make_model_distribution()
+        # Which network this model runs on, captured now rather than read off
+        # the module-global at log time: building a second model in the same
+        # session would otherwise make this one report the other's network.
+        self._tracking_network = tracking.last_network()
 
         self.family = make_family(
             self.model_distribution,
@@ -856,6 +860,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             else:
                 backend = "numba"
 
+        tracker = tracking.active()
+        if tracker is not None:
+            tracker.vi_started()
+
         # Run variational inference directly from pymc model
         # pyrefly: ignore[bad-context-manager]
         with self.pymc_model:
@@ -882,6 +890,17 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Post-processing
         self._clean_posterior_group(dt=cast("DataTree | None", self._inference_obj_vi))
+
+        if tracker is not None:
+            tracker.log_vi(
+                self,
+                {
+                    "method": method,
+                    "niter": niter,
+                    "draws": draws,
+                    "backend": backend,
+                },
+            )
 
         # Return the DataTree object if return_idata is True
         if return_idata:
