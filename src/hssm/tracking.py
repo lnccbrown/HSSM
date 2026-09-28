@@ -47,6 +47,33 @@ MLFLOW_SCHEMA_VERSION = "2"
 #: root of the HuggingFace repository.
 MANIFEST_FILENAME = "manifest.json"
 
+#: Param keys this module logs itself. A caller-supplied param of the same name
+#: would be a second value for an existing key, which MLflow rejects for the
+#: *whole batch* — so they are refused up front, as reserved tags are.
+RESERVED_PARAMS = frozenset(
+    {
+        "model",
+        "loglik_kind",
+        "network_file",
+        "hf_revision",
+        "n_trials",
+        "n_subjects",
+        "spec_sha256",
+        "hssm_version",
+        "pymc_version",
+        "bambi_version",
+        "sampler",
+        "draws",
+        "tune",
+        "chains",
+        "target_accept",
+        "cores",
+        "method",
+        "niter",
+        "backend",
+    }
+)
+
 # The last network fetched from HuggingFace, recorded by the ONNX loader so a
 # tracker started later can still say which file this model runs on.
 _LAST_NETWORK: dict[str, str] = {}
@@ -161,6 +188,20 @@ def common_run_tags(lineage_id: str) -> dict[str, str]:
     return tags
 
 
+def check_params(params: dict[str, Any] | None) -> None:
+    """Raise if any key collides with one this module logs itself.
+
+    MLflow refuses to record a second, different value for a param, and it
+    rejects the entire batch when one key offends — so a silent collision would
+    cost the run every other param too. Failing here says which key to rename.
+    """
+    clash = RESERVED_PARAMS & set(params or {})
+    if clash:
+        raise ValueError(
+            f"params may not override what HSSM records itself: {sorted(clash)}"
+        )
+
+
 # --------------------------------------------------------------------------- #
 # Model description
 # --------------------------------------------------------------------------- #
@@ -202,13 +243,21 @@ def spec_sha256(spec: dict[str, Any]) -> str:
 
 
 def data_sha256(data: Any) -> str | None:
-    """Content hash of the observed DataFrame."""
+    """Content hash of the observed DataFrame, schema included.
+
+    Values alone are not enough: renaming a column, or reading the same numbers
+    back as a different dtype, gives a frame that means something else while
+    hashing identically. Column labels and dtypes therefore go into the digest
+    alongside the row and index values.
+    """
     try:
         import pandas as pd
 
-        return hashlib.sha256(
-            pd.util.hash_pandas_object(data, index=True).to_numpy().tobytes()
-        ).hexdigest()
+        digest = hashlib.sha256()
+        digest.update(pd.util.hash_pandas_object(data, index=True).to_numpy().tobytes())
+        schema = [(str(c), str(dt)) for c, dt in zip(data.columns, data.dtypes)]
+        digest.update(repr(schema).encode())
+        return digest.hexdigest()
     except Exception:  # noqa: BLE001
         return None
 
@@ -236,6 +285,7 @@ class Tracker:
         self.lineage_id: str | None = None
         self._model_logged = False
         self._sample_started: float | None = None
+        self._vi_started: float | None = None
 
     # -- helpers -----------------------------------------------------------
 
@@ -277,7 +327,9 @@ class Tracker:
 
     def _log_model(self, model: HSSMBase) -> None:
         mlflow = self._mlflow
-        network = last_network()
+        # The model carries the network it was built with; `last_network()` is
+        # the fallback for a model constructed before that snapshot existed.
+        network = dict(getattr(model, "_tracking_network", None) or last_network())
         loglik = getattr(getattr(model, "model_config", None), "loglik", None)
         if isinstance(loglik, str) and not network.get("network_file"):
             network["network_file"] = loglik
@@ -337,11 +389,26 @@ class Tracker:
         if stats is not None and "diverging" in stats:
             metrics["divergences"] = float(stats["diverging"].sum())
 
+        self._log_idata(traces, metrics, artifact_name="traces.nc")
+
+    def _log_idata(
+        self,
+        idata: Any,
+        metrics: dict[str, float],
+        *,
+        artifact_name: str,
+    ) -> None:
+        """Summarise an inference result: posterior metrics, summary, the idata.
+
+        Shared by the MCMC and variational paths, which differ in what they call
+        the result and in which metrics they bring with them.
+        """
+        mlflow = self._mlflow
         summary = None
         try:
             import arviz as az
 
-            summary = az.summary(traces)
+            summary = az.summary(idata)
         except Exception as e:  # noqa: BLE001
             _logger.debug("az.summary unavailable for tracking: %s", e)
         if summary is not None and len(summary):
@@ -351,7 +418,8 @@ class Tracker:
                 metrics["ess_bulk_min"] = float(summary["ess_bulk"].min())
             if "ess_tail" in summary:
                 metrics["ess_tail_min"] = float(summary["ess_tail"].min())
-        # Single-chain fits yield NaN r_hat/ESS; a NaN metric is noise in the UI.
+        # Single-chain fits (and every VI fit) yield NaN r_hat/ESS; a NaN metric
+        # is noise in the UI.
         metrics = {k: v for k, v in metrics.items() if math.isfinite(v)}
         if metrics:
             mlflow.log_metrics(metrics)
@@ -362,10 +430,40 @@ class Tracker:
                     path = Path(tmp) / "summary.csv"
                     summary.to_csv(path)
                     mlflow.log_artifact(str(path))
-                if traces is not None and hasattr(traces, "to_netcdf"):
-                    path = Path(tmp) / "traces.nc"
-                    traces.to_netcdf(path)
+                if idata is not None and hasattr(idata, "to_netcdf"):
+                    path = Path(tmp) / artifact_name
+                    idata.to_netcdf(path)
                     mlflow.log_artifact(str(path))
+
+    def vi_started(self) -> None:
+        """Mark the start of ``vi()`` for the ``vi_seconds`` metric."""
+        self._vi_started = time.monotonic()
+
+    def log_vi(self, model: HSSMBase, kwargs: dict) -> None:
+        """Log variational settings, the approximation's loss, and the idata."""
+        self.log_model(model)
+        self._guard("log vi", self._log_vi, model, kwargs)
+
+    def _log_vi(self, model: HSSMBase, kwargs: dict) -> None:
+        mlflow = self._mlflow
+        params: dict[str, Any] = {}
+        for key in ("method", "niter", "draws", "backend"):
+            if kwargs.get(key) is not None:
+                params[key] = kwargs[key]
+        mlflow.log_params(params)
+
+        metrics: dict[str, float] = {}
+        if self._vi_started is not None:
+            metrics["vi_seconds"] = time.monotonic() - self._vi_started
+        # `hist` is the ELBO trace of the fitted approximation: its last entry
+        # is where optimisation ended up, its minimum the best it reached.
+        hist = getattr(getattr(model, "vi_approx", None), "hist", None)
+        if hist is not None and len(hist):
+            metrics["elbo_final"] = float(hist[-1])
+            metrics["elbo_min"] = float(min(hist))
+
+        idata = getattr(model, "_inference_obj_vi", None)
+        self._log_idata(idata, metrics, artifact_name="vi_traces.nc")
 
     def log_saved_model(self, model_path: Path) -> None:
         """Attach ``model.pkl`` if ``log_artifacts="all"``; called by ``save_model``."""
@@ -383,6 +481,21 @@ class Tracker:
         """Attach an extra metric (e.g. ``loo_elpd``) to the run."""
         self._guard(f"log metric {key}", self._mlflow.log_metric, key, value)
 
+    def log_param(self, key: str, value: Any) -> None:
+        """Attach one of your own parameters to the run.
+
+        Use this for the dimensions *you* are varying — a dataset version, a
+        prior set, which subjects were included — so runs can be compared on
+        them in the MLflow UI. Keys this module logs itself are refused; see
+        :data:`RESERVED_PARAMS`.
+        """
+        self.log_params({key: value})
+
+    def log_params(self, params: dict[str, Any]) -> None:
+        """Attach several of your own parameters at once. See :meth:`log_param`."""
+        check_params(params)
+        self._guard("log params", self._mlflow.log_params, params)
+
 
 def active() -> Tracker | None:
     """Return the tracker of the enclosing :func:`track` block, or None."""
@@ -398,6 +511,7 @@ def track(
     log_artifacts: bool | Literal["all"] = True,
     lineage_id: str | None = None,
     tags: dict[str, str] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> Iterator[Tracker]:
     """Record the enclosed HSSM workflow as one MLflow run (``phase=infer``).
 
@@ -421,11 +535,19 @@ def track(
     tags
         Extra tags. ``schema_version``, ``phase`` and ``lineage_id`` are
         reserved and rejected.
+    params
+        Your own parameters for this run — the dimensions you are varying, such
+        as a dataset version or a prior set — so runs can be compared on them in
+        the MLflow UI. Keys HSSM records itself are rejected; see
+        :data:`RESERVED_PARAMS`. More can be added later with
+        :meth:`Tracker.log_param`.
 
     Raises
     ------
     ImportError
         If MLflow is not installed (``pip install hssm[tracking]``).
+    ValueError
+        If ``tags`` or ``params`` collide with what HSSM records itself.
     """
     global _ACTIVE  # noqa: PLW0603 - the whole point is process-wide state
 
@@ -440,6 +562,7 @@ def track(
     reserved = {"schema_version", "phase", "lineage_id"} & set(tags or {})
     if reserved:
         raise ValueError(f"tags may not override reserved schema tags: {reserved}")
+    check_params(params)
     if _ACTIVE is not None:
         raise RuntimeError("hssm.track() blocks cannot be nested")
 
@@ -460,6 +583,8 @@ def track(
     initial["phase"] = "infer"
     initial.update(tags or {})
     tracker._guard("set tags", mlflow.set_tags, initial)
+    if params:
+        tracker._guard("log params", mlflow.log_params, params)
     _logger.info("MLflow tracking: started run %s", run.info.run_id)
 
     _ACTIVE = tracker
@@ -481,8 +606,10 @@ def track(
 
 __all__ = [
     "MLFLOW_SCHEMA_VERSION",
+    "RESERVED_PARAMS",
     "Tracker",
     "active",
+    "check_params",
     "common_run_tags",
     "data_sha256",
     "hf_revision_from_path",
