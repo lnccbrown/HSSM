@@ -111,6 +111,17 @@ def last_network() -> dict[str, str]:
     return dict(_LAST_NETWORK)
 
 
+def reset_network_record() -> None:
+    """Forget the last recorded network.
+
+    Called before a model builds its likelihood so that what is recorded
+    afterwards belongs to *that* model. Without it a model which downloads
+    nothing — an analytical likelihood, say — would inherit whichever network
+    the previous model in the session happened to load.
+    """
+    _LAST_NETWORK.clear()
+
+
 def _manifest_entry_for(network_file: str) -> dict[str, Any] | None:
     """Return the ``manifest.json`` record whose root network is ``network_file``."""
     try:
@@ -327,9 +338,11 @@ class Tracker:
 
     def _log_model(self, model: HSSMBase) -> None:
         mlflow = self._mlflow
-        # The model carries the network it was built with; `last_network()` is
-        # the fallback for a model constructed before that snapshot existed.
-        network = dict(getattr(model, "_tracking_network", None) or last_network())
+        # The model carries the network it was built with, and an empty record
+        # means it uses none. Falling back to `last_network()` here would undo
+        # that: a model with no network of its own would pick up whichever one
+        # was loaded most recently in the session.
+        network = dict(getattr(model, "_tracking_network", None) or {})
         loglik = getattr(getattr(model, "model_config", None), "loglik", None)
         if isinstance(loglik, str) and not network.get("network_file"):
             network["network_file"] = loglik
@@ -616,6 +629,7 @@ __all__ = [
     "last_network",
     "model_spec",
     "record_network",
+    "reset_network_record",
     "spec_sha256",
     "track",
 ]

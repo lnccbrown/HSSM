@@ -407,10 +407,14 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         self._post_check_data_sanity()
 
+        # Which network this model runs on. The loader records downloads to a
+        # module-global, so clear it first and read it straight after: what is
+        # left belongs to this model's likelihood and nothing else. Reading it
+        # lazily at log time would attribute a later model's network to this
+        # one, and reading it without clearing would hand an analytical model
+        # whichever network the previous model loaded.
+        tracking.reset_network_record()
         self.model_distribution = self._make_model_distribution()
-        # Which network this model runs on, captured now rather than read off
-        # the module-global at log time: building a second model in the same
-        # session would otherwise make this one report the other's network.
         self._tracking_network = tracking.last_network()
 
         self.family = make_family(

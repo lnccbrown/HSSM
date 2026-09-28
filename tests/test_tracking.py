@@ -344,23 +344,41 @@ class TestDataHash:
 class TestNetworkAttribution:
     """Network provenance belongs to the model, not to the process."""
 
-    def test_second_model_does_not_steal_the_first_models_network(self, data_ddm):
-        """Constructing model B must not change what model A reports.
+    def test_model_reports_the_network_recorded_while_it_was_built(self, data_ddm):
+        """A run logs the model's own snapshot, not the session's latest network.
 
-        `_LAST_NETWORK` is process-wide, so a model logged after a second one
-        was built would otherwise report the second one's network — the common
-        case in a notebook that fits several models.
+        `_LAST_NETWORK` is process-wide, so reading it at log time would make a
+        model report whichever network was loaded most recently — the wrong one
+        in a notebook that builds several models.
         """
-        tracking.record_network("net_a.onnx", "/tmp/snapshots/aaa/net_a.onnx")
-        model_a = hssm.HSSM(data_ddm, model="ddm")
+        model = hssm.HSSM(data_ddm, model="ddm")
+        model._tracking_network = {"network_file": "net_a.onnx", "hf_revision": "aaa"}
         tracking.record_network("net_b.onnx", "/tmp/snapshots/bbb/net_b.onnx")
 
         # An explicit lineage id keeps the manifest lookup (a network call) out
         # of the test; it is not what is under test here.
         with hssm.track(experiment="study", lineage_id="lin") as t:
-            t.log_model(model_a)
+            t.log_model(model)
             run_id = t.run_id
-        assert _run(run_id).data.params["network_file"] == "net_a.onnx"
+        p = _run(run_id).data.params
+        assert p["network_file"] == "net_a.onnx"
+        assert p["hf_revision"] == "aaa"
+
+    def test_model_that_loads_no_network_inherits_none(self, data_ddm):
+        """An analytical model must not pick up an earlier model's network.
+
+        Construction clears the record before building the likelihood, so a
+        model that downloads nothing ends up with nothing rather than with
+        whatever the previous model in the session loaded.
+        """
+        tracking.record_network("net_a.onnx", "/tmp/snapshots/aaa/net_a.onnx")
+        model = hssm.HSSM(data_ddm, model="ddm", loglik_kind="analytical")
+        assert model._tracking_network == {}
+
+        with hssm.track(experiment="study", lineage_id="lin") as t:
+            t.log_model(model)
+            run_id = t.run_id
+        assert "net_a.onnx" not in _run(run_id).data.params.get("network_file", "")
 
 
 class TestTrackedVI:
