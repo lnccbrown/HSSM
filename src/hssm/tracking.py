@@ -78,9 +78,14 @@ RESERVED_PARAMS = frozenset(
     }
 )
 
-# The last network fetched from HuggingFace, recorded by the ONNX loader so a
-# tracker started later can still say which file this model runs on.
-_LAST_NETWORK: dict[str, str] = {}
+# The last network fetched from HuggingFace, recorded by the ONNX loader so the
+# model being built can claim it. A ContextVar for the same reason as `_ACTIVE`
+# below: two models constructed concurrently would otherwise interleave on one
+# dict and could end up claiming each other's network. Always replaced
+# wholesale, never mutated in place.
+_LAST_NETWORK: ContextVar[dict[str, str] | None] = ContextVar(
+    "hssm_last_network", default=None
+)
 
 # Which tracker the enclosing `track()` block installed. A ContextVar rather
 # than a plain global: a new thread starts with a fresh context, so an untracked
@@ -108,15 +113,19 @@ def hf_revision_from_path(local_path: str | os.PathLike) -> str | None:
 
 def record_network(filename: str, local_path: str | os.PathLike) -> None:
     """Remember which network file was just fetched from HuggingFace."""
-    _LAST_NETWORK.clear()
-    _LAST_NETWORK["network_file"] = str(filename)
+    record: dict[str, str] = {"network_file": str(filename)}
     if revision := hf_revision_from_path(local_path):
-        _LAST_NETWORK["hf_revision"] = revision
+        record["hf_revision"] = revision
+    _LAST_NETWORK.set(record)
 
 
 def last_network() -> dict[str, str]:
-    """Return the most recently fetched network (``network_file``, ``hf_revision``)."""
-    return dict(_LAST_NETWORK)
+    """Return the most recently fetched network (``network_file``, ``hf_revision``).
+
+    Scoped to the execution context, so a download in another thread is not
+    mistaken for this one's.
+    """
+    return dict(_LAST_NETWORK.get() or {})
 
 
 def reset_network_record() -> None:
@@ -127,7 +136,7 @@ def reset_network_record() -> None:
     nothing — an analytical likelihood, say — would inherit whichever network
     the previous model in the session happened to load.
     """
-    _LAST_NETWORK.clear()
+    _LAST_NETWORK.set(None)
 
 
 def _manifest_entry_for(

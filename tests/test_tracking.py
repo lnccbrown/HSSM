@@ -23,7 +23,7 @@ def _isolated_mlflow(tmp_path, monkeypatch):
     # ./mlruns. Run from tmp_path so that lands with the rest of the test's
     # scratch instead of in the developer's working directory.
     monkeypatch.chdir(tmp_path)
-    tracking._LAST_NETWORK.clear()
+    tracking.reset_network_record()
     uri = f"sqlite:///{(tmp_path / 'tracking.db').absolute()}"
     mlflow.set_tracking_uri(uri)
     # mlflow remembers the active experiment *id* process-wide; a previous
@@ -32,7 +32,7 @@ def _isolated_mlflow(tmp_path, monkeypatch):
     yield uri
     if mlflow.active_run() is not None:
         mlflow.end_run()
-    tracking._LAST_NETWORK.clear()
+    tracking.reset_network_record()
     with contextlib.suppress(Exception):
         mlflow.set_tracking_uri(original_uri)
 
@@ -385,7 +385,7 @@ class TestNetworkAttribution:
     def test_model_reports_the_network_recorded_while_it_was_built(self, data_ddm):
         """A run logs the model's own snapshot, not the session's latest network.
 
-        `_LAST_NETWORK` is process-wide, so reading it at log time would make a
+        The network record is a moving target, so reading it at log time would make a
         model report whichever network was loaded most recently — the wrong one
         in a notebook that builds several models.
         """
@@ -553,3 +553,24 @@ class TestContextIsolation:
         # 100 trials is this block's own fit; 40 would be the other thread's.
         assert run.data.params["n_trials"] == "100"
         assert run.data.metrics["sampling_seconds"] > 0
+
+    def test_network_record_is_per_context(self):
+        """A download in another thread must not become this one's network.
+
+        Construction clears the record and reads it back a moment later; if that
+        record were shared across threads, a model built concurrently could slot
+        its own download into the gap and be claimed by the wrong model.
+        """
+        seen = {}
+
+        def worker():
+            tracking.record_network("other.onnx", "/tmp/snapshots/bbb/other.onnx")
+            seen["in_thread"] = tracking.last_network().get("network_file")
+
+        tracking.record_network("mine.onnx", "/tmp/snapshots/aaa/mine.onnx")
+        thread = threading.Thread(target=worker)
+        thread.start()
+        thread.join()
+
+        assert seen["in_thread"] == "other.onnx"  # the thread saw its own
+        assert tracking.last_network()["network_file"] == "mine.onnx"  # ours intact
