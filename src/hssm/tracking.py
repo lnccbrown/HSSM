@@ -326,6 +326,7 @@ class Tracker:
         self.log_artifacts = log_artifacts
         self._explicit_lineage_id = lineage_id
         self._dataset_name = dataset_name
+        self._data_uri: str | None = None
         self.lineage_id: str | None = None
         self._model_logged = False
         self._sample_started: float | None = None
@@ -406,14 +407,31 @@ class Tracker:
         mlflow.set_tags(tags)
         if self.log_artifacts:
             mlflow.log_dict(spec, "model_spec.json")
+            if data is not None:
+                self._guard("log data", self._log_data, data)
         if data is not None and self._dataset_name:
             self._guard("log dataset", self._log_dataset, data)
+
+    def _log_data(self, data: Any) -> None:
+        """Attach the data the model was fit to, as ``data.parquet``.
+
+        The traces keep only the observed response, so without this a run
+        cannot say which covariates a regression used. Parquet keeps the
+        dtypes that a CSV round trip would lose. Logged before the dataset is
+        registered, so the Datasets panel can point at this copy.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "data.parquet"
+            data.to_parquet(path)
+            self._mlflow.log_artifact(str(path))
+        self._data_uri = self._mlflow.get_artifact_uri("data.parquet")
 
     def _log_dataset(self, data: Any) -> None:
         """Register the observed data as an MLflow dataset.
 
         This fills the run's "Datasets" panel with the column schema and row
-        count, and makes the UI's dataset filter work. It needs a name, which a
+        count, and makes the UI's dataset filter work. When ``data.parquet``
+        was logged, the entry's source points at it. It needs a name, which a
         DataFrame does not carry, so it happens only when the caller supplies
         one — an unnamed dataset would show up identically for every study.
         """
@@ -422,9 +440,17 @@ class Tracker:
         # `from_pandas` exists at runtime in mlflow>=3.14 but neither checker
         # can see it, so both are told to stand down here.
         # pyrefly: ignore[missing-attribute]
-        dataset = mlflow.data.from_pandas(  # type: ignore[attr-defined]
-            data, name=self._dataset_name
-        )
+        from_pandas = mlflow.data.from_pandas  # type: ignore[attr-defined]
+        try:
+            dataset = from_pandas(data, name=self._dataset_name, source=self._data_uri)
+        except Exception:  # noqa: BLE001 - a missing link must not cost the entry
+            if self._data_uri is None:
+                raise
+            # MLflow resolves a dataset source by URI scheme, and some stores
+            # have no resolver — notably a server run with --serve-artifacts,
+            # whose artifact URIs are `mlflow-artifacts:/...`. Register the
+            # dataset without the link to the stored copy rather than lose it.
+            dataset = from_pandas(data, name=self._dataset_name)
         self._mlflow.log_input(dataset)
 
     def sample_started(self) -> None:
@@ -605,7 +631,9 @@ def track(
         Tracking server. Defaults to ``MLFLOW_TRACKING_URI`` (the lab's shared
         server), then MLflow's own default.
     log_artifacts
-        ``True`` attaches ``traces.nc``, ``summary.csv`` and ``model_spec.json``;
+        ``True`` attaches ``traces.nc``, ``summary.csv``, ``model_spec.json``
+        and ``data.parquet`` — the data the model was fit to, so note that it
+        is copied into every run, including runs sent to a shared server;
         ``"all"`` additionally attaches ``model.pkl`` when ``save_model`` is
         called inside the block; ``False`` logs params/metrics only.
     lineage_id
