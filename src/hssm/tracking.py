@@ -154,9 +154,12 @@ def _manifest_entry_for(
 
         from hssm.distribution_utils.onnx_utils.model import REPO_ID
 
-        kwargs = {"revision": revision} if revision else {}
+        # `revision=None` is hf_hub_download's own default (the default
+        # branch), so the unpinned case needs no special handling.
         with open(
-            hf_hub_download(repo_id=REPO_ID, filename=MANIFEST_FILENAME, **kwargs)
+            hf_hub_download(
+                repo_id=REPO_ID, filename=MANIFEST_FILENAME, revision=revision
+            )
         ) as f:
             manifest = json.load(f)
     except Exception as e:  # noqa: BLE001 - provenance is best-effort
@@ -416,7 +419,10 @@ class Tracker:
         """
         import mlflow.data
 
-        self._mlflow.log_input(mlflow.data.from_pandas(data, name=self._dataset_name))
+        # pyrefly: ignore[missing-attribute]  - mlflow.data.from_pandas is
+        # resolved lazily; it exists at runtime in mlflow>=3.14.
+        dataset = mlflow.data.from_pandas(data, name=self._dataset_name)
+        self._mlflow.log_input(dataset)
 
     def sample_started(self) -> None:
         """Mark the start of ``sample()`` for the ``sampling_seconds`` metric."""

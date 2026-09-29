@@ -111,7 +111,9 @@ class TestNetworkProvenance:
         import huggingface_hub
 
         monkeypatch.setattr(
-            huggingface_hub, "hf_hub_download", lambda repo_id, filename: str(manifest)
+            huggingface_hub,
+            "hf_hub_download",
+            lambda repo_id, filename, revision=None: str(manifest),
         )
         assert tracking._manifest_entry_for("ddm.onnx")["lineage_id"] == "lin-ddm"
         assert tracking._manifest_entry_for("x_lan_ddm__model.onnx")["run_uuid"] == "x"
