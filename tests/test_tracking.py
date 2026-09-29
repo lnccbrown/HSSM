@@ -3,6 +3,7 @@
 import contextlib
 import json
 import math
+import threading
 
 import pytest
 
@@ -115,6 +116,43 @@ class TestNetworkProvenance:
         assert tracking._manifest_entry_for("ddm.onnx")["lineage_id"] == "lin-ddm"
         assert tracking._manifest_entry_for("x_lan_ddm__model.onnx")["run_uuid"] == "x"
         assert tracking._manifest_entry_for("angle.onnx") is None
+
+    def test_manifest_is_read_at_the_network_s_own_revision(
+        self, tmp_path, monkeypatch
+    ):
+        """The manifest must be fetched at the commit the network came from.
+
+        The manifest on the default branch moves on as networks are published,
+        so reading it there would describe whatever is current rather than what
+        this fit actually ran.
+        """
+        import huggingface_hub
+
+        def manifest_at(rev, lineage):
+            path = tmp_path / f"manifest-{rev}.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "networks": [{"onnx_root": "ddm.onnx", "lineage_id": lineage}],
+                    }
+                )
+            )
+            return path
+
+        old, new = manifest_at("old", "lin-old"), manifest_at("new", "lin-new")
+        monkeypatch.setattr(
+            huggingface_hub,
+            "hf_hub_download",
+            lambda repo_id, filename, revision=None: str(
+                old if revision == "old" else new
+            ),
+        )
+
+        at_old = tracking._manifest_entry_for("ddm.onnx", "old")
+        assert at_old["lineage_id"] == "lin-old"
+        # No revision recorded: fall back to the default branch, as before.
+        assert tracking._manifest_entry_for("ddm.onnx")["lineage_id"] == "lin-new"
 
 
 class TestHelpers:
@@ -464,3 +502,54 @@ class TestDatasetRegistration:
         run = mlflow.tracking.MlflowClient().get_run(run_id)
         assert run.inputs.dataset_inputs == []
         assert len(run.data.tags["data_sha256"]) == 64
+
+
+class TestContextIsolation:
+    """The active tracker is scoped to its execution context, not the process."""
+
+    def test_other_thread_sees_no_tracker(self):
+        """A thread that did not open a block must not find one."""
+        seen = {}
+
+        def worker():
+            seen["active"] = tracking.active()
+
+        with hssm.track(experiment="study", lineage_id="lin"):
+            assert tracking.active() is not None
+            t = threading.Thread(target=worker)
+            t.start()
+            t.join()
+        assert seen["active"] is None
+
+    def test_untracked_fit_in_another_thread_does_not_spoil_the_tracked_run(
+        self, data_ddm
+    ):
+        """A concurrent untracked fit must not consume the tracked run's state.
+
+        With a process-wide tracker the other thread's `sample()` finds it, logs
+        *its* model and marks the tracker as done. The tracked fit that follows
+        is then skipped as "already logged", so the run describes the wrong fit.
+        The two fits here use different numbers of trials, which is what makes
+        the mix-up visible.
+        """
+        other_data = data_ddm.head(40)
+
+        def worker():
+            hssm.HSSM(other_data, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+
+        with hssm.track(experiment="study", lineage_id="lin") as t:
+            thread = threading.Thread(target=worker)
+            thread.start()
+            thread.join()
+            # The tracked fit happens *after* the other thread has finished.
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+            run_id = t.run_id
+
+        run = _run(run_id)
+        # 100 trials is this block's own fit; 40 would be the other thread's.
+        assert run.data.params["n_trials"] == "100"
+        assert run.data.metrics["sampling_seconds"] > 0

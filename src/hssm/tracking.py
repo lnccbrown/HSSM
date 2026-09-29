@@ -35,6 +35,7 @@ import os
 import tempfile
 import time
 import uuid
+from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal
 
@@ -81,7 +82,11 @@ RESERVED_PARAMS = frozenset(
 # tracker started later can still say which file this model runs on.
 _LAST_NETWORK: dict[str, str] = {}
 
-_ACTIVE: Tracker | None = None
+# Which tracker the enclosing `track()` block installed. A ContextVar rather
+# than a plain global: a new thread starts with a fresh context, so an untracked
+# `sample()` running alongside a tracked one cannot see — and so cannot mutate —
+# the tracked run's timing and model state.
+_ACTIVE: ContextVar[Tracker | None] = ContextVar("hssm_active_tracker", default=None)
 
 
 # --------------------------------------------------------------------------- #
@@ -125,14 +130,25 @@ def reset_network_record() -> None:
     _LAST_NETWORK.clear()
 
 
-def _manifest_entry_for(network_file: str) -> dict[str, Any] | None:
-    """Return the ``manifest.json`` record whose root network is ``network_file``."""
+def _manifest_entry_for(
+    network_file: str, revision: str | None = None
+) -> dict[str, Any] | None:
+    """Return the ``manifest.json`` record whose root network is ``network_file``.
+
+    ``revision`` is the repository commit the network itself came from. Reading
+    the manifest at that same commit keeps the two consistent: the manifest on
+    the default branch may have moved on since, and would then describe a
+    different network under the same filename.
+    """
     try:
         from huggingface_hub import hf_hub_download
 
         from hssm.distribution_utils.onnx_utils.model import REPO_ID
 
-        with open(hf_hub_download(repo_id=REPO_ID, filename=MANIFEST_FILENAME)) as f:
+        kwargs = {"revision": revision} if revision else {}
+        with open(
+            hf_hub_download(repo_id=REPO_ID, filename=MANIFEST_FILENAME, **kwargs)
+        ) as f:
             manifest = json.load(f)
     except Exception as e:  # noqa: BLE001 - provenance is best-effort
         _logger.debug("Could not read %s from HuggingFace: %s", MANIFEST_FILENAME, e)
@@ -318,7 +334,9 @@ class Tracker:
             tags["lineage_id"] = self._explicit_lineage_id
             tags["lineage_source"] = "user"
         elif network.get("network_file") and (
-            entry := _manifest_entry_for(network["network_file"])
+            entry := _manifest_entry_for(
+                network["network_file"], network.get("hf_revision")
+            )
         ):
             if entry.get("lineage_id"):
                 tags["lineage_id"] = entry["lineage_id"]
@@ -530,8 +548,12 @@ class Tracker:
 
 
 def active() -> Tracker | None:
-    """Return the tracker of the enclosing :func:`track` block, or None."""
-    return _ACTIVE
+    """Return the tracker of the enclosing :func:`track` block, or None.
+
+    Scoped to the execution context: work started in another thread sees None
+    unless it opened a block of its own.
+    """
+    return _ACTIVE.get()
 
 
 @contextlib.contextmanager
@@ -588,8 +610,6 @@ def track(
     ValueError
         If ``tags`` or ``params`` collide with what HSSM records itself.
     """
-    global _ACTIVE  # noqa: PLW0603 - the whole point is process-wide state
-
     try:
         import mlflow
     except ImportError as exc:
@@ -602,7 +622,7 @@ def track(
     if reserved:
         raise ValueError(f"tags may not override reserved schema tags: {reserved}")
     check_params(params)
-    if _ACTIVE is not None:
+    if _ACTIVE.get() is not None:
         raise RuntimeError("hssm.track() blocks cannot be nested")
 
     uri = tracking_uri or os.getenv("MLFLOW_TRACKING_URI")
@@ -630,16 +650,16 @@ def track(
         tracker._guard("log params", mlflow.log_params, params)
     _logger.info("MLflow tracking: started run %s", run.info.run_id)
 
-    _ACTIVE = tracker
+    token = _ACTIVE.set(tracker)
     try:
         yield tracker
     except BaseException:
-        _ACTIVE = None
+        _ACTIVE.reset(token)
         with contextlib.suppress(Exception):
             mlflow.end_run(status="FAILED")
         raise
     else:
-        _ACTIVE = None
+        _ACTIVE.reset(token)
         with contextlib.suppress(Exception):
             if tracker.lineage_id is None:
                 # No model was ever logged; give the run a real lineage id.
