@@ -419,9 +419,12 @@ class Tracker:
         """
         import mlflow.data
 
-        # pyrefly: ignore[missing-attribute]  - mlflow.data.from_pandas is
-        # resolved lazily; it exists at runtime in mlflow>=3.14.
-        dataset = mlflow.data.from_pandas(data, name=self._dataset_name)
+        # `from_pandas` exists at runtime in mlflow>=3.14 but neither checker
+        # can see it, so both are told to stand down here.
+        # pyrefly: ignore[missing-attribute]
+        dataset = mlflow.data.from_pandas(  # type: ignore[attr-defined]
+            data, name=self._dataset_name
+        )
         self._mlflow.log_input(dataset)
 
     def sample_started(self) -> None:
