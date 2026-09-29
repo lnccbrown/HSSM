@@ -39,6 +39,13 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
 
 `dataset_name=` is optional but worth setting: it fills the run's **Datasets** panel with your data's column schema and row count, and lets the UI filter by dataset. Left out, that panel stays empty — a DataFrame carries no name of its own, and an invented one would look identical for every study. Either way the data is identified by the `data_sha256` tag.
 
+One block records one fit, and fitting more than once inside a single block is
+not supported. The second fit's settings collide with the first's — MLflow will
+not change a parameter it has already recorded — so the second fit's settings,
+metrics and artifacts are dropped and the run silently describes only the first.
+This applies to a second model, to re-sampling the same model, and to `vi()`
+after `sample()`.
+
 To keep several projects apart, or to use a tracking server, set `MLFLOW_TRACKING_URI` in your environment or pass `tracking_uri=` to `track()`.
 
 ## Recording parameter changes

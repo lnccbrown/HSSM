@@ -588,6 +588,12 @@ def track(
 ) -> Iterator[Tracker]:
     """Record the enclosed HSSM workflow as one MLflow run (``phase=infer``).
 
+    One block records one fit. Fitting twice inside a single block is **not
+    supported**: the second fit's settings collide with the first's, MLflow
+    refuses to change a recorded parameter, and the second fit's settings,
+    metrics and artifacts are dropped — leaving a run that silently describes
+    only the first. Open one block per fit.
+
     Parameters
     ----------
     experiment
@@ -625,6 +631,8 @@ def track(
     ------
     ImportError
         If MLflow is not installed (``uv add "hssm[tracking]"``).
+    RuntimeError
+        If the block is nested inside another.
     ValueError
         If ``tags`` or ``params`` collide with what HSSM records itself.
     """
