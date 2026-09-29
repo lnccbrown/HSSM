@@ -23,11 +23,10 @@ data = hssm.load_data("cavanagh_theta")
 with hssm.track(
     experiment="my-study",
     run_name="ddm-basic",
-    dataset_name="cavanagh_theta", # optional but recommended for dataset tracking
+    dataset_name="cavanagh_theta",  # optional but recommended for dataset tracking
 ):
     model = hssm.HSSM(data, model="ddm")
     model.sample(draws=1000, chains=4)
-
 ```
 
 Everything inside the block becomes one MLflow run. With nothing else configured, two things appear in your working directory: `mlflow.db` holds the record of each run, and `mlruns/` holds the files attached to it — the traces, the summary table, the model specification. Keep both; the database refers to the artifacts by path rather than storing them.
@@ -115,9 +114,7 @@ Each run records which data it used, so fits across datasets stay separable.
 Adding a simulated dataset to the same study:
 
 ```python
-sim = hssm.simulate_data(
-    model="ddm", theta=dict(v=0.5, a=1.5, z=0.5, t=0.1), size=500
-)
+sim = hssm.simulate_data(model="ddm", theta=dict(v=0.5, a=1.5, z=0.5, t=0.1), size=500)
 
 with hssm.track(
     experiment="my-study",
@@ -138,16 +135,19 @@ import mlflow
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
 
 # every fit of one dataset, by the name you gave it
-mlflow.search_runs(search_all_experiments=True,
-                   filter_string="dataset.name = 'cavanagh_theta'")
+mlflow.search_runs(
+    search_all_experiments=True, filter_string="dataset.name = 'cavanagh_theta'"
+)
 
 # or by content, which catches the same data under a different name
-mlflow.search_runs(search_all_experiments=True,
-                   filter_string="tags.data_sha256 = '<hash>'")
+mlflow.search_runs(
+    search_all_experiments=True, filter_string="tags.data_sha256 = '<hash>'"
+)
 
 # the ones that did not converge
-mlflow.search_runs(experiment_names=["my-study"],
-                   filter_string="metrics.r_hat_max > 1.01")
+mlflow.search_runs(
+    experiment_names=["my-study"], filter_string="metrics.r_hat_max > 1.01"
+)
 ```
 
 `search_runs` returns a DataFrame, so a study's results can go straight into a
