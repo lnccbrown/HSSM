@@ -185,6 +185,9 @@ def _compute_log_likelihood(
 
     if not model.family:
         raise ValueError("Model family is not defined. Cannot compute log-likelihood.")
+    # bambi annotates `posterior` as a DataArray, but a DataTree's "posterior"
+    # child is itself a DataTree, which is what it is handed and handles.
+    # pyrefly: ignore[bad-argument-type]
     log_likelihood_out = log_likelihood(model.family, **required_kwargs).to_dataset(
         name=response_aliased_name
     )
