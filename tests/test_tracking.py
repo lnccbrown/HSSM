@@ -673,3 +673,25 @@ class TestDataArtifact:
         assert {"model_spec.json", "summary.csv", "traces.nc"} <= names
         # The dataset is still registered, just without a stored copy to link.
         assert run.inputs.dataset_inputs[0].dataset.name == "ddm"
+
+    def test_dataset_survives_a_proxied_artifact_store(self, data_ddm, monkeypatch):
+        """A server run with --serve-artifacts must still get its Datasets entry.
+
+        Such a server hands out `mlflow-artifacts:/...` URIs, which MLflow has no
+        dataset-source resolver for. Linking the entry to the stored copy then
+        fails, and the entry must be registered without the link rather than
+        dropped. Faking the URI reproduces it: resolution is by scheme alone.
+        """
+        monkeypatch.setattr(
+            mlflow,
+            "get_artifact_uri",
+            lambda path=None: f"mlflow-artifacts:/1/abc/artifacts/{path}",
+        )
+        with hssm.track(experiment="study", lineage_id="lin", dataset_name="ddm") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+            run_id = t.run_id
+        run = mlflow.tracking.MlflowClient().get_run(run_id)
+        assert [d.dataset.name for d in run.inputs.dataset_inputs] == ["ddm"]
+        assert "data.parquet" in _artifacts(run_id)
