@@ -317,6 +317,20 @@ def test_untracked_sample_is_unaffected(data_ddm):
     assert mlflow.active_run() is None
 
 
+def test_untracked_save_model_is_unaffected(data_ddm, tmp_path, monkeypatch):
+    """No track() block: save_model() must not touch MLflow either.
+
+    `save_model` carries the third `tracking.active()` hook, alongside the ones
+    in `sample()` and `vi()`.
+    """
+    monkeypatch.chdir(tmp_path)
+    assert tracking.active() is None
+    model = hssm.HSSM(data_ddm, model="ddm")
+    model.sample(draws=5, chains=1, tune=5, progressbar=False)
+    model.save_model(model_name="untracked", save_traces_only=False)
+    assert mlflow.active_run() is None
+
+
 class TestUserParams:
     """`params=` and `log_param`: the dimensions a user varies themselves."""
 
