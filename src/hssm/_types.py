@@ -1,7 +1,7 @@
 """Type definitions for the HSSM package."""
 
 from os import PathLike
-from typing import Any, Callable, Literal, Optional, TypedDict, Union
+from typing import Any, Callable, Literal, NotRequired, Optional, TypedDict, Union
 
 import bambi as bmb
 import numpy as np
@@ -14,6 +14,7 @@ ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
 SupportedModels = Literal[
     "ddm",
     "ddm_sdv",
+    "ddm_uniform_st",
     "full_ddm",
     "angle",
     "angle_extended",
@@ -45,6 +46,10 @@ class LoglikConfig(TypedDict):
     default_priors: dict[str, ParamSpec]
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]
+    # Optional. The name of the `ssm_simulators` simulator to use for
+    # posterior/prior predictive sampling, for models whose HSSM name differs
+    # from their upstream simulator name. Defaults to the HSSM model name.
+    rv: NotRequired[str]
 
 
 LoglikConfigs = dict[LoglikKind, LoglikConfig]

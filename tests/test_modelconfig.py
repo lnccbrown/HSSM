@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from ssms.config import model_config as ssms_model_config
 
 import hssm
 from hssm.likelihoods.analytical import lba4_bounds, logp_lba4
@@ -264,3 +265,35 @@ def test_softmax_inv_temperature_3_choices():
         "mu": 0.0,
         "sigma": 1.0,
     }
+
+
+def test_get_ddm_uniform_st_config():
+    ddm_st_model_config = get_default_model_config("ddm_uniform_st")
+    assert ddm_st_model_config["response"] == ["rt", "response"]
+    assert ddm_st_model_config["choices"] == [-1, 1]
+    assert ddm_st_model_config["list_params"] == ["v", "a", "z", "t", "st"]
+
+    likelihoods = ddm_st_model_config["likelihoods"]
+    lk_approx_differentiable = likelihoods["approx_differentiable"]
+    assert lk_approx_differentiable["loglik"] == "ddm_uniform_st.onnx"
+    assert lk_approx_differentiable["backend"] == "jax"
+
+    # the bounds are the LAN's training box, so they are pinned in full: a
+    # silent widening samples the network outside the region it was trained on
+    assert lk_approx_differentiable["bounds"] == {
+        "v": (-3.0, 3.0),
+        "a": (0.3, 2.5),
+        "z": (0.3, 0.7),
+        "t": (0.25, 2.25),
+        "st": (1e-3, 0.25),
+    }
+
+    assert lk_approx_differentiable["default_priors"] == {}
+    assert lk_approx_differentiable["extra_fields"] is None
+
+    # The simulator is named ``ddm_st`` upstream. HSSM falls back to the model
+    # name when ``rv`` is absent, so without this the resolver only warns at
+    # build time and every posterior/prior predictive call dies with
+    # ``Unknown model 'ddm_uniform_st'``.
+    assert lk_approx_differentiable["rv"] == "ddm_st"
+    assert lk_approx_differentiable["rv"] in ssms_model_config
