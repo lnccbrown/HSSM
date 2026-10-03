@@ -12,6 +12,7 @@ import hssm
 from hssm import distribution_utils
 from hssm.distribution_utils import dist as dist_module
 from hssm.distribution_utils.dist import (
+    LOGP_LB,
     _apply_lapse_model,
     _create_arg_arrays,
     _extract_size,
@@ -222,6 +223,64 @@ def test_make_distribution():
     )
 
 
+@pytest.mark.parametrize("bad_width", [-0.5, float("nan"), float("inf"), "3", True])
+def test_make_distribution_rejects_invalid_ndt_edge_width(bad_width):
+    """Reject a non-finite, negative, or non-numeric `ndt_edge_width` at the boundary.
+
+    `Config.validate()` guards the model path; `make_distribution` is reachable
+    without a `Config`, so it must refuse the same values itself.
+    """
+
+    def fake_logp_function(data, v, a, z, t, st):
+        """Make up a fake log likelihood function for this test only."""
+        return data[:, 0] * v
+
+    with pytest.raises(ValueError, match="ndt_edge_width"):
+        make_distribution(
+            rv="fake",
+            loglik=fake_logp_function,
+            list_params=["v", "a", "z", "t", "st"],
+            ndt_edge_width=bad_width,
+        )
+
+
+def test_make_distribution_accepts_zero_and_none_ndt_edge_width():
+    """`None` (default, meaning 1.0) and `0.0` (the fixed-t edge) both build."""
+
+    def fake_logp_function(data, v, a, z, t, st):
+        """Make up a fake log likelihood function for this test only."""
+        return data[:, 0] * v
+
+    for width in (None, 0.0):
+        make_distribution(
+            rv="fake",
+            loglik=fake_logp_function,
+            list_params=["v", "a", "z", "t", "st"],
+            ndt_edge_width=width,
+        )
+
+
+@pytest.mark.slow
+def test_make_distribution_applies_st_support_guard():
+    """make_distribution forwards st so rts at or below t - st receive LOGP_LB."""
+
+    def fake_logp_function(data, v, a, z, t, st):
+        """Make up a fake log likelihood function for this test only."""
+        return np.ones(data.shape[0])
+
+    data = np.array([[0.2, 1.0], [0.3, 1.0], [0.31, 1.0], [0.4, 1.0]])
+
+    Dist = make_distribution(
+        rv="fake",
+        loglik=fake_logp_function,
+        list_params=["v", "a", "z", "t", "st"],
+    )
+
+    result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.2).eval())
+
+    np.testing.assert_array_equal(result, [LOGP_LB, LOGP_LB, 1.0, 1.0])
+
+
 @pytest.mark.slow
 def test_make_distribution_for_supported_model():
     """Check supported-model distribution creation and unsupported-model errors."""
@@ -308,21 +367,43 @@ def test_extra_fields(data_ddm):
 
 
 @pytest.mark.slow
-def test_ensure_positive_ndt():
-    """Check that non-decision times above RT receive the sentinel logp."""
-    data = np.zeros((1000, 2))
-    data[:, 0] = np.random.uniform(size=1000)
+@pytest.mark.parametrize(
+    ("list_params", "dist_params", "edge_width", "expected_edge"),
+    [
+        (["v", "a", "z", "t"], [0.5, 0.5, 0.5, 0.5], 1.0, 0.5),
+        (["v", "a", "z", "t", "st"], [0.5, 0.5, 0.5, 0.5, 0.2], 1.0, 0.3),
+        (["v", "a", "z", "t", "sz", "sv"], [0.5, 0.5, 0.5, 0.5, 0.1, 0.3], 1.0, 0.5),
+        (["v", "a", "z", "t", "st"], [0.5, 0.5, 0.5, 0.5, 0.1], 3.0, 0.2),
+        (["v", "a", "z", "t"], [0.5, 0.5, 0.5, 0.5], 3.0, 0.5),
+    ],
+    ids=[
+        "fixed_t",
+        "st_moves_the_edge",
+        "sz_sv_leave_the_edge",
+        "edge_width_widens_the_st_shift",
+        "edge_width_inert_without_st",
+    ],
+)
+def test_ensure_positive_ndt(list_params, dist_params, edge_width, expected_edge):
+    """Response times below the model's support edge receive the sentinel logp.
 
-    logp = np.random.uniform(size=1000)
+    The edge is t, or t - edge_width * st for a model carrying st; sz and sv
+    leave it alone. The response times straddle every candidate edge, so
+    0.31/0.4/0.49 cover the [t - st, t] band that must survive untouched in the
+    st case, and 0.25/0.29/0.31 cover the (t - 3 st, t - st) band that only a
+    widened edge leaves untouched. The last element sits exactly on the case's
+    own edge, which pins the guard's inclusive comparison: an exclusive one
+    would leave it unfloored.
+    """
+    rt = np.array([0.1, 0.25, 0.29, 0.31, 0.4, 0.49, 0.51, 0.6, 1.0, expected_edge])
+    data = np.column_stack([rt, np.ones(rt.size)])
+    logp = np.arange(1.0, rt.size + 1.0)
 
-    list_params = ["v", "a", "z", "t"]
-    dist_params = [0.5] * 4
+    after = ensure_positive_ndt(data, logp, list_params, dist_params, edge_width).eval()
+    mask = rt - expected_edge <= 1e-15
 
-    after_replacement = ensure_positive_ndt(data, logp, list_params, dist_params).eval()
-    mask = data[:, 0] - 0.5 <= 1e-15
-
-    assert np.all(after_replacement[mask] == np.array(-66.1))
-    assert np.all(after_replacement[~mask] == logp[~mask])
+    assert np.all(after[mask] == LOGP_LB)
+    assert np.all(after[~mask] == logp[~mask])
 
 
 def test_make_likelihood_callable():

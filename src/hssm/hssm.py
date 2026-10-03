@@ -460,6 +460,7 @@ class HSSM(HSSMBase):
             list_params=_list_params,
             bounds=self.bounds,
             lapse=self.lapse,
+            ndt_edge_width=self.model_config.ndt_edge_width,
             extra_fields=(
                 None
                 if not self.extra_fields

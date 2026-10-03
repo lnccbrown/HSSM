@@ -6,7 +6,8 @@ generation ops.
 """
 
 import logging
-from collections.abc import Callable
+import math
+from collections.abc import Callable, Sequence
 from os import PathLike
 from typing import Any, Literal, Protocol, cast, get_args
 
@@ -87,11 +88,40 @@ def apply_param_bounds_to_loglik(
 # AF-TODO: define clip params
 
 
-def ensure_positive_ndt(data, logp, list_params, dist_params):
-    """Ensure that the non-decision time is always positive.
+def ensure_positive_ndt(
+    data: Any,
+    logp: Any,
+    list_params: list[str],
+    dist_params: Sequence[Any],
+    edge_width: float = 1.0,
+) -> pt.TensorVariable:
+    """Ensure that response times fall inside the model's support.
 
-    Replaces the log probability of the model with a lower bound if the non-decision
-    time is not positive.
+    Replaces the log probability with a lower bound for response times below the
+    fastest response time the model admits.
+
+    With a fixed non-decision time that edge is ``t``. A model that also carries
+    ``st`` gets the edge shifted to ``t - st``. That shift is correct under the
+    half-width convention of ``ssms``/``cssm``, which every LAN ``*_st`` model
+    follows: trial non-decision time is ``Uniform(t - st, t + st)``, so the band
+    ``[t - st, t]`` carries real density and flooring it would discard
+    likelihood the model genuinely assigns.
+
+    ``full_ddm`` is the one bundled model on the other convention and still needs
+    no separate factor. Its only likelihood is the blackbox wrapper around
+    ``hddm_wfpt``, which reads ``st`` as the full width and puts its own edge at
+    ``t - st / 2``. The ``t - st`` shift is therefore wider than that likelihood's
+    support, but changes nothing: ``hddm_wfpt`` returns zero density across
+    ``[t - st, t - st / 2)``, which the wrapper maps to the same lower bound
+    applied here.
+
+    ``edge_width`` scales that shift: the floor sits at ``t - edge_width * st``,
+    so the default of 1.0 is the half-width case above. A kernel with unbounded
+    support - e.g. ``Normal(t, st)``, where ``st`` is a standard deviation and
+    real density extends below ``t - st`` - opts in to a wider edge by declaring
+    ``ndt_edge_width`` on the model config or in a registered model's likelihood
+    entry (3.0 places the floor at the kernel's practical 3-sigma edge). It has
+    no effect on models without ``st``.
 
     Parameters
     ----------
@@ -106,10 +136,13 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
     dist_params
         A list of parameters used in the likelihood computation. The parameters
         can be both scalars and arrays.
+    edge_width : optional
+        Position of the floor in units of ``st`` below ``t``, as described
+        above. Defaults to 1.0.
 
     Returns
     -------
-    float
+    tensor
         The log-likelihood of the model.
     """
     rt = data[:, 0]
@@ -117,14 +150,20 @@ def ensure_positive_ndt(data, logp, list_params, dist_params):
     if "t" not in list_params:
         return logp
 
-    t = dist_params[list_params.index("t")]
+    min_rt = dist_params[list_params.index("t")]
+
+    # Only st moves this edge. sz (starting point) and sv (drift) are variability
+    # in parameters that leave the response-time support alone, so they are
+    # deliberately not consulted.
+    if "st" in list_params:
+        min_rt = min_rt - edge_width * dist_params[list_params.index("st")]
 
     # Skip the check for missing data (encoded as -999.0)
     missing_mask = pt.eq(rt, -999.0)
 
     return pt.where(
         # consistent with the epsilon in the analytical likelihood
-        pt.bitwise_and(rt - t <= 1e-15, pt.bitwise_not(missing_mask)),
+        pt.bitwise_and(rt - min_rt <= 1e-15, pt.bitwise_not(missing_mask)),
         LOGP_LB,
         logp,
     )
@@ -430,6 +469,24 @@ def _apply_lapse_model(
     return sims_out
 
 
+def _validate_ndt_edge_width(value: Any) -> None:
+    """Raise if `ndt_edge_width` is not a finite, non-negative number."""
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(
+            f"`ndt_edge_width` must be a finite, non-negative number, got {value!r}."
+        )
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(
+            "`ndt_edge_width` must be a finite, non-negative number, got "
+            f"{value!r}. It places the response-time admissibility floor at "
+            "`t - ndt_edge_width * st`, so a negative width raises that floor "
+            "above `t`, and a non-finite width either disables the floor or "
+            "applies it to every response time. 0.0 is the fixed-`t` edge."
+        )
+
+
 def make_distribution(
     rv: str | type[RandomVariable] | RandomVariable | Callable[..., Any],
     loglik: LogLikeFunc | pytensor.graph.Op,
@@ -440,6 +497,7 @@ def make_distribution(
     fixed_vector_params: dict[str, np.ndarray] | None = None,
     params_is_trialwise: list[bool] | None = None,
     is_choice_only: bool = False,
+    ndt_edge_width: float | None = None,
 ) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -486,6 +544,15 @@ def make_distribution(
         When ``None``, no graph-level broadcasting is applied.
     is_choice_only : optional
         Whether the model is a choice-only model.
+    ndt_edge_width : optional
+        Width of the response-time admissibility floor in units of ``st`` below
+        ``t``, forwarded to :func:`ensure_positive_ndt` (which floors the logp
+        for ``rt <= t - ndt_edge_width * st``). ``None`` (the default) means
+        1.0, exact for a compact uniform non-decision-time kernel of half-width
+        ``st``. Models whose kernel has unbounded support - e.g. ``Normal(t,
+        st)``, where ``st`` is a standard deviation - should pass 3.0 to place
+        the floor at the kernel's practical 3-sigma edge. Has no effect on
+        models without ``st``.
 
     Returns
     -------
@@ -518,6 +585,10 @@ def make_distribution(
     # random_variable = make_ssm_rv(rv, list_params, lapse)
     # if isinstance(rv, str) else rv
     extra_fields = [] if extra_fields is None else extra_fields
+    # Validate here as well as in `Config`: this is the public boundary that
+    # `Config.validate()` never sees when `make_distribution` is called directly.
+    _validate_ndt_edge_width(ndt_edge_width)
+    _ndt_edge_width = 1.0 if ndt_edge_width is None else ndt_edge_width
 
     # Pre-build PyTensor tensors for fixed-vector params. These replace the
     # scalar constants that Bambi provides, at the correct positions in the
@@ -623,10 +694,10 @@ def make_distribution(
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
-                # Ensure that non-decision time is always smaller than rt.
-                # Assuming that the non-decision time parameter is always named "t".
                 if not is_choice_only:
-                    logp = ensure_positive_ndt(data, logp, list_params, dist_params)
+                    logp = ensure_positive_ndt(
+                        data, logp, list_params, dist_params, _ndt_edge_width
+                    )
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)
                     + p_outlier * pt.exp(lapse_logp)
@@ -634,9 +705,10 @@ def make_distribution(
                 )
             else:
                 logp = loglik(data, *dist_params, *extra_fields)
-                # Ensure that non-decision time is always smaller than rt.
                 if not is_choice_only:
-                    logp = ensure_positive_ndt(data, logp, list_params, dist_params)
+                    logp = ensure_positive_ndt(
+                        data, logp, list_params, dist_params, _ndt_edge_width
+                    )
 
             if bounds is not None:
                 logp = apply_param_bounds_to_loglik(

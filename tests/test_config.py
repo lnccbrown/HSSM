@@ -62,8 +62,10 @@ def test_from_defaults():
 
 
 def test_update_config():
+    """update_config copies every user-set ModelConfig field onto the Config."""
     config1 = Config.from_defaults("ddm", "analytical")
     assert config1.response == ["rt", "response"]
+    assert config1.ndt_edge_width is None
 
     v_prior, v_bounds = config1.get_defaults("v")
 
@@ -77,6 +79,7 @@ def test_update_config():
             "t": hssm.Prior("Uniform", lower=-5, upper=5),
             "v": hssm.Prior("Normal"),
         },
+        ndt_edge_width=3.0,
     )
 
     config1.update_config(user_config)
@@ -85,11 +88,34 @@ def test_update_config():
     assert config1.backend is None
     assert "t" in config1.default_priors
     assert "a" not in config1.default_priors
+    assert config1.ndt_edge_width == 3.0
 
     v_prior, v_bounds = config1.get_defaults("v")
 
     assert v_prior.name == "Normal"
     assert v_bounds == (-np.inf, np.inf)
+
+
+@pytest.mark.parametrize(
+    "bad_width",
+    [-1.0, -0.5, float("nan"), float("inf"), float("-inf"), "3.0"],
+    ids=["negative", "small_negative", "nan", "inf", "neg_inf", "string"],
+)
+def test_ndt_edge_width_rejects_invalid(bad_width):
+    """A non-finite or negative `ndt_edge_width` is refused at validation."""
+    with pytest.raises(ValueError, match="ndt_edge_width"):
+        Config._build_model_config(
+            "ddm", "analytical", ModelConfig(ndt_edge_width=bad_width), None
+        )
+
+
+@pytest.mark.parametrize("good_width", [None, 0.0, 1, 1.0, 3.0])
+def test_ndt_edge_width_accepts_finite_non_negative(good_width):
+    """Zero degenerates to the fixed-`t` edge, so non-negative widths pass."""
+    config = Config._build_model_config(
+        "ddm", "analytical", ModelConfig(ndt_edge_width=good_width), None
+    )
+    assert config.ndt_edge_width == good_width
 
 
 class TestConfigBuildModelConfigExtraLogic:
