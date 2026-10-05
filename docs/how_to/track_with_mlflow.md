@@ -27,7 +27,6 @@ with hssm.track(
 ):
     model = hssm.HSSM(data, model="ddm")
     model.sample(draws=1000, chains=4)
-
 ```
 
 Everything inside the block becomes one MLflow run. With nothing else configured, two things appear in your working directory:
