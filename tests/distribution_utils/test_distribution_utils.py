@@ -23,6 +23,7 @@ from hssm.distribution_utils.dist import (
     make_distribution_for_supported_model,
 )
 from hssm.likelihoods.analytical import DDM, logp_ddm
+from hssm.likelihoods.blackbox import logp_full_ddm
 
 hssm.set_floatX("float32")
 
@@ -507,3 +508,30 @@ class TestGetPOutlier:
 
         assert p_outlier is None
         assert new_arg_arrays is arg_arrays
+
+
+def test_full_ddm_keeps_likelihood_for_rt_below_t():
+    """full_ddm returns hddm_wfpt's own log-likelihood on both sides of t.
+
+    hddm_wfpt reads st as the full width, so it assigns real density to response
+    times in (t - st / 2, t]. A guard that floors every rt <= t replaces that
+    density with LOGP_LB; the t - st edge must leave it untouched. The response
+    times run from below t - st to above t, so they cover the band the guard
+    floors, the band hddm_wfpt itself scores as zero density, and the band it
+    does not.
+    """
+    # v, a, z, t, sz, sv, st. Cast once so that both sides see the same values
+    # whichever floatX is in effect.
+    params = pm.pytensorf.floatX([1.0, 1.0, 0.5, 0.4, 0.1, 0.3, 0.3])
+    rt = np.linspace(0.06, 0.46, 21)
+    data = pm.pytensorf.floatX(np.column_stack([rt, np.ones_like(rt)]))
+
+    # lapse defaults to None, so there is no p_outlier mixture on the HSSM side.
+    Dist = make_distribution_for_supported_model("full_ddm", loglik_kind="blackbox")
+
+    # Equal up to the float32 rounding of the output.
+    np.testing.assert_allclose(
+        Dist.logp(data, *params).eval(),
+        logp_full_ddm(data, *params),
+        rtol=1e-6,
+    )
