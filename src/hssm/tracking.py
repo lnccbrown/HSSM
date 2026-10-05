@@ -1039,7 +1039,7 @@ def list_runs(tracking_uri: str | None = None) -> pd.DataFrame:
         RunRow.from_run(
             run,
             experiment=experiments.get(run.info.experiment_id),
-            restorable=_is_rebuildable(client, run),
+            restorable=_is_rebuildable(run),
         )
         for run in _tracked_runs(client, list(experiments))
     ]
@@ -1092,10 +1092,15 @@ def _dataset_name(run: Run) -> str | None:
     return datasets[0].dataset.name if datasets else None
 
 
-def _is_rebuildable(client: MlflowClient, run: Run) -> bool:
-    """Whether :func:`load_run` would rebuild ``run``, without rebuilding it."""
+def _is_rebuildable(run: Run) -> bool:
+    """Whether :func:`load_run` would rebuild ``run``, from its tags alone.
+
+    Reading tags the search already returned keeps :func:`list_runs` to one
+    request per page of runs; :func:`load_run` still checks the files itself.
+    """
     tags = run.data.tags
-    if tags.get("model_class") != "HSSM" or tags.get("spec_restorable") != "true":
-        return False
-    names = {a.path for a in client.list_artifacts(run.info.run_id)}
-    return REBUILD_ARTIFACTS <= names
+    return (
+        tags.get("model_class") == "HSSM"
+        and tags.get("spec_restorable") == "true"
+        and tags.get(REBUILD_TAG) == "true"
+    )
