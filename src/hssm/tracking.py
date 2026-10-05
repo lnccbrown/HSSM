@@ -124,6 +124,13 @@ _NETWORKS: ContextVar[dict[str, dict[str, str]] | None] = ContextVar(
     "hssm_networks", default=None
 )
 
+# Network files to fetch at a fixed HuggingFace revision, by filename; see
+# `pinned_revisions`. Empty outside `load_run`, so building a model normally
+# fetches the default branch.
+_PINNED_REVISIONS: ContextVar[dict[str, str] | None] = ContextVar(
+    "hssm_pinned_revisions", default=None
+)
+
 # The role of whatever network is loaded next; see `network_role`.
 _NETWORK_ROLE: ContextVar[str] = ContextVar(
     "hssm_network_role", default=LIKELIHOOD_ROLE
@@ -172,6 +179,26 @@ def network_role(role: str) -> Iterator[None]:
         yield
     finally:
         _NETWORK_ROLE.reset(token)
+
+
+@contextlib.contextmanager
+def pinned_revisions(revisions: dict[str, str]) -> Iterator[None]:
+    """Fetch the named network files at these HuggingFace revisions in the block.
+
+    ``revisions`` maps a network filename to a commit sha. :func:`load_run`
+    uses it so a rebuilt model gets the network its run was fitted with, even
+    after the file has been updated on the default branch.
+    """
+    token = _PINNED_REVISIONS.set(dict(revisions))
+    try:
+        yield
+    finally:
+        _PINNED_REVISIONS.reset(token)
+
+
+def pinned_revision(filename: str) -> str | None:
+    """Return the revision to fetch ``filename`` at, or None for the default."""
+    return (_PINNED_REVISIONS.get() or {}).get(filename)
 
 
 def recorded_networks() -> dict[str, dict[str, str]]:
@@ -905,7 +932,8 @@ def load_run(run_id: str, tracking_uri: str | None = None) -> HSSM:
     from hssm import HSSM
 
     client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
-    tags = client.get_run(run_id).data.tags
+    run = client.get_run(run_id)
+    tags = run.data.tags
     model_class = tags.get("model_class", "HSSM")
     if model_class != "HSSM":
         raise NotImplementedError(
@@ -940,7 +968,9 @@ def load_run(run_id: str, tracking_uri: str | None = None) -> HSSM:
         spec = json.loads(Path(fetch("model_spec.json")).read_text())
         spec.pop("repr", None)
         try:
-            model = HSSM(data, **spec)
+            # The networks the run was fitted with, not the latest versions.
+            with pinned_revisions(_recorded_revisions(run.data.params)):
+                model = HSSM(data, **spec)
         except Exception as exc:
             # Runs logged before `spec_restorable` existed carry no verdict, so
             # the spec is only one possible cause; keep the real error in view.
@@ -1046,6 +1076,20 @@ def list_runs(tracking_uri: str | None = None) -> pd.DataFrame:
     return pd.DataFrame(
         [asdict(row) for row in rows], columns=[f.name for f in fields(RunRow)]
     )
+
+
+def _recorded_revisions(params: dict[str, str]) -> dict[str, str]:
+    """Return the HuggingFace revision of each network a run recorded, by file.
+
+    Covers the likelihood network and the missing-data network; a network
+    with no recorded revision (a local file, say) is not pinned.
+    """
+    prefixes = ("", f"{MISSING_DATA_ROLE}_")
+    return {
+        params[f"{prefix}network_file"]: params[f"{prefix}hf_revision"]
+        for prefix in prefixes
+        if f"{prefix}network_file" in params and f"{prefix}hf_revision" in params
+    }
 
 
 def _tracked_runs(
