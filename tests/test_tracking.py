@@ -740,3 +740,59 @@ class TestReviewFixes:
         assert _run(minted.run_id).data.tags["lineage_source"] == "minted"
         tags = _run(given.run_id).data.tags
         assert tags["lineage_id"] == "mine" and tags["lineage_source"] == "user"
+
+
+class TestPreviouslyMissedFindings:
+    """Findings from the second review of code that had not changed."""
+
+    # -- revision of a network in a subfolder of the repository --------------
+
+    def test_revision_found_for_a_network_in_a_subfolder(self, tmp_path):
+        """`hf_hub_download("sub/net.onnx")` caches it one level deeper."""
+        nested = tmp_path / "snapshots" / "abc123" / "sub" / "net.onnx"
+        assert tracking.hf_revision_from_path(nested) == "abc123"
+
+    def test_no_revision_outside_the_cache_layout(self, tmp_path):
+        """A path with no `snapshots/<sha>/` above it has nothing to report."""
+        assert tracking.hf_revision_from_path(tmp_path / "sub" / "net.onnx") is None
+
+    # -- spec hash stable across processes -----------------------------------
+
+    def test_function_text_carries_no_memory_address(self):
+        """Two copies of one function, at different addresses, read the same."""
+        import types
+
+        def my_logp(data, v):
+            return v
+
+        copy = types.FunctionType(
+            my_logp.__code__, my_logp.__globals__, my_logp.__name__
+        )
+        assert copy is not my_logp
+        assert tracking._jsonable(my_logp) == tracking._jsonable(copy)
+        assert "0x" not in tracking._jsonable(my_logp)
+
+    def test_sets_are_written_in_a_fixed_order(self):
+        """Set order depends on the process's string hashing, so sort it."""
+        assert tracking._jsonable({"b", "a", "c"}) == ["a", "b", "c"]
+        assert tracking._jsonable(frozenset({2, 1})) == [1, 2]
+
+    # -- switching tracking stores -------------------------------------------
+
+    def test_switching_store_without_an_experiment_uses_its_default(self, tmp_path):
+        """The active experiment belongs to the old store, not the new one."""
+        mlflow.set_experiment("study")  # active in this test's own store
+        other = f"sqlite:///{(tmp_path / 'other.db').absolute()}"
+        with hssm.track(tracking_uri=other) as t:
+            pass
+        client = mlflow.tracking.MlflowClient(tracking_uri=other)
+        run = client.get_run(t.run_id)
+        assert client.get_experiment(run.info.experiment_id).name == "Default"
+
+    def test_same_store_keeps_the_active_experiment(self):
+        """Not switching stores must not undo the user's `set_experiment`."""
+        mlflow.set_experiment("study")
+        with hssm.track() as t:
+            pass
+        experiment_id = _run(t.run_id).info.experiment_id
+        assert mlflow.get_experiment(experiment_id).name == "study"
