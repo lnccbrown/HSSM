@@ -415,7 +415,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # whichever network the previous model loaded.
         tracking.reset_network_record()
         self.model_distribution = self._make_model_distribution()
-        self._tracking_network = tracking.last_network()
+        networks = tracking.recorded_networks()
+        self._tracking_network = networks.get(tracking.LIKELIHOOD_ROLE, {})
+        self._tracking_missing_data_network = networks.get(
+            tracking.MISSING_DATA_ROLE, {}
+        )
 
         self.family = make_family(
             self.model_distribution,
@@ -1680,7 +1684,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             self._inference_obj_vi.to_netcdf(model_path.joinpath("vi_traces.nc"))
 
         # Opt-in MLflow tracking: attach model.pkl when log_artifacts="all".
-        if (tracker := tracking.active()) is not None:
+        # A traces-only save writes no pickle, so any in the directory is older.
+        if not save_traces_only and (tracker := tracking.active()) is not None:
             tracker.log_saved_model(model_path)
 
     @classmethod

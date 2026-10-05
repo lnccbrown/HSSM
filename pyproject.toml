@@ -65,7 +65,7 @@ dev = [
     "ruff>=0.16.1",
     "pytest>=9.1.1",
     "pyrefly>=1.2.0",
-    "mlflow>=3.14.0",
+    "hssm[tracking]",
 ]
 
 notebook = [
