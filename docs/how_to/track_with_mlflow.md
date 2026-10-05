@@ -94,7 +94,7 @@ Keys HSSM records itself are refused rather than silently dropped — MLflow rej
 | --- | --- |
 | Params | `model`, `loglik_kind`, `network_file`, `hf_revision`, `missing_data_network_file`, `missing_data_hf_revision`, `sampler`, `draws`, `tune`, `chains`, `target_accept`, `n_trials`, `n_subjects`, `spec_sha256`, `hssm_version`, `pymc_version`, `bambi_version` |
 | Metrics | `sampling_seconds`, `divergences`, `r_hat_max`, `ess_bulk_min`, `ess_tail_min` |
-| Tags | `user`, `hostname`, `git_sha`, `data_sha256`, `schema_version`, `phase`, `lineage_id`, `lineage_source`, `model_class`, `spec_restorable` |
+| Tags | `user`, `hostname`, `git_sha`, `data_sha256`, `schema_version`, `phase`, `lineage_id`, `lineage_source`, `model_class`, `spec_restorable`, `rebuild_artifacts` |
 | Artifacts | `model_spec.json`, `summary.csv`, `traces.nc`, `data.parquet`; `model.pkl` with `log_artifacts="all"` |
 
 `spec_sha256` hashes the modelling choices — model, `include`, priors, links, `p_outlier` — but not the data, so two fits share it exactly when the specification is the same. `data_sha256` hashes the observed data frame and its schema, so fits of the same data share that instead. Together they separate "same model, different data" from "same data, different model".
@@ -176,8 +176,10 @@ table or a plot.
 the run's `model_spec.json` and `data.parquet`, and attaches its traces.
 
 ```python
+import arviz as az
+
 model = hssm.load_run("<run_id>")
-model.summary()
+az.summary(model.traces)
 ```
 
 The run id is on the tracker while you fit, and it stays readable after the
