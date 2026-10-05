@@ -57,8 +57,8 @@ def _clamp_default_initval_to_bounds(
     endpoint. The defaults in ``INITVAL_SETTINGS`` are shared across models, so a
     model's declared bounds may exclude them, and a start outside the bounds has
     -inf log-probability from which sampling cannot move. This applies only to
-    defaults on the natural scale (the ``None``-link branch); user-supplied
-    initial values are never touched.
+    defaults on the natural scale (a non-regression parameter, or a regression
+    with an identity link); user-supplied initial values are never touched.
 
     Parameters
     ----------

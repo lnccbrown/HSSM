@@ -2068,17 +2068,13 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             # should also have supplied an initial value insofar it matters.
 
             param = self.params[self._get_prefix(name_tmp)]
-            # The parameter's own link decides which default scale applies. A
-            # regression may override the model-wide link_settings: under an
-            # identity link the default is natural-scale, where the declared
-            # bounds apply; under HSSM's own log or gen_logit links it is the
-            # link-space default. Any other link keeps the model-wide setting,
-            # since its scale is not known here.
+            # A regression may override the model-wide link_settings with an
+            # identity link: its default is then natural-scale, where the
+            # declared bounds apply. Any other link keeps the model-wide
+            # setting.
             link_name = getattr(param.link, "name", param.link)
             if not param.is_regression or link_name == "identity":
                 param_link_setting = None
-            elif link_name in ("log", "gen_logit"):
-                param_link_setting = "log_logit"
             else:
                 param_link_setting = self.link_settings
             if name_tmp in initval_settings[param_link_setting].keys():
@@ -2092,10 +2088,11 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
                 # Apply specific settings from initval_settings dictionary,
                 # clamped into the parameter's declared bounds (natural-scale
-                # defaults only; log_logit defaults are link-space and any
-                # user-supplied value was already skipped above).
+                # values only; under any other link the value is link-space,
+                # whichever table it came from, and any user-supplied value
+                # was already skipped above).
                 value = initval_settings[param_link_setting][name_tmp]
-                if param_link_setting is None:
+                if not param.is_regression or link_name == "identity":
                     value = _clamp_default_initval_to_bounds(
                         value, name_tmp, param.bounds
                     )

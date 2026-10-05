@@ -448,19 +448,37 @@ def test_identity_link_override_clamps_into_bounds(caplog, cavanagh_test):
     assert initval == pytest.approx(0.25 + 0.05 * (2.0 - 0.25))
 
 
-def test_user_log_link_gets_link_space_default(cavanagh_test):
-    """A regression's own log link selects the link-space default.
+@pytest.mark.parametrize(
+    ("name", "bounds", "expected_initval"),
+    [
+        # Not re-routed to the log_logit table, which would start a at 0.0.
+        ("a", None, 1.5),
+        # Not clamped either: under a log link 0.025 is a link-space value, so
+        # bounds that exclude it on the natural scale say nothing about it.
+        ("t", (0.25, 2.0), 0.025),
+    ],
+)
+def test_explicit_log_link_keeps_default_start(
+    cavanagh_test, name, bounds, expected_initval
+):
+    """An explicit log link under ``link_settings=None`` leaves the start alone.
 
-    The model-wide ``link_settings`` is ``None`` here, so the natural-scale
-    table would have applied before; the parameter's effective link decides.
+    Such a regression has always started from the ``None`` table of
+    ``INITVAL_SETTINGS``. Clamping natural-scale defaults must not change that
+    start, neither by switching tables nor by clamping it.
     """
+    spec: dict = {"name": name, "formula": f"{name} ~ 1 + stim", "link": "log"}
+    if bounds is not None:
+        spec["bounds"] = bounds
+
     model = hssm.HSSM(
         data=cavanagh_test,
         model="ddm",
         link_settings=None,
         initval_jitter=0,
-        include=[{"name": "a", "formula": "a ~ 1 + stim", "link": "log"}],
+        include=[spec],
     )
-    assert getattr(model.params["a"].link, "name", model.params["a"].link) == "log"
-    # the log-space default, i.e. a = exp(0) = 1, not the natural-scale 1.5
-    assert float(np.asarray(model._initvals["a_Intercept"])) == 0.0
+
+    assert model.params[name].link == "log"
+    initval = model._initvals[f"{name}_Intercept"]
+    assert initval == np.array(expected_initval).astype(initval.dtype)
