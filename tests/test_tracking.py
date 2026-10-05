@@ -1113,9 +1113,55 @@ class TestIsRebuildable:
 
     def test_run_from_before_the_tags(self):
         """Without the tags there is no verdict, so it is not offered."""
-        client = mlflow.tracking.MlflowClient()
-        run = client.get_run(_empty_hssm_run())
-        assert not tracking._is_rebuildable(client, run)
+        run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
+        assert not tracking._is_rebuildable(run)
+
+
+class TestRebuildArtifactsTag:
+    """The `rebuild_artifacts` tag says the files `load_run` needs were written."""
+
+    def test_set_when_data_and_spec_are_stored(self, data_ddm):
+        """A fit with artifacts on stores both files and says so."""
+        with hssm.track(lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        assert _run(t.run_id).data.tags["rebuild_artifacts"] == "true"
+        assert {"data.parquet", "model_spec.json"} <= _artifacts(t.run_id)
+
+    def test_absent_when_artifacts_are_off(self, data_ddm):
+        """`log_artifacts=False` stores neither file."""
+        with hssm.track(log_artifacts=False, lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        assert "rebuild_artifacts" not in _run(t.run_id).data.tags
+
+    def test_absent_when_the_data_could_not_be_written(self, data_ddm, monkeypatch):
+        """The spec alone is not enough to rebuild a model."""
+
+        def fail(self, data):
+            raise OSError("no parquet engine")
+
+        monkeypatch.setattr(tracking.Tracker, "_log_data", fail)
+        with hssm.track(lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        assert "rebuild_artifacts" not in _run(t.run_id).data.tags
+
+    def test_list_runs_makes_no_request_per_run(self, data_ddm, monkeypatch):
+        """Listing reads tags it already has instead of each run's artifacts."""
+        with hssm.track(lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+
+        def no_listing(*args, **kwargs):
+            raise AssertionError("list_runs listed a run's artifacts")
+
+        monkeypatch.setattr(mlflow.tracking.MlflowClient, "list_artifacts", no_listing)
+        assert _only_row(hssm.list_runs(), t.run_id)["restorable"]
 
 
 class TestReviewFixes:
