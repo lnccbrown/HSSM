@@ -1,6 +1,7 @@
 """Tests for opt-in MLflow tracking of inference runs (hssm.track)."""
 
 import contextlib
+import dataclasses
 import json
 import math
 import threading
@@ -967,53 +968,37 @@ class TestTrackedRunsSearch:
 
 
 class TestRunRow:
-    """`_run_row`: one run as a row of the `list_runs` table."""
+    """`RunRow`: one run as a row of the `list_runs` table."""
 
-    def test_row_has_every_column_and_reads_the_run(self):
-        """Names, times and recorded params end up in their columns."""
+    def test_fields_are_the_table_columns_in_order(self):
+        """The dataclass is the table's template: its fields are the columns."""
+        assert [f.name for f in dataclasses.fields(tracking.RunRow)] == (
+            LIST_RUNS_COLUMNS
+        )
+
+    def test_from_run_reads_names_times_and_recorded_params(self):
+        """Names, times and recorded params end up in their fields."""
         run_id = _empty_hssm_run(run_name="r")
         client = mlflow.tracking.MlflowClient()
         client.log_param(run_id, "model", "ddm")
         client.log_param(run_id, "n_trials", "42")
-        row = tracking._run_row(
+        row = tracking.RunRow.from_run(
             client.get_run(run_id), experiment="study", restorable=True
         )
-        assert list(row) == LIST_RUNS_COLUMNS
-        assert row["run_id"] == run_id and row["run_name"] == "r"
-        assert row["experiment"] == "study"
-        assert row["status"] == "FINISHED"
-        assert row["model"] == "ddm"
-        assert row["n_trials"] == 42  # a number, not the param's string
-        assert row["start_time"].tzinfo is not None
-        assert row["restorable"] is True
+        assert row.run_id == run_id and row.run_name == "r"
+        assert row.experiment == "study"
+        assert row.status == "FINISHED"
+        assert row.model == "ddm"
+        assert row.n_trials == 42  # a number, not the param's string
+        assert row.start_time.tzinfo is not None
+        assert row.restorable is True
 
-    def test_unfitted_run_leaves_model_columns_empty(self):
+    def test_unfitted_run_leaves_model_fields_empty(self):
         """A block that fitted nothing has no model, data or trial count."""
-        run_id = _empty_hssm_run()
-        run = mlflow.tracking.MlflowClient().get_run(run_id)
-        row = tracking._run_row(run, experiment="Default", restorable=False)
-        assert row["model"] is None and row["loglik_kind"] is None
-        assert row["dataset_name"] is None and row["n_trials"] is None
-
-
-class TestRunRowTemplate:
-    """`RUN_ROW_TEMPLATE`: one entry per column, read from the run or supplied."""
-
-    def test_columns_are_the_template_keys(self):
-        """The table's columns are defined once, by the template."""
-        assert list(tracking.LIST_RUNS_COLUMNS) == list(tracking.RUN_ROW_TEMPLATE)
-        assert list(tracking.LIST_RUNS_COLUMNS) == LIST_RUNS_COLUMNS
-
-    def test_only_experiment_and_restorable_are_supplied_by_the_caller(self):
-        """Every other column comes from the run itself."""
-        supplied = {c for c, get in tracking.RUN_ROW_TEMPLATE.items() if get is None}
-        assert supplied == {"experiment", "restorable"}
-
-    def test_missing_supplied_value_names_the_column(self):
-        """Forgetting a caller-supplied column fails loudly, not with a None."""
         run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
-        with pytest.raises(KeyError, match="restorable"):
-            tracking._run_row(run, experiment="Default")
+        row = tracking.RunRow.from_run(run, experiment="Default", restorable=False)
+        assert row.model is None and row.loglik_kind is None
+        assert row.dataset_name is None and row.n_trials is None
 
 
 class TestRunFieldReaders:
