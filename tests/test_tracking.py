@@ -1281,12 +1281,17 @@ class TestReviewFixes:
     # -- closing the run -----------------------------------------------------
 
     def test_run_is_closed_even_if_the_final_tag_write_fails(self, monkeypatch):
-        """A leftover active run would make the next block a nested run."""
+        """A leftover active run would make the next block a nested run.
+
+        `track()` writes the closing lineage tags with `mlflow.set_tags`, so
+        that is what fails here. The write when the block opens fails too, and
+        is guarded the same way.
+        """
 
         def fail(*args, **kwargs):
             raise RuntimeError("server unavailable")
 
-        monkeypatch.setattr(mlflow, "set_tag", fail)
+        monkeypatch.setattr(mlflow, "set_tags", fail)
         with hssm.track() as t:
             pass
         assert mlflow.active_run() is None
