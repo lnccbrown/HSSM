@@ -903,3 +903,128 @@ class TestListRuns:
         runs = hssm.list_runs(tracking_uri=_isolated_mlflow)
         assert list(runs["run_id"]) == [hssm_run]
         assert mlflow.get_tracking_uri() == "sqlite:///elsewhere.db"
+
+
+class TestRestorableValues:
+    """`_is_restorable`: which constructor arguments survive the JSON spec."""
+
+    @pytest.mark.parametrize(
+        "value",
+        [None, True, 1, 1.5, "ddm", [1, "a"], (0.0, 1.0), {"v": {"prior": [1]}}],
+    )
+    def test_plain_values_are_kept_as_data(self, value):
+        """What `_jsonable` writes unchanged can be read back unchanged."""
+        assert tracking._is_restorable(value)
+
+    @pytest.mark.parametrize(
+        "value",
+        [object(), {1: "a"}, {"v": object()}, [object()], {1, 2}, print],
+    )
+    def test_anything_else_is_written_as_text(self, value):
+        """Objects, non-string keys, sets and functions become `repr` text."""
+        assert not tracking._is_restorable(value)
+
+    def test_model_with_dict_priors_is_restorable(self, data_ddm):
+        """The spec of a model built from plain values needs nothing else."""
+        model = hssm.HSSM(
+            data_ddm,
+            model="ddm",
+            include=[{"name": "v", "prior": {"name": "Normal", "mu": 0, "sigma": 1}}],
+        )
+        assert tracking.spec_is_restorable(model)
+
+    def test_model_with_an_object_prior_is_not_restorable(self, data_ddm):
+        """A `bmb.Prior` in the arguments is enough to lose the spec."""
+        import bambi as bmb
+
+        model = hssm.HSSM(
+            data_ddm,
+            model="ddm",
+            include=[{"name": "v", "prior": bmb.Prior("Normal", mu=0, sigma=1)}],
+        )
+        assert not tracking.spec_is_restorable(model)
+
+
+class TestTrackedRunsSearch:
+    """`_tracked_runs`: every HSSM run on the server, across result pages."""
+
+    def test_follows_every_page_newest_first(self):
+        """With one run per page, all runs still come back, in order."""
+        names = ["first", "second", "third"]
+        for name in names:
+            _empty_hssm_run(run_name=name)
+            time.sleep(0.01)  # distinct start times, so the order is defined
+        _other_tools_run()
+        client = mlflow.tracking.MlflowClient()
+        experiment_ids = [e.experiment_id for e in client.search_experiments()]
+        runs = tracking._tracked_runs(client, experiment_ids, page_size=1)
+        assert [r.info.run_name for r in runs] == names[::-1]
+
+    def test_no_experiments_means_no_runs(self):
+        """An empty list of experiments must not search everything instead."""
+        client = mlflow.tracking.MlflowClient()
+        assert list(tracking._tracked_runs(client, [])) == []
+
+
+class TestRunRow:
+    """`_run_row`: one run as a row of the `list_runs` table."""
+
+    def test_row_has_every_column_and_reads_the_run(self):
+        """Names, times and recorded params end up in their columns."""
+        run_id = _empty_hssm_run(run_name="r")
+        client = mlflow.tracking.MlflowClient()
+        client.log_param(run_id, "model", "ddm")
+        client.log_param(run_id, "n_trials", "42")
+        row = tracking._run_row(client.get_run(run_id), "study", restorable=True)
+        assert list(row) == LIST_RUNS_COLUMNS
+        assert row["run_id"] == run_id and row["run_name"] == "r"
+        assert row["experiment"] == "study"
+        assert row["status"] == "FINISHED"
+        assert row["model"] == "ddm"
+        assert row["n_trials"] == 42  # a number, not the param's string
+        assert row["start_time"].tzinfo is not None
+        assert row["restorable"] is True
+
+    def test_unfitted_run_leaves_model_columns_empty(self):
+        """A block that fitted nothing has no model, data or trial count."""
+        run_id = _empty_hssm_run()
+        run = mlflow.tracking.MlflowClient().get_run(run_id)
+        row = tracking._run_row(run, "Default", restorable=False)
+        assert row["model"] is None and row["loglik_kind"] is None
+        assert row["dataset_name"] is None and row["n_trials"] is None
+
+
+class TestIsRebuildable:
+    """`_is_rebuildable`: what `load_run` needs, checked without rebuilding."""
+
+    def _run(self, *, model_class="HSSM", spec_restorable="true", artifacts=True):
+        client = mlflow.tracking.MlflowClient()
+        run_id = _empty_hssm_run()
+        client.set_tag(run_id, "model_class", model_class)
+        client.set_tag(run_id, "spec_restorable", spec_restorable)
+        if artifacts:
+            for name in ("data.parquet", "model_spec.json"):
+                client.log_text(run_id, "", name)
+        return client, client.get_run(run_id)
+
+    def test_hssm_run_with_restorable_spec_and_artifacts(self):
+        """All three conditions met."""
+        assert tracking._is_rebuildable(*self._run())
+
+    def test_other_model_class(self):
+        """`load_run` rebuilds `HSSM` only."""
+        assert not tracking._is_rebuildable(*self._run(model_class="RLSSM"))
+
+    def test_spec_recorded_as_text(self):
+        """A spec holding `repr` text cannot be passed to a constructor."""
+        assert not tracking._is_rebuildable(*self._run(spec_restorable="false"))
+
+    def test_missing_artifacts(self):
+        """No stored data or spec, nothing to rebuild from."""
+        assert not tracking._is_rebuildable(*self._run(artifacts=False))
+
+    def test_run_from_before_the_tags(self):
+        """Without the tags there is no verdict, so it is not offered."""
+        client = mlflow.tracking.MlflowClient()
+        run = client.get_run(_empty_hssm_run())
+        assert not tracking._is_rebuildable(client, run)
