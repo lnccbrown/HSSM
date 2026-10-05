@@ -27,6 +27,7 @@ with hssm.track(
 ):
     model = hssm.HSSM(data, model="ddm")
     model.sample(draws=1000, chains=4)
+
 ```
 
 Everything inside the block becomes one MLflow run. With nothing else configured, two things appear in your working directory:
@@ -95,7 +96,7 @@ Keys HSSM records itself are refused rather than silently dropped — MLflow rej
 | --- | --- |
 | Params | `model`, `loglik_kind`, `network_file`, `hf_revision`, `sampler`, `draws`, `tune`, `chains`, `target_accept`, `n_trials`, `n_subjects`, `spec_sha256`, `hssm_version`, `pymc_version`, `bambi_version` |
 | Metrics | `sampling_seconds`, `divergences`, `r_hat_max`, `ess_bulk_min`, `ess_tail_min` |
-| Tags | `user`, `hostname`, `git_sha`, `data_sha256`, `schema_version`, `phase`, `lineage_id`, `lineage_source` |
+| Tags | `user`, `hostname`, `git_sha`, `data_sha256`, `schema_version`, `phase`, `lineage_id`, `lineage_source`, `model_class`, `spec_restorable` |
 | Artifacts | `model_spec.json`, `summary.csv`, `traces.nc`, `data.parquet`; `model.pkl` with `log_artifacts="all"` |
 
 `spec_sha256` hashes the modelling choices — model, `include`, priors, links, `p_outlier` — but not the data, so two fits share it exactly when the specification is the same. `data_sha256` hashes the observed data frame and its schema, so fits of the same data share that instead. Together they separate "same model, different data" from "same data, different model".
@@ -169,6 +170,41 @@ mlflow.search_runs(
 
 `search_runs` returns a DataFrame, so a study's results can go straight into a
 table or a plot.
+
+## Rebuild a model from a run
+
+`hssm.load_run` turns a run back into a fitted model: it rebuilds the model from
+the run's `model_spec.json` and `data.parquet`, and attaches its traces.
+
+```python
+model = hssm.load_run("<run_id>")
+model.summary()
+```
+
+The run id is on the tracker while you fit, and it stays readable after the
+block closes:
+
+```python
+with hssm.track(experiment="my-study", run_name="ddm-basic") as run:
+    model = hssm.HSSM(data, model="ddm")
+    model.sample()
+
+run_id = run.run_id
+```
+
+For an earlier run, `hssm.list_runs()` lists every run `hssm.track` recorded,
+newest first, with its id, name, experiment, model and dataset. The
+`restorable` column says whether `load_run` can rebuild it:
+
+```python
+hssm.list_runs()
+```
+
+The run must have been logged with artifacts on (the default), and the model
+must have been specified with plain values: strings, numbers, formulas, and
+priors written as dicts. Arguments such as `bmb.Prior` or `hssm.Link` objects
+and custom likelihood functions are stored as text, so those runs cannot be
+rebuilt. Only `hssm.HSSM` models are supported for now.
 
 ## Ecosystem provenance
 
