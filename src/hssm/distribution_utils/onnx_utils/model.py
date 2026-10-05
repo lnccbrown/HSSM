@@ -32,7 +32,9 @@ def download_hf(path: str):
     The file is downloaded using the HuggingFace Hub's
      hf_hub_download function.
     """
-    local_path = hf_hub_download(repo_id=REPO_ID, filename=path)
+    local_path = hf_hub_download(
+        repo_id=REPO_ID, filename=path, revision=tracking.pinned_revision(path)
+    )
     tracking.record_network(path, local_path)
     return local_path
 
@@ -72,7 +74,9 @@ def load_onnx_model(
         )
 
     if isinstance(model, str):
-        local_path = hf_hub_download(repo_id=REPO_ID, filename=model)
+        local_path = hf_hub_download(
+            repo_id=REPO_ID, filename=model, revision=tracking.pinned_revision(model)
+        )
         tracking.record_network(model, local_path)
         return onnx.load(local_path)
 
