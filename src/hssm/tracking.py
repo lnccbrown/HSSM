@@ -35,6 +35,7 @@ import json
 import logging
 import math
 import os
+import re
 import tempfile
 import time
 import uuid
@@ -83,6 +84,9 @@ RESERVED_PARAMS = frozenset(
     }
 )
 
+# The memory address in a default ``repr``, e.g. ``<function f at 0x7f...>``.
+_MEMORY_ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
+
 #: Role of the network that implements a model's likelihood.
 LIKELIHOOD_ROLE = "likelihood"
 
@@ -120,13 +124,18 @@ _ACTIVE: ContextVar[Tracker | None] = ContextVar("hssm_active_tracker", default=
 def hf_revision_from_path(local_path: str | os.PathLike) -> str | None:
     """Commit sha of a file in the huggingface_hub cache, or None.
 
-    ``hf_hub_download`` returns ``.../snapshots/<commit sha>/<file>``; reading
-    the sha off the path costs no network round-trip.
+    ``hf_hub_download`` returns ``.../snapshots/<commit sha>/<file>``, with
+    the file's folders in the repository below the sha; reading the sha off
+    the path costs no network round-trip.
     """
-    path = Path(local_path)
-    if path.parent.parent.name == "snapshots":
-        return path.parent.name
-    return None
+    return next(
+        (
+            folder.name
+            for folder in Path(local_path).parents
+            if folder.parent.name == "snapshots"
+        ),
+        None,
+    )
 
 
 def record_network(filename: str, local_path: str | os.PathLike) -> None:
@@ -291,9 +300,15 @@ def _jsonable(value: Any) -> Any:
         return value
     if isinstance(value, dict):
         return {str(k): _jsonable(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, (list, tuple)):
         return [_jsonable(v) for v in value]
-    return repr(value)
+    if isinstance(value, (set, frozenset)):
+        # Set order follows the process's string hashing; sort it so the
+        # same set reads, and hashes, the same in every run.
+        return sorted((_jsonable(v) for v in value), key=repr)
+    # A function's or plain object's repr carries its memory address, which
+    # differs from one process to the next; drop it so `spec_sha256` does not.
+    return _MEMORY_ADDRESS.sub("", repr(value))
 
 
 def model_spec(model: HSSMBase) -> dict[str, Any]:
@@ -676,7 +691,9 @@ def track(
         Optional run name.
     tracking_uri
         Tracking server. Defaults to ``MLFLOW_TRACKING_URI`` (the lab's shared
-        server), then MLflow's own default.
+        server), then MLflow's own default. Switching to a different server
+        without naming an ``experiment`` records the run in that server's
+        ``Default`` experiment.
     log_artifacts
         ``True`` attaches ``traces.nc``, ``summary.csv`` and ``model_spec.json``;
         ``"all"`` additionally attaches ``model.pkl`` when ``save_model`` is
@@ -729,9 +746,13 @@ def track(
         raise RuntimeError("hssm.track() blocks cannot be nested")
 
     uri = tracking_uri or os.getenv("MLFLOW_TRACKING_URI")
-    if uri:
-        mlflow.set_tracking_uri(uri)
     exp = experiment or os.getenv("MLFLOW_EXPERIMENT_NAME")
+    if uri and uri != mlflow.get_tracking_uri():
+        mlflow.set_tracking_uri(uri)
+        if not exp:
+            # MLflow keeps the active experiment's id process-wide, and it
+            # belongs to the store just left; the new store may not have it.
+            exp = "Default"
     if exp:
         mlflow.set_experiment(exp)
 
