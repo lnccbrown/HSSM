@@ -7,8 +7,11 @@ model specification, are tagged alike, so a study of several models stays
 legible afterwards.
 
 Nothing here runs unless :func:`track` is active, MLflow is an optional
-dependency (``uv add "hssm[tracking]"``), and every hook is best-effort: a
-tracking failure is logged and never interrupts inference.
+dependency (``uv add "hssm[tracking]"``), and every hook that records a fit is
+best-effort: a failure to record is logged and never interrupts inference.
+Opening the run is the exception: if the tracking server cannot be reached,
+:func:`track` raises before the fit starts, rather than run a fit you asked to
+have recorded without recording it.
 
 Where the likelihood is a network published by the LAN pipeline, the run also
 carries that network's provenance, which links a fit back to the data the
@@ -60,6 +63,8 @@ RESERVED_PARAMS = frozenset(
         "loglik_kind",
         "network_file",
         "hf_revision",
+        "missing_data_network_file",
+        "missing_data_hf_revision",
         "n_trials",
         "n_subjects",
         "spec_sha256",
@@ -78,13 +83,26 @@ RESERVED_PARAMS = frozenset(
     }
 )
 
-# The last network fetched from HuggingFace, recorded by the ONNX loader so the
-# model being built can claim it. A ContextVar for the same reason as `_ACTIVE`
-# below: two models constructed concurrently would otherwise interleave on one
-# dict and could end up claiming each other's network. Always replaced
-# wholesale, never mutated in place.
-_LAST_NETWORK: ContextVar[dict[str, str] | None] = ContextVar(
-    "hssm_last_network", default=None
+#: Role of the network that implements a model's likelihood.
+LIKELIHOOD_ROLE = "likelihood"
+
+#: Role of the network that scores missing or deadline-censored trials.
+MISSING_DATA_ROLE = "missing_data"
+
+# The networks fetched from HuggingFace while a model is built, keyed by the
+# role each plays, recorded by the ONNX loader so the model can claim them. A
+# model with missing data loads two networks, and one record per role keeps
+# the second from overwriting the first. A ContextVar for the same reason as
+# `_ACTIVE` below: two models constructed concurrently would otherwise
+# interleave on one dict and could end up claiming each other's network.
+# Always replaced wholesale, never mutated in place.
+_NETWORKS: ContextVar[dict[str, dict[str, str]] | None] = ContextVar(
+    "hssm_networks", default=None
+)
+
+# The role of whatever network is loaded next; see `network_role`.
+_NETWORK_ROLE: ContextVar[str] = ContextVar(
+    "hssm_network_role", default=LIKELIHOOD_ROLE
 )
 
 # Which tracker the enclosing `track()` block installed. A ContextVar rather
@@ -112,20 +130,38 @@ def hf_revision_from_path(local_path: str | os.PathLike) -> str | None:
 
 
 def record_network(filename: str, local_path: str | os.PathLike) -> None:
-    """Remember which network file was just fetched from HuggingFace."""
+    """Remember which network file was just fetched from HuggingFace.
+
+    Recorded under the current :func:`network_role`.
+    """
     record: dict[str, str] = {"network_file": str(filename)}
     if revision := hf_revision_from_path(local_path):
         record["hf_revision"] = revision
-    _LAST_NETWORK.set(record)
+    _NETWORKS.set({**(_NETWORKS.get() or {}), _NETWORK_ROLE.get(): record})
 
 
-def last_network() -> dict[str, str]:
-    """Return the most recently fetched network (``network_file``, ``hf_revision``).
+@contextlib.contextmanager
+def network_role(role: str) -> Iterator[None]:
+    """Record networks loaded inside the block under ``role``."""
+    token = _NETWORK_ROLE.set(role)
+    try:
+        yield
+    finally:
+        _NETWORK_ROLE.reset(token)
+
+
+def recorded_networks() -> dict[str, dict[str, str]]:
+    """Return the recorded networks, keyed by role.
 
     Scoped to the execution context, so a download in another thread is not
     mistaken for this one's.
     """
-    return dict(_LAST_NETWORK.get() or {})
+    return {role: dict(record) for role, record in (_NETWORKS.get() or {}).items()}
+
+
+def last_network() -> dict[str, str]:
+    """Return the recorded likelihood network (``network_file``, ``hf_revision``)."""
+    return recorded_networks().get(LIKELIHOOD_ROLE, {})
 
 
 def reset_network_record() -> None:
@@ -136,7 +172,7 @@ def reset_network_record() -> None:
     nothing — an analytical likelihood, say — would inherit whichever network
     the previous model in the session happened to load.
     """
-    _LAST_NETWORK.set(None)
+    _NETWORKS.set(None)
 
 
 def _manifest_entry_for(
@@ -284,20 +320,35 @@ def spec_sha256(spec: dict[str, Any]) -> str:
     ).hexdigest()
 
 
+def _dtype_signature(dtype: Any) -> str:
+    """Describe a column's dtype for :func:`data_sha256`.
+
+    A categorical's levels and their order set bambi's reference level, and
+    ``ordered`` changes its encoding, yet ``str()`` of every categorical dtype
+    is just ``"category"``.
+    """
+    import pandas as pd
+
+    if isinstance(dtype, pd.CategoricalDtype):
+        return f"category{list(map(str, dtype.categories))}ordered={dtype.ordered}"
+    return str(dtype)
+
+
 def data_sha256(data: Any) -> str | None:
     """Content hash of the observed DataFrame, schema included.
 
     Values alone are not enough: renaming a column, or reading the same numbers
     back as a different dtype, gives a frame that means something else while
-    hashing identically. Column labels and dtypes therefore go into the digest
-    alongside the row and index values.
+    hashing identically. Column labels and dtypes, including a categorical's
+    levels and their order, therefore go into the digest alongside the row and
+    index values.
     """
     try:
         import pandas as pd
 
         digest = hashlib.sha256()
         digest.update(pd.util.hash_pandas_object(data, index=True).to_numpy().tobytes())
-        schema = [(str(c), str(dt)) for c, dt in zip(data.columns, data.dtypes)]
+        schema = [(str(c), _dtype_signature(dt)) for c, dt in data.dtypes.items()]
         digest.update(repr(schema).encode())
         return digest.hexdigest()
     except Exception:  # noqa: BLE001
@@ -328,6 +379,7 @@ class Tracker:
         self._dataset_name = dataset_name
         self.lineage_id: str | None = None
         self._model_logged = False
+        self._fit_logged = False
         self._sample_started: float | None = None
         self._vi_started: float | None = None
 
@@ -387,6 +439,8 @@ class Tracker:
             "loglik_kind": getattr(model, "loglik_kind", None),
         }
         params.update(network)
+        missing = getattr(model, "_tracking_missing_data_network", None) or {}
+        params.update({f"{MISSING_DATA_ROLE}_{k}": v for k, v in missing.items()})
         data = getattr(model, "data", None)
         if data is not None:
             params["n_trials"] = int(len(data))
@@ -427,12 +481,31 @@ class Tracker:
         )
         self._mlflow.log_input(dataset)
 
+    def _claim_fit(self, call: str) -> bool:
+        """Whether this block may log a fit; only the first one is recorded.
+
+        MLflow accepts a second fit's settings when they match the first's,
+        and would then overwrite its metrics and traces under the first
+        model's record. The second fit is skipped as a whole instead.
+        """
+        if self._fit_logged:
+            _logger.warning(
+                "MLflow tracking: %s is a second fit in one track() block and "
+                "is not recorded. Open one block per fit.",
+                call,
+            )
+            return False
+        self._fit_logged = True
+        return True
+
     def sample_started(self) -> None:
         """Mark the start of ``sample()`` for the ``sampling_seconds`` metric."""
         self._sample_started = time.monotonic()
 
     def log_sample(self, model: HSSMBase, sampler: str, kwargs: dict) -> None:
         """Log sampler settings, convergence metrics and (optionally) traces."""
+        if not self._claim_fit("sample()"):
+            return
         self.log_model(model)
         self._guard("log sample", self._log_sample, model, sampler, kwargs)
 
@@ -508,7 +581,9 @@ class Tracker:
         self._vi_started = time.monotonic()
 
     def log_vi(self, model: HSSMBase, kwargs: dict) -> None:
-        """Log variational settings, the approximation's loss, and the idata."""
+        """Log variational settings, the approximation's ELBO, and the idata."""
+        if not self._claim_fit("vi()"):
+            return
         self.log_model(model)
         self._guard("log vi", self._log_vi, model, kwargs)
 
@@ -523,12 +598,12 @@ class Tracker:
         metrics: dict[str, float] = {}
         if self._vi_started is not None:
             metrics["vi_seconds"] = time.monotonic() - self._vi_started
-        # `hist` is the ELBO trace of the fitted approximation: its last entry
-        # is where optimisation ended up, its minimum the best it reached.
+        # `hist` is the loss PyMC minimised, the negative ELBO; the run reports
+        # the ELBO itself, so the best value is the highest.
         hist = getattr(getattr(model, "vi_approx", None), "hist", None)
         if hist is not None and len(hist):
-            metrics["elbo_final"] = float(hist[-1])
-            metrics["elbo_min"] = float(min(hist))
+            metrics["elbo_final"] = -float(hist[-1])
+            metrics["elbo_max"] = -float(min(hist))
 
         idata = getattr(model, "_inference_obj_vi", None)
         self._log_idata(idata, metrics, artifact_name="vi_traces.nc")
@@ -589,10 +664,8 @@ def track(
     """Record the enclosed HSSM workflow as one MLflow run (``phase=infer``).
 
     One block records one fit. Fitting twice inside a single block is **not
-    supported**: the second fit's settings collide with the first's, MLflow
-    refuses to change a recorded parameter, and the second fit's settings,
-    metrics and artifacts are dropped — leaving a run that silently describes
-    only the first. Open one block per fit.
+    supported**: only the first ``sample()`` or ``vi()`` is recorded, and a
+    later one is skipped with a warning. Open one block per fit.
 
     Parameters
     ----------
@@ -635,6 +708,10 @@ def track(
         If the block is nested inside another.
     ValueError
         If ``tags`` or ``params`` collide with what HSSM records itself.
+    Exception
+        Whatever MLflow raises when the tracking server or the experiment
+        cannot be set up, before the block runs. Once the run is open, tracking
+        failures are logged and never raised.
     """
     try:
         import mlflow
@@ -686,10 +763,18 @@ def track(
         raise
     else:
         _ACTIVE.reset(token)
+        if tracker.lineage_id is None:
+            # No model was ever logged; give the run a real lineage id. Guarded
+            # on its own, so a failed write cannot keep the run from closing.
+            tracker._guard(
+                "set lineage tags",
+                mlflow.set_tags,
+                {
+                    "lineage_id": lineage_id or uuid.uuid4().hex,
+                    "lineage_source": "user" if lineage_id else "minted",
+                },
+            )
         with contextlib.suppress(Exception):
-            if tracker.lineage_id is None:
-                # No model was ever logged; give the run a real lineage id.
-                mlflow.set_tag("lineage_id", lineage_id or uuid.uuid4().hex)
             mlflow.end_run()
 
 
