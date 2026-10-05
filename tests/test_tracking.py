@@ -76,7 +76,9 @@ class TestNetworkProvenance:
         local.parent.mkdir(parents=True)
         local.write_bytes(b"")
         monkeypatch.setattr(
-            onnx_model, "hf_hub_download", lambda repo_id, filename: str(local)
+            onnx_model,
+            "hf_hub_download",
+            lambda repo_id, filename, revision=None: str(local),
         )
         assert onnx_model.download_hf("ddm.onnx") == str(local)
         assert tracking.last_network() == {
