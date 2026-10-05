@@ -5,7 +5,6 @@ import dataclasses
 import json
 import math
 import threading
-import time
 
 import pandas as pd
 import pytest
@@ -774,6 +773,29 @@ class TestLoadRun:
         with pytest.raises(ValueError, match="cannot be rebuilt from its spec"):
             hssm.load_run(t.run_id)
 
+    def test_untagged_run_reports_why_its_rebuild_failed(self, data_ddm, monkeypatch):
+        """A run from before `spec_restorable` gets no verdict at logging time.
+
+        Its rebuild can fail for reasons unrelated to the spec (a missing
+        network, invalid data), so the error must carry the real cause rather
+        than blame text-recorded arguments outright.
+        """
+        with hssm.track(lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        mlflow.tracking.MlflowClient().delete_tag(t.run_id, "spec_restorable")
+
+        def fail(*args, **kwargs):
+            raise FileNotFoundError("network ddm.onnx not found")
+
+        monkeypatch.setattr(hssm, "HSSM", fail)
+        with pytest.raises(ValueError) as excinfo:
+            hssm.load_run(t.run_id)
+        message = str(excinfo.value)
+        assert "network ddm.onnx not found" in message
+        assert "may hold arguments recorded as text" in message
+
     def test_run_without_artifacts_cannot_be_rebuilt(self, data_ddm):
         """`log_artifacts=False` keeps no data or spec, so nothing to rebuild from."""
         with hssm.track(log_artifacts=False, lineage_id="lin") as t:
@@ -823,6 +845,23 @@ def _empty_hssm_run(**kwargs):
     return t.run_id
 
 
+def _hssm_run_started_at(start_time, run_name, experiment="Default"):
+    """An HSSM-tagged run with a fixed start time (ms), so ordering is exact."""
+    client = mlflow.tracking.MlflowClient()
+    found = client.get_experiment_by_name(experiment)
+    experiment_id = (
+        found.experiment_id if found else client.create_experiment(experiment)
+    )
+    run = client.create_run(
+        experiment_id,
+        start_time=start_time,
+        tags={"phase": "infer"},
+        run_name=run_name,
+    )
+    client.set_terminated(run.info.run_id)
+    return run.info.run_id
+
+
 def _other_tools_run():
     """A plain MLflow run, as ssm-simulators or LANfactory would log it."""
     with mlflow.start_run() as run:
@@ -841,9 +880,8 @@ class TestListRuns:
 
     def test_runs_listed_newest_first_with_their_experiment(self):
         """The table a user reads a `run_id` off: curated columns, newest on top."""
-        _empty_hssm_run(experiment="study-a", run_name="first")
-        time.sleep(0.01)  # distinct start times, so the order is defined
-        _empty_hssm_run(experiment="study-b", run_name="second")
+        _hssm_run_started_at(1_000, "first", experiment="study-a")
+        _hssm_run_started_at(2_000, "second", experiment="study-b")
         runs = hssm.list_runs()
         assert list(runs.columns) == LIST_RUNS_COLUMNS
         assert list(runs["run_name"]) == ["second", "first"]
@@ -952,9 +990,8 @@ class TestTrackedRunsSearch:
     def test_follows_every_page_newest_first(self):
         """With one run per page, all runs still come back, in order."""
         names = ["first", "second", "third"]
-        for name in names:
-            _empty_hssm_run(run_name=name)
-            time.sleep(0.01)  # distinct start times, so the order is defined
+        for start_time, name in enumerate(names, start=1):
+            _hssm_run_started_at(start_time * 1_000, name)
         _other_tools_run()
         client = mlflow.tracking.MlflowClient()
         experiment_ids = [e.experiment_id for e in client.search_experiments()]
