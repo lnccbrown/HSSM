@@ -915,8 +915,10 @@ def list_runs(tracking_uri: str | None = None) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        One row per run. ``restorable`` says whether :func:`load_run` can
-        rebuild the run.
+        One row per run, with columns ``run_id``, ``run_name``, ``experiment``,
+        ``start_time``, ``status``, ``user``, ``model``, ``loglik_kind``,
+        ``dataset_name``, ``n_trials`` and ``restorable``, which says whether
+        :func:`load_run` can rebuild the run.
 
     Raises
     ------
