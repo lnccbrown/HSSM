@@ -1083,7 +1083,7 @@ class TestRunFieldReaders:
 
 
 class TestIsRebuildable:
-    """`_is_rebuildable`: what `load_run` needs, checked without rebuilding."""
+    """`_is_rebuildable`: what `load_run` needs, read off the run's tags alone."""
 
     def _run(self, *, model_class="HSSM", spec_restorable="true", artifacts=True):
         client = mlflow.tracking.MlflowClient()
@@ -1091,25 +1091,24 @@ class TestIsRebuildable:
         client.set_tag(run_id, "model_class", model_class)
         client.set_tag(run_id, "spec_restorable", spec_restorable)
         if artifacts:
-            for name in ("data.parquet", "model_spec.json"):
-                client.log_text(run_id, "", name)
-        return client, client.get_run(run_id)
+            client.set_tag(run_id, "rebuild_artifacts", "true")
+        return client.get_run(run_id)
 
     def test_hssm_run_with_restorable_spec_and_artifacts(self):
         """All three conditions met."""
-        assert tracking._is_rebuildable(*self._run())
+        assert tracking._is_rebuildable(self._run())
 
     def test_other_model_class(self):
         """`load_run` rebuilds `HSSM` only."""
-        assert not tracking._is_rebuildable(*self._run(model_class="RLSSM"))
+        assert not tracking._is_rebuildable(self._run(model_class="RLSSM"))
 
     def test_spec_recorded_as_text(self):
         """A spec holding `repr` text cannot be passed to a constructor."""
-        assert not tracking._is_rebuildable(*self._run(spec_restorable="false"))
+        assert not tracking._is_rebuildable(self._run(spec_restorable="false"))
 
     def test_missing_artifacts(self):
         """No stored data or spec, nothing to rebuild from."""
-        assert not tracking._is_rebuildable(*self._run(artifacts=False))
+        assert not tracking._is_rebuildable(self._run(artifacts=False))
 
     def test_run_from_before_the_tags(self):
         """Without the tags there is no verdict, so it is not offered."""
