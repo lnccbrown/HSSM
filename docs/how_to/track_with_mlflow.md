@@ -207,6 +207,10 @@ priors written as dicts. Arguments such as `bmb.Prior` or `hssm.Link` objects
 and custom likelihood functions are stored as text, so those runs cannot be
 rebuilt. Only `hssm.HSSM` models are supported for now.
 
+A likelihood network from Hugging Face is fetched at the revision the run
+recorded, so the rebuilt model uses the network it was fitted with even if the
+file has since been updated.
+
 ## Ecosystem provenance
 
 If your likelihood is a network published by the LAN pipeline, HSSM also records
