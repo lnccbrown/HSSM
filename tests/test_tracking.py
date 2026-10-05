@@ -1301,3 +1301,109 @@ class TestReviewFixes:
         assert _run(minted.run_id).data.tags["lineage_source"] == "minted"
         tags = _run(given.run_id).data.tags
         assert tags["lineage_id"] == "mine" and tags["lineage_source"] == "user"
+
+
+class _FakeHub:
+    """Stand-in for the Hugging Face hub: fixture networks at chosen revisions.
+
+    `latest` is what the default branch serves; `requests` records each
+    download as (filename, revision asked for).
+    """
+
+    def __init__(self, fixture_path, root, latest):
+        self.fixture_path, self.root, self.latest = fixture_path, root, latest
+        self.requests = []
+
+    def __call__(self, repo_id, filename, revision=None):
+        self.requests.append((filename, revision))
+        local = self.root / "snapshots" / (revision or self.latest[filename]) / filename
+        local.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(self.fixture_path / filename, local)
+        return str(local)
+
+
+class TestRevisionPinning:
+    """`load_run` fetches each network at the revision the run recorded."""
+
+    def test_recorded_revisions_are_read_off_the_run_params(self):
+        """Both roles' networks, keyed by filename; no revision, no pin."""
+        params = {
+            "network_file": "ddm.onnx",
+            "hf_revision": "aaa",
+            "missing_data_network_file": "ddm_cpn.onnx",
+            "missing_data_hf_revision": "ccc",
+        }
+        assert tracking._recorded_revisions(params) == {
+            "ddm.onnx": "aaa",
+            "ddm_cpn.onnx": "ccc",
+        }
+        assert tracking._recorded_revisions({"network_file": "local.onnx"}) == {}
+
+    def test_pins_apply_only_inside_the_block(self):
+        """Ordinary model building outside `load_run` keeps the default branch."""
+        assert tracking.pinned_revision("ddm.onnx") is None
+        with tracking.pinned_revisions({"ddm.onnx": "aaa"}):
+            assert tracking.pinned_revision("ddm.onnx") == "aaa"
+            assert tracking.pinned_revision("angle.onnx") is None
+        assert tracking.pinned_revision("ddm.onnx") is None
+
+    def test_loader_asks_the_hub_for_the_pinned_revision(
+        self, fixture_path, tmp_path, monkeypatch
+    ):
+        """Both download paths of the ONNX loader honour the pin."""
+        from hssm.distribution_utils.onnx_utils import model as onnx_model
+
+        hub = _FakeHub(fixture_path, tmp_path, {"ddm.onnx": "bbb"})
+        monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
+        with tracking.pinned_revisions({"ddm.onnx": "aaa"}):
+            onnx_model.download_hf("ddm.onnx")
+            onnx_model.load_onnx_model("ddm.onnx")
+        onnx_model.load_onnx_model("ddm.onnx")
+        assert hub.requests == [
+            ("ddm.onnx", "aaa"),
+            ("ddm.onnx", "aaa"),
+            ("ddm.onnx", None),
+        ]
+
+    def test_rebuild_uses_the_fitted_network_not_the_latest(
+        self, data_ddm, fixture_path, tmp_path, monkeypatch
+    ):
+        """The network was updated after the fit; the rebuild must not notice."""
+        from hssm.distribution_utils.onnx_utils import model as onnx_model
+
+        hub = _FakeHub(fixture_path, tmp_path, {"ddm.onnx": "aaa"})
+        monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
+        model = hssm.HSSM(data_ddm, model="ddm", loglik_kind="approx_differentiable")
+        with hssm.track(lineage_id="lin") as t:
+            t.log_model(model)
+
+        hub.latest["ddm.onnx"] = "bbb"
+        loaded = hssm.load_run(t.run_id)
+        assert hub.requests[-1] == ("ddm.onnx", "aaa")
+        assert loaded._tracking_network == {
+            "network_file": "ddm.onnx",
+            "hf_revision": "aaa",
+        }
+
+    def test_rebuild_pins_the_missing_data_network_too(
+        self, data_ddm, fixture_path, tmp_path, monkeypatch
+    ):
+        """A missing-data model loads two networks; both keep their revision."""
+        from hssm.distribution_utils.onnx_utils import model as onnx_model
+
+        hub = _FakeHub(
+            fixture_path, tmp_path, {"ddm.onnx": "aaa", "ddm_cpn.onnx": "ccc"}
+        )
+        monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
+        data = data_ddm.copy()
+        data.loc[:9, "rt"] = -999.0
+        model = hssm.HSSM(
+            data, model="ddm", loglik_kind="approx_differentiable", missing_data=True
+        )
+        with hssm.track(lineage_id="lin") as t:
+            t.log_model(model)
+
+        hub.latest.update({"ddm.onnx": "bbb", "ddm_cpn.onnx": "ddd"})
+        loaded = hssm.load_run(t.run_id)
+        assert loaded._tracking_network["hf_revision"] == "aaa"
+        assert loaded._tracking_missing_data_network["hf_revision"] == "ccc"
