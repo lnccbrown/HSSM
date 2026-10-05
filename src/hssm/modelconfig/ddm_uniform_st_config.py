@@ -8,7 +8,7 @@ def get_ddm_uniform_st_config() -> DefaultConfig:
     Trial non-decision time is ``Uniform(t - st, t + st)``, so ``st`` is the
     kernel half-width and the kernel SD is ``st / sqrt(3)``.
 
-    ``ddm_normal_st`` declares the same ``st`` bounds, but there ``st`` is the
+    ``ddm_normal_st`` also has an ``st`` parameter, but there ``st`` is the
     standard deviation of an unbounded ``Normal(t, st)`` kernel. The numbers
     match; the dispersions do not. ``st = 0.25`` is an SD of ``0.144`` here
     and of ``0.25`` there, and this kernel has a hard support edge at
@@ -49,7 +49,7 @@ def get_ddm_uniform_st_config() -> DefaultConfig:
                     "a": (0.3, 2.5),
                     "z": (0.3, 0.7),
                     "t": (0.25, 2.25),
-                    "st": (1e-3, 0.25),
+                    "st": (1e-3, 0.35),
                 },
                 "extra_fields": None,
             },
