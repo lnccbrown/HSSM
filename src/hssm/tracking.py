@@ -848,11 +848,16 @@ def load_run(run_id: str, tracking_uri: str | None = None) -> HSSM:
         try:
             model = HSSM(data, **spec)
         except Exception as exc:
-            # Runs logged before `spec_restorable` existed carry no verdict;
-            # a failed rebuild is the first sign their spec held text.
+            # Runs logged before `spec_restorable` existed carry no verdict, so
+            # the spec is only one possible cause; keep the real error in view.
             if "spec_restorable" in tags:
                 raise
-            raise not_restorable from exc
+            raise ValueError(
+                f"Run {run_id} could not be rebuilt: {exc}. It was logged before "
+                "HSSM recorded whether a spec is restorable, so its spec may hold "
+                "arguments recorded as text (e.g. bmb.Prior objects or custom "
+                "functions)."
+            ) from exc
         # Loaded into memory: the files go when the temporary directory does.
         if "traces.nc" in names:
             model.restore_traces(az.from_netcdf(fetch("traces.nc")).load())
