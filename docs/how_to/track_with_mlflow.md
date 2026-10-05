@@ -29,7 +29,11 @@ with hssm.track(
     model.sample(draws=1000, chains=4)
 ```
 
-Everything inside the block becomes one MLflow run. With nothing else configured, two things appear in your working directory: `mlflow.db` holds the record of each run, and `mlruns/` holds the files attached to it — the traces, the summary table, the model specification. Keep both; the database refers to the artifacts by path rather than storing them.
+Everything inside the block becomes one MLflow run. With nothing else configured, two things appear in your working directory:
+- `mlflow.db` holds the record of each run, and
+- `mlruns/` holds the files attached to it: the traces, the summary table, the model specification, and a copy of the data the model was fit to (`data.parquet`).
+
+The database refers to the artifacts by path rather than storing them.
 
 Browse them with:
 
