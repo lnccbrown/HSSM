@@ -357,18 +357,19 @@ def test_doubly_infinite_bounds_leave_finite_default_untouched():
     assert _clamp_default_initval_to_bounds(0.0, "v", (-np.inf, np.inf)) == 0.0
 
 
-def test_clamp_warns_naming_the_parameter_and_replacement(caplog):
+def test_clamp_logs_the_parameter_and_replacement_at_info(caplog):
     """Moving a default is announced, so a surprising start is traceable."""
-    caplog.set_level(logging.WARNING, logger="hssm")
+    caplog.set_level(logging.INFO, logger="hssm")
 
     _clamp_default_initval_to_bounds(0.025, "t", (0.25, 2.25))
 
     assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.INFO
     message = caplog.records[0].getMessage()
-    assert "Default initial value 0.025 for t" in message
-    assert "outside the declared bounds (0.25, 2.25)" in message
-    assert "using 0.35 instead" in message
-    assert "Pass an explicit initval to override." in message
+    assert "HSSM's default initial value 0.025 for t" in message
+    assert "outside this model's bounds (0.25, 2.25)" in message
+    assert "starting at 0.35" in message
+    assert "Pass initvals=... to sample() to choose another." in message
 
 
 @pytest.mark.parametrize(

@@ -66,7 +66,7 @@ def _clamp_default_initval_to_bounds(
         The default initial value, on the natural scale of the parameter.
     name
         The parameter name as it appears in the model's initial point. Used only
-        in the warning emitted when the value is moved.
+        in the message logged when the value is moved.
     bounds
         The parameter's ``(lower, upper)`` bounds, or ``None`` if the parameter
         declares none.
@@ -97,9 +97,9 @@ def _clamp_default_initval_to_bounds(
         finite_endpoints = [abs(b) for b in (lower, upper) if np.isfinite(b)]
         margin = 0.05 * max(finite_endpoints + [1.0])
     clamped = float(np.clip(value, lower + margin, upper - margin))
-    _logger.warning(
-        "Default initial value %s for %s lies outside the declared bounds "
-        "(%s, %s); using %s instead. Pass an explicit initval to override.",
+    _logger.info(
+        "HSSM's default initial value %s for %s is outside this model's bounds "
+        "(%s, %s); starting at %s. Pass initvals=... to sample() to choose another.",
         value,
         name,
         lower,
