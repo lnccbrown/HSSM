@@ -3,6 +3,7 @@
 import contextlib
 import json
 import math
+import shutil
 import threading
 
 import pandas as pd
@@ -454,13 +455,18 @@ class TestTrackedVI:
         r_hat is excluded deliberately: VI produces a single draw set, so the
         statistic is NaN and would be noise in the UI rather than information.
         """
-        run, _ = fitted_vi
+        run, model = fitted_vi
         p, m = run.data.params, run.data.metrics
         assert p["method"] == "advi"
         assert p["niter"] == "100" and p["draws"] == "10"
         assert p["model"] == "ddm"  # the model block still runs
         assert m["vi_seconds"] > 0
-        assert "elbo_final" in m and "elbo_min" in m
+        # PyMC's `hist` is the loss it minimises, the negative ELBO: the run
+        # reports the ELBO itself, and its best value is the highest one.
+        loss = model.vi_approx.hist
+        assert m["elbo_final"] == pytest.approx(-float(loss[-1]))
+        assert m["elbo_max"] == pytest.approx(-float(min(loss)))
+        assert "elbo_min" not in m
         # VI yields a single draw set: r_hat is NaN and must not be logged.
         assert "r_hat_max" not in m
         assert all(math.isfinite(v) for v in m.values())
@@ -695,3 +701,141 @@ class TestDataArtifact:
         run = mlflow.tracking.MlflowClient().get_run(run_id)
         assert [d.dataset.name for d in run.inputs.dataset_inputs] == ["ddm"]
         assert "data.parquet" in _artifacts(run_id)
+
+
+class TestReviewFixes:
+    """Behaviour pinned down in review of the tracking PR."""
+
+    # -- networks: each role keeps its own record ----------------------------
+
+    def test_network_roles_are_recorded_apart(self):
+        """A missing-data network must not overwrite the likelihood's record."""
+        tracking.record_network("ddm.onnx", "/tmp/snapshots/aaa/ddm.onnx")
+        with tracking.network_role("missing_data"):
+            tracking.record_network("ddm_cpn.onnx", "/tmp/snapshots/ccc/ddm_cpn.onnx")
+        assert tracking.recorded_networks() == {
+            "likelihood": {"network_file": "ddm.onnx", "hf_revision": "aaa"},
+            "missing_data": {"network_file": "ddm_cpn.onnx", "hf_revision": "ccc"},
+        }
+        assert tracking.last_network() == {
+            "network_file": "ddm.onnx",
+            "hf_revision": "aaa",
+        }
+
+    def test_missing_data_model_logs_both_networks(
+        self, data_ddm, fixture_path, monkeypatch, tmp_path
+    ):
+        """The likelihood network keeps its own params; the CPN gets its own."""
+        from hssm.distribution_utils.onnx_utils import model as onnx_model
+
+        revisions = {"ddm.onnx": "aaa", "ddm_cpn.onnx": "ccc"}
+
+        def fake_download(repo_id, filename, **kwargs):
+            local = tmp_path / "snapshots" / revisions[filename] / filename
+            local.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(fixture_path / filename, local)
+            return str(local)
+
+        monkeypatch.setattr(onnx_model, "hf_hub_download", fake_download)
+        data = data_ddm.copy()
+        data.loc[:9, "rt"] = -999.0
+        model = hssm.HSSM(
+            data, model="ddm", loglik_kind="approx_differentiable", missing_data=True
+        )
+        with hssm.track(lineage_id="lin") as t:
+            t.log_model(model)
+        p = _run(t.run_id).data.params
+        assert p["network_file"] == "ddm.onnx" and p["hf_revision"] == "aaa"
+        assert p["missing_data_network_file"] == "ddm_cpn.onnx"
+        assert p["missing_data_hf_revision"] == "ccc"
+
+    def test_missing_data_network_params_are_reserved(self):
+        """HSSM logs them itself, so a caller may not."""
+        with pytest.raises(ValueError, match="missing_data_network_file"):
+            with hssm.track(params={"missing_data_network_file": "x"}):
+                pass
+
+    # -- save_model(save_traces_only=True) -----------------------------------
+
+    def test_traces_only_save_does_not_attach_an_older_pickle(self, data_ddm):
+        """A reused directory may hold a pickle this save did not write."""
+        model = hssm.HSSM(data_ddm, model="ddm")
+        model.sample(draws=5, chains=1, tune=5, progressbar=False)
+        model.save_model(model_name="m")  # untracked: leaves m/model.pkl
+        with hssm.track(log_artifacts="all", lineage_id="lin") as t:
+            model = hssm.HSSM(data_ddm, model="ddm")
+            model.sample(draws=5, chains=1, tune=5, progressbar=False)
+            model.save_model(model_name="m", save_traces_only=True)
+        names = {
+            a.path for a in mlflow.tracking.MlflowClient().list_artifacts(t.run_id)
+        }
+        assert "model.pkl" not in names
+
+    # -- data hash and categorical schema ------------------------------------
+
+    def test_category_order_changes_the_data_digest(self, data_ddm):
+        """Reordered levels change bambi's reference level, so the data differs."""
+        values = ["x", "y"] * (len(data_ddm) // 2)
+        a = data_ddm.assign(g=pd.Categorical(values, categories=["x", "y"]))
+        b = data_ddm.assign(g=pd.Categorical(values, categories=["y", "x"]))
+        assert tracking.data_sha256(a) != tracking.data_sha256(b)
+
+    def test_ordered_flag_changes_the_data_digest(self, data_ddm):
+        """An ordered factor is encoded differently from an unordered one."""
+        values = ["x", "y"] * (len(data_ddm) // 2)
+        a = data_ddm.assign(g=pd.Categorical(values, ordered=False))
+        b = data_ddm.assign(g=pd.Categorical(values, ordered=True))
+        assert tracking.data_sha256(a) != tracking.data_sha256(b)
+
+    # -- a second fit in one block -------------------------------------------
+
+    def test_second_fit_in_one_block_leaves_the_first_fit_s_record(self, data_ddm):
+        """Same settings would be accepted by MLflow; the second fit is skipped."""
+        with hssm.track(lineage_id="lin") as t:
+            model = hssm.HSSM(data_ddm, model="ddm")
+            model.sample(draws=5, chains=1, tune=5, progressbar=False, random_seed=1)
+            first = model.traces["posterior"].to_dataset().copy(deep=True)
+            model.sample(draws=5, chains=1, tune=5, progressbar=False, random_seed=2)
+        client = mlflow.tracking.MlflowClient()
+        assert len(client.get_metric_history(t.run_id, "sampling_seconds")) == 1
+        path = mlflow.artifacts.download_artifacts(
+            run_id=t.run_id, artifact_path="traces.nc"
+        )
+        import arviz as az
+
+        stored = az.from_netcdf(path)["posterior"].to_dataset()
+        assert stored.equals(first)
+
+    def test_vi_after_sample_in_one_block_is_skipped(self, data_ddm):
+        """A different kind of fit is a second fit too."""
+        with hssm.track(lineage_id="lin") as t:
+            model = hssm.HSSM(data_ddm, model="ddm")
+            model.sample(draws=5, chains=1, tune=5, progressbar=False)
+            model.vi(method="advi", niter=50, draws=5, progressbar=False)
+        run = _run(t.run_id)
+        assert "method" not in run.data.params
+        assert "vi_seconds" not in run.data.metrics
+
+    # -- closing the run -----------------------------------------------------
+
+    def test_run_is_closed_even_if_the_final_tag_write_fails(self, monkeypatch):
+        """A leftover active run would make the next block a nested run."""
+
+        def fail(*args, **kwargs):
+            raise RuntimeError("server unavailable")
+
+        monkeypatch.setattr(mlflow, "set_tag", fail)
+        with hssm.track() as t:
+            pass
+        assert mlflow.active_run() is None
+        assert _run(t.run_id).info.status == "FINISHED"
+
+    def test_model_less_run_records_where_its_lineage_came_from(self):
+        """`lineage_source` is part of the schema for every run."""
+        with hssm.track() as minted:
+            pass
+        with hssm.track(lineage_id="mine") as given:
+            pass
+        assert _run(minted.run_id).data.tags["lineage_source"] == "minted"
+        tags = _run(given.run_id).data.tags
+        assert tags["lineage_id"] == "mine" and tags["lineage_source"] == "user"
