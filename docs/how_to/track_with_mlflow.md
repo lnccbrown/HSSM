@@ -40,9 +40,8 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
 `dataset_name=` is optional but worth setting: it fills the run's **Datasets** panel with your data's column schema and row count, and lets the UI filter by dataset. Left out, that panel stays empty — a DataFrame carries no name of its own, and an invented one would look identical for every study. Either way the data is identified by the `data_sha256` tag.
 
 One block records one fit, and fitting more than once inside a single block is
-not supported. The second fit's settings collide with the first's — MLflow will
-not change a parameter it has already recorded — so the second fit's settings,
-metrics and artifacts are dropped and the run silently describes only the first.
+not supported: only the first fit is recorded, and a later one is skipped with
+a warning.
 This applies to a second model, to re-sampling the same model, and to `vi()`
 after `sample()`.
 
@@ -89,7 +88,7 @@ Keys HSSM records itself are refused rather than silently dropped — MLflow rej
 
 | Kind | Keys |
 | --- | --- |
-| Params | `model`, `loglik_kind`, `network_file`, `hf_revision`, `sampler`, `draws`, `tune`, `chains`, `target_accept`, `n_trials`, `n_subjects`, `spec_sha256`, `hssm_version`, `pymc_version`, `bambi_version` |
+| Params | `model`, `loglik_kind`, `network_file`, `hf_revision`, `missing_data_network_file`, `missing_data_hf_revision`, `sampler`, `draws`, `tune`, `chains`, `target_accept`, `n_trials`, `n_subjects`, `spec_sha256`, `hssm_version`, `pymc_version`, `bambi_version` |
 | Metrics | `sampling_seconds`, `divergences`, `r_hat_max`, `ess_bulk_min`, `ess_tail_min` |
 | Tags | `user`, `hostname`, `git_sha`, `data_sha256`, `schema_version`, `phase`, `lineage_id`, `lineage_source` |
 | Artifacts | `model_spec.json`, `summary.csv`, `traces.nc`; `model.pkl` with `log_artifacts="all"` |
@@ -102,7 +101,8 @@ large and already stored elsewhere.
 ## Variational inference
 
 `vi()` is tracked the same way, recording `method`, `niter`, `draws` and
-`backend`, the `vi_seconds` it took, the final and best ELBO, and the
+`backend`, the `vi_seconds` it took, the final and best ELBO (`elbo_final`,
+`elbo_max`), and the
 approximate posterior as `vi_traces.nc`:
 
 ```python
