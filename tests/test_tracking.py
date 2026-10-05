@@ -975,7 +975,9 @@ class TestRunRow:
         client = mlflow.tracking.MlflowClient()
         client.log_param(run_id, "model", "ddm")
         client.log_param(run_id, "n_trials", "42")
-        row = tracking._run_row(client.get_run(run_id), "study", restorable=True)
+        row = tracking._run_row(
+            client.get_run(run_id), experiment="study", restorable=True
+        )
         assert list(row) == LIST_RUNS_COLUMNS
         assert row["run_id"] == run_id and row["run_name"] == "r"
         assert row["experiment"] == "study"
@@ -989,9 +991,67 @@ class TestRunRow:
         """A block that fitted nothing has no model, data or trial count."""
         run_id = _empty_hssm_run()
         run = mlflow.tracking.MlflowClient().get_run(run_id)
-        row = tracking._run_row(run, "Default", restorable=False)
+        row = tracking._run_row(run, experiment="Default", restorable=False)
         assert row["model"] is None and row["loglik_kind"] is None
         assert row["dataset_name"] is None and row["n_trials"] is None
+
+
+class TestRunRowTemplate:
+    """`RUN_ROW_TEMPLATE`: one entry per column, read from the run or supplied."""
+
+    def test_columns_are_the_template_keys(self):
+        """The table's columns are defined once, by the template."""
+        assert list(tracking.LIST_RUNS_COLUMNS) == list(tracking.RUN_ROW_TEMPLATE)
+        assert list(tracking.LIST_RUNS_COLUMNS) == LIST_RUNS_COLUMNS
+
+    def test_only_experiment_and_restorable_are_supplied_by_the_caller(self):
+        """Every other column comes from the run itself."""
+        supplied = {c for c, get in tracking.RUN_ROW_TEMPLATE.items() if get is None}
+        assert supplied == {"experiment", "restorable"}
+
+    def test_missing_supplied_value_names_the_column(self):
+        """Forgetting a caller-supplied column fails loudly, not with a None."""
+        run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
+        with pytest.raises(KeyError, match="restorable"):
+            tracking._run_row(run, experiment="Default")
+
+
+class TestRunFieldReaders:
+    """The helpers that read one field off a run for its row."""
+
+    def test_start_time_is_a_utc_timestamp(self):
+        """MLflow stores epoch milliseconds; the table shows a real time."""
+        run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
+        start = tracking._start_time(run)
+        assert isinstance(start, pd.Timestamp)
+        assert str(start.tz) == "UTC"
+        assert start.value // 1_000_000 == run.info.start_time
+
+    def test_n_trials_is_a_number_when_recorded(self):
+        """Params come back as strings; the column holds an int."""
+        client = mlflow.tracking.MlflowClient()
+        run_id = _empty_hssm_run()
+        client.log_param(run_id, "n_trials", "42")
+        assert tracking._n_trials(client.get_run(run_id)) == 42
+
+    def test_n_trials_is_none_when_nothing_was_fitted(self):
+        """No model logged, no trial count."""
+        run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
+        assert tracking._n_trials(run) is None
+
+    def test_dataset_name_is_the_registered_name(self, data_ddm):
+        """The name passed to `track(dataset_name=...)`."""
+        with hssm.track(lineage_id="lin", dataset_name="ddm-sim") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        run = mlflow.tracking.MlflowClient().get_run(t.run_id)
+        assert tracking._dataset_name(run) == "ddm-sim"
+
+    def test_dataset_name_is_none_without_a_dataset(self):
+        """No `dataset_name=`, no dataset registered."""
+        run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
+        assert tracking._dataset_name(run) is None
 
 
 class TestIsRebuildable:
