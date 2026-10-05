@@ -101,6 +101,9 @@ RESERVED_PARAMS = frozenset(
 #: Artifacts :func:`load_run` rebuilds a model from; the traces are optional.
 REBUILD_ARTIFACTS = frozenset({"data.parquet", "model_spec.json"})
 
+#: Tag set to ``"true"`` once a run has stored :data:`REBUILD_ARTIFACTS`.
+REBUILD_TAG = "rebuild_artifacts"
+
 #: How many runs :func:`list_runs` asks the server for per request.
 RUNS_PAGE_SIZE = 1000
 
@@ -509,6 +512,12 @@ class Tracker:
             mlflow.log_dict(spec, "model_spec.json")
             if data is not None:
                 self._guard("log data", self._log_data, data)
+            if self._data_uri is not None:
+                # Both files `load_run` needs are stored. Saying so on the run
+                # lets `list_runs` tell without asking for each run's files.
+                self._guard(
+                    "tag rebuild artifacts", mlflow.set_tag, REBUILD_TAG, "true"
+                )
         if data is not None and self._dataset_name:
             self._guard("log dataset", self._log_dataset, data)
 
