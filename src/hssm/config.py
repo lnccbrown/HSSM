@@ -3,14 +3,16 @@
 # This is necessary to enable forward looking
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
+from numbers import Real
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args
 
 from bambi import Prior
 
-from ._types import LogLik, LoglikKind, SupportedModels
+from ._types import LogLik, LoglikKind, NDTEdgeShift, SupportedModels
 from .defaults import (
     default_model_config,
 )
@@ -94,6 +96,9 @@ class Config(BaseModelConfig):
     rv: RandomVariable | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
+    # Which parameter shifts the lower edge of the response-time support, and by
+    # how much (edge at t - scale * param). None keeps the edge at t.
+    ndt_edge_shift: NDTEdgeShift | None = None
 
     def __post_init__(self):
         """Validate that loglik_kind is provided."""
@@ -238,6 +243,8 @@ class Config(BaseModelConfig):
             and user_config.backend is not None
         ):
             self.backend = user_config.backend
+        if user_config.ndt_edge_shift is not None:
+            self.ndt_edge_shift = user_config.ndt_edge_shift
 
         self.default_priors |= user_config.default_priors
         self.bounds |= user_config.bounds
@@ -255,6 +262,30 @@ class Config(BaseModelConfig):
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
             raise ValueError("Please provide `backend` via `model_config`.")
+        if self.ndt_edge_shift is not None:
+            param = self.ndt_edge_shift["param"]
+            scale = self.ndt_edge_shift["scale"]
+            if "t" not in self.list_params:
+                raise ValueError(
+                    "`ndt_edge_shift` places the support edge relative to `t`, "
+                    "but `t` is not in `list_params`."
+                )
+            if param not in self.list_params:
+                raise ValueError(
+                    f"`ndt_edge_shift` names the parameter {param!r}, "
+                    "which is not in `list_params`."
+                )
+            # bool is a subclass of int, so it is excluded explicitly.
+            if (
+                isinstance(scale, bool)
+                or not isinstance(scale, Real)
+                or not math.isfinite(scale)
+                or scale < 0
+            ):
+                raise ValueError(
+                    "`ndt_edge_shift['scale']` must be a finite, non-negative "
+                    f"number, got {scale!r}."
+                )
 
     def get_defaults(
         self, param: str
@@ -331,6 +362,8 @@ class ModelConfig:
     backend: Literal["jax", "pytensor"] | None = None
     rv: RandomVariable | None = None
     extra_fields: list[str] | None = None
+    # Overrides the likelihood's own declaration when not None; see Config.
+    ndt_edge_shift: NDTEdgeShift | None = None
 
 
 def _normalize_model_config_with_choices(
