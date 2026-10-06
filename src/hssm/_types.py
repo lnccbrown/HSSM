@@ -1,7 +1,7 @@
 """Type definitions for the HSSM package."""
 
 from os import PathLike
-from typing import Any, Callable, Literal, Optional, TypedDict, Union
+from typing import Any, Callable, Literal, NotRequired, Optional, TypedDict, Union
 
 import bambi as bmb
 import numpy as np
@@ -37,6 +37,16 @@ SupportedModels = Literal[
 LoglikKind = Literal["analytical", "approx_differentiable", "blackbox"]
 
 
+class NDTEdgeShift(TypedDict):
+    """Declare which parameter shifts the lower edge of the response-time support.
+
+    The likelihood admits response times from ``t - scale * <param>`` upwards.
+    """
+
+    param: str
+    scale: float
+
+
 class LoglikConfig(TypedDict):
     """Type for the value of LoglikConfig."""
 
@@ -45,6 +55,7 @@ class LoglikConfig(TypedDict):
     default_priors: dict[str, ParamSpec]
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]
+    ndt_edge_shift: NotRequired[NDTEdgeShift]
 
 
 LoglikConfigs = dict[LoglikKind, LoglikConfig]
