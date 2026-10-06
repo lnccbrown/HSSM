@@ -567,6 +567,42 @@ class TestRLSSMConfigEdgeCases:
             learning_process={},
         )
 
+    def test_modelconfig_decision_process_brings_its_ndt_edge_shift(self):
+        """A ModelConfig decision process hands its declaration to the RLSSM config."""
+        decision_config = ModelConfig(
+            response=["rt", "response"],
+            list_params=["v", "a", "z", "t", "st"],
+            choices=[0, 1],
+            ndt_edge_shift={"param": "st", "scale": 1.0},
+        )
+        config = RLSSMConfig(
+            model_name="test_model",
+            list_params=["alpha", "t", "st"],
+            params_default=[0.0, 0.5, 0.1],
+            decision_process=decision_config,
+            response=["rt", "response"],
+            choices=[0, 1],
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+            learning_process={},
+        )
+        assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+        assert config.ndt_edge_shift is not decision_config.ndt_edge_shift
+        # An explicit declaration on the RLSSM config wins.
+        explicit = RLSSMConfig(
+            model_name="test_model",
+            list_params=["alpha", "t", "st"],
+            params_default=[0.0, 0.5, 0.1],
+            decision_process=decision_config,
+            response=["rt", "response"],
+            choices=[0, 1],
+            decision_process_loglik_kind="analytical",
+            learning_process_kind="blackbox",
+            learning_process={},
+            ndt_edge_shift={"param": "st", "scale": 2.0},
+        )
+        assert explicit.ndt_edge_shift == {"param": "st", "scale": 2.0}
+
 
 class TestRLSSMConfigDefaultWarnings:
     """Warnings are emitted when 'response' or 'choices' are missing from config_dict."""

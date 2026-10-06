@@ -10,17 +10,18 @@ from __future__ import annotations
 
 import importlib
 import logging
+from copy import deepcopy
 from dataclasses import MISSING, dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from .._types import LoglikKind, NDTEdgeShift, SupportedModels
-    from ..config import ModelConfig
 
 from ..config import (
     DEFAULT_SSM_CHOICES,
     DEFAULT_SSM_OBSERVED_DATA,
     BaseModelConfig,
+    ModelConfig,
     _validate_ndt_edge_shift,
 )
 from ..utils import annotate_function
@@ -122,6 +123,11 @@ class RLSSMConfig(BaseModelConfig):
                 "RLSSMConfig: loglik_kind not specified; "
                 "defaulting to 'approx_differentiable'."
             )
+        # A ModelConfig decision process brings its own declaration along.
+        if self.ndt_edge_shift is None and isinstance(
+            self.decision_process, ModelConfig
+        ):
+            self.ndt_edge_shift = deepcopy(self.decision_process.ndt_edge_shift)
 
     @classmethod
     def from_defaults(  # noqa: D102
