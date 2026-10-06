@@ -157,12 +157,14 @@ def hf_revision_from_path(local_path: str | os.PathLike) -> str | None:
 
     ``hf_hub_download`` returns ``.../snapshots/<commit sha>/<file>``, with
     the file's folders in the repository below the sha; reading the sha off
-    the path costs no network round-trip.
+    the path costs no network round-trip. The search runs from the outermost
+    folder inward, so a repository folder that is itself named ``snapshots``
+    is not mistaken for the cache's.
     """
     return next(
         (
             folder.name
-            for folder in Path(local_path).parents
+            for folder in reversed(Path(local_path).parents)
             if folder.parent.name == "snapshots"
         ),
         None,
