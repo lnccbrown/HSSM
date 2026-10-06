@@ -249,6 +249,11 @@ class RLSSMConfig(BaseModelConfig):
         ssm_logp_func = registry._build_ssm_logp_func(
             ssm_base_logp_func, computed_functions
         )
+        # The spec lookup is lazy (no ONNX load); it carries the backbone's
+        # support-edge declaration, which the learning kernel knows nothing of.
+        decision_process_spec = registry._get_decision_process_spec(
+            assembled.decision_process
+        )
 
         config = cls.from_rlssm_dict(
             {
@@ -260,6 +265,7 @@ class RLSSMConfig(BaseModelConfig):
                 "decision_process": assembled.decision_process,
                 "learning_process": computed_functions,
                 "ssm_logp_func": ssm_logp_func,
+                "ndt_edge_shift": decision_process_spec.get("ndt_edge_shift"),
                 "response": list(assembled.response),
                 "choices": tuple(assembled.choices),
                 # ssms exposes task/design columns (feedback, condition, block,
