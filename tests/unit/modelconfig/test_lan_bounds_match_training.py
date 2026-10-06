@@ -83,9 +83,11 @@ def _support_edge_mismatches():
     Only `approx_differentiable` likelihoods are compared: the network was
     trained on the simulator's output, so HSSM's declaration must equal ssms'
     for the same model (absent on both sides means the support starts at t).
-    Blackbox and analytical likelihoods keep their own convention — hddm_wfpt
-    reads st as the full width, so full_ddm declares scale 0.5 where ssms says
-    1.0 — and are deliberately left out.
+    The simulator is `rv` when the config declares one (hssm.py resolves it
+    the same way), else the model name. Blackbox and analytical likelihoods
+    keep their own convention — hddm_wfpt reads st as the full width, so
+    full_ddm declares scale 0.5 where ssms says 1.0 — and are deliberately
+    left out.
     """
     found = []
     for name in get_args(SupportedModels):
@@ -94,10 +96,13 @@ def _support_edge_mismatches():
         except Exception:
             continue
         lik = (cfg.get("likelihoods") or {}).get("approx_differentiable")
-        if not lik or name not in ssms.config.model_config:
+        if not lik:
+            continue
+        sim = lik.get("rv") if isinstance(lik.get("rv"), str) else name
+        if sim not in ssms.config.model_config:
             continue
         declared = _normalised_edge(lik.get("ndt_edge_shift"))
-        trained = _normalised_edge(ssms.config.model_config[name].get("ndt_edge_shift"))
+        trained = _normalised_edge(ssms.config.model_config[sim].get("ndt_edge_shift"))
         if declared != trained:
             found.append((name, declared, trained))
     return sorted(found, key=lambda row: row[0])
@@ -142,6 +147,28 @@ def test_support_edge_guard_sees_drift_on_either_side(monkeypatch):
     with monkeypatch.context() as m:
         m.setattr(sys.modules[__name__], "get_default_model_config", with_edge)
         assert ("angle", shift, None) in _support_edge_mismatches()
+
+
+def test_support_edge_guard_resolves_the_simulator_via_rv(monkeypatch):
+    # A LAN that aliases its simulator (`"rv": "ddm_st"`, as ddm_uniform_st
+    # does) was trained on *that* simulator's output, so the guard must compare
+    # against the alias target's declaration, not the model name's.
+    shift = {"param": "st", "scale": 1.0}
+
+    patched = ssms.config.model_config["ddm_st"]
+    patched["ndt_edge_shift"] = shift
+    real = get_default_model_config
+
+    def with_rv(name):
+        cfg = real(name)
+        if name == "angle":
+            cfg["likelihoods"]["approx_differentiable"]["rv"] = "ddm_st"
+        return cfg
+
+    with monkeypatch.context() as m:
+        m.setitem(ssms.config.model_config, "ddm_st", patched)
+        m.setattr(sys.modules[__name__], "get_default_model_config", with_rv)
+        assert ("angle", None, shift) in _support_edge_mismatches()
 
 
 def test_ddm_sdv_sv_covers_the_full_trained_range():
