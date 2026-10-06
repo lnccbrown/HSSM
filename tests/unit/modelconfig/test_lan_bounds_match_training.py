@@ -148,6 +148,21 @@ def test_support_edge_guard_sees_drift_on_either_side(monkeypatch):
         m.setattr(sys.modules[__name__], "get_default_model_config", with_edge)
         assert ("angle", shift, None) in _support_edge_mismatches()
 
+    # A declaration on both sides that differs only in scale must also be
+    # reported — that is the full_ddm 0.5-vs-1.0 case, not a missing key.
+    half = {"param": "st", "scale": 0.5}
+
+    def with_half(name):
+        cfg = real(name)
+        if name == "angle":
+            cfg["likelihoods"]["approx_differentiable"]["ndt_edge_shift"] = half
+        return cfg
+
+    with monkeypatch.context() as m:
+        m.setitem(ssms.config.model_config, "angle", patched)
+        m.setattr(sys.modules[__name__], "get_default_model_config", with_half)
+        assert ("angle", half, shift) in _support_edge_mismatches()
+
 
 def test_support_edge_guard_resolves_the_simulator_via_rv(monkeypatch):
     # A LAN that aliases its simulator (`"rv": "ddm_st"`, as ddm_uniform_st
