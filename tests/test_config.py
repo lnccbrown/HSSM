@@ -128,6 +128,8 @@ def test_update_config_ndt_edge_shift_precedence():
         (["v", "a", "z", "t", "st"], {"param": "st", "scale": True}, "scale"),
         (["v", "a", "z", "t", "st"], {"param": "st", "scale": "1.0"}, "scale"),
         (["v", "a", "z", "t", "st"], {"param": "st", "scale": None}, "scale"),
+        (["v", "a", "z", "t", "st"], {"param": "st"}, "keys 'param' and 'scale'"),
+        (["v", "a", "z", "t", "st"], {"scale": 1.0}, "keys 'param' and 'scale'"),
     ],
     ids=[
         "param_not_in_list_params",
@@ -138,6 +140,8 @@ def test_update_config_ndt_edge_shift_precedence():
         "bool",
         "string",
         "none",
+        "missing_scale",
+        "missing_param",
     ],
 )
 def test_validate_rejects_bad_ndt_edge_shift(list_params, ndt_edge_shift, match):

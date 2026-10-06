@@ -263,6 +263,13 @@ class Config(BaseModelConfig):
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
             raise ValueError("Please provide `backend` via `model_config`.")
         if self.ndt_edge_shift is not None:
+            if not isinstance(self.ndt_edge_shift, dict) or set(
+                self.ndt_edge_shift
+            ) != {"param", "scale"}:
+                raise ValueError(
+                    "`ndt_edge_shift` must be a dict with the keys 'param' and "
+                    f"'scale', got {self.ndt_edge_shift!r}."
+                )
             param = self.ndt_edge_shift["param"]
             scale = self.ndt_edge_shift["scale"]
             if "t" not in self.list_params:
