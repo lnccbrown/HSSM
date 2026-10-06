@@ -36,7 +36,11 @@ def register_model(
     description : str
         Description of the model
     likelihoods : LoglikConfigs
-        Dictionary of likelihood configurations
+        Dictionary of likelihood configurations. A likelihood whose support
+        starts below the non-decision time ``t`` declares the parameter that
+        shifts the edge, and by how much, under the optional ``ndt_edge_shift``
+        key: ``{"param": "st", "scale": 0.5}`` floors the log-likelihood for
+        response times at or below ``t - 0.5 * st`` instead of ``t``.
 
     Returns
     -------

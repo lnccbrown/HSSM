@@ -105,6 +105,10 @@ class HSSM(HSSMBase):
         - `"default_priors"`: A `dict` indicating the default priors for each parameter.
         - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
             of LAN, these bounds are training boundaries.
+        - `"ndt_edge_shift"`: Optional. A `dict` with keys `"param"` and `"scale"`
+            declaring that the likelihood's support starts at `t - scale * param`
+            rather than at `t`, so that only response times at or below that edge
+            are floored. Overrides the declaration bundled with the likelihood.
         - `"rv"`: Optional. Can be a `RandomVariable` class containing the user's own
             `rng_fn` function for sampling from the distribution that the user is
             supplying. If not supplied, HSSM will automatically generate a
