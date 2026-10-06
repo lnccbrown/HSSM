@@ -751,10 +751,10 @@ def test_full_ddm_keeps_likelihood_for_rt_below_t():
 
     hddm_wfpt reads st as the full width, so it assigns real density to response
     times in (t - st / 2, t]. A guard that floors every rt <= t replaces that
-    density with LOGP_LB; the t - st edge must leave it untouched. The response
-    times run from below t - st to above t, so they cover the band the guard
-    floors, the band hddm_wfpt itself scores as zero density, and the band it
-    does not.
+    density with LOGP_LB; the t - st / 2 edge that full_ddm's config declares
+    must leave it untouched. The response times run from below t - st to above
+    t, so they cover the band the guard floors, the band hddm_wfpt itself scores
+    as zero density, and the band it does not.
     """
     # v, a, z, t, sz, sv, st. Cast once so that both sides see the same values
     # whichever floatX is in effect.
