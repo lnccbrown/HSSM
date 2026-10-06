@@ -38,6 +38,16 @@ SupportedModels = Literal[
 LoglikKind = Literal["analytical", "approx_differentiable", "blackbox"]
 
 
+class NDTEdgeShift(TypedDict):
+    """Declare which parameter shifts the lower edge of the response-time support.
+
+    The likelihood admits response times from ``t - scale * <param>`` upwards.
+    """
+
+    param: str
+    scale: float
+
+
 class LoglikConfig(TypedDict):
     """Type for the value of LoglikConfig."""
 
@@ -46,6 +56,7 @@ class LoglikConfig(TypedDict):
     default_priors: dict[str, ParamSpec]
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]
+    ndt_edge_shift: NotRequired[NDTEdgeShift]
     # Optional. The name of the `ssm_simulators` simulator to use for
     # posterior/prior predictive sampling, for models whose HSSM name differs
     # from their upstream simulator name. Defaults to the HSSM model name.

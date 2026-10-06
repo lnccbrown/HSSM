@@ -63,7 +63,8 @@ dev = [
     "onnxruntime>=1.27.0",
     "ruff>=0.16.1",
     "pytest>=9.1.1",
-    "pyrefly>=1.2.0",
+    # <1.3 until #1334: pyrefly 1.3.0 reports 5 new errors under preset = "legacy"
+    "pyrefly>=1.2.0,<1.3",
 ]
 
 notebook = [
