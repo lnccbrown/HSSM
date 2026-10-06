@@ -14,10 +14,15 @@ from dataclasses import MISSING, dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from .._types import LoglikKind, SupportedModels
+    from .._types import LoglikKind, NDTEdgeShift, SupportedModels
     from ..config import ModelConfig
 
-from ..config import DEFAULT_SSM_CHOICES, DEFAULT_SSM_OBSERVED_DATA, BaseModelConfig
+from ..config import (
+    DEFAULT_SSM_CHOICES,
+    DEFAULT_SSM_OBSERVED_DATA,
+    BaseModelConfig,
+    _validate_ndt_edge_shift,
+)
 from ..utils import annotate_function
 
 _logger = logging.getLogger("hssm")
@@ -39,6 +44,12 @@ class RLSSMConfig(BaseModelConfig):
     - ``decision_process_loglik_kind`` / ``learning_process_kind``: string
       tags that record which kind of likelihood and which kind of learning rule
       are used (e.g. ``"approx_differentiable"`` / ``"blackbox"``).
+    - ``ndt_edge_shift``: the decision process's declaration of which
+      parameter shifts the lower edge of the response-time support and by
+      how much (``{"param": "st", "scale": 0.5}`` floors the log-likelihood
+      at ``t - 0.5 * st`` instead of ``t``). It travels with the decision
+      process (see ``register_ssm``) and has the same meaning as
+      ``Config.ndt_edge_shift``; ``None`` keeps the edge at ``t``.
 
     ssm_logp_func:
         A JAX function decorated with ``@annotate_function``.  It must carry:
@@ -93,6 +104,8 @@ class RLSSMConfig(BaseModelConfig):
     decision_process: str | "ModelConfig" = field(kw_only=True)
     learning_process: dict[str, Any] = field(kw_only=True)
     ssm_logp_func: Any = field(default=None, kw_only=True)
+    # Declared by the decision process; same meaning as Config.ndt_edge_shift.
+    ndt_edge_shift: NDTEdgeShift | None = field(default=None, kw_only=True)
 
     # Private metadata attached by from_ssms_model(); not constructor arguments.
     _ssms_model_config: Any = field(default=None, init=False, repr=False)
@@ -152,6 +165,7 @@ class RLSSMConfig(BaseModelConfig):
             bounds=config_dict.get("bounds", {}),
             decision_process_loglik_kind=config_dict["decision_process_loglik_kind"],
             learning_process_kind=config_dict["learning_process_kind"],
+            ndt_edge_shift=config_dict.get("ndt_edge_shift"),
         )
 
         def _get_or_warn(key: str, default: Any) -> None:
@@ -318,6 +332,10 @@ class RLSSMConfig(BaseModelConfig):
                     "Every parameter in `list_params` must have a corresponding "
                     "entry in `bounds`."
                 )
+
+        # list_params holds the sampled parameters only, so a declaration that
+        # names a parameter the learning process computes is rejected here too.
+        _validate_ndt_edge_shift(self.ndt_edge_shift, self.list_params)
 
     def get_defaults(  # noqa: D102
         self, param: str
