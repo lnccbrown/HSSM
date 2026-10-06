@@ -241,7 +241,9 @@ and rebuild runs that others logged to a shared store, pass it to `list_runs`
 and `load_run`:
 
 ```python
-shared = "sqlite:////oscar/data/<lab>/mlflow/mlflow.db"  # four slashes: an absolute path
+shared = (
+    "sqlite:////oscar/data/<lab>/mlflow/mlflow.db"  # four slashes: an absolute path
+)
 
 hssm.list_runs(tracking_uri=shared)
 model = hssm.load_run("<run_id>", tracking_uri=shared)
