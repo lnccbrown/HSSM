@@ -856,6 +856,19 @@ class TestPreviouslyMissedFindings:
         nested = tmp_path / "snapshots" / "abc123" / "sub" / "net.onnx"
         assert tracking.hf_revision_from_path(nested) == "abc123"
 
+    def test_revision_is_the_cache_commit_not_a_repository_folder(self, tmp_path):
+        """A repository folder named `snapshots` must not pass for the cache's."""
+        nested = (
+            tmp_path
+            / "models--franklab--HSSM"
+            / "snapshots"
+            / "abc123"
+            / "snapshots"
+            / "v1"
+            / "net.onnx"
+        )
+        assert tracking.hf_revision_from_path(nested) == "abc123"
+
     def test_no_revision_outside_the_cache_layout(self, tmp_path):
         """A path with no `snapshots/<sha>/` above it has nothing to report."""
         assert tracking.hf_revision_from_path(tmp_path / "sub" / "net.onnx") is None
