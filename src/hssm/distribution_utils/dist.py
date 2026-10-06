@@ -755,6 +755,7 @@ def make_distribution_for_supported_model(
         bounds=config.bounds,
         lapse=lapse,
         is_choice_only=is_choice_only,
+        ndt_edge_shift=config.ndt_edge_shift,
     )
 
 

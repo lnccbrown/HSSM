@@ -453,6 +453,8 @@ class HSSM(HSSMBase):
         _list_params = self.model_config.list_params
         assert _list_params is not None, "list_params should be set"  # for type checker
         rv_name = getattr(self.model_config, "rv", None) or self.model_config.model_name
+        # HSSM.__init__ always builds a Config, which is where ndt_edge_shift lives.
+        ndt_edge_shift = typing_cast("Config", self.model_config).ndt_edge_shift
 
         return make_distribution(
             rv=rv_name,
@@ -472,4 +474,5 @@ class HSSM(HSSMBase):
             params_is_trialwise=params_is_trialwise_base,
             # TODO: add to HSSMBase
             is_choice_only=self.is_choice_only,
+            ndt_edge_shift=ndt_edge_shift,
         )
