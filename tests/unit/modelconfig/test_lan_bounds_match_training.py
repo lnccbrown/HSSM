@@ -6,9 +6,17 @@ finite, plausible, wrong density, which the sampler will happily explore. So a
 bound wider than the training box is a correctness bug, and one narrower than
 it silently withholds range the network was validated on.
 
-The source of truth is ssms' `param_bounds` for the same model. The same goes
-for the RT support edge (`ndt_edge_shift`): the network learnt it from the
-simulator's output, so the two declarations must be equal.
+The source of truth is ssms' `param_bounds` for the same model.
+
+The RT support edge (`ndt_edge_shift`) is held to the same source for a
+different reason. The network does not learn the edge: its labels are a KDE
+fitted in log-RT space to simulated RTs, which smooths across the edge and is
+floored only at rt <= 0, so below the simulator's edge the network returns
+small, finite, meaningless values and above it an approximation of real
+density. HSSM's floor is the correction that restores the model's zero density
+below the edge, so it has to sit exactly where the simulator's support starts:
+higher, and it clips density the network fitted; lower, and the KDE's leakage
+stays in the likelihood for the sampler to exploit.
 """
 
 import sys
@@ -80,9 +88,11 @@ def _normalised_edge(declaration):
 def _support_edge_mismatches():
     """LAN models whose `ndt_edge_shift` differs from ssms', as (name, hssm, ssms).
 
-    Only `approx_differentiable` likelihoods are compared: the network was
-    trained on the simulator's output, so HSSM's declaration must equal ssms'
-    for the same model (absent on both sides means the support starts at t).
+    Only `approx_differentiable` likelihoods are compared: the floor marks
+    where the network's output stops approximating the model's density, and
+    that is the simulator's support edge (see the module docstring), so HSSM's
+    declaration must equal ssms' for the same model (absent on both sides
+    means the support starts at t).
     The simulator is `rv` when the config declares one (hssm.py resolves it
     the same way), else the model name. Blackbox and analytical likelihoods
     keep their own convention — hddm_wfpt reads st as the full width, so
@@ -109,7 +119,7 @@ def _support_edge_mismatches():
 
 
 def test_declared_support_edge_matches_the_simulator():
-    """A LAN likelihood's support edge is the simulator's, not a convention.
+    """A LAN likelihood's floor sits at the simulator's support edge.
 
     Blackbox and analytical likelihoods own their own edge and are not checked
     here; see `_support_edge_mismatches`.
