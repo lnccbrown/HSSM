@@ -52,6 +52,10 @@ def get_ddm_uniform_st_config() -> DefaultConfig:
                     "st": (1e-3, 0.35),
                 },
                 "extra_fields": None,
+                # ssms draws the non-decision time as t + U(-st, st): st is the
+                # half-width, so the support starts at t - st. (hddm_wfpt's full_ddm
+                # reads st as the full width and declares 0.5.)
+                "ndt_edge_shift": {"param": "st", "scale": 1.0},
             },
         },
     }

@@ -1,8 +1,12 @@
 import numpy as np
+import pytensor.tensor as pt
 import pytest
 from ssms.config import model_config as ssms_model_config
 
 import hssm
+from hssm.config import Config
+from hssm.distribution_utils import dist as dist_module
+from hssm.distribution_utils.dist import LOGP_LB, make_distribution_for_supported_model
 from hssm.likelihoods.analytical import lba4_bounds, logp_lba4
 from hssm.modelconfig import get_default_model_config
 from hssm.modelconfig._softmax_inv_temperature_config import (
@@ -297,3 +301,44 @@ def test_get_ddm_uniform_st_config():
     # ``Unknown model 'ddm_uniform_st'``.
     assert lk_approx_differentiable["rv"] == "ddm_st"
     assert lk_approx_differentiable["rv"] in ssms_model_config
+
+
+def test_ddm_uniform_st_declares_support_edge_at_t_minus_st():
+    """The registry entry places the support edge at t - st, and Config carries it.
+
+    ssms draws the non-decision time as ``t + U(-st, st)``, so the fastest
+    admissible response time is ``t - st``. Without the declaration the guard
+    floors ``(t - st, t]``, the band this kernel puts real density on (#1292).
+    """
+    likelihood = get_default_model_config("ddm_uniform_st")["likelihoods"][
+        "approx_differentiable"
+    ]
+    assert likelihood["ndt_edge_shift"] == {"param": "st", "scale": 1.0}
+
+    config = Config.from_defaults("ddm_uniform_st", "approx_differentiable")
+    assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+
+
+def test_ddm_uniform_st_logp_floors_at_t_minus_st(monkeypatch):
+    """The declaration reaches the compiled logp: the floor sits at t - st, not t.
+
+    The ONNX loader is swapped for a flat stand-in that scores every response
+    0.0, so the support guard's floor is the only thing that can change a value.
+    """
+
+    def flat_likelihood(**kwargs):
+        return lambda data, *params: pt.zeros(data.shape[0])
+
+    monkeypatch.setattr(dist_module, "make_likelihood_callable", flat_likelihood)
+    Dist = make_distribution_for_supported_model(
+        "ddm_uniform_st", loglik_kind="approx_differentiable"
+    )
+
+    # t = 0.5 and st = 0.1 put the edge at 0.4: the first two response times sit
+    # on or below it, the last two above it. 0.45 is still below t, so a floor
+    # left at t would wrongly bite there.
+    rt = np.array([0.35, 0.40, 0.45, 0.6])
+    data = np.column_stack([rt, np.ones_like(rt)])
+    # v, a, z, t, st
+    result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.1).eval())
+    np.testing.assert_array_equal(result, [LOGP_LB, LOGP_LB, 0.0, 0.0])
