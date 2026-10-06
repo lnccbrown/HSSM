@@ -364,6 +364,8 @@ class _RLSSM(HSSMBase):
             extra_fields=extra_fields_data,
             params_is_trialwise=params_is_trialwise,
             is_choice_only=self.model_config.is_choice_only,
+            # __init__ takes an RLSSMConfig, which is where ndt_edge_shift lives.
+            ndt_edge_shift=cast("RLSSMConfig", self.model_config).ndt_edge_shift,
         )
 
 
