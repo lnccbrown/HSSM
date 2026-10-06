@@ -224,15 +224,19 @@ def test_make_distribution():
     )
 
 
-@pytest.mark.slow
-def test_make_distribution_applies_st_support_guard():
-    """make_distribution forwards st so rts at or below t - st receive LOGP_LB."""
+def test_make_distribution_floors_at_t_without_declaration():
+    """A parameter named st does not move the edge unless a config declares it.
+
+    Pins that the guard infers nothing from parameter names: with no
+    ``ndt_edge_shift`` the floor sits at t, exactly as for a model without st.
+    """
 
     def fake_logp_function(data, v, a, z, t, st):
         """Make up a fake log likelihood function for this test only."""
         return np.ones(data.shape[0])
 
-    data = np.array([[0.2, 1.0], [0.3, 1.0], [0.31, 1.0], [0.4, 1.0]])
+    rt = np.array([0.2, 0.3, 0.31, 0.4, 0.5, 0.6])
+    data = np.column_stack([rt, np.ones(rt.size)])
 
     Dist = make_distribution(
         rv="fake",
@@ -242,7 +246,7 @@ def test_make_distribution_applies_st_support_guard():
 
     result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.2).eval())
 
-    np.testing.assert_array_equal(result, [LOGP_LB, LOGP_LB, 1.0, 1.0])
+    np.testing.assert_array_equal(result, [LOGP_LB] * 5 + [1.0])
 
 
 @pytest.mark.slow
@@ -330,31 +334,26 @@ def test_extra_fields(data_ddm):
     )
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    ("list_params", "dist_params", "expected_edge"),
-    [
-        (["v", "a", "z", "t"], [0.5, 0.5, 0.5, 0.5], 0.5),
-        (["v", "a", "z", "t", "st"], [0.5, 0.5, 0.5, 0.5, 0.2], 0.3),
-        (["v", "a", "z", "t", "sz", "sv"], [0.5, 0.5, 0.5, 0.5, 0.1, 0.3], 0.5),
-    ],
-    ids=["fixed_t", "st_moves_the_edge", "sz_sv_leave_the_edge"],
-)
-def test_ensure_positive_ndt(list_params, dist_params, expected_edge):
-    """Response times below the model's support edge receive the sentinel logp.
+@pytest.mark.parametrize("edge", [0.5, 0.3])
+@pytest.mark.parametrize("trialwise", [False, True], ids=["scalar", "trialwise"])
+def test_ensure_positive_ndt(edge, trialwise):
+    """Response times at or below the given edge receive the sentinel logp.
 
-    The edge is t, or t - st for a model carrying st; sz and sv leave it alone.
-    The response times straddle both candidate edges, so 0.31/0.4/0.49 cover the
-    [t - st, t] band that must survive untouched in the st case. The last element
-    sits exactly on the edge, which pins the guard's inclusive comparison: an
-    exclusive one would leave it unfloored.
+    The guard takes the edge ready-made, so the only things to pin are the
+    inclusive comparison (one response time sits exactly on the edge), the
+    exemption for missing responses (-999.0 is below any edge but keeps its
+    logp), and that a trial-wise edge tensor is accepted.
     """
-    rt = np.array([0.1, 0.25, 0.29, 0.31, 0.4, 0.49, 0.51, 0.6, 1.0, expected_edge])
+    rt = np.array([0.1, 0.25, 0.29, 0.31, 0.4, 0.49, 0.51, 0.6, 1.0, -999.0, edge])
     data = np.column_stack([rt, np.ones(rt.size)])
     logp = np.arange(1.0, rt.size + 1.0)
 
-    after = ensure_positive_ndt(data, logp, list_params, dist_params).eval()
-    mask = rt - expected_edge <= 1e-15
+    lower_edge = pt.as_tensor_variable(
+        pm.pytensorf.floatX(np.full(rt.size, edge) if trialwise else edge)
+    )
+
+    after = ensure_positive_ndt(data, logp, lower_edge).eval()
+    mask = (rt - edge <= 1e-15) & (rt != -999.0)
 
     assert np.all(after[mask] == LOGP_LB)
     assert np.all(after[~mask] == logp[~mask])

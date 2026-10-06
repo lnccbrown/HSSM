@@ -23,7 +23,7 @@ from ssms.hssm_support import (
 )
 from ssms.hssm_support import rng_fn as ssms_rng_fn
 
-from .._types import LogLikeFunc, LoglikKind, SupportedModels
+from .._types import LogLikeFunc, LoglikKind, NDTEdgeShift, SupportedModels
 from .blackbox import make_blackbox_op
 from .jax import make_jax_logp_funcs_from_callable, make_jax_logp_ops
 from .onnx import (
@@ -90,28 +90,9 @@ def apply_param_bounds_to_loglik(
 def ensure_positive_ndt(
     data: Any,
     logp: Any,
-    list_params: list[str],
-    dist_params: Sequence[Any],
+    lower_edge: Any,
 ) -> pt.TensorVariable:
-    """Ensure that response times fall inside the model's support.
-
-    Replaces the log probability with a lower bound for response times below the
-    fastest response time the model admits.
-
-    With a fixed non-decision time that edge is ``t``. A model that also carries
-    ``st`` gets the edge shifted to ``t - st``. That shift is correct under the
-    half-width convention of ``ssms``/``cssm``, which every LAN ``*_st`` model
-    follows: trial non-decision time is ``Uniform(t - st, t + st)``, so the band
-    ``[t - st, t]`` carries real density and flooring it would discard
-    likelihood the model genuinely assigns.
-
-    ``full_ddm`` is the one bundled model on the other convention and still needs
-    no separate factor. Its only likelihood is the blackbox wrapper around
-    ``hddm_wfpt``, which reads ``st`` as the full width and puts its own edge at
-    ``t - st / 2``. The ``t - st`` shift is therefore wider than that likelihood's
-    support, but changes nothing: ``hddm_wfpt`` returns zero density across
-    ``[t - st, t - st / 2)``, which the wrapper maps to the same lower bound
-    applied here.
+    """Floor the log-likelihood of response times outside the model's support.
 
     Parameters
     ----------
@@ -119,41 +100,69 @@ def ensure_positive_ndt(
         A two-column numpy array with response time and response.
     logp
         The log-likelihoods.
-    list_params
-        A list of parameters that the log-likelihood accepts. The order of the
-        parameters in the list will determine the order in which the parameters
-        are passed to the log-likelihood function.
-    dist_params
-        A list of parameters used in the likelihood computation. The parameters
-        can be both scalars and arrays.
+    lower_edge
+        The fastest response time the model admits, as a scalar or a trial-wise
+        tensor. See :func:`_ndt_lower_edge` for how it is resolved.
 
     Returns
     -------
-    tensor
-        The log-likelihood of the model.
+    pt.TensorVariable
+        The log-likelihoods, with LOGP_LB substituted for responses at or below
+        the support edge; missing responses (-999.0) are left alone.
     """
     rt = data[:, 0]
-
-    if "t" not in list_params:
-        return logp
-
-    min_rt = dist_params[list_params.index("t")]
-
-    # Only st moves this edge. sz (starting point) and sv (drift) are variability
-    # in parameters that leave the response-time support alone, so they are
-    # deliberately not consulted.
-    if "st" in list_params:
-        min_rt = min_rt - dist_params[list_params.index("st")]
 
     # Skip the check for missing data (encoded as -999.0)
     missing_mask = pt.eq(rt, -999.0)
 
     return pt.where(
         # consistent with the epsilon in the analytical likelihood
-        pt.bitwise_and(rt - min_rt <= 1e-15, pt.bitwise_not(missing_mask)),
+        pt.bitwise_and(rt - lower_edge <= 1e-15, pt.bitwise_not(missing_mask)),
         LOGP_LB,
         logp,
     )
+
+
+def _ndt_lower_edge(
+    list_params: list[str],
+    dist_params: Sequence[Any],
+    ndt_edge_shift: NDTEdgeShift | None,
+) -> Any | None:
+    """Resolve the lower edge of the response-time support.
+
+    This is the one place that reads the ``"t"`` naming convention for the
+    non-decision time and a likelihood's ``ndt_edge_shift`` declaration; the
+    guard in :func:`ensure_positive_ndt` knows no parameter names.
+
+    Parameters
+    ----------
+    list_params
+        A list of parameters that the log-likelihood accepts, in the order of
+        ``dist_params``.
+    dist_params
+        The distribution parameters, scalars or trial-wise tensors.
+    ndt_edge_shift
+        The likelihood's declaration of which parameter shifts the edge and by
+        how much: the support starts at ``t - scale * <param>``. ``None`` keeps
+        the edge at ``t``.
+
+    Returns
+    -------
+    tensor or None
+        The lower edge, or ``None`` when ``t`` is not among the parameters, in
+        which case no floor applies.
+    """
+    if "t" not in list_params:
+        return None
+
+    t = dist_params[list_params.index("t")]
+
+    if ndt_edge_shift is None:
+        return t
+
+    shift_param = dist_params[list_params.index(ndt_edge_shift["param"])]
+
+    return t - pm.pytensorf.floatX(ndt_edge_shift["scale"]) * shift_param
 
 
 class _RandomVariable(Protocol):  # for mypy
@@ -466,6 +475,7 @@ def make_distribution(
     fixed_vector_params: dict[str, np.ndarray] | None = None,
     params_is_trialwise: list[bool] | None = None,
     is_choice_only: bool = False,
+    ndt_edge_shift: NDTEdgeShift | None = None,
 ) -> type[pm.Distribution]:
     """Make a `pymc.Distribution`.
 
@@ -512,6 +522,12 @@ def make_distribution(
         When ``None``, no graph-level broadcasting is applied.
     is_choice_only : optional
         Whether the model is a choice-only model.
+    ndt_edge_shift : optional
+        Declares which parameter shifts the lower edge of the response-time
+        support and by how much: the log-likelihood is floored at ``LOGP_LB``
+        for response times at or below ``t - scale * <param>``. ``None`` (the
+        default) keeps the edge at ``t``. Ignored when ``is_choice_only`` or
+        when ``"t"`` is not in ``list_params``.
 
     Returns
     -------
@@ -637,6 +653,14 @@ def make_distribution(
                     for i, p in enumerate(dist_params)
                 )
 
+            # The fastest response time the model admits; None when nothing is
+            # to be floored (choice-only models, or no non-decision time).
+            lower_edge = (
+                None
+                if is_choice_only
+                else _ndt_lower_edge(list_params, dist_params, ndt_edge_shift)
+            )
+
             # AF-TODO: Apply clipping here
             if p_outlier is not None:
                 if not callable(lapse_func):
@@ -649,8 +673,8 @@ def make_distribution(
 
                 # AF-TODO potentially apply clipping here
                 logp = loglik(data, *dist_params, *extra_fields)
-                if not is_choice_only:
-                    logp = ensure_positive_ndt(data, logp, list_params, dist_params)
+                if lower_edge is not None:
+                    logp = ensure_positive_ndt(data, logp, lower_edge)
                 logp = pt.log(
                     (1.0 - p_outlier) * pt.exp(logp)
                     + p_outlier * pt.exp(lapse_logp)
@@ -658,8 +682,8 @@ def make_distribution(
                 )
             else:
                 logp = loglik(data, *dist_params, *extra_fields)
-                if not is_choice_only:
-                    logp = ensure_positive_ndt(data, logp, list_params, dist_params)
+                if lower_edge is not None:
+                    logp = ensure_positive_ndt(data, logp, lower_edge)
 
             if bounds is not None:
                 logp = apply_param_bounds_to_loglik(
