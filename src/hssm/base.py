@@ -69,6 +69,7 @@ from .param.parameterization_check import (
     find_disconnected_free_rvs,
     raise_prior_compatibility_errors,
 )
+from .param.utils import _clamp_default_initval_to_bounds
 
 _logger = logging.getLogger("hssm")
 
@@ -206,6 +207,9 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         either `missing_data` or `deadline` is not `False`. Defaults to `None`.
     process_initvals : optional
         If `True`, the model will process the initial values. Defaults to `True`.
+        Processing also clamps a default initial value that falls outside its
+        parameter's declared `bounds` to a point just inside them; initial values
+        you supply yourself are used as given.
     initval_jitter : optional
         The jitter value for the initial values. Defaults to `0.01`.
     noncentered : optional
@@ -2063,10 +2067,16 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             # If the user actively supplies a link function, the user
             # should also have supplied an initial value insofar it matters.
 
-            if self.params[self._get_prefix(name_tmp)].is_regression:
-                param_link_setting = self.link_settings
-            else:
+            param = self.params[self._get_prefix(name_tmp)]
+            # A regression may override the model-wide link_settings with an
+            # identity link: its default is then natural-scale, where the
+            # declared bounds apply. Any other link keeps the model-wide
+            # setting.
+            link_name = getattr(param.link, "name", param.link)
+            if not param.is_regression or link_name == "identity":
                 param_link_setting = None
+            else:
+                param_link_setting = self.link_settings
             if name_tmp in initval_settings[param_link_setting].keys():
                 if self._check_if_initval_user_supplied(name_tmp):
                     _logger.info(
@@ -2076,11 +2086,18 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     )
                     continue
 
-                # Apply specific settings from initval_settings dictionary
+                # Apply specific settings from initval_settings dictionary,
+                # clamped into the parameter's declared bounds (natural-scale
+                # values only; under any other link the value is link-space,
+                # whichever table it came from, and any user-supplied value
+                # was already skipped above).
+                value = initval_settings[param_link_setting][name_tmp]
+                if not param.is_regression or link_name == "identity":
+                    value = _clamp_default_initval_to_bounds(
+                        value, name_tmp, param.bounds
+                    )
                 dtype = self._initvals[name_tmp].dtype
-                self._initvals[name_tmp] = np.array(
-                    initval_settings[param_link_setting][name_tmp]
-                ).astype(dtype)
+                self._initvals[name_tmp] = np.array(value).astype(dtype)
 
     def _get_prefix(self, name_str: str) -> str:
         """Resolve parameter prefix, handling underscore-containing RL param names.
