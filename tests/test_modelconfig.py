@@ -1,7 +1,11 @@
 import numpy as np
+import pytensor.tensor as pt
 import pytest
 
 import hssm
+from hssm.config import Config
+from hssm.distribution_utils import dist as dist_module
+from hssm.distribution_utils.dist import LOGP_LB, make_distribution_for_supported_model
 from hssm.likelihoods.analytical import lba4_bounds, logp_lba4
 from hssm.modelconfig import get_default_model_config
 from hssm.modelconfig._softmax_inv_temperature_config import (
@@ -288,3 +292,44 @@ def test_get_ddm_normal_st_config():
 
     assert lk["default_priors"] == {}
     assert lk["extra_fields"] is None
+
+
+def test_ddm_normal_st_declares_support_edge_at_t_minus_3st():
+    """The registry entry places the support edge at t - 3 * st, and Config carries it.
+
+    The ``Normal(t, st)`` kernel is unbounded, so the edge is a practical one about
+    three kernel SDs below ``t``. Without the declaration the guard floors
+    ``(t - 3 * st, t]``, where this kernel puts nearly half its mass (#1292).
+    """
+    likelihood = get_default_model_config("ddm_normal_st")["likelihoods"][
+        "approx_differentiable"
+    ]
+    assert likelihood["ndt_edge_shift"] == {"param": "st", "scale": 3.0}
+
+    config = Config.from_defaults("ddm_normal_st", "approx_differentiable")
+    assert config.ndt_edge_shift == {"param": "st", "scale": 3.0}
+
+
+def test_ddm_normal_st_logp_floors_at_t_minus_3st(monkeypatch):
+    """The declaration reaches the compiled logp: the floor sits at t - 3 * st, not t.
+
+    The ONNX loader is swapped for a flat stand-in that scores every response
+    0.0, so the support guard's floor is the only thing that can change a value.
+    """
+
+    def flat_likelihood(**kwargs):
+        return lambda data, *params: pt.zeros(data.shape[0])
+
+    monkeypatch.setattr(dist_module, "make_likelihood_callable", flat_likelihood)
+    Dist = make_distribution_for_supported_model(
+        "ddm_normal_st", loglik_kind="approx_differentiable"
+    )
+
+    # t = 0.5 and st = 0.125 put the edge at 0.125 (exact in binary): the first
+    # two response times sit on or below it, the last two above it. 0.35 is
+    # below t - st and 0.45 below t, so a floor left at either would bite there.
+    rt = np.array([0.10, 0.125, 0.35, 0.45])
+    data = np.column_stack([rt, np.ones_like(rt)])
+    # v, a, z, t, st
+    result = np.asarray(Dist.logp(data, 0.5, 0.5, 0.5, 0.5, 0.125).eval())
+    np.testing.assert_array_equal(result, [LOGP_LB, LOGP_LB, 0.0, 0.0])

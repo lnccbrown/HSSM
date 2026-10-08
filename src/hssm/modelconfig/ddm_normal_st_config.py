@@ -59,6 +59,11 @@ def get_ddm_normal_st_config() -> DefaultConfig:
                     "st": (1e-3, 0.25),
                 },
                 "extra_fields": None,
+                # The Normal(t, st) kernel has no hard edge, so this is a
+                # practical one: the support is taken to start at t - 3 * st,
+                # about three kernel SDs below t. (ssms declares no edge for
+                # ddm_normal_st.)
+                "ndt_edge_shift": {"param": "st", "scale": 3.0},
             },
         },
     }
