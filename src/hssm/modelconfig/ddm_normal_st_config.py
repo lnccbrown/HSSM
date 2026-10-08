@@ -6,13 +6,14 @@ def get_ddm_normal_st_config() -> DefaultConfig:
     Get the default configuration for the DDM with Normal ndt variability.
 
     Trial non-decision time is ``Normal(t, st)``, so ``st`` is the kernel SD
-    and the kernel support is unbounded.
+    and the kernel support is unbounded. HSSM floors the likelihood at the
+    practical edge ``t - 3 * st`` (``ndt_edge_shift``).
 
-    ``ddm_uniform_st`` declares the same ``st`` bounds, but there ``st`` is the
+    ``ddm_st`` also has an ``st`` parameter, but there ``st`` is the
     half-width of a ``Uniform(t - st, t + st)`` kernel whose SD is
     ``st / sqrt(3)``. The numbers match; the dispersions do not. ``st = 0.25``
-    is an SD of ``0.25`` here and of ``0.144`` there, and this kernel has no
-    support edge at all where that one stops at ``t - st``. Do not read a
+    is an SD of ``0.25`` here and of ``0.144`` there, and that kernel has a
+    hard support edge at ``t - st`` where this one has none. Do not read a
     shared ``st`` value as a shared amount of non-decision-time variability.
 
     The ``st`` lower bound of ``1e-3`` is the network's true training-box
@@ -25,6 +26,9 @@ def get_ddm_normal_st_config() -> DefaultConfig:
     inference - e.g. ``include=[{"name": "st", "bounds": (0.01, 0.25)}]`` -
     which restores recovery (measured at ``st = 0.05``: correlation with
     truth for ``v`` +0.24 -> +0.97, coverage 6/12 -> 11/12).
+
+    Note: this paragraph describes the ``ddm_normal_st.onnx`` network that
+    exists today. The network that ships is pending retraining.
 
     Returns
     -------
