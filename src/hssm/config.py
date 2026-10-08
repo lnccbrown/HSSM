@@ -151,7 +151,8 @@ class BaseModelConfig(ABC):
 class Config(BaseModelConfig):
     """Config class that stores the configurations for models."""
 
-    rv: RandomVariable | None = None
+    # A `str` here names an `ssm_simulators` simulator; see `make_distribution`.
+    rv: RandomVariable | str | None = None
     # Fields with dictionaries are automatically deepcopied
     default_priors: dict[str, ParamSpec] = field(default_factory=dict)
     # Which parameter shifts the lower edge of the response-time support, and by

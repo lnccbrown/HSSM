@@ -14,6 +14,7 @@ ParamSpec = Union[float, dict[str, Any], bmb.Prior, None]
 SupportedModels = Literal[
     "ddm",
     "ddm_sdv",
+    "ddm_st",
     "full_ddm",
     "angle",
     "angle_extended",
@@ -56,6 +57,10 @@ class LoglikConfig(TypedDict):
     bounds: dict[str, tuple[float, float]]
     extra_fields: Optional[list[str]]
     ndt_edge_shift: NotRequired[NDTEdgeShift]
+    # Optional. The name of the `ssm_simulators` simulator to use for
+    # posterior/prior predictive sampling, for models whose HSSM name differs
+    # from their upstream simulator name. Defaults to the HSSM model name.
+    rv: NotRequired[str]
 
 
 LoglikConfigs = dict[LoglikKind, LoglikConfig]
