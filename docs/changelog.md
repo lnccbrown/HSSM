@@ -1,6 +1,8 @@
 # Changelog
 
-### Unreleased
+### 0.5.1
+
+This version includes the following changes:
 
 1. **`full_ddm` no longer discards the response times between `t - st/2` and `t`** (#1292; fix by @EItanm1999). The blackbox likelihood behind `full_ddm` (`hddm_wfpt`) reads `st` as the full width of the non-decision-time distribution, so its support starts at `t - st/2`, yet on 0.5.0 and earlier the log-likelihood was floored for every response in `(t - st/2, t]`, biasing `t` downward (profile maximum 0.36 against a true 0.40 in a 2000-trial example). Refit any `full_ddm` model whose fastest response times fall within `st/2` below `t`.
 
@@ -9,6 +11,8 @@
 3. **RLSSM decision processes carry the same declaration** (#1358). `register_ssm(..., ndt_edge_shift=...)` stores it with the decision-process spec, `RLSSMConfig.ndt_edge_shift` picks it up from there (as well as from a `ModelConfig` decision process and from `ssm-simulators` presets), and `RLSSM` forwards it to the RL likelihood.
 
 4. **Default initial values that fall outside a parameter's bounds are clamped into them** (#1293; by @EItanm1999). A default start outside the declared `bounds` previously gave a `NaN` starting point (100% divergences under `numpyro`, "Bad initial energy" under PyMC) for bounded `Uniform` priors, bounded safe `Intercept` priors on identity-link regressions, and models whose `t` bounds start above 0.025; such defaults are now moved just inside the bounds, logged at `INFO` with a pointer to `sample(initvals=...)`. Initial values you supply yourself are used as given.
+
+5. **Documentation: how bounds act on an identity-link regression** (#1343; by @EItanm1999). The `link_settings` docstrings, `RegressionParam.validate` and the priors how-to now say that a bounded parameter used in a regression with the identity link does not have its bounds built into the parameterization: a draw that puts any observation's value outside them is penalised by the likelihood (`apply_param_bounds_to_loglik`) rather than mapped back inside, which is usually harmless when the parameter sits well inside its bounds, and that `"log_logit"` composes the regression on the link scale instead. The runtime warning proposed in that PR was not adopted.
 
 ### 0.5.0
 
