@@ -57,6 +57,29 @@ def annotated_ssm_base_logp() -> Any:
     return base_logp
 
 
+@pytest.fixture
+def annotated_ndt_ssm_base_logp() -> Any:
+    """Return an annotated SSM base logp with non-decision-time variability."""
+
+    @annotate_function(
+        inputs=["v", "a", "t", "st", "rt", "response"],
+        outputs=["logp"],
+    )
+    def base_logp(lan_matrix):
+        return lan_matrix[:, 1]
+
+    return base_logp
+
+
+# Bounds for every parameter of annotated_ndt_ssm_base_logp.
+NDT_BOUNDS_SSM = {
+    "v": (-3.0, 3.0),
+    "a": (0.3, 3.0),
+    "t": (0.0, 2.0),
+    "st": (0.0, 1.0),
+}
+
+
 class TestBuildSsmSpecFromModelconfig:
     """Tests for deriving SSM specs from HSSM modelconfig entries."""
 
@@ -116,6 +139,40 @@ class TestBuildSsmSpecFromModelconfig:
         assert callable(result)
         assert result.inputs == ["v", "a", "z", "t", "theta", "rt", "response"]
         assert result.outputs == ["logp"]
+
+    def test_spec_carries_backbone_ndt_edge_shift(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The backbone's declaration lands on the spec as its own copy."""
+        import hssm.modelconfig as mc_module
+
+        declaration = {"param": "st", "scale": 1.0}
+
+        def _fake_get(name):  # type: ignore[no-untyped-def]
+            return {
+                "list_params": ["v", "a", "z", "t", "st"],
+                "response": ["rt", "response"],
+                "likelihoods": {
+                    "approx_differentiable": {
+                        "loglik": "fake_st.onnx",
+                        "bounds": {},
+                        "backend": "jax",
+                        "ndt_edge_shift": declaration,
+                    },
+                },
+            }
+
+        monkeypatch.setattr(mc_module, "get_default_model_config", _fake_get)
+        spec = registry._build_ssm_spec_from_modelconfig("fake_st")
+
+        assert spec["ndt_edge_shift"] == {"param": "st", "scale": 1.0}
+        assert spec["ndt_edge_shift"] is not declaration
+
+    def test_spec_ndt_edge_shift_is_none_without_declaration(self) -> None:
+        """A backbone that declares nothing yields None, not a missing key."""
+        spec = registry._build_ssm_spec_from_modelconfig("angle")
+
+        assert spec["ndt_edge_shift"] is None
 
 
 class TestGetSsmLogp:
@@ -367,6 +424,64 @@ class TestRegisterSsm:
             )
 
         assert any("dup_ssm" in r.message for r in caplog.records)
+
+    def test_stores_ndt_edge_shift_copy(self, annotated_ndt_ssm_base_logp: Any) -> None:
+        """The declaration is stored as a copy; None when nothing is declared."""
+        declaration = {"param": "st", "scale": 1.0}
+        registry.register_ssm(
+            name="ndt_ssm",
+            ssm_base_logp_func=annotated_ndt_ssm_base_logp,
+            list_params_ssm=["v", "a", "t", "st"],
+            bounds_ssm=NDT_BOUNDS_SSM,
+            params_default_ssm=[0.0, 1.5, 0.3, 0.1],
+            ndt_edge_shift=declaration,  # type: ignore[arg-type]
+        )
+        declaration["scale"] = 3.0
+
+        assert registry._SSM_REGISTRY["ndt_ssm"]["ndt_edge_shift"] == {
+            "param": "st",
+            "scale": 1.0,
+        }
+
+        registry.register_ssm(
+            name="plain_ssm",
+            ssm_base_logp_func=annotated_ndt_ssm_base_logp,
+            list_params_ssm=["v", "a", "t", "st"],
+            bounds_ssm=NDT_BOUNDS_SSM,
+            params_default_ssm=[0.0, 1.5, 0.3, 0.1],
+        )
+
+        assert registry._SSM_REGISTRY["plain_ssm"]["ndt_edge_shift"] is None
+
+    @pytest.mark.parametrize(
+        ("list_params_ssm", "ndt_edge_shift", "match"),
+        [
+            (["v", "a", "t"], {"param": "st", "scale": 1.0}, "names the parameter"),
+            (["v", "a", "st"], {"param": "st", "scale": 1.0}, "`t` is not in"),
+            (["v", "a", "t", "st"], {"param": "st", "scale": -1.0}, "scale"),
+            (["v", "a", "t", "st"], {"param": "st"}, "keys 'param' and 'scale'"),
+        ],
+        ids=["param_not_in_list_params_ssm", "no_t", "negative_scale", "no_scale"],
+    )
+    def test_rejects_bad_ndt_edge_shift(
+        self,
+        annotated_ndt_ssm_base_logp: Any,
+        list_params_ssm: list[str],
+        ndt_edge_shift: dict[str, Any],
+        match: str,
+    ) -> None:
+        """The shared rules apply to the SSM's own parameters at registration."""
+        with pytest.raises(ValueError, match=match):
+            registry.register_ssm(
+                name="bad_ndt_ssm",
+                ssm_base_logp_func=annotated_ndt_ssm_base_logp,
+                list_params_ssm=list_params_ssm,
+                bounds_ssm=NDT_BOUNDS_SSM,
+                params_default_ssm=[0.0] * len(list_params_ssm),
+                ndt_edge_shift=ndt_edge_shift,  # type: ignore[arg-type]
+            )
+
+        assert "bad_ndt_ssm" not in registry._SSM_REGISTRY
 
 
 class TestRegisterRlssmModel:
@@ -650,6 +765,101 @@ class TestGetRlssmModelConfig:
 
         with pytest.raises(ValueError, match="no entry in bounds_ssm"):
             registry.get_rlssm_model_config("no_bounds_model")
+
+    def test_config_carries_decision_process_ndt_edge_shift(
+        self,
+        annotated_ndt_ssm_base_logp: Any,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """The declaration registered with the SSM lands on the RLSSMConfig."""
+        registry.register_ssm(
+            name="ndt_ssm",
+            ssm_base_logp_func=annotated_ndt_ssm_base_logp,
+            list_params_ssm=["v", "a", "t", "st"],
+            bounds_ssm=NDT_BOUNDS_SSM,
+            params_default_ssm=[0.0, 1.5, 0.3, 0.1],
+            ndt_edge_shift={"param": "st", "scale": 1.0},
+        )
+        registry.register_rlssm_model(
+            name="ndt_model",
+            decision_process="ndt_ssm",
+            learning_process=learning_process,
+            learning_process_params=["rl_alpha"],
+            learning_process_bounds={"rl_alpha": (0.0, 1.0)},
+            learning_process_params_default=[0.2],
+            extra_fields=["feedback"],
+        )
+
+        config = registry.get_rlssm_model_config("ndt_model")
+
+        assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
+        assert config.list_params == ["rl_alpha", "a", "t", "st"]
+        # The declaration names sampled parameters, so the config validates.
+        config.validate()
+
+    def test_tolerates_spec_without_ndt_edge_shift_key(
+        self,
+        annotated_ssm_base_logp: Any,
+        learning_process: dict[str, Any],
+    ) -> None:
+        """A spec written before the key existed composes with no declaration."""
+        registry._SSM_REGISTRY["legacy_ssm"] = {
+            "ssm_base_logp_func": annotated_ssm_base_logp,
+            "list_params_ssm": ["v", "a"],
+            "bounds_ssm": {"a": (0.3, 3.0)},
+            "params_default_ssm": [0.0, 1.5],
+            "response": ["rt", "response"],
+        }
+        registry.register_rlssm_model(
+            name="legacy_model",
+            decision_process="legacy_ssm",
+            learning_process=learning_process,
+            learning_process_params=["rl_alpha"],
+            learning_process_bounds={"rl_alpha": (0.0, 1.0)},
+            learning_process_params_default=[0.2],
+            extra_fields=["feedback"],
+        )
+
+        assert registry.get_rlssm_model_config("legacy_model").ndt_edge_shift is None
+
+    @pytest.mark.parametrize("computed_param", ["st", "t"])
+    def test_rejects_ndt_edge_shift_on_computed_param(
+        self,
+        annotated_ndt_ssm_base_logp: Any,
+        computed_param: str,
+    ) -> None:
+        """A declaration cannot lean on a parameter the learning process computes."""
+
+        @annotate_function(
+            inputs=["rl_alpha", "response", "feedback"],
+            outputs=[computed_param],
+        )
+        def compute_param(rl_alpha, response, feedback):
+            return rl_alpha
+
+        registry.register_ssm(
+            name="ndt_ssm",
+            ssm_base_logp_func=annotated_ndt_ssm_base_logp,
+            list_params_ssm=["v", "a", "t", "st"],
+            bounds_ssm=NDT_BOUNDS_SSM,
+            params_default_ssm=[0.0, 1.5, 0.3, 0.1],
+            ndt_edge_shift={"param": "st", "scale": 1.0},
+        )
+        registry.register_rlssm_model(
+            name="computed_ndt_model",
+            decision_process="ndt_ssm",
+            learning_process={computed_param: compute_param},
+            learning_process_params=["rl_alpha"],
+            learning_process_bounds={"rl_alpha": (0.0, 1.0)},
+            learning_process_params_default=[0.2],
+            extra_fields=["feedback"],
+        )
+
+        with pytest.raises(
+            ValueError,
+            match=rf"Decision process 'ndt_ssm'.*computes \['{computed_param}'\]",
+        ):
+            registry.get_rlssm_model_config("computed_ndt_model")
 
 
 class TestSsMsPresetDiscovery:

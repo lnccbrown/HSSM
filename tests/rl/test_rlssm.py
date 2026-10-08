@@ -22,6 +22,7 @@ import pytest
 
 import hssm
 from hssm.distribution_utils import make_distribution as real_make_distribution
+from hssm.distribution_utils.dist import LOGP_LB
 from hssm.rl import RLSSM, RLSSMConfig, register_rlssm_model, registry
 from hssm.rl.likelihoods.two_armed_bandit import compute_v_subject_wise
 from hssm.rl.rlssm import _RLSSM
@@ -44,6 +45,16 @@ def _dummy_ssm_logp(lan_matrix: jnp.ndarray) -> jnp.ndarray:
     """Return per-trial log-probabilities (column-sum); structural tests only."""
     # Return 1D (N,) — PyTensor declares the Op output as pt.vector(), so
     # gradients arrive as (N,). A (N,1) return causes a VJP shape mismatch.
+    return jnp.sum(lan_matrix, axis=1)
+
+
+@annotate_function(
+    inputs=["v", "a", "z", "t", "st", "rt", "response"],
+    outputs=["logp"],
+    computed={"v": _compute_v_annotated},
+)
+def _dummy_ndt_ssm_logp(lan_matrix: jnp.ndarray) -> jnp.ndarray:
+    """Like _dummy_ssm_logp, for a decision process with ndt variability (st)."""
     return jnp.sum(lan_matrix, axis=1)
 
 
@@ -101,6 +112,34 @@ def rlssm_config() -> RLSSMConfig:
         choices=[0, 1],
         extra_fields=["feedback"],
         ssm_logp_func=_dummy_ssm_logp,
+    )
+
+
+@pytest.fixture(scope="module")
+def rlssm_ndt_config() -> RLSSMConfig:
+    """RLSSMConfig whose decision process declares its support edge at t - st."""
+    return RLSSMConfig(
+        model_name="rldm_ndt_test",
+        loglik_kind="approx_differentiable",
+        decision_process="full_ddm",
+        decision_process_loglik_kind="approx_differentiable",
+        learning_process_kind="blackbox",
+        list_params=["rl_alpha", "scaler", "a", "z", "t", "st"],
+        params_default=[0.1, 1.0, 1.0, 0.5, 0.3, 0.1],
+        bounds={
+            "rl_alpha": (0.0, 1.0),
+            "scaler": (0.0, 10.0),
+            "a": (0.1, 3.0),
+            "z": (0.1, 0.9),
+            "t": (0.001, 1.0),
+            "st": (0.0, 1.0),
+        },
+        learning_process={"v": _compute_v_annotated},
+        response=["rt", "response"],
+        choices=[0, 1],
+        extra_fields=["feedback"],
+        ssm_logp_func=_dummy_ndt_ssm_logp,
+        ndt_edge_shift={"param": "st", "scale": 1.0},
     )
 
 
@@ -378,6 +417,59 @@ class TestRLSSMModelStructure:
             model._make_model_distribution()
 
         assert captured.get("extra_fields") is None
+
+    def test_rlssm_forwards_ndt_edge_shift_to_make_distribution(
+        self, rldm_data, rlssm_ndt_config
+    ) -> None:
+        """The config's declaration reaches make_distribution as ndt_edge_shift."""
+        model = RLSSM(data=rldm_data, model_config=rlssm_ndt_config)
+        captured: dict = {}
+
+        def capturing_make_distribution(*args, **kwargs):
+            captured["ndt_edge_shift"] = kwargs.get("ndt_edge_shift")
+            return real_make_distribution(*args, **kwargs)
+
+        with patch(
+            "hssm.rl.rlssm.make_distribution", side_effect=capturing_make_distribution
+        ):
+            model._make_model_distribution()
+
+        assert captured["ndt_edge_shift"] == {"param": "st", "scale": 1.0}
+
+    def test_rlssm_floors_logp_below_declared_edge(self, rlssm_ndt_config) -> None:
+        """The compiled logp is LOGP_LB at or below t - st and finite above.
+
+        A two-participant, five-trial panel puts the response times on a grid
+        that keeps 0.01 clear of the declared edge (t = 0.5, st = 0.1, so 0.4)
+        and of t itself, as the make_distribution tests do, so float32 rounding
+        cannot move a point across either; a floor left at t would catch 0.41
+        and 0.49.
+        """
+        rt = np.array([0.1, 0.19, 0.21, 0.3, 0.39, 0.41, 0.49, 0.51, 0.6, 1.0])
+        response = np.tile([0.0, 1.0], 5)
+        data = pd.DataFrame(
+            {
+                "participant_id": np.repeat([0, 1], 5),
+                "rt": rt,
+                "response": response,
+                "feedback": np.tile([1.0, 0.0], 5),
+            }
+        )
+        model = RLSSM(
+            data=data, model_config=rlssm_ndt_config, p_outlier=None, lapse=None
+        )
+
+        # rl_alpha, scaler, a, z, t, st; the Op broadcasts the scalars per trial.
+        logp = np.asarray(
+            model.model_distribution.logp(
+                np.column_stack([rt, response]), 0.2, 1.0, 1.0, 0.5, 0.5, 0.1
+            ).eval()
+        )
+
+        below = rt <= 0.4
+        np.testing.assert_array_equal(logp[below], LOGP_LB)
+        assert np.all(np.isfinite(logp[~below]))
+        assert np.all(logp[~below] != LOGP_LB)
 
     def test_choice_only_response_validation_exits_when_metadata_is_incomplete(
         self,
