@@ -1,7 +1,7 @@
 from .._types import DefaultConfig  # noqa: D100
 
 
-def get_ddm_uniform_st_config() -> DefaultConfig:
+def get_ddm_st_config() -> DefaultConfig:
     """
     Get the default configuration for the DDM with uniform ndt variability.
 
@@ -29,14 +29,8 @@ def get_ddm_uniform_st_config() -> DefaultConfig:
         "description": "The DDM with uniform variability in non-decision time",
         "likelihoods": {
             "approx_differentiable": {
-                "loglik": "ddm_uniform_st.onnx",
+                "loglik": "ddm_st.onnx",
                 "backend": "jax",
-                # ssm-simulators ships this simulator as ``ddm_st`` (same
-                # half-width ``st``); ``ddm_uniform_st`` becomes an alias for
-                # it upstream in a separate ssm-simulators PR. Without this,
-                # posterior/prior predictive sampling raises
-                # ``Unknown model 'ddm_uniform_st'``.
-                "rv": "ddm_st",
                 "default_priors": {},
                 # These are the LAN's training box, not modelling choices: the
                 # network is only defined on the region it was trained on, and

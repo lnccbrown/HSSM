@@ -271,15 +271,15 @@ def test_softmax_inv_temperature_3_choices():
     }
 
 
-def test_get_ddm_uniform_st_config():
-    ddm_st_model_config = get_default_model_config("ddm_uniform_st")
+def test_get_ddm_st_config():
+    ddm_st_model_config = get_default_model_config("ddm_st")
     assert ddm_st_model_config["response"] == ["rt", "response"]
     assert ddm_st_model_config["choices"] == [-1, 1]
     assert ddm_st_model_config["list_params"] == ["v", "a", "z", "t", "st"]
 
     likelihoods = ddm_st_model_config["likelihoods"]
     lk_approx_differentiable = likelihoods["approx_differentiable"]
-    assert lk_approx_differentiable["loglik"] == "ddm_uniform_st.onnx"
+    assert lk_approx_differentiable["loglik"] == "ddm_st.onnx"
     assert lk_approx_differentiable["backend"] == "jax"
 
     # the bounds are the LAN's training box, so they are pinned in full: a
@@ -295,31 +295,29 @@ def test_get_ddm_uniform_st_config():
     assert lk_approx_differentiable["default_priors"] == {}
     assert lk_approx_differentiable["extra_fields"] is None
 
-    # The simulator is named ``ddm_st`` upstream. HSSM falls back to the model
-    # name when ``rv`` is absent, so without this the resolver only warns at
-    # build time and every posterior/prior predictive call dies with
-    # ``Unknown model 'ddm_uniform_st'``.
-    assert lk_approx_differentiable["rv"] == "ddm_st"
-    assert lk_approx_differentiable["rv"] in ssms_model_config
+    # The model shares its name with the ssm-simulators simulator, so the
+    # simulator resolves from the model name and no ``rv`` override is needed.
+    assert "rv" not in lk_approx_differentiable
+    assert "ddm_st" in ssms_model_config
 
 
-def test_ddm_uniform_st_declares_support_edge_at_t_minus_st():
+def test_ddm_st_declares_support_edge_at_t_minus_st():
     """The registry entry places the support edge at t - st, and Config carries it.
 
     ssms draws the non-decision time as ``t + U(-st, st)``, so the fastest
     admissible response time is ``t - st``. Without the declaration the guard
     floors ``(t - st, t]``, the band this kernel puts real density on (#1292).
     """
-    likelihood = get_default_model_config("ddm_uniform_st")["likelihoods"][
+    likelihood = get_default_model_config("ddm_st")["likelihoods"][
         "approx_differentiable"
     ]
     assert likelihood["ndt_edge_shift"] == {"param": "st", "scale": 1.0}
 
-    config = Config.from_defaults("ddm_uniform_st", "approx_differentiable")
+    config = Config.from_defaults("ddm_st", "approx_differentiable")
     assert config.ndt_edge_shift == {"param": "st", "scale": 1.0}
 
 
-def test_ddm_uniform_st_logp_floors_at_t_minus_st(monkeypatch):
+def test_ddm_st_logp_floors_at_t_minus_st(monkeypatch):
     """The declaration reaches the compiled logp: the floor sits at t - st, not t.
 
     The ONNX loader is swapped for a flat stand-in that scores every response
@@ -331,7 +329,7 @@ def test_ddm_uniform_st_logp_floors_at_t_minus_st(monkeypatch):
 
     monkeypatch.setattr(dist_module, "make_likelihood_callable", flat_likelihood)
     Dist = make_distribution_for_supported_model(
-        "ddm_uniform_st", loglik_kind="approx_differentiable"
+        "ddm_st", loglik_kind="approx_differentiable"
     )
 
     # t = 0.5 and st = 0.1 put the edge at 0.4: the first two response times sit
