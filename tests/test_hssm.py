@@ -77,7 +77,10 @@ class _EqualitySpoof:
                     "formula": "invalid_formula",
                 }
             ],
-            IndexError,
+            # RHS-only shorthand is normalised to ``v ~ invalid_formula`` before
+            # the design matrices are built, so the unknown column surfaces as a
+            # pandas ``KeyError`` from formulae (pandas 2 and 3 alike).
+            KeyError,
         ),
     ],
 )

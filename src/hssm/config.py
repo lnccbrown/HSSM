@@ -36,6 +36,64 @@ DEFAULT_SSM_CHOICES = (0, 1)
 ParamSpec = Union[float, dict[str, Any], Prior, None]
 
 
+def _validate_ndt_edge_shift(
+    ndt_edge_shift: NDTEdgeShift | None, list_params: list[str]
+) -> None:
+    """Check an ``ndt_edge_shift`` declaration against a likelihood's parameters.
+
+    Shared by every config that carries the declaration (``Config`` and the RL
+    decision-process registry), so the rules and messages stay the same.
+
+    Parameters
+    ----------
+    ndt_edge_shift
+        The declaration to check. ``None`` means nothing is declared and is
+        accepted as is.
+    list_params
+        The parameters of the likelihood the declaration belongs to.
+
+    Raises
+    ------
+    ValueError
+        If the declaration is not a dict with exactly the keys ``param`` and
+        ``scale``, if ``t`` or the named parameter is not in ``list_params``,
+        or if ``scale`` is not a finite, non-negative number.
+    """
+    if ndt_edge_shift is None:
+        return
+    if not isinstance(ndt_edge_shift, dict) or set(ndt_edge_shift) != {
+        "param",
+        "scale",
+    }:
+        raise ValueError(
+            "`ndt_edge_shift` must be a dict with the keys 'param' and "
+            f"'scale', got {ndt_edge_shift!r}."
+        )
+    param = ndt_edge_shift["param"]
+    scale = ndt_edge_shift["scale"]
+    if "t" not in list_params:
+        raise ValueError(
+            "`ndt_edge_shift` places the support edge relative to `t`, "
+            "but `t` is not in `list_params`."
+        )
+    if param not in list_params:
+        raise ValueError(
+            f"`ndt_edge_shift` names the parameter {param!r}, "
+            "which is not in `list_params`."
+        )
+    # bool is a subclass of int, so it is excluded explicitly.
+    if (
+        isinstance(scale, bool)
+        or not isinstance(scale, Real)
+        or not math.isfinite(scale)
+        or scale < 0
+    ):
+        raise ValueError(
+            "`ndt_edge_shift['scale']` must be a finite, non-negative "
+            f"number, got {scale!r}."
+        )
+
+
 @dataclass
 class BaseModelConfig(ABC):
     """Base configuration class for all model types."""
@@ -263,37 +321,7 @@ class Config(BaseModelConfig):
             raise ValueError("Please provide a log-likelihood function via `loglik`.")
         if self.loglik_kind == "approx_differentiable" and self.backend is None:
             raise ValueError("Please provide `backend` via `model_config`.")
-        if self.ndt_edge_shift is not None:
-            if not isinstance(self.ndt_edge_shift, dict) or set(
-                self.ndt_edge_shift
-            ) != {"param", "scale"}:
-                raise ValueError(
-                    "`ndt_edge_shift` must be a dict with the keys 'param' and "
-                    f"'scale', got {self.ndt_edge_shift!r}."
-                )
-            param = self.ndt_edge_shift["param"]
-            scale = self.ndt_edge_shift["scale"]
-            if "t" not in self.list_params:
-                raise ValueError(
-                    "`ndt_edge_shift` places the support edge relative to `t`, "
-                    "but `t` is not in `list_params`."
-                )
-            if param not in self.list_params:
-                raise ValueError(
-                    f"`ndt_edge_shift` names the parameter {param!r}, "
-                    "which is not in `list_params`."
-                )
-            # bool is a subclass of int, so it is excluded explicitly.
-            if (
-                isinstance(scale, bool)
-                or not isinstance(scale, Real)
-                or not math.isfinite(scale)
-                or scale < 0
-            ):
-                raise ValueError(
-                    "`ndt_edge_shift['scale']` must be a finite, non-negative "
-                    f"number, got {scale!r}."
-                )
+        _validate_ndt_edge_shift(self.ndt_edge_shift, self.list_params)
 
     def get_defaults(
         self, param: str

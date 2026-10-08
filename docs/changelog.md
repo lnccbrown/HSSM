@@ -1,5 +1,15 @@
 # Changelog
 
+### Unreleased
+
+1. **`full_ddm` no longer discards the response times between `t - st/2` and `t`** (#1292; fix by @EItanm1999). The blackbox likelihood behind `full_ddm` (`hddm_wfpt`) reads `st` as the full width of the non-decision-time distribution, so its support starts at `t - st/2`, yet on 0.5.0 and earlier the log-likelihood was floored for every response in `(t - st/2, t]`, biasing `t` downward (profile maximum 0.36 against a true 0.40 in a 2000-trial example). Refit any `full_ddm` model whose fastest response times fall within `st/2` below `t`.
+
+2. **A likelihood can declare where its response-time support starts** (#1292; the configurable edge was proposed by @EItanm1999 in #1344, which this supersedes). The optional `"ndt_edge_shift": {"param": "<name>", "scale": s}` entry (the `hssm._types.NDTEdgeShift` `TypedDict`) places the floor at `t - s * param`; it is accepted in a `register_model` likelihood dict, as a `model_config` override on `HSSM(...)`, and as `make_distribution(ndt_edge_shift=...)`. `full_ddm` declares `{"param": "st", "scale": 0.5}`; a likelihood without the key keeps the floor at `t`, and a model without `t` has no floor.
+
+3. **RLSSM decision processes carry the same declaration** (#1358). `register_ssm(..., ndt_edge_shift=...)` stores it with the decision-process spec, `RLSSMConfig.ndt_edge_shift` picks it up from there (as well as from a `ModelConfig` decision process and from `ssm-simulators` presets), and `RLSSM` forwards it to the RL likelihood.
+
+4. **Default initial values that fall outside a parameter's bounds are clamped into them** (#1293; by @EItanm1999). A default start outside the declared `bounds` previously gave a `NaN` starting point (100% divergences under `numpyro`, "Bad initial energy" under PyMC) for bounded `Uniform` priors, bounded safe `Intercept` priors on identity-link regressions, and models whose `t` bounds start above 0.025; such defaults are now moved just inside the bounds, logged at `INFO` with a pointer to `sample(initvals=...)`. Initial values you supply yourself are used as given.
+
 ### 0.5.0
 
 This version includes the following changes:
