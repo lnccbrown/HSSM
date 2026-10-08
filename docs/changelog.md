@@ -14,6 +14,8 @@ This version includes the following changes:
 
 5. **Documentation: how bounds act on an identity-link regression** (#1343; by @EItanm1999). The `link_settings` docstrings, `RegressionParam.validate` and the priors how-to now say that a bounded parameter used in a regression with the identity link does not have its bounds built into the parameterization: a draw that puts any observation's value outside them is penalised by the likelihood (`apply_param_bounds_to_loglik`) rather than mapped back inside, which is usually harmless when the parameter sits well inside its bounds, and that `"log_logit"` composes the regression on the link scale instead. The runtime warning proposed in that PR was not adopted.
 
+6. **The `p_outlier` regression and random-slope tutorials execute again** (#1366, closes #1363). Both had failed at model construction since the 0.5.0 safe-prior guards. `tutorial_p_outlier_regression` now gives `v` the `gen_logit` link through `link_settings="log_logit"`, since the guard refuses an unbounded identity-scale default for a group-only intercept on a bounded parameter; `random_slope_safe_priors` now shows HSSM rejecting the legacy free-mean group priors under `noncentered=True` instead of building that graph, and keeps every other comparison.
+
 ### 0.5.0
 
 This version includes the following changes:
