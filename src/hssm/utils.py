@@ -178,7 +178,8 @@ def _compute_log_likelihood(
 
     required_kwargs = {
         "model": model,
-        "posterior": dt["posterior"],
+        # `.children[...]` is typed as DataTree; `dt[...]` is DataTree | DataArray
+        "posterior": dt.children["posterior"],
         "data": data,
         "compile_mode": compile_mode,
     }
@@ -206,7 +207,7 @@ def _compute_log_likelihood(
 def log_likelihood(
     family: bmb.Family,
     model: bmb.Model,
-    posterior: xr.DataArray,
+    posterior: xr.Dataset | xr.DataTree,
     data: pd.DataFrame | None = None,
     compile_mode: str | None = None,
     **kwargs,
@@ -221,9 +222,9 @@ def log_likelihood(
     ----------
     model : bambi.Model
         The model
-    posterior : xr.Dataset
-        The xarray dataset that contains the draws for
-        all the parameters in the posterior.
+    posterior : xr.Dataset | xr.DataTree
+        The xarray dataset (or the `posterior` group of a DataTree) that
+        contains the draws for all the parameters in the posterior.
         It must contain the parameters that are needed
         in the distribution of the response, or
         the parameters that allow to derive them.
