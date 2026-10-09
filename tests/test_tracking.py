@@ -1,6 +1,7 @@
 """Tests for opt-in MLflow tracking of inference runs (hssm.track)."""
 
 import contextlib
+import dataclasses
 import json
 import math
 import shutil
@@ -75,7 +76,9 @@ class TestNetworkProvenance:
         local.parent.mkdir(parents=True)
         local.write_bytes(b"")
         monkeypatch.setattr(
-            onnx_model, "hf_hub_download", lambda repo_id, filename: str(local)
+            onnx_model,
+            "hf_hub_download",
+            lambda repo_id, filename, revision=None: str(local),
         )
         assert onnx_model.download_hf("ddm.onnx") == str(local)
         assert tracking.last_network() == {
@@ -703,6 +706,465 @@ class TestDataArtifact:
         assert "data.parquet" in _artifacts(run_id)
 
 
+def _posterior(idata):
+    return idata["posterior"].to_dataset()
+
+
+class TestLoadRun:
+    """`hssm.load_run` rebuilds a fitted model from what its run recorded."""
+
+    @pytest.fixture
+    def fitted_reg(self, data_ddm_reg):
+        """A regression with a dict prior: everything the spec can store as is."""
+        with hssm.track(experiment="study", lineage_id="lin") as t:
+            model = hssm.HSSM(
+                data_ddm_reg,
+                model="ddm",
+                include=[
+                    {
+                        "name": "v",
+                        "formula": "v ~ 1 + x",
+                        "prior": {"x": {"name": "Normal", "mu": 0.0, "sigma": 0.5}},
+                    }
+                ],
+            )
+            model.sample(draws=5, chains=1, tune=5, progressbar=False)
+        return t.run_id, model
+
+    def test_rebuilt_model_has_the_same_specification(self, fitted_reg):
+        """Same modelling choices, same data: the spec hashes must agree."""
+        run_id, model = fitted_reg
+        loaded = hssm.load_run(run_id)
+        assert isinstance(loaded, hssm.HSSM)
+        assert tracking.spec_sha256(tracking.model_spec(loaded)) == (
+            tracking.spec_sha256(tracking.model_spec(model))
+        )
+        pd.testing.assert_frame_equal(loaded.data, model.data)
+
+    def test_rebuilt_model_carries_the_fitted_posterior(self, fitted_reg):
+        """The draws come back attached, not just the model that made them."""
+        run_id, model = fitted_reg
+        loaded = hssm.load_run(run_id)
+        assert _posterior(loaded.traces).equals(_posterior(model.traces))
+
+    def test_vi_run_restores_the_vi_posterior(self, data_ddm):
+        """A VI fit stores `vi_traces.nc`, which must land back on the model."""
+        with hssm.track(lineage_id="lin") as t:
+            model = hssm.HSSM(data_ddm, model="ddm")
+            model.vi(method="advi", niter=100, draws=10, progressbar=False)
+        loaded = hssm.load_run(t.run_id)
+        assert _posterior(loaded._inference_obj_vi).equals(
+            _posterior(model._inference_obj_vi)
+        )
+
+    def test_run_records_class_and_that_its_spec_is_restorable(self, fitted_reg):
+        """The tags `load_run` checks before trying to rebuild anything."""
+        run_id, _ = fitted_reg
+        tags = _run(run_id).data.tags
+        assert tags["model_class"] == "HSSM"
+        assert tags["spec_restorable"] == "true"
+
+    def test_object_prior_marks_the_spec_not_restorable(self, data_ddm):
+        """A `bmb.Prior` is stored as text, which no constructor accepts.
+
+        The JSON alone looks valid, so the run must say so at logging time.
+        """
+        import bambi as bmb
+
+        with hssm.track(lineage_id="lin") as t:
+            hssm.HSSM(
+                data_ddm,
+                model="ddm",
+                include=[{"name": "v", "prior": bmb.Prior("Normal", mu=0, sigma=1)}],
+            ).sample(draws=5, chains=1, tune=5, progressbar=False)
+        assert _run(t.run_id).data.tags["spec_restorable"] == "false"
+        with pytest.raises(ValueError, match="cannot be rebuilt from its spec"):
+            hssm.load_run(t.run_id)
+
+    def test_untagged_run_reports_why_its_rebuild_failed(self, data_ddm, monkeypatch):
+        """A run from before `spec_restorable` gets no verdict at logging time.
+
+        Its rebuild can fail for reasons unrelated to the spec (a missing
+        network, invalid data), so the error must carry the real cause rather
+        than blame text-recorded arguments outright.
+        """
+        with hssm.track(lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        mlflow.tracking.MlflowClient().delete_tag(t.run_id, "spec_restorable")
+
+        def fail(*args, **kwargs):
+            raise FileNotFoundError("network ddm.onnx not found")
+
+        monkeypatch.setattr(hssm, "HSSM", fail)
+        with pytest.raises(ValueError) as excinfo:
+            hssm.load_run(t.run_id)
+        message = str(excinfo.value)
+        assert "network ddm.onnx not found" in message
+        assert "may hold arguments recorded as text" in message
+
+    def test_run_without_artifacts_cannot_be_rebuilt(self, data_ddm):
+        """`log_artifacts=False` keeps no data or spec, so nothing to rebuild from."""
+        with hssm.track(log_artifacts=False, lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        with pytest.raises(ValueError, match="log_artifacts"):
+            hssm.load_run(t.run_id)
+
+    def test_other_model_classes_are_refused(self, fitted_reg):
+        """Subclasses record different constructor arguments than `HSSM`."""
+        run_id, _ = fitted_reg
+        mlflow.tracking.MlflowClient().set_tag(run_id, "model_class", "RLSSM")
+        with pytest.raises(NotImplementedError, match="RLSSM"):
+            hssm.load_run(run_id)
+
+    def test_explicit_tracking_uri_leaves_the_global_one_alone(
+        self, fitted_reg, _isolated_mlflow
+    ):
+        """Loading from a named server must not redirect later tracked runs."""
+        run_id, _ = fitted_reg
+        mlflow.set_tracking_uri("sqlite:///elsewhere.db")
+        loaded = hssm.load_run(run_id, tracking_uri=_isolated_mlflow)
+        assert isinstance(loaded, hssm.HSSM)
+        assert mlflow.get_tracking_uri() == "sqlite:///elsewhere.db"
+
+
+LIST_RUNS_COLUMNS = [
+    "run_id",
+    "run_name",
+    "experiment",
+    "start_time",
+    "status",
+    "user",
+    "model",
+    "loglik_kind",
+    "dataset_name",
+    "n_trials",
+    "restorable",
+]
+
+
+def _empty_hssm_run(**kwargs):
+    """A run recorded by hssm.track with nothing fitted inside it."""
+    with hssm.track(**kwargs) as t:
+        pass
+    return t.run_id
+
+
+def _hssm_run_started_at(start_time, run_name, experiment="Default"):
+    """An HSSM-tagged run with a fixed start time (ms), so ordering is exact."""
+    client = mlflow.tracking.MlflowClient()
+    found = client.get_experiment_by_name(experiment)
+    experiment_id = (
+        found.experiment_id if found else client.create_experiment(experiment)
+    )
+    run = client.create_run(
+        experiment_id,
+        start_time=start_time,
+        tags={"phase": "infer"},
+        run_name=run_name,
+    )
+    client.set_terminated(run.info.run_id)
+    return run.info.run_id
+
+
+def _other_tools_run():
+    """A plain MLflow run, as ssm-simulators or LANfactory would log it."""
+    with mlflow.start_run() as run:
+        pass
+    return run.info.run_id
+
+
+def _only_row(runs, run_id):
+    rows = runs[runs["run_id"] == run_id]
+    assert len(rows) == 1
+    return rows.iloc[0]
+
+
+class TestListRuns:
+    """`hssm.list_runs` shows the runs `hssm.track` recorded, one row each."""
+
+    def test_runs_listed_newest_first_with_their_experiment(self):
+        """The table a user reads a `run_id` off: curated columns, newest on top."""
+        _hssm_run_started_at(1_000, "first", experiment="study-a")
+        _hssm_run_started_at(2_000, "second", experiment="study-b")
+        runs = hssm.list_runs()
+        assert list(runs.columns) == LIST_RUNS_COLUMNS
+        assert list(runs["run_name"]) == ["second", "first"]
+        assert list(runs["experiment"]) == ["study-b", "study-a"]
+        assert (runs["status"] == "FINISHED").all()
+
+    def test_fitted_run_reports_model_data_and_that_it_can_be_rebuilt(self, data_ddm):
+        """A fit fills in the model columns, and `load_run` can rebuild it."""
+        with hssm.track(lineage_id="lin", dataset_name="ddm-sim") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        row = _only_row(hssm.list_runs(), t.run_id)
+        assert row["model"] == "ddm"
+        assert row["loglik_kind"] == "analytical"
+        assert row["dataset_name"] == "ddm-sim"
+        assert row["n_trials"] == 100
+        assert row["restorable"]
+
+    def test_runs_not_recorded_by_hssm_are_left_out(self):
+        """Other tools on a shared server log runs too; they are not HSSM fits."""
+        other = _other_tools_run()
+        hssm_run = _empty_hssm_run()
+        run_ids = set(hssm.list_runs()["run_id"])
+        assert hssm_run in run_ids
+        assert other not in run_ids
+
+    def test_object_prior_run_is_not_restorable(self, data_ddm):
+        """The column agrees with what `load_run` would refuse."""
+        import bambi as bmb
+
+        with hssm.track(lineage_id="lin") as t:
+            hssm.HSSM(
+                data_ddm,
+                model="ddm",
+                include=[{"name": "v", "prior": bmb.Prior("Normal", mu=0, sigma=1)}],
+            ).sample(draws=5, chains=1, tune=5, progressbar=False)
+        assert not _only_row(hssm.list_runs(), t.run_id)["restorable"]
+
+    def test_run_without_artifacts_is_not_restorable(self, data_ddm):
+        """No stored data or spec means nothing for `load_run` to rebuild from."""
+        with hssm.track(log_artifacts=False, lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        assert not _only_row(hssm.list_runs(), t.run_id)["restorable"]
+
+    def test_empty_store_gives_an_empty_table_with_the_columns(self):
+        """Code that reads the columns must not break before the first run."""
+        runs = hssm.list_runs()
+        assert runs.empty
+        assert list(runs.columns) == LIST_RUNS_COLUMNS
+
+    def test_explicit_tracking_uri_leaves_the_global_one_alone(self, _isolated_mlflow):
+        """Listing a named server must not redirect later tracked runs."""
+        hssm_run = _empty_hssm_run()
+        mlflow.set_tracking_uri("sqlite:///elsewhere.db")
+        runs = hssm.list_runs(tracking_uri=_isolated_mlflow)
+        assert list(runs["run_id"]) == [hssm_run]
+        assert mlflow.get_tracking_uri() == "sqlite:///elsewhere.db"
+
+
+class TestRestorableValues:
+    """`_is_restorable`: which constructor arguments survive the JSON spec."""
+
+    @pytest.mark.parametrize(
+        "value",
+        [None, True, 1, 1.5, "ddm", [1, "a"], (0.0, 1.0), {"v": {"prior": [1]}}],
+    )
+    def test_plain_values_are_kept_as_data(self, value):
+        """What `_jsonable` writes unchanged can be read back unchanged."""
+        assert tracking._is_restorable(value)
+
+    @pytest.mark.parametrize(
+        "value",
+        [object(), {1: "a"}, {"v": object()}, [object()], {1, 2}, print],
+    )
+    def test_anything_else_is_written_as_text(self, value):
+        """Objects, non-string keys, sets and functions become `repr` text."""
+        assert not tracking._is_restorable(value)
+
+    def test_model_with_dict_priors_is_restorable(self, data_ddm):
+        """The spec of a model built from plain values needs nothing else."""
+        model = hssm.HSSM(
+            data_ddm,
+            model="ddm",
+            include=[{"name": "v", "prior": {"name": "Normal", "mu": 0, "sigma": 1}}],
+        )
+        assert tracking.spec_is_restorable(model)
+
+    def test_model_with_an_object_prior_is_not_restorable(self, data_ddm):
+        """A `bmb.Prior` in the arguments is enough to lose the spec."""
+        import bambi as bmb
+
+        model = hssm.HSSM(
+            data_ddm,
+            model="ddm",
+            include=[{"name": "v", "prior": bmb.Prior("Normal", mu=0, sigma=1)}],
+        )
+        assert not tracking.spec_is_restorable(model)
+
+
+class TestTrackedRunsSearch:
+    """`_tracked_runs`: every HSSM run on the server, across result pages."""
+
+    def test_follows_every_page_newest_first(self):
+        """With one run per page, all runs still come back, in order."""
+        names = ["first", "second", "third"]
+        for start_time, name in enumerate(names, start=1):
+            _hssm_run_started_at(start_time * 1_000, name)
+        _other_tools_run()
+        client = mlflow.tracking.MlflowClient()
+        experiment_ids = [e.experiment_id for e in client.search_experiments()]
+        runs = tracking._tracked_runs(client, experiment_ids, page_size=1)
+        assert [r.info.run_name for r in runs] == names[::-1]
+
+    def test_no_experiments_means_no_runs(self):
+        """An empty list of experiments must not search everything instead."""
+        client = mlflow.tracking.MlflowClient()
+        assert list(tracking._tracked_runs(client, [])) == []
+
+
+class TestRunRow:
+    """`RunRow`: one run as a row of the `list_runs` table."""
+
+    def test_fields_are_the_table_columns_in_order(self):
+        """The dataclass is the table's template: its fields are the columns."""
+        assert [f.name for f in dataclasses.fields(tracking.RunRow)] == (
+            LIST_RUNS_COLUMNS
+        )
+
+    def test_from_run_reads_names_times_and_recorded_params(self):
+        """Names, times and recorded params end up in their fields."""
+        run_id = _empty_hssm_run(run_name="r")
+        client = mlflow.tracking.MlflowClient()
+        client.log_param(run_id, "model", "ddm")
+        client.log_param(run_id, "n_trials", "42")
+        row = tracking.RunRow.from_run(
+            client.get_run(run_id), experiment="study", restorable=True
+        )
+        assert row.run_id == run_id and row.run_name == "r"
+        assert row.experiment == "study"
+        assert row.status == "FINISHED"
+        assert row.model == "ddm"
+        assert row.n_trials == 42  # a number, not the param's string
+        assert row.start_time.tzinfo is not None
+        assert row.restorable is True
+
+    def test_unfitted_run_leaves_model_fields_empty(self):
+        """A block that fitted nothing has no model, data or trial count."""
+        run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
+        row = tracking.RunRow.from_run(run, experiment="Default", restorable=False)
+        assert row.model is None and row.loglik_kind is None
+        assert row.dataset_name is None and row.n_trials is None
+
+
+class TestRunFieldReaders:
+    """The helpers that read one field off a run for its row."""
+
+    def test_start_time_is_a_utc_timestamp(self):
+        """MLflow stores epoch milliseconds; the table shows a real time."""
+        run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
+        start = tracking._start_time(run)
+        assert isinstance(start, pd.Timestamp)
+        assert str(start.tz) == "UTC"
+        assert start.value // 1_000_000 == run.info.start_time
+
+    def test_n_trials_is_a_number_when_recorded(self):
+        """Params come back as strings; the column holds an int."""
+        client = mlflow.tracking.MlflowClient()
+        run_id = _empty_hssm_run()
+        client.log_param(run_id, "n_trials", "42")
+        assert tracking._n_trials(client.get_run(run_id)) == 42
+
+    def test_n_trials_is_none_when_nothing_was_fitted(self):
+        """No model logged, no trial count."""
+        run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
+        assert tracking._n_trials(run) is None
+
+    def test_dataset_name_is_the_registered_name(self, data_ddm):
+        """The name passed to `track(dataset_name=...)`."""
+        with hssm.track(lineage_id="lin", dataset_name="ddm-sim") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        run = mlflow.tracking.MlflowClient().get_run(t.run_id)
+        assert tracking._dataset_name(run) == "ddm-sim"
+
+    def test_dataset_name_is_none_without_a_dataset(self):
+        """No `dataset_name=`, no dataset registered."""
+        run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
+        assert tracking._dataset_name(run) is None
+
+
+class TestIsRebuildable:
+    """`_is_rebuildable`: what `load_run` needs, read off the run's tags alone."""
+
+    def _run(self, *, model_class="HSSM", spec_restorable="true", artifacts=True):
+        client = mlflow.tracking.MlflowClient()
+        run_id = _empty_hssm_run()
+        client.set_tag(run_id, "model_class", model_class)
+        client.set_tag(run_id, "spec_restorable", spec_restorable)
+        if artifacts:
+            client.set_tag(run_id, "rebuild_artifacts", "true")
+        return client.get_run(run_id)
+
+    def test_hssm_run_with_restorable_spec_and_artifacts(self):
+        """All three conditions met."""
+        assert tracking._is_rebuildable(self._run())
+
+    def test_other_model_class(self):
+        """`load_run` rebuilds `HSSM` only."""
+        assert not tracking._is_rebuildable(self._run(model_class="RLSSM"))
+
+    def test_spec_recorded_as_text(self):
+        """A spec holding `repr` text cannot be passed to a constructor."""
+        assert not tracking._is_rebuildable(self._run(spec_restorable="false"))
+
+    def test_missing_artifacts(self):
+        """No stored data or spec, nothing to rebuild from."""
+        assert not tracking._is_rebuildable(self._run(artifacts=False))
+
+    def test_run_from_before_the_tags(self):
+        """Without the tags there is no verdict, so it is not offered."""
+        run = mlflow.tracking.MlflowClient().get_run(_empty_hssm_run())
+        assert not tracking._is_rebuildable(run)
+
+
+class TestRebuildArtifactsTag:
+    """The `rebuild_artifacts` tag says the files `load_run` needs were written."""
+
+    def test_set_when_data_and_spec_are_stored(self, data_ddm):
+        """A fit with artifacts on stores both files and says so."""
+        with hssm.track(lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        assert _run(t.run_id).data.tags["rebuild_artifacts"] == "true"
+        assert {"data.parquet", "model_spec.json"} <= _artifacts(t.run_id)
+
+    def test_absent_when_artifacts_are_off(self, data_ddm):
+        """`log_artifacts=False` stores neither file."""
+        with hssm.track(log_artifacts=False, lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        assert "rebuild_artifacts" not in _run(t.run_id).data.tags
+
+    def test_absent_when_the_data_could_not_be_written(self, data_ddm, monkeypatch):
+        """The spec alone is not enough to rebuild a model."""
+
+        def fail(self, data):
+            raise OSError("no parquet engine")
+
+        monkeypatch.setattr(tracking.Tracker, "_log_data", fail)
+        with hssm.track(lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+        assert "rebuild_artifacts" not in _run(t.run_id).data.tags
+
+    def test_list_runs_makes_no_request_per_run(self, data_ddm, monkeypatch):
+        """Listing reads tags it already has instead of each run's artifacts."""
+        with hssm.track(lineage_id="lin") as t:
+            hssm.HSSM(data_ddm, model="ddm").sample(
+                draws=5, chains=1, tune=5, progressbar=False
+            )
+
+        def no_listing(*args, **kwargs):
+            raise AssertionError("list_runs listed a run's artifacts")
+
+        monkeypatch.setattr(mlflow.tracking.MlflowClient, "list_artifacts", no_listing)
+        assert _only_row(hssm.list_runs(), t.run_id)["restorable"]
+
+
 class TestReviewFixes:
     """Behaviour pinned down in review of the tracking PR."""
 
@@ -844,6 +1306,112 @@ class TestReviewFixes:
         assert _run(minted.run_id).data.tags["lineage_source"] == "minted"
         tags = _run(given.run_id).data.tags
         assert tags["lineage_id"] == "mine" and tags["lineage_source"] == "user"
+
+
+class _FakeHub:
+    """Stand-in for the Hugging Face hub: fixture networks at chosen revisions.
+
+    `latest` is what the default branch serves; `requests` records each
+    download as (filename, revision asked for).
+    """
+
+    def __init__(self, fixture_path, root, latest):
+        self.fixture_path, self.root, self.latest = fixture_path, root, latest
+        self.requests = []
+
+    def __call__(self, repo_id, filename, revision=None):
+        self.requests.append((filename, revision))
+        local = self.root / "snapshots" / (revision or self.latest[filename]) / filename
+        local.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(self.fixture_path / filename, local)
+        return str(local)
+
+
+class TestRevisionPinning:
+    """`load_run` fetches each network at the revision the run recorded."""
+
+    def test_recorded_revisions_are_read_off_the_run_params(self):
+        """Both roles' networks, keyed by filename; no revision, no pin."""
+        params = {
+            "network_file": "ddm.onnx",
+            "hf_revision": "aaa",
+            "missing_data_network_file": "ddm_cpn.onnx",
+            "missing_data_hf_revision": "ccc",
+        }
+        assert tracking._recorded_revisions(params) == {
+            "ddm.onnx": "aaa",
+            "ddm_cpn.onnx": "ccc",
+        }
+        assert tracking._recorded_revisions({"network_file": "local.onnx"}) == {}
+
+    def test_pins_apply_only_inside_the_block(self):
+        """Ordinary model building outside `load_run` keeps the default branch."""
+        assert tracking.pinned_revision("ddm.onnx") is None
+        with tracking.pinned_revisions({"ddm.onnx": "aaa"}):
+            assert tracking.pinned_revision("ddm.onnx") == "aaa"
+            assert tracking.pinned_revision("angle.onnx") is None
+        assert tracking.pinned_revision("ddm.onnx") is None
+
+    def test_loader_asks_the_hub_for_the_pinned_revision(
+        self, fixture_path, tmp_path, monkeypatch
+    ):
+        """Both download paths of the ONNX loader honour the pin."""
+        from hssm.distribution_utils.onnx_utils import model as onnx_model
+
+        hub = _FakeHub(fixture_path, tmp_path, {"ddm.onnx": "bbb"})
+        monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
+        with tracking.pinned_revisions({"ddm.onnx": "aaa"}):
+            onnx_model.download_hf("ddm.onnx")
+            onnx_model.load_onnx_model("ddm.onnx")
+        onnx_model.load_onnx_model("ddm.onnx")
+        assert hub.requests == [
+            ("ddm.onnx", "aaa"),
+            ("ddm.onnx", "aaa"),
+            ("ddm.onnx", None),
+        ]
+
+    def test_rebuild_uses_the_fitted_network_not_the_latest(
+        self, data_ddm, fixture_path, tmp_path, monkeypatch
+    ):
+        """The network was updated after the fit; the rebuild must not notice."""
+        from hssm.distribution_utils.onnx_utils import model as onnx_model
+
+        hub = _FakeHub(fixture_path, tmp_path, {"ddm.onnx": "aaa"})
+        monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
+        model = hssm.HSSM(data_ddm, model="ddm", loglik_kind="approx_differentiable")
+        with hssm.track(lineage_id="lin") as t:
+            t.log_model(model)
+
+        hub.latest["ddm.onnx"] = "bbb"
+        loaded = hssm.load_run(t.run_id)
+        assert hub.requests[-1] == ("ddm.onnx", "aaa")
+        assert loaded._tracking_network == {
+            "network_file": "ddm.onnx",
+            "hf_revision": "aaa",
+        }
+
+    def test_rebuild_pins_the_missing_data_network_too(
+        self, data_ddm, fixture_path, tmp_path, monkeypatch
+    ):
+        """A missing-data model loads two networks; both keep their revision."""
+        from hssm.distribution_utils.onnx_utils import model as onnx_model
+
+        hub = _FakeHub(
+            fixture_path, tmp_path, {"ddm.onnx": "aaa", "ddm_cpn.onnx": "ccc"}
+        )
+        monkeypatch.setattr(onnx_model, "hf_hub_download", hub)
+        data = data_ddm.copy()
+        data.loc[:9, "rt"] = -999.0
+        model = hssm.HSSM(
+            data, model="ddm", loglik_kind="approx_differentiable", missing_data=True
+        )
+        with hssm.track(lineage_id="lin") as t:
+            t.log_model(model)
+
+        hub.latest.update({"ddm.onnx": "bbb", "ddm_cpn.onnx": "ddd"})
+        loaded = hssm.load_run(t.run_id)
+        assert loaded._tracking_network["hf_revision"] == "aaa"
+        assert loaded._tracking_missing_data_network["hf_revision"] == "ccc"
 
 
 class TestPreviouslyMissedFindings:

@@ -40,13 +40,28 @@ import tempfile
 import time
 import uuid
 from contextvars import ContextVar
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal
 
 if TYPE_CHECKING:  # pragma: no cover
+    import pandas as pd
+    from mlflow import MlflowClient
+    from mlflow.entities import Run
+
+    from hssm import HSSM
     from hssm.base import HSSMBase
 
 _logger = logging.getLogger("hssm")
+
+
+__all__ = [
+    "Tracker",
+    "active",
+    "list_runs",
+    "load_run",
+    "track",
+]
 
 #: MLflow run-schema version this module emits (HSSMSpine ``_docs/mlflow-schema.md``).
 MLFLOW_SCHEMA_VERSION = "2"
@@ -84,6 +99,15 @@ RESERVED_PARAMS = frozenset(
     }
 )
 
+#: Artifacts :func:`load_run` rebuilds a model from; the traces are optional.
+REBUILD_ARTIFACTS = frozenset({"data.parquet", "model_spec.json"})
+
+#: Tag set to ``"true"`` once a run has stored :data:`REBUILD_ARTIFACTS`.
+REBUILD_TAG = "rebuild_artifacts"
+
+#: How many runs :func:`list_runs` asks the server for per request.
+RUNS_PAGE_SIZE = 1000
+
 # The memory address in a default ``repr``, e.g. ``<function f at 0x7f...>``.
 _MEMORY_ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
 
@@ -102,6 +126,13 @@ MISSING_DATA_ROLE = "missing_data"
 # Always replaced wholesale, never mutated in place.
 _NETWORKS: ContextVar[dict[str, dict[str, str]] | None] = ContextVar(
     "hssm_networks", default=None
+)
+
+# Network files to fetch at a fixed HuggingFace revision, by filename; see
+# `pinned_revisions`. Empty outside `load_run`, so building a model normally
+# fetches the default branch.
+_PINNED_REVISIONS: ContextVar[dict[str, str] | None] = ContextVar(
+    "hssm_pinned_revisions", default=None
 )
 
 # The role of whatever network is loaded next; see `network_role`.
@@ -159,6 +190,26 @@ def network_role(role: str) -> Iterator[None]:
         yield
     finally:
         _NETWORK_ROLE.reset(token)
+
+
+@contextlib.contextmanager
+def pinned_revisions(revisions: dict[str, str]) -> Iterator[None]:
+    """Fetch the named network files at these HuggingFace revisions in the block.
+
+    ``revisions`` maps a network filename to a commit sha. :func:`load_run`
+    uses it so a rebuilt model gets the network its run was fitted with, even
+    after the file has been updated on the default branch.
+    """
+    token = _PINNED_REVISIONS.set(dict(revisions))
+    try:
+        yield
+    finally:
+        _PINNED_REVISIONS.reset(token)
+
+
+def pinned_revision(filename: str) -> str | None:
+    """Return the revision to fetch ``filename`` at, or None for the default."""
+    return (_PINNED_REVISIONS.get() or {}).get(filename)
 
 
 def recorded_networks() -> dict[str, dict[str, str]]:
@@ -311,6 +362,28 @@ def _jsonable(value: Any) -> Any:
     # A function's or plain object's repr carries its memory address, which
     # differs from one process to the next; drop it so `spec_sha256` does not.
     return _MEMORY_ADDRESS.sub("", repr(value))
+
+
+def _is_restorable(value: Any) -> bool:
+    """Whether :func:`_jsonable` keeps ``value`` as data rather than ``repr`` text.
+
+    A ``repr`` placeholder is an ordinary string in the JSON, so a spec that
+    contains one looks valid but cannot be passed back to a constructor.
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return True
+    if isinstance(value, dict):
+        return all(isinstance(k, str) and _is_restorable(v) for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return all(_is_restorable(v) for v in value)
+    return False
+
+
+def spec_is_restorable(model: HSSMBase) -> bool:
+    """Whether :func:`model_spec` records ``model`` well enough to rebuild it."""
+    init_args = dict(getattr(model, "_init_args", {}) or {})
+    init_args.pop("data", None)
+    return _is_restorable(init_args)
 
 
 def model_spec(model: HSSMBase) -> dict[str, Any]:
@@ -475,11 +548,20 @@ class Tracker:
         self.lineage_id = tags["lineage_id"]
         if data is not None and (h := data_sha256(data)):
             tags["data_sha256"] = h
+        # What `load_run` checks before trying to rebuild the model.
+        tags["model_class"] = type(model).__name__
+        tags["spec_restorable"] = str(spec_is_restorable(model)).lower()
         mlflow.set_tags(tags)
         if self.log_artifacts:
             mlflow.log_dict(spec, "model_spec.json")
             if data is not None:
                 self._guard("log data", self._log_data, data)
+            if self._data_uri is not None:
+                # Both files `load_run` needs are stored. Saying so on the run
+                # lets `list_runs` tell without asking for each run's files.
+                self._guard(
+                    "tag rebuild artifacts", mlflow.set_tag, REBUILD_TAG, "true"
+                )
         if data is not None and self._dataset_name:
             self._guard("log dataset", self._log_dataset, data)
 
@@ -829,11 +911,263 @@ def track(
             mlflow.end_run()
 
 
-# The public surface. Everything else in this module is machinery the ONNX
-# loader, `HSSMBase` and the ecosystem CLIs call by name; it stays importable
-# but is not part of what a user is offered.
-__all__ = [
-    "Tracker",
-    "active",
-    "track",
-]
+def load_run(run_id: str, tracking_uri: str | None = None) -> HSSM:
+    """Rebuild a fitted model from a run recorded by :func:`track`.
+
+    The model is constructed again from the run's ``model_spec.json`` and
+    ``data.parquet``, and its ``traces.nc`` and ``vi_traces.nc`` are attached
+    when the run has them.
+
+    Parameters
+    ----------
+    run_id
+        The MLflow run to rebuild.
+    tracking_uri
+        Tracking server to read from. Defaults to the current MLflow tracking
+        URI, which is left unchanged either way.
+
+    Returns
+    -------
+    HSSM
+        The rebuilt model, with its posterior restored.
+
+    Raises
+    ------
+    ImportError
+        If MLflow is not installed (``uv add "hssm[tracking]"``).
+    NotImplementedError
+        If the run fitted a model class other than ``HSSM``.
+    ValueError
+        If the run kept no data or spec (it was logged with
+        ``log_artifacts=False``), or if its spec holds arguments that were
+        recorded as text, such as ``bmb.Prior`` objects or custom functions.
+    """
+    try:
+        import mlflow
+    except ImportError as exc:
+        raise ImportError(
+            "MLflow is required for hssm.load_run(). Install it with "
+            '`uv add "hssm[tracking]"` (or `pip install "hssm[tracking]"`).'
+        ) from exc
+    import arviz as az
+    import pandas as pd
+
+    from hssm import HSSM
+
+    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    run = client.get_run(run_id)
+    tags = run.data.tags
+    model_class = tags.get("model_class", "HSSM")
+    if model_class != "HSSM":
+        raise NotImplementedError(
+            f"Run {run_id} fitted a {model_class}; load_run rebuilds HSSM models only."
+        )
+    not_restorable = ValueError(
+        f"Run {run_id} cannot be rebuilt from its spec: some constructor arguments "
+        "(e.g. bmb.Prior objects or custom functions) were recorded as text."
+    )
+    if tags.get("spec_restorable") == "false":
+        raise not_restorable
+
+    names = {a.path for a in client.list_artifacts(run_id)}
+    missing = sorted(REBUILD_ARTIFACTS - names)
+    if missing:
+        raise ValueError(
+            f"Run {run_id} has no {', '.join(missing)} to rebuild from; it was "
+            "probably logged with log_artifacts=False."
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+
+        def fetch(name: str) -> str:
+            return mlflow.artifacts.download_artifacts(
+                run_id=run_id,
+                artifact_path=name,
+                dst_path=tmp,
+                tracking_uri=tracking_uri,
+            )
+
+        data = pd.read_parquet(fetch("data.parquet"))
+        spec = json.loads(Path(fetch("model_spec.json")).read_text())
+        spec.pop("repr", None)
+        try:
+            # The networks the run was fitted with, not the latest versions.
+            with pinned_revisions(_recorded_revisions(run.data.params)):
+                model = HSSM(data, **spec)
+        except Exception as exc:
+            # Runs logged before `spec_restorable` existed carry no verdict, so
+            # the spec is only one possible cause; keep the real error in view.
+            if "spec_restorable" in tags:
+                raise
+            raise ValueError(
+                f"Run {run_id} could not be rebuilt: {exc}. It was logged before "
+                "HSSM recorded whether a spec is restorable, so its spec may hold "
+                "arguments recorded as text (e.g. bmb.Prior objects or custom "
+                "functions)."
+            ) from exc
+        # Loaded into memory: the files go when the temporary directory does.
+        if "traces.nc" in names:
+            model.restore_traces(az.from_netcdf(fetch("traces.nc")).load())
+        if "vi_traces.nc" in names:
+            model.restore_vi_traces(az.from_netcdf(fetch("vi_traces.nc")).load())
+    return model
+
+
+@dataclass(frozen=True)
+class RunRow:
+    """One run as a row of the `list_runs` table; the fields are its columns."""
+
+    run_id: str
+    run_name: str | None
+    experiment: str | None
+    start_time: pd.Timestamp
+    status: str
+    user: str | None
+    model: str | None
+    loglik_kind: str | None
+    dataset_name: str | None
+    n_trials: int | None
+    restorable: bool
+
+    @classmethod
+    def from_run(cls, run: Run, *, experiment: str | None, restorable: bool) -> RunRow:
+        """Read ``run`` into a row.
+
+        ``experiment`` and ``restorable`` are not held by the run itself: the
+        first needs the server's experiment names, the second the run's
+        artifact listing.
+        """
+        params = run.data.params
+        return cls(
+            run_id=run.info.run_id,
+            run_name=run.info.run_name,
+            experiment=experiment,
+            start_time=_start_time(run),
+            status=run.info.status,
+            user=run.data.tags.get("user"),
+            model=params.get("model"),
+            loglik_kind=params.get("loglik_kind"),
+            dataset_name=_dataset_name(run),
+            n_trials=_n_trials(run),
+            restorable=restorable,
+        )
+
+
+def list_runs(tracking_uri: str | None = None) -> pd.DataFrame:
+    """List the runs recorded by :func:`track`, newest first.
+
+    Runs logged by other tools on the same server are left out.
+
+    Parameters
+    ----------
+    tracking_uri
+        Tracking server to read from. Defaults to the current MLflow tracking
+        URI, which is left unchanged either way.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per run, with columns ``run_id``, ``run_name``, ``experiment``,
+        ``start_time``, ``status``, ``user``, ``model``, ``loglik_kind``,
+        ``dataset_name``, ``n_trials`` and ``restorable``, which says whether
+        :func:`load_run` can rebuild the run.
+
+    Raises
+    ------
+    ImportError
+        If MLflow is not installed (``uv add "hssm[tracking]"``).
+    """
+    try:
+        import mlflow
+    except ImportError as exc:
+        raise ImportError(
+            "MLflow is required for hssm.list_runs(). Install it with "
+            '`uv add "hssm[tracking]"` (or `pip install "hssm[tracking]"`).'
+        ) from exc
+    import pandas as pd
+
+    client = mlflow.tracking.MlflowClient(tracking_uri=tracking_uri)
+    experiments = {e.experiment_id: e.name for e in client.search_experiments()}
+    rows = [
+        RunRow.from_run(
+            run,
+            experiment=experiments.get(run.info.experiment_id),
+            restorable=_is_rebuildable(run),
+        )
+        for run in _tracked_runs(client, list(experiments))
+    ]
+    return pd.DataFrame(
+        [asdict(row) for row in rows], columns=[f.name for f in fields(RunRow)]
+    )
+
+
+def _recorded_revisions(params: dict[str, str]) -> dict[str, str]:
+    """Return the HuggingFace revision of each network a run recorded, by file.
+
+    Covers the likelihood network and the missing-data network; a network
+    with no recorded revision (a local file, say) is not pinned.
+    """
+    prefixes = ("", f"{MISSING_DATA_ROLE}_")
+    return {
+        params[f"{prefix}network_file"]: params[f"{prefix}hf_revision"]
+        for prefix in prefixes
+        if f"{prefix}network_file" in params and f"{prefix}hf_revision" in params
+    }
+
+
+def _tracked_runs(
+    client: MlflowClient, experiment_ids: list[str], page_size: int = RUNS_PAGE_SIZE
+) -> Iterator[Run]:
+    """Yield every run :func:`track` recorded in ``experiment_ids``, newest first.
+
+    MLflow returns results a page at a time; this follows the page tokens so
+    a server with more runs than one page still lists them all.
+    """
+    if not experiment_ids:  # MLflow would otherwise reject the empty search
+        return
+    page_token = None
+    while True:
+        page = client.search_runs(
+            experiment_ids,
+            filter_string="tags.phase = 'infer'",
+            order_by=["attributes.start_time DESC"],
+            max_results=page_size,
+            page_token=page_token,
+        )
+        yield from page
+        page_token = page.token
+        if not page_token:
+            return
+
+
+def _start_time(run: Run) -> pd.Timestamp:
+    """Return when the run started, as a UTC timestamp (MLflow stores epoch ms)."""
+    import pandas as pd
+
+    return pd.to_datetime(run.info.start_time, unit="ms", utc=True)
+
+
+def _n_trials(run: Run) -> int | None:
+    """Return the number of trials fitted, or None if no model was logged."""
+    n_trials = run.data.params.get("n_trials")
+    return int(n_trials) if n_trials is not None else None
+
+
+def _dataset_name(run: Run) -> str | None:
+    """Return the name given to ``track(dataset_name=...)``, or None."""
+    datasets = run.inputs.dataset_inputs if run.inputs else []
+    return datasets[0].dataset.name if datasets else None
+
+
+def _is_rebuildable(run: Run) -> bool:
+    """Whether :func:`load_run` would rebuild ``run``, from its tags alone.
+
+    Reading tags the search already returned keeps :func:`list_runs` to one
+    request per page of runs; :func:`load_run` still checks the files itself.
+    """
+    tags = run.data.tags
+    return (
+        tags.get("model_class") == "HSSM"
+        and tags.get("spec_restorable") == "true"
+        and tags.get(REBUILD_TAG) == "true"
+    )
