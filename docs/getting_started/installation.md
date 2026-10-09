@@ -39,6 +39,18 @@ pip install hssm[cuda12]  # CUDA 12
 pip install hssm[cuda13]  # CUDA 13
 ```
 
+### Install HSSM (with run tracking)
+
+To keep a record of each fit — the model, the sampler settings, the diagnostics
+and the traces — install the `tracking` extra, which adds MLflow:
+
+```bash
+uv add "hssm[tracking]"       # or: uv pip install "hssm[tracking]"
+pip install "hssm[tracking]"  # with pip
+```
+
+See [Track fits with MLflow](../how_to/track_with_mlflow.md).
+
 ## Optional: a faster simulator backend (GSL + OpenMP)
 
 HSSM simulates through [`ssm-simulators`](https://github.com/lnccbrown/ssm-simulators),

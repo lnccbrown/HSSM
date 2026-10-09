@@ -96,6 +96,7 @@ pypi-token
 pre-commit
 .github/copilot-instructions.md
 uv.lock
+mlruns/
 
 .claude/CLAUDE.local.md
 
@@ -103,3 +104,4 @@ uv.lock
 # (scripts/sync_agent_config.py materializes these from .claude/).
 .cursor/
 .agents/
+mlflow.db

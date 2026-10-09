@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 
+from hssm import tracking
 from hssm._types import LoglikKind, SupportedModels
 from hssm.defaults import (
     INITVAL_JITTER_SETTINGS,
@@ -403,9 +404,13 @@ class HSSM(HSSMBase):
                 if self.model_config.backend != "pytensor"
                 else self.model_config.backend
             )
-            missing_data_callable = make_missing_data_callable(
-                self.loglik_missing_data, backend_tmp, params_is_trialwise, params_only
-            )
+            with tracking.network_role(tracking.MISSING_DATA_ROLE):
+                missing_data_callable = make_missing_data_callable(
+                    self.loglik_missing_data,
+                    backend_tmp,
+                    params_is_trialwise,
+                    params_only,
+                )
 
             self.loglik_missing_data = missing_data_callable
 
