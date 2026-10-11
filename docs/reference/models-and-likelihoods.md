@@ -25,7 +25,7 @@ model.
 | `lba3` | `analytical` | `analytical` | `A`, `b`, `v0`, `v1`, `v2` | `0`, `1`, `2` |
 | `lba4` | `analytical` | `analytical` | `A`, `b`, `v0`, `v1`, `v2`, `v3` | `0`, `1`, `2`, `3` |
 | `lba2` | `analytical` | `analytical` | `A`, `b`, `v0`, `v1` | `0`, `1` |
-| `racing_diffusion_3` | `analytical` | `analytical` | `A`, `b`, `v0`, `v1`, `v2`, `t` | `0`, `1`, `2` |
+| `racing_diffusion_3` | `analytical` | `analytical` | `v0`, `v1`, `v2`, `A`, `b`, `t` | `0`, `1`, `2` |
 | `poisson_race` | `analytical` | `analytical` | `r1`, `r2`, `k1`, `k2`, `t` | `-1`, `1` |
 | `softmax_inv_temperature_2` | `analytical` | `analytical` | `beta`, `logit1` | `-1`, `1` |
 | `softmax_inv_temperature_3` | `analytical` | `analytical` | `beta`, `logit1`, `logit2` | `0`, `1`, `2` |
