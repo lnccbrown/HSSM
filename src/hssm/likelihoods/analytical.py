@@ -490,11 +490,11 @@ def _jax_rdm3_ll(t, ch, A, b, v0, v1, v2, eps_t: float = 1e-8):
 
 def logp_rdm3(
     data: np.ndarray,
-    A: float,
-    b: float,
     v0: float,
     v1: float,
     v2: float,
+    A: float,
+    b: float,
     t: float,
     epsilon: float = 1e-10,
 ) -> np.ndarray:
@@ -540,7 +540,12 @@ def jax_check_parameters(logp, condition, msg="Condition failed", print_msg=Fals
     return jnp.where(condition, logp, -jnp.inf)
 
 
-rdm3_params = ["A", "b", "v0", "v1", "v2", "t"]
+# Order is load-bearing, and it must match
+# ssms.config.model_config["racing_diffusion_3"]["params"] element for element.
+# HSSM passes parameters positionally in this order both to `logp_rdm3` (whose
+# signature follows it) and to the ssm-simulators random variable used by
+# prior and posterior predictive sampling, which reads theta in registry order.
+rdm3_params = ["v0", "v1", "v2", "A", "b", "t"]
 
 rdm3_bounds = {
     "A": (0.0, inf),
