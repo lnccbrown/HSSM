@@ -40,7 +40,7 @@ def get_ddm_st_config() -> DefaultConfig:
                     "a": (0.3, 2.5),
                     "z": (0.3, 0.7),
                     "t": (0.25, 2.25),
-                    "st": (1e-3, 0.35),
+                    "st": (1e-3, 0.25),
                 },
                 "extra_fields": None,
                 # ssms draws the non-decision time as t + U(-st, st): st is the
