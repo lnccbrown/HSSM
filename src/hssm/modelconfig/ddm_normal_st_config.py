@@ -16,19 +16,13 @@ def get_ddm_normal_st_config() -> DefaultConfig:
     hard support edge at ``t - st`` where this one has none. Do not read a
     shared ``st`` value as a shared amount of non-decision-time variability.
 
-    The ``st`` lower bound of ``1e-3`` is the network's true training-box
-    edge, and it is also a defect corner of this particular network: below
-    ``st = 0.01`` the network puts its maximum on the bound where the exact
-    likelihood has an interior maximum, and the gradient there points into
-    the bound. Chains trap, ``st`` collapses to about ``0.002``, and
-    per-subject recovery of ``v`` and ``a`` degrades while rhat and ESS stay
-    clean, so nothing warns. Constrain ``st`` to ``(0.01, 0.25)`` for
-    inference - e.g. ``include=[{"name": "st", "bounds": (0.01, 0.25)}]`` -
-    which restores recovery (measured at ``st = 0.05``: correlation with
-    truth for ``v`` +0.24 -> +0.97, coverage 6/12 -> 11/12).
+    The parameter bounds are the network's training box.
 
-    Note: this paragraph describes the ``ddm_normal_st.onnx`` network that
-    exists today. The network that ships is pending retraining.
+    Because the kernel is unbounded, simulated RTs can be non-positive near
+    the lower ``t`` bound. The ssm-simulators config measures 8.9% at
+    ``t = st = 0.25, a = 0.3`` and 0.013% on the 3-sigma edge
+    (``3 * st = t``), so filter non-positive RTs out of posterior-predictive
+    samples before comparing them with data.
 
     Returns
     -------
@@ -52,9 +46,7 @@ def get_ddm_normal_st_config() -> DefaultConfig:
                 # HSSM uses these bounds to keep sampling inside it. They are
                 # narrower than the family norm for that reason alone - plain
                 # ``ddm`` allows ``t`` from 0.0 and ``z`` in (0.1, 0.9), while
-                # this network saw ``t >= 0.25`` and ``z`` in (0.3, 0.7). The
-                # ``st`` floor of 1e-3 is the box edge but not a safe operating
-                # point; see this function's docstring.
+                # this network saw ``t >= 0.25`` and ``z`` in (0.3, 0.7).
                 "bounds": {
                     "v": (-3.0, 3.0),
                     "a": (0.3, 2.5),
