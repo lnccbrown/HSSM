@@ -45,8 +45,9 @@ def get_ddm_normal_st_config() -> DefaultConfig:
                 # network is only defined on the region it was trained on, and
                 # HSSM uses these bounds to keep sampling inside it. They are
                 # narrower than the family norm for that reason alone - plain
-                # ``ddm`` allows ``t`` from 0.0 and ``z`` in (0.1, 0.9), while
-                # this network saw ``t >= 0.25`` and ``z`` in (0.3, 0.7).
+                # ``ddm`` allows ``t`` from 0.0 and ``z`` in (0, 1) (ddm.onnx
+                # was trained on (0.1, 0.9)), while this network saw
+                # ``t >= 0.25`` and ``z`` in (0.3, 0.7).
                 "bounds": {
                     "v": (-3.0, 3.0),
                     "a": (0.3, 2.5),
