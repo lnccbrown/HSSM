@@ -130,9 +130,10 @@ def _(mo):
     ## What a run holds
 
     The run records the model and its settings as **params**, the fit's
-    diagnostics as **metrics**, and identifying labels as **tags**. Two tags
-    group runs later: `spec_sha256` (a param) changes with the modelling
-    choices, and `data_sha256` with the data.
+    diagnostics as **metrics**, and identifying labels as **tags**. Two keys
+    group runs later: the param `spec_sha256` changes with the modelling
+    choices, and the tag `data_sha256` with the data. Filter on them in
+    `search_runs` as `params.spec_sha256` and `tags.data_sha256`.
     """)
     return
 
