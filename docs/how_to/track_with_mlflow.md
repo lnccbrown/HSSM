@@ -31,7 +31,7 @@ with hssm.track(
 
 Everything inside the block becomes one MLflow run. With nothing else configured, two things appear in your working directory:
 - `mlflow.db` holds the record of each run, and
-- `mlruns/` holds the files attached to it: the traces, the summary table, the model specification, and a copy of the data the model was fit to (`data.parquet`).
+- `mlruns/` holds the files attached to it: the traces, the summary table, the model specification, and a copy of the data the model was fit to (`data.parquet`). Each run's files are in `mlruns/<experiment id>/<run id>/artifacts/`; `mlflow.get_run(run_id).info.artifact_uri` gives that path, and `mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="data.parquet")` fetches a file by name.
 
 The database refers to the artifacts by path rather than storing them.
 
@@ -256,7 +256,9 @@ in your shell or job script instead, and `track()`, `list_runs()` and
 
 The database holds the list of runs, but each run's files (`data.parquet`,
 `model_spec.json`, the traces) are stored at the experiment's artifact
-location, an absolute path fixed when the experiment was created. `list_runs`
+location, an absolute path fixed when the experiment was created: by default
+the `mlruns/<experiment id>/` folder described in [Record a fit](#record-a-fit),
+under whichever folder the experiment was created from. `list_runs`
 needs only the database; `load_run` also needs to read those files. So when
 several people log to one store, create each experiment once, with an
 artifact location everyone can read:
@@ -295,6 +297,7 @@ the HSSMSpine repository at `_docs/mlflow-schema.md`.
 
 ## See also
 
+- [Track fits with MLflow: the notebook](../tutorials/track_with_mlflow.ipynb), the steps above run end to end
 - [Compare and interpret models](compare_models.ipynb)
 - [Run variational inference](../tutorials/variational_inference.ipynb)
 - [Save and load fitted models](../tutorials/save_load_tutorial.ipynb)
