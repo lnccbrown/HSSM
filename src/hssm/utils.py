@@ -63,41 +63,6 @@ def _response_evaluate_new_data(model: bmb.Model, data: pd.DataFrame) -> np.ndar
     return np.asarray(design.response)
 
 
-def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
-    """Make aliases from the parent parameter.
-
-    From a Param object that represents a parent parameter in Bambi,
-    returns a dict that represents how Bambi should alias its parameters to
-    make it more HSSM-friendly.
-
-    Parameters
-    ----------
-    parent: A Param object that represents a parent parameter.
-
-    Returns
-    -------
-        A dict that indicates how Bambi should alias its parameters.
-    """
-    assert parent.is_parent, "This Param object should be a parent!"
-    assert parent.name is not None
-
-    result_dict = {"c(rt, response)": "rt,response"}
-
-    # The easy case. We will just alias "Intercept" as the actual name of the
-    # parameter
-    if not parent.is_regression:
-        result_dict |= {"Intercept": parent.name}
-
-        return result_dict
-
-    # The regression case:
-    # In this case, the name of the response variable should actually be
-    # the name of the parent parameter
-    result_dict["c(rt, response)"] = parent.name
-
-    return result_dict
-
-
 def _get_alias_dict(
     model: bmb.Model, parent: Param, response_c: str, response_str: str
 ) -> dict[str, str | dict]:

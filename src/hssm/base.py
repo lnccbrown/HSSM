@@ -967,10 +967,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         vars_to_keep = set(dt["posterior"].data_vars.keys()).difference(
             key_ for key_ in self.model.parameters if key_ in deterministic_names
         )
+        # Drop only bambi's exact `{parent}_mean` alias, not every name containing
+        # `_mean`, so a covariate like `rt_mean` keeps its coefficient (#1378).
         vars_to_keep_clean = [
             var_
             for var_ in vars_to_keep
-            if isinstance(var_, str) and "_mean" not in var_
+            if isinstance(var_, str) and var_ != f"{self._parent}_mean"
         ]
         dt["posterior"] = dt["posterior"].to_dataset()[vars_to_keep_clean]
 
@@ -1376,9 +1378,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
         do_dt = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
 
-        # clean up `rt,response_mean` to `v`
-        do_dt = self._drop_parent_str_from_datatree(dt=do_dt)
-
         # rename otherwise inconsistent dims and coords
         do_dt["prior_predictive"] = _rename_response_dim(do_dt["prior_predictive"].ds)
 
@@ -1438,14 +1437,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     continue
                 self._inference_obj[group_name] = prior_predictive[group_name]
 
-        # clean up `rt,response_mean` to `v`
-        dt = self._drop_parent_str_from_datatree(dt=self._inference_obj)
-
         # rename otherwise inconsistent dims and coords
-        dt["prior_predictive"] = _rename_response_dim(dt["prior_predictive"].ds)
-
-        # Update self._inference_obj to match the cleaned datatree
-        self._inference_obj = dt
+        self._inference_obj["prior_predictive"] = _rename_response_dim(
+            self._inference_obj["prior_predictive"].ds
+        )
         return deepcopy(self._inference_obj)
 
     @property
@@ -2094,31 +2089,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 var_names = [var for var in var_names if var != f"~{self._parent}"]
 
         return var_names
-
-    def _drop_parent_str_from_datatree(self, dt: DataTree | None) -> DataTree:
-        """Drop the parent_str variable from a DataTree object.
-
-        Parameters
-        ----------
-        dt
-            The DataTree object to be modified.
-
-        Returns
-        -------
-        xr.Dataset
-            The modified DataTree object.
-        """
-        if dt is None:
-            raise ValueError("Please provide a DataTree (traces) object.")
-        else:
-            for group in dt.groups:
-                if group == "/":
-                    continue
-                if ("rt,response_mean" in dt[group].data_vars) and (
-                    self._parent not in dt[group].data_vars
-                ):
-                    dt[group] = dt[group].ds.rename({"rt,response_mean": self._parent})
-            return dt
 
     def _postprocess_initvals_deterministic(
         self, initval_settings: dict = INITVAL_SETTINGS
