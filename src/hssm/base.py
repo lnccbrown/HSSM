@@ -687,7 +687,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         if initvals is not None:
             if isinstance(initvals, dict):
-                kwargs["initvals"] = initvals
+                kwargs["initvals"] = self._remap_centered_intercept_initvals(initvals)
             else:
                 if isinstance(initvals, str):
                     if initvals == "map":
@@ -982,6 +982,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         keep_likelihood_params: bool = False,
+        random_seed: int | np.random.Generator | None = None,
     ) -> DataTree | None:
         """Compute the log likelihood of the model.
 
@@ -1007,6 +1008,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             on route to getting the log likelihood are kept in the `dt` object.
             Defaults to False. See also the method
             `add_likelihood_parameters_to_datatree`.
+        random_seed : optional
+            Seed for the coefficients generated for new or unidentified groups in
+            `data`. Without it, repeated calls give different log likelihoods for
+            those observations. Fitted groups do not depend on the seed.
 
         Returns
         -------
@@ -1048,6 +1053,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             data,
             inplace,
             compile_mode=compile_mode,
+            random_seed=random_seed,
         )
 
         # clean up posterior:
@@ -2142,6 +2148,37 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 self._initvals[name_tmp] = np.array(
                     initval_settings[param_link_setting][settings_key]
                 ).astype(dtype)
+
+    def _remap_centered_intercept_initvals(self, initvals: dict) -> dict:
+        """Move user initvals from a `<param>_Intercept` deterministic to its RV.
+
+        With common predictors, bambi (>= 0.20) samples `<param>_Intercept_centered`
+        and makes `<param>_Intercept` a Deterministic. PyMC silently ignores
+        initvals keyed on a Deterministic, so remap them to the centered RV, the
+        same way `_postprocess_initvals_deterministic` remaps HSSM's defaults.
+        The two intercepts coincide when the slopes start at 0 (HSSM's default).
+        """
+        free_rv_names = {rv.name for rv in self.pymc_model.free_RVs}
+        remapped = {}
+        for key, value in initvals.items():
+            centered = f"{key}_centered"
+            if (
+                isinstance(key, str)
+                and key.endswith("_Intercept")
+                and centered in free_rv_names
+                and centered not in initvals
+            ):
+                _logger.info(
+                    "Initial value for %s applied to %s: %s is a deterministic "
+                    "because the predictors of its parameter are centered.",
+                    key,
+                    centered,
+                    key,
+                )
+                remapped[centered] = value
+            else:
+                remapped[key] = value
+        return remapped
 
     def _get_prefix(self, name_str: str) -> str:
         """Resolve parameter prefix, handling underscore-containing RL param names.

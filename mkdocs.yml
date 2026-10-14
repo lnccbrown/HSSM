@@ -90,6 +90,7 @@ nav:
       - Likelihood kinds in HSSM: explanations/likelihoods.md
       - Link functions and safe priors: tutorials/link_functions.ipynb
       - Centered vs. non-centered parameterizations: tutorials/centered_vs_noncentered_basic_logic.ipynb
+      - Predictor centering and the intercept: explanations/intercept_centering.md
       - Random-slope prior diagnostics: tutorials/random_slope_safe_priors.ipynb
       - Choosing a parameterization per parameter: tutorials/parameterization_per_parameter.ipynb
   - Reference:

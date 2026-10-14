@@ -130,11 +130,12 @@ def minimal_log_likelihood_datatree(minimal_posterior_datatree):
 
 
 def _log_likelihood_model(family):
-    def predict(dt, kind, data, inplace, include_group_specific):
+    def predict(dt, kind, data, inplace, include_group_specific, random_seed):
         assert kind == "response_params"
         assert data is None
         assert inplace is True
         assert include_group_specific is True
+        assert random_seed is None
 
     return SimpleNamespace(
         response_term=SimpleNamespace(label="rt,response", name="c(rt, response)"),
@@ -213,7 +214,7 @@ def test_compute_likelihood_params_in_sample_uses_posterior(
     """In sample, the evaluated parameters land in the posterior group."""
     traces = minimal_log_likelihood_datatree()
 
-    def predict(dt, kind, data, inplace, include_group_specific):
+    def predict(dt, kind, data, inplace, include_group_specific, random_seed):
         assert kind == "response_params"
         assert data is None
         assert inplace is True
@@ -241,10 +242,11 @@ def test_compute_likelihood_params_out_of_sample_merges_predictions(
     )
     new_data = pd.DataFrame({"x": [1.0, 2.0]})
 
-    def predict(dt, kind, data, inplace, include_group_specific):
+    def predict(dt, kind, data, inplace, include_group_specific, random_seed):
         assert kind == "response_params"
         assert data is new_data
         assert inplace is True
+        assert random_seed == 3
         dt["predictions"] = xr.Dataset(
             {"v": (("chain", "draw", "__obs__"), np.full((1, 2, 2), -1.0))},
             coords={"chain": [0], "draw": [0, 1], "__obs__": [0, 1]},
@@ -252,7 +254,7 @@ def test_compute_likelihood_params_out_of_sample_merges_predictions(
         dt["predictions_constant_data"] = xr.Dataset({"x": ("__obs__", [1.0, 2.0])})
 
     posterior = _compute_likelihood_params(
-        SimpleNamespace(predict=predict), traces, data=new_data
+        SimpleNamespace(predict=predict), traces, data=new_data, random_seed=3
     )
 
     assert posterior["theta"].dims == ("chain", "draw")
