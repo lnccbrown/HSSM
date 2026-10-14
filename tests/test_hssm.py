@@ -182,6 +182,9 @@ def test_sample_prior_predictive(data_ddm_reg):
             prior_predictive.children
         )
         assert prior_predictive["prior_predictive"].sizes["draw"] == 10
+        # The fixed default `p_outlier` is a constant, not a prior draw (#1329).
+        assert "p_outlier" not in prior_predictive["prior"]
+        assert {"v", "a", "z", "t"} <= set(prior_predictive["prior"].data_vars)
 
     model_regression = HSSM(
         data=data_ddm_reg, include=[dict(name="v", formula="v ~ 1 + x")]

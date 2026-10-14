@@ -1425,8 +1425,21 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         # Bambi >= 0.17 renamed kind="mean" to kind="response_params".
         self.model.predict(prior_predictive, kind="response_params", inplace=True)
 
-        # clean
-        prior_predictive["prior"] = prior_predictive["posterior"]
+        # clean: bambi 0.20 traces fixed parameters (e.g. `p_outlier`) as constant
+        # deterministics; forward sampling from `prior` rejects them (#1329).
+        deterministic_names = {var_.name for var_ in self.pymc_model.deterministics}
+        prior_predictive["prior"] = (
+            prior_predictive["posterior"]
+            .to_dataset()
+            .drop_vars(
+                [
+                    name
+                    for name in self.model.marginal_parameters
+                    if name in deterministic_names
+                ],
+                errors="ignore",
+            )
+        )
         del prior_predictive["posterior"]
 
         if self._inference_obj is None:
