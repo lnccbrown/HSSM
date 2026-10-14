@@ -65,7 +65,75 @@ still share one generated coefficient, as described above.
 - Because both strategies involve random draws (of a donor group, or of new
   coefficients), repeated out-of-sample calls on the same posterior do not give
   identical trial-wise parameters for unknown or new groups. Fitted groups are
-  deterministic given the posterior.
+  deterministic given the posterior. Pass `random_seed` to `log_likelihood` to
+  fix the generated coefficients and get a reproducible result.
 - The retired Bambi keyword `sample_new_groups` is not exposed by HSSM. Passing
   it to the underlying `bambi.Model.predict` raises a `FutureWarning` and has no
   effect.
+
+## Log likelihood for unknown and new participants
+
+Bambi's own `compute_log_likelihood` rejects grouping values it has not seen.
+HSSM does not: `log_likelihood(data=...)` first obtains every observation's
+parameters from Bambi's prediction machinery, as described above, and then
+evaluates the HSSM likelihood on them. Each value in the `log_likelihood` group
+is therefore **conditional on the coefficients generated for that posterior
+draw**:
+
+- **New participant** (unseen, non-missing id): within a draw, all of the
+  participant's observations are scored with the same generated coefficient. It
+  is re-generated from draw to draw.
+- **Unknown identity** (missing id): each observation borrows a donor group
+  independently, per observation and per draw. Several rows with a missing id
+  are not treated as one participant, even within a draw.
+
+The generated coefficients are random, so the log likelihood of these rows
+changes between calls. Pass `random_seed` to make it reproducible:
+
+```python
+dt = model.log_likelihood(data=new_data, inplace=False, random_seed=42)
+```
+
+### Averaging draws into a predictive score
+
+The raw values have shape `(chain, draw, __obs__)`. A predictive score averages
+the *likelihood* (not the log likelihood) over draws, and the result depends on
+what you average:
+
+- **Trial level.** Average each observation's likelihood over draws on its own.
+  This scores every trial as if it were the only one observed from its
+  participant, and it is the appropriate score for rows with a missing id.
+- **Participant level.** Sum the log likelihood of a participant's observations
+  within each draw first, then average the joint likelihood over draws. Because
+  a new participant's coefficient is shared within a draw, this integrates over
+  that coefficient once for all of the participant's trials, which gives the
+  predictive score of the participant as a whole. Do not use it for rows with a
+  missing id: their coefficients are not shared, so the rows do not form one
+  participant.
+
+The two scores differ in general, because the average of a product is not the
+product of averages.
+
+```python
+import numpy as np
+import xarray as xr
+from scipy.special import logsumexp
+
+ll = dt["log_likelihood"]["rt,response"].stack(sample=("chain", "draw"))
+log_n = np.log(ll.sizes["sample"])
+
+# Trial level: one score per observation.
+trial_score = logsumexp(ll, axis=ll.get_axis_num("sample")) - log_n
+
+# Participant level: one score per participant.
+participant = xr.DataArray(new_data["participant_id"].to_numpy(), dims="__obs__")
+joint = ll.groupby(participant).sum()
+participant_score = logsumexp(joint, axis=joint.get_axis_num("sample")) - log_n
+```
+
+`groupby` drops rows with a missing id, so they do not enter the participant
+level score; score them at the trial level instead.
+
+Both are Monte Carlo estimates with one generated coefficient per posterior
+draw, so they are noisy when the posterior has few draws. HSSM has no dedicated
+participant-level scoring API; compute it as shown.

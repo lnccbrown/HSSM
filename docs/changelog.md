@@ -103,6 +103,14 @@ This work is in progress; entries are added as each sub-issue lands.
 9. **Traces gain a `constant_data` group** holding the design-matrix data (for example
    `v_x_data`) and the group index arrays (for example `g__idx`) Bambi used to build the model.
 
+10. **`log_likelihood` takes a `random_seed` for unseen and missing participant IDs**
+    ([#1376](https://github.com/lnccbrown/HSSM/issues/1376)). Out of sample, the log likelihood of
+    a new or unidentified participant is conditional on coefficients that Bambi's prediction
+    machinery generates at random, so it changed between calls. `random_seed` fixes them. The
+    how-to guide [Predict for new or unidentified participants](how_to/predict_new_groups.md) now
+    documents these semantics and how to average draws into a trial-level or participant-level
+    predictive score.
+
 #### Dependency changes:
 
 1. **`bambi` now tracks the `dev` branch** pending the 0.20 release, which reorganizes its

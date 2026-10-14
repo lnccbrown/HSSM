@@ -163,6 +163,7 @@ def _compute_log_likelihood(
     data: pd.DataFrame | None,
     inplace: bool = True,
     compile_mode: str | None = None,
+    random_seed: int | np.random.Generator | None = None,
 ) -> xr.DataTree | None:
     """Compute the model's log-likelihood.
 
@@ -183,6 +184,9 @@ def _compute_log_likelihood(
         PyTensor compilation mode for the response log-probability graph. JAX-backed
         HSSM models pass ``"JAX"`` so their custom likelihood Ops use their
         ``jax_funcify`` registrations instead of PyMC's default Numba linker.
+    random_seed : optional
+        Seed for the coefficients generated for new or unidentified groups in
+        ``data``. See ``_compute_likelihood_params``.
 
     Returns
     -------
@@ -199,7 +203,7 @@ def _compute_log_likelihood(
     # log-likelihood omitting the group-specific components of the model, so
     # they are always included.
     posterior = _compute_likelihood_params(
-        model, dt, data=data, include_group_specific=True
+        model, dt, data=data, include_group_specific=True, random_seed=random_seed
     )
 
     required_kwargs = {
@@ -234,6 +238,7 @@ def _compute_likelihood_params(
     dt: xr.DataTree,
     data: pd.DataFrame | None = None,
     include_group_specific: bool = True,
+    random_seed: int | np.random.Generator | None = None,
 ) -> xr.Dataset:
     """Evaluate the likelihood parameters and gather them into one dataset.
 
@@ -255,6 +260,10 @@ def _compute_likelihood_params(
         omitted, the original dataset is used.
     include_group_specific : bool
         Whether the group-specific effects contribute to the parameters.
+    random_seed : optional
+        Seed for bambi's prediction machinery. It fixes the coefficients that are
+        generated for new or unidentified groups in ``data``; fitted groups are
+        deterministic given the posterior.
 
     Returns
     -------
@@ -268,6 +277,7 @@ def _compute_likelihood_params(
         data=data,
         inplace=True,
         include_group_specific=include_group_specific,
+        random_seed=random_seed,
     )
     posterior = dt["posterior"].to_dataset()
 

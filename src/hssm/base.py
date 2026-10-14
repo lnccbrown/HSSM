@@ -980,6 +980,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         keep_likelihood_params: bool = False,
+        random_seed: int | np.random.Generator | None = None,
     ) -> DataTree | None:
         """Compute the log likelihood of the model.
 
@@ -1005,6 +1006,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             on route to getting the log likelihood are kept in the `dt` object.
             Defaults to False. See also the method
             `add_likelihood_parameters_to_datatree`.
+        random_seed : optional
+            Seed for the coefficients generated for new or unidentified groups in
+            `data`. Without it, repeated calls give different log likelihoods for
+            those observations. Fitted groups do not depend on the seed.
 
         Returns
         -------
@@ -1046,6 +1051,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             data,
             inplace,
             compile_mode=compile_mode,
+            random_seed=random_seed,
         )
 
         # clean up posterior:

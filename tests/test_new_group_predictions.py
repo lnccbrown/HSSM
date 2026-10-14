@@ -183,3 +183,59 @@ def test_sample_new_groups_is_not_forwarded(hierarchical_ddm):
     with warnings.catch_warnings():
         warnings.simplefilter("error", FutureWarning)
         _trialwise_v(hierarchical_ddm, _new_data(participant_id=[0]))
+
+
+def _log_likelihood(model: hssm.HSSM, data: pd.DataFrame, **kwargs) -> np.ndarray:
+    """Return the out-of-sample log likelihood, shaped (chain, draw, obs)."""
+    dt = model.log_likelihood(data=data, inplace=False, **kwargs)
+    return dt["log_likelihood"]["rt,response"].values
+
+
+def _identical_rows(participant_id) -> pd.DataFrame:
+    """Rows with the same `rt` and `response`; only the coefficients can differ."""
+    data = _new_data(participant_id=participant_id)
+    data[["rt", "response"]] = [0.9, 1.0]
+    return data
+
+
+def test_log_likelihood_new_group_shares_coefficients_within_a_draw(
+    hierarchical_ddm,
+):
+    """Within a draw, an unseen participant's rows are scored with one coefficient."""
+    ll = _log_likelihood(
+        hierarchical_ddm, _identical_rows([NEW_GROUP] * 4), random_seed=1
+    )
+
+    np.testing.assert_allclose(ll, np.broadcast_to(ll[..., :1], ll.shape))
+    # The shared coefficient is still re-generated from draw to draw.
+    assert not np.allclose(ll[0], ll[0, :1])
+
+
+def test_log_likelihood_missing_id_varies_per_observation(hierarchical_ddm):
+    """Missing IDs borrow a donor per observation, so they are not one participant."""
+    ll = _log_likelihood(
+        hierarchical_ddm,
+        _identical_rows(pd.Series([np.nan] * 6, dtype="object")),
+        random_seed=1,
+    )
+
+    assert not np.allclose(ll, ll[..., :1])
+
+
+def test_log_likelihood_random_seed_makes_unseen_groups_reproducible(
+    hierarchical_ddm,
+):
+    """The same seed gives the same score; another seed regenerates coefficients."""
+    data = _new_data(
+        participant_id=pd.Series([0, np.nan, NEW_GROUP, NEW_GROUP], dtype="object")
+    )
+
+    first = _log_likelihood(hierarchical_ddm, data, random_seed=7)
+    np.testing.assert_array_equal(
+        first, _log_likelihood(hierarchical_ddm, data, random_seed=7)
+    )
+
+    other = _log_likelihood(hierarchical_ddm, data, random_seed=8)
+    assert not np.allclose(first[..., 1:], other[..., 1:])
+    # The fitted participant does not depend on the seed.
+    np.testing.assert_allclose(first[..., 0], other[..., 0])
