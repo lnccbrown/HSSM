@@ -75,6 +75,7 @@ This work is in progress; entries are added as each sub-issue lands.
    `prior_predictive` (previously `observed_data` used `rt,response_extra_dim_0`).
    `sample_posterior_predictive` raises a `ValueError` when the posterior lacks a free random
    variable of the model, such as `v_Intercept_centered` in a trace saved before Bambi 0.20.
+   Missing `*_offset` variables are allowed when the corresponding base term is present.
    Previously, out-of-sample prediction silently drew the missing variable from its prior.
    Resample such traces.
 
