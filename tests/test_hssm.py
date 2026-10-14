@@ -316,9 +316,11 @@ def test_log_likelihood_uses_likelihood_compile_mode(
     model._inference_obj = traces
     calls = []
 
-    def fake_compute_log_likelihood(bambi_model, dt, data, inplace, *, compile_mode):
-        """Record the compiler forwarded by the public method."""
-        calls.append((bambi_model, dt, data, inplace, compile_mode))
+    def fake_compute_log_likelihood(
+        bambi_model, dt, data, inplace, *, compile_mode, random_seed
+    ):
+        """Record the compiler and seed forwarded by the public method."""
+        calls.append((bambi_model, dt, data, inplace, compile_mode, random_seed))
         result = dt.copy(deep=True)
         result["log_likelihood"] = xr.Dataset(
             {"rt,response": (("chain", "draw"), np.array([[-1.0]]))}
@@ -332,6 +334,7 @@ def test_log_likelihood_uses_likelihood_compile_mode(
     result = model.log_likelihood(
         inplace=False,
         keep_likelihood_params=True,
+        random_seed=5,
     )
 
     assert len(calls) == 1
@@ -340,6 +343,7 @@ def test_log_likelihood_uses_likelihood_compile_mode(
     assert calls[0][2] is None
     assert calls[0][3] is False
     assert calls[0][4] == expected_compile_mode
+    assert calls[0][5] == 5
     assert result is not traces
     assert isinstance(result, xr.DataTree)
     assert "log_likelihood" in result
