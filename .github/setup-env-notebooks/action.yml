@@ -8,25 +8,34 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Setup Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: ${{ inputs.python-version }}
+    - name: Checkout repository
+      uses: actions/checkout@v7
 
-    - name: Install BLAS and LAPACK
-      run: sudo apt-get update && sudo apt-get install -y libblas-dev liblapack-dev
+    # The `graphviz` Python package is a binding, not a bundle: it shells out
+    # to the `dot` binary, which ubuntu-latest does not ship. Without this,
+    # every notebook that renders a model graph dies on
+    # `ExecutableNotFound: PosixPath('dot')`.
+    - name: Install graphviz
+      run: sudo apt-get update && sudo apt-get install -y graphviz
       shell: bash
 
-    - name: Checkout repository
-      uses: actions/checkout@v6
-
     - name: Install uv
-      uses: astral-sh/setup-uv@v7
+      uses: astral-sh/setup-uv@v9.0.0
       with:
         version: "latest"
+        python-version: ${{ inputs.python-version }}
         enable-cache: true
 
+    # (a stale `if: steps.cache.outputs.cache-hit` guard used to sit here —
+    # no step with id `cache` exists, so it always evaluated true)
+    # Several tutorials call `model.graph()`, which shells out to Graphviz's
+    # `dot`. The Python wrapper comes from the notebook group; the binary does
+    # not, and without it those notebooks fail with
+    # `FileNotFoundError: PosixPath('dot')`.
+    - name: Install Graphviz
+      run: sudo apt-get update && sudo apt-get install -y graphviz
+      shell: bash
+
     - name: Install hssm
-      if: steps.cache.outputs.cache-hit != 'true'
       run: uv sync --group notebook
       shell: bash

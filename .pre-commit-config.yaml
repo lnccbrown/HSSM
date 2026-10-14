@@ -33,3 +33,5 @@ repos:
       - id: mypy
         args: [--no-strict-optional, --ignore-missing-imports]
         additional_dependencies: [types-PyYAML]
+        # Match CI (`mypy src/hssm`) and pyrefly's project-includes.
+        files: ^src/hssm/

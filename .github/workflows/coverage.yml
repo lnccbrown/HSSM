@@ -14,8 +14,6 @@ on:
 jobs:
   coverage:
     runs-on: ubuntu-latest
-    env:
-      PYTENSOR_FLAGS: "blas__ldflags=-L/usr/lib/x86_64-linux-gnu -lblas -llapack"
 
     strategy:
       fail-fast: true
@@ -33,8 +31,6 @@ jobs:
 
       - name: Run all tests with coverage
         run: uv run pytest --cov=src/hssm --cov-report=term-missing --cov-report=xml
-        env:
-          PYTENSOR_FLAGS: ${{ env.PYTENSOR_FLAGS }}
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7

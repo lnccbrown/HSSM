@@ -76,6 +76,14 @@ class HSSM(HSSMBase):
         A list of dictionaries specifying parameter specifications to include in the
         model. If left unspecified, defaults will be used for all parameter
         specifications. Defaults to None.
+
+        In a regression's ``"prior"`` dictionary, each key is a term of the
+        formula and each value is a number, a ``bmb.Prior``, or a dict spec
+        (with a ``"name"`` key) that is converted to one. The exception is
+        ``hsgp(...)`` terms: bambi requires their prior to be a *dictionary*
+        mapping covariance-function parameters (e.g. ``"sigma"``, ``"ell"``)
+        to priors or numbers, so such values are passed through as dicts.
+        Omitting the ``hsgp(...)`` key defers to bambi's automatic HSGP priors.
     model_config : optional
         A `hssm.config.BaseModelConfig` / `hssm.config.Config`
         instance or a ``dict`` with model configuration information. The
@@ -193,19 +201,19 @@ class HSSM(HSSMBase):
         If `True`, the model will process the initial values. Defaults to `True`.
     initval_jitter : optional
         The jitter value for the initial values. Defaults to `0.01`.
-    noncentered : optional
-        Controls the centered vs. non-centered parameterization of
-        group-specific (hierarchical) terms. ``True`` (bambi's default) uses the
-        non-centered parameterization everywhere, ``False`` uses centered. A
-        ``dict`` keyed by HSSM parameter name (e.g. ``{"v": False, "a": True}``)
-        sets it per parameter; an unknown key raises at construction. A per-prior
-        ``noncentered`` field (inside a prior ``dict`` or on an ``hssm.Prior``)
-        overrides the model-level value for that term (precedence: per-prior >
-        model-level dict > default ``True``). Only affects parameters that have a
-        group-specific term (e.g. ``... + (1|participant_id)``); setting it for a
-        non-hierarchical parameter is a silent no-op. Passed to ``bmb.Model``.
     **kwargs
-        Additional arguments passed to the `bmb.Model` object.
+        Additional arguments passed to the `bmb.Model` object. Most notably
+        ``noncentered``, which controls the centered vs. non-centered
+        parameterization of group-specific (hierarchical) terms: ``True``
+        (bambi's default) uses the non-centered parameterization everywhere,
+        ``False`` uses centered. A ``dict`` keyed by HSSM parameter name
+        (e.g. ``{"v": False, "a": True}``) sets it per parameter; an unknown
+        key raises at construction. A per-prior ``noncentered`` field (inside
+        a prior ``dict`` or on an ``hssm.Prior``) overrides the model-level
+        value for that term (precedence: per-prior > model-level dict >
+        default ``True``). Only affects parameters that have a group-specific
+        term (e.g. ``... + (1|participant_id)``); setting it for a
+        non-hierarchical parameter is a silent no-op.
 
     Attributes
     ----------

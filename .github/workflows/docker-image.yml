@@ -1,6 +1,6 @@
 name: Docker image (GHCR)
 
-# PRs: amd64 build only (fast sanity). Release: multi-arch build + push to GHCR.
+# Merge to main: amd64 build only (fast sanity). Release: multi-arch build + push to GHCR.
 # Manual dispatch: multi-arch build, pushed only if `publish` is set (otherwise a
 # build-only validation of the arm64 leg).
 on:
@@ -10,7 +10,9 @@ on:
         description: "Push the image to GHCR (otherwise multi-arch build-only)"
         type: boolean
         default: false
-  pull_request:
+  push:
+    branches:
+      - main
     paths:
       - Dockerfile
       - .dockerignore
@@ -42,14 +44,14 @@ jobs:
           echo "value=$V" >> "$GITHUB_OUTPUT"
 
       # Push only on release (or an explicit `publish` dispatch). Multi-arch
-      # everywhere except PRs, which stay amd64 for fast turnaround.
+      # everywhere except merge-to-main, which stays amd64 for fast turnaround.
       - name: Configure build
         id: cfg
         run: |
           case "${{ github.event_name }}" in
-            pull_request) echo "push=false"; echo "platforms=linux/amd64";;
-            release)      echo "push=true";  echo "platforms=linux/amd64,linux/arm64";;
-            *)            echo "push=${{ inputs.publish }}"; echo "platforms=linux/amd64,linux/arm64";;
+            push)     echo "push=false"; echo "platforms=linux/amd64";;
+            release)  echo "push=true";  echo "platforms=linux/amd64,linux/arm64";;
+            *)        echo "push=${{ inputs.publish }}"; echo "platforms=linux/amd64,linux/arm64";;
           esac >> "$GITHUB_OUTPUT"
 
       # QEMU is needed to build the linux/arm64 leg on an amd64 runner. The arm64

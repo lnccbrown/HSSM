@@ -6,7 +6,9 @@ name: Dev container
 # the `hssm` remote user, and the uv-synced .venv.
 on:
   workflow_dispatch:
-  pull_request:
+  push:
+    branches:
+      - main
     paths:
       - .devcontainer/**
       - Dockerfile

@@ -179,6 +179,16 @@ def data_ddm_reg_va():
 
 
 @pytest.fixture
+def fixture_path():
+    """Return the shared test fixtures directory.
+
+    Use this instead of deriving the path from ``__file__`` so that moving a
+    test file between ``tests/`` subdirectories does not break it.
+    """
+    return FIXTURES
+
+
+@pytest.fixture
 def cav_dt():
     """Return Cavanagh idata."""
     return az.from_netcdf(FIXTURES / "cavanagh_idata.nc")

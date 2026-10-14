@@ -2,6 +2,7 @@ name: Run slow tests
 
 on:
   workflow_dispatch:  # Manual trigger
+  workflow_call:  # Called by drift.yml (scheduled drift detection)
   push:
     branches:
       - main

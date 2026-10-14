@@ -754,7 +754,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         Parameters
         ----------
         niter : int
-            The number of iterations to run the VI algorithm. Defaults to 3000.
+            The number of iterations to run the VI algorithm. Defaults to 10000.
         method : str
             The method to use for VI. Can be one of "advi" or "fullrank_advi", "svgd",
             "asvgd".Defaults to "advi".
@@ -1182,6 +1182,22 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             The matplotlib axis or seaborn FacetGrid object containing the plot.
         """
         return plotting.plot_quantile_probability(self, **kwargs)
+
+    def plot_model_cartoon(
+        self, **kwargs
+    ) -> mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]:
+        """Produce a model cartoon plot.
+
+        Equivalent to calling `hssm.plotting.plot_model_cartoon()` with the
+        model. Please see that function for
+        [full documentation][hssm.plotting.plot_model_cartoon].
+
+        Returns
+        -------
+        mpl.axes.Axes | sns.FacetGrid | list[sns.FacetGrid]
+            The matplotlib axis or seaborn FacetGrid object containing the plot.
+        """
+        return plotting.plot_model_cartoon(self, **kwargs)
 
     def predict(self, **kwargs) -> DataTree:
         """Generate samples from the predictive distribution."""

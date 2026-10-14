@@ -24,16 +24,18 @@ classifiers = [
 ]
 
 dependencies = [
-    "absl-py>=2.3.1",
+    "absl-py>=2.5.0",
     "bambi>=0.19.0",
     "h5netcdf>=1.8.1",
     "h5py>=3.16.0",
     "hddm-wfpt>=0.1.6",
     "huggingface-hub>=1.17.0",
     "jaxonnxruntime>=0.3.0",
-    "numpyro>=0.19",
+    "numpy>=2.4.0,<2.5.0",
+    "numpyro>=0.20",
     "onnx>=1.16.0",
-    # 0.13.1 ships the aDDM engine + fixation_continuation (used by aDDM PPC).
+    # Direct import in hssm.plotting (gaussian_kde, chi2), not merely transitive via pymc.
+    "scipy>=1.10",
     "ssm-simulators>=0.13.1",
 ]
 
@@ -52,16 +54,16 @@ dev = [
     "mypy>=2.1",
     "pytest-cov>=6.0.0",
     "pytest-xdist>=3.6.1",
-    "pytest>=8.3.1",
     "pytest-random-order>=1.1.1",
     "pytest-rerunfailures>=15.0",
     "pytest-timeout>=2.3.1",
-    "ruff>=0.15.0",
     "types-PyYAML",
     "psutil>=7.2.2",
     "prek>=0.4.8",
     "pyrefly>=1.1.1",
     "onnxruntime>=1.27.0",
+    "ruff>=0.16.1",
+    "pytest>=9.1.1",
 ]
 
 notebook = [
@@ -91,6 +93,7 @@ docs = [
     "mkdocs>=1.6.0",
     "mkdocs-jupyter>=0.25.1",
     "mkdocstrings-python>=1.10.0",
+    "mkdocs-redirects==1.2.2",
 ]
 
 [tool.ruff]
@@ -235,7 +238,7 @@ addopts = [
     "--reruns-delay=5",
 ]
 markers = [
-    "slow: marks tests as slow (add --runslow option to run these tests)",
+    "slow: marks tests as slow (deselect with -m 'not slow')",
 ]
 
 [build-system]

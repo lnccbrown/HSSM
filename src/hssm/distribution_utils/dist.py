@@ -448,10 +448,6 @@ def make_distribution(
 
     Parameters
     ----------
-    model_name
-        The name of the model.
-    choices
-        A list of integers indicating the choices.
     rv
         A RandomVariable Op (a class, not an instance) or a string indicating the model.
         If a string, a RandomVariable class will be created automatically with its
