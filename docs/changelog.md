@@ -69,6 +69,15 @@ This work is in progress; entries are added as each sub-issue lands.
    user-supplied `more_replacements` still takes precedence entry by entry; the other backends
    are unchanged.
 
+5. **The response dimension is `rt,response_dim` in every group, and traces must match the model**
+   ([#1336](https://github.com/lnccbrown/HSSM/issues/1336)). Bambi 0.20 names it `rt_dim`; HSSM
+   now renames it in `observed_data` and `posterior_predictive` too, not only in
+   `prior_predictive` (previously `observed_data` used `rt,response_extra_dim_0`).
+   `sample_posterior_predictive` raises a `ValueError` when the posterior lacks a free random
+   variable of the model, such as `v_Intercept_centered` in a trace saved before Bambi 0.20.
+   Previously, out-of-sample prediction silently drew the missing variable from its prior.
+   Resample such traces.
+
 #### Dependency changes:
 
 1. **`bambi` now tracks the `dev` branch** pending the 0.20 release, which reorganizes its

@@ -218,6 +218,7 @@ failing test to tell you when it is fixed.
       `pm.compute_deterministics` cannot find `v_Intercept_centered`. They stay
       xfail with that reason — **regenerating the `.nc` fixtures is tracked in
       #1336.** The cartoon path was verified end-to-end on a fresh trace.
+      *Done in #1336:* fixtures regenerated, xfails removed.
 
 ### F7 (#1316) — Adapt to the new new-group prediction semantics
 
