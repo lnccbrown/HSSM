@@ -3,7 +3,6 @@
 import gc
 import logging
 import os
-from pathlib import Path
 
 import matplotlib as mpl
 
@@ -19,13 +18,16 @@ import xarray as xr
 from ssms.basic_simulators.simulator import simulator
 
 import hssm
+from tests.trace_fixtures import (
+    FIXTURES,
+    build_cav_cartoon_model,
+    build_race_cartoon_model,
+)
 
 _memory_logger = logging.getLogger("hssm.tests.memory")
 
 MIB = 1024 * 1024
 _PSUTIL_AVAILABLE = True
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(autouse=True)
@@ -229,33 +231,8 @@ def basic_hssm_model():
 @pytest.fixture
 def cav_model_cartoon(cavanagh_test):
     """Return a Cavanagh model for cartoon plots."""
-    cav_model = hssm.HSSM(
-        model="ddm",
-        data=cavanagh_test,
-        include=[
-            {
-                "name": "v",
-                "prior": {
-                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.5},
-                },
-                "formula": "v ~ 1 + stim",
-                "link": "identity",
-            },
-            {
-                "name": "a",
-                "prior": {
-                    "Intercept": {"name": "Normal", "mu": 1.5, "sigma": 0.5},
-                },
-                "formula": "a ~ 1 + (1|participant_id)",
-                "link": "identity",
-            },
-        ],
-        p_outlier=0.00,
-    )
-
-    # Attach trace
-    idata_cav = az.from_netcdf(FIXTURES / "idata_cavanagh_cartoon.nc")
-    cav_model._inference_obj = idata_cav
+    cav_model = build_cav_cartoon_model(cavanagh_test)
+    cav_model._inference_obj = az.from_netcdf(FIXTURES / "idata_cavanagh_cartoon.nc")
     return cav_model
 
 
@@ -277,10 +254,10 @@ def intercept_only_ddm_cartoon(cavanagh_test):
     # without requiring actual MCMC sampling.
     posterior = xr.Dataset(
         {
-            "v_Intercept": (["chain", "draw"], np.array([[0.5, 0.6]])),
-            "a_Intercept": (["chain", "draw"], np.array([[1.4, 1.5]])),
-            "z_Intercept": (["chain", "draw"], np.array([[0.5, 0.5]])),
-            "t_Intercept": (["chain", "draw"], np.array([[0.3, 0.3]])),
+            "v": (["chain", "draw"], np.array([[0.5, 0.6]])),
+            "a": (["chain", "draw"], np.array([[1.4, 1.5]])),
+            "z": (["chain", "draw"], np.array([[0.5, 0.5]])),
+            "t": (["chain", "draw"], np.array([[0.3, 0.3]])),
         },
         coords={"chain": [0], "draw": [0, 1]},
     )
@@ -319,33 +296,8 @@ def minimal_posterior_datatree():
 @pytest.fixture
 def race_model_cartoon():
     """Return a race model for cartoon plots."""
-    my_race_data = pd.read_csv(FIXTURES / "data_race.csv")
-    race_model = hssm.HSSM(
-        model="race_no_bias_angle_4",
-        data=my_race_data,
-        include=[
-            {
-                "name": "v0",
-                "prior": {
-                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.5},
-                },
-                "formula": "v0 ~ 1 + stim",
-                "link": "identity",
-            },
-            {
-                "name": "a",
-                "prior": {
-                    "Intercept": {"name": "Normal", "mu": 1.5, "sigma": 0.5},
-                },
-                "formula": "a ~ 1 + (1|participant_id)",
-                "link": "identity",
-            },
-        ],
-        p_outlier=0.00,
-    )
-    # Attach trace
-    idata_race = az.from_netcdf(FIXTURES / "test_idata_race.nc")
-    race_model._inference_obj = idata_race
+    race_model = build_race_cartoon_model(pd.read_csv(FIXTURES / "data_race.csv"))
+    race_model._inference_obj = az.from_netcdf(FIXTURES / "test_idata_race.nc")
     return race_model
 
 

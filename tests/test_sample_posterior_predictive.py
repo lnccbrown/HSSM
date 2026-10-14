@@ -5,6 +5,7 @@ import pytest
 import xarray as xr
 
 import hssm
+from tests.trace_fixtures import build_cav_reg_model
 
 hssm.set_floatX("float32")
 
@@ -16,8 +17,8 @@ PARAMETER_GRID = [
     (None, True, False),
     # (50, False, False),
     (50, True, False),
-    # (np.arange(500), False, False), # very slow to test
-    (np.arange(500), True, False),
+    # (np.arange(200), False, False), # very slow to test
+    (np.arange(200), True, False),
     (1, False, True),
     (1, True, True),
     # (None, False, True), # very slow to test
@@ -25,7 +26,7 @@ PARAMETER_GRID = [
     (50, False, True),
     (50, True, True),
     (np.arange(50), False, True),
-    (np.arange(500), True, True),
+    (np.arange(200), True, True),
     ([1, 2, 3, 4, 5], False, False),
     ([1, 2, 3, 4, 5], True, False),
     ([1, 2, 3, 4, 5], False, True),
@@ -33,28 +34,11 @@ PARAMETER_GRID = [
 ]
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior` (#1330)",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, inplace):
     """Test sample_posterior_predictive method."""
-    model = hssm.HSSM(
-        data=cavanagh_test,
-        include=[
-            {
-                "name": "v",
-                "prior": {
-                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
-                    "theta": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
-                },
-                "formula": "v ~ theta + (1|participant_id)",
-                "link": "identity",
-            },
-        ],
-    )  # Doesn't matter what model or data we use here
+    model = build_cav_reg_model(cavanagh_test)
     if "posterior_predictive" in cav_dt:
         del cav_dt["posterior_predictive"]
     cav_dt_copy = cav_dt.copy()
@@ -64,7 +48,7 @@ def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, in
     )
 
     if draws is None:
-        size = 500
+        size = 200
     elif isinstance(draws, int):
         size = draws
     elif isinstance(draws, np.ndarray):

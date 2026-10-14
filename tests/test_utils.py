@@ -410,12 +410,12 @@ def assertions(caplog, obj, n_samples, expected):
         (0, "error"),
         (1, 1),
         (100, 100),
-        (501, 500),
+        (201, 200),
         (0.0, "error"),
-        (0.5, 250),
-        (1.0, 500),
+        (0.5, 100),
+        (1.0, 200),
         (2.0, "error"),
-        (None, 500),
+        (None, 200),
     ],
 )
 def test__random_sample(
