@@ -38,6 +38,15 @@ PARAMETER_GRID = [
 ]
 
 
+@pytest.fixture
+def cav_dt_thin(cav_dt):
+    """Return the Cavanagh idata thinned to its first ``THIN_DRAWS`` draws."""
+    return cav_dt.isel(
+        draw=slice(0, THIN_DRAWS),  # Take only the first THIN_DRAWS draws
+        missing_dims="ignore",  # Ignore any dimensions that are missing in the selection
+    )
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, inplace):
