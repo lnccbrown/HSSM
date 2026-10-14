@@ -328,8 +328,11 @@ def _(mo):
     mo.md(r"""
     ## Browse the runs
 
-    From the folder that holds `mlflow.db`, start the MLflow UI and open the
-    address it prints:
+    This notebook keeps its runs in a throwaway folder, so they are gone once
+    it finishes. To keep and browse your own, delete the `os.chdir(...)` line
+    in the first cell and run the notebook again: the runs then go to
+    `mlflow.db` in the folder you started it from. From that folder, start the
+    MLflow UI and open the address it prints:
 
     ```bash
     mlflow ui --backend-store-uri sqlite:///mlflow.db
