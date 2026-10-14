@@ -67,6 +67,7 @@ def test_sample_posterior_predictive(
             },
         ],
     )  # Doesn't matter what model or data we use here
+    cav_dt = request.getfixturevalue(fixture)
     if "posterior_predictive" in cav_dt:
         del cav_dt["posterior_predictive"]
     cav_dt_copy = cav_dt.copy()
@@ -76,7 +77,7 @@ def test_sample_posterior_predictive(
     )
 
     if draws is None:
-        size = 500
+        size = cav_dt.posterior.draw.size
     elif isinstance(draws, int):
         size = draws
     elif isinstance(draws, np.ndarray):
