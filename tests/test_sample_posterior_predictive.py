@@ -85,6 +85,8 @@ def test_sample_posterior_predictive_uses_attached_traces_for_response_params(
         return expected
 
     monkeypatch.setattr(model.model, "predict", fake_predict)
+    # the fake posterior only carries `v`; this test is about delegation
+    monkeypatch.setattr(model, "_check_posterior_has_free_rvs", lambda dt: None)
 
     result = model.sample_posterior_predictive(
         kind="response_params",
@@ -116,6 +118,8 @@ def test_sample_posterior_predictive_replaces_existing_group_inplace(
         dt["posterior_predictive"] = replacement
 
     monkeypatch.setattr(model.model, "predict", fake_predict)
+    # the fake posterior only carries `v`; this test is about delegation
+    monkeypatch.setattr(model, "_check_posterior_has_free_rvs", lambda dt: None)
 
     result = model.sample_posterior_predictive(
         dt=traces,
@@ -264,3 +268,33 @@ def test_in_sample_prediction_ignores_stale_predictions_group(
     pps = out["posterior_predictive"].to_dataset()
     assert list(pps.data_vars) == ["rt,response"]
     assert pps.sizes["draw"] == 2
+
+
+@pytest.mark.parametrize("data", [None, "cavanagh_test"])
+def test_sample_posterior_predictive_rejects_trace_missing_free_rv(
+    cav_dt, cavanagh_test, data
+):
+    """A trace lacking a free RV fails loudly instead of resampling it from its prior.
+
+    Out of sample, ``pm.sample_posterior_predictive`` would otherwise draw the
+    missing RV from its prior and pass the result off as posterior predictions.
+    """
+    model = build_cav_reg_model(cavanagh_test)
+    cav_dt["posterior"] = (
+        cav_dt["posterior"].to_dataset().drop_vars("v_Intercept_centered")
+    )
+
+    with pytest.raises(ValueError, match=r"\['v_Intercept_centered'\]"):
+        model.sample_posterior_predictive(
+            dt=cav_dt, data=cavanagh_test if data else None, draws=1
+        )
+
+
+def test_free_rv_check_allows_omitted_offsets(cav_dt, cavanagh_test):
+    """`omit_offsets=True` traces pass: bambi rebuilds `*_offset` from the term."""
+    model = build_cav_reg_model(cavanagh_test)
+    cav_dt["posterior"] = (
+        cav_dt["posterior"].to_dataset().drop_vars("v_1|participant_id_offset")
+    )
+
+    model._check_posterior_has_free_rvs(cav_dt)

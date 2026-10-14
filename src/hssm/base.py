@@ -1109,6 +1109,29 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         del dt["posterior_predictive"]
         return draws
 
+    def _check_posterior_has_free_rvs(self, dt: DataTree) -> None:
+        """Raise if `dt`'s posterior lacks a free RV of the current model.
+
+        Out of sample, `pm.sample_posterior_predictive` silently draws a missing
+        free RV from its prior, so a trace sampled from another model (or an
+        older bambi, #1336) would pass prior draws off as posterior predictions.
+        """
+        posterior = set(dt["posterior"].data_vars)
+        missing = sorted(
+            name
+            for name in (rv.name for rv in self.pymc_model.free_RVs)
+            if name not in posterior
+            # `omit_offsets=True` drops `{term}_offset`; bambi rebuilds it from
+            # `{term}` and `{term}_sigma`.
+            and not (name.endswith("_offset") and name[: -len("_offset")] in posterior)
+        )
+        if missing:
+            raise ValueError(
+                f"The posterior is missing free random variables of this model: "
+                f"{missing}. Was the trace sampled from a different model or an "
+                "older bambi version? Resample the model, or pass the matching trace."
+            )
+
     def sample_posterior_predictive(
         self,
         dt: DataTree | None = None,
@@ -1175,7 +1198,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         Raises
         ------
         ValueError
-            If the model has not been sampled yet and datatree is not provided.
+            If the model has not been sampled yet and datatree is not provided, or
+            if the posterior lacks a free random variable of the model.
 
         Returns
         -------
@@ -1199,6 +1223,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 _logger.warning(
                     "pre-existing posterior_predictive group deleted from datatree."
                 )
+
+        self._check_posterior_has_free_rvs(dt)
 
         if self._check_extra_fields(data):
             self._update_extra_fields(data)
