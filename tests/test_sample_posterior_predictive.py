@@ -10,26 +10,26 @@ hssm.set_floatX("float32")
 
 PARAMETER_NAMES = "draws,safe_mode,inplace"
 PARAMETER_GRID = [
-    (1, False, False),
-    (1, True, False),
-    # (None, False, False), # slow test...
-    (None, True, False),
-    # (50, False, False),
-    (50, True, False),
-    # (np.arange(500), False, False), # very slow to test
-    (np.arange(500), True, False),
-    (1, False, True),
-    (1, True, True),
-    # (None, False, True), # very slow to test
-    (None, True, True),
-    (50, False, True),
-    (50, True, True),
-    (np.arange(50), False, True),
-    (np.arange(500), True, True),
-    ([1, 2, 3, 4, 5], False, False),
-    ([1, 2, 3, 4, 5], True, False),
-    ([1, 2, 3, 4, 5], False, True),
-    ([1, 2, 3, 4, 5], True, True),
+    ("cav_dt", 1, False, False),
+    ("cav_dt", 1, True, False),
+    # ("cav_dt_thin", None, False, False), # slow test...
+    ("cav_dt_thin", None, True, False),
+    # ("cav_dt", 50, False, False),
+    ("cav_dt", 50, True, False),
+    # ("cav_dt_thin", np.arange(THIN_DRAWS), False, False), # very slow to test
+    ("cav_dt_thin", np.arange(THIN_DRAWS), True, False),
+    ("cav_dt", 1, False, True),
+    ("cav_dt", 1, True, True),
+    # ("cav_dt_thin", None, False, True), # very slow to test
+    ("cav_dt_thin", None, True, True),
+    ("cav_dt", 50, False, True),
+    ("cav_dt", 50, True, True),
+    ("cav_dt", np.arange(50), False, True),
+    ("cav_dt_thin", np.arange(THIN_DRAWS), True, True),
+    ("cav_dt", [1, 2, 3, 4, 5], False, False),
+    ("cav_dt", [1, 2, 3, 4, 5], True, False),
+    ("cav_dt", [1, 2, 3, 4, 5], False, True),
+    ("cav_dt", [1, 2, 3, 4, 5], True, True),
 ]
 
 
