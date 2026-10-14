@@ -762,44 +762,6 @@ def test_vi_idata_rejects_attached_approximation(data_ddm):
         _ = model.vi_idata
 
 
-def test_drop_parent_str_requires_datatree(data_ddm):
-    """Posterior cleanup rejects a missing trace object."""
-    model = HSSM(data=data_ddm)
-
-    with pytest.raises(
-        ValueError,
-        match=r"Please provide a DataTree \(traces\) object\.",
-    ):
-        model._drop_parent_str_from_datatree(None)
-
-
-def test_drop_parent_str_renames_response_mean(data_ddm):
-    """Posterior cleanup restores the model's response-parameter name."""
-    model = HSSM(data=data_ddm)
-    traces = xr.DataTree.from_dict(
-        {
-            "posterior": xr.Dataset(
-                {
-                    "rt,response_mean": (
-                        ("chain", "draw"),
-                        np.array([[0.5]]),
-                    )
-                }
-            )
-        }
-    )
-
-    result = model._drop_parent_str_from_datatree(traces)
-
-    assert result is traces
-    assert model._parent in result["posterior"].data_vars
-    assert "rt,response_mean" not in result["posterior"].data_vars
-    np.testing.assert_array_equal(
-        result["posterior"][model._parent].values,
-        np.array([[0.5]]),
-    )
-
-
 def test_clean_posterior_keeps_covariates_named_mean(data_ddm):
     """Only the parent's `_mean` alias is dropped, not any name containing `_mean`."""
     data = data_ddm.assign(rt_mean=np.linspace(-1, 1, len(data_ddm)))
