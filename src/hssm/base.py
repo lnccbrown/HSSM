@@ -687,7 +687,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         if initvals is not None:
             if isinstance(initvals, dict):
-                kwargs["initvals"] = initvals
+                kwargs["initvals"] = self._remap_centered_intercept_initvals(initvals)
             else:
                 if isinstance(initvals, str):
                     if initvals == "map":
@@ -967,10 +967,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         vars_to_keep = set(dt["posterior"].data_vars.keys()).difference(
             key_ for key_ in self.model.parameters if key_ in deterministic_names
         )
+        # Drop only bambi's exact `{parent}_mean` alias, not every name containing
+        # `_mean`, so a covariate like `rt_mean` keeps its coefficient (#1378).
         vars_to_keep_clean = [
             var_
             for var_ in vars_to_keep
-            if isinstance(var_, str) and "_mean" not in var_
+            if isinstance(var_, str) and var_ != f"{self._parent}_mean"
         ]
         dt["posterior"] = dt["posterior"].to_dataset()[vars_to_keep_clean]
 
@@ -980,6 +982,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         data: pd.DataFrame | None = None,
         inplace: bool = True,
         keep_likelihood_params: bool = False,
+        random_seed: int | np.random.Generator | None = None,
     ) -> DataTree | None:
         """Compute the log likelihood of the model.
 
@@ -1005,6 +1008,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             on route to getting the log likelihood are kept in the `dt` object.
             Defaults to False. See also the method
             `add_likelihood_parameters_to_datatree`.
+        random_seed : optional
+            Seed for the coefficients generated for new or unidentified groups in
+            `data`. Without it, repeated calls give different log likelihoods for
+            those observations. Fitted groups do not depend on the seed.
 
         Returns
         -------
@@ -1046,6 +1053,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             data,
             inplace,
             compile_mode=compile_mode,
+            random_seed=random_seed,
         )
 
         # clean up posterior:
@@ -1370,9 +1378,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         )
         do_dt = pm.sample_prior_predictive(model=do_model, draws=draws, **kwargs)
 
-        # clean up `rt,response_mean` to `v`
-        do_dt = self._drop_parent_str_from_datatree(dt=do_dt)
-
         # rename otherwise inconsistent dims and coords
         do_dt["prior_predictive"] = _rename_response_dim(do_dt["prior_predictive"].ds)
 
@@ -1432,14 +1437,10 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                     continue
                 self._inference_obj[group_name] = prior_predictive[group_name]
 
-        # clean up `rt,response_mean` to `v`
-        dt = self._drop_parent_str_from_datatree(dt=self._inference_obj)
-
         # rename otherwise inconsistent dims and coords
-        dt["prior_predictive"] = _rename_response_dim(dt["prior_predictive"].ds)
-
-        # Update self._inference_obj to match the cleaned datatree
-        self._inference_obj = dt
+        self._inference_obj["prior_predictive"] = _rename_response_dim(
+            self._inference_obj["prior_predictive"].ds
+        )
         return deepcopy(self._inference_obj)
 
     @property
@@ -2089,31 +2090,6 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         return var_names
 
-    def _drop_parent_str_from_datatree(self, dt: DataTree | None) -> DataTree:
-        """Drop the parent_str variable from a DataTree object.
-
-        Parameters
-        ----------
-        dt
-            The DataTree object to be modified.
-
-        Returns
-        -------
-        xr.Dataset
-            The modified DataTree object.
-        """
-        if dt is None:
-            raise ValueError("Please provide a DataTree (traces) object.")
-        else:
-            for group in dt.groups:
-                if group == "/":
-                    continue
-                if ("rt,response_mean" in dt[group].data_vars) and (
-                    self._parent not in dt[group].data_vars
-                ):
-                    dt[group] = dt[group].ds.rename({"rt,response_mean": self._parent})
-            return dt
-
     def _postprocess_initvals_deterministic(
         self, initval_settings: dict = INITVAL_SETTINGS
     ) -> None:
@@ -2172,6 +2148,37 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 self._initvals[name_tmp] = np.array(
                     initval_settings[param_link_setting][settings_key]
                 ).astype(dtype)
+
+    def _remap_centered_intercept_initvals(self, initvals: dict) -> dict:
+        """Move user initvals from a `<param>_Intercept` deterministic to its RV.
+
+        With common predictors, bambi (>= 0.20) samples `<param>_Intercept_centered`
+        and makes `<param>_Intercept` a Deterministic. PyMC silently ignores
+        initvals keyed on a Deterministic, so remap them to the centered RV, the
+        same way `_postprocess_initvals_deterministic` remaps HSSM's defaults.
+        The two intercepts coincide when the slopes start at 0 (HSSM's default).
+        """
+        free_rv_names = {rv.name for rv in self.pymc_model.free_RVs}
+        remapped = {}
+        for key, value in initvals.items():
+            centered = f"{key}_centered"
+            if (
+                isinstance(key, str)
+                and key.endswith("_Intercept")
+                and centered in free_rv_names
+                and centered not in initvals
+            ):
+                _logger.info(
+                    "Initial value for %s applied to %s: %s is a deterministic "
+                    "because the predictors of its parameter are centered.",
+                    key,
+                    centered,
+                    key,
+                )
+                remapped[centered] = value
+            else:
+                remapped[key] = value
+        return remapped
 
     def _get_prefix(self, name_str: str) -> str:
         """Resolve parameter prefix, handling underscore-containing RL param names.

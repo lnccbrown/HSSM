@@ -79,6 +79,44 @@ This work is in progress; entries are added as each sub-issue lands.
    Previously, out-of-sample prediction silently drew the missing variable from its prior.
    Resample such traces.
 
+6. **Regression intercepts appear twice in the trace when the parameter has common predictors**
+   ([#1375](https://github.com/lnccbrown/HSSM/issues/1375)). With an intercept, at least one
+   common predictor, and `center_predictors=True` (the default), Bambi now samples
+   `{param}_Intercept_centered` and records the original-scale `{param}_Intercept` as a
+   deterministic, so `az.summary` and `plot_trace` show two rows per such intercept. Both are
+   kept: Bambi's `predict` and `compute_log_likelihood` need the centered one. The meaning of
+   the intercept prior is unchanged. To report only the ordinary intercept, use
+   `az.summary(idata, var_names=["~_centered"], filter_vars="like")`. See
+   [Predictor centering and the intercept](explanations/intercept_centering.md).
+
+7. **`sample(initvals={"v_Intercept": ...})` is remapped to `v_Intercept_centered`**
+   ([#1375](https://github.com/lnccbrown/HSSM/issues/1375)). Once `v_Intercept` is a
+   deterministic, PyMC silently ignores an initial value keyed on it. HSSM now moves such a
+   key to the centered random variable, as it already did for its own default initial values.
+   An explicit `v_Intercept_centered` key takes precedence.
+
+8. **Dimension names follow Bambi 0.20.** Group-specific terms use `{factor}_dim` instead of
+   `{factor}__factor_dim`; a categorical predictor in a formula with an intercept uses
+   `{var}_dim_reduced`; and a nested factor such as `(1|g:h)` now gets two dims, `g_dim` and
+   `h_dim`, instead of one. Code that selects coordinates by dim name must be updated.
+
+9. **Traces gain a `constant_data` group** holding the design-matrix data (for example
+   `v_x_data`) and the group index arrays (for example `g__idx`) Bambi used to build the model.
+
+10. **`log_likelihood` takes a `random_seed` for unseen and missing participant IDs**
+    ([#1376](https://github.com/lnccbrown/HSSM/issues/1376)). Out of sample, the log likelihood of
+    a new or unidentified participant is conditional on coefficients that Bambi's prediction
+    machinery generates at random, so it changed between calls. `random_seed` fixes them. The
+    how-to guide [Predict for new or unidentified participants](how_to/predict_new_groups.md) now
+    documents these semantics and how to average draws into a trial-level or participant-level
+    predictive score.
+
+11. **Posterior cleanup no longer drops every variable whose name contains `_mean`**
+    ([#1378](https://github.com/lnccbrown/HSSM/issues/1378)). It now drops only the parent
+    parameter's `{parent}_mean` alias (e.g. `v_mean`), so a covariate such as `rt_mean` keeps its
+    coefficient `v_rt_mean` in the trace. The unused `hssm.utils.make_alias_dict_from_parent` and
+    the no-op `rt,response_mean` rename, which Bambi 0.20 no longer produces, are removed.
+
 #### Dependency changes:
 
 1. **`bambi` now tracks the `dev` branch** pending the 0.20 release, which reorganizes its

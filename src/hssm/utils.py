@@ -63,41 +63,6 @@ def _response_evaluate_new_data(model: bmb.Model, data: pd.DataFrame) -> np.ndar
     return np.asarray(design.response)
 
 
-def make_alias_dict_from_parent(parent: Param) -> dict[str, str]:
-    """Make aliases from the parent parameter.
-
-    From a Param object that represents a parent parameter in Bambi,
-    returns a dict that represents how Bambi should alias its parameters to
-    make it more HSSM-friendly.
-
-    Parameters
-    ----------
-    parent: A Param object that represents a parent parameter.
-
-    Returns
-    -------
-        A dict that indicates how Bambi should alias its parameters.
-    """
-    assert parent.is_parent, "This Param object should be a parent!"
-    assert parent.name is not None
-
-    result_dict = {"c(rt, response)": "rt,response"}
-
-    # The easy case. We will just alias "Intercept" as the actual name of the
-    # parameter
-    if not parent.is_regression:
-        result_dict |= {"Intercept": parent.name}
-
-        return result_dict
-
-    # The regression case:
-    # In this case, the name of the response variable should actually be
-    # the name of the parent parameter
-    result_dict["c(rt, response)"] = parent.name
-
-    return result_dict
-
-
 def _get_alias_dict(
     model: bmb.Model, parent: Param, response_c: str, response_str: str
 ) -> dict[str, str | dict]:
@@ -163,6 +128,7 @@ def _compute_log_likelihood(
     data: pd.DataFrame | None,
     inplace: bool = True,
     compile_mode: str | None = None,
+    random_seed: int | np.random.Generator | None = None,
 ) -> xr.DataTree | None:
     """Compute the model's log-likelihood.
 
@@ -183,6 +149,9 @@ def _compute_log_likelihood(
         PyTensor compilation mode for the response log-probability graph. JAX-backed
         HSSM models pass ``"JAX"`` so their custom likelihood Ops use their
         ``jax_funcify`` registrations instead of PyMC's default Numba linker.
+    random_seed : optional
+        Seed for the coefficients generated for new or unidentified groups in
+        ``data``. See ``_compute_likelihood_params``.
 
     Returns
     -------
@@ -199,7 +168,7 @@ def _compute_log_likelihood(
     # log-likelihood omitting the group-specific components of the model, so
     # they are always included.
     posterior = _compute_likelihood_params(
-        model, dt, data=data, include_group_specific=True
+        model, dt, data=data, include_group_specific=True, random_seed=random_seed
     )
 
     required_kwargs = {
@@ -234,6 +203,7 @@ def _compute_likelihood_params(
     dt: xr.DataTree,
     data: pd.DataFrame | None = None,
     include_group_specific: bool = True,
+    random_seed: int | np.random.Generator | None = None,
 ) -> xr.Dataset:
     """Evaluate the likelihood parameters and gather them into one dataset.
 
@@ -255,6 +225,10 @@ def _compute_likelihood_params(
         omitted, the original dataset is used.
     include_group_specific : bool
         Whether the group-specific effects contribute to the parameters.
+    random_seed : optional
+        Seed for bambi's prediction machinery. It fixes the coefficients that are
+        generated for new or unidentified groups in ``data``; fitted groups are
+        deterministic given the posterior.
 
     Returns
     -------
@@ -268,6 +242,7 @@ def _compute_likelihood_params(
         data=data,
         inplace=True,
         include_group_specific=include_group_specific,
+        random_seed=random_seed,
     )
     posterior = dt["posterior"].to_dataset()
 

@@ -316,9 +316,11 @@ def test_log_likelihood_uses_likelihood_compile_mode(
     model._inference_obj = traces
     calls = []
 
-    def fake_compute_log_likelihood(bambi_model, dt, data, inplace, *, compile_mode):
-        """Record the compiler forwarded by the public method."""
-        calls.append((bambi_model, dt, data, inplace, compile_mode))
+    def fake_compute_log_likelihood(
+        bambi_model, dt, data, inplace, *, compile_mode, random_seed
+    ):
+        """Record the compiler and seed forwarded by the public method."""
+        calls.append((bambi_model, dt, data, inplace, compile_mode, random_seed))
         result = dt.copy(deep=True)
         result["log_likelihood"] = xr.Dataset(
             {"rt,response": (("chain", "draw"), np.array([[-1.0]]))}
@@ -332,6 +334,7 @@ def test_log_likelihood_uses_likelihood_compile_mode(
     result = model.log_likelihood(
         inplace=False,
         keep_likelihood_params=True,
+        random_seed=5,
     )
 
     assert len(calls) == 1
@@ -340,6 +343,7 @@ def test_log_likelihood_uses_likelihood_compile_mode(
     assert calls[0][2] is None
     assert calls[0][3] is False
     assert calls[0][4] == expected_compile_mode
+    assert calls[0][5] == 5
     assert result is not traces
     assert isinstance(result, xr.DataTree)
     assert "log_likelihood" in result
@@ -762,42 +766,28 @@ def test_vi_idata_rejects_attached_approximation(data_ddm):
         _ = model.vi_idata
 
 
-def test_drop_parent_str_requires_datatree(data_ddm):
-    """Posterior cleanup rejects a missing trace object."""
-    model = HSSM(data=data_ddm)
-
-    with pytest.raises(
-        ValueError,
-        match=r"Please provide a DataTree \(traces\) object\.",
-    ):
-        model._drop_parent_str_from_datatree(None)
-
-
-def test_drop_parent_str_renames_response_mean(data_ddm):
-    """Posterior cleanup restores the model's response-parameter name."""
-    model = HSSM(data=data_ddm)
+def test_clean_posterior_keeps_covariates_named_mean(data_ddm):
+    """Only the parent's `_mean` alias is dropped, not any name containing `_mean`."""
+    data = data_ddm.assign(rt_mean=np.linspace(-1, 1, len(data_ddm)))
+    model = HSSM(data=data, include=[{"name": "v", "formula": "v ~ 1 + rt_mean"}])
+    # bambi only emits `v_mean` for an all-simple model, so add it by hand.
+    names = ["v_mean"] + [
+        var_.name
+        for var_ in model.pymc_model.free_RVs + model.pymc_model.deterministics
+    ]
+    assert "v_rt_mean" in names
     traces = xr.DataTree.from_dict(
         {
             "posterior": xr.Dataset(
-                {
-                    "rt,response_mean": (
-                        ("chain", "draw"),
-                        np.array([[0.5]]),
-                    )
-                }
+                {name: (("chain", "draw"), np.zeros((1, 1))) for name in names}
             )
         }
     )
 
-    result = model._drop_parent_str_from_datatree(traces)
+    model._clean_posterior_group(dt=traces)
 
-    assert result is traces
-    assert model._parent in result["posterior"].data_vars
-    assert "rt,response_mean" not in result["posterior"].data_vars
-    np.testing.assert_array_equal(
-        result["posterior"][model._parent].values,
-        np.array([[0.5]]),
-    )
+    assert "v_rt_mean" in traces["posterior"].data_vars
+    assert "v_mean" not in traces["posterior"].data_vars
 
 
 def test_is_choice_only_and_deadline(data_ddm):
