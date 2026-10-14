@@ -41,7 +41,7 @@ Browse them with:
 mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
-`dataset_name=` is optional but worth setting: it fills the run's **Datasets** panel with your data's column schema and row count, and lets the UI filter by dataset. Left out, that panel stays empty — a DataFrame carries no name of its own, and an invented one would look identical for every study. Either way the data is identified by the `data_sha256` tag, and the data itself is stored with the run as `data.parquet` (unless `log_artifacts=False`); with a name, the Datasets entry links to that stored copy.
+`dataset_name=` is optional but worth setting: it fills the run's **Datasets** panel with your data's column schema and row count, and lets the UI filter by dataset. Left out, that panel stays empty — a DataFrame carries no name of its own, and an invented one would look identical for every study. Either way the data is identified by the `data_sha256` tag, and the data itself is stored with the run as `data.parquet` (unless `log_artifacts=False`); with a name, the Datasets entry links to that stored copy, except on a server that proxies artifacts (`mlflow-artifacts:/` URIs), where it is registered without the link.
 
 One block records one fit, and fitting more than once inside a single block is
 not supported: only the first fit is recorded, and a later one is skipped with
