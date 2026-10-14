@@ -132,6 +132,25 @@ def test_plot_model_cartoon_intercept_only(intercept_only_ddm_cartoon):
 
 
 @pytest.mark.slow
+def test_plot_model_cartoon_prior_with_fixed_p_outlier(cavanagh_test):
+    """Prior-predictive mean cartoon works when `p_outlier` is a fixed constant.
+
+    bambi 0.20 traces fixed parameters as constant deterministics; left in the
+    `prior` group they broke forward sampling from it (#1329).
+    """
+    model = hssm.HSSM(model="ddm", data=cavanagh_test)  # default p_outlier=0.05
+    model.sample_prior_predictive(draws=10)
+    ax = hssm.plotting.plot_model_cartoon(
+        model,
+        n_samples_prior=10,
+        uncertainty=None,
+        predictive_group="prior_predictive",
+        n_trajectories=2,
+    )
+    assert ax is not None
+
+
+@pytest.mark.slow
 def test_plot_model_cartoon_random_state_end_to_end(cav_model_cartoon):
     """Same random_state => identical figure through the full public path
     (draw selection, simulations, trajectories).
