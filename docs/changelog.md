@@ -79,6 +79,12 @@ This work is in progress; entries are added as each sub-issue lands.
    Previously, out-of-sample prediction silently drew the missing variable from its prior.
    Resample such traces.
 
+6. **Posterior cleanup no longer drops variables whose name contains `_mean`**
+   ([#1378](https://github.com/lnccbrown/HSSM/issues/1378)). It now drops only the parent
+   parameter's `{parent}_mean` alias (e.g. `v_mean`), so a covariate such as `rt_mean` keeps its
+   coefficient `v_rt_mean` in the trace. The unused `hssm.utils.make_alias_dict_from_parent` and
+   the no-op `rt,response_mean` rename, which Bambi 0.20 no longer produces, are removed.
+
 #### Dependency changes:
 
 1. **`bambi` now tracks the `dev` branch** pending the 0.20 release, which reorganizes its
