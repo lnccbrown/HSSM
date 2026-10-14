@@ -49,7 +49,9 @@ def cav_dt_thin(cav_dt):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
-def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, inplace):
+def test_sample_posterior_predictive(
+    request, cavanagh_test, fixture, draws, safe_mode, inplace
+):
     """Test sample_posterior_predictive method."""
     model = hssm.HSSM(
         data=cavanagh_test,
