@@ -2329,7 +2329,7 @@ def _(N_ADVANCED_TRIALS, SEEDS, a_trialwise, np, pd, t_true, v_true, z_true):
     )  # z
     # simulate data
     # Turn into nice dataset
-    dataset_trialwise  # t  # parameter_matrix  # specify model (many are included in ssms)  # number of samples for each set of parameters  # (plays the role of `size` parameter in `hssm.simulate_data`)
+    dataset_trialwise
     return
 
 
@@ -2572,6 +2572,8 @@ def _(hddm_wfpt, np):
         """Create a custom blackbox likelihood function."""
         data = data[:, 0] * data[:, 1]
         data_nrows = data.shape[0]
+        # Our function expects inputs as float64, but they are not guaranteed to
+        # come in as such --> we type convert
         return hddm_wfpt.wfpt.wiener_logp_array(
             np.float64(data),
             (np.ones(data_nrows) * v).astype(np.float64),
@@ -2583,7 +2585,7 @@ def _(hddm_wfpt, np):
             np.ones(data_nrows) * 0,
             err,
             1,
-        )  # Our function expects inputs as float64, but they are not guaranteed to  # come in as such --> we type convert
+        )
 
     return (my_blackbox_loglik,)
 
