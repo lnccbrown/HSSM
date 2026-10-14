@@ -8,7 +8,12 @@ import hssm
 
 hssm.set_floatX("float32")
 
-PARAMETER_NAMES = "draws,safe_mode,inplace"
+# Full-posterior cases run on a thinned copy of the cavanagh fixture: predicting
+# over all 500 draws dominated this file's runtime, and the assertions only check
+# draw counts. 20 draws still gives safe_mode two chunks of 10.
+THIN_DRAWS = 20
+
+PARAMETER_NAMES = "fixture,draws,safe_mode,inplace"
 PARAMETER_GRID = [
     ("cav_dt", 1, False, False),
     ("cav_dt", 1, True, False),
