@@ -105,6 +105,10 @@ class HSSM(HSSMBase):
         - `"default_priors"`: A `dict` indicating the default priors for each parameter.
         - `"bounds"`: A `dict` indicating the boundaries for each parameter. In the case
             of LAN, these bounds are training boundaries.
+        - `"ndt_edge_shift"`: Optional. A `dict` with keys `"param"` and `"scale"`
+            declaring that the likelihood's support starts at `t - scale * param`
+            rather than at `t`, so that only response times at or below that edge
+            are floored. Overrides the declaration bundled with the likelihood.
         - `"rv"`: Optional. Can be a `RandomVariable` class containing the user's own
             `rng_fn` function for sampling from the distribution that the user is
             supplying. If not supplied, HSSM will automatically generate a
@@ -166,7 +170,12 @@ class HSSM(HSSMBase):
         - `"log_logit"`: uses identity for bounds `(-inf, inf)`, log for
         `(0, inf)`, and generalized logit when both bounds are finite.
         - `None`: uses the `"identity"` link unless a regression parameter specifies
-        another link.
+        another link. A bounded parameter used in a regression with the identity link
+        does not have its bounds built into the parameterization: a draw that puts any
+        observation's value outside them is penalised by the likelihood rather than
+        mapped back inside. This is usually harmless when the parameter sits well
+        inside its bounds. If you see divergences, `"log_logit"` composes the
+        regression on the link scale (it also changes the generated default priors).
 
         Explicit per-parameter links take precedence. Parameters without a regression
         formula have no linear predictor and are unaffected. Defaults to `None`.
@@ -205,6 +214,9 @@ class HSSM(HSSMBase):
         either `missing_data` or `deadline` is not `False`. Defaults to `None`.
     process_initvals : optional
         If `True`, the model will process the initial values. Defaults to `True`.
+        Processing also clamps a default initial value that falls outside its
+        parameter's declared `bounds` to a point just inside them; initial values
+        you supply yourself are used as given.
     initval_jitter : optional
         The jitter value for the initial values. Defaults to `0.01`.
     **kwargs
@@ -453,6 +465,8 @@ class HSSM(HSSMBase):
         _list_params = self.model_config.list_params
         assert _list_params is not None, "list_params should be set"  # for type checker
         rv_name = getattr(self.model_config, "rv", None) or self.model_config.model_name
+        # HSSM.__init__ always builds a Config, which is where ndt_edge_shift lives.
+        ndt_edge_shift = typing_cast("Config", self.model_config).ndt_edge_shift
 
         return make_distribution(
             rv=rv_name,
@@ -472,4 +486,5 @@ class HSSM(HSSMBase):
             params_is_trialwise=params_is_trialwise_base,
             # TODO: add to HSSMBase
             is_choice_only=self.is_choice_only,
+            ndt_edge_shift=ndt_edge_shift,
         )

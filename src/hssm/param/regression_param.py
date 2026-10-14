@@ -158,7 +158,15 @@ class RegressionParam(Param):
             self.set_loglogit_link()
 
     def validate(self) -> None:
-        """Validate the parameter."""
+        """Validate the parameter.
+
+        A regression parameter whose link is left unset gets the identity link, so
+        its bounds are not built into the parameterization. They are enforced by the
+        likelihood instead: `HSSMBase` collects the bounds of every regression
+        parameter and `make_distribution` sets the log-likelihood of any observation
+        whose composed value falls outside them to `LOGP_LB`
+        (`apply_param_bounds_to_loglik`).
+        """
         if self.formula is None:
             raise ValueError(f"Formula not specified for parameter {self.name}.")
         self.reformat_formula()
