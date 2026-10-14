@@ -830,7 +830,7 @@ def _(expect_model_error, pd):
         a=1.5,
         noncentered={"vv": True},
     )
-    assert "Unknown component name(s)" in unknown_key_error
+    assert "Unknown parameter name(s)" in unknown_key_error
     assert "['a', 't', 'v', 'z']" in unknown_key_error
     unknown_key_table = pd.DataFrame(
         [
