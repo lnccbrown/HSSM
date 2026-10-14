@@ -111,7 +111,7 @@ This work is in progress; entries are added as each sub-issue lands.
     documents these semantics and how to average draws into a trial-level or participant-level
     predictive score.
 
-11. **Posterior cleanup no longer drops variables whose name contains `_mean`**
+11. **Posterior cleanup no longer drops every variable whose name contains `_mean`**
     ([#1378](https://github.com/lnccbrown/HSSM/issues/1378)). It now drops only the parent
     parameter's `{parent}_mean` alias (e.g. `v_mean`), so a covariate such as `rt_mean` keeps its
     coefficient `v_rt_mean` in the trace. The unused `hssm.utils.make_alias_dict_from_parent` and
