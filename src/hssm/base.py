@@ -101,6 +101,13 @@ def _rename_response_dim(dataset: xr.Dataset) -> xr.Dataset:
     return dataset
 
 
+def _rename_response_dim_in_tree(dt: DataTree) -> None:
+    """Apply `_rename_response_dim` to every group of `dt`, in place."""
+    for group in list(dt.children):
+        if _BAMBI_RESPONSE_DIM in dt[group].dims:
+            dt[group] = _rename_response_dim(dt[group].to_dataset())
+
+
 def _validate_setting_preset(name: str, value: object, preset: str) -> None:
     """Validate a model-level preset selector at the public boundary."""
     if value is not None and (not isinstance(value, str) or value != preset):
@@ -804,6 +811,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Subset data vars in posterior
         self._clean_posterior_group(dt=self._inference_obj)
+        _rename_response_dim_in_tree(self._inference_obj)
         return self.traces
 
     def vi(
@@ -903,6 +911,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             if self._vi_approx is not None:
                 _vi_compat.coerce_approx_params_to_numpy(self._vi_approx)
                 self._inference_obj_vi = self._vi_approx.sample(draws)
+                _rename_response_dim_in_tree(self._inference_obj_vi)
 
         # Post-processing
         self._clean_posterior_group(dt=cast("DataTree | None", self._inference_obj_vi))
@@ -1259,7 +1268,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             for group in ("posterior_predictive", *_BAMBI_PREDICTIONS_GROUPS):
                 if group in target:
                     del target[group]
-            target["posterior_predictive"] = posterior_predictive
+            target["posterior_predictive"] = _rename_response_dim(posterior_predictive)
             return None if inplace else target
         elif kind == "response_params":
             # If kind == 'response_params', we don't need to run the RV directly,

@@ -249,6 +249,9 @@ def test_in_sample_prediction_matches_out_of_sample_layout(
     assert list(a.data_vars) == list(b.data_vars)
     assert a["rt,response"].dims == b["rt,response"].dims
     assert a.sizes == b.sizes
+    # HSSM's response dim is the same in every group (bambi calls it `rt_dim`)
+    assert a["rt,response"].dims[-1] == "rt,response_dim"
+    assert ddm_reg_dt["observed_data"]["rt,response"].dims[-1] == "rt,response_dim"
 
 
 @pytest.mark.slow
