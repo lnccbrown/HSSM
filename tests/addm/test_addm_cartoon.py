@@ -49,10 +49,6 @@ needs_addm_cartoon = pytest.mark.skipif(
 import hssm  # noqa: E402
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R10 bambi 0.20 `Model.predict(data=...)` writes to `predictions`, not `posterior_predictive`",
-    strict=False,
-)
 @needs_addm_cartoon
 @pytest.mark.slow
 def test_plot_model_cartoon_addm_posterior():

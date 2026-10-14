@@ -101,6 +101,13 @@ def _rename_response_dim(dataset: xr.Dataset) -> xr.Dataset:
     return dataset
 
 
+def _rename_response_dim_in_tree(dt: DataTree) -> None:
+    """Apply `_rename_response_dim` to every group of `dt`, in place."""
+    for group in list(dt.children):
+        if _BAMBI_RESPONSE_DIM in dt[group].dims:
+            dt[group] = _rename_response_dim(dt[group].to_dataset())
+
+
 def _validate_setting_preset(name: str, value: object, preset: str) -> None:
     """Validate a model-level preset selector at the public boundary."""
     if value is not None and (not isinstance(value, str) or value != preset):
@@ -804,6 +811,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
 
         # Subset data vars in posterior
         self._clean_posterior_group(dt=self._inference_obj)
+        _rename_response_dim_in_tree(self._inference_obj)
         return self.traces
 
     def vi(
@@ -903,6 +911,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             if self._vi_approx is not None:
                 _vi_compat.coerce_approx_params_to_numpy(self._vi_approx)
                 self._inference_obj_vi = self._vi_approx.sample(draws)
+                _rename_response_dim_in_tree(self._inference_obj_vi)
 
         # Post-processing
         self._clean_posterior_group(dt=cast("DataTree | None", self._inference_obj_vi))
@@ -1100,6 +1109,29 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         del dt["posterior_predictive"]
         return draws
 
+    def _check_posterior_has_free_rvs(self, dt: DataTree) -> None:
+        """Raise if `dt`'s posterior lacks a free RV of the current model.
+
+        Out of sample, `pm.sample_posterior_predictive` silently draws a missing
+        free RV from its prior, so a trace sampled from another model (or an
+        older bambi, #1336) would pass prior draws off as posterior predictions.
+        """
+        posterior = set(dt["posterior"].data_vars)
+        missing = sorted(
+            name
+            for name in (rv.name for rv in self.pymc_model.free_RVs)
+            if name not in posterior
+            # `omit_offsets=True` drops `{term}_offset`; bambi rebuilds it from
+            # `{term}` and `{term}_sigma`.
+            and not (name.endswith("_offset") and name[: -len("_offset")] in posterior)
+        )
+        if missing:
+            raise ValueError(
+                f"The posterior is missing free random variables of this model: "
+                f"{missing}. Was the trace sampled from a different model or an "
+                "older bambi version? Resample the model, or pass the matching trace."
+            )
+
     def sample_posterior_predictive(
         self,
         dt: DataTree | None = None,
@@ -1166,7 +1198,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         Raises
         ------
         ValueError
-            If the model has not been sampled yet and datatree is not provided.
+            If the model has not been sampled yet and datatree is not provided, or
+            if the posterior lacks a free random variable of the model.
 
         Returns
         -------
@@ -1190,6 +1223,8 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
                 _logger.warning(
                     "pre-existing posterior_predictive group deleted from datatree."
                 )
+
+        self._check_posterior_has_free_rvs(dt)
 
         if self._check_extra_fields(data):
             self._update_extra_fields(data)
@@ -1259,7 +1294,7 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
             for group in ("posterior_predictive", *_BAMBI_PREDICTIONS_GROUPS):
                 if group in target:
                     del target[group]
-            target["posterior_predictive"] = posterior_predictive
+            target["posterior_predictive"] = _rename_response_dim(posterior_predictive)
             return None if inplace else target
         elif kind == "response_params":
             # If kind == 'response_params', we don't need to run the RV directly,

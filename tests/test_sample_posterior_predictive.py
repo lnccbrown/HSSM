@@ -5,6 +5,7 @@ import pytest
 import xarray as xr
 
 import hssm
+from tests.trace_fixtures import build_cav_reg_model
 
 hssm.set_floatX("float32")
 
@@ -16,8 +17,8 @@ PARAMETER_GRID = [
     (None, True, False),
     # (50, False, False),
     (50, True, False),
-    # (np.arange(500), False, False), # very slow to test
-    (np.arange(500), True, False),
+    # (np.arange(200), False, False), # very slow to test
+    (np.arange(200), True, False),
     (1, False, True),
     (1, True, True),
     # (None, False, True), # very slow to test
@@ -25,7 +26,7 @@ PARAMETER_GRID = [
     (50, False, True),
     (50, True, True),
     (np.arange(50), False, True),
-    (np.arange(500), True, True),
+    (np.arange(200), True, True),
     ([1, 2, 3, 4, 5], False, False),
     ([1, 2, 3, 4, 5], True, False),
     ([1, 2, 3, 4, 5], False, True),
@@ -33,28 +34,11 @@ PARAMETER_GRID = [
 ]
 
 
-@pytest.mark.xfail(
-    reason="bambi 0.20 migration (#1305): R13 bambi 0.20 keeps constant parameters and `*_Intercept_centered` RVs in `posterior` (#1330)",
-    strict=False,
-)
 @pytest.mark.slow
 @pytest.mark.parametrize(PARAMETER_NAMES, PARAMETER_GRID)
 def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, inplace):
     """Test sample_posterior_predictive method."""
-    model = hssm.HSSM(
-        data=cavanagh_test,
-        include=[
-            {
-                "name": "v",
-                "prior": {
-                    "Intercept": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
-                    "theta": {"name": "Normal", "mu": 0.0, "sigma": 1.0},
-                },
-                "formula": "v ~ theta + (1|participant_id)",
-                "link": "identity",
-            },
-        ],
-    )  # Doesn't matter what model or data we use here
+    model = build_cav_reg_model(cavanagh_test)
     if "posterior_predictive" in cav_dt:
         del cav_dt["posterior_predictive"]
     cav_dt_copy = cav_dt.copy()
@@ -64,7 +48,7 @@ def test_sample_posterior_predictive(cav_dt, cavanagh_test, draws, safe_mode, in
     )
 
     if draws is None:
-        size = 500
+        size = 200
     elif isinstance(draws, int):
         size = draws
     elif isinstance(draws, np.ndarray):
@@ -101,6 +85,8 @@ def test_sample_posterior_predictive_uses_attached_traces_for_response_params(
         return expected
 
     monkeypatch.setattr(model.model, "predict", fake_predict)
+    # the fake posterior only carries `v`; this test is about delegation
+    monkeypatch.setattr(model, "_check_posterior_has_free_rvs", lambda dt: None)
 
     result = model.sample_posterior_predictive(
         kind="response_params",
@@ -132,6 +118,8 @@ def test_sample_posterior_predictive_replaces_existing_group_inplace(
         dt["posterior_predictive"] = replacement
 
     monkeypatch.setattr(model.model, "predict", fake_predict)
+    # the fake posterior only carries `v`; this test is about delegation
+    monkeypatch.setattr(model, "_check_posterior_has_free_rvs", lambda dt: None)
 
     result = model.sample_posterior_predictive(
         dt=traces,
@@ -249,6 +237,9 @@ def test_in_sample_prediction_matches_out_of_sample_layout(
     assert list(a.data_vars) == list(b.data_vars)
     assert a["rt,response"].dims == b["rt,response"].dims
     assert a.sizes == b.sizes
+    # HSSM's response dim is the same in every group (bambi calls it `rt_dim`)
+    assert a["rt,response"].dims[-1] == "rt,response_dim"
+    assert ddm_reg_dt["observed_data"]["rt,response"].dims[-1] == "rt,response_dim"
 
 
 @pytest.mark.slow
@@ -277,3 +268,33 @@ def test_in_sample_prediction_ignores_stale_predictions_group(
     pps = out["posterior_predictive"].to_dataset()
     assert list(pps.data_vars) == ["rt,response"]
     assert pps.sizes["draw"] == 2
+
+
+@pytest.mark.parametrize("data", [None, "cavanagh_test"])
+def test_sample_posterior_predictive_rejects_trace_missing_free_rv(
+    cav_dt, cavanagh_test, data
+):
+    """A trace lacking a free RV fails loudly instead of resampling it from its prior.
+
+    Out of sample, ``pm.sample_posterior_predictive`` would otherwise draw the
+    missing RV from its prior and pass the result off as posterior predictions.
+    """
+    model = build_cav_reg_model(cavanagh_test)
+    cav_dt["posterior"] = (
+        cav_dt["posterior"].to_dataset().drop_vars("v_Intercept_centered")
+    )
+
+    with pytest.raises(ValueError, match=r"\['v_Intercept_centered'\]"):
+        model.sample_posterior_predictive(
+            dt=cav_dt, data=cavanagh_test if data else None, draws=1
+        )
+
+
+def test_free_rv_check_allows_omitted_offsets(cav_dt, cavanagh_test):
+    """`omit_offsets=True` traces pass: bambi rebuilds `*_offset` from the term."""
+    model = build_cav_reg_model(cavanagh_test)
+    cav_dt["posterior"] = (
+        cav_dt["posterior"].to_dataset().drop_vars("v_1|participant_id_offset")
+    )
+
+    model._check_posterior_has_free_rvs(cav_dt)
