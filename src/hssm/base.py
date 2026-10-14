@@ -967,10 +967,12 @@ class HSSMBase(ABC, DataValidatorMixin, MissingDataMixin):
         vars_to_keep = set(dt["posterior"].data_vars.keys()).difference(
             key_ for key_ in self.model.parameters if key_ in deterministic_names
         )
+        # Drop only bambi's exact `{parent}_mean` alias, not every name containing
+        # `_mean`, so a covariate like `rt_mean` keeps its coefficient (#1378).
         vars_to_keep_clean = [
             var_
             for var_ in vars_to_keep
-            if isinstance(var_, str) and "_mean" not in var_
+            if isinstance(var_, str) and var_ != f"{self._parent}_mean"
         ]
         dt["posterior"] = dt["posterior"].to_dataset()[vars_to_keep_clean]
 

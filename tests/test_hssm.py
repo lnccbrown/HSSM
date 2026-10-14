@@ -800,6 +800,30 @@ def test_drop_parent_str_renames_response_mean(data_ddm):
     )
 
 
+def test_clean_posterior_keeps_covariates_named_mean(data_ddm):
+    """Only the parent's `_mean` alias is dropped, not any name containing `_mean`."""
+    data = data_ddm.assign(rt_mean=np.linspace(-1, 1, len(data_ddm)))
+    model = HSSM(data=data, include=[{"name": "v", "formula": "v ~ 1 + rt_mean"}])
+    # bambi only emits `v_mean` for an all-simple model, so add it by hand.
+    names = ["v_mean"] + [
+        var_.name
+        for var_ in model.pymc_model.free_RVs + model.pymc_model.deterministics
+    ]
+    assert "v_rt_mean" in names
+    traces = xr.DataTree.from_dict(
+        {
+            "posterior": xr.Dataset(
+                {name: (("chain", "draw"), np.zeros((1, 1))) for name in names}
+            )
+        }
+    )
+
+    model._clean_posterior_group(dt=traces)
+
+    assert "v_rt_mean" in traces["posterior"].data_vars
+    assert "v_mean" not in traces["posterior"].data_vars
+
+
 def test_is_choice_only_and_deadline(data_ddm):
     """Expose choice-only and deadline response metadata."""
     config_choice_only = {"response": ["response"]}
