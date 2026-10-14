@@ -356,3 +356,50 @@ def test_user_initval_on_centered_regression_intercept(cavanagh_test):
     assert "a_Intercept" not in model._initvals
     np.testing.assert_allclose(model._initvals["a_Intercept_centered"], 0.8)
     _check_initval_defaults_correctness(model)
+
+
+class _FitCalled(Exception):
+    pass
+
+
+def test_user_sample_initval_on_intercept_deterministic_is_remapped(
+    cavanagh_test, monkeypatch
+):
+    """`sample(initvals={"a_Intercept": ...})` reaches `a_Intercept_centered`.
+
+    PyMC silently drops initvals keyed on a Deterministic, which `a_Intercept`
+    is once `a` has a common predictor.
+    """
+    model = hssm.HSSM(
+        data=cavanagh_test.iloc[:12],
+        include=[
+            {"name": "a", "formula": "a ~ 1 + theta"},
+            {"name": "v", "formula": "v ~ 1 + theta"},
+        ],
+        z=0.5,
+        t=0.2,
+        p_outlier=0.0,
+    )
+    captured = {}
+
+    def fake_fit(**kwargs):
+        captured.update(kwargs["initvals"])
+        raise _FitCalled
+
+    monkeypatch.setattr(model.model, "fit", fake_fit)
+    with pytest.raises(_FitCalled):
+        model.sample(
+            initvals={
+                "a_Intercept": 1.2,
+                "v_Intercept": 0.3,
+                "v_Intercept_centered": 0.5,  # explicit centered key wins
+                "a_theta": 0.1,
+            }
+        )
+
+    assert captured == {
+        "a_Intercept_centered": 1.2,
+        "v_Intercept": 0.3,
+        "v_Intercept_centered": 0.5,
+        "a_theta": 0.1,
+    }

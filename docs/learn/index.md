@@ -48,6 +48,8 @@ that matches your data:
   available likelihood kinds.
 - [Centered and non-centered parameterizations](../tutorials/centered_vs_noncentered_basic_logic.ipynb)
   establish the basic trade-off.
+- [Predictor centering and the intercept](../explanations/intercept_centering.md)
+  explains the `*_Intercept_centered` and `*_Intercept` pair in regression traces.
 - [Random-slope prior diagnostics](../tutorials/random_slope_safe_priors.ipynb)
   show how parameterization decisions affect real models.
 
